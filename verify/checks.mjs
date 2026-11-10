@@ -54,7 +54,7 @@ export function quickChecks(packages) {
     {
       id: "typecheck",
       title: "TypeScript in the changed packages and what depends on them",
-      command: ["pnpm", ...packages.flatMap((name) => ["--filter", `${name}...`]), "typecheck"],
+      command: ["pnpm", ...packages.flatMap((name) => ["--filter", `...${name}`]), "typecheck"],
     },
     {
       id: "test",

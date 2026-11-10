@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
 import { expect, it } from "vitest";
-import { GATES, TASKS } from "../../verify/checks.mjs";
+import { GATES, TASKS, quickChecks } from "../../verify/checks.mjs";
 
 const verify = (...args) =>
   spawnSync("node", ["scripts/verify.mjs", ...args], { encoding: "utf8" });
@@ -46,4 +46,15 @@ it("fails closed with no mode and with two modes", () => {
     title: "Choose one of --quick, --task <id> or --gate <gate>",
   });
   expect(verify("--quick", "--gate", "M0").status).toBe(1);
+});
+it.each([
+  [["@tc/core"], "pnpm --filter ...@tc/core typecheck"],
+  [["@tc/core", "@tc/web"], "pnpm --filter ...@tc/core --filter ...@tc/web typecheck"],
+])("--quick type-checks %j and every package that depends on it", (packages, command) => {
+  const commands = quickChecks(packages).map((c) => c.command.join(" "));
+  expect(commands).toContain(command);
+});
+it("--quick never selects only what a changed package depends on", () => {
+  const words = quickChecks(["@tc/core", "@tc/web"]).flatMap((c) => c.command);
+  expect(words.filter((word) => word.endsWith("..."))).toEqual([]);
 });
