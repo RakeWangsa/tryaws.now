@@ -65,8 +65,11 @@ LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
 DECLARE txid uuid;
 BEGIN
   IF TG_TABLE_NAME = 'ledger_entries' THEN txid := NEW.transaction_id; ELSE txid := NEW.id; END IF;
-  IF EXISTS (SELECT 1 FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id
-             WHERE e.transaction_id = txid AND e.created_at <> t.created_at) THEN
+  -- The first half asks whether this database transaction created the ledger transaction; no trigger on ledger_entries can change that.
+  IF NOT EXISTS (SELECT 1 FROM ledger_transactions t
+                 WHERE t.id = txid AND t.created_at = transaction_timestamp())
+     OR EXISTS (SELECT 1 FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id
+                WHERE e.transaction_id = txid AND e.created_at <> t.created_at) THEN
     RAISE EXCEPTION 'R5: ledger transaction % is closed', txid USING ERRCODE = 'restrict_violation';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM ledger_entries WHERE transaction_id = txid AND direction = 'debit')

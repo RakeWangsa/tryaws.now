@@ -246,6 +246,56 @@ describe("ledger balance", () => {
       ).rows[0].n,
     ).toBe(2);
   });
+
+  it("a trigger that runs later cannot reopen a closed ledger transaction by copying its stamp", async () => {
+    const id = await inTransaction(t.pool, (c) =>
+      postLedger(c, "topup:p4", [
+        [clearing, "debit", 1000],
+        [wallet, "credit", 1000],
+      ]),
+    );
+    await t.pool.query(
+      "create function test_restamp() returns trigger language plpgsql as $$ begin select created_at into new.created_at from ledger_transactions where id = new.transaction_id; return new; end $$",
+    );
+    await t.pool.query(
+      "create trigger z_restamp before insert on ledger_entries for each row execute function test_restamp()",
+    );
+    try {
+      await expectSqlError(
+        inTransaction(t.pool, async (c) => {
+          await c.query(
+            "insert into ledger_entries (id, transaction_id, account_id, direction, amount_minor) values ($1, $2, $3, 'debit', 5)",
+            [uuidv7(), id, clearing],
+          );
+          await c.query(
+            "insert into ledger_entries (id, transaction_id, account_id, direction, amount_minor) values ($1, $2, $3, 'credit', 5)",
+            [uuidv7(), id, wallet],
+          );
+        }),
+        "23001",
+        { message: /^R5: ledger transaction [0-9a-f-]{36} is closed$/ },
+      );
+      // with the same trigger in place, a new ledger transaction still posts
+      const fresh = await inTransaction(t.pool, (c) =>
+        postLedger(c, "topup:p5", [
+          [clearing, "debit", 7],
+          [wallet, "credit", 7],
+        ]),
+      );
+      expect(await count(fresh)).toBe(1);
+    } finally {
+      await t.pool.query("drop trigger z_restamp on ledger_entries");
+      await t.pool.query("drop function test_restamp()");
+    }
+    expect(
+      (
+        await t.pool.query(
+          "select count(*)::int as n from ledger_entries where transaction_id = $1",
+          [id],
+        )
+      ).rows[0].n,
+    ).toBe(2);
+  });
 });
 
 it("R5: a ledger account never changes and is never removed", async () => {
