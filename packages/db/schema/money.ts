@@ -13,7 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { adminUsers } from "./admins";
-import { createdAt, id, money } from "./common";
+import { createdAt, id, inList, money } from "./common";
 import { customers } from "./identity";
 
 // The nine ledger account types. STEP_ACCOUNTS of @tc/core holds four of them; packages/db stays
@@ -64,10 +64,7 @@ export const ledgerAccounts = pgTable(
     unique("ledger_accounts_customer_id_type_currency_unique")
       .on(t.customerId, t.type, t.currency)
       .nullsNotDistinct(),
-    check(
-      "ledger_accounts_type_check",
-      sql`${t.type} in (${sql.raw(LEDGER_ACCOUNT_TYPES.map((v) => `'${v}'`).join(", "))})`,
-    ),
+    check("ledger_accounts_type_check", inList(t.type, LEDGER_ACCOUNT_TYPES)),
     check(
       "ledger_accounts_owner_check",
       sql`(${t.type} = 'customer_wallet') = (${t.customerId} IS NOT NULL)`,

@@ -15,7 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { adminUsers } from "./admins";
 import { catalogProducts } from "./catalog";
-import { createdAt, id } from "./common";
+import { createdAt, id, inList } from "./common";
 import { customers } from "./identity";
 
 // The ten quota codes of section 10.2.
@@ -55,10 +55,6 @@ export const OPERATION_STATES = [
 
 // Section 11.
 export const SUBSCRIPTION_STATUSES = ["active", "grace", "retained", "ended"] as const;
-
-function inList(column: unknown, values: readonly string[]) {
-  return sql`${column} in (${sql.raw(values.map((v) => `'${v}'`).join(", "))})`;
-}
 
 export const poolAccounts = pgTable(
   "pool_accounts",
