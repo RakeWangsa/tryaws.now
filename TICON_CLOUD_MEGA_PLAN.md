@@ -1,6 +1,6 @@
 # TiCON Cloud on AWS: MEGA PLAN
 
-Version 1.0, 2026-11-11. Launch target: Tuesday 2026-11-17.
+Version 1.1, 2026-11-11. Launch target: Tuesday 2026-11-17.
 Owner: S M Moshiur Rahman, TiCON System Limited. Builder: Claude Code with the TiCON dev team.
 
 This one file is the source of truth for the product, the launch and the build. It replaces `TICON_CLOUD_LIGHTSAIL_BUILD_PLAN.md`: the full text of that file (version 0.3) is Part 3 here, with the same section numbers.
@@ -22,6 +22,8 @@ Changes against build plan 0.3, all made in this version:
 | 0, 2, 16.2 | `CLAUDE.md` stays short. Full rule text lives in path-scoped rule files and in generated `docs/spec/` files (Appendix P to S) |
 | 4, 5 | CI and deploy row; `.claude/`, `docs/spec/`, `verify/` and `docs/runbooks/` in the layout |
 | 14, 15, 17 | Pointers to the task backlog and the gates; one more security check; open items for roles and for Amazon SES production access |
+
+Version 1.1 applies the corrections of the pre-flight audit of 2026-11-11. The findings and their evidence are in `docs/audit/2026-11-11-mega-plan-audit.md`. The exact edits are in `docs/audit/2026-11-11-corrections.json`, and `docs/audit/2026-11-11-apply-corrections.mjs` applies them to version 1.0.
 
 # Part 1. Start here
 
@@ -53,35 +55,35 @@ Claude Code works only with what is on the developer's machine and in the reposi
 | Item | Where it goes | From |
 | --- | --- | --- |
 | This file | `TICON_CLOUD_MEGA_PLAN.md` in the repository root | Moshiur |
-| The mockup zip, unpacked | `design/mockup/` (the `template`, `order-form`, `email`, `newsletter`, `graphic`, `documentation` folders) | Moshiur |
+| The mockup zip, unpacked | `design/mockup/` (the `template`, `order-form`, `whmcs-template`, `email`, `newsletter`, `graphic`, `documentation` folders) | Moshiur |
 | TiCON Cloud logo as SVG for dark and light backgrounds, favicon | `design/brand/` | Dev team, from the `ticoncloud` site repo |
 | Sample TiCON Cloud invoice (PDF) | `design/reference/invoice-sample.pdf` | Moshiur |
-| The team's `eps-payment-gateway` skill folder | `.claude/skills/eps-payment-gateway/` | Dev team |
+| The team's `eps-payment-gateway` skill folder, copied without any `.env*` file (the skill's README says that `assets/.env.production` holds live credentials of another project) | `.claude/skills/eps-payment-gateway/` | Dev team |
 | Legal texts when ready: terms, acceptable use, privacy, refund, domain registration agreement | `content/legal/<doc>.<locale>.mdx` | Moshiur with the legal adviser |
 
 ### B.2 Accounts and access
 
 | Access | Scope to give | Scope never to give |
 | --- | --- | --- |
-| GitHub | One private repository (for example `TiCON-Project/ticoncloud-platform`), `gh` signed in on each developer machine. Branch protection on `main`: pull request required, CI checks required, CODEOWNERS review on money and security paths | Organization admin rights; permission to push to `main` |
+| GitHub | One private repository (for example `TiCON-Project/ticoncloud-platform`), `gh` signed in on each developer machine. Branch protection on `main`: pull request required, CI checks required, CODEOWNERS review on money and security paths and on the kit (`.claude/`, `CLAUDE.md`, `.github/`, `scripts/verify.mjs`, `scripts/split-plan.mjs`, `verify/`) | Organization admin rights; permission to push to `main` |
 | AWS, staging control plane | An IAM Identity Center permission set on the account `tc-platform-stg` that can deploy the SST app. Used as a named CLI profile, for example `tc-stg` | Any access to `tc-platform` (production), the management account, `tc-pool-v1`, `tc-pool-n1` |
 | AWS, test pool | A permission set on `tc-pool-dev` limited to Lightsail, used by integration and isolation tests | Any other pool account |
 | AWS, DNS for tests | Permission on `tc-dns` to manage test hosted zones only. Domain registration stays with DevOps | `route53domains:RegisterDomain` from a developer machine |
 | Production deploys | None from a machine. Production is deployed by GitHub Actions through an OIDC role after a manual approval | Long-lived AWS keys anywhere (R3) |
 | Organization setup (accounts, OUs, SCPs, pool roles) | Claude Code writes the templates in `infra/org/`. DevOps reviews and applies them from the management account | The management account credentials |
-| Domain and email | DNS records for `my.`, `ops.` and the staging names; SES domain identity with DKIM for `ticoncloud.com`. Created by the IaC where the zone is in Route 53, otherwise DevOps adds the records the deploy prints | Registrar account password |
+| Domain and email | DNS records for `my.`, `ops.` and the staging names; SES domain identity with DKIM for `ticoncloud.com`. Created by the IaC where the zone is in Route 53, otherwise DevOps first validates an ACM certificate in us-east-1 for these names, the apps use `domain: { name, dns: false, cert }`, and DevOps adds CNAME records to the CloudFront domain names after the deploy | Registrar account password |
 | EPS | Staging and production credentials as SST secrets (B.3). A test customer account with a small real balance for end-to-end payments | Credentials in a prompt, a file in the repo, or a chat |
 | SMS provider | API key as an SST secret, sender id as config, two test phone numbers | Same as EPS |
 
 ### B.3 Secrets: set by a person, never shown to Claude Code
 
-A person types these into their own terminal with `npx sst secret set <Name> <value> --stage <stage>` (confirm the syntax in the SST docs). Claude Code knows only the names. The project settings deny `sst secret` commands and reads of `.env` files (Appendix Q).
+A person types these into their own terminal with `npx sst secret set <Name> <value> --stage <stage>` (confirm the syntax in the SST docs). Claude Code knows only the names. Production values are set only by a named administrator of `tc-platform`, because `--stage production` needs credentials for `tc-platform`, which no developer machine may hold (3.1): in a short-lived IAM Identity Center session, from AWS CloudShell or from a machine that runs no Claude Code session, before the first production deploy, noted in `JOURNEY.md` without the values. The project settings deny `sst secret` and `sst shell` commands and reads of `.env` files (Appendix Q). These rules match one spelling of a command and are not a boundary (C.2): anyone, or any session, with the staging profile can read the staging secrets.
 
 | Secret name | Stages | Set by |
 | --- | --- | --- |
 | `EpsMerchantId`, `EpsStoreId`, `EpsUsername`, `EpsPassword`, `EpsHashKey` | staging, production (separate values) | Moshiur or the lead |
-| `SmsApiKey` | staging, production | Lead |
-| `PoolExternalId` for each pool account | the stage that uses the pool | DevOps |
+| `SmsApiKey` | staging, production (separate values) | Lead |
+| None for pool accounts: each ExternalId is a plain column of `pool_accounts`, so adding a pool needs no secret and no deploy | - | DevOps |
 
 Generated by the infrastructure code, never typed by anyone: the HMAC key for order draft tokens, the OTP hashing key, KMS keys, database passwords.
 
@@ -104,7 +106,7 @@ Generated by the infrastructure code, never typed by anyone: the HMAC key for or
 | Tool | Note |
 | --- | --- |
 | Claude Code, current version | Auto mode is the starting permission mode from v2.1.283. Check with `claude --version` |
-| Node.js | The current LTS release that AWS Lambda offers as a managed runtime. Pin it in `.nvmrc` and `package.json` `engines` |
+| Node.js | Node.js 24, the Lambda runtime `nodejs24.x` and the SST default; Node.js 26 is only a preview runtime on Lambda this month. Pin it in `.nvmrc` and `package.json` `engines` |
 | pnpm, Git, GitHub CLI `gh`, `jq` | `jq` is used by the hook scripts |
 | AWS CLI v2 | Signed in through IAM Identity Center with the profiles of B.2 |
 | Docker | Runs the PostgreSQL container for integration tests |
@@ -129,7 +131,7 @@ Production or management account credentials. Real customer data, KYC documents 
 
 1. Install or update Claude Code, sign in, and open the repository folder once with `claude` to accept workspace trust.
 2. Run the bootstrap prompt (E.1) on one machine only. Everyone else pulls the result.
-3. Run `/permissions` and confirm the project rules loaded. Run `/sandbox` and turn the sandbox on. Run `/hooks` and confirm the three hooks of Appendix Q are listed.
+3. Run `/permissions` and confirm the project rules loaded. Run `/sandbox` and confirm the sandbox is on (the project settings turn it on and list the commands that run outside it). Run `/hooks` and confirm the three hooks of Appendix Q are listed.
 4. Run `/context` and confirm `CLAUDE.md` is loaded and small.
 5. Optional plugins through `/plugin`: a TypeScript code intelligence plugin, and Superpowers if the team already uses it (its planning, test-first, worktree and review skills fit the loop of C.3).
 
@@ -142,11 +144,11 @@ Production or management account credentials. Real customer data, KYC documents 
 | Unattended batch work (for example translating message files) | `dontAsk` with an explicit tool list | `claude -p "<prompt>" --allowedTools "Read,Edit,Bash(pnpm test *)" --permission-mode dontAsk` |
 | Never | `bypassPermissions` | Disabled in project settings |
 
-Deny rules and hooks are guard rails. The real boundary is what the AWS profile can reach (staging and the test pool only) and what branch protection allows.
+Deny rules and hooks are guard rails. The real boundary is what the AWS profile can reach (staging and the test pool only) and what branch protection allows. With the sandbox on, the `Read` and `Edit` deny rules also bind every sandboxed command: a sandboxed `pnpm spec:split` cannot write `docs/spec/`, a sandboxed test cannot read `.env.local`, and a sandboxed `git merge` over those paths fails with `unable to unlink old`. The `sandbox.excludedCommands` list of Appendix Q runs these commands outside the sandbox.
 
 ### C.3 The loop for every task
 
-1. Start a fresh session in its own worktree: `claude --worktree wp3-t1 --permission-mode plan`. The worktree lives in `.claude/worktrees/wp3-t1/` on branch `worktree-wp3-t1`. Run `pnpm install` there.
+1. Run `git fetch origin` in the main checkout, then start a fresh session in its own worktree: `claude --worktree wp3-t1 --permission-mode plan`. The worktree lives in `.claude/worktrees/wp3-t1/` on branch `worktree-wp3-t1`. Run `pnpm install` there.
 2. Type `/wp-start WP3-T1`. Claude reads the task row, the spec files named for its work package and the last entries of `JOURNEY.md`, then writes a plan: files, interfaces consumed and produced, tests, open questions.
 3. Read the plan. Fix it or approve it. Leave plan mode.
 4. Claude writes the failing tests first, runs them, implements, and runs them until they pass. For long tasks set the proof as a `/goal` condition so Claude keeps going until it holds.
@@ -155,12 +157,13 @@ Deny rules and hooks are guard rails. The real boundary is what the AWS profile 
 7. Claude appends a `JOURNEY.md` entry, commits with the task id, pushes, and opens a pull request with `gh pr create`. It does not merge.
 8. A human reviews. Money, auth, IAM and infrastructure paths need the lead's approval (CODEOWNERS). After merge, CI deploys staging.
 9. `/clear` or close the session. Never start the next task in the same context.
+10. Keep the worktree until the pull request is merged. For review changes run `claude --worktree wp3-t1 --resume` (on another machine `claude --worktree "#<pr number>"`), fix, run `pnpm verify --task`, push. Remove the worktree after the merge.
 
 ### C.4 Context discipline
 
 | Rule | Why |
 | --- | --- |
-| One task per session; `/clear` between tasks; name sessions with `/rename` | A full context makes Claude forget rules |
+| One task per session; `/clear` between tasks; name sessions with `/rename` | A focused context gives better answers and costs less |
 | Never ask Claude to read this whole file after bootstrap. Point it to `docs/spec/<file>` | The file is about 170 KB |
 | Use subagents for investigation ("use a subagent to find how X is done") | Exploration stays out of the main context |
 | After two failed corrections of the same problem, `/clear` and restart with a sharper prompt | Failed attempts pollute the context |
@@ -177,10 +180,10 @@ Deny rules and hooks are guard rails. The real boundary is what the AWS profile 
 | D, admin | `apps/admin`, WP8 | 1 |
 
 - One worktree per task, named after the task id. `.worktreeinclude` copies `.env.local` into each new worktree; `.claude/worktrees/` is in `.gitignore`.
-- A new worktree starts from the default branch on the remote. A task that needs work not yet merged waits for the merge, or its driver sets `"worktree": { "baseRef": "head" }` in `.claude/settings.local.json` and starts from the branch that has the work.
-- A track never edits another track's package. It codes against the contract in Section F and, until the real function exists, against a typed stub with the same signature.
+- A new worktree starts from the default branch on the remote. Claude Code fetches the default branch only when the repository has not been fetched for 24 hours, so run `git fetch origin` first. A task that needs work not yet merged waits for the merge, or its driver creates the worktree with git from the branch that has the work (`git worktree add .claude/worktrees/wp3-t2 -b worktree-wp3-t2 worktree-wp3-t1`) and starts `claude` inside it. `worktree.baseRef` cannot name a branch, and in `.claude/settings.local.json` it would apply to every later worktree.
+- A track edits another track's package only where its task row in E.3 puts the work there (for example `functions/catalog-sync` for track A and `packages/core/operations` for track B), and notes it in `JOURNEY.md` (Section 14). Otherwise it codes against the contract in Section F and, until the real function exists, against a typed stub with the same signature. Track B writes `packages/core/{operations,capacity,orders,lifecycle}` and `packages/notify`, with migrations reviewed by track A; each `functions/` folder belongs to the track whose task creates it.
 - A contract change is its own small pull request that updates Section F first.
-- For mechanical changes across many files (message keys, renames) use `/batch <instruction>`.
+- A mechanical change across many files (message keys, renames) is its own task with one pull request, done in one session. `/batch` opens one pull request per unit, so use it only when the lead agrees, and never for shared files such as message catalogs.
 - One person can drive two sessions. More than two per person lowers review quality.
 
 ### C.6 External tools
@@ -194,7 +197,7 @@ Prefer command line tools over MCP servers, because they cost less context: `gh`
 | Branching | Trunk-based. One short-lived branch per task, squash merge, linear history |
 | Pull request size | One task. If a diff passes about 600 changed lines outside generated files, split the task |
 | CI on every pull request | Install, lint (with the import-boundary rule for R1), typecheck, unit tests, integration tests against a PostgreSQL container, secret scan, dependency audit, `pnpm verify --quick`, spec split in sync |
-| Deploy | Merge to `main` deploys `staging` through an OIDC role in `tc-platform-stg`. Production deploys from a tag through an OIDC role in `tc-platform` after a manual approval in a protected GitHub environment |
+| Deploy | Merge to `main` deploys `staging` through an OIDC role in `tc-platform-stg`. Production deploys from a tag through an OIDC role in `tc-platform` after a manual approval in a protected GitHub environment. A tag ruleset lets only the lead and DevOps create `v*` tags; the workflow fails unless the tagged commit is on `main`; the environment `production` accepts only `v*` tags and needs a reviewer other than the tagger. The `tc-platform` role trusts only `sub` = `repo:<org>/<repo>:environment:production`, the staging role only `repo:<org>/<repo>:ref:refs/heads/main`. CODEOWNERS (E.1) covers, among its other paths, `.github/`, `infra/`, `sst.config.ts` and `.claude/` |
 | Migrations | Forward-only, run by the `migrator` function during deploy (R15) |
 | Commit messages | `WP3-T1: <what changed>` |
 
@@ -221,21 +224,25 @@ Read TICON_CLOUD_MEGA_PLAN.md completely. This is the only session that reads it
 
 Then do task WP0-T1:
 1. Create the monorepo skeleton of Section 5 (pnpm workspaces, TypeScript strict, ESLint with an
-   import-boundary rule that enforces R1, Prettier, Vitest).
+   import-boundary rule that enforces R1, Prettier, Vitest). Exclude .claude/worktrees/ in the ESLint, Vitest,
+   Playwright and TypeScript configs: those tools do not read .gitignore.
 2. Create CLAUDE.md, .claude/settings.json, the hook scripts, .claude/rules/, .claude/skills/,
-   .claude/agents/, .worktreeinclude, .gitignore, JOURNEY.md and the pull request template exactly
-   from Appendices P to T.
+   .claude/agents/, .worktreeinclude, .gitignore, .github/CODEOWNERS (owned by the lead and the second reviewer: money, auth, IAM and infrastructure paths including infra/ and sst.config.ts, and the kit: .claude/, CLAUDE.md, .github/, scripts/verify.mjs, scripts/split-plan.mjs, verify/), JOURNEY.md and the pull request template exactly
+   from Appendices P to T. Write .claude/settings.json after step 4, as the last kit file, so its hooks
+   do not run before scripts/verify.mjs exists.
 3. Write scripts/split-plan.mjs and run it so docs/spec/ holds one file per section of this plan,
    each with a "GENERATED, do not edit" header. File name: <id>-<slug>.md, where the id is the
-   section letter or the two-digit section number and the slug is the heading in lower case with
-   hyphens (E-backlog-and-prompts.md, 08-pricing-engine.md). A section over 150 lines also gets a
+   section letter or the two-digit section number and the slug is the heading in lower case, with every run of
+   characters outside a-z and 0-9 replaced by one hyphen and no hyphen at either end (E-backlog-and-prompts.md,
+   08-pricing-engine.md, 09-wallet-ledger-and-eps.md). A section over 150 lines also gets a
    folder <id>/ with one file per subsection. docs/spec/INDEX.md lists every file with its heading.
    A heading inside a fenced code block is not a section boundary.
 4. Write scripts/verify.mjs and verify/baseline.json as Section G specifies. Fill the baseline
    from this plan: the pricing vectors of Section 8, the tables of Section 7, the routes and
    priorities of Section 16, the theme allow-list of 16.3, the secret names of B.3.
 5. Add the CI workflow of C.7.
-6. Run pnpm verify --gate M0 and show the output. Open a pull request. Stop.
+6. Run pnpm verify --gate M0 and show the output. Open a pull request, run gh pr checks --watch
+   and show the result. Stop.
 
 Do not create application code, AWS resources or migrations in this task.
 ```
@@ -262,30 +269,30 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | Task | Output | Proof |
 | --- | --- | --- |
 | WP0-T1 | Repository kit: skeleton, `CLAUDE.md`, `.claude/`, `docs/spec/`, verify script and baseline, CI | `pnpm verify --gate M0` green locally and in CI |
-| WP0-T2 | SST app with stages, VPC with two AZs and NAT, hello page behind CloudFront and WAF | `npx sst deploy --stage staging` succeeds; page loads through CloudFront |
-| WP0-T3 | RDS PostgreSQL with RDS Proxy, roles `app_rw`, `migrator`, `report_ro`, TLS forced, `migrator` function | A connection from the internet fails; `migrator` runs an empty migration |
+| WP0-T2 | SST app with stages, VPC with two AZs and NAT, hello page behind CloudFront and WAF | `npx sst deploy --stage staging` succeeds; page loads through CloudFront; a direct request to the function URL gets 403 |
+| WP0-T3 | RDS PostgreSQL with RDS Proxy, roles `web_rw`, `admin_rw`, `worker_rw`, `migrator`, `report_ro`, TLS forced, `migrator` function | A connection from the internet fails; a connection without TLS through the proxy is refused; the instance shows 14-day backup retention and deletion protection on; `migrator` runs an empty migration |
 | WP0-T4 | Cognito pools for customers and admins (admin TOTP required, email sent through SES), SQS FIFO queue with dead-letter queue, buckets `kyc`, `invoices`, `exports`, alarms to SNS | Deployed outputs listed by `pnpm verify --task WP0-T4` |
-| WP0-T5 | `infra/org/`: templates for accounts, OUs, SCPs and the roles of Section 6.3. Applied by DevOps, not by Claude Code | DevOps confirms in `JOURNEY.md`; a test proves the staging web role cannot assume `TcProvisioner` |
+| WP0-T5 | `infra/org/`: templates for accounts, OUs, SCPs, the roles of Section 6.3, the organization CloudTrail trail, GuardDuty in every account and the security alternate contact of each pool account (3.3, Section 15). Applied by DevOps, not by Claude Code | DevOps confirms in `JOURNEY.md`; a test proves the staging web role cannot assume `TcProvisioner` |
 | WP0-T6 | By Fri 13: the production control plane deployed once through CI with every feature flag off; SES production access requested on Wed 11 | A tag deploy succeeds after approval; the production web role cannot assume any pool role |
 
 **WP1 Data and pricing (Wed 11, track A). Read: 2 (R4, R5, R8, R15), 7, 8.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
-| WP1-T1 | Drizzle schema and migrations for every table of Section 7, constraints, ledger balance trigger, grants | `app_rw` cannot UPDATE or DELETE `ledger_entries` and `audit_log`; unbalanced transaction is rejected |
+| WP1-T1 | Drizzle schema and migrations for every table of Section 7, constraints, ledger balance trigger, grants | No application role can UPDATE or DELETE an (A) table; `web_rw` cannot set `operations.approved_by` or write admin-owned tables; unbalanced transaction is rejected; `select current_user` from the deployed `web` function returns `web_rw` |
 | WP1-T2 | Tenant-scoped repositories and a cross-tenant test helper used by every later endpoint | Helper proves customer A cannot read or write customer B rows |
 | WP1-T3 | Pricing engine in `packages/core/pricing` | All Section 8 vectors pass, including both extra vectors |
 | WP1-T4 | Markets, FX rates, pricing rules (append-only), feature flags, preview of five products | A new rate never changes a stored order; preview equals engine output |
-| WP1-T5 | `catalog-sync` function and config prices | Catalog holds real plans from `tc-pool-dev` with BDT prices; TLD prices loaded |
+| WP1-T5 | `catalog-sync` function and config prices, with the read-only STS and Lightsail client in `packages/aws` that WP4-T1 then extends | Catalog holds real plans from `tc-pool-dev` with BDT prices; no active instance plan is IPv6-only; TLD prices loaded |
 
-**WP2 Identity (Wed 11, track C). Read: 2 (R8, R9, R14, R16), 6.1, 16.9, 16.13.**
+**WP2 Identity (Wed 11, track C). Read: 2 (R8, R9, R14, R16), 3.3 (the `kyc` bucket), 6.1, 16.9, 16.10 settings rows, 16.13.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
 | WP2-T1 | `packages/auth`: token verification, cookie session, `requireCustomer`, fresh sign-in check | A tampered or expired token is rejected; cookies are `HttpOnly`, `Secure`, `SameSite=Lax` |
 | WP2-T2 | `/signup`, `/verify` (email), `/login`, `/forgot-password`, `/reset-password` | Playwright completes sign-up to sign-in in `bn` at 360 px |
 | WP2-T3 | Phone OTP with the SMS provider adapter | Limits hold: 5 attempts, 3 sends per hour per number and per IP; codes are stored hashed |
-| WP2-T4 | `/kyc`: presigned upload, submission, status | The web role cannot read a KYC object; no resource can be created before `verified` |
+| WP2-T4 | `/kyc`: presigned upload, submission, status | The web role cannot read a KYC object; a staging-only seed command marks a test customer `verified` until `approveKyc` exists (WP8-T2); the proof that no resource is created before `verified` runs in WP4-T4 |
 | WP2-T5 | `/settings/profile`, `/settings/security` | Email or phone change needs a fresh sign-in and a new verification |
 
 **WPU UI kit and shells (Wed 11, track C, second session). Read: 16.1 to 16.7, 16.13, 16.16.**
@@ -295,9 +302,9 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | WPU-T1 | `scripts/sync-theme.ts`, theme assets, `tc.css`, the composite font family | Build output has no file from the theme's `assets/js`; Bengali renders with Noto Sans Bengali |
 | WPU-T2 | Kit, part one: `Card`, `Button`, `Field`, `Badge`, `Tabs`, `Accordion`, `Modal`, `ConfirmDestroy`, `Toast`, `DataTable` | Gallery page shows each in `bn` and `en` |
 | WPU-T3 | Kit, part two: the remaining components of 16.6 | Same |
-| WPU-T4 | Four shells, `next-intl` setup, AWS statements and footers, `/dev/ui`, CSP in report-only mode | The 16.16 checks that apply to the gallery pass |
+| WPU-T4 | Four shells, `next-intl` setup, AWS statements and footers, `/dev/ui`, CSP in report-only mode | The 16.16 checks that apply to the gallery pass; the `next build` route table shows every page as dynamic |
 
-**WP3 Wallet and EPS (Thu 12, track A; screens with track C). Read: 2 (R4 to R7, R16), 9, 16.10 wallet rows, the `eps-payment-gateway` skill.**
+**WP3 Wallet and EPS (Thu 12, track A; screens with track C). Read: 2 (R4 to R7, R16), 3.2, 3.4, 8, 9, 16.10 dashboard, wallet and invoice rows, 16.13, the `eps-payment-gateway` skill.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
@@ -312,14 +319,14 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | Task | Output | Proof |
 | --- | --- | --- |
 | WP4-T1 | `packages/aws`: STS client with ExternalId, Lightsail client factory, AWS error mapping, retries | The web bundle cannot import it (lint); errors map to platform codes |
-| WP4-T2 | Operations engine: table, states, FIFO enqueue, `provisioner` step runner, dead-letter alarm | A step retried three times creates one resource |
+| WP4-T2 | Operations engine: table, states, FIFO enqueue, `provisioner` step runner, dead-letter alarm | A step retried three times creates one resource; an operation with a wait step completes on the real FIFO queue in staging; an operation committed without a queue message is picked up within 3 minutes |
 | WP4-T3 | Capacity: reservation inside the purchase transaction, release, waitlist | Two concurrent orders for the last slot: one succeeds, one gets the waitlist |
-| WP4-T4 | Orders: draft token, `placeOrder`, purchase transaction, automatic reversal on failed create | Double submit with one idempotency key charges once; a failed create refunds once |
+| WP4-T4 | Orders: draft token, `placeOrder`, purchase transaction, automatic reversal on failed create | Double submit with one idempotency key charges once; a failed create refunds once; an order from a customer who is not `verified` is refused and creates no resource |
 | WP4-T5 | Linux instance adapter with key import, static IP and ports | A paid order on staging yields a running instance reachable by SSH with the customer key |
 | WP4-T6 | Bootstrap firewall template and the isolation test | `tests/isolation` passes in `tc-pool-dev` |
 | WP4-T7 | `/servers`, `/servers/new`, `/orders/review`, `/orders/[id]`, tabs Overview, Access, Networking, `/settings/ssh-keys` | Playwright creates a server at 360 px in `bn` against staging |
 
-**WP5 Instance extras and lifecycle (Fri 13, track B; screens with track C). Read: 10.3, 11, 16.10, 16.14.**
+**WP5 Instance extras and lifecycle (Fri 13, track B; screens with track C). Read: 3.2, 6.3, 8, 9.1, 9.3, 10.3, 11, 16.10, 16.14.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
@@ -348,13 +355,13 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | WP7-T3 | DNS zones and record editor | Apex NS and SOA are read-only; records validate per type |
 | WP7-T4 | Domains: search, registration with contact, verification state, renewal | Second confirmation repeats the name; TLDs with extra parameters go to admin review |
 | WP7-T5 | Metering: snapshot storage per day, data transfer | Daily charge equals GB x price / 30; 80% and 100% notices sent |
-| WP7-T6 | `reconciler`: inventory hourly, cost daily, payments | Zero unexplained resources; cost variance under 2% |
+| WP7-T6 | `reconciler`: inventory hourly, cost daily, payments | Zero unexplained resources; cost variance under 2% on the latest day Cost Explorer has data for |
 
 **WP8 Admin (Sat 14 to Sun 15, track D). Read: 2 (R10), 6.2, 13, 16.12.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
-| WP8-T1 | Admin app: shell, sign-in with TOTP, roles, audit of every action, WAF allowlist | No MFA means no sign-in; outside the allowlist gets 403 |
+| WP8-T1 | Admin app: shell, sign-in with TOTP, roles, audit of every action, WAF allowlist | No MFA means no sign-in; outside the allowlist gets 403; a direct request to the admin function URL gets 403 |
 | WP8-T2 | Customers and KYC review | Document images come through short-lived URLs and are never cached |
 | WP8-T3 | Wallets, payments, adjustments with second approval | An adjustment above the limit waits for a second admin |
 | WP8-T4 | Pricing, catalog and flags | Saving a rule shows the five-product preview first |
@@ -380,7 +387,7 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | WP9-T3 | Database restore drill; purchase concurrency test | Point-in-time restore works; no double spend and no over-reservation under 50 parallel orders with stubbed adapters |
 | WP9-T4 | Runbooks of Section M in `docs/runbooks/`; signed-in support form | Each runbook was walked through once |
 | WP9-T5 | Wording pass in `bn` and `en`; final legal content | No untranslated key; U6 checks pass |
-| WP9-T6 | Beta: 10 to 20 customers with real payments on production with core flags on | Each beta customer has a verified payment and a running server |
+| WP9-T6 | Production tag deploy of the build that passed gate M5, approved by DevOps; then the beta: 10 to 20 customers with real payments on production with core flags on | Each beta customer has a verified payment and a running server |
 
 **WP10 Launch (Tue 17). Read: K, M.**
 
@@ -389,7 +396,7 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | WP10-T1 | Flags on for families that passed their gate; monitoring and on-call confirmed | `pnpm verify --gate M7` |
 | WP10-T2 | First-day report at 21:00 | Payments verified, no stuck operations, no dead-letter messages, active resources counted |
 
-Critical path for launch day: WP0, WP1, WP2, WPU, WP3, WP4, WP5, the P0 tasks of WP8 and WPP, WP9. WP6, WP7 and every P1 row can slip behind their feature flags without moving the date.
+Critical path for launch day: WP0, WP1, WP2, WPU, WP3, WP4, WP5, the P0 tasks of WP8 and WPP, WP9. WP7-T5 (metering) and WP7-T6 (the reconciler) are on the critical path too: no feature flag covers them, K item 8 needs the daily cost reconciliation, and core backups are charged by metering. WP6, WP7-T1 to WP7-T4 and every P1 row can slip behind their feature flags without moving the date.
 
 ## F. Contracts between tracks
 
@@ -414,7 +421,7 @@ export interface PriceQuote {
   currency: "BDT"; fxRate: string; ruleVersion: string;
   baseMinor: Minor; steps: { code: string; amountMinor: Minor }[]; totalMinor: Minor;
 }
-export function quote(awsPriceUsd: string, fxRate: string, steps: PricingStep[]): PriceQuote;
+export function quote(input: { awsPriceUsd: string; quantity?: string; fxRate: string; rule: { version: string; steps: PricingStep[] } }): PriceQuote;   // quantity for per-GB and daily prices (R4); the rule carries its version
 
 // packages/db
 export function withTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
@@ -444,22 +451,22 @@ export function verifyPayment(merchantTransactionId: string):
 export function createOrderDraft(s: CustomerSession, input: unknown):
   Promise<Result<{ token: string; quote: PriceQuote; expiresAt: Date }>>;
 export function placeOrder(s: CustomerSession, input: { token: string; idempotencyKey: string }):
-  Promise<Result<{ orderId: string }>>;          // "price_changed" carries the new PriceQuote in `data`
+  Promise<Result<{ orderId: string }>>;          // "price_changed" carries a new draft { token, quote, expiresAt } in `data`
 
 // packages/core/operations
 export function enqueueOperation(tx: Tx, input: {
   resourceId: string; kind: OperationKind; payload: unknown;
   idempotencyKey: string; needsApproval?: boolean;
-}): Promise<{ operationId: string }>;
+}): Promise<{ operationId: string }>;   // inserts the row only (queued, next_run_at = now); the queue message is sent after commit
 
 // packages/core/flags
 export function isEnabled(flag: FeatureFlag, market: string): Promise<boolean>;
 
 // packages/notify
-export function notify(tx: Tx, input: { customerId: string; template: TemplateId; data: Record<string, unknown> }): Promise<void>;
+export function notify(tx: Tx, input: { customerId?: string; email?: string; template: TemplateId; data: Record<string, unknown>; dedupeKey: string }): Promise<void>;   // inserts a `pending` row; `notifier` sends it after commit
 ```
 
-`ProductAdapter` (Section 10.3) is the contract between `packages/aws` and the `provisioner`. The live read contract is one function in `functions/reader`: `describe(resourceId, customerId)` and `metrics(resourceId, customerId, range)`, both of which check ownership themselves.
+`ProductAdapter` (Section 10.3) is the contract between `packages/aws` and the `provisioner`. The live read contract is one function in `functions/reader`: `describe(resourceId, caller)` and `metrics(resourceId, caller, range)`, where `caller` is `{ customerId }` or `{ adminId }`, both of which check ownership themselves, and `checkDomain(name)`, which reads no customer data.
 
 ## G. Verification and gates
 
@@ -475,7 +482,7 @@ Contract of the script: exit code 0 only when every check passed; a table of che
 
 | Gate | When | Passes when |
 | --- | --- | --- |
-| M0 | Wed 11, morning | Repository kit exists; CI green; spec split in sync |
+| M0 | Wed 11, morning | Repository kit exists; `pnpm verify --quick` passes; spec split in sync. The lead merges the kit pull request only when its CI run is green |
 | M1 | Wed 11, 21:00 | Staging deployed; database private; schema and pricing vectors pass; sign-up to KYC submission works; UI gallery passes; a signed-in customer sees the real catalog in taka |
 | M2 | Thu 12, 21:00 | A real top-up credits exactly once and the replay and forgery tests pass; a paid order produces a server reachable by SSH; UI review done with Moshiur |
 | M3 | Fri 13, 21:00 | Server features complete; one instance passes the whole lifecycle on the test clock; notifications send |
@@ -496,7 +503,7 @@ A gate that fails is finished the next morning before new work starts.
 | Product | TiCON Cloud: Amazon Lightsail resources sold prepaid in taka through a Bengali-first panel, paid by EPS, with VAT invoices and local support |
 | Promise to the customer | 100% AWS infrastructure, at about the AWS price, in taka, prepaid, with a taka invoice and support in Bengali |
 | Customers | Web and software agencies; SaaS companies and startups; e-commerce shops; existing TiCON Cloud customers (for dev and test servers); developers and students |
-| Price | AWS list price x FX rate x 1.17 (10% Korea VAT, 5% Bangladesh VAT, 2% processing fee, each on the AWS price). At FX 127 the 5 USD plan is 743 taka for 30 days, about 1.7% above buying from AWS directly with 15% VAT |
+| Price | AWS list price x FX rate x 1.17 (10% Korea VAT, 5% Bangladesh VAT, 2% processing fee, each on the AWS price). At FX 127 the 5 USD plan is 743 taka for 30 days, about 1.7% above one AWS month bought directly with 15% VAT (about 3% over a full year, because a term is 30 days and AWS bills by the calendar month) |
 | What TiCON adds | Local payment, prepaid control of spending, identity checks, taka invoices, Bengali support, a path to full AWS with TiCON later |
 | Not in this product | Postpaid billing, AWS console or API access for customers, mail sending (port 25 stays closed), private networking between customers, hourly billing, resources outside Lightsail |
 | Launch scope | Core on launch day; Gate A and Gate B families when they pass their tests (Section 1) |
@@ -512,7 +519,7 @@ Metrics. All come from existing tables, so no tracking script is needed:
 | KYC review time | From submission to decision | Under 2 working hours in launch week |
 | Provisioning success | Operations of kind create that end `succeeded` | 98% or more |
 | Money integrity | Wallet balance minus ledger sum, per wallet | Zero differences, every night |
-| Cost integrity | AWS cost of pool accounts against expected cost from active subscriptions | Variance under 2%; zero unexplained resources |
+| Cost integrity | AWS cost of pool accounts against expected cost, per account and UTC day. Expected cost: for each live resource that AWS bills by the hour, hours alive x AWS monthly price / 744, plus config-priced items in their own unit. AWS cost: Cost Explorer daily unblended cost without tax, read for the latest complete day (Cost Explorer lags about 24 hours). Grace hours, retained snapshots and unattached static IPs are reported as their own lines, not as variance | Variance under 2%; zero unexplained resources |
 | Renewal rate | Subscriptions renewed at their first period end | Measured from day 30 |
 
 The admin dashboard shows the first five every day (16.12, route `/`).
@@ -586,8 +593,8 @@ Core message: real AWS, at about the AWS price, in taka, prepaid, with a VAT inv
 | Objection | Answer |
 | --- | --- |
 | A local VPS is cheaper | For local speed alone it is. Choose this for visitors abroad, AWS infrastructure, and a path to full AWS later |
-| I can buy from AWS directly | Then you need a dollar card, pay 15% VAT without a BIN, and get no taka invoice. Here the price is about 1.7% higher, with support in Bengali |
-| Where is my data | In the AWS Region you choose: Singapore or Mumbai |
+| I can buy from AWS directly | Then you need a dollar card, pay 15% VAT without a BIN, and get no taka invoice. Here the price is about 1.7% higher per 30-day term (about 3% over a full year), with support in Bengali |
+| Where is my data | Your servers, databases and storage are in the AWS Region you choose: Singapore or Mumbai. Your account and identity documents are kept in AWS Singapore |
 | Will my money get stuck | Every wallet transaction and invoice is visible in the panel, and the refund policy is published |
 
 Content Claude Code drafts for review, in `bn` and `en` (task WPP and WP9): landing and product page copy, the FAQ, email and SMS templates, ten help articles, the announcement post, and drafts of the legal pages for the legal adviser. No AWS mark in paid search ads without authorization from AWS.
@@ -598,10 +605,10 @@ Content Claude Code drafts for review, in `bn` and `en` (task WPP and WP9): land
 | --- | --- | --- |
 | KYC queue | Continuously in working hours; under 2 hours in launch week | Operations lead |
 | Operations queue (approvals, needs attention) | Three times a day; at once on an alarm | Track B driver until day 14, then operations |
-| Payments in `pending` over 30 minutes | Twice a day | Finance admin |
+| Payments pending (`initiated` or `redirected`) over 30 minutes, and every payment in `review` | Twice a day | Finance admin |
 | Reconciliation report | Every morning | Finance admin and DevOps |
 | Capacity per pool account and Region | Every morning; quota request at 70% use | DevOps |
-| Abuse notices from AWS | Within 24 hours: suspend the resource, open a case, answer AWS | Operations lead |
+| Abuse notices from AWS | Suspend the resource at once when a violation is confirmed (Customer Agreement 2.5), within 24 hours of the notice at the latest; open a case, answer AWS | Operations lead |
 | Support inbox | First answer within 1 working hour in launch week | Operations lead |
 
 Runbooks that task WP9-T4 writes into `docs/runbooks/`, one page each with symptoms, checks, actions and who decides: payment stuck or disputed; EPS unavailable (manual top-up by a `finance` admin with a bank or wallet receipt); provisioning failed; capacity full; lifecycle approval; abuse notice; KYC review; refund; domain registration problem; reconciliation mismatch; database restore; incident (severity levels, who is told, customer notice).
@@ -619,8 +626,9 @@ Runbooks that task WP9-T4 writes into `docs/runbooks/`, one page each with sympt
 | AWS naming rules broken | AWS objects; pages or ads must change | Fixed statements and rules in 16.13; wording confirmed with the AWS Partner manager before launch |
 | Bengali text in invoice PDFs renders wrongly | Unreadable invoices | Headless Chromium renderer; VERIFY on day 2; fallback is an English PDF with the Bengali invoice on screen |
 | Tracks collide or drift from the plan | Rework, merge conflicts | Contracts of Section F; one task per pull request; fresh-context review; daily gate |
-| Review bottleneck on the lead | Merges wait | Reviewer subagents first; CODEOWNERS only on money and security paths; second reviewer named on day 1 |
+| Review bottleneck on the lead | Merges wait | Reviewer subagents first; CODEOWNERS only on the paths that E.1 lists (money, security, infrastructure and the kit); second reviewer named on day 1 |
 | Domain registration | No refunds; registrant details needed | Gate B; double confirmation; contact in the customer's name |
+| Amazon SES production access comes late | Sign-up codes, receipts and invoices reach only verified addresses, so beta customers cannot confirm their email | Requested on Wed 11; AWS gives a first answer within 96 hours (by Sun 15) and may ask for more. Until access is granted the customer Cognito pool uses the Cognito default sender for sign-up codes (50 emails a day), and receipts and invoices are read in the panel |
 
 ## O. After launch
 
@@ -645,7 +653,7 @@ Sections 0 to 18 below are the build specification. Their numbers are stable: ta
 
 ## 1. Product in one page
 
-TiCON Cloud is a prepaid, self-service cloud panel (in the style of Vultr or DigitalOcean) whose resources are Amazon Lightsail resources in AWS accounts owned by TiCON. Customers are told openly that the service is 100% AWS: every resource they buy is an Amazon Lightsail resource in an AWS Region. They do not get an AWS account, the AWS console or AWS API access; they use the TiCON Cloud panel. They sign up, verify identity, top up a wallet in BDT through EPS, and buy resources on 30-day prepaid terms.
+TiCON Cloud is a prepaid, self-service cloud panel (in the style of Vultr or DigitalOcean) whose resources are Amazon Lightsail resources in AWS accounts owned by TiCON. Customers are told openly that the service is 100% AWS: every server, database, disk, bucket, load balancer and container service they buy is an Amazon Lightsail resource in an AWS Region, and CDN, DNS and domains use Amazon Lightsail CDN and Amazon Route 53, which are global AWS services. They do not get an AWS account, the AWS console or AWS API access; they use the TiCON Cloud panel. They sign up, verify identity, top up a wallet in BDT through EPS, and buy resources on 30-day prepaid terms.
 
 | Decision | Value |
 | --- | --- |
@@ -671,15 +679,15 @@ Security is the first requirement of this product. `CLAUDE.md` carries these rul
 | --- | --- |
 | R1 | The web tier never provisions. `apps/web` and `apps/admin` have no IAM permission to assume pool roles and must not import provisioning clients from `packages/aws`. They only write an operation row and enqueue it. Enforce with IAM and with an ESLint import-boundary rule. |
 | R2 | The database is private. It is reachable only from Lambda functions inside the VPC through RDS Proxy, with TLS required. No public endpoint, ever. |
-| R3 | No long-lived AWS keys and no secrets in the repo, in logs, or in client bundles. Cross-account access is STS AssumeRole only. Secrets live in SST Secrets (SSM SecureString). |
+| R3 | No long-lived AWS keys and no secrets in the repo, in logs, or in client bundles. Cross-account access is STS AssumeRole only. Secrets live in SST Secrets (`sst.Secret`): encrypted in the SST state bucket of the stage's account (the passphrase is an SSM parameter) and bundled, encrypted, into each function that links them. Link a secret only to the functions that use it. A new value applies at the next deploy. |
 | R4 | Money is an integer in minor units (paisa, `BIGINT`). Decimal math is allowed only inside the pricing engine with a decimal library. Rounding is half-up. No floats anywhere near money. |
 | R5 | The ledger is double-entry and append-only. Every transaction balances. Corrections are new reversing transactions, never updates or deletes. The application database role has no UPDATE or DELETE on ledger and audit tables. |
-| R6 | A wallet is credited only after a server-to-server EPS verification returns success for the same merchantTransactionId, amount and currency. Redirect query parameters are untrusted input. |
+| R6 | A wallet is credited only after a server-to-server EPS verification returns success for the same merchantTransactionId and amount. EPS takes and returns no currency: every EPS amount is BDT, and the currency of the payment row is fixed to the market currency when the row is created. Redirect query parameters are untrusted input. |
 | R7 | Every state-changing request and job is idempotent. An idempotency key is accepted or derived, and a unique constraint enforces it. |
 | R8 | Tenant scoping: customer data is read and written only through repository functions that take `customerId` from the verified session, never from the request body, query or path. Each endpoint has a cross-tenant (IDOR) test. |
 | R9 | Order of work in every server action and route handler: authenticate, authorize, validate with zod, rate limit, execute, write audit log. |
 | R10 | Admin is a separate app, domain, Cognito user pool and CloudFront distribution, with mandatory TOTP MFA and a WAF IP allowlist. Every admin action stores actor, reason, IP and target. |
-| R11 | AWS resource names are generated by the platform (`tc-<type>-<16 char id>`) and tagged. Customer-supplied text is never used as an AWS name, tag key, or inside user data without escaping from a fixed template. |
+| R11 | AWS resource names are generated by the platform (`tc-<type>-<16 char id>`) and tagged where Lightsail supports tags. Customer-supplied text is never used as an AWS name, tag key, or inside user data without escaping from a fixed template. |
 | R12 | Every product family sits behind a feature flag that defaults to off in production. |
 | R13 | Destructive lifecycle actions (delete instance, database, disk, bucket, snapshot, release static IP) run only when the subscription state allows it and a final snapshot exists where the product supports one. Until 2026-12-01 they also need admin approval in the operations queue. |
 | R14 | Logs are structured JSON and contain no passwords, tokens, EPS secrets, ID document numbers, or full phone numbers and emails. |
@@ -695,7 +703,7 @@ All accounts are TiCON's own, inside the existing TiCON AWS Organization, in a d
 
 | Account | Purpose | Notes |
 | --- | --- | --- |
-| Management (existing) | Organizations, SCPs, billing, Lightsail Partner enrollment | No workloads. Hosts the `TcBillingReader` role for Cost Explorer |
+| Management (existing) | Organizations, SCPs, billing, Lightsail Partner enrollment | No workloads and no platform role. Cost Explorer access for member accounts is switched on here |
 | `tc-platform` (new) | The production control plane: web, admin, workers, database, queues, buckets | Reached only by the CI deploy role and by named administrators. No developer machine and no Claude Code session holds credentials for it |
 | `tc-platform-stg` (new) | The staging control plane: the same stack with its own VPC and database | Developers and Claude Code deploy here. It works only with `tc-pool-dev` and with test zones in `tc-dns` |
 | `tc-pool-v1` | Lightsail resources of trusted customers | Lightsail only, by SCP |
@@ -716,33 +724,35 @@ Region for the control plane: `ap-southeast-1`. Everything runs on AWS Lambda th
 
 | Component | Trigger | May do | Must not do |
 | --- | --- | --- | --- |
-| `web` (customer Next.js server) | CloudFront + WAF | Database through RDS Proxy; enqueue operations; presign KYC uploads; send email; invoke `reader` | Assume any pool or DNS role; call Lightsail or Route 53; read KYC objects |
-| `admin` (admin Next.js server) | CloudFront + WAF with IP allowlist | Same as `web`, plus read KYC objects and approve operations | Assume any pool or DNS role |
+| `web` (customer Next.js server) | CloudFront + WAF | Database through RDS Proxy; enqueue operations; presign KYC uploads; insert `notifications` rows through `notify` (the `notifier` sends them); invoke `reader` | Assume any pool or DNS role; call Lightsail or Route 53; read KYC objects |
+| `admin` (admin Next.js server) | CloudFront + WAF with IP allowlist | Same as `web`, plus read KYC objects, approve operations, invoke `catalog-sync`, and call the Cognito admin API of the admin pool only | Assume any pool or DNS role |
 | `provisioner` | SQS FIFO queue | Database; assume `TcProvisioner` in listed pool accounts and `TcDnsProvisioner` in `tc-dns` | Be reachable from the internet |
 | `reader` | Invoked by `web` and `admin` | Assume `TcReader` (read-only) to fetch live state and metrics for one resource id, after its own tenant check; assume `TcDnsReader` for domain availability, domain status and DNS records | Any write in pool accounts or in `tc-dns` |
-| `access-details` | Invoked by `web` | Assume `TcAccessDetails` to fetch a Windows password or a database master password for one resource id, after its own tenant check; writes an audit row | Anything else |
-| `invoice-renderer` | Invoked by `web` and `admin` for one invoice, after their own tenant check | Render the invoice HTML to PDF with headless Chromium and write it to the `invoices` bucket | Read the database; reach the internet; assume any role |
-| `scheduler` | EventBridge, every minute | Database; enqueue lifecycle operations and notifications | Assume pool roles |
-| `payments-sweeper` | EventBridge, every 5 minutes | Database; call EPS verify for pending payments | Assume pool roles |
+| `access-details` | Invoked by `web` | Assume `TcAccessDetails` to fetch a Windows password or a database master password, or to create a bucket access key and return its secret once, for one resource id, after its own tenant check; writes an audit row | Anything else |
+| `invoice-renderer` | Invoked by `web` and `admin` for one invoice, after their own tenant check | Render the invoice HTML to PDF with headless Chromium and write it to the `invoices` bucket. Runs in the VPC with its own security group whose only egress is HTTPS to S3 through an S3 gateway endpoint; receives self-contained HTML (CSS inlined) and packaged fonts including Noto Sans Bengali; `@sparticuz/chromium` stays outside the bundle, x86_64, about 2 GB memory | Read the database; reach the internet; assume any role |
+| `scheduler` | EventBridge Scheduler (`sst.aws.CronV2`), every minute | Database; send the queue message for every `waiting` operation whose `next_run_at` has passed and every `queued` operation still unsent 2 minutes after its `next_run_at` (this recovers a message lost after the purchase committed); enqueue lifecycle operations and notifications | Assume pool roles |
+| `payments-sweeper` | EventBridge Scheduler (`sst.aws.CronV2`), every 5 minutes | Database; call EPS verify for pending payments | Assume pool roles |
 | `catalog-sync` | Daily and on demand | Assume `TcReader` and `TcDnsReader` (TLD prices); write catalog tables | Change prices of existing subscriptions |
-| `reconciler` | Hourly inventory, daily cost | Assume `TcReader` and `TcBillingReader`; write discrepancy rows; alert | Fix discrepancies by itself |
+| `reconciler` | Hourly inventory, daily cost | Assume `TcReader`, `TcDnsReader` (hosted zones and domains belong to the inventory) and `TcBillingReader`; measure data transfer every hour and write `usage_records` (Section 11); write discrepancy rows; alert | Fix discrepancies by itself |
 | `migrator` | Deploy time | Run migrations with the migrator database role | Serve traffic |
+| `notifier` | EventBridge Scheduler (`sst.aws.CronV2`), every minute | Database; read `pending` `notifications` rows, send them through SES or the SMS gateway (`SmsApiKey`) and mark them sent. `notify(tx, ...)` only inserts the row | Assume pool roles |
+| `cognito-messages` | Custom message trigger of both Cognito pools | Render Cognito emails (codes, temporary password) in the user's locale with the `packages/notify` layout, under 20,000 characters | Read the database; assume any role |
 
 ### 3.3 Network and data stores
 
-- VPC with two AZs, public and private subnets, managed NAT gateway (outbound calls to EPS, AWS APIs and the SMS gateway go through NAT).
-- Amazon RDS for PostgreSQL in private subnets: Multi-AZ in production, storage encrypted with a KMS key, automated backups with 14 days point-in-time recovery, deletion protection on, TLS forced, RDS Proxy in front.
-- Database roles: `app_rw` (DML only; no UPDATE or DELETE on `ledger_transactions`, `ledger_entries`, `audit_log`), `migrator` (DDL), `report_ro` (read-only).
+- VPC with two AZs, public and private subnets, managed NAT gateway (outbound calls to EPS, AWS APIs and the SMS gateway go through NAT). `invoice-renderer` runs in two isolated subnets with no NAT route and reaches S3 only through an S3 gateway endpoint; its package holds the fonts, and the HTML it receives has its CSS inlined and refers to no URL.
+- Amazon RDS for PostgreSQL in private subnets: Multi-AZ in production, storage encrypted with a KMS key, automated backups with 14 days point-in-time recovery, deletion protection on, TLS forced, RDS Proxy in front. `sst.aws.Postgres` defaults differ (`rds.force_ssl` 0, 7-day backups, final snapshot skipped, no deletion protection, the VPC default security group, proxy without `requireTls`): override each through `transform` and give the instance its own security group that admits 5432 only from the proxy.
+- Database roles: `web_rw` (customer panel), `admin_rw` (admin panel) and `worker_rw` (functions), each DML only with no UPDATE or DELETE on the append-only (A) tables of Section 7 (`ledger_transactions`, `ledger_entries`, `audit_log`, `legal_acceptances`, `fx_rates`, `pricing_rules`); `web_rw` cannot write `fx_rates`, `pricing_rules`, `feature_flags`, `admin_users`, `pool_accounts` or `pool_capacity` and cannot set `operations.approved_by`; `migrator` (DDL), `report_ro` (read-only). Do not `link` the Postgres component to web, admin or workers: its link carries the master user. List `web_rw`, `admin_rw`, `worker_rw` and `report_ro` in the component's `proxy.credentials` and give each function only its own role's credentials. `migrator` alone uses the master user, to create the roles.
 - S3 buckets, all private with Block Public Access: `kyc` (SSE-KMS, uploads by presigned POST with size and content-type conditions, read only by `admin`), `invoices`, `exports`.
-- SQS FIFO queue `provisioning` with a dead-letter queue. MessageGroupId is the resource id, deduplication id is the operation id. An alarm fires when the dead-letter queue is not empty.
-- CloudFront in front of both apps. AWS WAF with the AWS managed core, known-bad-inputs and IP-reputation rule groups, plus rate-based rules for login, OTP, top-up and order endpoints.
+- SQS FIFO queue `provisioning` with a dead-letter queue. MessageGroupId is the resource id. The deduplication id is `<operation id>:<enqueue_seq>`, a counter kept on the operation row and increased for every send, never the operation id alone: SQS accepts a second message with the same deduplication id inside 5 minutes, even after the first was deleted, but does not deliver it, so the next step, a repeated wait check or a retry would vanish without an error. An alarm fires when the dead-letter queue is not empty.
+- CloudFront in front of both apps. Both `sst.aws.Nextjs` apps set `protection: "oac-with-edge-signing"`, so their Lambda function URLs accept only signed requests from their own distribution and no request can skip the WAF or the admin allowlist. The SST default `"none"` leaves the function URLs public and outside WAF (VERIFY that Server Actions work behind it; request bodies are limited to 1 MB, and KYC files go straight to S3). AWS WAF with the AWS managed core, known-bad-inputs and IP-reputation rule groups, plus rate-based rules for login, OTP, top-up and order endpoints. Server Actions POST to the page URL, so these rules match method POST on those page paths in both locales and on `/pay/eps/`. The web ACLs and the admin IP set are created in us-east-1 (a second provider) and attached through `transform.cdn` (`webAclArn`).
 - CloudTrail (organization trail) and GuardDuty enabled for every account above. Alarms go to an SNS topic that emails the on-call list.
 
 ### 3.4 Main flows
 
 Top-up: `web` creates `payments` row -> EPS GetToken -> EPS InitializeEPS -> browser goes to EPS -> EPS returns browser to success, fail or cancel URL -> handler calls EPS CheckMerchantTransactionStatus -> on verified success posts the ledger transaction -> wallet balance updates. The sweeper repeats the verify step for payments whose browser never came back.
 
-Purchase: `web` opens one database transaction: lock wallet row, price the order, check balance, reserve capacity, insert order, subscription, resource, operation, ledger transaction and invoice -> commit -> enqueue operation id -> `provisioner` runs the product adapter step by step -> resource becomes `active` -> notify. Permanent failure posts a reversing ledger transaction and notifies.
+Purchase: `web` opens one database transaction: lock wallet row, check customer status, KYC, feature flag and risk-tier limits again, price the order, check balance, reserve capacity, insert order, subscription, resource, operation, ledger transaction and invoice -> commit -> send the operation id to the queue (after commit, outside the transaction; `enqueueOperation(tx, ...)` only inserts the row as `queued` with `next_run_at` = now, and if the send is lost the `scheduler` sends it, 3.2) -> `provisioner` runs the product adapter step by step -> resource becomes `active` -> notify. Permanent failure posts a reversing ledger transaction and notifies.
 
 Expiry: `scheduler` finds subscriptions at period end -> auto-renew if enabled and funded -> otherwise grace -> suspend -> final snapshot and delete -> snapshot purge. Section 11 has the timings.
 
@@ -751,8 +761,8 @@ Expiry: `scheduler` finds subscriptions at period end -> auto-renew if enabled a
 | Layer | Choice | Why (security first) |
 | --- | --- | --- |
 | Language | TypeScript, strict mode | One language end to end; types on money and ids |
-| Web framework | Next.js 15 or newer stable, App Router, Server Actions and Route Handlers | Server-side rendering keeps secrets and logic off the client |
-| Infrastructure as code | SST v3 (OpenNext on Lambda, `sst.aws.Vpc`, `sst.aws.Postgres` with proxy, `sst.aws.Nextjs` with `vpc`, `sst.aws.Queue`, `sst.aws.Cron`, `sst.aws.Bucket`, `sst.Secret`) | No servers to patch; one IAM role per function gives real privilege separation |
+| Web framework | Next.js 16.4.x (current stable on 2026-11-11), exact version pinned in both apps, App Router, Server Actions and Route Handlers. `sst.aws.Nextjs` sets `openNextVersion` to an OpenNext release whose changelog names that Next.js patch (SST's default is 3.9.14) | Server-side rendering keeps secrets and logic off the client |
+| Infrastructure as code | SST v4, exact version pinned (4.17.2 on 2026-11-11); `transform` and raw `aws.*` code follows Pulumi AWS v7 names (OpenNext on Lambda, `sst.aws.Vpc`, `sst.aws.Postgres` with proxy, `sst.aws.Nextjs` with `vpc` and `protection: "oac-with-edge-signing"`, `sst.aws.Queue`, `sst.aws.CronV2`, `sst.aws.Bucket`, `sst.Secret`) | No servers to patch; one IAM role per function gives real privilege separation |
 | Database | Amazon RDS for PostgreSQL 16 or newer, private, behind RDS Proxy | Financial ledger and KYC data stay inside TiCON's own AWS account and off the internet |
 | ORM and migrations | Drizzle ORM with `pg`, drizzle-kit migrations | Typed SQL, explicit transactions and row locks |
 | Authentication | Amazon Cognito: one user pool for customers, a separate pool for admins | Passwords are never stored in our database; managed MFA and lockout |
@@ -767,7 +777,7 @@ Expiry: `scheduler` finds subscriptions at period end -> auto-renew if enabled a
 | i18n | `next-intl`, `bn` default | |
 | CI and deploy | GitHub Actions. Staging deploys on merge through an OIDC role in `tc-platform-stg`. Production deploys from a tag through an OIDC role in `tc-platform` after a manual approval | No deploy key exists anywhere (R3) |
 | Invoice PDF | The invoice HTML rendered by headless Chromium in `invoice-renderer` | Bengali text needs real text shaping |
-| UI | Bootstrap 5.2.3 CSS and the Antler theme CSS from the mockup, rendered by React Server Components (Section 16). No jQuery and no theme JavaScript | Small script surface, so a strict CSP with nonces works |
+| UI | Bootstrap 5.2.3 CSS and the Antler theme CSS from the mockup, rendered by React Server Components (Section 16). No jQuery and no theme JavaScript | Small script surface, so a strict CSP with nonces works. Nonces make every page dynamic (no prerendering, no CDN caching, no Partial Prerendering); `proxy.ts` sets the nonce and the CSP header |
 | UI behavior | Radix UI primitives (dialog, dropdown menu, tabs, accordion, toast, tooltip) carrying the theme's classes | Keyboard and focus handling without the theme's scripts |
 | Charts | Recharts, rendered on the client only | SVG output, no `eval` |
 | Fonts and icons | Self-hosted Open Sans and Noto Sans Bengali; Font Awesome Free 6.4.2 and the theme's line icon fonts | No third-party origin at runtime |
@@ -790,7 +800,7 @@ packages/
   ui/             theme files, tokens, shells and components shared by web and admin (Section 16)
 functions/
   provisioner/  reader/  access-details/  scheduler/  payments-sweeper/
-  catalog-sync/  reconciler/  migrator/  invoice-renderer/
+  catalog-sync/  reconciler/  migrator/  invoice-renderer/  notifier/  cognito-messages/
 infra/            SST definitions (one file per concern); infra/org/ holds the Organization templates that DevOps applies
 tests/            e2e and isolation tests
 design/           mockup/ (the mockup zip contents: read-only reference, excluded from every build), brand/ (logo, favicon), reference/ (sample invoice)
@@ -806,8 +816,8 @@ CLAUDE.md  JOURNEY.md  TICON_CLOUD_MEGA_PLAN.md
 
 ### 6.1 Customers
 
-- Cognito customer pool: email and password sign-up, email verification, password policy of at least 12 characters, optional TOTP MFA, self-service password reset. Destructive actions (destroy a resource, delete a snapshot, change email or phone) require a fresh sign-in within the last 10 minutes.
-- Tokens are kept only in `HttpOnly`, `Secure`, `SameSite=Lax` cookies. Nothing in `localStorage`. The server verifies the JWT signature, issuer, audience and expiry on every request and maps the Cognito `sub` to `customers.id`.
+- Cognito customer pool: email and password sign-up, email verification, password policy of at least 12 characters, optional TOTP MFA, self-service password reset. Destructive actions (destroy a resource, delete a snapshot, change email or phone) and sensitive ones (enable or disable TOTP, reveal any password, create a bucket access key, change name servers, switch database public mode) require a fresh sign-in within the last 10 minutes.
+- Tokens are kept only in `HttpOnly`, `Secure`, `SameSite=Lax` cookies. Nothing in `localStorage`. The server verifies the access token's signature, issuer, `client_id`, `token_use` and expiry on every request (`aud` exists only in the ID token and is checked there), maps the Cognito `sub` to `customers.id`, and refuses a token issued before the customer's `sessions_valid_after` time or for a customer who is not active. Revoked Cognito tokens still pass the local check until they expire, so sign-out everywhere, a password change and a suspension set `sessions_valid_after` (with `AdminUserGlobalSignOut`); the acting browser signs in again. Admin tokens are checked the same way against `admin_users.status`. `proxy.ts` refreshes an expiring access token before rendering, because Server Components cannot set cookies.
 - Phone verification is an in-app OTP by SMS: 6 digits, stored hashed, 5 minute expiry, 5 attempts, 3 sends per hour per number and per IP.
 - KYC: customer type (individual or business), ID document images uploaded straight to the `kyc` bucket by presigned POST, document number stored encrypted with a KMS data key. Status: `none`, `pending`, `verified`, `rejected`. No resource can be created before `verified`.
 - Risk tier is separate from KYC status. Everyone passes KYC; the tier is `new` or `trusted` and drives limits (Section 10.2) and the home pool. A customer becomes `trusted` by admin decision, or automatically after 14 days and one paid renewal with no abuse case.
@@ -822,48 +832,52 @@ CLAUDE.md  JOURNEY.md  TICON_CLOUD_MEGA_PLAN.md
 
 | Role | Account | Trusted principal | Permissions |
 | --- | --- | --- | --- |
-| `TcProvisioner` | each pool account | `provisioner` function role of the matching control plane (`tc-platform` for customer pools, `tc-platform-stg` for `tc-pool-dev`), with an ExternalId per pool account | Explicit allow-list of the Lightsail actions used by the adapters in Section 10.3. Explicit deny of `lightsail:DownloadDefaultKeyPair`, `lightsail:PeerVpc`, `lightsail:UnpeerVpc`, `lightsail:ExportSnapshot`, `lightsail:CreateCloudFormationStack`, `lightsail:GetInstanceAccessDetails` |
+| `TcProvisioner` | each pool account | the matching control plane account (`tc-platform` for customer pools, `tc-platform-stg` for `tc-pool-dev`) with the condition `aws:PrincipalArn` = its `provisioner` function role, and `sts:ExternalId` per pool account (a plain value in `pool_accounts`). In this row and the rows below, write the trust as the control plane account with an `aws:PrincipalArn` condition, and give the function roles fixed names in `infra/`: a trust that names a role directly stores its internal id, breaks when a deploy recreates the role, and cannot be saved before the role exists | Explicit allow-list of the Lightsail actions used by the adapters in Section 10.3: every command the adapters call, including the Get, start, stop and restore calls that the table there does not name, plus `lightsail:TagResource`, which AWS also checks when a create carries tags. Explicit deny of `lightsail:DownloadDefaultKeyPair`, `lightsail:PeerVpc`, `lightsail:UnpeerVpc`, `lightsail:ExportSnapshot`, `lightsail:CreateCloudFormationStack`, `lightsail:GetInstanceAccessDetails` |
 | `TcReader` | each pool account | `reader`, `catalog-sync`, `reconciler` roles | Lightsail `Get*` only, without `GetInstanceAccessDetails`, `GetRelationalDatabaseMasterUserPassword`, `DownloadDefaultKeyPair` |
-| `TcAccessDetails` | each pool account | `access-details` role | `lightsail:GetInstanceAccessDetails`, `lightsail:GetRelationalDatabaseMasterUserPassword` only |
+| `TcAccessDetails` | each pool account | `access-details` role | `lightsail:GetInstanceAccessDetails` only on instances tagged `tc:os` = `windows` (condition `aws:ResourceTag/tc:os`), because for a Linux instance the same call returns a temporary SSH key; `lightsail:GetRelationalDatabaseMasterUserPassword`; `lightsail:CreateBucketAccessKey`. Nothing else |
 | `TcDnsProvisioner` | `tc-dns` | `provisioner` role | The Route 53 and Route 53 Domains actions in Section 12 |
-| `TcDnsReader` | `tc-dns` | `reader`, `catalog-sync` roles | `route53domains:CheckDomainAvailability`, `route53domains:GetDomainSuggestions`, `route53domains:ListPrices`, `route53domains:GetDomainDetail`, `route53:GetHostedZone`, `route53:ListResourceRecordSets` only |
-| `TcBillingReader` | management | `reconciler` role | `ce:GetCostAndUsage` only |
+| `TcDnsReader` | `tc-dns` | `reader`, `catalog-sync`, `reconciler` roles | `route53domains:CheckDomainAvailability`, `route53domains:GetDomainSuggestions`, `route53domains:ListPrices`, `route53domains:GetDomainDetail`, `route53domains:GetContactReachabilityStatus` (the contact verification state of Section 12, which `GetDomainDetail` does not return), `route53domains:ListDomains`, `route53:ListHostedZones`, `route53:GetHostedZone`, `route53:ListResourceRecordSets` only |
+| `TcBillingReader` | each pool account and `tc-dns` | `reconciler` role of the matching control plane | `ce:GetCostAndUsage` only (a member account sees only its own cost) |
 
-SCP on the pool OU: deny every action except `lightsail:*` and the minimum read-only support actions, and deny Lightsail outside `ap-southeast-1`, `ap-south-1` and `us-east-1` (distributions and other global Lightsail resources are managed through `us-east-1`). SCP on `tc-dns`: only Route 53 and Route 53 Domains. VERIFY in `tc-pool-dev` that first-use setup of Lightsail is not blocked, then record the final policy JSON in `infra/`.
+SCP on the pool OU: deny every action except `lightsail:*` and the minimum read-only support actions, and deny Lightsail outside `ap-southeast-1`, `ap-south-1` and `us-east-1` (distributions and other global Lightsail resources are managed through `us-east-1`). SCP on `tc-dns`: only Route 53 and Route 53 Domains. Both SCPs also allow `ce:GetCostAndUsage` for `TcBillingReader`. An SCP also binds the root user and every admin role of a member account, so both SCPs exempt one named admin role (condition on `aws:PrincipalArn`) for IAM changes to the `Tc` roles, Service Quotas requests and support cases: static IP, vCPU and domain increases are requested inside the account. Before the SCP is attached, DevOps creates and deletes one bucket in each pool account as that admin, so that Lightsail creates its service-linked role `AWSServiceRoleForLightsail`; `TcProvisioner` has no IAM permission to create it. VERIFY in `tc-pool-dev`, with the SCP attached, that `TcProvisioner` can create an instance and a bucket and that the admin role can list and file a quota increase, then record the final policy JSON in `infra/`.
 
 ## 7. Data model
 
-All primary keys are UUID v7. All money columns end in `_minor` and are `BIGINT`. Every table has `created_at`. Tables marked (A) are append-only.
+All primary keys are UUID v7, generated by the application with a UUID v7 library (PostgreSQL before 18 has no `uuidv7()`, and Drizzle's `defaultRandom()` gives version 4). All money columns end in `_minor` and are `BIGINT`. Every table has `created_at`. Tables marked (A) are append-only.
 
 | Table | Key columns |
 | --- | --- |
-| `customers` | `cognito_sub` unique, email, phone, `phone_verified_at`, name, type, `kyc_status`, `risk_tier`, market, locale, status |
+| `customers` | `cognito_sub` unique, `sessions_valid_after`, email, phone, `phone_verified_at`, name, type, `kyc_status`, `risk_tier`, market, locale, status |
 | `kyc_submissions` | customer, document type, encrypted document number, S3 keys, status, reviewer, reviewed at, note |
 | `ssh_keys` | customer, name, public key, fingerprint (public keys only) |
+| `otp_challenges` | customer, phone (also a new number waiting for `changePhone`), code hash, expires at, attempts, consumed at |
+| `rate_limits` | scope key (for example a hashed phone number, a customer or an IP), window start, count; unique on scope key and window start; rows older than a day are purged |
 | `legal_acceptances` (A) | customer, document (terms, acceptable use, privacy, refund, domain registration agreement), version, accepted at, IP |
-| `markets` | code (`BD`), currency (`BDT`), gateway, active |
+| `markets` | code (`BD`), currency (`BDT`), gateway, locales, numerals (`beng` or `latn`), top-up minimum and maximum (`_minor`), quick amounts (JSON), active |
 | `fx_rates` (A) | market, rate (numeric), effective from, set by admin |
 | `pricing_rules` (A) | market, optional product family, ordered steps (JSON), effective from, set by admin |
 | `catalog_products` | family, AWS bundle or power id, platform, Region, specs (JSON), `aws_price_usd` (numeric 12,4), billing unit, feature flag, active, synced at |
 | `tlds` | TLD, registration, renewal and transfer price in USD, needs extra parameters (bool), synced at |
 | `feature_flags` | key, market, enabled |
+| `settings` | key, market, scope (`market`, `tier` or `customer`) and scope id, value (JSON), set by admin; unique on key, market, scope and scope id. Holds tier and customer limits, config prices, the image allow-list, capacity reserves and the adjustment approval limit |
 | `wallets` | customer unique, currency, `balance_minor` (cached), version |
 | `ledger_accounts` | type (`customer_wallet`, `gateway_clearing`, `revenue_aws_base`, `vat_korea_payable`, `vat_bd_payable`, `processing_fee_income`, `markup_income`, `refunds`, `adjustments`), customer (nullable), currency |
 | `ledger_transactions` (A) | kind, reference type and id, `idempotency_key` unique, actor, memo |
 | `ledger_entries` (A) | transaction, account, direction, `amount_minor` > 0 |
-| `payments` | customer, gateway, `merchant_transaction_id` unique, `amount_minor`, currency, status, gateway transaction id, verify payload (JSON), verified at, ledger transaction |
-| `orders` | customer, kind (`new`, `renew`, `addon`, `restore`), items and price snapshot (JSON), `total_minor`, ledger transaction, status |
+| `wallet_adjustments` | customer, direction, `amount_minor`, kind (`goodwill`, `deposit`, `correction`), reason, evidence reference, requested by, approved by (never the requester), status (`pending`, `approved`, `rejected`), ledger transaction |
+| `payments` | customer, gateway, `merchant_transaction_id` unique, `idempotency_key` (unique per customer), `amount_minor`, currency, status (`initiated`, `redirected`, `credited`, `failed`, `cancelled`, `expired`, `review`), gateway transaction id, verify payload (JSON), verified at, ledger transaction |
+| `orders` | customer, kind (`new`, `renew`, `addon`, `restore`), items and price snapshot (JSON), `total_minor`, ledger transaction, `idempotency_key` (unique per customer), status |
 | `invoices` | sequential number per fiscal year, customer, order, lines (JSON), `total_minor`, issued at, PDF key |
-| `pool_accounts` | AWS account id, name, tier, role ARN, ExternalId secret reference, status |
+| `pool_accounts` | AWS account id, name, tier, role ARN, ExternalId, status |
 | `pool_capacity` | pool account, Region, quota code, limit, used, checked at |
 | `customer_homes` | customer, Region, pool account (unique per customer and Region) |
-| `resources` | customer, family, product, pool account, Region, AWS name, state, config (JSON), deleted at |
+| `resources` | customer, family, product, pool account, Region, AWS name, state, parent resource (nullable: the instance of a disk, static IP or backup), config (JSON: the order configuration and the state saved at suspend, such as port rules and load balancer targets), deleted at. Each manual or final snapshot is its own row of family `backup` |
 | `subscriptions` | resource, customer, term days, price snapshot, period start and end, auto renew, status |
-| `operations` | resource, kind, state, step, attempts, last error, `idempotency_key` unique, payload (JSON), needs approval, approved by |
-| `usage_records` | resource, metric, period, quantity (for metered items) |
-| `domains` | customer, name, TLD, Route 53 operation id, status, expires at, hosted zone |
-| `dns_zones` | customer, name, hosted zone id, name servers, delegated at |
-| `notifications` | customer, channel (`email`, `sms`, `in_app`), template, payload, status, sent at, read at |
+| `operations` | resource, kind, state, step, attempts, `enqueue_seq`, `next_run_at`, last error, `idempotency_key` unique, payload (JSON), needs approval, approved by |
+| `usage_records` | resource, metric, period (unique together), quantity (for metered items) |
+| `domains` | customer, resource, name, TLD, Route 53 operation id, status, expires at, hosted zone, registrant contact (JSON, encrypted) |
+| `dns_zones` | customer, resource, name, hosted zone id, name servers, delegated at, status, notices sent at |
+| `notifications` | customer (nullable), email (for visitors), channel (`email`, `sms`, `in_app`), template, payload, `dedupe_key` unique (for a reminder: subscription, period end and days), status, attempts, sent at, read at |
 | `waitlist_entries` | customer (nullable), email (for visitors who are not signed in), product family, Region, reason (`capacity` or `flag_off`), notified at |
 | `support_requests` | customer (nullable), name and email (for visitors who are not signed in), category, related resource (nullable), subject, message, status, handled by |
 | `admin_users` | `cognito_sub` unique, role, status |
@@ -872,6 +886,8 @@ All primary keys are UUID v7. All money columns end in `_minor` and are `BIGINT`
 | `audit_log` (A) | actor type and id, action, target type and id, IP, user agent, metadata (JSON) |
 
 Constraints to implement in the database, not only in code: unique keys above; `amount_minor > 0`; a deferred constraint trigger that rejects a ledger transaction whose debits and credits differ; `wallets.balance_minor >= 0`.
+
+State values: `payments.status` is `initiated`, `redirected`, `credited`, `failed`, `cancelled`, `expired` or `review` (`pending` is the display name of `initiated` and `redirected`; `review` is shown as pending with a note to contact support, 9.2); `resources.state` is `creating`, `active`, `stopped`, `suspended`, `destroyed` or `failed`; `orders.status` is `paid`, `fulfilled` or `reversed`.
 
 ## 8. Pricing engine
 
@@ -887,7 +903,7 @@ for step in steps:                     # in order
 total_minor = running
 ```
 
-Launch configuration for market `BD`:
+Launch configuration for market `BD`. The block shows the Bengali label of each step. A stored step has `label` with `bn` and `en`, as `PricingStep` in Section F requires; the English labels are Korea VAT, Bangladesh VAT, Processing fee and Service charge. Each step code posts to one ledger account of 9.1: `korea_vat` to `vat_korea_payable`, `bd_vat` to `vat_bd_payable`, `processing_fee` to `processing_fee_income`, `markup` to `markup_income`. A rule with a step code that has no account is not saved:
 
 ```json
 [
@@ -903,7 +919,7 @@ Rules:
 - A 30-day term is charged the full AWS monthly price of the bundle.
 - An order stores the FX rate, the rule version and every step amount. Changing a rate later never changes an existing order or the current period of a subscription. Renewals use the rate and rule in force at renewal time.
 - The admin editor shows a preview of five sample products before a new rate or rule is saved, and saves a new row with an effective time.
-- Switching `bd_vat.base` to `"subtotal"` (and moving it last) gives the alternative where 5% VAT is charged on the full value. Both must work.
+- Switching `bd_vat.base` to `"subtotal"` (and moving it last) gives the alternative where 5% VAT is charged on the full value. Both must work. Switching the base without moving the step gives a third result that matches neither (5 USD at FX 127: bd_vat 3493, total 74613), so `savePricingRule` refuses a rule in which a step with base `subtotal` is not the last step.
 
 Test vectors (FX 127, launch configuration, all amounts in paisa):
 
@@ -924,9 +940,11 @@ Test vectors (FX 127, launch configuration, all amounts in paisa):
 | 0.50 | 6350 | 635 | 318 | 127 | 7430 |
 | 3.50 | 44450 | 4445 | 2223 | 889 | 52007 |
 
-Extra vectors: FX 124.77 and aws_usd 5 gives base 62385, steps 6239, 3119, 1248, total 72991. With the alternative configuration (bd_vat last on subtotal) and FX 127, aws_usd 5 gives bd_vat 3556 and total 74676.
+Extra vectors: FX 124.77 and aws_usd 5 gives base 62385, steps 6239, 3119, 1248, total 72991. With the alternative configuration (bd_vat last on subtotal) and FX 127, aws_usd 5 gives bd_vat 3556 and total 74676. Negative vector: `bd_vat` switched to `subtotal` but left in second place gives bd_vat 3493 and total 74613; a rule in that shape must be refused.
 
-Catalog sync sources: `GetBundles`, `GetBlueprints`, `GetRelationalDatabaseBundles`, `GetRelationalDatabaseBlueprints`, `GetContainerServicePowers`, `GetBucketBundles`, `GetDistributionBundles` per launch Region (transfer allowances differ by Region), Route 53 Domains `ListPrices` for TLDs. Prices without an API (load balancer, block storage per GB, snapshot per GB, hosted zone) are admin-editable config rows seeded from the AWS pricing pages.
+Catalog sync sources: `GetBundles`, `GetBlueprints`, `GetRelationalDatabaseBundles`, `GetRelationalDatabaseBlueprints`, `GetContainerServicePowers`, `GetBucketBundles` per launch Region (transfer allowances differ by Region), `GetDistributionBundles` once in `us-east-1` (distribution APIs answer only there), Route 53 Domains `ListPrices` for TLDs. Prices without an API (load balancer, block storage per GB, snapshot per GB, hosted zone) are admin-editable config rows seeded from the AWS pricing pages.
+
+Instance bundles: `GetBundles` returns bundles with a public IPv4 address (`publicIpv4AddressCount` 1, from 5 USD) and IPv6-only bundles (0, from 3.50 USD). At launch `catalog-sync` marks active only the bundles with a public IPv4 address and stores IPv6-only bundles inactive, because the Linux adapter always attaches a static IP and AWS does not allow a static IP on an IPv6-only instance.
 
 ## 9. Wallet, ledger and EPS
 
@@ -935,51 +953,53 @@ Catalog sync sources: `GetBundles`, `GetBlueprints`, `GetRelationalDatabaseBundl
 | Event | Debit | Credit |
 | --- | --- | --- |
 | Top-up verified | `gateway_clearing` | `customer_wallet` |
-| Purchase or renewal | `customer_wallet` (total) | `revenue_aws_base` (base), `vat_korea_payable`, `vat_bd_payable`, `processing_fee_income`, `markup_income` (one line per step) |
+| Purchase or renewal | `customer_wallet` (total) | `revenue_aws_base` (base), `vat_korea_payable`, `vat_bd_payable`, `processing_fee_income`, `markup_income` (one line per step whose amount is above 0; a step of 0, such as the markup at launch, stays in the price snapshot and posts no line) |
 | Provisioning failed, automatic reversal | the same accounts, reversed | |
 | Metered daily charge (snapshot storage, transfer packs) | `customer_wallet` | same split as a purchase |
-| Admin credit or debit | `adjustments` or `customer_wallet` | the other one, with reason |
+| Admin credit or debit | `adjustments` or `customer_wallet` | the other one, with reason. Posted when the adjustment is approved (at once below the limit) |
 | Refund paid out manually | `customer_wallet` | `refunds` |
 
 The wallet balance is the sum of its ledger entries. `wallets.balance_minor` is a cache updated in the same transaction and checked by a nightly job.
 
+Idempotency keys of ledger transactions are derived on the server, so a repeated request or an overlapping job run cannot post twice: `topup:<payment id>`, `order:<hash of the draft token>` (new orders), `order-reversal:<order id>`, `renew:<subscription id>:<new period start>` (every renewal, automatic or manual), `meter:<resource id>:<metric>:<period>`, and for an admin posting the id of its request row. A key sent by a client is never used alone. A repeated request returns the first result.
+
 ### 9.2 EPS top-up
 
-Follow the team's `eps-payment-gateway` skill for endpoints, hashing and the Next.js client. Platform rules on top of it:
+Follow the team's `eps-payment-gateway` skill for endpoints, hashing and the Next.js client. Where the skill and this plan differ, this plan wins: credentials never come from an `.env` file, an amount is never passed through `Number()` (R4), and the verify payload is not written to logs (R14). Platform rules on top of it:
 
 1. `merchant_transaction_id` is generated by the server, unique, at least 10 characters, and stored before calling EPS.
 2. Success, fail and cancel URLs are fixed route handlers under `/pay/eps/`. They read only the transaction id from the redirect, then call the verify API. They never trust a status in the URL.
-3. Credit only when the verify response says success (accept the known variants: `Success`, `SUCCESS`, `COMPLETED`), the amount and currency equal the stored payment, and the payment row is still uncredited. Lock the payment row with `SELECT ... FOR UPDATE`.
-4. The sweeper verifies payments in `initiated` or `redirected` state every 5 minutes for 24 hours, then marks them `expired`.
+3. Credit only when the verify response says success (accept the known variants: `Success`, `SUCCESS`, `COMPLETED`), the amount equals the stored payment (EPS returns no currency; convert `TotalAmount`, a decimal string such as `1500.00`, to paisa with integer arithmetic, never with `Number()`, and treat any difference as a mismatch), and the payment row is still uncredited. Lock the payment row with `SELECT ... FOR UPDATE`.
+4. The sweeper verifies payments in `initiated` or `redirected` state every 5 minutes for 24 hours, then marks them `expired`. `initiated` and `redirected` are what Section F, the screens and Section M call pending. If InitializeEPS returns an error the payment is marked `failed` at once. A payment that EPS reports as successful but that fails the amount check is never credited and never expired: it gets the state `review`, a `discrepancies` row of kind `payment` and an alert to finance, and the customer sees it as pending with a note to contact support.
 5. Rate limit top-up initiation per customer and per IP. Minimum and maximum top-up amounts are market config.
 6. EPS has no refund API in its current public version. Refunds are processed manually through the EPS dashboard and recorded by a `finance` admin.
 7. EPS credentials exist only as SST Secrets. They are never printed, logged, or sent to the client.
 
 ### 9.3 Invoices
 
-Each purchase and renewal creates an invoice with one line for the AWS service price (the AWS list price converted at the stored FX rate) and one line per pricing step, matching the layout of TiCON Cloud's current invoice (sample pending, Section 17). The PDF is produced by the `invoice-renderer` function from the same HTML template as the invoice page, with self-hosted fonts. VERIFY that Bengali conjuncts and numerals are shaped correctly in the PDF. If that is not proven on day 2, ship an English PDF and keep the Bengali invoice on screen. A top-up produces a payment receipt, not a tax invoice. The VAT point for prepaid top-ups is an open item for the VAT consultant; keep invoice creation behind a single function so the trigger can move.
+Each purchase and renewal creates an invoice with one line for the AWS service price (the AWS list price converted at the stored FX rate) and one line per pricing step whose amount is not 0, matching the layout of TiCON Cloud's current invoice (sample pending, Section 17). The PDF is produced by the `invoice-renderer` function from the same HTML template as the invoice page, with self-hosted fonts. VERIFY that Bengali conjuncts and numerals are shaped correctly in the PDF. If that is not proven on day 2, ship an English PDF and keep the Bengali invoice on screen. A top-up produces a payment receipt, not a tax invoice. The VAT point for prepaid top-ups is an open item for the VAT consultant; keep invoice creation behind a single function so the trigger can move.
 
 ## 10. Provisioning
 
 ### 10.1 Operations
 
 - An operation is a row with a kind, a step and a state: `queued`, `running`, `waiting`, `succeeded`, `failed`, `needs_approval`, `needs_attention`.
-- The `provisioner` handles one step per invocation, saves the new step, and re-enqueues with a delay when it has to wait for AWS (instance pending, database creating, snapshot pending, domain registration in progress).
+- The `provisioner` handles one step per invocation and saves the new step. When the next step can run at once, it sends the operation to the queue again. When it has to wait for AWS (instance pending, database creating, snapshot pending, domain registration in progress) or retry after an error, it sets the state `waiting` with `next_run_at` and sends nothing, because a FIFO queue has no per-message delay. The `scheduler` (every minute) sends `waiting` operations whose `next_run_at` has passed and `queued` operations still unsent 2 minutes after their `next_run_at`, which also recovers a first message lost after the purchase committed.
 - Every step is idempotent. Create steps use the deterministic AWS name, so a retry that finds the resource already present with the right tags continues instead of failing.
-- After 5 failed attempts the operation becomes `needs_attention` and appears in the admin queue. A failed create posts the reversing ledger transaction once.
-- Tags on every AWS resource: `tc:env`, `tc:customer`, `tc:resource`, `tc:order`.
+- After 5 failed attempts the operation becomes `needs_attention` and appears in the admin queue; no refund is posted yet. An admin then retries it (`retryOperation`, back to `queued`) or rejects it (`rejectOperation`). A create becomes `failed` only when it is rejected there or when its error can never succeed on a retry. `failed` is final and `retryOperation` is refused for it. The move to `failed` and the reversing ledger transaction are one database transaction, keyed by the order id, so the reversal is posted once. The same step releases the capacity, sets the subscription to `ended`, queues the removal of anything the create already made in AWS and notifies the customer. If that removal fails, a `discrepancies` row is opened; the refund stands.
+- Tags on every AWS resource that supports tags: `tc:env`, `tc:customer`, `tc:resource`, `tc:order`. Instances also get `tc:os` (`linux` or `windows`) at create and at restore; the `TcAccessDetails` policy reads it (Section 6.3). Static IPs and automatic snapshots take no tags; for them the retry rule and the reconciler use the deterministic name or the parent instance, matched against `resources`.
 
 ### 10.2 Capacity and limits
 
-- `pool_capacity` rows per pool account, Region and quota code: `instance_vcpu`, `static_ip`, `database`, `load_balancer`, `container_service`, `certificate_active`, `disk_gb` (per Region), `bucket`, `distribution` (per account).
-- Reservation happens inside the purchase transaction with `SELECT ... FOR UPDATE` on the affected rows. Sell up to the limit minus a configurable reserve per quota (0 at launch while limits are small; raise it after quotas grow). Release on delete and on failed create. The hourly inventory run corrects `used` from live data.
+- `pool_capacity` rows per pool account, Region and quota code: `instance_vcpu`, `static_ip`, `database`, `load_balancer`, `container_service`, `certificate_active`, `certificate_365d` (certificates created in the last 365 days: 20 per Region, fixed), `disk_gb` (per Region), `bucket`, `distribution` (per account). Certificates for distributions are always created in `us-east-1`, so that Region has its own rows for both certificate codes.
+- Reservation happens inside the purchase transaction with `SELECT ... FOR UPDATE` on the affected rows. Sell up to the limit minus a configurable reserve per quota (0 at launch while limits are small; raise it after quotas grow). Release on delete and on failed create. The hourly inventory run corrects `used` from live data, but never below the live count plus the reservations of create operations not yet `succeeded`; `certificate_365d` has no live count and is kept from the platform's own records.
 - If the home account is full the order is refused with a waitlist option. It is never placed in another account silently.
 - Default limits for risk tier `new` (admin-editable): at most 2 instances, bundle price at most 24 USD, no Windows, no containers, at most 1 static IP each. Tier `trusted`: at most 20 instances until raised by admin.
 - Outbound port 25 stays closed (AWS default). Mail sending is not offered at launch.
 
 ### 10.3 Product adapters
 
-One adapter per family in `packages/aws/adapters`, all implementing:
+One adapter per family in `packages/aws/adapters`, all implementing the interface below. `parseConfig` and `capacityNeeds` are pure functions in `packages/core/products` (schemas from `packages/core/validation`), so `createOrderDraft` and `placeOrder` use them without importing `packages/aws`; the adapter imports them from there:
 
 ```ts
 interface ProductAdapter<C> {
@@ -994,6 +1014,7 @@ interface ProductAdapter<C> {
     destroy(ctx: OpCtx<C>): Promise<StepResult>;
     purgeSnapshots(ctx: OpCtx<C>): Promise<StepResult>;
     describe(ctx: OpCtx<C>): Promise<LiveState>;
+    action(kind: OperationKind, ctx: OpCtx<C>): Promise<StepResult>; // reboot, stop, start, ports, static IP, backups, disks, targets, deploy, records
   };
 }
 ```
@@ -1002,34 +1023,34 @@ interface ProductAdapter<C> {
 | --- | --- | --- | --- | --- |
 | Linux instance (core) | `ImportKeyPair` if missing, `CreateInstances` with bootstrap user data, wait for running, `AllocateStaticIp`, `AttachStaticIp`, `PutInstancePublicPorts` | Save the port rules, then close all public ports (VERIFY that `PutInstancePublicPorts` with an empty list closes everything). Config switch allows `StopInstance` instead | `CreateInstanceSnapshot`, wait, `DeleteInstance`, `ReleaseStaticIp` | Restore with `CreateInstancesFromSnapshot`. The public IP changes after a restore; say so in the UI |
 | Firewall, static IP (core) | `PutInstancePublicPorts`, `OpenInstancePublicPorts`, `CloseInstancePublicPorts`, `AttachStaticIp`, `DetachStaticIp` | with the instance | with the instance | Validate protocols, port ranges and CIDRs with zod |
-| Backups (core) | `CreateInstanceSnapshot`, `EnableAddOn` (AutoSnapshot), `DeleteInstanceSnapshot` | keep | purge 14 days after the instance is deleted | Snapshot storage is metered daily per GB |
+| Backups (core) | `CreateInstanceSnapshot`, `EnableAddOn` (AutoSnapshot), `DeleteInstanceSnapshot` | keep | manual backups and the final snapshot: purge 14 days after the instance is deleted. AWS deletes automatic backups together with the instance, so after a destroy only manual backups and the final snapshot remain, and the Destroy tab says so | Snapshot storage is metered daily per GB |
 | Block storage (core) | `CreateDisk` in the instance's AZ, `AttachDisk` | with the instance | `CreateDiskSnapshot`, `DetachDisk`, `DeleteDisk` | VERIFY attach and detach rules for running instances |
-| Windows instance (A) | As Linux, with the pool's default key pair | as Linux | as Linux | Password is fetched on demand by `access-details`, shown once, never stored. UI tells the customer to change it at first login |
+| Windows instance (A) | As Linux, with the pool's default key pair, and without automatic backups: Lightsail does not support the AutoSnapshot add-on on Windows instances, so the create option and the Backups switch are hidden and backups are manual | as Linux | as Linux | Password is fetched on demand by `access-details`, shown once, never stored. UI tells the customer to change it at first login |
 | Managed database (A) | `CreateRelationalDatabase` with `publiclyAccessible=false`, wait for available | `StopRelationalDatabase` (AWS restarts it after 7 days, grace is 48 hours) | `DeleteRelationalDatabase` with a final snapshot | Password comes from `GetRelationalDatabaseMasterUserPassword` on demand (VERIFY that Lightsail generates it when omitted). Public mode is a customer toggle with a warning |
 | Load balancer (A) | `CreateLoadBalancer`, `AttachInstancesToLoadBalancer`; optional `CreateLoadBalancerTlsCertificate` and `AttachLoadBalancerTlsCertificate` | `DetachInstancesFromLoadBalancer` (remember the list) | `DeleteLoadBalancer` | Targets must be the customer's instances in the same account and Region. HTTPS uses the scarce certificate quota |
-| Object storage (A) | `CreateBucket`, `CreateBucketAccessKey` (secret shown once) | Make the bucket private and delete its access keys | `DeleteBucket` with force after 14 days | 20 buckets per pool account; 2 keys per bucket |
+| Object storage (A) | `CreateBucket`. Access keys are created on demand by `access-details` (`CreateBucketAccessKey`), because AWS returns the secret only in that response; the secret is returned once (U9) and never stored | Make the bucket private and delete its access keys | `DeleteBucket` with force after 14 days | 20 buckets per pool account; 2 keys per bucket |
 | Container service (B) | `CreateContainerService`, `CreateContainerServiceDeployment` | `UpdateContainerService` with `isDisabled=true` (AWS still bills it) | `DeleteContainerService` | Public registry images only at launch. Do not hand out registry logins (`CreateContainerServiceRegistryLogin`), they are account-wide |
 | CDN (B) | `CreateDistribution` in `us-east-1` | `UpdateDistribution` with `isEnabled=false` | `DeleteDistribution` | Origin is the customer's own instance, load balancer or bucket. Custom domains need a certificate |
 | DNS (B) | Route 53 `CreateHostedZone` in `tc-dns` | none | Delete record sets, `DeleteHostedZone` | Section 12 |
-| Domain (B) | Route 53 Domains `RegisterDomain` in `tc-dns` | none | none (expires) | Section 12 |
+| Domain (B) | Route 53 Domains `RegisterDomain` in `tc-dns` | none | none (expires) | Section 12. `RegisterDomain` also creates a hosted zone: adopt it, never create a second one |
 
 ### 10.4 Tenant isolation inside a pool account
 
 Lightsail firewall rules filter only traffic that arrives through the public IP. Instances in the same account and Region can reach each other on private IPs. Databases without public mode are reachable by every Lightsail resource in the same account and Region. Container services have a private domain reachable the same way. The platform therefore adds its own isolation:
 
 1. Bootstrap firewall on every instance through user data, from a fixed template. It installs a systemd unit that applies the rules on every boot and does not depend on `ufw`:
-   - read the VPC CIDR from instance metadata (`network/interfaces/macs/<mac>/vpc-ipv4-cidr-block`); expected value `172.26.0.0/16` (VERIFY);
+   - read the VPC CIDR from instance metadata (`network/interfaces/macs/<mac>/vpc-ipv4-cidr-block`) with an IMDSv2 session token, because Amazon Linux 2023 and Ubuntu 24 blueprints have IMDSv2 by default and a request without a token can be refused; expected value `172.26.0.0/16` (VERIFY). If the read fails, the unit uses the expected value and still applies the rules, so it fails closed;
    - allow established and related traffic;
    - allow UDP source port 67 to destination port 68 (DHCP);
-   - allow TCP 80 and 443 from the VPC CIDR (Lightsail load balancer traffic and health checks);
-   - drop everything else whose source is inside the VPC CIDR.
-   Windows gets the equivalent Windows Firewall block rules in a PowerShell launch script (block rules win over allow rules there, so block the port ranges around 80, 443 and UDP 68 rather than everything). VERIFY both scripts on every blueprint that is offered; a blueprint is listed in the catalog only after its bootstrap passes the isolation test.
+   - allow TCP 80 from the VPC CIDR (Lightsail load balancer traffic and health checks; load balancers are created with `instancePort` 80, so 443 stays closed). Port 80 is therefore reachable from other servers in the same pool account and Region, and private traffic between a customer's own servers is blocked; the Networking tab says both;
+   - drop everything else whose source is inside the VPC CIDR, in a hook that runs before NAT and forwarding (for example an nftables `inet` table at prerouting), so ports published by Docker are covered too.
+   Windows gets the equivalent Windows Firewall block rules in a PowerShell launch script (block rules win over allow rules there, so block the port ranges around 80 and UDP 68 rather than everything). VERIFY both scripts on every blueprint that is offered; a blueprint is listed in the catalog only after its bootstrap passes the isolation test.
 2. Per-customer SSH key pairs. The private key is generated in the browser or supplied by the customer; only the public key reaches the platform. Start with RSA keys; allow ED25519 only if `ImportKeyPair` accepts it (VERIFY).
 3. The pool's default key pair is used only for Windows. `DownloadDefaultKeyPair` is denied to every platform role.
 4. Database passwords are generated, at least 24 characters, and shown on demand. The panel recommends TLS connections.
 5. The UI never describes a container service without a public endpoint as "private".
 6. Customers who need hard isolation get a dedicated pool account (a config row), sold as a separate option later.
-7. Isolation test in `tests/isolation` (runs in `tc-pool-dev`): two instances owned by different test customers; B cannot open TCP 22 or 3306 on A's private IP; a load balancer health check to A passes; DHCP renewal on A works after a reboot.
+7. Isolation test in `tests/isolation` (runs in `tc-pool-dev`): two instances owned by different test customers; B cannot open TCP 22, 443, 3306, a high TCP port or a UDP port on A's private IP, and the test records that B can open TCP 80; B cannot open a port that Docker publishes on A; a load balancer health check to A passes; DHCP renewal on A works after a reboot. Instances are dual-stack by default and every IPv6 address is public, so the test also has an IPv6 case: B cannot open a port on A's IPv6 address that A's IPv6 firewall does not allow, and a rule sent with IPv4 sources only leaves that port closed for IPv6 (VERIFY both). Until both hold, instances are created with `ipAddressType` `ipv4`.
 
 ## 11. Lifecycle engine
 
@@ -1037,15 +1058,16 @@ Subscription states: `active`, `grace` (resource suspended, data intact), `retai
 
 | When | Action |
 | --- | --- |
-| 7, 3 and 1 day before period end | Reminder by email and SMS with the renewal amount and wallet balance |
+| 7, 3 and 1 day before period end | Reminder by email with the renewal amount at today's rate and the wallet balance; SMS only at 1 day (16.14) |
 | Period end, auto-renew on, wallet funded | Charge, extend 30 days, invoice |
 | Period end, not renewed | State `grace`. Suspend the resource (Section 10.3). Notify |
-| During grace | Customer pays: resume the resource, new period starts from the old period end |
+| During grace | Customer pays: resume the resource, new period starts from the old period end. Paying means `renewNow`, or, with auto-renew on, the `scheduler` itself: it tries the renewal again on every run and renews as soon as the wallet covers the amount |
 | Period end + 48 hours | State `retained`. Final snapshot, then destroy the resource. Needs admin approval until 2026-12-01. Notify |
-| During retention | Customer pays: restore from the final snapshot, new period starts at restore time |
+| During retention | Customer pays: restore from the final snapshot, new period starts at restore time. A family without a final snapshot (load balancer, container service, CDN, DNS) keeps its configuration in `resources.config` and is created again from it; its endpoint changes and the badge and email say "settings kept" |
 | Destroy + 14 days | State `ended`. Purge snapshots. Notify |
+| Any time | A resource suspended by an admin (`suspendResource`) stays suspended: a renewal or payment never resumes it; only an admin action does |
 
-Metered items: snapshot storage is charged daily at (GB x price per GB-month / 30). Data transfer is measured hourly from instance metrics; notify at 80% and 100% of the bundle allowance; above 100% buy 50 GB packs from the wallet if the customer enabled it, otherwise close public ports until the next period. If a daily charge cannot be paid the item enters the same grace flow.
+Metered items: snapshot storage is charged daily at (GB x price per GB-month / 30). Data transfer is measured hourly from instance metrics by the `reconciler` through `TcReader` and written to `usage_records`; notify at 80% and 100% of the bundle allowance; above 100% buy 50 GB packs from the wallet if the customer enabled it, otherwise close public ports until the next period. If a daily charge cannot be paid the item enters the same grace flow.
 
 ## 12. Domains and DNS
 
@@ -1053,11 +1075,13 @@ All calls run in `tc-dns`. Route 53 Domains uses the `us-east-1` endpoint.
 
 - TLD catalog: `ListPrices` daily into `tlds`. Show every TLD. TLDs that require extra parameters or eligibility proof are listed too, but their orders go to an admin review step before `RegisterDomain`.
 - Search: `CheckDomainAvailability`. Price: registration price through the pricing engine, per year.
-- Register: collect registrant contact details from the customer (the customer is the registrant), privacy protection on where the TLD supports it, `AutoRenew=false`. Poll `GetOperationDetail`. The registrant must confirm the verification email or the domain is suspended by the registry; show that status and offer `ResendContactReachabilityEmail`.
+- Register: collect registrant contact details from the customer (the customer is the registrant), privacy protection on where the TLD supports it, `AutoRenew=false`. Poll `GetOperationDetail`. The registrant must confirm the verification email or the domain is suspended by the registry; show that status and offer `ResendContactReachabilityEmail`. `setNameServers` calls `UpdateDomainNameservers`.
+- `RegisterDomain` itself creates a Route 53 hosted zone with the domain's name in `tc-dns` and points the domain's name servers to it; AWS bills it like any hosted zone, unless it is deleted within 12 hours. After the registration succeeds, find it with `ListHostedZonesByName` and record its id on the `domains` row. If the customer orders a DNS zone for that name, this zone is the one: save it as the `dns_zones` row and never call `CreateHostedZone` for a domain registered here. If the customer bought no DNS zone, keep the zone and count it as TiCON's cost until the owner decides what to do with it (Section 17). VERIFY in `tc-dns` with the first real registration.
 - No refunds on registrations. Require a second confirmation that repeats the exact domain name.
+- TiCON registers names for its customers, so it is a reseller under section 3.12 of the Route 53 Domain Name Registration Agreement. The domain flag stays off until the customer's domain registration agreement in `content/legal/` carries the provisions ICANN requires, names the sponsoring registrar or links a lookup, and links ICANN's Registrant Educational Information and Registrants' Benefits and Responsibilities pages, and until the order flow saves the customer's consent to the processing of registration data in `legal_acceptances`. No ICANN logo is shown.
 - Renewal is prepaid: reminders 60, 30 and 7 days before expiry, then `RenewDomain` when the wallet is charged.
 - Quota: 20 domains per account by default. Request an increase for `tc-dns` on Day 0.
-- DNS zones: `CreateHostedZone` with the operation id as caller reference. Zone price is a 30-day product. Record editor for A, AAAA, CNAME, MX, TXT, SRV and CAA through `ChangeResourceRecordSets`; the apex NS and SOA records are read-only.
+- DNS zones: `CreateHostedZone` with the operation id as caller reference, except for a domain registered here, whose automatic hosted zone is adopted (see Register). Zone price is a 30-day product. Record editor for A, AAAA, CNAME, MX, TXT, SRV and CAA through `ChangeResourceRecordSets`; the apex NS and SOA records are read-only.
 - A zone is allowed only for a domain the customer registered here or declares to control. Zones that are not delegated to their Route 53 name servers within 14 days are removed after two notices.
 - Transfer out is handled by support at launch.
 
@@ -1092,8 +1116,8 @@ Each work package is broken into session-sized tasks in Section E.3, and each da
 | WP | Day | Scope | Acceptance tests |
 | --- | --- | --- | --- |
 | WP0 Foundation | Wed 11 | Monorepo, SST app with stages, VPC, RDS and proxy, Cognito pools, queue, buckets, WAF, CI (lint, typecheck, test), the Claude Code kit of Appendices P to T | `sst deploy --stage staging` succeeds; database is not reachable from the internet; a hello page loads through CloudFront; CI is green |
-| WP1 Data and pricing | Wed 11 | Schema and migrations, database roles, pricing engine, markets, FX and rules, catalog sync from `tc-pool-dev` | All Section 8 vectors pass; `app_rw` cannot UPDATE `ledger_entries`; catalog shows real bundles with BDT prices |
-| WP2 Identity | Wed 11 | Sign-up, sign-in, sessions in cookies, phone OTP, KYC upload and status | JWT tampering is rejected; OTP limits hold; KYC object is not readable by the web role; no resource creation before `verified` |
+| WP1 Data and pricing | Wed 11 | Schema and migrations, database roles, pricing engine, markets, FX and rules, catalog sync from `tc-pool-dev` | All Section 8 vectors pass; no application role can UPDATE `ledger_entries`; catalog shows real bundles with BDT prices |
+| WP2 Identity | Wed 11 | Sign-up, sign-in, sessions in cookies, phone OTP, KYC upload and status | JWT tampering is rejected; OTP limits hold; KYC object is not readable by the web role; no resource creation before `verified` (proved in WP4-T4) |
 | WPU UI kit and shells | Wed 11 | Section 16.3 to 16.7: theme sync, fonts, tokens, component kit, four shells, i18n scaffolding, `/dev/ui` gallery | The gallery passes the checks of Section 16.16 that apply to it; the build output has no file from the theme's `assets/js` |
 | WP3 Wallet and EPS | Thu 12 | Ledger, wallet, top-up flow, sweeper, receipts, invoice data | Real top-up credits once; replayed callback credits nothing; forged success URL credits nothing; amount mismatch credits nothing; balance equals ledger sum |
 | WP4 Provisioning core | Thu 12 to Fri 13 | Pool accounts and roles, capacity, operations and queue, Linux instance adapter, keys, bootstrap firewall, static IP, firewall rules | Paid order yields a running instance reachable by SSH with the customer key; a failed create refunds once; isolation test passes; web role cannot assume `TcProvisioner` |
@@ -1109,7 +1133,7 @@ Each work package is broken into session-sized tasks in Section E.3, and each da
 
 - [ ] Web and admin function roles have no `sts:AssumeRole` permission (checked in IAM and by a test that tries it).
 - [ ] RDS has no public endpoint; security group allows only the proxy; TLS is forced.
-- [ ] No secret in the repo history, client bundles or logs (secret scan in CI).
+- [ ] No secret in the repo history or client bundles (secret scan in CI). After the Playwright P0 run a script searches the staging log groups for the test password, tokens, document number, full phone and email and finds none (R14).
 - [ ] Every customer endpoint has a passing cross-tenant test.
 - [ ] EPS: replay, forged redirect, amount mismatch and double callback tests pass.
 - [ ] Ledger: balance check job reports zero differences; no negative wallet.
@@ -1117,7 +1141,7 @@ Each work package is broken into session-sized tasks in Section E.3, and each da
 - [ ] Security headers: CSP with nonces, HSTS, `X-Content-Type-Options`, `frame-ancestors 'none'`, `Referrer-Policy`.
 - [ ] Cookies are `HttpOnly`, `Secure`, `SameSite=Lax`; Server Actions accept only same-origin requests.
 - [ ] Uploads: size and type limits enforced by the presigned policy; bucket is private.
-- [ ] Admin: separate pool, MFA required, IP allowlist enforced, all actions audited.
+- [ ] Admin: separate pool, MFA required, IP allowlist enforced, all actions audited. A direct request to the Lambda function URL of `web` or `admin` returns 403.
 - [ ] Isolation test passes in each launch Region.
 - [ ] SCPs attached to the pool OU and `tc-dns`; the provisioner role cannot use a denied action.
 - [ ] CloudTrail and GuardDuty on in every account; dead-letter, 5xx and reconciliation alarms deliver to on-call.
@@ -1126,8 +1150,11 @@ Each work package is broken into session-sized tasks in Section E.3, and each da
 - [ ] Each pool account has a monitored security alternate contact for AWS abuse notices, and the abuse runbook (suspend within 24 hours) is written.
 - [ ] No page requests a third-party origin: fonts, scripts, styles and images are self-hosted. The only cross-origin traffic from the browser is the KYC upload to the platform's own bucket and the navigation to EPS.
 - [ ] No file from the mockup's `assets/js`, `assets/php` or `order-form` folders is in a build output, and `design/mockup/` is excluded from every build.
-- [ ] No page, API response, email or SMS that a customer can see contains an AWS account id, an ARN, a pool account name, an internal AWS resource name or raw AWS error text (rule U6).
+- [ ] No page, API response, email or SMS that a customer can see contains an AWS account id, an ARN, a pool account name, an internal AWS resource name or raw AWS error text (rule U6). Exceptions: the names and addresses that rule U6 allows because the customer needs them (the bucket name, the default domain of a container service, and the endpoints of databases and distributions).
 - [ ] No developer machine and no Claude Code session holds credentials for `tc-platform`, the management account or a customer pool account. Production is deployed only by the CI role after approval.
+- [ ] Shell and template characters in every free-text field reach no AWS name, tag or user data (R11).
+- [ ] With EPS verify, the KYC lookup or capacity stubbed to fail, the action is refused (R16).
+- [ ] An absolute or `//` value of `next` is ignored (U12); a flag-off family returns `flag_off` from `placeOrder` (R12).
 
 ## 16. Screens and UI
 
@@ -1141,16 +1168,18 @@ The mockup zip received on 2026-11-10 is the unmodified ThemeForest item "Antler
 | --- | --- | --- |
 | `template/` | 57 static HTML pages of a hosting company website and `assets/` (Bootstrap 5.2.3, theme CSS, jQuery 3.7.1 with plugins, icon fonts, patterns, images) | The look of the product and the layouts named in 16.6 to 16.12 |
 | `order-form/antler/` | 26 Smarty `.tpl` files, a skin for the WHMCS `standard_cart` order form | Reference for order states and wording. Not code for this product |
+| `whmcs-template/antler/` | 192 Smarty `.tpl` files of the WHMCS client area (client area home, add funds, invoices, product details, domains), built on the WHMCS Six theme (Bootstrap 3.4.1, jQuery 1.12.4), with its own `assets/`, `css/` and `js/` folders; 825 files in all | Visual reference for panel screens. Not code for this product, and nothing from it is shipped (rule U2) |
 | `email/` | One HTML email layout: `index.html`, `header.html`, `footer.html`, `global.css` | Layout of transactional emails (16.14) |
 | `newsletter/` | A newsletter layout | Not used at launch |
 | `graphic/` | Four Illustrator files with the Antler logo and artwork | Not used. The TiCON Cloud logo comes from the `ticoncloud` site repo |
 | `documentation/` | The theme's own documentation | Reference |
+| `changelog(4.5.0).rtf` (a file, not a folder) | The theme's change log, top entry version 4.5.0 of 2026-10-24 | Read it before every theme update (16.3) |
 
 Facts that shape this section:
 
 - Nothing in the zip is customized. Titles, logo, text, USD prices and form targets are the theme's demo content. The mockup defines how the product looks, not what its screens contain.
-- The zip has no customer panel. The theme's WHMCS client area (the `whmcs-template` folder named in the theme documentation) is not in the zip, and no page shows a dashboard, wallet, server management, KYC, invoice or admin screen. Sections 16.9 to 16.12 specify those screens and compose them from the theme's own blocks.
-- With no saved settings the pages render with `data-layout="wide"`, `data-color="pink"`, `data-background="dark"`, `data-font="opensans"`, `data-header="static"`, `data-radius="defaultradius"` and `data-textdirection="ltr"` on `<body>` (checked by loading the pages in a browser). The values in `assets/js/settings-init.js` are not applied while its settings panel is switched on. The theme also has the color schemes `blue`, `green` and `black` and the backgrounds `light`, `origin` and `modern`. Each is one attribute.
+- The `template/` pages have no customer panel: no page shows a dashboard, wallet, server management, KYC, invoice or admin screen. The theme's WHMCS client area is in `whmcs-template/antler/` as Smarty templates for WHMCS (client area home, add funds, invoices, product details, domains), not as pages that open in a browser. It is a visual reference only: `scripts/sync-theme.ts` copies nothing from it. Sections 16.9 to 16.12 specify those screens and compose them from the theme's own blocks.
+- With no saved settings the pages render with `data-layout="wide"`, `data-color="pink"`, `data-background="dark"`, `data-font="opensans"`, `data-header="static"`, `data-radius="defaultradius"` and `data-textdirection="ltr"` on `<body>` (checked by loading the pages in a browser). The values in `assets/js/settings-init.js` are not applied while its settings panel is switched on. The theme also has the color schemes `blue`, `green` and `black` and the background `light`. Each is one attribute. The background `origin` has only four CSS rules and `modern` has none; do not use them.
 - The shipped CSS has no external URL and no `@import`. The request to Google Fonts is made only by the theme's JavaScript, which is not shipped.
 - Licence: an Envato licence covers one end product, which for a site theme is one customized website. Under Envato's licence FAQ a Regular License is enough while visitors can use the site without paying for access to it, and payment for a separate product or service does not require the Extended License. This is a reading of the FAQ, not legal advice. Before launch confirm that the licence used here is not already used on another site (Section 17).
 
@@ -1163,9 +1192,9 @@ These go verbatim into `.claude/rules/ui.md` (Appendix R). `CLAUDE.md` carries a
 | U1 | The mockup is the look. Reuse its CSS classes and layouts; do not redesign. Where a screen has no mockup page, compose it from the kit in 16.6 and the shells in 16.7. |
 | U2 | Ship CSS, fonts and images only. No file from the theme's `assets/js`, `assets/php` or `order-form/` reaches a build: no jQuery, no plugin, no `scripts.js`, no `settings-init.js`, no i18next, no cookie plugin, no Smarty. |
 | U3 | No third-party origin at runtime. Fonts, styles, icons and images are self-hosted. No analytics, chat or tag script without a recorded decision and a CSP entry. |
-| U4 | No inline script except the nonce scripts of Next.js. No inline `style` attribute in server-rendered markup; use classes. CSP runs in report-only mode on staging and a screen is done only at zero violations. |
+| U4 | No inline script except the nonce scripts of Next.js. No inline `style` attribute in server-rendered markup; use classes. CSP runs in report-only mode on staging and a screen is done only at zero violations. U4 applies to pages of `apps/web` and `apps/admin`; email templates in `packages/notify` (16.14) and the invoice HTML for `invoice-renderer` use inline CSS. |
 | U5 | All text comes from `next-intl` messages in `bn` and `en`. No hard-coded strings in components. Bengali is written first. |
-| U6 | AWS is named openly. Public pages, the panel, invoices and emails tell the customer that the service is 100% AWS: every resource is an Amazon Lightsail resource in an AWS Region. Use the statements, names and wording rules of 16.13, which follow the AWS Trademark Guidelines. Still never shown to a customer: AWS account ids, ARNs, the pool account structure, internal AWS resource names and raw AWS error text. Errors from AWS are mapped to platform messages. |
+| U6 | AWS is named openly. Public pages, the panel, invoices and emails tell the customer that the service is 100% AWS: every server, database, disk, bucket, load balancer and container service is an Amazon Lightsail resource in the AWS Region the customer chose, and CDN, DNS and domains use Amazon Lightsail CDN and Amazon Route 53, which are global AWS services. Use the statements, names and wording rules of 16.13, which follow the AWS Trademark Guidelines. Still never shown to a customer: AWS account ids, ARNs, the pool account structure, internal AWS resource names and raw AWS error text. One exception: a name or address that the customer needs in order to use the resource is shown, namely the bucket name (it is part of the bucket URL), the default domain of a container service (it starts with the service name) and the endpoints of databases and distributions. Errors from AWS are mapped to platform messages. |
 | U7 | Server Components by default. A component is a Client Component only when it holds interaction state. Data is read on the server through repositories (R8). No customer data in `localStorage` or `sessionStorage`. |
 | U8 | Every form posts to a Server Action that follows R9, and shows field errors from the same zod schema. A button that changes state is disabled while its action is pending, and the action is idempotent (R7). |
 | U9 | A secret shown to a customer (Windows password, database password, bucket secret key) is returned once in a Server Action response with `no-store`, is never part of a cached render, is never logged, and is hidden again after 60 seconds. |
@@ -1176,11 +1205,12 @@ These go verbatim into `.claude/rules/ui.md` (Appendix R). `CLAUDE.md` carries a
 
 ### 16.3 Theme port
 
-`scripts/sync-theme.ts` copies the files below from `design/mockup/template/assets/` to `packages/ui/theme/assets/`, and from there into `public/theme/assets/` of both apps. The `assets/` tree is mirrored because `theme.min.css` refers to its files with paths such as `../patterns/` and `../../assets/img/`. The root layout links the stylesheets with plain `<link rel="stylesheet">` tags in the order of the mockup's `<head>`: Font Awesome, icon fonts, Bootstrap, theme, and then `tc.css`. The script also copies `tc.css` to `public/theme/`, so it is linked last as a static file and the order is fixed.
+`scripts/sync-theme.ts` copies the files below from `design/mockup/template/assets/` to `packages/ui/theme/assets/`, and from there into `public/theme/assets/` of both apps. The `assets/` tree is mirrored because `theme.min.css` refers to its files with paths such as `../patterns/` and `../../assets/img/`. The root layout links the stylesheets with plain `<link rel="stylesheet">` tags in the order of the mockup's `<head>`: Font Awesome, icon fonts, Bootstrap, `vendors.min.css`, theme, and then `tc.css`. The script also copies `tc.css` to `public/theme/`, so it is linked last as a static file and the order is fixed.
 
 | Shipped | Note |
 | --- | --- |
 | `css/bootstrap.min.css` | Bootstrap 5.2.3, CSS only |
+| `css/vendors.min.css` and `img/filter/*.svg` | Unmodified. Base styles of `cd-filter-block` (radio, checkbox and select of `OptionGroup`) and of the slider under `PlanPicker`; `theme.min.css` builds on them |
 | `css/theme.min.css` | Unmodified, so a theme update is a file swap. All product CSS goes into `packages/ui/styles/tc.css` |
 | The 8 `patterns/*.svg` files that the theme CSS refers to | Background line patterns |
 | `fonts/fonts.min.css`, `fonts/cloudicon/*`, `fonts/evafeat/*` | Line icon fonts used by plan cards and menus (`icon-*` classes) |
@@ -1191,7 +1221,7 @@ These go verbatim into `.claude/rules/ui.md` (Appendix R). `CLAUDE.md` carries a
 | Never shipped | Why |
 | --- | --- |
 | `js/*`, `php/*`, and the whole `order-form/` folder | Rule U2 |
-| `css/vendors.min.css`, `css/aos.min.css`, `css/rtl/*` | Styles of plugins and animations that are not used. The RTL files come back only when a right-to-left market opens |
+| `css/aos.min.css`, `css/rtl/*` | Animation styles that are not used. The RTL files come back only when a right-to-left market opens |
 | `img/topbanner*.jpg`, `img/partners/*`, `img/avatars/*`, `img/blog/*`, `casestudy/*`, `videos/*` | Demo photos, logos of other companies, PDFs and videos (rule U13). The CSS classes that refer to them are not used |
 | `img/logo.svg`, `img/logo-light.svg`, `img/symbol.svg`, `img/favicon.ico` | Antler branding. Replaced by TiCON Cloud files in the same roles |
 | `locales/*` | Theme demo translations. Text comes from `next-intl` |
@@ -1202,13 +1232,13 @@ The script copies only the allow-list above. It reports every `url()` in a shipp
 
 | Token | Value | Note |
 | --- | --- | --- |
-| Theme attributes, customer app | `data-layout="wide" data-color="pink" data-background="dark" data-font="opensans" data-header="static" data-radius="defaultradius" data-textdirection="ltr"` on `<body>` | What the mockup renders. Written by the root layout from one config object. No cookie, no script |
+| Theme attributes, customer app | `data-layout="wide" data-color="pink" data-background="dark" data-font="opensans" data-header="static" data-radius="defaultradius" data-textdirection="ltr"` on `<body>` | What the mockup renders. Written by the root layout from one config object. No cookie, no script. The root layout also wraps all content in one `div.box-container.limit-width`, as every mockup page does: the theme's color, card and button rules apply only inside it |
 | Theme attributes, admin app | The same with `data-color="blue"` and `data-background="light"`, and a fixed "OPS" label in the top bar | Staff must never mistake the admin panel for the customer panel |
 | Colors on the dark background | Page `#15212a`, card `#101920`, text `#ffffff`, muted text `#6c757d` | Computed from the rendered mockup. Components use the helper classes `bg-colorstyle` (page sections), `bg-seccolorstyle` (cards), `mergecolor` and `seccolor` (text), not hex values |
 | Colors on the light background | Page `#ffffff`, card `#ebeff5`, text `#212122` | Same classes |
 | Accent | Pink `#ee5586`. Magenta `#a5215e` for plan specification blocks and badges (`bg-purple`) | |
 | Buttons | Primary: yellow `#fdd700` with black text, pill shape (`btn btn-default-yellow-fill`), one per view. Secondary: `btn btn-default-pink-fill`. Tertiary: `btn btn-outline-pink`. Destructive: Bootstrap `btn btn-danger` | |
-| Radius | Cards 15 px; buttons and inputs are pills | From `defaultradius` |
+| Radius | Cards (`sec-main`) 12 px; plan boxes (`.pricing .wrapper`) 15 px; buttons and inputs are pills | From `defaultradius` |
 | Other color schemes | `data-color="blue"`, `"green"` or `"black"` change the accent with one attribute. For TiCON Cloud brand colors add `data-color="ticon"` by copying the `[data-color="pink"]` rules of `theme.css` (about 89 selectors) into `tc.css` with the brand values | Decision in Section 17. Never edit `theme.min.css` |
 | Light and dark switch | Optional, P2: a customer setting that flips `data-background` between `dark` and `light`, stored in a cookie that the server reads | Both backgrounds already work in the theme |
 | Font | The theme's rules name `'Open Sans'` with `!important`. Define that family in `tc.css` from self-hosted files: Open Sans for Latin text, and a second `@font-face` with the same family name and the Bengali `unicode-range` that points to Noto Sans Bengali. Take the files and the `unicode-range` values from the Fontsource packages (`@fontsource-variable/open-sans`, `@fontsource-variable/noto-sans-bengali`; confirm the names at install) | Open Sans has no Bengali glyphs. One composite family means no theme rule needs an override |
@@ -1273,11 +1303,11 @@ The script copies only the allow-list above. It reports every `url()` in a shipp
 | `AppShell` | No mockup page shows an app frame, so it is composed. Top bar: the `div.menu-wrap` bar without the top line. Left navigation: `aside#sidebar.sidebar.sec-bg1.bg-seccolorstyle` of `legal.html` (icon and label rows, the active row in the accent color). Content column: `div#sidebar_content` of the same page with `Card` blocks | Top bar: logo, language switch, `WalletChip` with the balance and a yellow "Top up" button, notification bell, account menu. Navigation: Dashboard, Cloud Servers, Databases, Object Storage, Load Balancers, Containers, CDN, Domains and DNS, Wallet, Invoices, Support, Settings. A family whose flag is off is hidden, or shown with a "soon" tag when the market config asks for it. No pink title band inside the panel: each screen starts with a compact row of breadcrumb, title and one primary button. Under 992 px the navigation moves into the offcanvas of `header.html` (`div#offcanvasWithBackdrop`). A slim footer carries the short AWS statement and the trademark line of 16.13 |
 | `AdminShell` | `AppShell` with the admin attributes of 16.4 | Navigation from 16.12, the "OPS" label, the signed-in admin and role |
 
-Locale routing in both apps: `bn` at the root, `en` under `/en` (`next-intl`, prefix as needed). After sign-in the customer's saved locale decides.
+Locale routing in both apps: `bn` at the root, `en` under `/en` (`next-intl`, `localePrefix: 'as-needed'`, `localeDetection: false`, so the `Accept-Language` header never redirects `/` to `/en`). Playwright runs with `locale: 'bn-BD'`. After sign-in the customer's saved locale decides.
 
 ### 16.8 Public pages
 
-All are Server Components, indexable, with a canonical URL, `hreflang` for `bn` and `en`, structured data (`Organization`, `Product` with `Offer` in BDT, `FAQPage`, `BreadcrumbList`), `sitemap.xml` and `robots.txt`. Every price comes from `catalog_products` through the pricing engine. Plan cards and price tables show whole taka rounded up, with the note that prices include VAT and fees and are for 30 days. Each public page names the AWS service in its title, description and first paragraph in the form of 16.13 (for example "Cloud Server, built on Amazon Lightsail"), because customers look for AWS by name.
+All are Server Components, indexable, with a canonical URL, `hreflang` for `bn` and `en`, structured data (`Organization`, `Product` with `Offer` in BDT, `FAQPage`, `BreadcrumbList`), `sitemap.xml` and `robots.txt`. Every price comes from `catalog_products` through the pricing engine. Plan cards and price tables show whole taka rounded up, with the note that prices include VAT and fees and are for 30 days. Where a plan's specification differs by location (the data transfer allowance in Mumbai is half of Singapore's), cards and tables show the value for each location. Each public page names the AWS service in its title, description and first paragraph in the form of 16.13 (for example "Cloud Server, built on Amazon Lightsail"), because customers look for AWS by name.
 
 | Route | Mockup page | Content | P |
 | --- | --- | --- | --- |
@@ -1288,10 +1318,10 @@ All are Server Components, indexable, with a canonical URL, `hreflang` for `bn` 
 | `/products/object-storage`, `/products/load-balancers`, `/products/containers`, `/products/cdn`, `/products/dns` | Layout of `vps.html` | The same blocks with the family's data | P1, with the family's gate |
 | `/products/domains` | `domains.html` | Search box (`section.cd-main-content`, `div.cd-filter`), TLD table (`table.table.compare`: register, renew, transfer) from `tlds` with a text filter, FAQ. The availability check goes through `reader`, is cached for 60 seconds, and has a WAF rate rule and an application limit per IP | P1, Gate B |
 | `/payments` | `payments.html` | How top-up works, payment methods with the EPS banner, link to the refund policy | P1 |
-| `/help` | `faq.html` | FAQ in an `Accordion` from MDX files in the repo, at least ten questions at launch. Required questions: is this real AWS (yes, 100%), do I get an AWS account or the AWS console (no, the TiCON Cloud panel), who bills and supports me (TiCON Cloud), where is my data (the AWS Region the customer chose) | P0 |
+| `/help` | `faq.html` | FAQ in an `Accordion` from MDX files in the repo, at least ten questions at launch. Required questions: is this real AWS (yes, 100%), do I get an AWS account or the AWS console (no, the TiCON Cloud panel), who bills and supports me (TiCON Cloud), where is my data (servers, databases, disks and buckets in the AWS Region the customer chose; CDN copies at AWS edge locations worldwide; DNS is global; the account and identity documents in AWS Singapore) | P0 |
 | `/help/[slug]` | `knowledgebase-list.html`, `knowledgebase-article.html` | Help articles from MDX files | P2 |
 | `/support` | `contact.html`, `section#ticket` | Form: name, email, subject, department, message, saved in `support_requests` and mailed to the support inbox. Rate limited per IP, with a hidden honeypot field (no third-party captcha, rule U3). Phone and the company address. Not used: the map and the newsletter checkbox | P0 |
-| `/legal/[doc]` | `legal.html` | Sidebar of documents and versioned content from MDX: terms, acceptable use, privacy, refund, domain registration agreement | P0 |
+| `/legal/[doc]` | `legal.html` | Sidebar of documents and versioned content from MDX: terms, acceptable use, privacy, refund, domain registration agreement. The acceptable use policy passes on the AWS rules that bind TiCON's customers as end users: the AWS Acceptable Use Policy, no cryptocurrency mining (Service Terms 1.25), no use of Lightsail to avoid the data fees of other AWS services (51.3), no video streaming or very high request volume through CDN (Lightsail FAQ), outbound port 25 closed, and TiCON's right to suspend a resource at once on a breach or an AWS notice (Customer Agreement 2.5). The wording is the legal adviser's | P0 |
 | Not found, error, maintenance, coming soon | `404.html`, `maintenance.html`, `soon.html` | `not-found` and `error` files of Next.js, a maintenance page behind one switch, and the page of a flag-off family with a "notify me" button that writes `waitlist_entries` | P0 |
 
 ### 16.9 Sign-in and onboarding (WP2)
@@ -1322,12 +1352,12 @@ All routes use `AppShell`, send `X-Robots-Tag: noindex`, and read data through r
 | `/servers/[id]` | `Tabs` in a `Card`, tabs below | Header: label, state, addresses, plan, AWS Region and Availability Zone, period end | | WP4 | P0 |
 | Tab Overview | `StatTile`, `CopyField` | Specifications, addresses, renewal date, data transfer used against the allowance | `rebootServer`, `stopServer`, `startServer`, `renameServer` | WP5 | P0 |
 | Tab Access | `CopyField`, `SecretReveal` | SSH command and key name. Windows: user name and the password on demand through `access-details` | `revealWindowsPassword` | WP4; Windows in WP6 | P0; Windows P1 |
-| Tab Networking | `DataTable` with inline editing | Firewall rules (protocol, port range, source CIDR) and the static IP | `saveFirewallRules`, `attachStaticIp`, `detachStaticIp` | WP4 | P0 |
+| Tab Networking | `DataTable` with inline editing | Firewall rules (protocol, port range, source CIDR) and the static IP; a note that these rules filter public traffic only, that port 80 is reachable on the private network from other servers in the same Region, and that private traffic between the customer's own servers is blocked (10.4) | `saveFirewallRules`, `attachStaticIp`, `detachStaticIp` | WP4 | P0 |
 | Tab Backups | `DataTable` | Backups with size and date, the automatic backup switch and hour | `createBackup`, `deleteBackup`, `setAutoBackup`, `restoreToNewServer` (review) | WP5 | P0 |
-| Tab Storage | `DataTable` | Attached disks with size and path | `addDisk` (review), `attachDisk`, `detachDisk`, `destroyDisk` | WP5 | P0 |
+| Tab Storage | `DataTable` | Attached and detached disks with size and path (a detached disk is still billed) | `addDisk` (review), `attachDisk`, `detachDisk`, `destroyDisk` | WP5 | P0 |
 | Tab Metrics | Charts | CPU, network in and out, status checks for 1 hour, 1 day and 1 week, read through `reader` | None | WP5 | P0 |
 | Tab Billing | `PriceBreakdown` | Plan, current period, next renewal amount, automatic renewal, past invoices | `setAutoRenew`, `renewNow` (review) | WP5 | P0 |
-| Tab Destroy | `ConfirmDestroy` | What is deleted, what is kept, and for how long | `destroyServer` (rule U10; enters the approval queue until 2026-12-01) | WP5 | P0 |
+| Tab Destroy | `ConfirmDestroy` | What is deleted (the server and its automatic backups, which AWS removes with it), what is kept (manual backups and the final backup), and for how long | `destroyServer` (rule U10; enters the approval queue until 2026-12-01) | WP5 | P0 |
 | `/databases`, `/databases/new`, `/databases/[id]` | The list, configure and tab patterns above; plan table from `database.html` | Engine and version, plan, location. Detail: endpoint, port, user, password on demand, public mode switch with a warning, backups, metrics | `createOrderDraft` (review), `revealDatabasePassword`, `setPublicMode`, `createBackup`, `destroyDatabase` | WP6 | P1, Gate A |
 | `/storage`, `/storage/new`, `/storage/[id]` | Same patterns | Plan, usage, access mode, access keys (the secret is shown once) | `createOrderDraft` (review), `createAccessKey`, `deleteAccessKey`, `setBucketAccess`, `destroyBucket` | WP6 | P1, Gate A |
 | `/load-balancers`, `/load-balancers/new`, `/load-balancers/[id]` | Same patterns | Targets (the customer's own servers in the same location), health, HTTPS certificate state | `createOrderDraft` (review), `setTargets`, `requestCertificate`, `destroyLoadBalancer` | WP6 | P1, Gate A |
@@ -1348,9 +1378,9 @@ There is no multi-item cart at launch: one resource per order, paid from the wal
 1. Configure (`/servers/new` or another family's `/new` page). The page loads the catalog rows that the customer may buy (feature flags, risk tier limits of Section 10.2, allowed locations). The client never computes money.
 2. `createOrderDraft` validates the configuration (zod, limits, flag, KYC `verified`, capacity available but not yet reserved), prices it, and returns a draft token: the customer id, the configuration, the price snapshot and the rule version, signed with a server secret (HMAC), valid for 30 minutes. The token holds nothing secret and is accepted only from the customer it names. No database row is written.
 3. Review (`/orders/review?d=<token>`) shows the lines, the total, the balance after purchase, the 30-day term, the renewal rule and the terms box.
-4. Short balance: the page shows the shortfall and a button to `/wallet/topup` with the amount pre-filled and `next` set to the review URL (rule U12). After a verified top-up the customer is back on the review page. Nothing is bought automatically.
-5. `placeOrder` takes the token and an idempotency key, verifies the signature and expiry, and prices again. If the total differs from the token (the FX rate or a rule changed), it returns the new price and asks again. Otherwise it runs the purchase transaction of Section 3.4 and redirects to `/orders/[id]`.
-6. `/orders/[id]` refreshes every few seconds until the operation is `succeeded` or `failed`, then links to the resource. A failed create shows the automatic refund line from the ledger.
+4. Short balance: the page shows the shortfall and a button to `/wallet/topup` with the amount pre-filled (the shortfall rounded up to whole taka, and at least the market minimum) and `next` set to the review URL (rule U12). The top-up action keeps `next` in a short-lived `HttpOnly` cookie, because the browser leaves for EPS in between. After a verified top-up the result page checks it against U12 again and sends the customer back to the review page. If the draft has expired by then, the review page makes a new draft from the same configuration and shows the current price. Nothing is bought automatically.
+5. `placeOrder` takes the token and an idempotency key, verifies the signature and expiry, and prices again. Inside the purchase transaction, after the wallet row is locked, it checks again what `createOrderDraft` checked: customer status, KYC `verified`, the feature flag and the risk-tier limits counted from the database (errors `forbidden`, `kyc_required`, `flag_off`, `limit_reached`). One draft gives at most one order: the hash of the token is the idempotency key of the purchase's ledger transaction, so a second `placeOrder` with the same token returns the first order. If the FX rate, the rule version or any step amount differs from the token, it makes a new draft for the same configuration at the new price and returns its token; the review page shows the old and the new total and asks again. Otherwise it runs the purchase transaction of Section 3.4 and redirects to `/orders/[id]`.
+6. `/orders/[id]` refreshes every few seconds until the operation is `succeeded` or `failed`, then links to the resource. While the operation is `needs_attention` the page says the order is delayed and that support is on it. A failed create shows the automatic refund line from the ledger.
 7. When the home pool is full, review offers the waitlist (`waitlist_entries`). The order is never placed elsewhere silently (Section 10.2).
 
 ### 16.12 Admin screens (WP8)
@@ -1362,7 +1392,7 @@ All use `AdminShell` and the same kit. Every action stores actor, reason, IP and
 | `/login` | Sign-in with TOTP, always | `signIn` | All | P0 |
 | `/` | Today: verified top-ups, orders, active resources, operations waiting for approval or attention, dead-letter count, capacity warnings, KYC waiting | None | All | P0 |
 | `/customers`, `/customers/[id]` | Search. Profile, KYC submissions with a document viewer (images through short-lived presigned URLs, never cached), risk tier, limits, resources, wallet summary, audit trail | `approveKyc`, `rejectKyc`, `setRiskTier`, `setLimits`, `suspendCustomer`, `resumeCustomer` | `support` reads; `ops` acts | P0 |
-| `/wallets/[customerId]` | Ledger | `createAdjustment` with a reason and a second approval above the limit | `finance` | P0 |
+| `/wallets/[customerId]` | Ledger; adjustments waiting for approval | `createAdjustment` with a reason; above the limit it waits as `pending` in `wallet_adjustments` until a second admin who is not the requester runs `approveAdjustment` or `rejectAdjustment` | `finance` creates; a second `finance` or `superadmin` approves | P0 |
 | `/payments` | Search by transaction id; state and verify payload | `reverifyPayment`, `recordManualRefund` | `finance` | P0 |
 | `/pricing` | FX rate history, pricing steps per market, config prices | `setFxRate`, `savePricingRule` (preview of five products before saving) | `finance`, `superadmin` | P0 |
 | `/catalog` | Products with their flags, image allow-list, last sync | `setFeatureFlag`, `setImageAllowed`, `runCatalogSync` | `ops` | P0 |
@@ -1416,9 +1446,9 @@ Wording rules, from the AWS Trademark Guidelines (last updated 2026-11-05). This
 | Exact marks | Write "AWS" and "Amazon Lightsail". Do not write "AWS Lightsail", and do not abbreviate, join or hyphenate a mark with another word. In Bengali prefer wording that leaves the mark standing alone, as in the statements above |
 | Prominence | TiCON Cloud branding is always larger and more prominent than any AWS name |
 | No implied endorsement | Never say or suggest that AWS sells, supports, sponsors or endorses TiCON Cloud. Say who does: TiCON Cloud sells, bills and supports |
-| Reseller notice | If TiCON holds a Solution Provider or Distribution Seller Addendum, the guidelines require a reseller notice with the first AWS mention on a page. Its text comes from that agreement |
-| Advertising | No AWS mark in paid search ads unless AWS has authorized it |
-| Still hidden | AWS account ids, ARNs, the pool account structure, internal resource names (`tc-...`) and raw AWS error text |
+| Reseller notice | If TiCON holds a Solution Provider or Distribution Seller Addendum, the guidelines require a reseller notice with the first AWS mention on a page. Its text is printed in section 3(b) of the guidelines |
+| Advertising | No AWS mark in paid search ads unless AWS has authorized it. AWS authorizes only AWS Partners at validated stage, through the Partner Development Manager (guidelines, section 14) |
+| Still hidden | AWS account ids, ARNs, the pool account structure, internal resource names (`tc-...`) and raw AWS error text. Shown by design, because the customer cannot use the resource without them: the bucket name, the container service default domain, and the database and distribution endpoints |
 
 Names in customer-facing text. The AWS name appears on the first mention on a page, in product page titles, in the configure flow, on the resource detail header and on the invoice line. Lists and buttons use the product name alone.
 
@@ -1452,7 +1482,7 @@ Formats:
 | Resource label | 1 to 40 characters: letters, digits, hyphen. Display only; it is never an AWS name (R11) |
 | Mobile number | Bangladesh mobile format, stored as `+880` followed by ten digits |
 | Top-up amount | Whole taka between the market's minimum and maximum |
-| Firewall rule | Protocol `tcp`, `udp`, `icmp` or `all`; ports 0 to 65535 with from not above to; source as CIDR. IPv4 and IPv6 rules are separate lists of at most 60 rules each (AWS quota) |
+| Firewall rule | Protocol `tcp`, `udp` or `all`: ports 0 to 65535 with from not above to. Protocol `icmp` (IPv4 list) or `icmpv6` (IPv6 list): the two numbers are the ICMP type, sent as `fromPort`, and the ICMP code, sent as `toPort`, each from -1 (all) to 255; the form offers Ping as a preset (type 8 and code -1 for IPv4, type 128 and code 0 for IPv6). Source as CIDR. IPv4 and IPv6 rules are separate lists of at most 60 rules each (AWS quota) |
 | SSH public key | One line, `ssh-rsa` with at least 2048 bits (ED25519 only after the VERIFY of Section 10.4), at most 10 keys for one customer |
 | Domain name | Lower case, IDNA-encoded, label and TLD checked against `tlds` |
 | DNS record | Type from the allowed list of Section 12; value checked per type; TTL 60 to 86400 |
@@ -1460,7 +1490,7 @@ Formats:
 
 ### 16.14 Emails and SMS
 
-Emails use the layout of `email/index.html` (dark header with the logo, one headline band, white body, dark footer with the company address), rebuilt in `packages/notify` as table-based templates with inline CSS, in `bn` and `en`. Hex values come from 16.4. No password, key, OTP or document number is ever sent by email, and links go only to the panel's own domain. The footer of every email carries the short AWS statement and the trademark line of 16.13.
+Emails use the layout of `email/index.html` (dark header with the logo, one headline band, white body, dark footer with the company address), rebuilt in `packages/notify` as table-based templates with inline CSS, in `bn` and `en`. Hex values come from 16.4. No password, key, phone OTP or document number is sent by email, except these, sent by Cognito through the `cognito-messages` trigger in the user's locale with this layout: the email verification code, the password reset code and an admin's one-time temporary password; and links go only to the panel's own domain. The footer of every email carries the short AWS statement and the trademark line of 16.13.
 
 | Trigger | Email | SMS |
 | --- | --- | --- |
@@ -1468,10 +1498,11 @@ Emails use the layout of `email/index.html` (dark header with the logo, one head
 | KYC | Received, approved, rejected with the reason | Approved |
 | Top-up verified | Receipt | No |
 | Order paid | Invoice | No |
+| Order failed and refunded | What failed, the refund line and the new wallet balance | No |
 | Resource ready | Location and address, link to the panel | Yes |
 | Renewal reminders at 7, 3 and 1 day | Amount and wallet balance | At 1 day |
 | Renewed | Invoice | No |
-| Grace started | What is suspended and until when | Yes |
+| Grace started | What is suspended, until when, the amount to renew and a link to renew or top up | Yes |
 | Resource destroyed, backup kept | Restore deadline | Yes |
 | Backups purged | Notice | No |
 | Low balance, payment expired | Notice | No |
@@ -1491,7 +1522,7 @@ Emails use the layout of `email/index.html` (dark header with the logo, one head
 - [ ] Automated accessibility checks (axe) report no serious or critical issue on the P0 screens, and every P0 flow can be completed with the keyboard.
 - [ ] Bengali text renders correctly on Android Chrome and iOS Safari, including conjuncts, numerals and the taka sign.
 - [ ] Public pages, the panel footer and emails carry the AWS statement and the trademark line of 16.13. A test checks the message files for forbidden forms such as "AWS Lightsail".
-- [ ] A test searches rendered P0 pages, emails and API responses for `arn:aws:`, the pool account ids and internal resource names and finds none.
+- [ ] A test searches rendered P0 pages, emails and API responses for `arn:aws:`, the pool account ids and internal resource names and finds none. The names and addresses that rule U6 allows (the bucket name, the default domain of a container service, and the endpoints of databases and distributions) are not counted.
 - [ ] Largest Contentful Paint is under 2.5 seconds on the landing and pricing pages on a simulated 4G phone.
 - [ ] Playwright completes sign-up, top-up and create-server at a width of 360 px in `bn`.
 
@@ -1504,21 +1535,74 @@ Emails use the layout of `email/index.html` (dark header with the logo, one head
 | AWS wording and badge: confirm with the AWS Partner manager (or `trademarks@amazon.com`) the 100% AWS statements of Section 16.13 and which AWS Partner badge TiCON may display. Check whether TiCON holds a Solution Provider or Distribution Seller Addendum, because the guidelines then require a reseller notice | Moshiur | Before launch |
 | Color scheme. Default: what the mockup renders (dark background, pink accent, yellow buttons). Alternative: TiCON Cloud brand colors as a fifth scheme (Section 16.4) | Moshiur | Thu 12 |
 | Theme licence: confirm the Envato licence for Antler is not already used on another site, and keep the purchase code on file (Section 16.1) | Moshiur | Before launch |
-| The theme's client area folder (`whmcs-template`) from the full theme download, as an extra visual reference for panel screens. Optional: Section 16 does not depend on it | Moshiur | Thu 12 |
+| The theme's client area folder (`whmcs-template/antler/`, 192 `.tpl` files) is already in the unpacked mockup: put it in `design/mockup/` with the other folders (B.1). It is an extra visual reference for panel screens; Section 16 does not depend on it | Moshiur | Wed 11 |
 | TiCON Cloud logo as SVG for dark and light backgrounds, and a favicon, from the `ticoncloud` site repo | Dev team | Wed 11 |
 | Numerals in the Bengali interface for money, dates and counts. Default: Bengali numerals (Section 16.13) | Moshiur | Thu 12 |
 | Support phone number and support email shown on public pages and emails | Moshiur | Sat 14 |
 | Current Lightsail quotas of the pool accounts; Partner application and quota requests filed | DevOps | Day 0 |
 | SMS provider and sender id | Dev team | Wed 11 |
-| Amazon SES production access for `tc-platform` and `tc-platform-stg` (new accounts start in the SES sandbox), and the first production deploy by Fri 13 so the beta is not the first run | DevOps | Wed 11 |
+| Amazon SES production access for `tc-platform` and `tc-platform-stg` (new accounts start in the SES sandbox; AWS answers within 96 hours, so file it first thing on Wed 11; until it is granted, test sign-ups use verified addresses and Playwright confirms its users with `AdminConfirmSignUp` on staging), and the first production deploy by Fri 13 so the beta is not the first run | DevOps | Wed 11 |
 | EPS minimum and maximum top-up amounts | Moshiur | Thu 12 |
-| Data transfer policy above the bundle allowance (default in Section 11: 50 GB packs, or close ports) | Moshiur | Fri 13 |
+| Data transfer policy above the bundle allowance (default in Section 11: 50 GB packs, or close ports; closing ports is not a hard cap, because the Lightsail firewall allows all outbound traffic, so a server can still send data it starts itself; only `StopInstance` stops the cost) | Moshiur | Fri 13 |
 | Grace behavior for instances: close public ports (default) or stop the instance | Moshiur | Fri 13 |
 | VAT point for prepaid top-ups and VAT base (AWS price or full value) | VAT consultant | Before launch |
 | Legal pages: terms, acceptable use, privacy, refund | Moshiur with legal adviser | Mon 16 |
 | On-call list and admin IP allowlist | Moshiur | Sat 14 |
 | Who drives each track, and the second reviewer for money and security pull requests (Section J) | Moshiur with the lead developer | Wed 11 |
 | Operations lead named; support hours and first-response target (Section M) | Moshiur | Sat 14 |
+| Source of the customer address that EPS requires on every top-up (address, city, state, postcode, country). Default: ask for the billing address on the first top-up and keep it on the profile | Moshiur | Wed 11 |
+| Wed 11 load and gate M1: tracks B and D have no Wednesday task, and no Wednesday task shows the catalog to a signed-in customer. Default: gate M1 as written in G; track B may start with WP4-T1 today | Moshiur with Lead developer | Wed 11 |
+| Oversized task rows (WPU-T3, WP4-T7, WP5-T5, WP9-T4 and the five "adapter and screens" rows): split them into lettered parts and name the part each gate needs? Default: split before work starts and recount tasks per day | Moshiur with Lead developer | Wed 11 |
+| DNS for staging: a separate `tc-dns-stg` account or a stub adapter? Default: a separate `tc-dns-stg`, and the roles in `tc-dns` trust only `tc-platform` | Moshiur with DevOps | Wed 11 |
+| Stages for parallel sessions: one `staging` stage cannot take deploys from several unmerged branches. Personal or per-track SST stages in `tc-platform-stg`, or CI-only staging with proofs after merge? Default: one stage per track; only CI deploys `staging` | Lead developer with DevOps | Wed 11 |
+| EPS for staging: sandbox credentials from EPS, or the live API with a separate store, staging return URLs and a low top-up maximum? Default: ask EPS for sandbox credentials today | Moshiur | Wed 11 |
+| Lambda concurrent executions quota of `tc-platform` and `tc-platform-stg` (ap-southeast-1, and us-east-1 for Lambda@Edge): new accounts start below 1,000. Read it today and request an increase; keep every function at or below 3,008 MB | DevOps | Sun 15 |
+| Staging domain: its own domain or a zone delegated from `ticoncloud.com`? Staging SES stays in the sandbox and only `tc-platform` asks for SES production access. Until then, the plan as written applies | Moshiur with DevOps | Wed 11 |
+| First data before the admin panel exists: seed for `pool_accounts`, `pool_capacity` and config rows, a staging fixture for KYC-verified test customers with test credit, and the first `superadmin` on each stage. Until then, the plan as written applies | Lead developer with DevOps | Wed 11 |
+| OTP and form rate limits per number, per customer and per IP, given that carrier NAT puts many users behind one IP. Until then, the limits of 6.1 apply | Moshiur with Lead developer | Wed 11 |
+| Journal: keep one shared `JOURNEY.md`, or one file per task under `journey/` once tracks open pull requests in parallel (every parallel pull request conflicts on the shared file)? Default: keep `JOURNEY.md` until then | Lead developer | Wed 11 |
+| Bring three dates of this table forward: VAT point and base by Fri 13, legal texts as version 1.0 by Sun 15, sample invoice on Wed 11 (WP3-T5 runs on Thu 12)? Default: the dates in the rows above stand | Moshiur | Wed 11 |
+| Written AWS confirmation (Partner manager or Solution Provider Program) that TiCON may resell Lightsail from its own accounts, add pool accounts to pass fixed quotas and give bucket keys to customers (Customer Agreement 6.4 and 2.4). Default: ask now; the go/no-go list of K stays as written | Moshiur | Sun 15 |
+| Pool accounts and bucket keys before AWS answers (Customer Agreement 6.4(b) and 2.4). Default: `tc-pool-n2` waits for AWS's answer; bucket keys are built as 10.3 says and reach no customer while the bucket flag is off | Moshiur with DevOps | Wed 11 |
+| Capacity for go/no-go item 7: K asks for 40 servers with static IPs, N accepts 20, and default quotas give 5 static IPs per pool account and Region. Set the number per pool and say whether `tc-pool-n2` is ready at launch. Default: K item 7 as written (40); DevOps files the static IP increases today and records real quotas in `pool_capacity` | Moshiur with DevOps | Sun 15 |
+| Admin approval of destroys (R13) ends 2026-12-01, before the first end-of-term destroy (2026-12-18) and the first snapshot purge (2027-01-01). When should it end? Default: R13 as written, with the end date kept as a config value (2026-12-01) so that it can move without a code change | Moshiur | Thu 12 |
+| Which deletes wait for admin approval under R13: only the deletes that the platform starts at the end of a term, every delete, or whole resources only? Default: R13 as it reads now | Moshiur with Lead developer | Wed 11 |
+| A 30-day term costs TiCON about 96.8% of the AWS monthly price, because AWS bills by the hour. Charge base x 720/744, or keep the monthly price and correct "about 1.7%" and "markup is zero"? Default: keep the price and correct the claims | Moshiur | Wed 11 |
+| Ports between customers on the private network: 10.4 now closes 443, but port 80 stays open from the VPC for load balancers, and the Networking tab says so. Go/no-go item 5 cannot be ticked while 80 is open. Close 80 too by default, with a load balancer variant chosen at create, or keep it open and reword item 5? The isolation test follows. Default: as 10.4 says; item 5 stays as written | Moshiur with Lead developer | Wed 11 |
+| Detached static IP: AWS charges 0.005 USD an hour after the first hour and the address still uses static IP quota. Remove the customer detach action at launch, or give it a daily price? Default: no detach action for customers at launch | Moshiur | Wed 11 |
+| Who is the named administrator of `tc-platform` who sets the production secrets (B.3), and from where: AWS CloudShell or a protected CI job? Default: CloudShell, before the first production deploy | Moshiur with DevOps | Thu 12 |
+| GitHub plan of the organization: required reviewers on the `production` environment of a private repository need Enterprise Cloud. If the plan is lower, what replaces them? Until then, the plan as written applies | DevOps | Thu 12 |
+| Tax document for a reversed purchase (credit note, void, or invoice only after `active`) and for metered daily charges (monthly usage invoice, or none). Default: invoices follow 9.3 as written until decided | Moshiur with VAT consultant | Wed 11 |
+| Server reboot, stop, start and rename are P0 in 16.10 and in the WP5 scope, but have no task, adapter call or allowed action. Default: add task WP5-T7 on Fri 13 and the three actions to the `TcProvisioner` allow-list | Moshiur with Lead developer | Thu 12 |
+| Task ids per gate for the two-day packages WP4 and WP8, and whether gate M4 needs every admin P0 screen or only sign-in and KYC review. Default: the gates as written in G | Moshiur with Lead developer | Wed 11 |
+| CSP style policy: Radix and `next/image` write inline style attributes, which U4 forbids. Allow them or replace them, and write the full directive list of 16.2? Until then, U4 applies as written | Lead developer with Moshiur | Wed 11 |
+| Payment methods enabled on the TiCON Cloud EPS store (bKash, Nagad, Rocket, cards, internet banking), each confirmed by one real payment. Until then, the plan as written applies | Moshiur | Fri 13 |
+| Overage on object storage, CDN, container service and database plans: AWS bills storage and transfer above the plan without a cap, and buckets and containers have no transfer metric. Bill daily, cap, or absorb? Default: these flags stay off until a rule is built | Moshiur | Wed 11 |
+| Price source of the 50 GB transfer pack, and who pays outbound transfer that an instance sends after its ports close at grace. Until then, the plan as written applies | Moshiur | Fri 13 |
+| Backup storage charge: the API gives only the disk size of a snapshot, while AWS bills used and changed data. Full size for each, or a smaller basis? Default: the first kept backup at disk size, each further one at 10% of it | Moshiur | Thu 12 |
+| Cost check of gate M5 and K item 8: the tolerance (2% or a floor per account), the day compared (Cost Explorer is about a day late) and whether staging may read cost. Cost Explorer is switched on by hand in the management account. Default: 2% per account | Moshiur with DevOps | Sat 14 |
+| Homes per pool account: a cap and the rule for opening the next account, because buckets (20), distributions (20) and load balancers (10 per Region) are fixed per account and a home never changes. Check the Organization's account quota (default 10). Until then, the plan as written applies | Moshiur with DevOps | Wed 11 |
+| Fallback if SES production access is not granted by Sun 15 (AWS promises a first answer within 96 hours; until then only verified recipients get mail, 200 a day). Default: the Cognito default sender for codes and verified beta addresses | Moshiur with DevOps | Sun 15 |
+| Cost of grace and retention (48 hours of the resource plus 14 days of snapshot storage per non-renewal, up to about 0.79 USD on the 5 USD plan): accept it as cost of sale, or charge a restore fee? Until then, TiCON bears it | Moshiur | Thu 12 |
+| Production before the go decision: sign-up, KYC upload and top-up have no flag, so the customer app is public from the Fri 13 deploy. Default: a WAF IP allowlist until the beta, then KYC approval only for invited customers | Moshiur with Lead developer | Thu 12 |
+| Order of Sat 14 to Mon 16: beta KYC on Sat and Sun, a staff smoke test in both production pools on Sun 15, WP9-T1 to T3 before the beta pays, and the time of the go/no-go. Default: the order in this sentence, go/no-go at 18:00 on Mon 16 | Moshiur with Lead developer | Sun 15 |
+| Hosted zone that Route 53 creates with every registered domain when the customer buys no DNS zone: keep it at TiCON's cost (0.50 USD a month), put a zone in every domain price, or delete it within 12 hours? Default: keep it (Section 12) | Moshiur | Sat 14 |
+| DNS zone at the end of an unpaid term: keep it through the 14-day retention (Bengali plan), save the records and delete, or delete at 48 hours (10.3)? A new zone gets new name servers. Default: delete after saving the records for a restore within 14 days | Moshiur | Thu 12 |
+| DNS zone price: Route 53 charges a zone at creation and on the 1st of each month without proration, and every query at 0.40 USD per million with no cap. Which term, and are queries metered and charged? Until then, the plan as written applies | Moshiur | Sat 14 |
+| Domain names with registry premium prices (not in `ListPrices`; `RegisterDomain` needs `Consent`): refuse them, or sell them at their own price with a renewal price per domain? Default: refuse them | Moshiur | Sat 14 |
+| Families without a snapshot (load balancer, container service, CDN) after the destroy at period end plus 48 hours: keep the settings 14 days and recreate on payment (Bengali plan), or end the subscription at once? The badge and restore email follow. Default: as Section 11 says (settings kept, and the resource created again on payment) | Moshiur | Thu 12 |
+| Unpaid daily backup charge: what "the same grace flow" means for backups. Default: no new backups, existing ones kept, the charge retried daily, deletion after 14 unpaid days with two notices | Moshiur | Thu 12 |
+| EPS contract rate and settlement terms against the 2% processing fee (EPS charges on the whole top-up; public rates 2.0% to 2.2%), and who bears the commission on a refunded top-up. Default: confirm the rate, then set the fee to cover it or accept the gap in writing | Moshiur | Wed 11 |
+| Finance admin and second approver named (FX rate, pending payments, reconciliation report, manual top-ups, refunds), and the approval limit for wallet adjustments set. Until then, the plan as written applies | Moshiur | Fri 13 |
+| FX rate: source, buffer, review interval, and the guard on rate and pricing rule changes. Default: a rate more than 5% away from the current one needs a second admin | Moshiur | Wed 11 |
+| What "the Day 6 tests" of Gates A and B are, who decides per family and where it is recorded. Default: the M4 or M5 cycle on staging plus one staff run in a production pool before the flag goes on, recorded in `JOURNEY.md` | Moshiur with Lead developer | Sun 15 |
+| Rule for a go/no-go list that is not complete at 18:00 on Mon 16: second check time, how far the launch moves, who may waive an item. Default: a second check on Tue 17 at 10:00, then one day at a time | Moshiur | Mon 16 |
+| Ledger accounts and postings for bank settlement and gateway commission (`gateway_clearing` is never cleared in 9.1), and for a payment that EPS or a bank takes back after the wallet was spent (receivable, negative wallet or write-off). Until then, the plan as written applies | Moshiur with VAT consultant | Wed 11 |
+| Tax review beyond the VAT point: the Bangladesh rate for this service (5% assumed), whether the 10% Korean VAT on the AWS bill is a cost or recoverable, and how that line is named and explained on invoices, the price page and the FAQ | Moshiur with VAT consultant | Before launch |
+| Tax Settings of every pool account: member accounts do not inherit the payer's settings. Set them in each pool account and in `tc-dns` | DevOps | Before launch |
+| Domain registration agreement for customers, with the reseller duties of section 3.12 of the Route 53 Domain Name Registration Agreement. Default: the domain flag stays off until it is published | Moshiur with Legal adviser | Before launch |
+| Theme licence type and count: Regular (29 USD) or Extended (320 USD) for a panel whose customers pay, and a second licence for `ops.`? Ask Envato Support in writing. Default: buy a second Regular licence | Moshiur | Before launch |
+| Domain renewal rule: automatic charge and `RenewDomain` 35 days before expiry, or by hand only; the last safe day per TLD; who pays a restoration fee. Until then, domains do not renew automatically (`AutoRenew=false`, Section 12) | Moshiur | Sat 14 |
 
 ## 18. Sources checked on 2026-11-10
 
@@ -1546,8 +1630,8 @@ Keep it under 200 lines. It is loaded in every session, so it holds only what ap
 ```markdown
 # TiCON Cloud platform
 
-Prepaid cloud panel for Bangladesh. Every customer resource is an Amazon Lightsail resource in
-TiCON's AWS pool accounts. The money is real: wallet, double-entry ledger, EPS payments.
+Prepaid cloud panel for Bangladesh. Customer resources are Amazon Lightsail resources in
+TiCON's AWS pool accounts; DNS zones and domains are Amazon Route 53 resources in `tc-dns`. The money is real: wallet, double-entry ledger, EPS payments.
 
 The specification is TICON_CLOUD_MEGA_PLAN.md. Do not read it whole. Read the files in docs/spec/
 that your task names. docs/spec/INDEX.md lists them. The task backlog is docs/spec/E-backlog-and-prompts.md.
@@ -1585,7 +1669,7 @@ that your task names. docs/spec/INDEX.md lists them. The task backlog is docs/sp
 - R3 No long-lived AWS keys. No secrets in the repo, in logs or in client bundles. Cross-account access is STS AssumeRole.
 - R4 Money is bigint paisa. Decimal math only inside packages/core/pricing. Rounding is half-up. No floats.
 - R5 The ledger is double-entry and append-only. A correction is a reversing transaction.
-- R6 Credit a wallet only after server-to-server EPS verification of the same transaction id, amount and currency.
+- R6 Credit a wallet only after server-to-server EPS verification of the same transaction id and amount (EPS amounts are always BDT).
 - R7 Every state-changing request and job is idempotent, enforced by a unique key.
 - R8 Customer data only through tenant-scoped repositories. customerId comes from the session. Each endpoint has a cross-tenant test.
 - R9 Order in every action: authenticate, authorize, validate with zod, rate limit, execute, audit.
@@ -1599,6 +1683,7 @@ that your task names. docs/spec/INDEX.md lists them. The task backlog is docs/sp
 - R17 Dependencies are pinned. No high or critical advisories. No new auth or crypto dependency without a recorded reason.
 - Never read or print secrets, never run sst secret, never deploy production, never touch the management account.
 - Never edit design/mockup/, docs/spec/ or a migration that is already on main.
+- Never change a contract of docs/spec/F-contracts-between-tracks.md inside a task. A contract change is its own pull request that edits Section F of TICON_CLOUD_MEGA_PLAN.md.
 
 ## UI
 The mockup theme is the look: reuse its CSS classes, ship no theme JavaScript, self-host everything,
@@ -1648,12 +1733,16 @@ Keep the task id, the list of changed files and the commands that prove the task
       "Bash(aws *)"
     ],
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
       "Read(./**/*.pem)",
       "Edit(/design/mockup/**)",
       "Edit(/docs/spec/**)",
       "Bash(npx sst secret *)",
+      "Bash(pnpm sst secret *)",
+      "Bash(pnpm exec sst secret *)",
+      "Bash(npx sst shell *)",
+      "Bash(pnpm sst shell *)",
       "Bash(npx sst deploy --stage production*)",
       "Bash(npx sst remove *)",
       "Bash(git push --force*)",
@@ -1663,12 +1752,17 @@ Keep the task id, the list of changed files and the commands that prove the task
     ],
     "disableBypassPermissionsMode": "disable"
   },
+  "sandbox": {
+    "enabled": true,
+    "excludedCommands": ["docker *", "pnpm db:up", "pnpm db:migrate", "pnpm test *", "pnpm verify *", "pnpm spec:split", "gh *", "git fetch *", "git pull *", "git push *", "git merge *", "git rebase *", "npx sst *", "npx playwright *", "aws *"],
+    "network": { "allowedDomains": ["registry.npmjs.org", "github.com", "*.githubusercontent.com"] }
+  },
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-files.sh" }
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-files.sh", "onFailure": "block" }
         ]
       }
     ],
@@ -1676,7 +1770,7 @@ Keep the task id, the list of changed files and the commands that prove the task
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "jq -r '.tool_input.file_path' | xargs npx prettier --write --ignore-unknown" }
+          { "type": "command", "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in ''|*.md|*.mdx) exit 0 ;; esac; npx prettier --write --ignore-unknown \"$f\"" }
         ]
       }
     ],
@@ -1704,7 +1798,7 @@ block() { echo "Blocked: $1" >&2; exit 2; }
 case "$FILE_PATH" in
   */design/mockup/*) block "design/mockup is a read-only reference" ;;
   */docs/spec/*)     block "docs/spec is generated. Edit TICON_CLOUD_MEGA_PLAN.md, then run pnpm spec:split" ;;
-  *.env|*.env.*)     block "env files are edited by people only" ;;
+  */.env|*/.env.*)   block "env files are edited by people only" ;;
   */packages/db/migrations/*)
     ROOT=$(git -C "${CWD:-.}" rev-parse --show-toplevel 2>/dev/null)
     REL="${FILE_PATH#"$ROOT"/}"
@@ -1715,15 +1809,16 @@ esac
 exit 0
 ```
 
-`.claude/hooks/stop-check.sh` (make it executable). It runs the quick check once when files changed, in the worktree the session is in:
+`.claude/hooks/stop-check.sh` (make it executable). It runs the quick check at the root of the worktree the session is in, at the end of every turn that leaves uncommitted changes, and skips it until `pnpm install` has run and `scripts/verify.mjs` exists:
 
 ```bash
 #!/bin/bash
 INPUT=$(cat)
 if [ "$(echo "$INPUT" | jq -r '.stop_hook_active')" = "true" ]; then exit 0; fi
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
-cd "${CWD:-$CLAUDE_PROJECT_DIR}" || exit 0
-if git diff --quiet HEAD -- . 2>/dev/null && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+ROOT=$(git -C "${CWD:-$CLAUDE_PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$ROOT" || exit 0
+if [ -z "$(git status --porcelain)" ] || [ ! -d node_modules ] || [ ! -f scripts/verify.mjs ]; then
   exit 0
 fi
 if ! OUT=$(pnpm -s verify --quick 2>&1); then
@@ -1763,7 +1858,8 @@ Each file starts with a `paths:` list in YAML frontmatter and loads only when Cl
 | `data.md` | `packages/db/**` | R5, R8, R15 in full. "Every new repository method takes the tenant scope and gets a cross-tenant test" |
 | `ui.md` | `apps/**`, `packages/ui/**`, `packages/notify/**`, `content/**` | U1 to U13 in full. Pointers: `docs/spec/16` files for tokens, kit, statements and names |
 | `admin.md` | `apps/admin/**` | R10 in full. Pointer: `docs/spec/16` (16.12) |
-| `lifecycle.md` | `packages/core/lifecycle/**`, `functions/scheduler/**` | R13, R16 in full. Pointer: `docs/spec/11`. "Time comes from the injected Clock only" |
+| `lifecycle.md` | `packages/core/lifecycle/**`, `functions/scheduler/**` | R4, R5, R7, R13, R16 in full. Pointer: `docs/spec/11`. "Time comes from the injected Clock only" |
+| `server.md` | `apps/**`, `functions/**`, `packages/auth/**`, `packages/core/operations/**`, `**/package.json`, `pnpm-lock.yaml` | R6, R7, R8, R9, R14, R16, R17 in full. Pointers: `docs/spec/02`, `docs/spec/06` |
 
 Example, `.claude/rules/money.md`:
 
@@ -1799,7 +1895,9 @@ disable-model-invocation: true
 Task id: $ARGUMENTS
 
 1. Open docs/spec/E-backlog-and-prompts.md and find the row of this task and the "Read" list of its
-   work package. Read those docs/spec files and no others. Read the last 60 lines of JOURNEY.md.
+   work package. Read those docs/spec files first. Read another docs/spec file only when the task
+   row names a route, function or rule that they do not contain, and name that file in the plan.
+   Read the last 60 lines of JOURNEY.md.
 2. Write the plan for this task only: files to create or change, the interfaces you consume and
    produce (docs/spec/F-contracts-between-tracks.md), the tests that prove the task, every VERIFY
    item it touches, and anything that needs a decision. Stop and show the plan.
@@ -1851,7 +1949,7 @@ description: Reviews a diff of the TiCON Cloud platform for security and tenant 
 tools: Read, Grep, Glob, Bash
 model: opus
 ---
-You review one diff. Read docs/spec/02 and the rule files in .claude/rules/ first.
+You review one diff, which the caller passes to you. Do not edit files. Read docs/spec/02 and the rule files in .claude/rules/ first.
 Check: R1 import boundary; every new endpoint follows R9 and has a cross-tenant test (R8);
 no secret, token, document number or raw AWS error reaches a log, a response or a client bundle;
 redirect targets follow U12; IAM changes grant the least needed; inputs are validated with zod.
@@ -1868,9 +1966,10 @@ description: Reviews pricing, ledger, wallet, order and EPS code against the spe
 tools: Read, Grep, Glob, Bash
 model: opus
 ---
-You review one diff against docs/spec/08 and docs/spec/09. Check: integer paisa everywhere and
+You review one diff against docs/spec/08 and docs/spec/09. Do not edit files; run only git diff and the
+pricing vector tests. Check: integer paisa everywhere and
 half-up rounding (R4); every ledger transaction balances and nothing updates or deletes ledger rows
-(R5); a wallet credit happens only after a verified EPS response with equal id, amount and currency,
+(R5); a wallet credit happens only after a verified EPS response with equal id and amount (EPS returns no currency),
 under a row lock (R6); idempotency keys with unique constraints (R7); the purchase transaction
 locks the wallet, prices on the server, reserves capacity and reverses once on failure.
 Run the pricing vectors. Report only findings that can lose or create money, each with a failing

@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 215-393. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 218-400. Change the plan, then run pnpm spec:split. -->
 
 ## E. Backlog and prompts
 
@@ -9,21 +9,25 @@ Read TICON_CLOUD_MEGA_PLAN.md completely. This is the only session that reads it
 
 Then do task WP0-T1:
 1. Create the monorepo skeleton of Section 5 (pnpm workspaces, TypeScript strict, ESLint with an
-   import-boundary rule that enforces R1, Prettier, Vitest).
+   import-boundary rule that enforces R1, Prettier, Vitest). Exclude .claude/worktrees/ in the ESLint, Vitest,
+   Playwright and TypeScript configs: those tools do not read .gitignore.
 2. Create CLAUDE.md, .claude/settings.json, the hook scripts, .claude/rules/, .claude/skills/,
-   .claude/agents/, .worktreeinclude, .gitignore, JOURNEY.md and the pull request template exactly
-   from Appendices P to T.
+   .claude/agents/, .worktreeinclude, .gitignore, .github/CODEOWNERS (owned by the lead and the second reviewer: money, auth, IAM and infrastructure paths including infra/ and sst.config.ts, and the kit: .claude/, CLAUDE.md, .github/, scripts/verify.mjs, scripts/split-plan.mjs, verify/), JOURNEY.md and the pull request template exactly
+   from Appendices P to T. Write .claude/settings.json after step 4, as the last kit file, so its hooks
+   do not run before scripts/verify.mjs exists.
 3. Write scripts/split-plan.mjs and run it so docs/spec/ holds one file per section of this plan,
    each with a "GENERATED, do not edit" header. File name: <id>-<slug>.md, where the id is the
-   section letter or the two-digit section number and the slug is the heading in lower case with
-   hyphens (E-backlog-and-prompts.md, 08-pricing-engine.md). A section over 150 lines also gets a
+   section letter or the two-digit section number and the slug is the heading in lower case, with every run of
+   characters outside a-z and 0-9 replaced by one hyphen and no hyphen at either end (E-backlog-and-prompts.md,
+   08-pricing-engine.md, 09-wallet-ledger-and-eps.md). A section over 150 lines also gets a
    folder <id>/ with one file per subsection. docs/spec/INDEX.md lists every file with its heading.
    A heading inside a fenced code block is not a section boundary.
 4. Write scripts/verify.mjs and verify/baseline.json as Section G specifies. Fill the baseline
    from this plan: the pricing vectors of Section 8, the tables of Section 7, the routes and
    priorities of Section 16, the theme allow-list of 16.3, the secret names of B.3.
 5. Add the CI workflow of C.7.
-6. Run pnpm verify --gate M0 and show the output. Open a pull request. Stop.
+6. Run pnpm verify --gate M0 and show the output. Open a pull request, run gh pr checks --watch
+   and show the result. Stop.
 
 Do not create application code, AWS resources or migrations in this task.
 ```
@@ -50,30 +54,30 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | Task | Output | Proof |
 | --- | --- | --- |
 | WP0-T1 | Repository kit: skeleton, `CLAUDE.md`, `.claude/`, `docs/spec/`, verify script and baseline, CI | `pnpm verify --gate M0` green locally and in CI |
-| WP0-T2 | SST app with stages, VPC with two AZs and NAT, hello page behind CloudFront and WAF | `npx sst deploy --stage staging` succeeds; page loads through CloudFront |
-| WP0-T3 | RDS PostgreSQL with RDS Proxy, roles `app_rw`, `migrator`, `report_ro`, TLS forced, `migrator` function | A connection from the internet fails; `migrator` runs an empty migration |
+| WP0-T2 | SST app with stages, VPC with two AZs and NAT, hello page behind CloudFront and WAF | `npx sst deploy --stage staging` succeeds; page loads through CloudFront; a direct request to the function URL gets 403 |
+| WP0-T3 | RDS PostgreSQL with RDS Proxy, roles `web_rw`, `admin_rw`, `worker_rw`, `migrator`, `report_ro`, TLS forced, `migrator` function | A connection from the internet fails; a connection without TLS through the proxy is refused; the instance shows 14-day backup retention and deletion protection on; `migrator` runs an empty migration |
 | WP0-T4 | Cognito pools for customers and admins (admin TOTP required, email sent through SES), SQS FIFO queue with dead-letter queue, buckets `kyc`, `invoices`, `exports`, alarms to SNS | Deployed outputs listed by `pnpm verify --task WP0-T4` |
-| WP0-T5 | `infra/org/`: templates for accounts, OUs, SCPs and the roles of Section 6.3. Applied by DevOps, not by Claude Code | DevOps confirms in `JOURNEY.md`; a test proves the staging web role cannot assume `TcProvisioner` |
+| WP0-T5 | `infra/org/`: templates for accounts, OUs, SCPs, the roles of Section 6.3, the organization CloudTrail trail, GuardDuty in every account and the security alternate contact of each pool account (3.3, Section 15). Applied by DevOps, not by Claude Code | DevOps confirms in `JOURNEY.md`; a test proves the staging web role cannot assume `TcProvisioner` |
 | WP0-T6 | By Fri 13: the production control plane deployed once through CI with every feature flag off; SES production access requested on Wed 11 | A tag deploy succeeds after approval; the production web role cannot assume any pool role |
 
 **WP1 Data and pricing (Wed 11, track A). Read: 2 (R4, R5, R8, R15), 7, 8.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
-| WP1-T1 | Drizzle schema and migrations for every table of Section 7, constraints, ledger balance trigger, grants | `app_rw` cannot UPDATE or DELETE `ledger_entries` and `audit_log`; unbalanced transaction is rejected |
+| WP1-T1 | Drizzle schema and migrations for every table of Section 7, constraints, ledger balance trigger, grants | No application role can UPDATE or DELETE an (A) table; `web_rw` cannot set `operations.approved_by` or write admin-owned tables; unbalanced transaction is rejected; `select current_user` from the deployed `web` function returns `web_rw` |
 | WP1-T2 | Tenant-scoped repositories and a cross-tenant test helper used by every later endpoint | Helper proves customer A cannot read or write customer B rows |
 | WP1-T3 | Pricing engine in `packages/core/pricing` | All Section 8 vectors pass, including both extra vectors |
 | WP1-T4 | Markets, FX rates, pricing rules (append-only), feature flags, preview of five products | A new rate never changes a stored order; preview equals engine output |
-| WP1-T5 | `catalog-sync` function and config prices | Catalog holds real plans from `tc-pool-dev` with BDT prices; TLD prices loaded |
+| WP1-T5 | `catalog-sync` function and config prices, with the read-only STS and Lightsail client in `packages/aws` that WP4-T1 then extends | Catalog holds real plans from `tc-pool-dev` with BDT prices; no active instance plan is IPv6-only; TLD prices loaded |
 
-**WP2 Identity (Wed 11, track C). Read: 2 (R8, R9, R14, R16), 6.1, 16.9, 16.13.**
+**WP2 Identity (Wed 11, track C). Read: 2 (R8, R9, R14, R16), 3.3 (the `kyc` bucket), 6.1, 16.9, 16.10 settings rows, 16.13.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
 | WP2-T1 | `packages/auth`: token verification, cookie session, `requireCustomer`, fresh sign-in check | A tampered or expired token is rejected; cookies are `HttpOnly`, `Secure`, `SameSite=Lax` |
 | WP2-T2 | `/signup`, `/verify` (email), `/login`, `/forgot-password`, `/reset-password` | Playwright completes sign-up to sign-in in `bn` at 360 px |
 | WP2-T3 | Phone OTP with the SMS provider adapter | Limits hold: 5 attempts, 3 sends per hour per number and per IP; codes are stored hashed |
-| WP2-T4 | `/kyc`: presigned upload, submission, status | The web role cannot read a KYC object; no resource can be created before `verified` |
+| WP2-T4 | `/kyc`: presigned upload, submission, status | The web role cannot read a KYC object; a staging-only seed command marks a test customer `verified` until `approveKyc` exists (WP8-T2); the proof that no resource is created before `verified` runs in WP4-T4 |
 | WP2-T5 | `/settings/profile`, `/settings/security` | Email or phone change needs a fresh sign-in and a new verification |
 
 **WPU UI kit and shells (Wed 11, track C, second session). Read: 16.1 to 16.7, 16.13, 16.16.**
@@ -83,9 +87,9 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | WPU-T1 | `scripts/sync-theme.ts`, theme assets, `tc.css`, the composite font family | Build output has no file from the theme's `assets/js`; Bengali renders with Noto Sans Bengali |
 | WPU-T2 | Kit, part one: `Card`, `Button`, `Field`, `Badge`, `Tabs`, `Accordion`, `Modal`, `ConfirmDestroy`, `Toast`, `DataTable` | Gallery page shows each in `bn` and `en` |
 | WPU-T3 | Kit, part two: the remaining components of 16.6 | Same |
-| WPU-T4 | Four shells, `next-intl` setup, AWS statements and footers, `/dev/ui`, CSP in report-only mode | The 16.16 checks that apply to the gallery pass |
+| WPU-T4 | Four shells, `next-intl` setup, AWS statements and footers, `/dev/ui`, CSP in report-only mode | The 16.16 checks that apply to the gallery pass; the `next build` route table shows every page as dynamic |
 
-**WP3 Wallet and EPS (Thu 12, track A; screens with track C). Read: 2 (R4 to R7, R16), 9, 16.10 wallet rows, the `eps-payment-gateway` skill.**
+**WP3 Wallet and EPS (Thu 12, track A; screens with track C). Read: 2 (R4 to R7, R16), 3.2, 3.4, 8, 9, 16.10 dashboard, wallet and invoice rows, 16.13, the `eps-payment-gateway` skill.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
@@ -100,14 +104,14 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | Task | Output | Proof |
 | --- | --- | --- |
 | WP4-T1 | `packages/aws`: STS client with ExternalId, Lightsail client factory, AWS error mapping, retries | The web bundle cannot import it (lint); errors map to platform codes |
-| WP4-T2 | Operations engine: table, states, FIFO enqueue, `provisioner` step runner, dead-letter alarm | A step retried three times creates one resource |
+| WP4-T2 | Operations engine: table, states, FIFO enqueue, `provisioner` step runner, dead-letter alarm | A step retried three times creates one resource; an operation with a wait step completes on the real FIFO queue in staging; an operation committed without a queue message is picked up within 3 minutes |
 | WP4-T3 | Capacity: reservation inside the purchase transaction, release, waitlist | Two concurrent orders for the last slot: one succeeds, one gets the waitlist |
-| WP4-T4 | Orders: draft token, `placeOrder`, purchase transaction, automatic reversal on failed create | Double submit with one idempotency key charges once; a failed create refunds once |
+| WP4-T4 | Orders: draft token, `placeOrder`, purchase transaction, automatic reversal on failed create | Double submit with one idempotency key charges once; a failed create refunds once; an order from a customer who is not `verified` is refused and creates no resource |
 | WP4-T5 | Linux instance adapter with key import, static IP and ports | A paid order on staging yields a running instance reachable by SSH with the customer key |
 | WP4-T6 | Bootstrap firewall template and the isolation test | `tests/isolation` passes in `tc-pool-dev` |
 | WP4-T7 | `/servers`, `/servers/new`, `/orders/review`, `/orders/[id]`, tabs Overview, Access, Networking, `/settings/ssh-keys` | Playwright creates a server at 360 px in `bn` against staging |
 
-**WP5 Instance extras and lifecycle (Fri 13, track B; screens with track C). Read: 10.3, 11, 16.10, 16.14.**
+**WP5 Instance extras and lifecycle (Fri 13, track B; screens with track C). Read: 3.2, 6.3, 8, 9.1, 9.3, 10.3, 11, 16.10, 16.14.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
@@ -136,13 +140,13 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | WP7-T3 | DNS zones and record editor | Apex NS and SOA are read-only; records validate per type |
 | WP7-T4 | Domains: search, registration with contact, verification state, renewal | Second confirmation repeats the name; TLDs with extra parameters go to admin review |
 | WP7-T5 | Metering: snapshot storage per day, data transfer | Daily charge equals GB x price / 30; 80% and 100% notices sent |
-| WP7-T6 | `reconciler`: inventory hourly, cost daily, payments | Zero unexplained resources; cost variance under 2% |
+| WP7-T6 | `reconciler`: inventory hourly, cost daily, payments | Zero unexplained resources; cost variance under 2% on the latest day Cost Explorer has data for |
 
 **WP8 Admin (Sat 14 to Sun 15, track D). Read: 2 (R10), 6.2, 13, 16.12.**
 
 | Task | Output | Proof |
 | --- | --- | --- |
-| WP8-T1 | Admin app: shell, sign-in with TOTP, roles, audit of every action, WAF allowlist | No MFA means no sign-in; outside the allowlist gets 403 |
+| WP8-T1 | Admin app: shell, sign-in with TOTP, roles, audit of every action, WAF allowlist | No MFA means no sign-in; outside the allowlist gets 403; a direct request to the admin function URL gets 403 |
 | WP8-T2 | Customers and KYC review | Document images come through short-lived URLs and are never cached |
 | WP8-T3 | Wallets, payments, adjustments with second approval | An adjustment above the limit waits for a second admin |
 | WP8-T4 | Pricing, catalog and flags | Saving a rule shows the five-product preview first |
@@ -168,7 +172,7 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | WP9-T3 | Database restore drill; purchase concurrency test | Point-in-time restore works; no double spend and no over-reservation under 50 parallel orders with stubbed adapters |
 | WP9-T4 | Runbooks of Section M in `docs/runbooks/`; signed-in support form | Each runbook was walked through once |
 | WP9-T5 | Wording pass in `bn` and `en`; final legal content | No untranslated key; U6 checks pass |
-| WP9-T6 | Beta: 10 to 20 customers with real payments on production with core flags on | Each beta customer has a verified payment and a running server |
+| WP9-T6 | Production tag deploy of the build that passed gate M5, approved by DevOps; then the beta: 10 to 20 customers with real payments on production with core flags on | Each beta customer has a verified payment and a running server |
 
 **WP10 Launch (Tue 17). Read: K, M.**
 
@@ -177,5 +181,5 @@ Each row is one session-sized task. "Read" names the spec sections the task need
 | WP10-T1 | Flags on for families that passed their gate; monitoring and on-call confirmed | `pnpm verify --gate M7` |
 | WP10-T2 | First-day report at 21:00 | Payments verified, no stuck operations, no dead-letter messages, active resources counted |
 
-Critical path for launch day: WP0, WP1, WP2, WPU, WP3, WP4, WP5, the P0 tasks of WP8 and WPP, WP9. WP6, WP7 and every P1 row can slip behind their feature flags without moving the date.
+Critical path for launch day: WP0, WP1, WP2, WPU, WP3, WP4, WP5, the P0 tasks of WP8 and WPP, WP9. WP7-T5 (metering) and WP7-T6 (the reconciler) are on the critical path too: no feature flag covers them, K item 8 needs the daily cost reconciliation, and core backups are charged by metering. WP6, WP7-T1 to WP7-T4 and every P1 row can slip behind their feature flags without moving the date.
 

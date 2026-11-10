@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1082-1107. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1106-1131. Change the plan, then run pnpm spec:split. -->
 
 ## 14. Work packages
 
@@ -13,8 +13,8 @@ Each work package is broken into session-sized tasks in Section E.3, and each da
 | WP | Day | Scope | Acceptance tests |
 | --- | --- | --- | --- |
 | WP0 Foundation | Wed 11 | Monorepo, SST app with stages, VPC, RDS and proxy, Cognito pools, queue, buckets, WAF, CI (lint, typecheck, test), the Claude Code kit of Appendices P to T | `sst deploy --stage staging` succeeds; database is not reachable from the internet; a hello page loads through CloudFront; CI is green |
-| WP1 Data and pricing | Wed 11 | Schema and migrations, database roles, pricing engine, markets, FX and rules, catalog sync from `tc-pool-dev` | All Section 8 vectors pass; `app_rw` cannot UPDATE `ledger_entries`; catalog shows real bundles with BDT prices |
-| WP2 Identity | Wed 11 | Sign-up, sign-in, sessions in cookies, phone OTP, KYC upload and status | JWT tampering is rejected; OTP limits hold; KYC object is not readable by the web role; no resource creation before `verified` |
+| WP1 Data and pricing | Wed 11 | Schema and migrations, database roles, pricing engine, markets, FX and rules, catalog sync from `tc-pool-dev` | All Section 8 vectors pass; no application role can UPDATE `ledger_entries`; catalog shows real bundles with BDT prices |
+| WP2 Identity | Wed 11 | Sign-up, sign-in, sessions in cookies, phone OTP, KYC upload and status | JWT tampering is rejected; OTP limits hold; KYC object is not readable by the web role; no resource creation before `verified` (proved in WP4-T4) |
 | WPU UI kit and shells | Wed 11 | Section 16.3 to 16.7: theme sync, fonts, tokens, component kit, four shells, i18n scaffolding, `/dev/ui` gallery | The gallery passes the checks of Section 16.16 that apply to it; the build output has no file from the theme's `assets/js` |
 | WP3 Wallet and EPS | Thu 12 | Ledger, wallet, top-up flow, sweeper, receipts, invoice data | Real top-up credits once; replayed callback credits nothing; forged success URL credits nothing; amount mismatch credits nothing; balance equals ledger sum |
 | WP4 Provisioning core | Thu 12 to Fri 13 | Pool accounts and roles, capacity, operations and queue, Linux instance adapter, keys, bootstrap firewall, static IP, firewall rules | Paid order yields a running instance reachable by SSH with the customer key; a failed create refunds once; isolation test passes; web role cannot assume `TcProvisioner` |

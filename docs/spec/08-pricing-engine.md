@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 876-930. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 892-948. Change the plan, then run pnpm spec:split. -->
 
 ## 8. Pricing engine
 
@@ -14,7 +14,7 @@ for step in steps:                     # in order
 total_minor = running
 ```
 
-Launch configuration for market `BD`:
+Launch configuration for market `BD`. The block shows the Bengali label of each step. A stored step has `label` with `bn` and `en`, as `PricingStep` in Section F requires; the English labels are Korea VAT, Bangladesh VAT, Processing fee and Service charge. Each step code posts to one ledger account of 9.1: `korea_vat` to `vat_korea_payable`, `bd_vat` to `vat_bd_payable`, `processing_fee` to `processing_fee_income`, `markup` to `markup_income`. A rule with a step code that has no account is not saved:
 
 ```json
 [
@@ -30,7 +30,7 @@ Rules:
 - A 30-day term is charged the full AWS monthly price of the bundle.
 - An order stores the FX rate, the rule version and every step amount. Changing a rate later never changes an existing order or the current period of a subscription. Renewals use the rate and rule in force at renewal time.
 - The admin editor shows a preview of five sample products before a new rate or rule is saved, and saves a new row with an effective time.
-- Switching `bd_vat.base` to `"subtotal"` (and moving it last) gives the alternative where 5% VAT is charged on the full value. Both must work.
+- Switching `bd_vat.base` to `"subtotal"` (and moving it last) gives the alternative where 5% VAT is charged on the full value. Both must work. Switching the base without moving the step gives a third result that matches neither (5 USD at FX 127: bd_vat 3493, total 74613), so `savePricingRule` refuses a rule in which a step with base `subtotal` is not the last step.
 
 Test vectors (FX 127, launch configuration, all amounts in paisa):
 
@@ -51,7 +51,9 @@ Test vectors (FX 127, launch configuration, all amounts in paisa):
 | 0.50 | 6350 | 635 | 318 | 127 | 7430 |
 | 3.50 | 44450 | 4445 | 2223 | 889 | 52007 |
 
-Extra vectors: FX 124.77 and aws_usd 5 gives base 62385, steps 6239, 3119, 1248, total 72991. With the alternative configuration (bd_vat last on subtotal) and FX 127, aws_usd 5 gives bd_vat 3556 and total 74676.
+Extra vectors: FX 124.77 and aws_usd 5 gives base 62385, steps 6239, 3119, 1248, total 72991. With the alternative configuration (bd_vat last on subtotal) and FX 127, aws_usd 5 gives bd_vat 3556 and total 74676. Negative vector: `bd_vat` switched to `subtotal` but left in second place gives bd_vat 3493 and total 74613; a rule in that shape must be refused.
 
-Catalog sync sources: `GetBundles`, `GetBlueprints`, `GetRelationalDatabaseBundles`, `GetRelationalDatabaseBlueprints`, `GetContainerServicePowers`, `GetBucketBundles`, `GetDistributionBundles` per launch Region (transfer allowances differ by Region), Route 53 Domains `ListPrices` for TLDs. Prices without an API (load balancer, block storage per GB, snapshot per GB, hosted zone) are admin-editable config rows seeded from the AWS pricing pages.
+Catalog sync sources: `GetBundles`, `GetBlueprints`, `GetRelationalDatabaseBundles`, `GetRelationalDatabaseBlueprints`, `GetContainerServicePowers`, `GetBucketBundles` per launch Region (transfer allowances differ by Region), `GetDistributionBundles` once in `us-east-1` (distribution APIs answer only there), Route 53 Domains `ListPrices` for TLDs. Prices without an API (load balancer, block storage per GB, snapshot per GB, hosted zone) are admin-editable config rows seeded from the AWS pricing pages.
+
+Instance bundles: `GetBundles` returns bundles with a public IPv4 address (`publicIpv4AddressCount` 1, from 5 USD) and IPv6-only bundles (0, from 3.50 USD). At launch `catalog-sync` marks active only the bundles with a public IPv4 address and stores IPv6-only bundles inactive, because the Linux adapter always attaches a static IP and AWS does not allow a static IP on an IPv6-only instance.
 

@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 243-255. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 250-262. Change the plan, then run pnpm spec:split. -->
 
 ### E.2 Prompts for the rest of the sprint
 

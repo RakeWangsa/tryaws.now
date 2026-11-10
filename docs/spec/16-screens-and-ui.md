@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1132-1497. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1159-1528. Change the plan, then run pnpm spec:split. -->
 
 ## 16. Screens and UI
 
@@ -12,16 +12,18 @@ The mockup zip received on 2026-11-10 is the unmodified ThemeForest item "Antler
 | --- | --- | --- |
 | `template/` | 57 static HTML pages of a hosting company website and `assets/` (Bootstrap 5.2.3, theme CSS, jQuery 3.7.1 with plugins, icon fonts, patterns, images) | The look of the product and the layouts named in 16.6 to 16.12 |
 | `order-form/antler/` | 26 Smarty `.tpl` files, a skin for the WHMCS `standard_cart` order form | Reference for order states and wording. Not code for this product |
+| `whmcs-template/antler/` | 192 Smarty `.tpl` files of the WHMCS client area (client area home, add funds, invoices, product details, domains), built on the WHMCS Six theme (Bootstrap 3.4.1, jQuery 1.12.4), with its own `assets/`, `css/` and `js/` folders; 825 files in all | Visual reference for panel screens. Not code for this product, and nothing from it is shipped (rule U2) |
 | `email/` | One HTML email layout: `index.html`, `header.html`, `footer.html`, `global.css` | Layout of transactional emails (16.14) |
 | `newsletter/` | A newsletter layout | Not used at launch |
 | `graphic/` | Four Illustrator files with the Antler logo and artwork | Not used. The TiCON Cloud logo comes from the `ticoncloud` site repo |
 | `documentation/` | The theme's own documentation | Reference |
+| `changelog(4.5.0).rtf` (a file, not a folder) | The theme's change log, top entry version 4.5.0 of 2026-10-24 | Read it before every theme update (16.3) |
 
 Facts that shape this section:
 
 - Nothing in the zip is customized. Titles, logo, text, USD prices and form targets are the theme's demo content. The mockup defines how the product looks, not what its screens contain.
-- The zip has no customer panel. The theme's WHMCS client area (the `whmcs-template` folder named in the theme documentation) is not in the zip, and no page shows a dashboard, wallet, server management, KYC, invoice or admin screen. Sections 16.9 to 16.12 specify those screens and compose them from the theme's own blocks.
-- With no saved settings the pages render with `data-layout="wide"`, `data-color="pink"`, `data-background="dark"`, `data-font="opensans"`, `data-header="static"`, `data-radius="defaultradius"` and `data-textdirection="ltr"` on `<body>` (checked by loading the pages in a browser). The values in `assets/js/settings-init.js` are not applied while its settings panel is switched on. The theme also has the color schemes `blue`, `green` and `black` and the backgrounds `light`, `origin` and `modern`. Each is one attribute.
+- The `template/` pages have no customer panel: no page shows a dashboard, wallet, server management, KYC, invoice or admin screen. The theme's WHMCS client area is in `whmcs-template/antler/` as Smarty templates for WHMCS (client area home, add funds, invoices, product details, domains), not as pages that open in a browser. It is a visual reference only: `scripts/sync-theme.ts` copies nothing from it. Sections 16.9 to 16.12 specify those screens and compose them from the theme's own blocks.
+- With no saved settings the pages render with `data-layout="wide"`, `data-color="pink"`, `data-background="dark"`, `data-font="opensans"`, `data-header="static"`, `data-radius="defaultradius"` and `data-textdirection="ltr"` on `<body>` (checked by loading the pages in a browser). The values in `assets/js/settings-init.js` are not applied while its settings panel is switched on. The theme also has the color schemes `blue`, `green` and `black` and the background `light`. Each is one attribute. The background `origin` has only four CSS rules and `modern` has none; do not use them.
 - The shipped CSS has no external URL and no `@import`. The request to Google Fonts is made only by the theme's JavaScript, which is not shipped.
 - Licence: an Envato licence covers one end product, which for a site theme is one customized website. Under Envato's licence FAQ a Regular License is enough while visitors can use the site without paying for access to it, and payment for a separate product or service does not require the Extended License. This is a reading of the FAQ, not legal advice. Before launch confirm that the licence used here is not already used on another site (Section 17).
 
@@ -34,9 +36,9 @@ These go verbatim into `.claude/rules/ui.md` (Appendix R). `CLAUDE.md` carries a
 | U1 | The mockup is the look. Reuse its CSS classes and layouts; do not redesign. Where a screen has no mockup page, compose it from the kit in 16.6 and the shells in 16.7. |
 | U2 | Ship CSS, fonts and images only. No file from the theme's `assets/js`, `assets/php` or `order-form/` reaches a build: no jQuery, no plugin, no `scripts.js`, no `settings-init.js`, no i18next, no cookie plugin, no Smarty. |
 | U3 | No third-party origin at runtime. Fonts, styles, icons and images are self-hosted. No analytics, chat or tag script without a recorded decision and a CSP entry. |
-| U4 | No inline script except the nonce scripts of Next.js. No inline `style` attribute in server-rendered markup; use classes. CSP runs in report-only mode on staging and a screen is done only at zero violations. |
+| U4 | No inline script except the nonce scripts of Next.js. No inline `style` attribute in server-rendered markup; use classes. CSP runs in report-only mode on staging and a screen is done only at zero violations. U4 applies to pages of `apps/web` and `apps/admin`; email templates in `packages/notify` (16.14) and the invoice HTML for `invoice-renderer` use inline CSS. |
 | U5 | All text comes from `next-intl` messages in `bn` and `en`. No hard-coded strings in components. Bengali is written first. |
-| U6 | AWS is named openly. Public pages, the panel, invoices and emails tell the customer that the service is 100% AWS: every resource is an Amazon Lightsail resource in an AWS Region. Use the statements, names and wording rules of 16.13, which follow the AWS Trademark Guidelines. Still never shown to a customer: AWS account ids, ARNs, the pool account structure, internal AWS resource names and raw AWS error text. Errors from AWS are mapped to platform messages. |
+| U6 | AWS is named openly. Public pages, the panel, invoices and emails tell the customer that the service is 100% AWS: every server, database, disk, bucket, load balancer and container service is an Amazon Lightsail resource in the AWS Region the customer chose, and CDN, DNS and domains use Amazon Lightsail CDN and Amazon Route 53, which are global AWS services. Use the statements, names and wording rules of 16.13, which follow the AWS Trademark Guidelines. Still never shown to a customer: AWS account ids, ARNs, the pool account structure, internal AWS resource names and raw AWS error text. One exception: a name or address that the customer needs in order to use the resource is shown, namely the bucket name (it is part of the bucket URL), the default domain of a container service (it starts with the service name) and the endpoints of databases and distributions. Errors from AWS are mapped to platform messages. |
 | U7 | Server Components by default. A component is a Client Component only when it holds interaction state. Data is read on the server through repositories (R8). No customer data in `localStorage` or `sessionStorage`. |
 | U8 | Every form posts to a Server Action that follows R9, and shows field errors from the same zod schema. A button that changes state is disabled while its action is pending, and the action is idempotent (R7). |
 | U9 | A secret shown to a customer (Windows password, database password, bucket secret key) is returned once in a Server Action response with `no-store`, is never part of a cached render, is never logged, and is hidden again after 60 seconds. |
@@ -47,11 +49,12 @@ These go verbatim into `.claude/rules/ui.md` (Appendix R). `CLAUDE.md` carries a
 
 ### 16.3 Theme port
 
-`scripts/sync-theme.ts` copies the files below from `design/mockup/template/assets/` to `packages/ui/theme/assets/`, and from there into `public/theme/assets/` of both apps. The `assets/` tree is mirrored because `theme.min.css` refers to its files with paths such as `../patterns/` and `../../assets/img/`. The root layout links the stylesheets with plain `<link rel="stylesheet">` tags in the order of the mockup's `<head>`: Font Awesome, icon fonts, Bootstrap, theme, and then `tc.css`. The script also copies `tc.css` to `public/theme/`, so it is linked last as a static file and the order is fixed.
+`scripts/sync-theme.ts` copies the files below from `design/mockup/template/assets/` to `packages/ui/theme/assets/`, and from there into `public/theme/assets/` of both apps. The `assets/` tree is mirrored because `theme.min.css` refers to its files with paths such as `../patterns/` and `../../assets/img/`. The root layout links the stylesheets with plain `<link rel="stylesheet">` tags in the order of the mockup's `<head>`: Font Awesome, icon fonts, Bootstrap, `vendors.min.css`, theme, and then `tc.css`. The script also copies `tc.css` to `public/theme/`, so it is linked last as a static file and the order is fixed.
 
 | Shipped | Note |
 | --- | --- |
 | `css/bootstrap.min.css` | Bootstrap 5.2.3, CSS only |
+| `css/vendors.min.css` and `img/filter/*.svg` | Unmodified. Base styles of `cd-filter-block` (radio, checkbox and select of `OptionGroup`) and of the slider under `PlanPicker`; `theme.min.css` builds on them |
 | `css/theme.min.css` | Unmodified, so a theme update is a file swap. All product CSS goes into `packages/ui/styles/tc.css` |
 | The 8 `patterns/*.svg` files that the theme CSS refers to | Background line patterns |
 | `fonts/fonts.min.css`, `fonts/cloudicon/*`, `fonts/evafeat/*` | Line icon fonts used by plan cards and menus (`icon-*` classes) |
@@ -62,7 +65,7 @@ These go verbatim into `.claude/rules/ui.md` (Appendix R). `CLAUDE.md` carries a
 | Never shipped | Why |
 | --- | --- |
 | `js/*`, `php/*`, and the whole `order-form/` folder | Rule U2 |
-| `css/vendors.min.css`, `css/aos.min.css`, `css/rtl/*` | Styles of plugins and animations that are not used. The RTL files come back only when a right-to-left market opens |
+| `css/aos.min.css`, `css/rtl/*` | Animation styles that are not used. The RTL files come back only when a right-to-left market opens |
 | `img/topbanner*.jpg`, `img/partners/*`, `img/avatars/*`, `img/blog/*`, `casestudy/*`, `videos/*` | Demo photos, logos of other companies, PDFs and videos (rule U13). The CSS classes that refer to them are not used |
 | `img/logo.svg`, `img/logo-light.svg`, `img/symbol.svg`, `img/favicon.ico` | Antler branding. Replaced by TiCON Cloud files in the same roles |
 | `locales/*` | Theme demo translations. Text comes from `next-intl` |
@@ -73,13 +76,13 @@ The script copies only the allow-list above. It reports every `url()` in a shipp
 
 | Token | Value | Note |
 | --- | --- | --- |
-| Theme attributes, customer app | `data-layout="wide" data-color="pink" data-background="dark" data-font="opensans" data-header="static" data-radius="defaultradius" data-textdirection="ltr"` on `<body>` | What the mockup renders. Written by the root layout from one config object. No cookie, no script |
+| Theme attributes, customer app | `data-layout="wide" data-color="pink" data-background="dark" data-font="opensans" data-header="static" data-radius="defaultradius" data-textdirection="ltr"` on `<body>` | What the mockup renders. Written by the root layout from one config object. No cookie, no script. The root layout also wraps all content in one `div.box-container.limit-width`, as every mockup page does: the theme's color, card and button rules apply only inside it |
 | Theme attributes, admin app | The same with `data-color="blue"` and `data-background="light"`, and a fixed "OPS" label in the top bar | Staff must never mistake the admin panel for the customer panel |
 | Colors on the dark background | Page `#15212a`, card `#101920`, text `#ffffff`, muted text `#6c757d` | Computed from the rendered mockup. Components use the helper classes `bg-colorstyle` (page sections), `bg-seccolorstyle` (cards), `mergecolor` and `seccolor` (text), not hex values |
 | Colors on the light background | Page `#ffffff`, card `#ebeff5`, text `#212122` | Same classes |
 | Accent | Pink `#ee5586`. Magenta `#a5215e` for plan specification blocks and badges (`bg-purple`) | |
 | Buttons | Primary: yellow `#fdd700` with black text, pill shape (`btn btn-default-yellow-fill`), one per view. Secondary: `btn btn-default-pink-fill`. Tertiary: `btn btn-outline-pink`. Destructive: Bootstrap `btn btn-danger` | |
-| Radius | Cards 15 px; buttons and inputs are pills | From `defaultradius` |
+| Radius | Cards (`sec-main`) 12 px; plan boxes (`.pricing .wrapper`) 15 px; buttons and inputs are pills | From `defaultradius` |
 | Other color schemes | `data-color="blue"`, `"green"` or `"black"` change the accent with one attribute. For TiCON Cloud brand colors add `data-color="ticon"` by copying the `[data-color="pink"]` rules of `theme.css` (about 89 selectors) into `tc.css` with the brand values | Decision in Section 17. Never edit `theme.min.css` |
 | Light and dark switch | Optional, P2: a customer setting that flips `data-background` between `dark` and `light`, stored in a cookie that the server reads | Both backgrounds already work in the theme |
 | Font | The theme's rules name `'Open Sans'` with `!important`. Define that family in `tc.css` from self-hosted files: Open Sans for Latin text, and a second `@font-face` with the same family name and the Bengali `unicode-range` that points to Noto Sans Bengali. Take the files and the `unicode-range` values from the Fontsource packages (`@fontsource-variable/open-sans`, `@fontsource-variable/noto-sans-bengali`; confirm the names at install) | Open Sans has no Bengali glyphs. One composite family means no theme rule needs an override |
@@ -144,11 +147,11 @@ The script copies only the allow-list above. It reports every `url()` in a shipp
 | `AppShell` | No mockup page shows an app frame, so it is composed. Top bar: the `div.menu-wrap` bar without the top line. Left navigation: `aside#sidebar.sidebar.sec-bg1.bg-seccolorstyle` of `legal.html` (icon and label rows, the active row in the accent color). Content column: `div#sidebar_content` of the same page with `Card` blocks | Top bar: logo, language switch, `WalletChip` with the balance and a yellow "Top up" button, notification bell, account menu. Navigation: Dashboard, Cloud Servers, Databases, Object Storage, Load Balancers, Containers, CDN, Domains and DNS, Wallet, Invoices, Support, Settings. A family whose flag is off is hidden, or shown with a "soon" tag when the market config asks for it. No pink title band inside the panel: each screen starts with a compact row of breadcrumb, title and one primary button. Under 992 px the navigation moves into the offcanvas of `header.html` (`div#offcanvasWithBackdrop`). A slim footer carries the short AWS statement and the trademark line of 16.13 |
 | `AdminShell` | `AppShell` with the admin attributes of 16.4 | Navigation from 16.12, the "OPS" label, the signed-in admin and role |
 
-Locale routing in both apps: `bn` at the root, `en` under `/en` (`next-intl`, prefix as needed). After sign-in the customer's saved locale decides.
+Locale routing in both apps: `bn` at the root, `en` under `/en` (`next-intl`, `localePrefix: 'as-needed'`, `localeDetection: false`, so the `Accept-Language` header never redirects `/` to `/en`). Playwright runs with `locale: 'bn-BD'`. After sign-in the customer's saved locale decides.
 
 ### 16.8 Public pages
 
-All are Server Components, indexable, with a canonical URL, `hreflang` for `bn` and `en`, structured data (`Organization`, `Product` with `Offer` in BDT, `FAQPage`, `BreadcrumbList`), `sitemap.xml` and `robots.txt`. Every price comes from `catalog_products` through the pricing engine. Plan cards and price tables show whole taka rounded up, with the note that prices include VAT and fees and are for 30 days. Each public page names the AWS service in its title, description and first paragraph in the form of 16.13 (for example "Cloud Server, built on Amazon Lightsail"), because customers look for AWS by name.
+All are Server Components, indexable, with a canonical URL, `hreflang` for `bn` and `en`, structured data (`Organization`, `Product` with `Offer` in BDT, `FAQPage`, `BreadcrumbList`), `sitemap.xml` and `robots.txt`. Every price comes from `catalog_products` through the pricing engine. Plan cards and price tables show whole taka rounded up, with the note that prices include VAT and fees and are for 30 days. Where a plan's specification differs by location (the data transfer allowance in Mumbai is half of Singapore's), cards and tables show the value for each location. Each public page names the AWS service in its title, description and first paragraph in the form of 16.13 (for example "Cloud Server, built on Amazon Lightsail"), because customers look for AWS by name.
 
 | Route | Mockup page | Content | P |
 | --- | --- | --- | --- |
@@ -159,10 +162,10 @@ All are Server Components, indexable, with a canonical URL, `hreflang` for `bn` 
 | `/products/object-storage`, `/products/load-balancers`, `/products/containers`, `/products/cdn`, `/products/dns` | Layout of `vps.html` | The same blocks with the family's data | P1, with the family's gate |
 | `/products/domains` | `domains.html` | Search box (`section.cd-main-content`, `div.cd-filter`), TLD table (`table.table.compare`: register, renew, transfer) from `tlds` with a text filter, FAQ. The availability check goes through `reader`, is cached for 60 seconds, and has a WAF rate rule and an application limit per IP | P1, Gate B |
 | `/payments` | `payments.html` | How top-up works, payment methods with the EPS banner, link to the refund policy | P1 |
-| `/help` | `faq.html` | FAQ in an `Accordion` from MDX files in the repo, at least ten questions at launch. Required questions: is this real AWS (yes, 100%), do I get an AWS account or the AWS console (no, the TiCON Cloud panel), who bills and supports me (TiCON Cloud), where is my data (the AWS Region the customer chose) | P0 |
+| `/help` | `faq.html` | FAQ in an `Accordion` from MDX files in the repo, at least ten questions at launch. Required questions: is this real AWS (yes, 100%), do I get an AWS account or the AWS console (no, the TiCON Cloud panel), who bills and supports me (TiCON Cloud), where is my data (servers, databases, disks and buckets in the AWS Region the customer chose; CDN copies at AWS edge locations worldwide; DNS is global; the account and identity documents in AWS Singapore) | P0 |
 | `/help/[slug]` | `knowledgebase-list.html`, `knowledgebase-article.html` | Help articles from MDX files | P2 |
 | `/support` | `contact.html`, `section#ticket` | Form: name, email, subject, department, message, saved in `support_requests` and mailed to the support inbox. Rate limited per IP, with a hidden honeypot field (no third-party captcha, rule U3). Phone and the company address. Not used: the map and the newsletter checkbox | P0 |
-| `/legal/[doc]` | `legal.html` | Sidebar of documents and versioned content from MDX: terms, acceptable use, privacy, refund, domain registration agreement | P0 |
+| `/legal/[doc]` | `legal.html` | Sidebar of documents and versioned content from MDX: terms, acceptable use, privacy, refund, domain registration agreement. The acceptable use policy passes on the AWS rules that bind TiCON's customers as end users: the AWS Acceptable Use Policy, no cryptocurrency mining (Service Terms 1.25), no use of Lightsail to avoid the data fees of other AWS services (51.3), no video streaming or very high request volume through CDN (Lightsail FAQ), outbound port 25 closed, and TiCON's right to suspend a resource at once on a breach or an AWS notice (Customer Agreement 2.5). The wording is the legal adviser's | P0 |
 | Not found, error, maintenance, coming soon | `404.html`, `maintenance.html`, `soon.html` | `not-found` and `error` files of Next.js, a maintenance page behind one switch, and the page of a flag-off family with a "notify me" button that writes `waitlist_entries` | P0 |
 
 ### 16.9 Sign-in and onboarding (WP2)
@@ -193,12 +196,12 @@ All routes use `AppShell`, send `X-Robots-Tag: noindex`, and read data through r
 | `/servers/[id]` | `Tabs` in a `Card`, tabs below | Header: label, state, addresses, plan, AWS Region and Availability Zone, period end | | WP4 | P0 |
 | Tab Overview | `StatTile`, `CopyField` | Specifications, addresses, renewal date, data transfer used against the allowance | `rebootServer`, `stopServer`, `startServer`, `renameServer` | WP5 | P0 |
 | Tab Access | `CopyField`, `SecretReveal` | SSH command and key name. Windows: user name and the password on demand through `access-details` | `revealWindowsPassword` | WP4; Windows in WP6 | P0; Windows P1 |
-| Tab Networking | `DataTable` with inline editing | Firewall rules (protocol, port range, source CIDR) and the static IP | `saveFirewallRules`, `attachStaticIp`, `detachStaticIp` | WP4 | P0 |
+| Tab Networking | `DataTable` with inline editing | Firewall rules (protocol, port range, source CIDR) and the static IP; a note that these rules filter public traffic only, that port 80 is reachable on the private network from other servers in the same Region, and that private traffic between the customer's own servers is blocked (10.4) | `saveFirewallRules`, `attachStaticIp`, `detachStaticIp` | WP4 | P0 |
 | Tab Backups | `DataTable` | Backups with size and date, the automatic backup switch and hour | `createBackup`, `deleteBackup`, `setAutoBackup`, `restoreToNewServer` (review) | WP5 | P0 |
-| Tab Storage | `DataTable` | Attached disks with size and path | `addDisk` (review), `attachDisk`, `detachDisk`, `destroyDisk` | WP5 | P0 |
+| Tab Storage | `DataTable` | Attached and detached disks with size and path (a detached disk is still billed) | `addDisk` (review), `attachDisk`, `detachDisk`, `destroyDisk` | WP5 | P0 |
 | Tab Metrics | Charts | CPU, network in and out, status checks for 1 hour, 1 day and 1 week, read through `reader` | None | WP5 | P0 |
 | Tab Billing | `PriceBreakdown` | Plan, current period, next renewal amount, automatic renewal, past invoices | `setAutoRenew`, `renewNow` (review) | WP5 | P0 |
-| Tab Destroy | `ConfirmDestroy` | What is deleted, what is kept, and for how long | `destroyServer` (rule U10; enters the approval queue until 2026-12-01) | WP5 | P0 |
+| Tab Destroy | `ConfirmDestroy` | What is deleted (the server and its automatic backups, which AWS removes with it), what is kept (manual backups and the final backup), and for how long | `destroyServer` (rule U10; enters the approval queue until 2026-12-01) | WP5 | P0 |
 | `/databases`, `/databases/new`, `/databases/[id]` | The list, configure and tab patterns above; plan table from `database.html` | Engine and version, plan, location. Detail: endpoint, port, user, password on demand, public mode switch with a warning, backups, metrics | `createOrderDraft` (review), `revealDatabasePassword`, `setPublicMode`, `createBackup`, `destroyDatabase` | WP6 | P1, Gate A |
 | `/storage`, `/storage/new`, `/storage/[id]` | Same patterns | Plan, usage, access mode, access keys (the secret is shown once) | `createOrderDraft` (review), `createAccessKey`, `deleteAccessKey`, `setBucketAccess`, `destroyBucket` | WP6 | P1, Gate A |
 | `/load-balancers`, `/load-balancers/new`, `/load-balancers/[id]` | Same patterns | Targets (the customer's own servers in the same location), health, HTTPS certificate state | `createOrderDraft` (review), `setTargets`, `requestCertificate`, `destroyLoadBalancer` | WP6 | P1, Gate A |
@@ -219,9 +222,9 @@ There is no multi-item cart at launch: one resource per order, paid from the wal
 1. Configure (`/servers/new` or another family's `/new` page). The page loads the catalog rows that the customer may buy (feature flags, risk tier limits of Section 10.2, allowed locations). The client never computes money.
 2. `createOrderDraft` validates the configuration (zod, limits, flag, KYC `verified`, capacity available but not yet reserved), prices it, and returns a draft token: the customer id, the configuration, the price snapshot and the rule version, signed with a server secret (HMAC), valid for 30 minutes. The token holds nothing secret and is accepted only from the customer it names. No database row is written.
 3. Review (`/orders/review?d=<token>`) shows the lines, the total, the balance after purchase, the 30-day term, the renewal rule and the terms box.
-4. Short balance: the page shows the shortfall and a button to `/wallet/topup` with the amount pre-filled and `next` set to the review URL (rule U12). After a verified top-up the customer is back on the review page. Nothing is bought automatically.
-5. `placeOrder` takes the token and an idempotency key, verifies the signature and expiry, and prices again. If the total differs from the token (the FX rate or a rule changed), it returns the new price and asks again. Otherwise it runs the purchase transaction of Section 3.4 and redirects to `/orders/[id]`.
-6. `/orders/[id]` refreshes every few seconds until the operation is `succeeded` or `failed`, then links to the resource. A failed create shows the automatic refund line from the ledger.
+4. Short balance: the page shows the shortfall and a button to `/wallet/topup` with the amount pre-filled (the shortfall rounded up to whole taka, and at least the market minimum) and `next` set to the review URL (rule U12). The top-up action keeps `next` in a short-lived `HttpOnly` cookie, because the browser leaves for EPS in between. After a verified top-up the result page checks it against U12 again and sends the customer back to the review page. If the draft has expired by then, the review page makes a new draft from the same configuration and shows the current price. Nothing is bought automatically.
+5. `placeOrder` takes the token and an idempotency key, verifies the signature and expiry, and prices again. Inside the purchase transaction, after the wallet row is locked, it checks again what `createOrderDraft` checked: customer status, KYC `verified`, the feature flag and the risk-tier limits counted from the database (errors `forbidden`, `kyc_required`, `flag_off`, `limit_reached`). One draft gives at most one order: the hash of the token is the idempotency key of the purchase's ledger transaction, so a second `placeOrder` with the same token returns the first order. If the FX rate, the rule version or any step amount differs from the token, it makes a new draft for the same configuration at the new price and returns its token; the review page shows the old and the new total and asks again. Otherwise it runs the purchase transaction of Section 3.4 and redirects to `/orders/[id]`.
+6. `/orders/[id]` refreshes every few seconds until the operation is `succeeded` or `failed`, then links to the resource. While the operation is `needs_attention` the page says the order is delayed and that support is on it. A failed create shows the automatic refund line from the ledger.
 7. When the home pool is full, review offers the waitlist (`waitlist_entries`). The order is never placed elsewhere silently (Section 10.2).
 
 ### 16.12 Admin screens (WP8)
@@ -233,7 +236,7 @@ All use `AdminShell` and the same kit. Every action stores actor, reason, IP and
 | `/login` | Sign-in with TOTP, always | `signIn` | All | P0 |
 | `/` | Today: verified top-ups, orders, active resources, operations waiting for approval or attention, dead-letter count, capacity warnings, KYC waiting | None | All | P0 |
 | `/customers`, `/customers/[id]` | Search. Profile, KYC submissions with a document viewer (images through short-lived presigned URLs, never cached), risk tier, limits, resources, wallet summary, audit trail | `approveKyc`, `rejectKyc`, `setRiskTier`, `setLimits`, `suspendCustomer`, `resumeCustomer` | `support` reads; `ops` acts | P0 |
-| `/wallets/[customerId]` | Ledger | `createAdjustment` with a reason and a second approval above the limit | `finance` | P0 |
+| `/wallets/[customerId]` | Ledger; adjustments waiting for approval | `createAdjustment` with a reason; above the limit it waits as `pending` in `wallet_adjustments` until a second admin who is not the requester runs `approveAdjustment` or `rejectAdjustment` | `finance` creates; a second `finance` or `superadmin` approves | P0 |
 | `/payments` | Search by transaction id; state and verify payload | `reverifyPayment`, `recordManualRefund` | `finance` | P0 |
 | `/pricing` | FX rate history, pricing steps per market, config prices | `setFxRate`, `savePricingRule` (preview of five products before saving) | `finance`, `superadmin` | P0 |
 | `/catalog` | Products with their flags, image allow-list, last sync | `setFeatureFlag`, `setImageAllowed`, `runCatalogSync` | `ops` | P0 |
@@ -287,9 +290,9 @@ Wording rules, from the AWS Trademark Guidelines (last updated 2026-11-05). This
 | Exact marks | Write "AWS" and "Amazon Lightsail". Do not write "AWS Lightsail", and do not abbreviate, join or hyphenate a mark with another word. In Bengali prefer wording that leaves the mark standing alone, as in the statements above |
 | Prominence | TiCON Cloud branding is always larger and more prominent than any AWS name |
 | No implied endorsement | Never say or suggest that AWS sells, supports, sponsors or endorses TiCON Cloud. Say who does: TiCON Cloud sells, bills and supports |
-| Reseller notice | If TiCON holds a Solution Provider or Distribution Seller Addendum, the guidelines require a reseller notice with the first AWS mention on a page. Its text comes from that agreement |
-| Advertising | No AWS mark in paid search ads unless AWS has authorized it |
-| Still hidden | AWS account ids, ARNs, the pool account structure, internal resource names (`tc-...`) and raw AWS error text |
+| Reseller notice | If TiCON holds a Solution Provider or Distribution Seller Addendum, the guidelines require a reseller notice with the first AWS mention on a page. Its text is printed in section 3(b) of the guidelines |
+| Advertising | No AWS mark in paid search ads unless AWS has authorized it. AWS authorizes only AWS Partners at validated stage, through the Partner Development Manager (guidelines, section 14) |
+| Still hidden | AWS account ids, ARNs, the pool account structure, internal resource names (`tc-...`) and raw AWS error text. Shown by design, because the customer cannot use the resource without them: the bucket name, the container service default domain, and the database and distribution endpoints |
 
 Names in customer-facing text. The AWS name appears on the first mention on a page, in product page titles, in the configure flow, on the resource detail header and on the invoice line. Lists and buttons use the product name alone.
 
@@ -323,7 +326,7 @@ Formats:
 | Resource label | 1 to 40 characters: letters, digits, hyphen. Display only; it is never an AWS name (R11) |
 | Mobile number | Bangladesh mobile format, stored as `+880` followed by ten digits |
 | Top-up amount | Whole taka between the market's minimum and maximum |
-| Firewall rule | Protocol `tcp`, `udp`, `icmp` or `all`; ports 0 to 65535 with from not above to; source as CIDR. IPv4 and IPv6 rules are separate lists of at most 60 rules each (AWS quota) |
+| Firewall rule | Protocol `tcp`, `udp` or `all`: ports 0 to 65535 with from not above to. Protocol `icmp` (IPv4 list) or `icmpv6` (IPv6 list): the two numbers are the ICMP type, sent as `fromPort`, and the ICMP code, sent as `toPort`, each from -1 (all) to 255; the form offers Ping as a preset (type 8 and code -1 for IPv4, type 128 and code 0 for IPv6). Source as CIDR. IPv4 and IPv6 rules are separate lists of at most 60 rules each (AWS quota) |
 | SSH public key | One line, `ssh-rsa` with at least 2048 bits (ED25519 only after the VERIFY of Section 10.4), at most 10 keys for one customer |
 | Domain name | Lower case, IDNA-encoded, label and TLD checked against `tlds` |
 | DNS record | Type from the allowed list of Section 12; value checked per type; TTL 60 to 86400 |
@@ -331,7 +334,7 @@ Formats:
 
 ### 16.14 Emails and SMS
 
-Emails use the layout of `email/index.html` (dark header with the logo, one headline band, white body, dark footer with the company address), rebuilt in `packages/notify` as table-based templates with inline CSS, in `bn` and `en`. Hex values come from 16.4. No password, key, OTP or document number is ever sent by email, and links go only to the panel's own domain. The footer of every email carries the short AWS statement and the trademark line of 16.13.
+Emails use the layout of `email/index.html` (dark header with the logo, one headline band, white body, dark footer with the company address), rebuilt in `packages/notify` as table-based templates with inline CSS, in `bn` and `en`. Hex values come from 16.4. No password, key, phone OTP or document number is sent by email, except these, sent by Cognito through the `cognito-messages` trigger in the user's locale with this layout: the email verification code, the password reset code and an admin's one-time temporary password; and links go only to the panel's own domain. The footer of every email carries the short AWS statement and the trademark line of 16.13.
 
 | Trigger | Email | SMS |
 | --- | --- | --- |
@@ -339,10 +342,11 @@ Emails use the layout of `email/index.html` (dark header with the logo, one head
 | KYC | Received, approved, rejected with the reason | Approved |
 | Top-up verified | Receipt | No |
 | Order paid | Invoice | No |
+| Order failed and refunded | What failed, the refund line and the new wallet balance | No |
 | Resource ready | Location and address, link to the panel | Yes |
 | Renewal reminders at 7, 3 and 1 day | Amount and wallet balance | At 1 day |
 | Renewed | Invoice | No |
-| Grace started | What is suspended and until when | Yes |
+| Grace started | What is suspended, until when, the amount to renew and a link to renew or top up | Yes |
 | Resource destroyed, backup kept | Restore deadline | Yes |
 | Backups purged | Notice | No |
 | Low balance, payment expired | Notice | No |
@@ -362,7 +366,7 @@ Emails use the layout of `email/index.html` (dark header with the logo, one head
 - [ ] Automated accessibility checks (axe) report no serious or critical issue on the P0 screens, and every P0 flow can be completed with the keyboard.
 - [ ] Bengali text renders correctly on Android Chrome and iOS Safari, including conjuncts, numerals and the taka sign.
 - [ ] Public pages, the panel footer and emails carry the AWS statement and the trademark line of 16.13. A test checks the message files for forbidden forms such as "AWS Lightsail".
-- [ ] A test searches rendered P0 pages, emails and API responses for `arn:aws:`, the pool account ids and internal resource names and finds none.
+- [ ] A test searches rendered P0 pages, emails and API responses for `arn:aws:`, the pool account ids and internal resource names and finds none. The names and addresses that rule U6 allows (the bucket name, the default domain of a container service, and the endpoints of databases and distributions) are not counted.
 - [ ] Largest Contentful Paint is under 2.5 seconds on the landing and pricing pages on a simulated 4G phone.
 - [ ] Playwright completes sign-up, top-up and create-server at a width of 360 px in `bn`.
 

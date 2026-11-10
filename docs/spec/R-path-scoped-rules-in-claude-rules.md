@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1755-1788. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1850-1884. Change the plan, then run pnpm spec:split. -->
 
 ## R. Path-scoped rules in `.claude/rules/`
 
@@ -11,7 +11,8 @@ Each file starts with a `paths:` list in YAML frontmatter and loads only when Cl
 | `data.md` | `packages/db/**` | R5, R8, R15 in full. "Every new repository method takes the tenant scope and gets a cross-tenant test" |
 | `ui.md` | `apps/**`, `packages/ui/**`, `packages/notify/**`, `content/**` | U1 to U13 in full. Pointers: `docs/spec/16` files for tokens, kit, statements and names |
 | `admin.md` | `apps/admin/**` | R10 in full. Pointer: `docs/spec/16` (16.12) |
-| `lifecycle.md` | `packages/core/lifecycle/**`, `functions/scheduler/**` | R13, R16 in full. Pointer: `docs/spec/11`. "Time comes from the injected Clock only" |
+| `lifecycle.md` | `packages/core/lifecycle/**`, `functions/scheduler/**` | R4, R5, R7, R13, R16 in full. Pointer: `docs/spec/11`. "Time comes from the injected Clock only" |
+| `server.md` | `apps/**`, `functions/**`, `packages/auth/**`, `packages/core/operations/**`, `**/package.json`, `pnpm-lock.yaml` | R6, R7, R8, R9, R14, R16, R17 in full. Pointers: `docs/spec/02`, `docs/spec/06` |
 
 Example, `.claude/rules/money.md`:
 

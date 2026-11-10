@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 549-565. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 556-572. Change the plan, then run pnpm spec:split. -->
 
 ## K. Go/no-go on Monday 16 at 18:00
 

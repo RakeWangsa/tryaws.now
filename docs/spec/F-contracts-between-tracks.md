@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 394-463. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 401-470. Change the plan, then run pnpm spec:split. -->
 
 ## F. Contracts between tracks
 
@@ -23,7 +23,7 @@ export interface PriceQuote {
   currency: "BDT"; fxRate: string; ruleVersion: string;
   baseMinor: Minor; steps: { code: string; amountMinor: Minor }[]; totalMinor: Minor;
 }
-export function quote(awsPriceUsd: string, fxRate: string, steps: PricingStep[]): PriceQuote;
+export function quote(input: { awsPriceUsd: string; quantity?: string; fxRate: string; rule: { version: string; steps: PricingStep[] } }): PriceQuote;   // quantity for per-GB and daily prices (R4); the rule carries its version
 
 // packages/db
 export function withTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
@@ -53,20 +53,20 @@ export function verifyPayment(merchantTransactionId: string):
 export function createOrderDraft(s: CustomerSession, input: unknown):
   Promise<Result<{ token: string; quote: PriceQuote; expiresAt: Date }>>;
 export function placeOrder(s: CustomerSession, input: { token: string; idempotencyKey: string }):
-  Promise<Result<{ orderId: string }>>;          // "price_changed" carries the new PriceQuote in `data`
+  Promise<Result<{ orderId: string }>>;          // "price_changed" carries a new draft { token, quote, expiresAt } in `data`
 
 // packages/core/operations
 export function enqueueOperation(tx: Tx, input: {
   resourceId: string; kind: OperationKind; payload: unknown;
   idempotencyKey: string; needsApproval?: boolean;
-}): Promise<{ operationId: string }>;
+}): Promise<{ operationId: string }>;   // inserts the row only (queued, next_run_at = now); the queue message is sent after commit
 
 // packages/core/flags
 export function isEnabled(flag: FeatureFlag, market: string): Promise<boolean>;
 
 // packages/notify
-export function notify(tx: Tx, input: { customerId: string; template: TemplateId; data: Record<string, unknown> }): Promise<void>;
+export function notify(tx: Tx, input: { customerId?: string; email?: string; template: TemplateId; data: Record<string, unknown>; dedupeKey: string }): Promise<void>;   // inserts a `pending` row; `notifier` sends it after commit
 ```
 
-`ProductAdapter` (Section 10.3) is the contract between `packages/aws` and the `provisioner`. The live read contract is one function in `functions/reader`: `describe(resourceId, customerId)` and `metrics(resourceId, customerId, range)`, both of which check ownership themselves.
+`ProductAdapter` (Section 10.3) is the contract between `packages/aws` and the `provisioner`. The live read contract is one function in `functions/reader`: `describe(resourceId, caller)` and `metrics(resourceId, caller, range)`, where `caller` is `{ customerId }` or `{ adminId }`, both of which check ownership themselves, and `checkDomain(name)`, which reads no customer data.
 

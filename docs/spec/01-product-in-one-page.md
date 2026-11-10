@@ -1,8 +1,8 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 646-665. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 654-673. Change the plan, then run pnpm spec:split. -->
 
 ## 1. Product in one page
 
-TiCON Cloud is a prepaid, self-service cloud panel (in the style of Vultr or DigitalOcean) whose resources are Amazon Lightsail resources in AWS accounts owned by TiCON. Customers are told openly that the service is 100% AWS: every resource they buy is an Amazon Lightsail resource in an AWS Region. They do not get an AWS account, the AWS console or AWS API access; they use the TiCON Cloud panel. They sign up, verify identity, top up a wallet in BDT through EPS, and buy resources on 30-day prepaid terms.
+TiCON Cloud is a prepaid, self-service cloud panel (in the style of Vultr or DigitalOcean) whose resources are Amazon Lightsail resources in AWS accounts owned by TiCON. Customers are told openly that the service is 100% AWS: every server, database, disk, bucket, load balancer and container service they buy is an Amazon Lightsail resource in an AWS Region, and CDN, DNS and domains use Amazon Lightsail CDN and Amazon Route 53, which are global AWS services. They do not get an AWS account, the AWS console or AWS API access; they use the TiCON Cloud panel. They sign up, verify identity, top up a wallet in BDT through EPS, and buy resources on 30-day prepaid terms.
 
 | Decision | Value |
 | --- | --- |

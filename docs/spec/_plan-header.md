@@ -2,7 +2,7 @@
 
 # TiCON Cloud on AWS: MEGA PLAN
 
-Version 1.0, 2026-11-11. Launch target: Tuesday 2026-11-17.
+Version 1.1, 2026-11-11. Launch target: Tuesday 2026-11-17.
 Owner: S M Moshiur Rahman, TiCON System Limited. Builder: Claude Code with the TiCON dev team.
 
 This one file is the source of truth for the product, the launch and the build. It replaces `TICON_CLOUD_LIGHTSAIL_BUILD_PLAN.md`: the full text of that file (version 0.3) is Part 3 here, with the same section numbers.
@@ -24,6 +24,8 @@ Changes against build plan 0.3, all made in this version:
 | 0, 2, 16.2 | `CLAUDE.md` stays short. Full rule text lives in path-scoped rule files and in generated `docs/spec/` files (Appendix P to S) |
 | 4, 5 | CI and deploy row; `.claude/`, `docs/spec/`, `verify/` and `docs/runbooks/` in the layout |
 | 14, 15, 17 | Pointers to the task backlog and the gates; one more security check; open items for roles and for Amazon SES production access |
+
+Version 1.1 applies the corrections of the pre-flight audit of 2026-11-11. The findings and their evidence are in `docs/audit/2026-11-11-mega-plan-audit.md`. The exact edits are in `docs/audit/2026-11-11-corrections.json`, and `docs/audit/2026-11-11-apply-corrections.mjs` applies them to version 1.0.
 
 # Part 1. Start here
 

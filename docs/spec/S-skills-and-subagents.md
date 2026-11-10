@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1789-1894. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1885-1993. Change the plan, then run pnpm spec:split. -->
 
 ## S. Skills and subagents
 
@@ -13,7 +13,9 @@ disable-model-invocation: true
 Task id: $ARGUMENTS
 
 1. Open docs/spec/E-backlog-and-prompts.md and find the row of this task and the "Read" list of its
-   work package. Read those docs/spec files and no others. Read the last 60 lines of JOURNEY.md.
+   work package. Read those docs/spec files first. Read another docs/spec file only when the task
+   row names a route, function or rule that they do not contain, and name that file in the plan.
+   Read the last 60 lines of JOURNEY.md.
 2. Write the plan for this task only: files to create or change, the interfaces you consume and
    produce (docs/spec/F-contracts-between-tracks.md), the tests that prove the task, every VERIFY
    item it touches, and anything that needs a decision. Stop and show the plan.
@@ -65,7 +67,7 @@ description: Reviews a diff of the TiCON Cloud platform for security and tenant 
 tools: Read, Grep, Glob, Bash
 model: opus
 ---
-You review one diff. Read docs/spec/02 and the rule files in .claude/rules/ first.
+You review one diff, which the caller passes to you. Do not edit files. Read docs/spec/02 and the rule files in .claude/rules/ first.
 Check: R1 import boundary; every new endpoint follows R9 and has a cross-tenant test (R8);
 no secret, token, document number or raw AWS error reaches a log, a response or a client bundle;
 redirect targets follow U12; IAM changes grant the least needed; inputs are validated with zod.
@@ -82,9 +84,10 @@ description: Reviews pricing, ledger, wallet, order and EPS code against the spe
 tools: Read, Grep, Glob, Bash
 model: opus
 ---
-You review one diff against docs/spec/08 and docs/spec/09. Check: integer paisa everywhere and
+You review one diff against docs/spec/08 and docs/spec/09. Do not edit files; run only git diff and the
+pricing vector tests. Check: integer paisa everywhere and
 half-up rounding (R4); every ledger transaction balances and nothing updates or deletes ledger rows
-(R5); a wallet credit happens only after a verified EPS response with equal id, amount and currency,
+(R5); a wallet credit happens only after a verified EPS response with equal id and amount (EPS returns no currency),
 under a row lock (R6); idempotency keys with unique constraints (R7); the purchase transaction
 locks the wallet, prices on the server, reserves capacity and reverses once on failure.
 Run the pricing vectors. Report only findings that can lose or create money, each with a failing

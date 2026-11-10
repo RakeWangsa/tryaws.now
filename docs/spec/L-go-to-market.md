@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 566-594. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 573-601. Change the plan, then run pnpm spec:split. -->
 
 ## L. Go-to-market
 
@@ -23,8 +23,8 @@ Core message: real AWS, at about the AWS price, in taka, prepaid, with a VAT inv
 | Objection | Answer |
 | --- | --- |
 | A local VPS is cheaper | For local speed alone it is. Choose this for visitors abroad, AWS infrastructure, and a path to full AWS later |
-| I can buy from AWS directly | Then you need a dollar card, pay 15% VAT without a BIN, and get no taka invoice. Here the price is about 1.7% higher, with support in Bengali |
-| Where is my data | In the AWS Region you choose: Singapore or Mumbai |
+| I can buy from AWS directly | Then you need a dollar card, pay 15% VAT without a BIN, and get no taka invoice. Here the price is about 1.7% higher per 30-day term (about 3% over a full year), with support in Bengali |
+| Where is my data | Your servers, databases and storage are in the AWS Region you choose: Singapore or Mumbai. Your account and identity documents are kept in AWS Singapore |
 | Will my money get stuck | Every wallet transaction and invoice is visible in the panel, and the refund policy is published |
 
 Content Claude Code drafts for review, in `bn` and `en` (task WPP and WP9): landing and product page copy, the FAQ, email and SMS templates, ten help articles, the announcement post, and drafts of the legal pages for the legal adviser. No AWS mark in paid search ads without authorization from AWS.

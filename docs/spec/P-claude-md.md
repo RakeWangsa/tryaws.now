@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1542-1620. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1626-1705. Change the plan, then run pnpm spec:split. -->
 
 ## P. `CLAUDE.md`
 
@@ -7,8 +7,8 @@ Keep it under 200 lines. It is loaded in every session, so it holds only what ap
 ```markdown
 # TiCON Cloud platform
 
-Prepaid cloud panel for Bangladesh. Every customer resource is an Amazon Lightsail resource in
-TiCON's AWS pool accounts. The money is real: wallet, double-entry ledger, EPS payments.
+Prepaid cloud panel for Bangladesh. Customer resources are Amazon Lightsail resources in
+TiCON's AWS pool accounts; DNS zones and domains are Amazon Route 53 resources in `tc-dns`. The money is real: wallet, double-entry ledger, EPS payments.
 
 The specification is TICON_CLOUD_MEGA_PLAN.md. Do not read it whole. Read the files in docs/spec/
 that your task names. docs/spec/INDEX.md lists them. The task backlog is docs/spec/E-backlog-and-prompts.md.
@@ -46,7 +46,7 @@ that your task names. docs/spec/INDEX.md lists them. The task backlog is docs/sp
 - R3 No long-lived AWS keys. No secrets in the repo, in logs or in client bundles. Cross-account access is STS AssumeRole.
 - R4 Money is bigint paisa. Decimal math only inside packages/core/pricing. Rounding is half-up. No floats.
 - R5 The ledger is double-entry and append-only. A correction is a reversing transaction.
-- R6 Credit a wallet only after server-to-server EPS verification of the same transaction id, amount and currency.
+- R6 Credit a wallet only after server-to-server EPS verification of the same transaction id and amount (EPS amounts are always BDT).
 - R7 Every state-changing request and job is idempotent, enforced by a unique key.
 - R8 Customer data only through tenant-scoped repositories. customerId comes from the session. Each endpoint has a cross-tenant test.
 - R9 Order in every action: authenticate, authorize, validate with zod, rate limit, execute, audit.
@@ -60,6 +60,7 @@ that your task names. docs/spec/INDEX.md lists them. The task backlog is docs/sp
 - R17 Dependencies are pinned. No high or critical advisories. No new auth or crypto dependency without a recorded reason.
 - Never read or print secrets, never run sst secret, never deploy production, never touch the management account.
 - Never edit design/mockup/, docs/spec/ or a migration that is already on main.
+- Never change a contract of docs/spec/F-contracts-between-tracks.md inside a task. A contract change is its own pull request that edits Section F of TICON_CLOUD_MEGA_PLAN.md.
 
 ## UI
 The mockup theme is the look: reuse its CSS classes, ship no theme JavaScript, self-host everything,

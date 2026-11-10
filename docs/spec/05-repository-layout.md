@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 777-804. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 787-814. Change the plan, then run pnpm spec:split. -->
 
 ## 5. Repository layout
 
@@ -16,7 +16,7 @@ packages/
   ui/             theme files, tokens, shells and components shared by web and admin (Section 16)
 functions/
   provisioner/  reader/  access-details/  scheduler/  payments-sweeper/
-  catalog-sync/  reconciler/  migrator/  invoice-renderer/
+  catalog-sync/  reconciler/  migrator/  invoice-renderer/  notifier/  cognito-messages/
 infra/            SST definitions (one file per concern); infra/org/ holds the Organization templates that DevOps applies
 tests/            e2e and isolation tests
 design/           mockup/ (the mockup zip contents: read-only reference, excluded from every build), brand/ (logo, favicon), reference/ (sample invoice)
