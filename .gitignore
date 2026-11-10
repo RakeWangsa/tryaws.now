@@ -7,3 +7,9 @@
 .claude/worktrees/
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Build output and dependencies
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo

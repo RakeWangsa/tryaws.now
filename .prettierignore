@@ -1,0 +1,13 @@
+TICON_CLOUD_MEGA_PLAN.md
+TiCON Cloud*.md
+design/
+docs/spec/
+docs/audit/
+docs/superpowers/
+CLAUDE.md
+JOURNEY.md
+.claude/
+.github/pull_request_template.md
+pnpm-lock.yaml
+verify/baseline.json
+verify/report-*.json
