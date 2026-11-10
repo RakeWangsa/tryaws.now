@@ -14,13 +14,27 @@ import { expect, it } from "vitest";
 
 const protect = resolve(".claude/hooks/protect-files.sh");
 const stopCheck = resolve(".claude/hooks/stop-check.sh");
+// Inside a git hook these variables point git at the real repository. The child processes of
+// these tests never get them, so the test repositories stay the only ones they touch.
+const GIT_REPO_VARS = [
+  "GIT_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_WORK_TREE",
+  "GIT_PREFIX",
+  "GIT_COMMON_DIR",
+];
+function childEnv(env = {}) {
+  const result = { ...process.env, ...env };
+  for (const name of GIT_REPO_VARS) delete result[name];
+  return result;
+}
 const run = (script, input, env = {}) =>
   spawnSync("bash", [script], {
     input: JSON.stringify(input),
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: childEnv(env),
   });
-const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: childEnv() });
 
 // A small repository like the real one: one merged migration, an ignored node_modules folder and a
 // committed scripts/verify.mjs. The two options leave out what stop-check.sh looks for.
@@ -43,6 +57,23 @@ function repo({ installed = true, verifyScript = true } = {}) {
   git(dir, "update-ref", "refs/remotes/origin/main", "HEAD");
   return dir;
 }
+
+it("builds its test repository even when GIT_DIR points elsewhere", () => {
+  const saved = process.env.GIT_DIR;
+  const elsewhere = join(mkdtempSync(join(tmpdir(), "gitdir-")), "missing");
+  try {
+    process.env.GIT_DIR = elsewhere;
+    const dir = repo();
+    expect(existsSync(join(dir, ".git"))).toBe(true);
+    expect(existsSync(elsewhere)).toBe(false);
+    const head = git(dir, "rev-parse", "HEAD");
+    expect(head.status, head.stderr).toBe(0);
+    expect(git(dir, "log", "-1", "--format=%s").stdout.trim()).toBe("init");
+  } finally {
+    if (saved === undefined) delete process.env.GIT_DIR;
+    else process.env.GIT_DIR = saved;
+  }
+});
 
 it.each([
   ["/repo/design/mockup/template/index.html", "design/mockup"],
@@ -137,7 +168,7 @@ const runFormat = (input, env) =>
   spawnSync("bash", ["-c", format], {
     input: JSON.stringify(input),
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: childEnv(env),
   });
 
 it("the format hook passes a path with spaces as one argument", () => {
