@@ -127,3 +127,52 @@ it.each([
   expect(() => quote({ ...input, rule: LAUNCH })).toThrow(RangeError);
   expect(() => quote({ ...input, rule: LAUNCH })).toThrow(new RegExp(field));
 });
+
+it("refuses the rule of the negative vector instead of pricing it", () => {
+  // spec section 8: bd_vat switched to subtotal but left in second place would give 3493 and 74613
+  const rule: PricingRule = {
+    version: "bd-3",
+    steps: [
+      LAUNCH.steps[0]!,
+      { ...LAUNCH.steps[1]!, base: "subtotal" },
+      LAUNCH.steps[2]!,
+      LAUNCH.steps[3]!,
+    ],
+  };
+  expect(() => quote({ awsPriceUsd: "5", fxRate: "127", rule })).toThrow(RangeError);
+  expect(() => quote({ awsPriceUsd: "5", fxRate: "127", rule })).toThrow(
+    /invalid pricing rule: step bd_vat has base subtotal/,
+  );
+});
+
+it("refuses a bad step rate and names the step", () => {
+  const rule: PricingRule = {
+    version: "bd-1",
+    steps: LAUNCH.steps.map((s) => (s.code === "korea_vat" ? { ...s, rate: "10%" } : s)),
+  };
+  expect(() => quote({ awsPriceUsd: "5", fxRate: "127", rule })).toThrow(RangeError);
+  expect(() => quote({ awsPriceUsd: "5", fxRate: "127", rule })).toThrow(
+    /invalid pricing rule: rate of step korea_vat/,
+  );
+});
+
+it("prices a rate above 1", () => {
+  const rule: PricingRule = {
+    version: "v",
+    steps: [{ code: "markup", rate: "1.5", base: "aws", label }],
+  };
+  const result = quote({ awsPriceUsd: "5", fxRate: "127", rule });
+  expect(result.baseMinor).toBe(63500n);
+  expect(result.steps).toEqual([{ code: "markup", amountMinor: 95250n }]);
+  expect(result.totalMinor).toBe(158750n);
+});
+
+it("keeps every digit of an amount beyond 2^53", () => {
+  const result = quote({
+    awsPriceUsd: "123456789012345678901234567890",
+    fxRate: "1",
+    rule: { version: "v", steps: [] },
+  });
+  expect(result.baseMinor).toBe(12345678901234567890123456789000n);
+  expect(result.totalMinor).toBe(12345678901234567890123456789000n);
+});

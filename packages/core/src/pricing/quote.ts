@@ -2,12 +2,17 @@ import Big from "big.js";
 import type { Minor } from "../types";
 import { parseDecimal, toMinor } from "./decimal";
 import type { PriceQuote, QuoteInput } from "./types";
+import { validateRule } from "./validate";
 
 /**
  * Spec section 8: base = round_half_up(aws * quantity * fx * 100); each step is
  * round_half_up(basis * rate) with basis = base for "aws" and the running total for "subtotal".
  */
 export function quote(input: QuoteInput): PriceQuote {
+  const problems = validateRule(input.rule);
+  if (problems.length > 0) {
+    throw new RangeError(`invalid pricing rule: ${problems.join("; ")}`);
+  }
   const aws = parseDecimal(input.awsPriceUsd, "awsPriceUsd");
   const quantity = parseDecimal(input.quantity ?? "1", "quantity");
   const fx = parseDecimal(input.fxRate, "fxRate");
