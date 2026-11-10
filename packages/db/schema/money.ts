@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -65,7 +66,7 @@ export const ledgerAccounts = pgTable(
       .nullsNotDistinct(),
     check(
       "ledger_accounts_type_check",
-      sql`${t.type} in ('customer_wallet', 'gateway_clearing', 'revenue_aws_base', 'vat_korea_payable', 'vat_bd_payable', 'processing_fee_income', 'markup_income', 'refunds', 'adjustments')`,
+      sql`${t.type} in (${sql.raw(LEDGER_ACCOUNT_TYPES.map((v) => `'${v}'`).join(", "))})`,
     ),
     check(
       "ledger_accounts_owner_check",
@@ -148,10 +149,16 @@ export const walletAdjustments = pgTable(
     // NULL on an adjustment below the limit, which posts at once (9.1).
     approvedBy: uuid("approved_by").references(() => adminUsers.id),
     status: text("status").notNull().default("pending"),
-    ledgerTransactionId: uuid("ledger_transaction_id").references(() => ledgerTransactions.id),
+    ledgerTransactionId: uuid("ledger_transaction_id"),
     createdAt: createdAt(),
   },
   (t) => [
+    // Named by hand: the default name is longer than the 63 bytes PostgreSQL keeps.
+    foreignKey({
+      name: "wallet_adjustments_ledger_transaction_id_fk",
+      columns: [t.ledgerTransactionId],
+      foreignColumns: [ledgerTransactions.id],
+    }),
     index("wallet_adjustments_customer_id_idx").on(t.customerId),
     unique("wallet_adjustments_ledger_transaction_id_unique").on(t.ledgerTransactionId),
     // 9.1: "Admin credit or debit".

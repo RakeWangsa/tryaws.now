@@ -1,5 +1,5 @@
 {
-  "id": "0ee2029a-b8fa-490e-8389-6d36bbf8e8ff",
+  "id": "091412d2-d32c-41dc-8809-04c1af0ef763",
   "prevId": "62912b4b-aedc-49b3-9d6b-04cee435b2f6",
   "version": "7",
   "dialect": "postgresql",
@@ -2265,8 +2265,8 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "wallet_adjustments_ledger_transaction_id_ledger_transactions_id_fk": {
-          "name": "wallet_adjustments_ledger_transaction_id_ledger_transactions_id_fk",
+        "wallet_adjustments_ledger_transaction_id_fk": {
+          "name": "wallet_adjustments_ledger_transaction_id_fk",
           "tableFrom": "wallet_adjustments",
           "tableTo": "ledger_transactions",
           "columnsFrom": [

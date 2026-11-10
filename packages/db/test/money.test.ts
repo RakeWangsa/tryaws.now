@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { payments } from "../schema/index";
+import { LEDGER_ACCOUNT_TYPES, payments } from "../schema/index";
 import { useTempDatabase } from "./temp-db";
 import { expectSqlError, inTransaction, insertRow } from "./sql";
 import {
@@ -387,4 +387,15 @@ it("ruling 4: an adjustment below the limit is approved with no approver; anothe
     "23505",
     { constraint: "wallet_adjustments_ledger_transaction_id_unique" },
   );
+});
+
+it("the type check of ledger_accounts holds exactly the values of LEDGER_ACCOUNT_TYPES", async () => {
+  const { rows } = await t.pool.query(
+    "select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'ledger_accounts_type_check'",
+  );
+  const inSql = [...(rows[0].def as string).matchAll(/'([a-z_]+)'/g)]
+    .map((match) => match[1])
+    .sort();
+  expect(inSql).toEqual([...LEDGER_ACCOUNT_TYPES].sort());
+  expect(LEDGER_ACCOUNT_TYPES).toHaveLength(9);
 });
