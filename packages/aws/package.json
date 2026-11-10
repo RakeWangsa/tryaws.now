@@ -8,5 +8,13 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-lightsail": "3.1166.0",
+    "@aws-sdk/client-sts": "3.1166.0",
+    "@tc/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2"
   }
 }
