@@ -81,15 +81,63 @@ it("Appendix R names seven rule files", () => {
     "`server.md`",
   ]);
 });
+// Title and bullets of each rule file (the table "Titles and bullets" of the task 4 brief). The
+// bullets of money.md are those of the plan's example block.
+const moneyBullets = blockAfter(plan, "Example, `.claude/rules/money.md`")
+  .trim()
+  .split("\n")
+  .filter((line) => line.startsWith("- "));
+const ruleFiles = {
+  "money.md": ["# Money rules", moneyBullets],
+  "aws.md": [
+    "# AWS rules",
+    [
+      "- Specification: docs/spec/03-architecture.md, docs/spec/06-identity-and-access.md and docs/spec/10-provisioning.md",
+    ],
+  ],
+  "data.md": [
+    "# Data rules",
+    ["- Every new repository method takes the tenant scope and gets a cross-tenant test."],
+  ],
+  "ui.md": [
+    "# UI rules",
+    [
+      "- Specification: the files in docs/spec/16/, above all 16.4 (tokens), 16.6 (kit) and 16.13 (statements and names).",
+    ],
+  ],
+  "admin.md": ["# Admin rules", ["- Specification: docs/spec/16/16.12-admin-screens-wp8.md"]],
+  "lifecycle.md": [
+    "# Lifecycle rules",
+    [
+      "- Specification: docs/spec/11-lifecycle-engine.md",
+      "- Time comes from the injected Clock only.",
+    ],
+  ],
+  "server.md": [
+    "# Server rules",
+    [
+      "- Specification: docs/spec/02-rules-that-are-never-broken.md and docs/spec/06-identity-and-access.md",
+    ],
+  ],
+};
 it.each(ruleRows)(
-  "rule file %s has the row's paths and the full text of its rules",
+  "rule file %s is exactly the row's paths, its title, its rules in order and its bullets",
   (file, paths, body) => {
-    const text = read(`.claude/rules/${file.replaceAll("`", "")}`);
-    const expectedPaths = paths.split(",").map((p) => `  - "${p.trim().replaceAll("`", "")}"`);
-    expect(text.startsWith(["---", "paths:", ...expectedPaths, "---", "", "# "].join("\n"))).toBe(
-      true,
-    );
-    for (const id of idsOf(body)) expect(text, id).toContain(`\n**${id}.** ${ruleText(id)}\n`);
+    const name = file.replaceAll("`", "");
+    const [title, bullets] = ruleFiles[name];
+    const expected = [
+      "---",
+      "paths:",
+      ...paths.split(",").map((p) => `  - "${p.trim().replaceAll("`", "")}"`),
+      "---",
+      "",
+      title,
+      "",
+      ...idsOf(body).flatMap((id) => [`**${id}.** ${ruleText(id)}`, ""]),
+      ...bullets,
+      "",
+    ].join("\n");
+    expect(read(`.claude/rules/${name}`)).toBe(expected);
   },
 );
 it("money.md ends with the three bullets of the plan's example", () => {
