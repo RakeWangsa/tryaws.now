@@ -25,6 +25,10 @@ const packages = {
   "functions/cognito-messages": "@tc/fn-cognito-messages",
 };
 
+// The shared form of a package's tsconfig.json (kit plan, Task 7). A package that needs more, for
+// example "jsx" in a Next.js app, gets its difference here, so that it is reviewed with this file.
+const tsconfigExtras = {};
+
 it.each(Object.entries(packages))("%s is the private workspace package %s", (dir, name) => {
   const pkg = JSON.parse(readFileSync(`${dir}/package.json`, "utf8"));
   expect(pkg.name).toBe(name);
@@ -33,6 +37,12 @@ it.each(Object.entries(packages))("%s is the private workspace package %s", (dir
   expect(existsSync(`${dir}/index.ts`), `${dir}/index.ts`).toBe(true);
   expect(existsSync(`${dir}/src`), `${dir}/src`).toBe(false);
   expect(pkg.exports).toEqual({ ".": "./index.ts" });
+  expect(JSON.parse(readFileSync(`${dir}/tsconfig.json`, "utf8")), `${dir}/tsconfig.json`).toEqual({
+    extends: "../../tsconfig.base.json",
+    include: ["**/*.ts", "**/*.tsx"],
+    exclude: ["node_modules", "dist", ".next", ".sst"],
+    ...tsconfigExtras[dir],
+  });
 });
 
 it("every workspace package on disk is in the table above, and every row is on disk", () => {

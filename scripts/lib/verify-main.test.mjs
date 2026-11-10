@@ -121,7 +121,7 @@ it("passes deps.signal on to the runner: an aborted signal stops every check", a
   }
 });
 
-it("lists both paths of a staged rename, and its git commands never follow GIT_DIR", () => {
+it("lists both paths of a staged rename, and the git commands this test starts never follow GIT_DIR", () => {
   const decoy = tmp("decoy-");
   spawnSync("git", ["init", "-q", "-b", "main"], { cwd: decoy, encoding: "utf8", env: childEnv() });
   const dir = tmp("rename-");
