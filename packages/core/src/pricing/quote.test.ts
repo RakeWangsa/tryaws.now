@@ -167,6 +167,14 @@ it("prices a rate above 1", () => {
   expect(result.totalMinor).toBe(158750n);
 });
 
+it("refuses a rule without steps instead of crashing", () => {
+  const rule = { version: "v" } as unknown as PricingRule;
+  expect(() => quote({ awsPriceUsd: "5", fxRate: "127", rule })).toThrow(RangeError);
+  expect(() => quote({ awsPriceUsd: "5", fxRate: "127", rule })).toThrow(
+    /invalid pricing rule: steps is not a list/,
+  );
+});
+
 it("keeps every digit of an amount beyond 2^53", () => {
   const result = quote({
     awsPriceUsd: "123456789012345678901234567890",

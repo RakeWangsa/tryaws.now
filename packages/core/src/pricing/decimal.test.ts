@@ -6,6 +6,11 @@ it.each(["5", "9.50", "0.50", "127", "124.77", "0", "0.0333333333"])("parses %s"
   expect(parseDecimal(text, "x").eq(new Big(text))).toBe(true);
 });
 
+it.each([0.1, ["0.1"], undefined])("refuses %s that is not text", (value) => {
+  expect(() => parseDecimal(value as unknown as string, "fxRate")).toThrow(RangeError);
+  expect(() => parseDecimal(value as unknown as string, "fxRate")).toThrow(/fxRate/);
+});
+
 it.each([
   "",
   " ",
