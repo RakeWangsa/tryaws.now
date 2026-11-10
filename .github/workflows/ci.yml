@@ -10,6 +10,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      DATABASE_URL: postgres://postgres:ci-throwaway-password@localhost:5432/postgres
     services:
       postgres:
         image: postgres:16

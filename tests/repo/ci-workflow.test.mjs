@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { URL } from "node:url";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 
@@ -42,4 +43,18 @@ it("does not deploy", () => {
 });
 it("keeps the mockup out of the secret scan", () => {
   expect(readFileSync(".gitleaks.toml", "utf8")).toContain("design/mockup/");
+});
+it("gives every step the service database through one job-level DATABASE_URL", () => {
+  const service = job.services.postgres;
+  const url = new URL(job.env.DATABASE_URL);
+  expect(url.protocol).toBe("postgres:");
+  expect(url.username).toBe(service.env.POSTGRES_USER ?? "postgres");
+  expect(url.password).toBe(service.env.POSTGRES_PASSWORD);
+  expect(url.hostname).toBe("localhost");
+  expect(url.port).toBe(String(service.ports[0]).split(":")[0]);
+  expect(url.pathname).toBe(
+    `/${service.env.POSTGRES_DB ?? service.env.POSTGRES_USER ?? "postgres"}`,
+  );
+  for (const step of job.steps)
+    expect(step.env?.DATABASE_URL, step.name ?? step.run).toBeUndefined();
 });

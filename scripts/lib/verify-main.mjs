@@ -65,7 +65,7 @@ function render(results, passed) {
 
 // deps: { root, runChecks, listChangedFiles, readPackages }
 // Returns { exitCode, report, output }; the report is also on disk.
-export async function verifyMain(argv, deps) {
+export async function verifyMain(argv, deps, signal) {
   const { root, runChecks, listChangedFiles, readPackages } = deps;
   let name = "usage";
   let results;
@@ -84,7 +84,7 @@ export async function verifyMain(argv, deps) {
         const files = listChangedFiles(root);
         checks = quickChecks(files === null ? "all" : changedPackages(files, readPackages(root)));
       }
-      results = await runChecks(checks, { cwd: root });
+      results = await runChecks(checks, { cwd: root, signal });
     }
   } catch (error) {
     const text = `runner error: ${error?.message ?? error}\n${error?.stack ?? ""}`;
