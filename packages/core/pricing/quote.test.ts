@@ -2,67 +2,76 @@ import Big from "big.js";
 import { expect, it } from "vitest";
 import { PricingInputError } from "./errors";
 import { quote } from "./quote";
-import type { PricingRule } from "./types";
+import type { PricingRule, PricingStep } from "./types";
 
 const label = { bn: "ক", en: "a" };
+
+// spec section 8 through verify/baseline.json: the facts the plan states, so a corrected
+// vector in the plan changes this test too.
+interface Vector {
+  aws_usd: string;
+  base: number;
+  korea_vat: number;
+  bd_vat: number;
+  processing_fee: number;
+  total: number;
+}
+interface Pricing {
+  fx: string;
+  steps: Omit<PricingStep, "label">[];
+  vectors: Vector[];
+  extra: [Vector & { fx: string }, { fx: string; aws_usd: string; bd_vat: number; total: number }];
+}
+const baselineUrl = new URL("../../../verify/baseline.json", import.meta.url);
+const { default: baseline } = (await import(baselineUrl.href, { with: { type: "json" } })) as {
+  default: { pricing: Pricing };
+};
+const { fx, vectors, extra } = baseline.pricing;
+
 const LAUNCH: PricingRule = {
   version: "bd-1",
-  steps: [
-    { code: "korea_vat", rate: "0.10", base: "aws", label },
-    { code: "bd_vat", rate: "0.05", base: "aws", label },
-    { code: "processing_fee", rate: "0.02", base: "aws", label },
-    { code: "markup", rate: "0", base: "aws", label },
-  ],
+  steps: baseline.pricing.steps.map((step) => ({ ...step, label })),
 };
 
-// spec section 8, "Test vectors (FX 127, launch configuration, all amounts in paisa)"
-const VECTORS: [string, bigint, bigint, bigint, bigint, bigint][] = [
-  ["5", 63500n, 6350n, 3175n, 1270n, 74295n],
-  ["7", 88900n, 8890n, 4445n, 1778n, 104013n],
-  ["12", 152400n, 15240n, 7620n, 3048n, 178308n],
-  ["24", 304800n, 30480n, 15240n, 6096n, 356616n],
-  ["44", 558800n, 55880n, 27940n, 11176n, 653796n],
-  ["84", 1066800n, 106680n, 53340n, 21336n, 1248156n],
-  ["9.50", 120650n, 12065n, 6033n, 2413n, 141161n],
-  ["15", 190500n, 19050n, 9525n, 3810n, 222885n],
-  ["10", 127000n, 12700n, 6350n, 2540n, 148590n],
-  ["18", 228600n, 22860n, 11430n, 4572n, 267462n],
-  ["1", 12700n, 1270n, 635n, 254n, 14859n],
-  ["2.50", 31750n, 3175n, 1588n, 635n, 37148n],
-  ["0.50", 6350n, 635n, 318n, 127n, 7430n],
-  ["3.50", 44450n, 4445n, 2223n, 889n, 52007n],
-];
+it("the baseline holds the 14 vectors and the 4 steps of section 8", () => {
+  expect(vectors).toHaveLength(14);
+  expect(LAUNCH.steps).toHaveLength(4);
+});
 
-it.each(VECTORS)("section 8 vector: %s USD", (usd, base, korea, bd, fee, total) => {
-  expect(quote({ awsPriceUsd: usd, fxRate: "127", rule: LAUNCH })).toEqual({
+it.each(vectors)("section 8 vector: $aws_usd USD", (v) => {
+  expect(quote({ awsPriceUsd: v.aws_usd, fxRate: fx, rule: LAUNCH })).toEqual({
     currency: "BDT",
-    fxRate: "127",
+    fxRate: fx,
     ruleVersion: "bd-1",
-    baseMinor: base,
+    baseMinor: BigInt(v.base),
     steps: [
-      { code: "korea_vat", amountMinor: korea },
-      { code: "bd_vat", amountMinor: bd },
-      { code: "processing_fee", amountMinor: fee },
+      { code: "korea_vat", amountMinor: BigInt(v.korea_vat) },
+      { code: "bd_vat", amountMinor: BigInt(v.bd_vat) },
+      { code: "processing_fee", amountMinor: BigInt(v.processing_fee) },
       { code: "markup", amountMinor: 0n },
     ],
-    totalMinor: total,
+    totalMinor: BigInt(v.total),
   });
 });
 
 it("section 8 extra vector: FX 124.77", () => {
-  const q = quote({ awsPriceUsd: "5", fxRate: "124.77", rule: LAUNCH });
+  const v = extra[0];
+  const q = quote({ awsPriceUsd: v.aws_usd, fxRate: v.fx, rule: LAUNCH });
   expect([q.baseMinor, ...q.steps.map((s) => s.amountMinor), q.totalMinor]).toEqual([
-    62385n,
-    6239n,
-    3119n,
-    1248n,
+    BigInt(v.base),
+    BigInt(v.korea_vat),
+    BigInt(v.bd_vat),
+    BigInt(v.processing_fee),
     0n,
-    72991n,
+    BigInt(v.total),
   ]);
-  expect(q.fxRate).toBe("124.77");
+  expect(q.fxRate).toBe(v.fx);
 });
 
 it("section 8 extra vector: bd_vat last, on the subtotal", () => {
+  const v = extra[1];
+  // the steps before bd_vat are on the AWS price, as in the launch vector of the same price
+  const launch = vectors.find((row) => row.aws_usd === v.aws_usd)!;
   const rule: PricingRule = {
     version: "bd-2",
     steps: [
@@ -72,18 +81,18 @@ it("section 8 extra vector: bd_vat last, on the subtotal", () => {
       { ...LAUNCH.steps[1]!, base: "subtotal" },
     ],
   };
-  const q = quote({ awsPriceUsd: "5", fxRate: "127", rule });
+  const q = quote({ awsPriceUsd: v.aws_usd, fxRate: v.fx, rule });
   expect(q.steps.map((s) => [s.code, s.amountMinor])).toEqual([
-    ["korea_vat", 6350n],
-    ["processing_fee", 1270n],
+    ["korea_vat", BigInt(launch.korea_vat)],
+    ["processing_fee", BigInt(launch.processing_fee)],
     ["markup", 0n],
-    ["bd_vat", 3556n],
+    ["bd_vat", BigInt(v.bd_vat)],
   ]);
-  expect(q.totalMinor).toBe(74676n);
+  expect(q.totalMinor).toBe(BigInt(v.total));
 });
 
 it("the total is the base plus every step", () => {
-  for (const [usd] of VECTORS) {
+  for (const { aws_usd: usd } of vectors) {
     const q = quote({ awsPriceUsd: usd, fxRate: "124.77", rule: LAUNCH });
     expect(q.steps.reduce((sum, s) => sum + s.amountMinor, q.baseMinor)).toBe(q.totalMinor);
   }
