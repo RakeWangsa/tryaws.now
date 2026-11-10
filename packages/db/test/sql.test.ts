@@ -1,6 +1,7 @@
+import type pg from "pg";
 import { beforeAll, expect, it } from "vitest";
 import { useTempDatabase } from "./temp-db";
-import { columnsOf, expectSqlError, inTransaction, insertRow } from "./sql";
+import { asRole, columnsOf, expectSqlError, inTransaction, insertRow, type AppRole } from "./sql";
 import { columnTests, EXPECTED_COLUMNS, expectedFor } from "./expected-columns";
 
 const t = useTempDatabase({ migrate: false });
@@ -72,6 +73,79 @@ it("expectSqlError matches code and constraint, also when Drizzle wraps the erro
   await expectSqlError(Promise.reject(wrapped), "23514", { constraint: "harness_t_a_check" });
   await expect(expectSqlError(insertRow(t.pool, "harness_t", { a: 0 }), "23505")).rejects.toThrow();
   await expect(expectSqlError(Promise.resolve(1), "23514")).rejects.toThrow();
+});
+
+it("expectSqlError rejects a wrong constraint, a wrong message and a wrong outer code", async () => {
+  await expect(
+    expectSqlError(insertRow(t.pool, "harness_t", { a: 0 }), "23514", {
+      constraint: "other_check",
+    }),
+  ).rejects.toThrow();
+  await expect(
+    expectSqlError(insertRow(t.pool, "harness_t", { a: 0 }), "23514", { message: /no such text/ }),
+  ).rejects.toThrow();
+  await expectSqlError(insertRow(t.pool, "harness_t", { a: 0 }), "23514", {
+    message: /harness_t_a_check/,
+  });
+  const outer = Object.assign(new Error("x"), { code: "23505", cause: { code: "23514" } });
+  await expect(expectSqlError(Promise.reject(outer), "23514")).rejects.toThrow();
+});
+
+it("asRole refuses an unknown role by name, before it takes a client", async () => {
+  await expect(asRole(t.pool, "postgres" as AppRole, async () => 1)).rejects.toThrow(/postgres/);
+});
+
+it("columnsOf gives plain numeric for a numeric column without precision", async () => {
+  await t.pool.query("create table harness_n (id uuid primary key, n numeric)");
+  expect(await columnsOf(t.pool, "harness_n")).toEqual(["id uuid NOT NULL", "n numeric NULL"]);
+});
+
+function fakePool(rollbackFails: boolean) {
+  const releases: unknown[][] = [];
+  const client = {
+    query: async (sql: string) => {
+      if (sql === "ROLLBACK" && rollbackFails) throw new Error("rollback failed");
+      return { rows: [] };
+    },
+    release: (...args: unknown[]) => {
+      releases.push(args);
+    },
+  };
+  return { pool: { connect: async () => client } as unknown as pg.Pool, releases };
+}
+
+it.each([
+  [
+    "inTransaction",
+    (p: pg.Pool) => inTransaction(p, async () => Promise.reject(new Error("boom"))),
+  ],
+  ["asRole", (p: pg.Pool) => asRole(p, "web_rw", async () => Promise.reject(new Error("boom")))],
+])(
+  "%s destroys the client when ROLLBACK fails and rethrows the original error",
+  async (_n, run) => {
+    const { pool, releases } = fakePool(true);
+    await expect(run(pool)).rejects.toThrow("boom");
+    expect(releases).toEqual([[true]]);
+  },
+);
+
+it.each([
+  [
+    "inTransaction",
+    (p: pg.Pool) => inTransaction(p, async () => Promise.reject(new Error("boom"))),
+  ],
+  ["asRole", (p: pg.Pool) => asRole(p, "web_rw", async () => Promise.reject(new Error("boom")))],
+])("%s keeps the client when ROLLBACK works", async (_n, run) => {
+  const { pool, releases } = fakePool(false);
+  await expect(run(pool)).rejects.toThrow("boom");
+  expect(releases).toHaveLength(1);
+  expect(releases[0]![0]).toBeFalsy();
+});
+
+it("asRole gives the caller the ROLLBACK error when fn succeeded", async () => {
+  const { pool, releases } = fakePool(true);
+  await expect(asRole(pool, "web_rw", async () => 1)).rejects.toThrow("rollback failed");
+  expect(releases).toEqual([[true]]);
 });
 
 it("inTransaction rolls back when fn throws and when COMMIT fails", async () => {

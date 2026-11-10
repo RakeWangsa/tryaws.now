@@ -20,8 +20,17 @@ export type TempDatabaseHandle = {
   readonly db: Database;
 };
 
+function parseUrl(url: string): URL {
+  try {
+    return new URL(url);
+  } catch {
+    // The TypeError of URL holds the whole URL, password included, in its property `input`.
+    throw new Error("invalid DATABASE_URL");
+  }
+}
+
 function withDatabase(url: string, database: string): string {
-  const u = new URL(url);
+  const u = parseUrl(url);
   u.pathname = `/${database}`;
   return u.toString();
 }
@@ -32,17 +41,32 @@ export function maintenanceUrl(url: string): string {
 
 const NETWORK_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EHOSTUNREACH"]);
 
+type ErrorLike = { code?: unknown; message?: unknown; cause?: { code?: unknown } };
+
+// The code of a network error, or the driver's own message when the error has no code at all.
+// An error that carries any other code (a SQLSTATE such as 57014 or 28P01) is not a network error.
+function networkReason(err: unknown): string | undefined {
+  const e = (err ?? {}) as ErrorLike;
+  if (typeof e.code === "string") return NETWORK_CODES.has(e.code) ? e.code : undefined;
+  const causeCode = e.cause?.code;
+  if (typeof causeCode === "string" && NETWORK_CODES.has(causeCode)) return causeCode;
+  const message = typeof e.message === "string" ? e.message : "";
+  return /timed? ?out|timeout/i.test(message) ? message : undefined;
+}
+
+export function isNetworkError(err: unknown): boolean {
+  return networkReason(err) !== undefined;
+}
+
 // Only a network error is rewritten; every other error keeps its code and message.
 // The text holds host and port, never the URL, so it cannot leak the password.
 function explainConnectionError(err: unknown, url: string): unknown {
-  const e = err as { code?: string; message?: string; cause?: { code?: string; message?: string } };
-  const code = [e?.code, e?.cause?.code].find((c) => c !== undefined && NETWORK_CODES.has(c));
-  const timedOut = /timed? ?out|timeout/i.test(e?.message ?? "");
-  if (code === undefined && !timedOut) return err;
-  const u = new URL(url);
+  const reason = networkReason(err);
+  if (reason === undefined) return err;
+  const u = parseUrl(url);
   const port = u.port === "" ? "5432" : u.port;
   return new Error(
-    `cannot reach PostgreSQL at ${u.hostname}:${port} (${code ?? e.message}). ` +
+    `cannot reach PostgreSQL at ${u.hostname}:${port} (${reason}). ` +
       "Start it with pnpm db:up, or set DATABASE_URL.",
     { cause: err },
   );
@@ -53,7 +77,7 @@ export async function createTempDatabase(
 ): Promise<TempDatabase> {
   const baseUrl = options.url ?? databaseUrl();
   const name = `tc_test_${process.pid}_${randomBytes(4).toString("hex")}`;
-  const adminUrl = maintenanceUrl(baseUrl);
+  const adminUrl = maintenanceUrl(baseUrl); // also refuses a malformed URL
 
   const admin = new pg.Client({ connectionString: adminUrl, connectionTimeoutMillis: 5000 });
   try {
@@ -67,33 +91,60 @@ export async function createTempDatabase(
 
   const url = withDatabase(baseUrl, name);
   const { db, pool } = createDatabase(url);
-  let dropped = false;
-  const drop = async (): Promise<void> => {
-    if (dropped) return;
-    dropped = true;
-    await pool.end();
+  let poolEnded = false;
+  let finished = false;
+  let inflight: Promise<void> | undefined;
+  const dropOnce = async (): Promise<void> => {
+    if (!poolEnded) {
+      poolEnded = true;
+      await pool.end();
+    }
     const c = new pg.Client({ connectionString: adminUrl, connectionTimeoutMillis: 5000 });
-    await c.connect();
     try {
+      await c.connect();
       await c.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
     } finally {
-      await c.end();
+      await c.end().catch(() => undefined);
     }
+  };
+  // A second call while the first runs gets the same promise; after a success it does nothing;
+  // after a failure the next call tries again.
+  const drop = (): Promise<void> => {
+    if (finished) return Promise.resolve();
+    inflight ??= dropOnce().then(
+      () => {
+        finished = true;
+      },
+      (err: unknown) => {
+        inflight = undefined;
+        throw err;
+      },
+    );
+    return inflight;
   };
 
   try {
     if (options.migrate ?? true) await runMigrations(url);
   } catch (err) {
-    await drop();
+    await drop().catch(() => undefined); // the migration error is the one that counts
     throw err;
   }
-  return { name, url, pool, db, drop };
+  const temp = { name, drop } as TempDatabase;
+  // Not enumerable: printing or serialising the object must not print the password.
+  // `pool` and `db` hold it too (pg.Pool keeps its connectionString in its options).
+  for (const [key, value] of Object.entries({ url, pool, db })) {
+    Object.defineProperty(temp, key, { value, enumerable: false });
+  }
+  return temp;
 }
 
 export function useTempDatabase(options: { migrate?: boolean } = {}): TempDatabaseHandle {
   let temp: TempDatabase | undefined;
   beforeAll(async () => {
-    temp = await createTempDatabase(options);
+    // Create and store first, then migrate: afterAll drops the database also when the
+    // migration fails or the time limit of this hook fires during it.
+    temp = await createTempDatabase({ ...options, migrate: false });
+    if (options.migrate ?? true) await runMigrations(temp.url);
   }, 60_000);
   afterAll(async () => {
     if (temp) await temp.drop();
@@ -106,18 +157,16 @@ export function useTempDatabase(options: { migrate?: boolean } = {}): TempDataba
     }
     return temp;
   };
-  return {
+  const handle = {
     get name() {
       return ready().name;
     },
-    get url() {
-      return ready().url;
-    },
-    get pool() {
-      return ready().pool;
-    },
-    get db() {
-      return ready().db;
-    },
-  };
+  } as TempDatabaseHandle;
+  // Not enumerable, like the properties of TempDatabase: they hold the password.
+  const secret = (key: "url" | "pool" | "db") =>
+    Object.defineProperty(handle, key, { get: () => ready()[key], enumerable: false });
+  secret("url");
+  secret("pool");
+  secret("db");
+  return handle;
 }

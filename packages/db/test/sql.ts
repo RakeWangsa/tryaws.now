@@ -12,6 +12,7 @@ function identifier(name: string): string {
   return `"${name}"`;
 }
 
+// information_schema.columns shows only the columns the current role may see: call it as the owner.
 export async function columnsOf(q: Queryable, table: string): Promise<string[]> {
   const { rows } = await q.query<{
     column_name: string;
@@ -28,7 +29,7 @@ export async function columnsOf(q: Queryable, table: string): Promise<string[]> 
   return rows
     .map((r) => {
       const type =
-        r.udt_name === "numeric"
+        r.udt_name === "numeric" && r.numeric_precision !== null
           ? `numeric(${r.numeric_precision},${r.numeric_scale})`
           : r.udt_name;
       return `${r.column_name} ${type} ${r.is_nullable === "NO" ? "NOT NULL" : "NULL"}`;
@@ -85,6 +86,20 @@ export async function insertRow(
   return row.id as string;
 }
 
+// Runs ROLLBACK and releases the client. A client whose ROLLBACK fails may still sit inside the
+// transaction (and keep SET LOCAL ROLE), so it is released as broken and the pool destroys it.
+// Returns the ROLLBACK error, if any; the caller decides which error to throw.
+async function rollbackAndRelease(c: pg.PoolClient): Promise<unknown> {
+  let failure: { error: unknown } | undefined;
+  try {
+    await c.query("ROLLBACK");
+  } catch (error) {
+    failure = { error };
+  }
+  c.release(failure !== undefined);
+  return failure;
+}
+
 export async function inTransaction<T>(
   pool: pg.Pool,
   fn: (c: pg.PoolClient) => Promise<T>,
@@ -94,12 +109,11 @@ export async function inTransaction<T>(
     await c.query("BEGIN");
     const result = await fn(c);
     await c.query("COMMIT");
+    c.release();
     return result;
   } catch (err) {
-    await c.query("ROLLBACK").catch(() => undefined);
+    await rollbackAndRelease(c); // the original error wins over a failed ROLLBACK
     throw err;
-  } finally {
-    c.release();
   }
 }
 
@@ -110,12 +124,17 @@ export async function asRole<T>(
 ): Promise<T> {
   if (!ROLES.includes(role)) throw new Error(`unknown role: ${role}`);
   const c = await pool.connect();
+  let result: T | undefined;
+  let failure: { error: unknown } | undefined;
   try {
     await c.query("BEGIN");
     await c.query(`SET LOCAL ROLE ${role}`);
-    return await fn(c);
-  } finally {
-    await c.query("ROLLBACK").catch(() => undefined);
-    c.release();
+    result = await fn(c);
+  } catch (error) {
+    failure = { error };
   }
+  const rollback = (await rollbackAndRelease(c)) as { error: unknown } | undefined;
+  if (failure) throw failure.error;
+  if (rollback) throw rollback.error;
+  return result as T;
 }
