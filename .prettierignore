@@ -10,4 +10,5 @@ JOURNEY.md
 .github/pull_request_template.md
 pnpm-lock.yaml
 verify/baseline.json
+packages/db/migrations/
 verify/report-*.json

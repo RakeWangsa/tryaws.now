@@ -16,6 +16,7 @@ it("prettier leaves the plans, the mockup and the generated or verbatim files al
     ".github/pull_request_template.md",
     "pnpm-lock.yaml",
     "verify/baseline.json",
+    "packages/db/migrations/meta/_journal.json",
   ]) {
     const info = await prettier.getFileInfo(file, { ignorePath: ".prettierignore" });
     expect(info.ignored, file).toBe(true);
