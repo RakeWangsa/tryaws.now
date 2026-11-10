@@ -60,3 +60,15 @@ it("--quick never selects only what a changed package depends on", () => {
   const words = quickChecks(["@tc/core", "@tc/web"]).flatMap((c) => c.command);
   expect(words.filter((word) => word.endsWith("..."))).toEqual([]);
 });
+it("task WP1-T1 is proven by the checks of M0 plus Prettier, the schema tests and the repository tests", () => {
+  expect(TASKS["WP1-T1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["repo", "pnpm test --filter repo"],
+  ]);
+  expect(TASKS["WP0-T1"]).toEqual(GATES.M0);
+});

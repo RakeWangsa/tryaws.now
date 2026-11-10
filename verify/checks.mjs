@@ -27,7 +27,20 @@ const test = { id: "test", title: "Vitest, all projects", command: ["pnpm", "tes
 // gate M0 is the result of the pull request itself, not a local check.
 const WP0_T1 = [specSync, baselineSync, lint, format, typecheck, test];
 
-export const TASKS = { "WP0-T1": WP0_T1 };
+const db = {
+  id: "db",
+  title: "packages/db: schema, constraints, triggers, grants, forward-only",
+  command: ["pnpm", "test", "--filter", "@tc/db"],
+};
+const repo = {
+  id: "repo",
+  title: "Repository tests",
+  command: ["pnpm", "test", "--filter", "repo"],
+};
+
+const WP1_T1 = [specSync, baselineSync, lint, typecheck, format, db, repo];
+
+export const TASKS = { "WP0-T1": WP0_T1, "WP1-T1": WP1_T1 };
 
 export const GATES = {
   M0: WP0_T1,
