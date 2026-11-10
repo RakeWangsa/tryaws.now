@@ -1,0 +1,273 @@
+import { sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  smallint,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { adminUsers } from "./admins";
+import { createdAt, id, money } from "./common";
+import { customers } from "./identity";
+
+// The nine ledger account types. STEP_ACCOUNTS of @tc/core holds four of them; packages/db stays
+// independent of pricing, so the list is repeated here.
+export const LEDGER_ACCOUNT_TYPES = [
+  "customer_wallet",
+  "gateway_clearing",
+  "revenue_aws_base",
+  "vat_korea_payable",
+  "vat_bd_payable",
+  "processing_fee_income",
+  "markup_income",
+  "refunds",
+  "adjustments",
+] as const;
+
+export const wallets = pgTable(
+  "wallets",
+  {
+    id: id(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    currency: text("currency").notNull(),
+    balanceMinor: money("balance_minor")
+      .notNull()
+      .default(sql`0`),
+    version: integer("version").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("wallets_customer_id_unique").on(t.customerId),
+    check("wallets_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("wallets_balance_minor_check", sql`${t.balanceMinor} >= 0`),
+  ],
+);
+
+export const ledgerAccounts = pgTable(
+  "ledger_accounts",
+  {
+    id: id(),
+    type: text("type").notNull(),
+    customerId: uuid("customer_id").references(() => customers.id),
+    currency: text("currency").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("ledger_accounts_customer_id_type_currency_unique")
+      .on(t.customerId, t.type, t.currency)
+      .nullsNotDistinct(),
+    check(
+      "ledger_accounts_type_check",
+      sql`${t.type} in ('customer_wallet', 'gateway_clearing', 'revenue_aws_base', 'vat_korea_payable', 'vat_bd_payable', 'processing_fee_income', 'markup_income', 'refunds', 'adjustments')`,
+    ),
+    check(
+      "ledger_accounts_owner_check",
+      sql`(${t.type} = 'customer_wallet') = (${t.customerId} IS NOT NULL)`,
+    ),
+    check("ledger_accounts_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+  ],
+);
+
+// Append-only (A); the triggers and the balance check are Task 8.
+export const ledgerTransactions = pgTable(
+  "ledger_transactions",
+  {
+    id: id(),
+    // The values belong to LedgerKind of WP3-T1.
+    kind: text("kind").notNull(),
+    referenceType: text("reference_type").notNull(),
+    referenceId: uuid("reference_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    // Decided here: the three kinds of actor, the same list as audit_log.actor_type.
+    actorType: text("actor_type").notNull(),
+    // No foreign key: it points at a customer or an admin.
+    actorId: uuid("actor_id"),
+    memo: text("memo"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("ledger_transactions_idempotency_key_unique").on(t.idempotencyKey),
+    index("ledger_transactions_reference_type_reference_id_idx").on(t.referenceType, t.referenceId),
+    check(
+      "ledger_transactions_actor_type_check",
+      sql`${t.actorType} in ('customer', 'admin', 'system')`,
+    ),
+    check(
+      "ledger_transactions_actor_check",
+      sql`(${t.actorType} = 'system') = (${t.actorId} IS NULL)`,
+    ),
+  ],
+);
+
+// Append-only (A).
+export const ledgerEntries = pgTable(
+  "ledger_entries",
+  {
+    id: id(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => ledgerAccounts.id),
+    // Decided here: the two sides of a double-entry line (R5).
+    direction: text("direction").notNull(),
+    amountMinor: money("amount_minor").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("ledger_entries_transaction_id_idx").on(t.transactionId),
+    index("ledger_entries_account_id_idx").on(t.accountId),
+    check("ledger_entries_direction_check", sql`${t.direction} in ('debit', 'credit')`),
+    check("ledger_entries_amount_minor_check", sql`${t.amountMinor} > 0`),
+  ],
+);
+
+export const walletAdjustments = pgTable(
+  "wallet_adjustments",
+  {
+    id: id(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    direction: text("direction").notNull(),
+    amountMinor: money("amount_minor").notNull(),
+    kind: text("kind").notNull(),
+    reason: text("reason").notNull(),
+    evidenceRef: text("evidence_ref"),
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => adminUsers.id),
+    // NULL on an adjustment below the limit, which posts at once (9.1).
+    approvedBy: uuid("approved_by").references(() => adminUsers.id),
+    status: text("status").notNull().default("pending"),
+    ledgerTransactionId: uuid("ledger_transaction_id").references(() => ledgerTransactions.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("wallet_adjustments_customer_id_idx").on(t.customerId),
+    unique("wallet_adjustments_ledger_transaction_id_unique").on(t.ledgerTransactionId),
+    // 9.1: "Admin credit or debit".
+    check("wallet_adjustments_direction_check", sql`${t.direction} in ('credit', 'debit')`),
+    check("wallet_adjustments_amount_minor_check", sql`${t.amountMinor} > 0`),
+    check("wallet_adjustments_kind_check", sql`${t.kind} in ('goodwill', 'deposit', 'correction')`),
+    check("wallet_adjustments_reason_check", sql`length(btrim(${t.reason})) > 0`),
+    check(
+      "wallet_adjustments_approver_check",
+      sql`${t.approvedBy} IS NULL OR ${t.approvedBy} <> ${t.requestedBy}`,
+    ),
+    check(
+      "wallet_adjustments_status_check",
+      sql`${t.status} in ('pending', 'approved', 'rejected')`,
+    ),
+    check(
+      "wallet_adjustments_posting_check",
+      sql`(${t.status} = 'approved') = (${t.ledgerTransactionId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: id(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    gateway: text("gateway").notNull(),
+    merchantTransactionId: text("merchant_transaction_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    amountMinor: money("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    status: text("status").notNull().default("initiated"),
+    gatewayTransactionId: text("gateway_transaction_id"),
+    verifyPayload: jsonb("verify_payload"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    ledgerTransactionId: uuid("ledger_transaction_id").references(() => ledgerTransactions.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("payments_merchant_transaction_id_unique").on(t.merchantTransactionId),
+    unique("payments_customer_id_idempotency_key_unique").on(t.customerId, t.idempotencyKey),
+    unique("payments_ledger_transaction_id_unique").on(t.ledgerTransactionId),
+    // The sweeper.
+    index("payments_status_created_at_idx").on(t.status, t.createdAt),
+    // 9.2.
+    check("payments_merchant_transaction_id_check", sql`length(${t.merchantTransactionId}) >= 10`),
+    check("payments_amount_minor_check", sql`${t.amountMinor} > 0`),
+    check("payments_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check(
+      "payments_status_check",
+      sql`${t.status} in ('initiated', 'redirected', 'credited', 'failed', 'cancelled', 'expired', 'review')`,
+    ),
+    check(
+      "payments_credit_check",
+      sql`(${t.status} = 'credited') = (${t.ledgerTransactionId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: id(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    kind: text("kind").notNull(),
+    items: jsonb("items").notNull(),
+    priceSnapshot: jsonb("price_snapshot").notNull(),
+    totalMinor: money("total_minor").notNull(),
+    // Every state of an order is paid.
+    ledgerTransactionId: uuid("ledger_transaction_id")
+      .notNull()
+      .references(() => ledgerTransactions.id),
+    idempotencyKey: text("idempotency_key").notNull(),
+    status: text("status").notNull().default("paid"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("orders_ledger_transaction_id_unique").on(t.ledgerTransactionId),
+    unique("orders_customer_id_idempotency_key_unique").on(t.customerId, t.idempotencyKey),
+    check("orders_kind_check", sql`${t.kind} in ('new', 'renew', 'addon', 'restore')`),
+    check("orders_total_minor_check", sql`${t.totalMinor} >= 0`),
+    check("orders_status_check", sql`${t.status} in ('paid', 'fulfilled', 'reversed')`),
+  ],
+);
+
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: id(),
+    // First calendar year of the fiscal year: 2026 is July 2026 to June 2027.
+    fiscalYear: smallint("fiscal_year").notNull(),
+    // WP3-T5 allocates it under a transaction-level advisory lock.
+    number: integer("number").notNull(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    // Nullable by ruling 9: an invoice that comes from no order has none.
+    orderId: uuid("order_id").references(() => orders.id),
+    lines: jsonb("lines").notNull(),
+    totalMinor: money("total_minor").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    pdfKey: text("pdf_key"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("invoices_fiscal_year_number_unique").on(t.fiscalYear, t.number),
+    unique("invoices_order_id_unique").on(t.orderId),
+    index("invoices_customer_id_idx").on(t.customerId),
+    check("invoices_fiscal_year_check", sql`${t.fiscalYear} >= 2026`),
+    check("invoices_number_check", sql`${t.number} > 0`),
+    check("invoices_lines_check", sql`jsonb_typeof(${t.lines}) = 'array'`),
+    check("invoices_total_minor_check", sql`${t.totalMinor} >= 0`),
+  ],
+);

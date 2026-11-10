@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type pg from "pg";
 import { v7 as uuidv7 } from "uuid";
 import { insertRow, type Queryable } from "./sql";
 
@@ -36,4 +37,58 @@ export async function newCustomer(
     market,
     ...over,
   });
+}
+
+// Plain INSERT: a second call with the same type, owner and currency fails on the unique key.
+export async function newLedgerAccount(
+  q: Queryable,
+  type: string,
+  customerId: string | null,
+  currency = "BDT",
+): Promise<string> {
+  return insertRow(q, "ledger_accounts", { type, customer_id: customerId, currency });
+}
+
+// Returns the account of that type and currency with no owner, or creates it.
+export async function systemAccount(q: Queryable, type: string, currency = "BDT"): Promise<string> {
+  const find = () =>
+    q.query<{ id: string }>(
+      "select id from ledger_accounts where type = $1 and currency = $2 and customer_id is null",
+      [type, currency],
+    );
+  const found = await find();
+  if (found.rows[0] !== undefined) return found.rows[0].id;
+  try {
+    return await newLedgerAccount(q, type, null, currency);
+  } catch (err) {
+    // Another call created it between the SELECT and the INSERT.
+    const again = await find();
+    if (again.rows[0] !== undefined) return again.rows[0].id;
+    throw err;
+  }
+}
+
+// One transaction row, then one INSERT per line in the given order (never a multi-row INSERT).
+// Call it inside inTransaction, with balanced lines.
+export async function postLedger(
+  c: pg.PoolClient,
+  key: string,
+  lines: [accountId: string, direction: "debit" | "credit", amountMinor: number][],
+): Promise<string> {
+  const txId = await insertRow(c, "ledger_transactions", {
+    kind: "test",
+    reference_type: "test",
+    reference_id: uuidv7(),
+    idempotency_key: key,
+    actor_type: "system",
+  });
+  for (const [account_id, direction, amount_minor] of lines) {
+    await insertRow(c, "ledger_entries", {
+      transaction_id: txId,
+      account_id,
+      direction,
+      amount_minor,
+    });
+  }
+  return txId;
 }
