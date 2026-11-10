@@ -1,0 +1,892 @@
+{
+  "source": {
+    "file": "TICON_CLOUD_MEGA_PLAN.md",
+    "version": "1.1"
+  },
+  "pricing": {
+    "fx": "127",
+    "steps": [
+      {
+        "code": "korea_vat",
+        "rate": "0.10",
+        "base": "aws"
+      },
+      {
+        "code": "bd_vat",
+        "rate": "0.05",
+        "base": "aws"
+      },
+      {
+        "code": "processing_fee",
+        "rate": "0.02",
+        "base": "aws"
+      },
+      {
+        "code": "markup",
+        "rate": "0",
+        "base": "aws"
+      }
+    ],
+    "vectors": [
+      {
+        "aws_usd": "5",
+        "base": 63500,
+        "korea_vat": 6350,
+        "bd_vat": 3175,
+        "processing_fee": 1270,
+        "total": 74295
+      },
+      {
+        "aws_usd": "7",
+        "base": 88900,
+        "korea_vat": 8890,
+        "bd_vat": 4445,
+        "processing_fee": 1778,
+        "total": 104013
+      },
+      {
+        "aws_usd": "12",
+        "base": 152400,
+        "korea_vat": 15240,
+        "bd_vat": 7620,
+        "processing_fee": 3048,
+        "total": 178308
+      },
+      {
+        "aws_usd": "24",
+        "base": 304800,
+        "korea_vat": 30480,
+        "bd_vat": 15240,
+        "processing_fee": 6096,
+        "total": 356616
+      },
+      {
+        "aws_usd": "44",
+        "base": 558800,
+        "korea_vat": 55880,
+        "bd_vat": 27940,
+        "processing_fee": 11176,
+        "total": 653796
+      },
+      {
+        "aws_usd": "84",
+        "base": 1066800,
+        "korea_vat": 106680,
+        "bd_vat": 53340,
+        "processing_fee": 21336,
+        "total": 1248156
+      },
+      {
+        "aws_usd": "9.50",
+        "base": 120650,
+        "korea_vat": 12065,
+        "bd_vat": 6033,
+        "processing_fee": 2413,
+        "total": 141161
+      },
+      {
+        "aws_usd": "15",
+        "base": 190500,
+        "korea_vat": 19050,
+        "bd_vat": 9525,
+        "processing_fee": 3810,
+        "total": 222885
+      },
+      {
+        "aws_usd": "10",
+        "base": 127000,
+        "korea_vat": 12700,
+        "bd_vat": 6350,
+        "processing_fee": 2540,
+        "total": 148590
+      },
+      {
+        "aws_usd": "18",
+        "base": 228600,
+        "korea_vat": 22860,
+        "bd_vat": 11430,
+        "processing_fee": 4572,
+        "total": 267462
+      },
+      {
+        "aws_usd": "1",
+        "base": 12700,
+        "korea_vat": 1270,
+        "bd_vat": 635,
+        "processing_fee": 254,
+        "total": 14859
+      },
+      {
+        "aws_usd": "2.50",
+        "base": 31750,
+        "korea_vat": 3175,
+        "bd_vat": 1588,
+        "processing_fee": 635,
+        "total": 37148
+      },
+      {
+        "aws_usd": "0.50",
+        "base": 6350,
+        "korea_vat": 635,
+        "bd_vat": 318,
+        "processing_fee": 127,
+        "total": 7430
+      },
+      {
+        "aws_usd": "3.50",
+        "base": 44450,
+        "korea_vat": 4445,
+        "bd_vat": 2223,
+        "processing_fee": 889,
+        "total": 52007
+      }
+    ],
+    "extra": [
+      {
+        "fx": "124.77",
+        "aws_usd": "5",
+        "base": 62385,
+        "korea_vat": 6239,
+        "bd_vat": 3119,
+        "processing_fee": 1248,
+        "total": 72991
+      },
+      {
+        "fx": "127",
+        "aws_usd": "5",
+        "bd_vat_base": "subtotal",
+        "bd_vat": 3556,
+        "total": 74676
+      }
+    ]
+  },
+  "tables": [
+    {
+      "name": "customers",
+      "appendOnly": false,
+      "columns": "`cognito_sub` unique, `sessions_valid_after`, email, phone, `phone_verified_at`, name, type, `kyc_status`, `risk_tier`, market, locale, status"
+    },
+    {
+      "name": "kyc_submissions",
+      "appendOnly": false,
+      "columns": "customer, document type, encrypted document number, S3 keys, status, reviewer, reviewed at, note"
+    },
+    {
+      "name": "ssh_keys",
+      "appendOnly": false,
+      "columns": "customer, name, public key, fingerprint (public keys only)"
+    },
+    {
+      "name": "otp_challenges",
+      "appendOnly": false,
+      "columns": "customer, phone (also a new number waiting for `changePhone`), code hash, expires at, attempts, consumed at"
+    },
+    {
+      "name": "rate_limits",
+      "appendOnly": false,
+      "columns": "scope key (for example a hashed phone number, a customer or an IP), window start, count; unique on scope key and window start; rows older than a day are purged"
+    },
+    {
+      "name": "legal_acceptances",
+      "appendOnly": true,
+      "columns": "customer, document (terms, acceptable use, privacy, refund, domain registration agreement), version, accepted at, IP"
+    },
+    {
+      "name": "markets",
+      "appendOnly": false,
+      "columns": "code (`BD`), currency (`BDT`), gateway, locales, numerals (`beng` or `latn`), top-up minimum and maximum (`_minor`), quick amounts (JSON), active"
+    },
+    {
+      "name": "fx_rates",
+      "appendOnly": true,
+      "columns": "market, rate (numeric), effective from, set by admin"
+    },
+    {
+      "name": "pricing_rules",
+      "appendOnly": true,
+      "columns": "market, optional product family, ordered steps (JSON), effective from, set by admin"
+    },
+    {
+      "name": "catalog_products",
+      "appendOnly": false,
+      "columns": "family, AWS bundle or power id, platform, Region, specs (JSON), `aws_price_usd` (numeric 12,4), billing unit, feature flag, active, synced at"
+    },
+    {
+      "name": "tlds",
+      "appendOnly": false,
+      "columns": "TLD, registration, renewal and transfer price in USD, needs extra parameters (bool), synced at"
+    },
+    {
+      "name": "feature_flags",
+      "appendOnly": false,
+      "columns": "key, market, enabled"
+    },
+    {
+      "name": "settings",
+      "appendOnly": false,
+      "columns": "key, market, scope (`market`, `tier` or `customer`) and scope id, value (JSON), set by admin; unique on key, market, scope and scope id. Holds tier and customer limits, config prices, the image allow-list, capacity reserves and the adjustment approval limit"
+    },
+    {
+      "name": "wallets",
+      "appendOnly": false,
+      "columns": "customer unique, currency, `balance_minor` (cached), version"
+    },
+    {
+      "name": "ledger_accounts",
+      "appendOnly": false,
+      "columns": "type (`customer_wallet`, `gateway_clearing`, `revenue_aws_base`, `vat_korea_payable`, `vat_bd_payable`, `processing_fee_income`, `markup_income`, `refunds`, `adjustments`), customer (nullable), currency"
+    },
+    {
+      "name": "ledger_transactions",
+      "appendOnly": true,
+      "columns": "kind, reference type and id, `idempotency_key` unique, actor, memo"
+    },
+    {
+      "name": "ledger_entries",
+      "appendOnly": true,
+      "columns": "transaction, account, direction, `amount_minor` > 0"
+    },
+    {
+      "name": "wallet_adjustments",
+      "appendOnly": false,
+      "columns": "customer, direction, `amount_minor`, kind (`goodwill`, `deposit`, `correction`), reason, evidence reference, requested by, approved by (never the requester), status (`pending`, `approved`, `rejected`), ledger transaction"
+    },
+    {
+      "name": "payments",
+      "appendOnly": false,
+      "columns": "customer, gateway, `merchant_transaction_id` unique, `idempotency_key` (unique per customer), `amount_minor`, currency, status (`initiated`, `redirected`, `credited`, `failed`, `cancelled`, `expired`, `review`), gateway transaction id, verify payload (JSON), verified at, ledger transaction"
+    },
+    {
+      "name": "orders",
+      "appendOnly": false,
+      "columns": "customer, kind (`new`, `renew`, `addon`, `restore`), items and price snapshot (JSON), `total_minor`, ledger transaction, `idempotency_key` (unique per customer), status"
+    },
+    {
+      "name": "invoices",
+      "appendOnly": false,
+      "columns": "sequential number per fiscal year, customer, order, lines (JSON), `total_minor`, issued at, PDF key"
+    },
+    {
+      "name": "pool_accounts",
+      "appendOnly": false,
+      "columns": "AWS account id, name, tier, role ARN, ExternalId, status"
+    },
+    {
+      "name": "pool_capacity",
+      "appendOnly": false,
+      "columns": "pool account, Region, quota code, limit, used, checked at"
+    },
+    {
+      "name": "customer_homes",
+      "appendOnly": false,
+      "columns": "customer, Region, pool account (unique per customer and Region)"
+    },
+    {
+      "name": "resources",
+      "appendOnly": false,
+      "columns": "customer, family, product, pool account, Region, AWS name, state, parent resource (nullable: the instance of a disk, static IP or backup), config (JSON: the order configuration and the state saved at suspend, such as port rules and load balancer targets), deleted at. Each manual or final snapshot is its own row of family `backup`"
+    },
+    {
+      "name": "subscriptions",
+      "appendOnly": false,
+      "columns": "resource, customer, term days, price snapshot, period start and end, auto renew, status"
+    },
+    {
+      "name": "operations",
+      "appendOnly": false,
+      "columns": "resource, kind, state, step, attempts, `enqueue_seq`, `next_run_at`, last error, `idempotency_key` unique, payload (JSON), needs approval, approved by"
+    },
+    {
+      "name": "usage_records",
+      "appendOnly": false,
+      "columns": "resource, metric, period (unique together), quantity (for metered items)"
+    },
+    {
+      "name": "domains",
+      "appendOnly": false,
+      "columns": "customer, resource, name, TLD, Route 53 operation id, status, expires at, hosted zone, registrant contact (JSON, encrypted)"
+    },
+    {
+      "name": "dns_zones",
+      "appendOnly": false,
+      "columns": "customer, resource, name, hosted zone id, name servers, delegated at, status, notices sent at"
+    },
+    {
+      "name": "notifications",
+      "appendOnly": false,
+      "columns": "customer (nullable), email (for visitors), channel (`email`, `sms`, `in_app`), template, payload, `dedupe_key` unique (for a reminder: subscription, period end and days), status, attempts, sent at, read at"
+    },
+    {
+      "name": "waitlist_entries",
+      "appendOnly": false,
+      "columns": "customer (nullable), email (for visitors who are not signed in), product family, Region, reason (`capacity` or `flag_off`), notified at"
+    },
+    {
+      "name": "support_requests",
+      "appendOnly": false,
+      "columns": "customer (nullable), name and email (for visitors who are not signed in), category, related resource (nullable), subject, message, status, handled by"
+    },
+    {
+      "name": "admin_users",
+      "appendOnly": false,
+      "columns": "`cognito_sub` unique, role, status"
+    },
+    {
+      "name": "abuse_cases",
+      "appendOnly": false,
+      "columns": "resource, source, status, notes"
+    },
+    {
+      "name": "discrepancies",
+      "appendOnly": false,
+      "columns": "kind (`orphan`, `missing`, `cost`, `payment`), details (JSON), status"
+    },
+    {
+      "name": "audit_log",
+      "appendOnly": true,
+      "columns": "actor type and id, action, target type and id, IP, user agent, metadata (JSON)"
+    }
+  ],
+  "routes": [
+    {
+      "section": "16.8",
+      "label": "/",
+      "routes": [
+        "/"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.8",
+      "label": "/pricing",
+      "routes": [
+        "/pricing"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.8",
+      "label": "/products/cloud-servers",
+      "routes": [
+        "/products/cloud-servers"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.8",
+      "label": "/products/databases",
+      "routes": [
+        "/products/databases"
+      ],
+      "priority": "P1, Gate A"
+    },
+    {
+      "section": "16.8",
+      "label": "/products/object-storage, /products/load-balancers, /products/containers, /products/cdn, /products/dns",
+      "routes": [
+        "/products/object-storage",
+        "/products/load-balancers",
+        "/products/containers",
+        "/products/cdn",
+        "/products/dns"
+      ],
+      "priority": "P1, with the family's gate"
+    },
+    {
+      "section": "16.8",
+      "label": "/products/domains",
+      "routes": [
+        "/products/domains"
+      ],
+      "priority": "P1, Gate B"
+    },
+    {
+      "section": "16.8",
+      "label": "/payments",
+      "routes": [
+        "/payments"
+      ],
+      "priority": "P1"
+    },
+    {
+      "section": "16.8",
+      "label": "/help",
+      "routes": [
+        "/help"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.8",
+      "label": "/help/[slug]",
+      "routes": [
+        "/help/[slug]"
+      ],
+      "priority": "P2"
+    },
+    {
+      "section": "16.8",
+      "label": "/support",
+      "routes": [
+        "/support"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.8",
+      "label": "/legal/[doc]",
+      "routes": [
+        "/legal/[doc]"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.8",
+      "label": "Not found, error, maintenance, coming soon",
+      "routes": [],
+      "priority": "P0"
+    },
+    {
+      "section": "16.9",
+      "label": "/signup",
+      "routes": [
+        "/signup"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.9",
+      "label": "/verify",
+      "routes": [
+        "/verify"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.9",
+      "label": "/login",
+      "routes": [
+        "/login"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.9",
+      "label": "/forgot-password, /reset-password",
+      "routes": [
+        "/forgot-password",
+        "/reset-password"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.9",
+      "label": "/kyc",
+      "routes": [
+        "/kyc"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/dashboard",
+      "routes": [
+        "/dashboard"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/wallet",
+      "routes": [
+        "/wallet"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/wallet/topup",
+      "routes": [
+        "/wallet/topup"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/wallet/topup/[paymentId]",
+      "routes": [
+        "/wallet/topup/[paymentId]"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/invoices, /invoices/[id]",
+      "routes": [
+        "/invoices",
+        "/invoices/[id]"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/orders/review",
+      "routes": [
+        "/orders/review"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/orders/[id]",
+      "routes": [
+        "/orders/[id]"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/servers",
+      "routes": [
+        "/servers"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/servers/new",
+      "routes": [
+        "/servers/new"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/servers/[id]",
+      "routes": [
+        "/servers/[id]"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "Tab Overview",
+      "routes": [],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "Tab Access",
+      "routes": [],
+      "priority": "P0; Windows P1"
+    },
+    {
+      "section": "16.10",
+      "label": "Tab Networking",
+      "routes": [],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "Tab Backups",
+      "routes": [],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "Tab Storage",
+      "routes": [],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "Tab Metrics",
+      "routes": [],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "Tab Billing",
+      "routes": [],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "Tab Destroy",
+      "routes": [],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/databases, /databases/new, /databases/[id]",
+      "routes": [
+        "/databases",
+        "/databases/new",
+        "/databases/[id]"
+      ],
+      "priority": "P1, Gate A"
+    },
+    {
+      "section": "16.10",
+      "label": "/storage, /storage/new, /storage/[id]",
+      "routes": [
+        "/storage",
+        "/storage/new",
+        "/storage/[id]"
+      ],
+      "priority": "P1, Gate A"
+    },
+    {
+      "section": "16.10",
+      "label": "/load-balancers, /load-balancers/new, /load-balancers/[id]",
+      "routes": [
+        "/load-balancers",
+        "/load-balancers/new",
+        "/load-balancers/[id]"
+      ],
+      "priority": "P1, Gate A"
+    },
+    {
+      "section": "16.10",
+      "label": "/containers, /containers/new, /containers/[id]",
+      "routes": [
+        "/containers",
+        "/containers/new",
+        "/containers/[id]"
+      ],
+      "priority": "P1, Gate B"
+    },
+    {
+      "section": "16.10",
+      "label": "/cdn, /cdn/new, /cdn/[id]",
+      "routes": [
+        "/cdn",
+        "/cdn/new",
+        "/cdn/[id]"
+      ],
+      "priority": "P1, Gate B"
+    },
+    {
+      "section": "16.10",
+      "label": "/dns, /dns/[zone]",
+      "routes": [
+        "/dns",
+        "/dns/[zone]"
+      ],
+      "priority": "P1, Gate B"
+    },
+    {
+      "section": "16.10",
+      "label": "/domains, /domains/new, /domains/[name]",
+      "routes": [
+        "/domains",
+        "/domains/new",
+        "/domains/[name]"
+      ],
+      "priority": "P1, Gate B"
+    },
+    {
+      "section": "16.10",
+      "label": "/settings/profile",
+      "routes": [
+        "/settings/profile"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/settings/security",
+      "routes": [
+        "/settings/security"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/settings/ssh-keys",
+      "routes": [
+        "/settings/ssh-keys"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.10",
+      "label": "/notifications",
+      "routes": [
+        "/notifications"
+      ],
+      "priority": "P1"
+    },
+    {
+      "section": "16.10",
+      "label": "/support when signed in",
+      "routes": [
+        "/support"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/login",
+      "routes": [
+        "/login"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/",
+      "routes": [
+        "/"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/customers, /customers/[id]",
+      "routes": [
+        "/customers",
+        "/customers/[id]"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/wallets/[customerId]",
+      "routes": [
+        "/wallets/[customerId]"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/payments",
+      "routes": [
+        "/payments"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/pricing",
+      "routes": [
+        "/pricing"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/catalog",
+      "routes": [
+        "/catalog"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/capacity",
+      "routes": [
+        "/capacity"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/operations",
+      "routes": [
+        "/operations"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/support",
+      "routes": [
+        "/support"
+      ],
+      "priority": "P1"
+    },
+    {
+      "section": "16.12",
+      "label": "/abuse",
+      "routes": [
+        "/abuse"
+      ],
+      "priority": "P1"
+    },
+    {
+      "section": "16.12",
+      "label": "/reconciliation",
+      "routes": [
+        "/reconciliation"
+      ],
+      "priority": "P1"
+    },
+    {
+      "section": "16.12",
+      "label": "/audit",
+      "routes": [
+        "/audit"
+      ],
+      "priority": "P0"
+    },
+    {
+      "section": "16.12",
+      "label": "/admins",
+      "routes": [
+        "/admins"
+      ],
+      "priority": "P0"
+    }
+  ],
+  "theme": {
+    "shipped": [
+      "`css/bootstrap.min.css`",
+      "`css/vendors.min.css` and `img/filter/*.svg`",
+      "`css/theme.min.css`",
+      "The 8 `patterns/*.svg` files that the theme CSS refers to",
+      "`fonts/fonts.min.css`, `fonts/cloudicon/*`, `fonts/evafeat/*`",
+      "`fonts/fontawesome/css/all.min.css`, `fonts/fontawesome/webfonts/*.woff2`",
+      "`apps/*.svg` (26 files)",
+      "The `fonts/svg/*.svg` files a component uses (the folder holds 306 line illustrations)"
+    ],
+    "neverShipped": [
+      "`js/*`, `php/*`, and the whole `order-form/` folder",
+      "`css/aos.min.css`, `css/rtl/*`",
+      "`img/topbanner*.jpg`, `img/partners/*`, `img/avatars/*`, `img/blog/*`, `casestudy/*`, `videos/*`",
+      "`img/logo.svg`, `img/logo-light.svg`, `img/symbol.svg`, `img/favicon.ico`",
+      "`locales/*`"
+    ]
+  },
+  "secretNames": [
+    "EpsMerchantId",
+    "EpsStoreId",
+    "EpsUsername",
+    "EpsPassword",
+    "EpsHashKey",
+    "SmsApiKey"
+  ],
+  "kitFiles": [
+    "CLAUDE.md",
+    "JOURNEY.md",
+    ".worktreeinclude",
+    ".github/pull_request_template.md",
+    ".github/CODEOWNERS",
+    ".claude/settings.json",
+    ".claude/hooks/protect-files.sh",
+    ".claude/hooks/stop-check.sh",
+    ".claude/rules/money.md",
+    ".claude/rules/aws.md",
+    ".claude/rules/data.md",
+    ".claude/rules/ui.md",
+    ".claude/rules/admin.md",
+    ".claude/rules/lifecycle.md",
+    ".claude/rules/server.md",
+    ".claude/skills/wp-start/SKILL.md",
+    ".claude/skills/wp-verify/SKILL.md",
+    ".claude/skills/handoff/SKILL.md",
+    ".claude/agents/security-reviewer.md",
+    ".claude/agents/money-reviewer.md",
+    ".claude/agents/spec-checker.md"
+  ]
+}

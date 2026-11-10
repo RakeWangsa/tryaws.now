@@ -12,6 +12,8 @@
     "test": "node scripts/run-tests.mjs",
     "spec:split": "node scripts/split-plan.mjs",
     "spec:check": "node scripts/split-plan.mjs --check",
+    "baseline:build": "node scripts/build-baseline.mjs",
+    "baseline:check": "node scripts/build-baseline.mjs --check",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
