@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1706-1849. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md, section "Q. Settings, hooks and ignore files". Change the plan, then run pnpm spec:split. -->
 
 ## Q. Settings, hooks and ignore files
 

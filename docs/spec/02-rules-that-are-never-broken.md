@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 674-697. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md, section "2. Rules that are never broken". Change the plan, then run pnpm spec:split. -->
 
 ## 2. Rules that are never broken
 

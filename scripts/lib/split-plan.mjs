@@ -39,13 +39,15 @@ export function sectionFileName(headingText) {
   return `${id}-${slug(title)}.md`;
 }
 
-function stamp(source, range) {
-  const where = range === null ? "" : ` lines ${range.start}-${range.end}`;
+// The header names the section, never a line number: an edit of the plan must not change the
+// files of the later sections.
+function stamp(source, section) {
+  const where = section === null ? "" : `, section "${section}"`;
   return `<!-- GENERATED, do not edit. Source: ${source}${where}. Change the plan, then run pnpm spec:split. -->`;
 }
 
-function render(source, range, bodyLines) {
-  return [stamp(source, range), "", ...bodyLines, ""].join("\n");
+function render(source, section, bodyLines) {
+  return [stamp(source, section), "", ...bodyLines, ""].join("\n");
 }
 
 function cell(text) {
@@ -73,14 +75,14 @@ export function splitPlan(markdown, source = DEFAULT_SOURCE) {
 
   const headerLines = lines.filter((_, i) => !inSection[i]);
   files.set("_plan-header.md", render(source, null, headerLines));
-  index.push({ file: "_plan-header.md", heading: "Title block and Part headings", range: "" });
+  index.push({ file: "_plan-header.md", heading: "Title block and Part headings" });
 
   for (const section of sections) {
     const { start, end, heading } = section;
     const name = sectionFileName(heading.text);
     const add = (file, from, to, title) => {
-      files.set(file, render(source, { start: from, end: to }, lines.slice(from - 1, to)));
-      index.push({ file, heading: title, range: `${from}-${to}` });
+      files.set(file, render(source, title, lines.slice(from - 1, to)));
+      index.push({ file, heading: title });
     };
     add(name, start, end, heading.text);
 
@@ -96,14 +98,14 @@ export function splitPlan(markdown, source = DEFAULT_SOURCE) {
     });
   }
 
-  const rows = index.map((r) => `| \`${r.file}\` | ${cell(r.heading)} | ${r.range} |`);
+  const rows = index.map((r) => `| \`${r.file}\` | ${cell(r.heading)} |`);
   files.set(
     "INDEX.md",
     render(source, null, [
       "# Specification index",
       "",
-      "| File | Heading | Plan lines |",
-      "| --- | --- | --- |",
+      "| File | Heading |",
+      "| --- | --- |",
       ...rows,
     ]),
   );

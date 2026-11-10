@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1626-1705. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md, section "P. `CLAUDE.md`". Change the plan, then run pnpm spec:split. -->
 
 ## P. `CLAUDE.md`
 

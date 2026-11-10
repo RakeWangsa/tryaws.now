@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 1850-1884. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md, section "R. Path-scoped rules in `.claude/rules/`". Change the plan, then run pnpm spec:split. -->
 
 ## R. Path-scoped rules in `.claude/rules/`
 

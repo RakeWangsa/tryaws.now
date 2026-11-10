@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 128-203. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md, section "C. Set up Claude Code for speed". Change the plan, then run pnpm spec:split. -->
 
 ## C. Set up Claude Code for speed
 

@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { diffAgainstDisk, sectionFileName, splitPlan, writeSpec } from "./split-plan.mjs";
 
-const HEADER = (range) =>
-  `<!-- GENERATED, do not edit. Source: PLAN.md${range}. Change the plan, then run pnpm spec:split. -->`;
+const HEADER = (section) =>
+  `<!-- GENERATED, do not edit. Source: PLAN.md${section}. Change the plan, then run pnpm spec:split. -->`;
 
 it("names files after the section id and heading", () => {
   expect(sectionFileName("E. Backlog and prompts")).toBe("E-backlog-and-prompts.md");
@@ -40,7 +40,7 @@ it("splits on level-2 headings and ignores headings inside fences", () => {
   expect([...files.keys()]).toEqual(["_plan-header.md", "A-one.md", "03-two.md", "INDEX.md"]);
   expect(files.get("A-one.md")).toBe(
     [
-      HEADER(" lines 5-10"),
+      HEADER(', section "A. One"'),
       "",
       "## A. One",
       "```markdown",
@@ -60,8 +60,28 @@ it("collects the title block and the Part headings in _plan-header.md", () => {
 it("lists every file with its heading in INDEX.md", () => {
   const index = splitPlan(small, "PLAN.md").get("INDEX.md");
   expect(index).toContain("# Specification index");
-  expect(index).toContain("| `A-one.md` | A. One | 5-10 |");
-  expect(index).toContain("| `03-two.md` | 3. Two | 12-13 |");
+  expect(index).toContain("| File | Heading |\n| --- | --- |\n");
+  expect(index).toContain("| `A-one.md` | A. One |\n");
+  expect(index).toContain("| `03-two.md` | 3. Two |\n");
+});
+it("keeps a section's file unchanged when a line is inserted in an earlier section", () => {
+  const before = splitPlan(small, "PLAN.md");
+  const after = splitPlan(small.replace("text", "text\none more line"), "PLAN.md");
+  expect(after.get("A-one.md")).not.toBe(before.get("A-one.md"));
+  expect(after.get("03-two.md")).toBe(before.get("03-two.md"));
+  expect(after.get("INDEX.md")).toBe(before.get("INDEX.md"));
+  const bigBefore = splitPlan(big(151), "PLAN.md");
+  const bigAfter = splitPlan(big(151).replace("before", "before\ninserted"), "PLAN.md");
+  for (const name of ["E/E.1-first-part.md", "E/E.2-second-part.md", "F-next.md", "INDEX.md"]) {
+    expect(bigAfter.get(name), name).toBe(bigBefore.get(name));
+  }
+});
+it("names the section of a subsection file in its header", () => {
+  const files = splitPlan(big(151), "PLAN.md");
+  expect(files.get("E/E.1-first-part.md").split("\n")[0]).toBe(
+    HEADER(', section "E.1 First part"'),
+  );
+  expect(files.get("E/E-intro.md").split("\n")[0]).toBe(HEADER(', section "E. Big (intro)"'));
 });
 
 function big(lines) {

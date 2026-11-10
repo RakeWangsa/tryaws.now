@@ -1,4 +1,4 @@
-<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md lines 220-249. Change the plan, then run pnpm spec:split. -->
+<!-- GENERATED, do not edit. Source: TICON_CLOUD_MEGA_PLAN.md, section "E.1 Bootstrap prompt (first session, once)". Change the plan, then run pnpm spec:split. -->
 
 ### E.1 Bootstrap prompt (first session, once)
 
