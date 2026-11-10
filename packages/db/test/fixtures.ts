@@ -1,7 +1,7 @@
 import { randomBytes, randomInt } from "node:crypto";
 import type pg from "pg";
 import { v7 as uuidv7 } from "uuid";
-import { insertRow, type Queryable } from "./sql";
+import { inTransaction, insertRow, type Queryable } from "./sql";
 
 export function uniqueSuffix(): string {
   return randomBytes(4).toString("hex");
@@ -113,4 +113,64 @@ export async function newResource(
   over: Record<string, unknown> = {},
 ): Promise<string> {
   return insertRow(q, "resources", { customer_id: customerId, family: "linux_instance", ...over });
+}
+
+export const APPEND_ONLY_TABLES = [
+  "ledger_transactions",
+  "ledger_entries",
+  "audit_log",
+  "legal_acceptances",
+  "fx_rates",
+  "pricing_rules",
+] as const;
+export type AppendOnlyTable = (typeof APPEND_ONLY_TABLES)[number];
+
+let effectiveSeconds = 0;
+
+// Inserts one valid row of an append-only table and returns its id. For ledger_entries it is the
+// id of the debit entry of a new balanced transaction. fx_rates and pricing_rules get a new
+// effective_from on every call, so the unique keys never collide in one database.
+export async function appendOnlyRow(pool: pg.Pool, table: AppendOnlyTable): Promise<string> {
+  const effectiveFrom = () =>
+    new Date(Date.parse("2030-01-01T00:00:00Z") + ++effectiveSeconds * 1000).toISOString();
+  switch (table) {
+    case "ledger_transactions":
+    case "ledger_entries": {
+      const clearing = await systemAccount(pool, "gateway_clearing");
+      const wallet = await newLedgerAccount(pool, "customer_wallet", await newCustomer(pool));
+      const txId = await inTransaction(pool, (c) =>
+        postLedger(c, "ao:" + uniqueSuffix(), [
+          [clearing, "debit", 100],
+          [wallet, "credit", 100],
+        ]),
+      );
+      if (table === "ledger_transactions") return txId;
+      const { rows } = await pool.query<{ id: string }>(
+        "select id from ledger_entries where transaction_id = $1 and direction = 'debit'",
+        [txId],
+      );
+      return rows[0]!.id;
+    }
+    case "audit_log":
+      return insertRow(pool, "audit_log", { actor_type: "system", action: "test" });
+    case "legal_acceptances":
+      return insertRow(pool, "legal_acceptances", {
+        customer_id: await newCustomer(pool),
+        document: "terms",
+        version: "1.0",
+        ip: "203.0.113.7",
+      });
+    case "fx_rates":
+      return insertRow(pool, "fx_rates", {
+        market: await ensureMarket(pool),
+        rate: "124.77",
+        effective_from: effectiveFrom(),
+      });
+    case "pricing_rules":
+      return insertRow(pool, "pricing_rules", {
+        market: await ensureMarket(pool),
+        steps: "[]",
+        effective_from: effectiveFrom(),
+      });
+  }
 }

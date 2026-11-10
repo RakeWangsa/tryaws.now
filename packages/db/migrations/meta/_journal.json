@@ -36,6 +36,13 @@
       "when": 1794351475708,
       "tag": "0004_service",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794352082680,
+      "tag": "0005_triggers",
+      "breakpoints": true
     }
   ]
 }
