@@ -8,20 +8,20 @@ async function errors(filePath, code) {
 }
 
 it.each([
-  ["apps/web/src/x.ts", 'import "@tc/aws";', "R1:"],
-  ["apps/admin/src/x.ts", 'import "@tc/aws/adapters/linux";', "R1:"],
-  ["apps/web/src/x.ts", 'import "../../../packages/aws/src/index";', "R1:"],
-  ["packages/db/src/x.ts", 'import "@tc/aws";', "R1:"],
-  ["apps/web/src/x.ts", 'import "@aws-sdk/client-lightsail";', "Spec section 4:"],
-  ["functions/reader/src/x.ts", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
-  ["packages/core/src/x.ts", 'import "@aws-sdk/client-s3";', "packages/core is pure logic:"],
-  ["packages/core/src/x.ts", 'import "node:https";', "packages/core is pure logic:"],
-  ["packages/core/src/ledger/x.ts", 'import "big.js";', "R4:"],
-  ["packages/db/src/x.ts", 'import "decimal.js";', "R4:"],
-  ["packages/aws/src/x.ts", 'import "big.js";', "R4:"],
-  ["apps/web/src/x.ts", 'import "big.js";', "R4:"],
-  ["functions/scheduler/src/x.ts", 'import "bignumber.js";', "R4:"],
-  ["packages/core/src/pricing/x.ts", 'import "node:https";', "packages/core is pure logic:"],
+  ["apps/web/x.ts", 'import "@tc/aws";', "R1:"],
+  ["apps/admin/x.ts", 'import "@tc/aws/adapters/linux";', "R1:"],
+  ["apps/web/x.ts", 'import "../../packages/aws/index";', "R1:"],
+  ["packages/db/x.ts", 'import "@tc/aws";', "R1:"],
+  ["apps/web/x.ts", 'import "@aws-sdk/client-lightsail";', "Spec section 4:"],
+  ["functions/reader/x.ts", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
+  ["packages/core/x.ts", 'import "@aws-sdk/client-s3";', "packages/core is pure logic:"],
+  ["packages/core/x.ts", 'import "node:https";', "packages/core is pure logic:"],
+  ["packages/core/ledger/x.ts", 'import "big.js";', "R4:"],
+  ["packages/db/x.ts", 'import "decimal.js";', "R4:"],
+  ["packages/aws/x.ts", 'import "big.js";', "R4:"],
+  ["apps/web/x.ts", 'import "big.js";', "R4:"],
+  ["functions/scheduler/x.ts", 'import "bignumber.js";', "R4:"],
+  ["packages/core/pricing/x.ts", 'import "node:https";', "packages/core is pure logic:"],
 ])("rejects %s with %s", async (filePath, code, prefix) => {
   const messages = await errors(filePath, code);
   expect(
@@ -31,11 +31,11 @@ it.each([
 });
 
 it.each([
-  ["functions/provisioner/src/x.ts", 'import "@tc/aws";'],
-  ["packages/aws/src/x.ts", 'import "@aws-sdk/client-lightsail";'],
-  ["apps/web/src/x.ts", 'import "@aws-sdk/client-s3";'],
-  ["packages/core/src/x.ts", 'import "@tc/db";'],
-  ["packages/core/src/pricing/x.ts", 'import "big.js";'],
+  ["functions/provisioner/x.ts", 'import "@tc/aws";'],
+  ["packages/aws/x.ts", 'import "@aws-sdk/client-lightsail";'],
+  ["apps/web/x.ts", 'import "@aws-sdk/client-s3";'],
+  ["packages/core/x.ts", 'import "@tc/db";'],
+  ["packages/core/pricing/x.ts", 'import "big.js";'],
 ])("allows %s with %s", async (filePath, code) => {
   expect(await errors(filePath, code)).toEqual([]);
 });

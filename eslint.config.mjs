@@ -42,7 +42,7 @@ const PURE_CORE = {
 
 const DECIMAL = {
   message:
-    "R4: decimal math lives only in packages/core/src/pricing. Everywhere else money is bigint paisa.",
+    "R4: decimal math lives only in packages/core/pricing. Everywhere else money is bigint paisa.",
   group: ["big.js", "decimal.js", "decimal.js-light", "bignumber.js"],
 };
 // packages/core already bans the SDK clients and @tc/aws through PURE_CORE, so R1 only adds the path form.
@@ -84,12 +84,12 @@ export default tseslint.config(
   {
     // packages/core except pricing: pure logic and R4.
     files: ["packages/core/**"],
-    ignores: ["packages/core/src/pricing/**"],
+    ignores: ["packages/core/pricing/**"],
     rules: restrict(PURE_CORE, R1_PATHS, DECIMAL),
   },
   {
-    // packages/core/src/pricing: pure logic, and the only scope that may import a decimal library.
-    files: ["packages/core/src/pricing/**"],
+    // packages/core/pricing: pure logic, and the only scope that may import a decimal library.
+    files: ["packages/core/pricing/**"],
     rules: restrict(PURE_CORE, R1_PATHS),
   },
   {

@@ -29,7 +29,19 @@ it.each(Object.entries(packages))("%s is the private workspace package %s", (dir
   expect(pkg.name).toBe(name);
   expect(pkg.private).toBe(true);
   expect(pkg.scripts.typecheck).toBe("tsc --noEmit");
-  expect(existsSync(`${dir}/src/index.ts`), `${dir}/src/index.ts`).toBe(true);
+  expect(existsSync(`${dir}/index.ts`), `${dir}/index.ts`).toBe(true);
+  expect(existsSync(`${dir}/src`), `${dir}/src`).toBe(false);
+  expect(pkg.exports).toEqual({ ".": "./index.ts" });
+});
+
+it("the pricing engine is where the spec and the money rule file name it", () => {
+  for (const file of [
+    "packages/core/types.ts",
+    "packages/core/pricing/quote.ts",
+    "packages/core/pricing/index.ts",
+  ]) {
+    expect(existsSync(file), file).toBe(true);
+  }
 });
 
 it("has the other folders of spec section 5", () => {
