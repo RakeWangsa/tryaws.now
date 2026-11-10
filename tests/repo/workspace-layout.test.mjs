@@ -27,7 +27,10 @@ it.each(Object.entries(packages))("%s is the private workspace package %s", (dir
   expect(pkg.name).toBe(name);
   expect(pkg.private).toBe(true);
   expect(pkg.scripts.typecheck).toBe("tsc --noEmit");
-  expect(readFileSync(`${dir}/src/index.ts`, "utf8").trim()).toBe("export {};");
+  // packages/core gained real code in WP1-T3; the other packages are still empty stubs
+  if (dir !== "packages/core") {
+    expect(readFileSync(`${dir}/src/index.ts`, "utf8").trim()).toBe("export {};");
+  }
 });
 
 it("has the other folders of spec section 5", () => {

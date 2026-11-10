@@ -5,5 +5,11 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/big.js": "^7.0.0"
+  },
+  "dependencies": {
+    "big.js": "^7.0.1"
   }
 }
