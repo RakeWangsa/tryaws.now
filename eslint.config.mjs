@@ -40,6 +40,14 @@ const PURE_CORE = {
   ],
 };
 
+const DECIMAL = {
+  message:
+    "R4: decimal math lives only in packages/core/src/pricing. Everywhere else money is bigint paisa.",
+  group: ["big.js", "decimal.js", "decimal.js-light", "bignumber.js"],
+};
+// packages/core already bans the SDK clients and @tc/aws through PURE_CORE, so R1 only adds the path form.
+const R1_PATHS = { ...R1, group: ["**/packages/aws", "**/packages/aws/**"] };
+
 const restrict = (...patterns) => ({
   "no-restricted-imports": ["error", { patterns }],
 });
@@ -63,20 +71,31 @@ export default tseslint.config(
     languageOptions: { globals: { process: "readonly" } },
   },
   {
-    // apps/** and packages/** (except aws and core): R1 and the SDK rule.
+    // apps/** and packages/** (except aws and core): R1, the SDK rule and R4.
     files: ["apps/**", "packages/**"],
     ignores: ["packages/aws/**", "packages/core/**"],
-    rules: restrict(R1, SDK),
+    rules: restrict(R1, SDK, DECIMAL),
   },
   {
-    // packages/core: pure logic. Its list already covers the SDK clients and @tc/aws.
+    // packages/aws: R4 only (it is the one place that may import the SDK clients).
+    files: ["packages/aws/**"],
+    rules: restrict(DECIMAL),
+  },
+  {
+    // packages/core except pricing: pure logic and R4.
     files: ["packages/core/**"],
-    rules: restrict(PURE_CORE, { ...R1, group: ["**/packages/aws", "**/packages/aws/**"] }),
+    ignores: ["packages/core/src/pricing/**"],
+    rules: restrict(PURE_CORE, R1_PATHS, DECIMAL),
   },
   {
-    // functions/** and everything else outside apps/ and packages/: the SDK rule only.
+    // packages/core/src/pricing: pure logic, and the only scope that may import a decimal library.
+    files: ["packages/core/src/pricing/**"],
+    rules: restrict(PURE_CORE, R1_PATHS),
+  },
+  {
+    // functions/** and everything else outside apps/ and packages/: the SDK rule and R4.
     files: ["**/*"],
     ignores: ["apps/**", "packages/**"],
-    rules: restrict(SDK),
+    rules: restrict(SDK, DECIMAL),
   },
 );
