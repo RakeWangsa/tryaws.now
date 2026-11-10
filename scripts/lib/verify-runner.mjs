@@ -7,6 +7,7 @@ import { clearTimeout, setTimeout } from "node:timers";
 
 const TAIL_LINES = 40;
 export const DEFAULT_TIMEOUT_MS = 600_000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
 const STOPPED = "stopped by the caller";
 
 function toResult(check, exitCode, output, seconds) {
@@ -34,7 +35,12 @@ function killTree(child) {
 function runOne(check, cwd, signal) {
   return new Promise((resolve) => {
     const started = Date.now();
-    const timeoutMs = check.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const timeoutMs = check.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : check.timeoutMs;
+    // Node would fire a timer outside this range after about 1 ms, with a warning.
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > MAX_TIMEOUT_MS) {
+      resolve(toResult(check, null, `invalid time limit: ${String(timeoutMs)}`, 0));
+      return;
+    }
     let output = "";
     let child;
     let timer;
@@ -51,6 +57,11 @@ function runOne(check, cwd, signal) {
     const stop = (line) => {
       if (done) return;
       killTree(child);
+      // A process that escaped the group may hold the pipes for ever; let go of them so that
+      // nothing of this check keeps the calling process alive.
+      child.stdout.destroy();
+      child.stderr.destroy();
+      child.unref();
       const before = output.replace(/\n+$/, "");
       finish(null, before === "" ? line : `${before}\n${line}`);
     };

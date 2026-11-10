@@ -7,19 +7,18 @@ import { verifyMain } from "./lib/verify-main.mjs";
 import { runChecks } from "./lib/verify-runner.mjs";
 
 const root = resolve(import.meta.dirname, "..");
-// A check runs in its own process group, so a Ctrl-C of the terminal does not reach it by itself.
+// A check runs in its own process group, so a Ctrl-C or a closed terminal does not reach it by
+// itself: the command stops the checks when it is interrupted, terminated or hung up. `on`, not
+// `once`: pnpm forwards the signal as well, and a second SIGINT with no handler would kill the
+// command before it writes its report.
 const controller = new AbortController();
-process.once("SIGINT", () => controller.abort());
-process.once("SIGTERM", () => controller.abort());
-const { exitCode, output } = await verifyMain(
-  process.argv.slice(2),
-  {
-    root,
-    runChecks,
-    listChangedFiles,
-    readPackages: readWorkspacePackages,
-  },
-  controller.signal,
-);
+for (const name of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(name, () => controller.abort());
+const { exitCode, output } = await verifyMain(process.argv.slice(2), {
+  root,
+  runChecks,
+  listChangedFiles,
+  readPackages: readWorkspacePackages,
+  signal: controller.signal,
+});
 process.stdout.write(`${output}\n`);
 process.exitCode = exitCode;

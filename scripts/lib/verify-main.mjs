@@ -63,10 +63,10 @@ function render(results, passed) {
   return parts.join("\n");
 }
 
-// deps: { root, runChecks, listChangedFiles, readPackages }
+// deps: { root, runChecks, listChangedFiles, readPackages, signal? }
 // Returns { exitCode, report, output }; the report is also on disk.
-export async function verifyMain(argv, deps, signal) {
-  const { root, runChecks, listChangedFiles, readPackages } = deps;
+export async function verifyMain(argv, deps) {
+  const { root, runChecks, listChangedFiles, readPackages, signal } = deps;
   let name = "usage";
   let results;
   let file;

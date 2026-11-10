@@ -1,3 +1,4 @@
+/* global AbortController */
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -12,6 +13,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { listChangedFiles } from "./changed-packages.mjs";
 import { verifyMain } from "./verify-main.mjs";
+import { runChecks } from "./verify-runner.mjs";
 
 const tmp = (prefix) => realpathSync(mkdtempSync(join(tmpdir(), prefix)));
 const reportOf = (root, name) =>
@@ -98,6 +100,22 @@ it("puts the tails of failed checks before the table", async () => {
   expect(exitCode).toBe(1);
   expect(output.indexOf("UNIQUE-TAIL-TEXT")).toBeGreaterThanOrEqual(0);
   expect(output.indexOf("UNIQUE-TAIL-TEXT")).toBeLessThan(output.indexOf("| FAIL"));
+});
+it("passes deps.signal on to the runner: an aborted signal stops every check", async () => {
+  const root = tmp("vm-");
+  const controller = new AbortController();
+  controller.abort();
+  const { exitCode, report } = await verifyMain(
+    ["--gate", "M0"],
+    deps(root, { runChecks, signal: controller.signal }),
+  );
+  expect(exitCode).toBe(1);
+  expect(report.passed).toBe(false);
+  expect(report.results.length).toBeGreaterThan(0);
+  for (const r of report.results) {
+    expect(r).toMatchObject({ passed: false, exitCode: null, seconds: 0 });
+    expect(r.tail).toBe("stopped by the caller");
+  }
 });
 
 it("lists both the old and the new path of a staged rename", () => {
