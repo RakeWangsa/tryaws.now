@@ -22,6 +22,10 @@ it.each([
   ["apps/web/x.ts", 'import "big.js";', "R4:"],
   ["functions/scheduler/x.ts", 'import "bignumber.js";', "R4:"],
   ["packages/core/pricing/x.ts", 'import "node:https";', "packages/core is pure logic:"],
+  ["apps/web/x.ts", 'import "@tc/fn-provisioner";', "R1:"],
+  ["apps/admin/x.ts", 'import "../../functions/reader/index";', "R1:"],
+  ["packages/db/x.ts", 'import "@tc/fn-reader";', "R1:"],
+  ["packages/core/pricing/x.ts", 'import "../../aws/index";', "R1:"],
 ])("rejects %s with %s", async (filePath, code, prefix) => {
   const messages = await errors(filePath, code);
   expect(
@@ -36,6 +40,7 @@ it.each([
   ["apps/web/x.ts", 'import "@aws-sdk/client-s3";'],
   ["packages/core/x.ts", 'import "@tc/db";'],
   ["packages/core/pricing/x.ts", 'import "big.js";'],
+  ["functions/scheduler/x.ts", 'import "@tc/fn-reader";'],
 ])("allows %s with %s", async (filePath, code) => {
   expect(await errors(filePath, code)).toEqual([]);
 });

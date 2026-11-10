@@ -14,9 +14,18 @@ const withSubpaths = (names) => names.flatMap((n) => [n, `${n}/*`]);
 
 // Flat config does not merge a rule across matching blocks (the last block wins), so each
 // file scope below gets exactly one block that carries every restriction that applies to it.
+// The path forms: packages/aws from anywhere, a sibling `aws` package reached with `../`
+// (from inside packages/), and every function package, which may import @tc/aws itself.
+const R1_PATH_FORMS = [
+  "**/packages/aws",
+  "**/packages/aws/**",
+  "../**/aws",
+  "../**/aws/**",
+  "**/functions/**",
+];
 const R1 = {
   message: "R1: the web tier never provisions. Only functions/ may import @tc/aws.",
-  group: ["@tc/aws", "@tc/aws/*", "**/packages/aws", "**/packages/aws/**"],
+  group: ["@tc/aws", "@tc/aws/*", "@tc/fn-*", "@tc/fn-*/*", ...R1_PATH_FORMS],
 };
 const SDK = {
   message: "Spec section 4: these AWS SDK clients are used only inside packages/aws.",
@@ -45,8 +54,9 @@ const DECIMAL = {
     "R4: decimal math lives only in packages/core/pricing. Everywhere else money is bigint paisa.",
   group: ["big.js", "decimal.js", "decimal.js-light", "bignumber.js"],
 };
-// packages/core already bans the SDK clients and @tc/aws through PURE_CORE, so R1 only adds the path form.
-const R1_PATHS = { ...R1, group: ["**/packages/aws", "**/packages/aws/**"] };
+// packages/core already bans the SDK clients and @tc/aws through PURE_CORE, so R1 adds the
+// function packages and the path forms.
+const R1_PATHS = { ...R1, group: ["@tc/fn-*", "@tc/fn-*/*", ...R1_PATH_FORMS] };
 
 const restrict = (...patterns) => ({
   "no-restricted-imports": ["error", { patterns }],
