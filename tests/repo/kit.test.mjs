@@ -158,19 +158,42 @@ it("CODEOWNERS covers the paths of spec E.1, each with the two placeholder owner
     "/packages/core/orders/",
     "/packages/eps/",
     "/functions/payments-sweeper/",
+    "/packages/db/migrations/",
     "/packages/auth/",
     "/infra/",
     "/sst.config.ts",
     "/.claude/",
     "/CLAUDE.md",
     "/.github/",
-    "/scripts/verify.mjs",
-    "/scripts/split-plan.mjs",
+    "/scripts/",
     "/verify/",
+    "/tests/repo/",
+    "/TICON_CLOUD_MEGA_PLAN.md",
+    "/package.json",
+    "/pnpm-workspace.yaml",
+    "/eslint.config.mjs",
+    "/vitest.config.mjs",
+    "/tsconfig.base.json",
+    "/.prettierrc.json",
+    "/.prettierignore",
+    "/.gitleaks.toml",
+    "/.gitignore",
+    "/.worktreeinclude",
   ]);
   for (const rule of owners) {
     expect(rule.slice(1), rule[0]).toEqual(["@REPLACE-WITH-LEAD", "@REPLACE-WITH-SECOND-REVIEWER"]);
   }
+});
+it("CODEOWNERS covers every kit path that B.2 of the plan lists", () => {
+  const row = plan.split("\n").find((line) => line.startsWith("| GitHub |"));
+  const kit = row.slice(row.indexOf("on the kit (")).split(")")[0];
+  const paths = [...kit.matchAll(/`([^`]+)`/g)].map((match) => "/" + match[1]);
+  expect(paths).toHaveLength(17);
+  for (const path of paths)
+    expect(
+      owners.map((rule) => rule[0]),
+      path,
+    ).toContain(path);
 });
 it("CODEOWNERS covers every path of the money rule file", () => {
   const moneyPaths = ruleRows

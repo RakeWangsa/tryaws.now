@@ -15,6 +15,7 @@ const baselineSync = {
   command: ["pnpm", "baseline:check"],
 };
 const lint = { id: "lint", title: "ESLint", command: ["pnpm", "lint"] };
+const format = { id: "format", title: "Prettier check", command: ["pnpm", "format:check"] };
 const typecheck = {
   id: "typecheck",
   title: "TypeScript in every package",
@@ -24,7 +25,7 @@ const test = { id: "test", title: "Vitest, all projects", command: ["pnpm", "tes
 
 // The kit and the CI workflow are proven by the repo tests that `test` runs. "CI green" of
 // gate M0 is the result of the pull request itself, not a local check.
-const WP0_T1 = [specSync, baselineSync, lint, typecheck, test];
+const WP0_T1 = [specSync, baselineSync, lint, format, typecheck, test];
 
 export const TASKS = { "WP0-T1": WP0_T1 };
 

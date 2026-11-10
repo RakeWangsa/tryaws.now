@@ -6,11 +6,12 @@ import { GATES, TASKS, quickChecks } from "../../verify/checks.mjs";
 const verify = (...args) =>
   spawnSync("node", ["scripts/verify.mjs", ...args], { encoding: "utf8" });
 
-it("gate M0 and task WP0-T1 are the same five checks", () => {
+it("gate M0 and task WP0-T1 are the same six checks", () => {
   expect(GATES.M0.map((c) => c.id)).toEqual([
     "spec-sync",
     "baseline-sync",
     "lint",
+    "format",
     "typecheck",
     "test",
   ]);
@@ -19,6 +20,7 @@ it("gate M0 and task WP0-T1 are the same five checks", () => {
     "pnpm spec:check",
     "pnpm baseline:check",
     "pnpm lint",
+    "pnpm format:check",
     "pnpm typecheck",
     "pnpm test",
   ]);

@@ -19,6 +19,7 @@ it("runs the checks of spec C.7 in order", () => {
   const order = [
     "pnpm install --frozen-lockfile",
     "pnpm lint",
+    "pnpm format:check",
     "pnpm typecheck",
     "pnpm test",
     "gitleaks",
