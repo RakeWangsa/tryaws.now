@@ -1,0 +1,9 @@
+# Configuration of the secret scan in .github/workflows/ci.yml.
+title = "TiCON Cloud secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "The design mockup is a static prototype and is never edited here."
+paths = ['''design/mockup/''']
