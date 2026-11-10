@@ -11,23 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
+import { childEnv } from "./child-env.mjs";
 
 const protect = resolve(".claude/hooks/protect-files.sh");
 const stopCheck = resolve(".claude/hooks/stop-check.sh");
-// Inside a git hook these variables point git at the real repository. The child processes of
-// these tests never get them, so the test repositories stay the only ones they touch.
-const GIT_REPO_VARS = [
-  "GIT_DIR",
-  "GIT_INDEX_FILE",
-  "GIT_WORK_TREE",
-  "GIT_PREFIX",
-  "GIT_COMMON_DIR",
-];
-function childEnv(env = {}) {
-  const result = { ...process.env, ...env };
-  for (const name of GIT_REPO_VARS) delete result[name];
-  return result;
-}
 const run = (script, input, env = {}) =>
   spawnSync("bash", [script], {
     input: JSON.stringify(input),

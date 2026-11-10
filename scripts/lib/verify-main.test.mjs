@@ -10,10 +10,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { childEnv } from "../../tests/repo/child-env.mjs";
 import { listChangedFiles } from "./changed-packages.mjs";
 import { verifyMain } from "./verify-main.mjs";
 import { runChecks } from "./verify-runner.mjs";
+
+afterEach(() => vi.unstubAllEnvs());
 
 const tmp = (prefix) => realpathSync(mkdtempSync(join(tmpdir(), prefix)));
 const reportOf = (root, name) =>
@@ -118,9 +121,12 @@ it("passes deps.signal on to the runner: an aborted signal stops every check", a
   }
 });
 
-it("lists both the old and the new path of a staged rename", () => {
+it("lists both paths of a staged rename, and its git commands never follow GIT_DIR", () => {
+  const decoy = tmp("decoy-");
+  spawnSync("git", ["init", "-q", "-b", "main"], { cwd: decoy, encoding: "utf8", env: childEnv() });
   const dir = tmp("rename-");
-  const git = (...args) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+  vi.stubEnv("GIT_DIR", join(decoy, ".git"));
+  const git = (...args) => spawnSync("git", args, { cwd: dir, encoding: "utf8", env: childEnv() });
   git("init", "-q", "-b", "main");
   mkdirSync(join(dir, "packages/a"), { recursive: true });
   mkdirSync(join(dir, "packages/b"), { recursive: true });
@@ -128,5 +134,12 @@ it("lists both the old and the new path of a staged rename", () => {
   git("add", "packages/a/x.ts");
   git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "first");
   git("mv", "packages/a/x.ts", "packages/b/x.ts");
-  expect(listChangedFiles(dir).sort()).toEqual(["packages/a/x.ts", "packages/b/x.ts"]);
+  vi.unstubAllEnvs();
+  const inDecoy = spawnSync("git", ["rev-list", "--all", "--count"], {
+    cwd: decoy,
+    encoding: "utf8",
+    env: childEnv(),
+  });
+  expect(inDecoy.stdout.trim()).toBe("0");
+  expect(listChangedFiles(dir)?.sort()).toEqual(["packages/a/x.ts", "packages/b/x.ts"]);
 });
