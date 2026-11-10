@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vitest";
+import { readWorkspacePackages } from "../../scripts/lib/changed-packages.mjs";
 
 const packages = {
   "apps/web": "@tc/web",
@@ -32,6 +33,23 @@ it.each(Object.entries(packages))("%s is the private workspace package %s", (dir
   expect(existsSync(`${dir}/index.ts`), `${dir}/index.ts`).toBe(true);
   expect(existsSync(`${dir}/src`), `${dir}/src`).toBe(false);
   expect(pkg.exports).toEqual({ ".": "./index.ts" });
+});
+
+it("every workspace package on disk is in the table above, and every row is on disk", () => {
+  const found = Object.keys(readWorkspacePackages("."));
+  const listed = Object.keys(packages);
+  const problems = [
+    ...found
+      .filter((dir) => !listed.includes(dir))
+      .map(
+        (dir) =>
+          `${dir}: add it to the table of tests/repo/workspace-layout.test.mjs (spec section 5), with a typecheck script`,
+      ),
+    ...listed
+      .filter((dir) => !found.includes(dir))
+      .map((dir) => `${dir}: in the table but not a workspace package on disk`),
+  ];
+  expect(problems).toEqual([]);
 });
 
 it("the pricing engine is where the spec and the money rule file name it", () => {
