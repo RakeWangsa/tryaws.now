@@ -20,6 +20,8 @@ const packages = {
   "functions/reconciler": "@tc/fn-reconciler",
   "functions/migrator": "@tc/fn-migrator",
   "functions/invoice-renderer": "@tc/fn-invoice-renderer",
+  "functions/notifier": "@tc/fn-notifier",
+  "functions/cognito-messages": "@tc/fn-cognito-messages",
 };
 
 it.each(Object.entries(packages))("%s is the private workspace package %s", (dir, name) => {
