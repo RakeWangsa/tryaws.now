@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import type pg from "pg";
 import { v7 as uuidv7 } from "uuid";
 import { insertRow, type Queryable } from "./sql";
@@ -91,4 +91,26 @@ export async function postLedger(
     });
   }
   return txId;
+}
+
+// Inserts a pool account with an AWS account id that no other call shares. Returns the id.
+export async function newPoolAccount(q: Queryable): Promise<string> {
+  const aws_account_id = Array.from({ length: 12 }, () => randomInt(10)).join("");
+  return insertRow(q, "pool_accounts", {
+    aws_account_id,
+    name: "tc-pool-" + uniqueSuffix(),
+    tier: "dev",
+    role_arn: `arn:aws:iam::${aws_account_id}:role/TcProvisioner`,
+    external_id: uniqueSuffix(),
+    status: "active",
+  });
+}
+
+// Inserts a Linux instance resource with no pool account. Returns the id.
+export async function newResource(
+  q: Queryable,
+  customerId: string,
+  over: Record<string, unknown> = {},
+): Promise<string> {
+  return insertRow(q, "resources", { customer_id: customerId, family: "linux_instance", ...over });
 }
