@@ -1,0 +1,9 @@
+# OS and editor files
+.DS_Store
+
+# Local tool state (session memory, plan workspaces, worktrees, personal settings)
+.remember/
+.superpowers/
+.claude/worktrees/
+.claude/settings.local.json
+CLAUDE.local.md
