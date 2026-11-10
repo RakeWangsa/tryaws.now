@@ -14,7 +14,7 @@ Contract of the script: exit code 0 only when every check passed; a table of che
 
 | Gate | When | Passes when |
 | --- | --- | --- |
-| M0 | Wed 11, morning | Repository kit exists; `pnpm verify --quick` passes; spec split in sync. The lead merges the kit pull request only when its CI run is green |
+| M0 | Wed 11, morning | Repository kit exists; `pnpm verify --quick` passes; spec split in sync; the format check (`pnpm format:check`) passes. The lead merges the kit pull request only when its CI run is green |
 | M1 | Wed 11, 21:00 | Staging deployed; database private; schema and pricing vectors pass; sign-up to KYC submission works; UI gallery passes; a signed-in customer sees the real catalog in taka |
 | M2 | Thu 12, 21:00 | A real top-up credits exactly once and the replay and forgery tests pass; a paid order produces a server reachable by SSH; UI review done with Moshiur |
 | M3 | Fri 13, 21:00 | Server features complete; one instance passes the whole lifecycle on the test clock; notifications send |

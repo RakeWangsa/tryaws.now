@@ -71,7 +71,7 @@ Prefer command line tools over MCP servers, because they cost less context: `gh`
 | --- | --- |
 | Branching | Trunk-based. One short-lived branch per task, squash merge, linear history |
 | Pull request size | One task. If a diff passes about 600 changed lines outside generated files, split the task |
-| CI on every pull request | Install, lint (with the import-boundary rule for R1), typecheck, unit tests, integration tests against a PostgreSQL container, secret scan, dependency audit, `pnpm verify --quick`, spec split in sync |
+| CI on every pull request | Install, lint (with the import-boundary rule for R1), format check, typecheck, unit tests, integration tests against a PostgreSQL container, secret scan, dependency audit, `pnpm verify --quick`, spec split in sync |
 | Deploy | Merge to `main` deploys `staging` through an OIDC role in `tc-platform-stg`. Production deploys from a tag through an OIDC role in `tc-platform` after a manual approval in a protected GitHub environment. A tag ruleset lets only the lead and DevOps create `v*` tags; the workflow fails unless the tagged commit is on `main`; the environment `production` accepts only `v*` tags and needs a reviewer other than the tagger. The `tc-platform` role trusts only `sub` = `repo:<org>/<repo>:environment:production`, the staging role only `repo:<org>/<repo>:ref:refs/heads/main`. CODEOWNERS (E.1) covers, among its other paths, `.github/`, `infra/`, `sst.config.ts` and `.claude/` |
 | Migrations | Forward-only, run by the `migrator` function during deploy (R15) |
 | Commit messages | `WP3-T1: <what changed>` |

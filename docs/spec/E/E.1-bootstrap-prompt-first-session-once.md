@@ -10,7 +10,7 @@ Then do task WP0-T1:
    import-boundary rule that enforces R1, Prettier, Vitest). Exclude .claude/worktrees/ in the ESLint, Vitest,
    Playwright and TypeScript configs: those tools do not read .gitignore.
 2. Create CLAUDE.md, .claude/settings.json, the hook scripts, .claude/rules/, .claude/skills/,
-   .claude/agents/, .worktreeinclude, .gitignore, .github/CODEOWNERS (owned by the lead and the second reviewer: money, auth, IAM and infrastructure paths including infra/ and sst.config.ts, and the kit: .claude/, CLAUDE.md, .github/, scripts/verify.mjs, scripts/split-plan.mjs, verify/), JOURNEY.md and the pull request template exactly
+   .claude/agents/, .worktreeinclude, .gitignore, .github/CODEOWNERS (owned by the lead and the second reviewer: money, auth, IAM and infrastructure paths including infra/, sst.config.ts and packages/db/migrations/, and the kit: .claude/, CLAUDE.md, .github/, scripts/, verify/, tests/repo/, TICON_CLOUD_MEGA_PLAN.md and the root files package.json, pnpm-workspace.yaml, eslint.config.mjs, vitest.config.mjs, tsconfig.base.json, .prettierrc.json, .prettierignore, .gitleaks.toml, .gitignore, .worktreeinclude), JOURNEY.md and the pull request template exactly
    from Appendices P to T. Write .claude/settings.json after step 4, as the last kit file, so its hooks
    do not run before scripts/verify.mjs exists.
 3. Write scripts/split-plan.mjs and run it so docs/spec/ holds one file per section of this plan,

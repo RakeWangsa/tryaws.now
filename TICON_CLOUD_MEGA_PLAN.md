@@ -1,6 +1,6 @@
 # TiCON Cloud on AWS: MEGA PLAN
 
-Version 1.1, 2026-11-11. Launch target: Tuesday 2026-11-17.
+Version 1.2, 2026-11-11. Launch target: Tuesday 2026-11-17.
 Owner: S M Moshiur Rahman, TiCON System Limited. Builder: Claude Code with the TiCON dev team.
 
 This one file is the source of truth for the product, the launch and the build. It replaces `TICON_CLOUD_LIGHTSAIL_BUILD_PLAN.md`: the full text of that file (version 0.3) is Part 3 here, with the same section numbers.
@@ -24,6 +24,8 @@ Changes against build plan 0.3, all made in this version:
 | 14, 15, 17 | Pointers to the task backlog and the gates; one more security check; open items for roles and for Amazon SES production access |
 
 Version 1.1 applies the corrections of the pre-flight audit of 2026-11-11. The findings and their evidence are in `docs/audit/2026-11-11-mega-plan-audit.md`. The exact edits are in `docs/audit/2026-11-11-corrections.json`, and `docs/audit/2026-11-11-apply-corrections.mjs` applies them to version 1.0.
+
+Version 1.2 changes three things that the first build of the repository kit showed, and adds one open item: the kit paths of CODEOWNERS (B.2, E.1), the format check in gate M0 and in CI (C.7, G), one sentence about `pool_capacity` (3.3), and an open item about the sandbox of the Claude Code kit (Section 17). Each change and its reason is in `docs/audit/2026-11-11-plan-1.2-changes.md`.
 
 # Part 1. Start here
 
@@ -65,7 +67,7 @@ Claude Code works only with what is on the developer's machine and in the reposi
 
 | Access | Scope to give | Scope never to give |
 | --- | --- | --- |
-| GitHub | One private repository (for example `TiCON-Project/ticoncloud-platform`), `gh` signed in on each developer machine. Branch protection on `main`: pull request required, CI checks required, CODEOWNERS review on money and security paths and on the kit (`.claude/`, `CLAUDE.md`, `.github/`, `scripts/verify.mjs`, `scripts/split-plan.mjs`, `verify/`) | Organization admin rights; permission to push to `main` |
+| GitHub | One private repository (for example `TiCON-Project/ticoncloud-platform`), `gh` signed in on each developer machine. Branch protection on `main`: pull request required, CI checks required, CODEOWNERS review on money and security paths and on the kit (`.claude/`, `CLAUDE.md`, `.github/`, `scripts/`, `verify/`, `tests/repo/`, `TICON_CLOUD_MEGA_PLAN.md` and the root files `package.json`, `pnpm-workspace.yaml`, `eslint.config.mjs`, `vitest.config.mjs`, `tsconfig.base.json`, `.prettierrc.json`, `.prettierignore`, `.gitleaks.toml`, `.gitignore`, `.worktreeinclude`) | Organization admin rights; permission to push to `main` |
 | AWS, staging control plane | An IAM Identity Center permission set on the account `tc-platform-stg` that can deploy the SST app. Used as a named CLI profile, for example `tc-stg` | Any access to `tc-platform` (production), the management account, `tc-pool-v1`, `tc-pool-n1` |
 | AWS, test pool | A permission set on `tc-pool-dev` limited to Lightsail, used by integration and isolation tests | Any other pool account |
 | AWS, DNS for tests | Permission on `tc-dns` to manage test hosted zones only. Domain registration stays with DevOps | `route53domains:RegisterDomain` from a developer machine |
@@ -196,7 +198,7 @@ Prefer command line tools over MCP servers, because they cost less context: `gh`
 | --- | --- |
 | Branching | Trunk-based. One short-lived branch per task, squash merge, linear history |
 | Pull request size | One task. If a diff passes about 600 changed lines outside generated files, split the task |
-| CI on every pull request | Install, lint (with the import-boundary rule for R1), typecheck, unit tests, integration tests against a PostgreSQL container, secret scan, dependency audit, `pnpm verify --quick`, spec split in sync |
+| CI on every pull request | Install, lint (with the import-boundary rule for R1), format check, typecheck, unit tests, integration tests against a PostgreSQL container, secret scan, dependency audit, `pnpm verify --quick`, spec split in sync |
 | Deploy | Merge to `main` deploys `staging` through an OIDC role in `tc-platform-stg`. Production deploys from a tag through an OIDC role in `tc-platform` after a manual approval in a protected GitHub environment. A tag ruleset lets only the lead and DevOps create `v*` tags; the workflow fails unless the tagged commit is on `main`; the environment `production` accepts only `v*` tags and needs a reviewer other than the tagger. The `tc-platform` role trusts only `sub` = `repo:<org>/<repo>:environment:production`, the staging role only `repo:<org>/<repo>:ref:refs/heads/main`. CODEOWNERS (E.1) covers, among its other paths, `.github/`, `infra/`, `sst.config.ts` and `.claude/` |
 | Migrations | Forward-only, run by the `migrator` function during deploy (R15) |
 | Commit messages | `WP3-T1: <what changed>` |
@@ -227,7 +229,7 @@ Then do task WP0-T1:
    import-boundary rule that enforces R1, Prettier, Vitest). Exclude .claude/worktrees/ in the ESLint, Vitest,
    Playwright and TypeScript configs: those tools do not read .gitignore.
 2. Create CLAUDE.md, .claude/settings.json, the hook scripts, .claude/rules/, .claude/skills/,
-   .claude/agents/, .worktreeinclude, .gitignore, .github/CODEOWNERS (owned by the lead and the second reviewer: money, auth, IAM and infrastructure paths including infra/ and sst.config.ts, and the kit: .claude/, CLAUDE.md, .github/, scripts/verify.mjs, scripts/split-plan.mjs, verify/), JOURNEY.md and the pull request template exactly
+   .claude/agents/, .worktreeinclude, .gitignore, .github/CODEOWNERS (owned by the lead and the second reviewer: money, auth, IAM and infrastructure paths including infra/, sst.config.ts and packages/db/migrations/, and the kit: .claude/, CLAUDE.md, .github/, scripts/, verify/, tests/repo/, TICON_CLOUD_MEGA_PLAN.md and the root files package.json, pnpm-workspace.yaml, eslint.config.mjs, vitest.config.mjs, tsconfig.base.json, .prettierrc.json, .prettierignore, .gitleaks.toml, .gitignore, .worktreeinclude), JOURNEY.md and the pull request template exactly
    from Appendices P to T. Write .claude/settings.json after step 4, as the last kit file, so its hooks
    do not run before scripts/verify.mjs exists.
 3. Write scripts/split-plan.mjs and run it so docs/spec/ holds one file per section of this plan,
@@ -482,7 +484,7 @@ Contract of the script: exit code 0 only when every check passed; a table of che
 
 | Gate | When | Passes when |
 | --- | --- | --- |
-| M0 | Wed 11, morning | Repository kit exists; `pnpm verify --quick` passes; spec split in sync. The lead merges the kit pull request only when its CI run is green |
+| M0 | Wed 11, morning | Repository kit exists; `pnpm verify --quick` passes; spec split in sync; the format check (`pnpm format:check`) passes. The lead merges the kit pull request only when its CI run is green |
 | M1 | Wed 11, 21:00 | Staging deployed; database private; schema and pricing vectors pass; sign-up to KYC submission works; UI gallery passes; a signed-in customer sees the real catalog in taka |
 | M2 | Thu 12, 21:00 | A real top-up credits exactly once and the replay and forgery tests pass; a paid order produces a server reachable by SSH; UI review done with Moshiur |
 | M3 | Fri 13, 21:00 | Server features complete; one instance passes the whole lifecycle on the test clock; notifications send |
@@ -742,7 +744,7 @@ Region for the control plane: `ap-southeast-1`. Everything runs on AWS Lambda th
 
 - VPC with two AZs, public and private subnets, managed NAT gateway (outbound calls to EPS, AWS APIs and the SMS gateway go through NAT). `invoice-renderer` runs in two isolated subnets with no NAT route and reaches S3 only through an S3 gateway endpoint; its package holds the fonts, and the HTML it receives has its CSS inlined and refers to no URL.
 - Amazon RDS for PostgreSQL in private subnets: Multi-AZ in production, storage encrypted with a KMS key, automated backups with 14 days point-in-time recovery, deletion protection on, TLS forced, RDS Proxy in front. `sst.aws.Postgres` defaults differ (`rds.force_ssl` 0, 7-day backups, final snapshot skipped, no deletion protection, the VPC default security group, proxy without `requireTls`): override each through `transform` and give the instance its own security group that admits 5432 only from the proxy.
-- Database roles: `web_rw` (customer panel), `admin_rw` (admin panel) and `worker_rw` (functions), each DML only with no UPDATE or DELETE on the append-only (A) tables of Section 7 (`ledger_transactions`, `ledger_entries`, `audit_log`, `legal_acceptances`, `fx_rates`, `pricing_rules`); `web_rw` cannot write `fx_rates`, `pricing_rules`, `feature_flags`, `admin_users`, `pool_accounts` or `pool_capacity` and cannot set `operations.approved_by`; `migrator` (DDL), `report_ro` (read-only). Do not `link` the Postgres component to web, admin or workers: its link carries the master user. List `web_rw`, `admin_rw`, `worker_rw` and `report_ro` in the component's `proxy.credentials` and give each function only its own role's credentials. `migrator` alone uses the master user, to create the roles.
+- Database roles: `web_rw` (customer panel), `admin_rw` (admin panel) and `worker_rw` (functions), each DML only with no UPDATE or DELETE on the append-only (A) tables of Section 7 (`ledger_transactions`, `ledger_entries`, `audit_log`, `legal_acceptances`, `fx_rates`, `pricing_rules`); `web_rw` cannot write `fx_rates`, `pricing_rules`, `feature_flags`, `admin_users` or `pool_accounts`, can change only the column `used` of `pool_capacity` (the capacity reservation of 10.2 runs inside the purchase transaction of `web`), and cannot set `operations.approved_by`; `migrator` (DDL), `report_ro` (read-only). Do not `link` the Postgres component to web, admin or workers: its link carries the master user. List `web_rw`, `admin_rw`, `worker_rw` and `report_ro` in the component's `proxy.credentials` and give each function only its own role's credentials. `migrator` alone uses the master user, to create the roles.
 - S3 buckets, all private with Block Public Access: `kyc` (SSE-KMS, uploads by presigned POST with size and content-type conditions, read only by `admin`), `invoices`, `exports`.
 - SQS FIFO queue `provisioning` with a dead-letter queue. MessageGroupId is the resource id. The deduplication id is `<operation id>:<enqueue_seq>`, a counter kept on the operation row and increased for every send, never the operation id alone: SQS accepts a second message with the same deduplication id inside 5 minutes, even after the first was deleted, but does not deliver it, so the next step, a repeated wait check or a retry would vanish without an error. An alarm fires when the dead-letter queue is not empty.
 - CloudFront in front of both apps. Both `sst.aws.Nextjs` apps set `protection: "oac-with-edge-signing"`, so their Lambda function URLs accept only signed requests from their own distribution and no request can skip the WAF or the admin allowlist. The SST default `"none"` leaves the function URLs public and outside WAF (VERIFY that Server Actions work behind it; request bodies are limited to 1 MB, and KYC files go straight to S3). AWS WAF with the AWS managed core, known-bad-inputs and IP-reputation rule groups, plus rate-based rules for login, OTP, top-up and order endpoints. Server Actions POST to the page URL, so these rules match method POST on those page paths in both locales and on `/pay/eps/`. The web ACLs and the admin IP set are created in us-east-1 (a second provider) and attached through `transform.cdn` (`webAclArn`).
@@ -1603,6 +1605,7 @@ Emails use the layout of `email/index.html` (dark header with the logo, one head
 | Domain registration agreement for customers, with the reseller duties of section 3.12 of the Route 53 Domain Name Registration Agreement. Default: the domain flag stays off until it is published | Moshiur with Legal adviser | Before launch |
 | Theme licence type and count: Regular (29 USD) or Extended (320 USD) for a panel whose customers pay, and a second licence for `ops.`? Ask Envato Support in writing. Default: buy a second Regular licence | Moshiur | Before launch |
 | Domain renewal rule: automatic charge and `RenewDomain` 35 days before expiry, or by hand only; the last safe day per TLD; who pays a restoration fee. Until then, domains do not renew automatically (`AutoRenew=false`, Section 12) | Moshiur | Sat 14 |
+| The sandbox of the Claude Code kit: with the settings of Appendix Q, Claude can run code that it wrote outside the sandbox with no prompt (through the excluded test and verify commands, the format hook and the Stop hook), and a sandboxed script can read credential files in the home folder and rewrite the settings and hooks of the kit. A hardened kit is ready, with its costs and with what it does not close, in `docs/audit/2026-11-11-kit-security.md`. Adopt it, or keep Appendix Q. Until then, the plan as written applies (Appendix Q; C.2: deny rules and hooks are guard rails, the real boundary is the AWS profile and branch protection) | Moshiur with Lead developer | Wed 11 |
 
 ## 18. Sources checked on 2026-11-10
 
