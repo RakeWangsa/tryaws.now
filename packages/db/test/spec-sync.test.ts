@@ -47,11 +47,16 @@ it("every column that section 7 names in back-ticks exists", async () => {
     name: string;
     columns: string;
   }[];
+  let checked = 0;
   for (const s of spec) {
     const tokens = [...s.columns.matchAll(/`([^`]+)`/g)]
       .map((m) => m[1]!)
       .filter((x) => COLUMN_TOKEN.test(x));
     const cols = (await columnsOf(t.pool, s.name)).map((c) => c.split(" ")[0]);
-    for (const token of tokens) expect(cols, `${s.name}.${token}`).toContain(token);
+    for (const token of tokens) {
+      expect(cols, `${s.name}.${token}`).toContain(token);
+      checked += 1;
+    }
   }
+  expect(checked, "column tokens found in verify/baseline.json").toBeGreaterThanOrEqual(20);
 });

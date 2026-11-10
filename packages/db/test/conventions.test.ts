@@ -3,13 +3,14 @@ import { useTempDatabase } from "./temp-db";
 
 const t = useTempDatabase();
 
-it("every table has a uuid id as its only primary key and a created_at with a default", async () => {
+it("every table has a uuid id without a database default as its only primary key and a created_at with a default", async () => {
   const { rows } = await t.pool.query(`
     select t.table_name,
       (select string_agg(k.column_name, ',') from information_schema.table_constraints c
          join information_schema.key_column_usage k on k.constraint_name = c.constraint_name and k.table_name = c.table_name
         where c.table_name = t.table_name and c.constraint_type = 'PRIMARY KEY') as pk,
       (select udt_name from information_schema.columns where table_name = t.table_name and column_name = 'id') as id_type,
+      (select column_default from information_schema.columns where table_name = t.table_name and column_name = 'id') as id_default,
       (select is_nullable || ' ' || udt_name || ' ' || coalesce(column_default, '') from information_schema.columns
         where table_name = t.table_name and column_name = 'created_at') as created
     from information_schema.tables t where t.table_schema = 'public' and t.table_type = 'BASE TABLE'`);
@@ -18,6 +19,7 @@ it("every table has a uuid id as its only primary key and a created_at with a de
       table_name: r.table_name,
       pk: "id",
       id_type: "uuid",
+      id_default: null,
       created: "NO timestamptz now()",
     });
 });

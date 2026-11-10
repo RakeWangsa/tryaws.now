@@ -79,6 +79,47 @@ it("an edited journal entry, and a deleted journal", () => {
   expect(checkForwardOnly(base, tree(committed))).toEqual(["meta/_journal.json was deleted"]);
 });
 
+it("a removed journal entry, and two entries with the same timestamp", () => {
+  const files = [...committed, "0001_identity.sql"];
+  const two = tree(files, [
+    [1000, "0000_catalog"],
+    [2000, "0001_identity"],
+  ]);
+  expect(checkForwardOnly(two, tree(files, [[1000, "0000_catalog"]]))).toEqual([
+    "meta/_journal.json entry 1 was removed",
+    "0001_identity.sql has no journal entry",
+  ]);
+  expect(
+    checkForwardOnly(
+      base,
+      tree(
+        [...committed, "0001_x.sql"],
+        [
+          [1000, "0000_catalog"],
+          [1000, "0001_x"],
+        ],
+      ),
+    ),
+  ).toEqual(["meta/_journal.json entry 1 is not newer than entry 0"]);
+});
+
+it("an SQL file that the journal does not name would never run", () => {
+  expect(
+    checkForwardOnly(base, tree([...committed, "0001_orphan.sql"], [[1000, "0000_catalog"]])),
+  ).toEqual(["0001_orphan.sql has no journal entry"]);
+});
+
+it("a journal that is not valid JSON is refused with a clear message", () => {
+  const broken: MigrationTree = new Map([
+    ["0000_catalog.sql", "-- 0000_catalog.sql"],
+    ["meta/0000_snapshot.json", "-- meta/0000_snapshot.json"],
+    ["meta/_journal.json", "{ not json"],
+  ]);
+  const message = "forward-only check: meta/_journal.json is not valid JSON";
+  expect(() => checkForwardOnly(tree([]), broken)).toThrow(message);
+  expect(() => checkForwardOnly(broken, base)).toThrow(message);
+});
+
 it("checks the order and the files of the journal even when the base is empty", () => {
   const empty = tree([]);
   expect(
