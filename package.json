@@ -10,6 +10,8 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "test": "node scripts/run-tests.mjs",
+    "spec:split": "node scripts/split-plan.mjs",
+    "spec:check": "node scripts/split-plan.mjs --check",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
