@@ -1,0 +1,23 @@
+# Code owners (spec E.1, B.2 and C.7). A pull request that touches one of these paths needs a review by an owner.
+# The two owners below are placeholders. Replace them with the GitHub handles of the lead developer and of the
+# second reviewer (spec section 17) before branch protection is switched on.
+
+# Money
+/packages/core/pricing/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/packages/core/ledger/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/packages/core/orders/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/packages/eps/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/functions/payments-sweeper/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+
+# Auth, IAM and infrastructure
+/packages/auth/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/infra/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/sst.config.ts @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+
+# The kit
+/.claude/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/CLAUDE.md @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/.github/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/scripts/verify.mjs @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/scripts/split-plan.mjs @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/verify/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER

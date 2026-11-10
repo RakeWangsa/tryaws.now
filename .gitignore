@@ -13,3 +13,8 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+
+.env
+.env.*
+.sst/
+verify/report-*.json

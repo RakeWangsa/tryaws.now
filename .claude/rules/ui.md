@@ -1,0 +1,37 @@
+---
+paths:
+  - "apps/**"
+  - "packages/ui/**"
+  - "packages/notify/**"
+  - "content/**"
+---
+
+# UI rules
+
+**U1.** The mockup is the look. Reuse its CSS classes and layouts; do not redesign. Where a screen has no mockup page, compose it from the kit in 16.6 and the shells in 16.7.
+
+**U2.** Ship CSS, fonts and images only. No file from the theme's `assets/js`, `assets/php` or `order-form/` reaches a build: no jQuery, no plugin, no `scripts.js`, no `settings-init.js`, no i18next, no cookie plugin, no Smarty.
+
+**U3.** No third-party origin at runtime. Fonts, styles, icons and images are self-hosted. No analytics, chat or tag script without a recorded decision and a CSP entry.
+
+**U4.** No inline script except the nonce scripts of Next.js. No inline `style` attribute in server-rendered markup; use classes. CSP runs in report-only mode on staging and a screen is done only at zero violations. U4 applies to pages of `apps/web` and `apps/admin`; email templates in `packages/notify` (16.14) and the invoice HTML for `invoice-renderer` use inline CSS.
+
+**U5.** All text comes from `next-intl` messages in `bn` and `en`. No hard-coded strings in components. Bengali is written first.
+
+**U6.** AWS is named openly. Public pages, the panel, invoices and emails tell the customer that the service is 100% AWS: every server, database, disk, bucket, load balancer and container service is an Amazon Lightsail resource in the AWS Region the customer chose, and CDN, DNS and domains use Amazon Lightsail CDN and Amazon Route 53, which are global AWS services. Use the statements, names and wording rules of 16.13, which follow the AWS Trademark Guidelines. Still never shown to a customer: AWS account ids, ARNs, the pool account structure, internal AWS resource names and raw AWS error text. One exception: a name or address that the customer needs in order to use the resource is shown, namely the bucket name (it is part of the bucket URL), the default domain of a container service (it starts with the service name) and the endpoints of databases and distributions. Errors from AWS are mapped to platform messages.
+
+**U7.** Server Components by default. A component is a Client Component only when it holds interaction state. Data is read on the server through repositories (R8). No customer data in `localStorage` or `sessionStorage`.
+
+**U8.** Every form posts to a Server Action that follows R9, and shows field errors from the same zod schema. A button that changes state is disabled while its action is pending, and the action is idempotent (R7).
+
+**U9.** A secret shown to a customer (Windows password, database password, bucket secret key) is returned once in a Server Action response with `no-store`, is never part of a cached render, is never logged, and is hidden again after 60 seconds.
+
+**U10.** A destructive action needs a dialog in which the customer types the resource name, and a fresh sign-in (Section 6.1).
+
+**U11.** Every screen has loading, empty, error and flag-off states (16.13) and works at a width of 360 px. State is never shown by color alone.
+
+**U12.** A redirect target taken from a request (`next`) must be a relative path that matches an allow-list of route prefixes.
+
+**U13.** The theme's demo photos, avatars, partner logos, case study PDFs and videos are not shipped.
+
+- Specification: the files in docs/spec/16/, above all 16.4 (tokens), 16.6 (kit) and 16.13 (statements and names).

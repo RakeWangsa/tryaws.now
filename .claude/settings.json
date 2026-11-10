@@ -1,0 +1,75 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install)",
+      "Bash(pnpm verify *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm lint *)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm db:up)",
+      "Bash(pnpm db:migrate)",
+      "Bash(pnpm spec:split)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr view *)",
+      "Bash(gh run view *)"
+    ],
+    "ask": [
+      "Bash(npx sst deploy --stage staging*)",
+      "Bash(git push *)",
+      "Bash(aws *)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(./**/*.pem)",
+      "Edit(/design/mockup/**)",
+      "Edit(/docs/spec/**)",
+      "Bash(npx sst secret *)",
+      "Bash(pnpm sst secret *)",
+      "Bash(pnpm exec sst secret *)",
+      "Bash(npx sst shell *)",
+      "Bash(pnpm sst shell *)",
+      "Bash(npx sst deploy --stage production*)",
+      "Bash(npx sst remove *)",
+      "Bash(git push --force*)",
+      "Bash(git push origin main*)",
+      "Bash(aws organizations *)",
+      "Bash(aws iam *)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "sandbox": {
+    "enabled": true,
+    "excludedCommands": ["docker *", "pnpm db:up", "pnpm db:migrate", "pnpm test *", "pnpm verify *", "pnpm spec:split", "gh *", "git fetch *", "git pull *", "git push *", "git merge *", "git rebase *", "npx sst *", "npx playwright *", "aws *"],
+    "network": { "allowedDomains": ["registry.npmjs.org", "github.com", "*.githubusercontent.com"] }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-files.sh", "onFailure": "block" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in ''|*.md|*.mdx) exit 0 ;; esac; npx prettier --write --ignore-unknown \"$f\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop-check.sh" }
+        ]
+      }
+    ]
+  }
+}
