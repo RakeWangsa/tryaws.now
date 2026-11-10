@@ -94,8 +94,12 @@ BEGIN
   IF NEW.needs_approval IS DISTINCT FROM OLD.needs_approval THEN
     RAISE EXCEPTION 'R13: operations.needs_approval cannot change' USING ERRCODE = 'restrict_violation';
   END IF;
-  RETURN NULL;
+  RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE TRIGGER r13_needs_approval_fixed AFTER UPDATE ON operations
+-- BEFORE gives the same error in every state, ahead of the table checks; AFTER catches a later BEFORE trigger that changes the flag.
+CREATE TRIGGER r13_needs_approval_fixed BEFORE UPDATE ON operations
+  FOR EACH ROW EXECUTE FUNCTION tc_reject_needs_approval_change();
+--> statement-breakpoint
+CREATE TRIGGER r13_needs_approval_fixed_after AFTER UPDATE ON operations
   FOR EACH ROW EXECUTE FUNCTION tc_reject_needs_approval_change();

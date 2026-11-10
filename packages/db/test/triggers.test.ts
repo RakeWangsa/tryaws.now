@@ -53,14 +53,13 @@ it("R13: needs_approval never changes after the row is created, not even for the
   const flagged = await insertRow(t.pool, "operations", {
     resource_id,
     kind: "destroy",
-    state: "failed", // the table CHECKs of Task 6 allow both flag values here, so only the trigger can refuse
+    state: "needs_approval",
     needs_approval: true,
     idempotency_key: uniqueSuffix(),
   });
   const plain = await insertRow(t.pool, "operations", {
     resource_id,
     kind: "reboot",
-    state: "failed",
     idempotency_key: uniqueSuffix(),
   });
   const fixed = { message: /^R13: operations\.needs_approval cannot change$/ };
@@ -91,6 +90,13 @@ it("R13: needs_approval never changes after the row is created, not even for the
     [[plain, flagged]],
   );
   expect(rows.map((r) => r.needs_approval)).toEqual([false, true]);
+  const { rows: found } = await t.pool.query(
+    "select tgname from pg_trigger where tgrelid = 'operations'::regclass and tgname like 'r13_%' order by 1",
+  );
+  expect(found.map((r) => r.tgname)).toEqual([
+    "r13_needs_approval_fixed",
+    "r13_needs_approval_fixed_after",
+  ]);
 });
 
 describe("ledger balance", () => {
@@ -307,7 +313,7 @@ it("R13: a trigger that runs later cannot flip the flag either", async () => {
   const flagged = await insertRow(t.pool, "operations", {
     resource_id,
     kind: "destroy",
-    state: "failed", // with state needs_approval the CHECK of Task 6 would refuse the flip first
+    state: "failed", // here the table CHECKs allow both flag values, so only the AFTER trigger can refuse
     needs_approval: true,
     idempotency_key: uniqueSuffix(),
   });
