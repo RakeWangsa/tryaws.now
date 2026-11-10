@@ -1,6 +1,6 @@
 import { NamingError, type NamingField } from "./errors";
 
-export const AWS_NAME_TYPES = [
+export const AWS_NAME_TYPES = Object.freeze([
   "instance",
   "staticip",
   "keypair",
@@ -13,7 +13,7 @@ export const AWS_NAME_TYPES = [
   "container",
   "cdn",
   "cert",
-] as const;
+] as const);
 
 export type AwsNameType = (typeof AWS_NAME_TYPES)[number];
 

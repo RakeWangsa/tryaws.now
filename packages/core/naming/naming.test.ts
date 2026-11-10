@@ -121,3 +121,74 @@ it("refuses an env or os outside the lists", () => {
     /^naming: os is not valid$/,
   );
 });
+
+const NEAR_MISSES = [ID + "\n", "\n" + ID, ID + "\r", ID.replace("0", "０"), `x${ID}x`];
+
+it.each(NEAR_MISSES)("a value that only looks like the id is refused: %j", (bad) => {
+  expect(() => awsResourceName("instance", bad)).toThrow(/^naming: id is not a lowercase UUID$/);
+  const ok = { env: "staging" as const, customerId: CUSTOMER, resourceId: ID, orderId: ORDER };
+  expect(() => resourceTags({ ...ok, customerId: bad })).toThrow(
+    /^naming: customerId is not a lowercase UUID$/,
+  );
+});
+
+const NOT_STRINGS = [
+  { what: "an array that holds the id", value: [ID] },
+  { what: "an object that prints as the id", value: { toString: () => ID } },
+  { what: "a String object", value: new String(ID) },
+  { what: "null", value: null },
+  { what: "undefined", value: undefined },
+  { what: "a number", value: 123 },
+];
+
+it.each(NOT_STRINGS)("$what is refused, although it may print as a valid id", ({ value }) => {
+  expect(() => awsResourceName("instance", value as never)).toThrow(
+    /^naming: id is not a lowercase UUID$/,
+  );
+  const ok = { env: "staging" as const, customerId: CUSTOMER, resourceId: ID, orderId: ORDER };
+  expect(() => resourceTags({ ...ok, resourceId: value as never })).toThrow(
+    /^naming: resourceId is not a lowercase UUID$/,
+  );
+});
+
+it.each(["__proto__", "constructor", "toString", "hasOwnProperty", "Instance", "instance "])(
+  "a type that is not in the list is refused: %j",
+  (type) => {
+    expect(() => awsResourceName(type as never, ID)).toThrow(/^naming: type is not valid$/);
+  },
+);
+
+it("the name uses the last 16 hex digits of the id, not the first", () => {
+  expect(awsResourceName("disk", "00000000-0000-7000-8000-00000000abcd")).toBe(
+    "tc-disk-800000000000abcd",
+  );
+});
+
+it("tags come only from the checked fields, and each call returns a new array", () => {
+  const input = {
+    env: "production" as const,
+    customerId: CUSTOMER,
+    resourceId: ID,
+    orderId: ORDER,
+    os: "linux" as const,
+    name: "My Server",
+  };
+  const first = resourceTags(input);
+  expect(first).toEqual([
+    { key: "tc:env", value: "production" },
+    { key: "tc:customer", value: CUSTOMER },
+    { key: "tc:resource", value: ID },
+    { key: "tc:order", value: ORDER },
+    { key: "tc:os", value: "linux" },
+  ]);
+  first.push({ key: "x", value: "y" });
+  expect(resourceTags(input)).toHaveLength(5);
+});
+
+it("the exported lists cannot be changed at run time", () => {
+  expect(Object.isFrozen(AWS_NAME_TYPES)).toBe(true);
+  expect(Object.isFrozen(TC_ENVS)).toBe(true);
+  expect(Object.isFrozen(TAG_KEYS)).toBe(true);
+  expect(() => (AWS_NAME_TYPES as unknown as string[]).push("evil")).toThrow(TypeError);
+  expect(() => awsResourceName("evil" as never, ID)).toThrow(/^naming: type is not valid$/);
+});

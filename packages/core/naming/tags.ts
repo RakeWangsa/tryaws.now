@@ -1,16 +1,16 @@
 import { NamingError } from "./errors";
 import { assertLowercaseUuid } from "./names";
 
-export const TC_ENVS = ["production", "staging"] as const;
+export const TC_ENVS = Object.freeze(["production", "staging"] as const);
 export type TcEnv = (typeof TC_ENVS)[number];
 
-export const TAG_KEYS = {
+export const TAG_KEYS = Object.freeze({
   env: "tc:env",
   customer: "tc:customer",
   resource: "tc:resource",
   order: "tc:order",
   os: "tc:os",
-} as const;
+} as const);
 
 /** The Lightsail tag shape. */
 export interface ResourceTag {
@@ -18,7 +18,7 @@ export interface ResourceTag {
   value: string;
 }
 
-const OS_VALUES = ["linux", "windows"] as const;
+const OS_VALUES = Object.freeze(["linux", "windows"] as const);
 
 /** Tags of a resource, built from platform ids only (R11). `tc:os` only when `os` is given. */
 export function resourceTags(input: {
