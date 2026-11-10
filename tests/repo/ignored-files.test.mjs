@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { ESLint } from "eslint";
 import * as prettier from "prettier";
 import { expect, it } from "vitest";
@@ -30,4 +31,27 @@ it("eslint ignores design/, docs/ and .claude/", async () => {
   ]) {
     expect(await eslint.isPathIgnored(file), file).toBe(true);
   }
+});
+
+it("eslint ignores build output and local tool folders, but not source files", async () => {
+  const eslint = new ESLint();
+  for (const file of [
+    "apps/web/.next/server/chunk.js",
+    "apps/web/.open-next/x.mjs",
+    ".sst/platform/x.ts",
+    ".superpowers/sdd/x.mjs",
+    ".remember/x.mjs",
+  ]) {
+    expect(await eslint.isPathIgnored(file), file).toBe(true);
+  }
+  expect(await eslint.isPathIgnored("apps/web/page.tsx")).toBe(false);
+});
+
+it("git ignores the build output of Next.js and OpenNext, but not source files", () => {
+  const ignored = (file) =>
+    spawnSync("git", ["check-ignore", "--quiet", "--no-index", file]).status === 0;
+  for (const file of ["apps/web/.next/x.js", "apps/web/.open-next/x.js"]) {
+    expect(ignored(file), file).toBe(true);
+  }
+  expect(ignored("apps/web/page.tsx")).toBe(false);
 });

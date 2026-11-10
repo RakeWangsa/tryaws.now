@@ -13,6 +13,8 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+.next/
+.open-next/
 
 .env
 .env.*
