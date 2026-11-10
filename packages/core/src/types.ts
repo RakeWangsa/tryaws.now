@@ -18,6 +18,7 @@ export type ErrorCode =
 export type Result<T> =
   | { ok: true; value: T }
   | { ok: false; error: ErrorCode; fields?: Record<string, string>; data?: unknown; ref?: string };
+/** Injected everywhere time matters (Section 11). */
 export interface Clock {
   now(): Date;
-} // injected everywhere time matters (Section 11)
+}

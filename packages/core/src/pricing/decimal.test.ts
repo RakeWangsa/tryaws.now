@@ -1,17 +1,10 @@
 import Big from "big.js";
 import { expect, it } from "vitest";
-import { parseDecimal, toMinor } from "./decimal";
+import { isPlainDecimal, isPositiveDecimal, parseDecimal, toMinor } from "./decimal";
+import { PricingInputError } from "./errors";
 
-it.each(["5", "9.50", "0.50", "127", "124.77", "0", "0.0333333333"])("parses %s", (text) => {
-  expect(parseDecimal(text, "x").eq(new Big(text))).toBe(true);
-});
-
-it.each([0.1, ["0.1"], undefined])("refuses %s that is not text", (value) => {
-  expect(() => parseDecimal(value as unknown as string, "fxRate")).toThrow(RangeError);
-  expect(() => parseDecimal(value as unknown as string, "fxRate")).toThrow(/fxRate/);
-});
-
-it.each([
+const PARSES = ["5", "9.50", "0.50", "127", "124.77", "0", "0.0333333333"];
+const REJECTS = [
   "",
   " ",
   " 5",
@@ -26,7 +19,18 @@ it.each([
   "Infinity",
   "0x10",
   "1 000",
-])("rejects %j and names the field", (text) => {
+];
+
+it.each(PARSES)("parses %s", (text) => {
+  expect(parseDecimal(text, "x").eq(new Big(text))).toBe(true);
+});
+
+it.each([0.1, ["0.1"], undefined])("refuses %s that is not text", (value) => {
+  expect(() => parseDecimal(value, "fxRate")).toThrow(RangeError);
+  expect(() => parseDecimal(value, "fxRate")).toThrow(/fxRate/);
+});
+
+it.each(REJECTS)("rejects %j and names the field", (text) => {
   expect(() => parseDecimal(text, "fxRate")).toThrow(RangeError);
   expect(() => parseDecimal(text, "fxRate")).toThrow(/fxRate/);
 });
@@ -41,4 +45,54 @@ it.each([
   ["74295", 74295n],
 ])("rounds %s half-up to %s", (text, minor) => {
   expect(toMinor(new Big(text))).toBe(minor);
+});
+
+it.each(PARSES)("isPlainDecimal accepts %j", (text) => {
+  expect(isPlainDecimal(text)).toBe(true);
+});
+
+it.each<unknown>([...REJECTS, 0.1, ["0.1"], undefined, null])(
+  "isPlainDecimal refuses %j",
+  (value) => {
+    expect(isPlainDecimal(value)).toBe(false);
+  },
+);
+
+it.each(["0.01", "127", "124.77", "0.0333333333"])("isPositiveDecimal accepts %j", (text) => {
+  expect(isPositiveDecimal(text)).toBe(true);
+});
+
+it.each<unknown>(["0", "0.000", "00", "", "-1", "1e3", 0.5, null])(
+  "isPositiveDecimal refuses %j",
+  (value) => {
+    expect(isPositiveDecimal(value)).toBe(false);
+  },
+);
+
+const thrown = (run: () => unknown): unknown => {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a throw");
+};
+
+it("throws a PricingInputError with one problem at the field", () => {
+  const error = thrown(() => parseDecimal("1e3", "fxRate"));
+  expect(error).toBeInstanceOf(PricingInputError);
+  expect(error).toBeInstanceOf(RangeError);
+  const { message, problems } = error as PricingInputError;
+  expect(problems).toEqual([{ path: "fxRate", message }]);
+});
+
+it.each<[string, unknown]>([
+  ["a BigInt", 10n],
+  ["a symbol", Symbol("x")],
+  ["an object without a prototype", Object.create(null)],
+  ["a long string", "9".repeat(199) + "x"],
+])("throws a PricingInputError, never a TypeError, for %s", (_, value) => {
+  const error = thrown(() => parseDecimal(value, "fxRate"));
+  expect(error).toBeInstanceOf(PricingInputError);
+  expect((error as Error).message.length).toBeLessThan(120);
 });

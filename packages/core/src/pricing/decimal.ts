@@ -1,17 +1,44 @@
 import Big from "big.js";
 import type { Minor } from "../types";
+import { PricingInputError } from "./errors";
+
+/**
+ * The engine's own Big constructor. Settings such as Big.RM, Big.DP or Big.strict that other code
+ * sets on the global constructor do not reach it, so they cannot change a price.
+ */
+export const D = Big();
 
 const PLAIN_DECIMAL = /^\d+(\.\d+)?$/;
 
-/** Accepts only plain decimal text (digits, optional fraction). Anything else is a RangeError naming the field. */
-export function parseDecimal(text: string, field: string): Big {
-  if (typeof text !== "string" || !PLAIN_DECIMAL.test(text)) {
-    throw new RangeError(`${field} must be a plain decimal number, got ${JSON.stringify(text)}`);
-  }
-  return new Big(text);
+/** True only for plain decimal text: digits with an optional fraction. */
+export function isPlainDecimal(text: unknown): text is string {
+  return typeof text === "string" && PLAIN_DECIMAL.test(text);
 }
 
-/** Rounds half-up to a whole number of minor units. Does not touch the global Big settings. */
+/** True only for plain decimal text with at least one digit from 1 to 9, so above zero. */
+export function isPositiveDecimal(text: unknown): text is string {
+  return isPlainDecimal(text) && /[1-9]/.test(text);
+}
+
+/** How a refused value is shown in a message: short, and never by calling the value itself. */
+function describe(value: unknown): string {
+  if (typeof value === "string") return JSON.stringify(value).slice(0, 40);
+  return `a value of type ${value === null ? "null" : typeof value}`;
+}
+
+/**
+ * Accepts only plain decimal text (digits, optional fraction). Anything else is a PricingInputError
+ * with one problem at the field.
+ */
+export function parseDecimal(text: unknown, field: string): Big {
+  if (!isPlainDecimal(text)) {
+    const message = `${field} must be a plain decimal number, got ${describe(text)}`;
+    throw new PricingInputError(message, [{ path: field, message }]);
+  }
+  return new D(text);
+}
+
+/** Rounds half-up to a whole number of minor units. Passes the rounding mode explicitly. */
 export function toMinor(value: Big): Minor {
-  return BigInt(value.round(0, Big.roundHalfUp).toFixed(0));
+  return BigInt(value.round(0, D.roundHalfUp).toFixed(0));
 }

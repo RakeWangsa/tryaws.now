@@ -1,4 +1,6 @@
+import Big from "big.js";
 import { expect, it } from "vitest";
+import { PricingInputError } from "./errors";
 import { quote } from "./quote";
 import type { PricingRule } from "./types";
 
@@ -183,4 +185,71 @@ it("keeps every digit of an amount beyond 2^53", () => {
   });
   expect(result.baseMinor).toBe(12345678901234567890123456789000n);
   expect(result.totalMinor).toBe(12345678901234567890123456789000n);
+});
+
+const thrown = (run: () => unknown): unknown => {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a throw");
+};
+
+it.each(["0", "0.000"])("refuses the FX rate %j", (fxRate) => {
+  const run = () => quote({ awsPriceUsd: "5", fxRate, rule: LAUNCH });
+  expect(run).toThrow(PricingInputError);
+  expect(run).toThrow(/fxRate must be greater than 0/);
+  expect((thrown(run) as PricingInputError).problems).toEqual([
+    { path: "fxRate", message: "fxRate must be greater than 0" },
+  ]);
+});
+
+it("prices an AWS price of 0 as 0", () => {
+  const q = quote({ awsPriceUsd: "0", fxRate: "127", rule: LAUNCH });
+  expect(q.baseMinor).toBe(0n);
+  expect(q.steps.map((s) => s.amountMinor)).toEqual([0n, 0n, 0n, 0n]);
+  expect(q.totalMinor).toBe(0n);
+});
+
+it("refuses a quantity of null", () => {
+  const run = () =>
+    quote({ awsPriceUsd: "5", fxRate: "127", quantity: null as unknown as string, rule: LAUNCH });
+  expect(run).toThrow(RangeError);
+  expect(run).toThrow(/quantity/);
+});
+
+it("refuses the negative vector rule with a typed error and the path of the step", () => {
+  const rule: PricingRule = {
+    version: "bd-3",
+    steps: [
+      LAUNCH.steps[0]!,
+      { ...LAUNCH.steps[1]!, base: "subtotal" },
+      LAUNCH.steps[2]!,
+      LAUNCH.steps[3]!,
+    ],
+  };
+  const error = thrown(() => quote({ awsPriceUsd: "5", fxRate: "127", rule }));
+  expect(error).toBeInstanceOf(PricingInputError);
+  expect(error).toBeInstanceOf(RangeError);
+  expect((error as PricingInputError).problems).toEqual([
+    {
+      path: "steps[1].base",
+      message: expect.stringMatching(/^step bd_vat has base subtotal and is not the last step/),
+    },
+  ]);
+});
+
+it("ignores global Big settings set by other code", () => {
+  const { RM, DP } = Big;
+  try {
+    Big.RM = Big.roundDown;
+    Big.DP = 0;
+    const q = quote({ awsPriceUsd: "9.50", fxRate: "127", rule: LAUNCH });
+    expect(q.steps[1]).toEqual({ code: "bd_vat", amountMinor: 6033n });
+    expect(q.totalMinor).toBe(141161n);
+  } finally {
+    Big.RM = RM;
+    Big.DP = DP;
+  }
 });
