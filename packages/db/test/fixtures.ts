@@ -22,3 +22,18 @@ export async function ensureMarket(q: Queryable, code = "BD"): Promise<string> {
 export async function newAdmin(q: Queryable, role = "finance"): Promise<string> {
   return insertRow(q, "admin_users", { cognito_sub: "admin-" + uniqueSuffix(), role });
 }
+
+// Inserts a customer with a cognito_sub and an email that no other call shares. Returns the id.
+export async function newCustomer(
+  q: Queryable,
+  over: Record<string, unknown> = {},
+): Promise<string> {
+  const market = await ensureMarket(q);
+  const suffix = uniqueSuffix();
+  return insertRow(q, "customers", {
+    cognito_sub: "sub-" + suffix,
+    email: suffix + "@example.test",
+    market,
+    ...over,
+  });
+}
