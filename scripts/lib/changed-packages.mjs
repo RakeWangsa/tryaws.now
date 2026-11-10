@@ -1,4 +1,5 @@
 // Maps changed files to workspace packages for `pnpm verify --quick`.
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,6 +18,16 @@ export function readWorkspacePackages(root) {
     }
   }
   return packages;
+}
+
+// Changed files of the repository at `root`: tracked changes against HEAD (a rename lists the old
+// and the new path) plus untracked files. Returns null when git cannot tell.
+export function listChangedFiles(root) {
+  const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  const changed = git("diff", "--name-only", "--no-renames", "HEAD");
+  const untracked = git("ls-files", "--others", "--exclude-standard");
+  if (changed.status !== 0 || untracked.status !== 0) return null;
+  return `${changed.stdout}\n${untracked.stdout}`.split("\n").filter(Boolean);
 }
 
 // The package names touched by `files`, or "all" when a file lies outside every package or when

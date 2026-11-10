@@ -23,6 +23,15 @@ it("counts a command that cannot start as failed", async () => {
   expect(result.exitCode).toBe(null);
   expect(result.tail.startsWith("cannot run:")).toBe(true);
 });
+it("says when a check was killed by a signal", async () => {
+  const [result] = await runChecks([
+    { id: "sig", title: "Killed", command: node("process.kill(process.pid, 'SIGTERM')") },
+  ]);
+  expect(result.passed).toBe(false);
+  expect(result.exitCode).toBe(null);
+  expect(result.tail).toContain("killed by SIGTERM");
+  expect(result.tail.trim().split("\n").at(-1)).toBe("killed by SIGTERM");
+});
 it("keeps the last 40 lines of output", async () => {
   const [result] = await runChecks([
     {

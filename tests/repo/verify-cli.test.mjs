@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { expect, it } from "vitest";
 import { GATES, TASKS } from "../../verify/checks.mjs";
 
@@ -28,6 +28,7 @@ it.each([
   [["--gate", "M9"], "Gate M9 does not exist", "gate-M9"],
   [["--task", "WP3-T1"], "Task WP3-T1 has no proof yet", "task-WP3-T1"],
 ])("fails closed for %j", (args, title, name) => {
+  rmSync(`verify/report-${name}.json`, { force: true });
   const result = verify(...args);
   expect(result.status).toBe(1);
   expect(result.stdout).toContain(title);
@@ -36,6 +37,13 @@ it.each([
   expect(report.results[0]).toMatchObject({ id: "not-defined", passed: false });
 });
 it("fails closed with no mode and with two modes", () => {
+  rmSync("verify/report-usage.json", { force: true });
   expect(verify().status).toBe(1);
+  const report = JSON.parse(readFileSync("verify/report-usage.json", "utf8"));
+  expect(report).toMatchObject({ name: "usage", passed: false });
+  expect(report.results[0]).toMatchObject({
+    id: "not-defined",
+    title: "Choose one of --quick, --task <id> or --gate <gate>",
+  });
   expect(verify("--quick", "--gate", "M0").status).toBe(1);
 });

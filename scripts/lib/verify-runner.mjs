@@ -33,7 +33,9 @@ function runOne(check, cwd) {
     child.stdout.on("data", collect);
     child.stderr.on("data", collect);
     child.on("error", (error) => finish(null, `cannot run: ${error.message}`));
-    child.on("close", (code) => finish(code ?? null, output));
+    child.on("close", (code, signal) => {
+      finish(code ?? null, signal ? `${output}\nkilled by ${signal}` : output);
+    });
   });
 }
 
