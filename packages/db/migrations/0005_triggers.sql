@@ -41,11 +41,34 @@ CREATE TRIGGER r5_append_only_row BEFORE UPDATE OR DELETE ON pricing_rules
 CREATE TRIGGER r5_append_only_truncate BEFORE TRUNCATE ON pricing_rules
   FOR EACH STATEMENT EXECUTE FUNCTION tc_reject_append_only_change();
 --> statement-breakpoint
+CREATE TRIGGER r5_fixed_row BEFORE UPDATE OR DELETE ON ledger_accounts
+  FOR EACH ROW EXECUTE FUNCTION tc_reject_append_only_change();
+--> statement-breakpoint
+CREATE TRIGGER r5_fixed_truncate BEFORE TRUNCATE ON ledger_accounts
+  FOR EACH STATEMENT EXECUTE FUNCTION tc_reject_append_only_change();
+--> statement-breakpoint
+CREATE FUNCTION tc_stamp_created_at() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+BEGIN
+  NEW.created_at := transaction_timestamp();
+  RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER r5_stamp_created_at BEFORE INSERT ON ledger_transactions
+  FOR EACH ROW EXECUTE FUNCTION tc_stamp_created_at();
+--> statement-breakpoint
+CREATE TRIGGER r5_stamp_created_at BEFORE INSERT ON ledger_entries
+  FOR EACH ROW EXECUTE FUNCTION tc_stamp_created_at();
+--> statement-breakpoint
 CREATE FUNCTION tc_check_ledger_balanced() RETURNS trigger
 LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
 DECLARE txid uuid;
 BEGIN
   IF TG_TABLE_NAME = 'ledger_entries' THEN txid := NEW.transaction_id; ELSE txid := NEW.id; END IF;
+  IF EXISTS (SELECT 1 FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id
+             WHERE e.transaction_id = txid AND e.created_at <> t.created_at) THEN
+    RAISE EXCEPTION 'R5: ledger transaction % is closed', txid USING ERRCODE = 'restrict_violation';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM ledger_entries WHERE transaction_id = txid AND direction = 'debit')
      OR NOT EXISTS (SELECT 1 FROM ledger_entries WHERE transaction_id = txid AND direction = 'credit')
      OR EXISTS (
@@ -71,8 +94,8 @@ BEGIN
   IF NEW.needs_approval IS DISTINCT FROM OLD.needs_approval THEN
     RAISE EXCEPTION 'R13: operations.needs_approval cannot change' USING ERRCODE = 'restrict_violation';
   END IF;
-  RETURN NEW;
+  RETURN NULL;
 END $$;
 --> statement-breakpoint
-CREATE TRIGGER r13_needs_approval_fixed BEFORE UPDATE ON operations
+CREATE TRIGGER r13_needs_approval_fixed AFTER UPDATE ON operations
   FOR EACH ROW EXECUTE FUNCTION tc_reject_needs_approval_change();
