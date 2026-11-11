@@ -73,4 +73,231 @@ export const WALLET_ANCHORS: readonly MockupAnchor[] = [
     why: "the empty state: centred text and a primary button",
     classes: ["text-center", "btn"],
   },
+
+  // ---- /wallet/topup
+  {
+    state: "topup.form",
+    mockupFile: "template/checkout.html",
+    why: "Payment Details: table.compare.min with badge.bg-purple, the amount line b.float-end.h4.seccolor, the yellow primary button",
+    classes: [
+      "table-responsive-sm",
+      "table",
+      "compare",
+      "min",
+      "border-0",
+      "badge",
+      "bg-purple",
+      "float-end",
+      "h4",
+      "seccolor",
+      "cd-filter-block",
+      "cd-filter-content",
+      "btn",
+      "btn-default-yellow-fill",
+    ],
+  },
+  {
+    state: "topup.form",
+    mockupFile: "template/configurator.html",
+    why: "option groups: cd-filter-block with a radio list (the quick amounts)",
+    classes: [
+      "cd-filter-block",
+      "cd-filter-content",
+      "radio-group",
+      "radios-filter",
+      "list",
+      "radio-label",
+      "seccolor",
+      "h6",
+      "mb-4",
+    ],
+  },
+  {
+    state: "topup.form",
+    mockupFile: "template/payments.html",
+    why: "the first sec-main pay card: badge.feat, section-heading, bullets with c-pink",
+    classes: [
+      "sec-main",
+      "sec-bg1",
+      "pay",
+      "bg-seccolorstyle",
+      "noshadow",
+      "plans",
+      "badge",
+      "feat",
+      "bg-purple",
+      "section-heading",
+      "mt-3",
+      "mergecolor",
+      "seccolor",
+      "c-pink",
+    ],
+  },
+  {
+    state: "topup.error.unavailable",
+    mockupFile: "order-form/antler/error.tpl",
+    why: "the gateway is not available: alert alert-danger with the warning icon",
+    classes: ["alert", "alert-danger", "fas", "fa-exclamation-triangle"],
+  },
+  {
+    state: "topup.closed",
+    mockupFile: "template/404.html",
+    why: "top-up not open: centred text and a primary button",
+    classes: ["text-center", "btn"],
+  },
+
+  // ---- /wallet/topup/[paymentId]
+  {
+    state: "status.credited",
+    mockupFile: "order-form/antler/complete.tpl",
+    why: "credited: section-heading, section-subheading, the card, the yellow primary button",
+    classes: [
+      "section-heading",
+      "mergecolor",
+      "border-0",
+      "section-subheading",
+      "text-center",
+      "bg-seccolorstyle",
+      "sec-bg1",
+      "br-12",
+      "noshadow",
+      "btn",
+      "btn-default-yellow-fill",
+    ],
+  },
+  {
+    state: "status.pending",
+    mockupFile: "order-form/antler/complete.tpl",
+    why: "pending: the same heading and card as complete.tpl, centred",
+    classes: [
+      "section-heading",
+      "mergecolor",
+      "border-0",
+      "section-subheading",
+      "text-center",
+      "bg-seccolorstyle",
+      "sec-bg1",
+      "br-12",
+      "noshadow",
+    ],
+  },
+  {
+    state: "status.review",
+    mockupFile: "order-form/antler/complete.tpl",
+    why: "review (shown as pending to the customer): the same card as complete.tpl",
+    classes: [
+      "section-heading",
+      "mergecolor",
+      "text-center",
+      "bg-seccolorstyle",
+      "sec-bg1",
+      "br-12",
+      "noshadow",
+    ],
+  },
+  {
+    state: "status.failed",
+    mockupFile: "order-form/antler/error.tpl",
+    why: "failed: heading, alert alert-danger with the warning icon, the yellow primary button",
+    classes: [
+      "section-heading",
+      "mergecolor",
+      "border-0",
+      "section-subheading",
+      "text-center",
+      "alert",
+      "alert-danger",
+      "fas",
+      "fa-exclamation-triangle",
+      "bg-seccolorstyle",
+      "sec-bg1",
+      "br-12",
+      "noshadow",
+      "btn",
+      "btn-default-yellow-fill",
+    ],
+  },
+  {
+    state: "status.cancelled",
+    mockupFile: "order-form/antler/error.tpl",
+    why: "cancelled: the same blocks as error.tpl",
+    classes: [
+      "section-heading",
+      "section-subheading",
+      "alert",
+      "alert-danger",
+      "fas",
+      "fa-exclamation-triangle",
+      "br-12",
+    ],
+  },
+  {
+    state: "status.expired",
+    mockupFile: "order-form/antler/error.tpl",
+    why: "expired: the same blocks as error.tpl",
+    classes: [
+      "section-heading",
+      "section-subheading",
+      "alert",
+      "alert-danger",
+      "fas",
+      "fa-exclamation-triangle",
+      "br-12",
+    ],
+  },
+  {
+    state: "status.notfound",
+    mockupFile: "template/404.html",
+    why: "a payment that is not found (or not the customer's): the 404 section and a primary button",
+    classes: ["sec-normal", "notfound", "pt-150", "container", "text-center", "btn"],
+  },
+];
+
+/**
+ * Classes of the mockup files above that the screens do not carry, each with the class used instead
+ * and the reason (open point 11). mockup-anchors.test.tsx checks that the class is in its mockup
+ * file, that no rendered state carries it, and that the replacement is known and rendered.
+ */
+export const EXPLAINED_EXCEPTIONS: readonly {
+  readonly cls: string;
+  readonly mockupFile: string;
+  readonly replacedBy: readonly string[];
+  readonly why: string;
+}[] = [
+  {
+    cls: "p-80",
+    mockupFile: "order-form/antler/complete.tpl",
+    replacedBy: ["p-3", "p-md-5"],
+    why: "the theme's .p-80 is a fixed 80px on every side; at 360 px that leaves 200px of content (U11)",
+  },
+  {
+    cls: "p-50",
+    mockupFile: "order-form/antler/error.tpl",
+    replacedBy: ["p-3", "p-md-5"],
+    why: "the theme has no .p-50 (not ported); the padding of the credited card is used",
+  },
+  {
+    cls: "error-heading",
+    mockupFile: "order-form/antler/error.tpl",
+    replacedBy: ["alert", "alert-danger"],
+    why: "the theme has no .error-heading; the alert alone carries the icon and the state word",
+  },
+  {
+    cls: "header-lined",
+    mockupFile: "order-form/antler/error.tpl",
+    replacedBy: ["text-center"],
+    why: "the theme has no .header-lined (a WHMCS hook); the heading block is centred with a Bootstrap class",
+  },
+  {
+    cls: "btn-default",
+    mockupFile: "order-form/antler/complete.tpl",
+    replacedBy: ["btn-default-fill"],
+    why: "the kit's secondary button is btn-default-fill; the theme has no plain .btn-default",
+  },
+  {
+    cls: "content-pay",
+    mockupFile: "template/payments.html",
+    replacedBy: [],
+    why: "the container of the payment-method logos; no third-party logo is shipped (U3, open point 7)",
+  },
 ];

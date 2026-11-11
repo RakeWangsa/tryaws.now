@@ -216,6 +216,8 @@ export default tseslint.config(
       "**/next-env.d.ts",
       ".superpowers/**",
       ".remember/**",
+      "test-results/**",
+      "playwright-report/**",
     ],
   },
   js.configs.recommended,

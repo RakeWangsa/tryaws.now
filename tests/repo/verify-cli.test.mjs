@@ -98,6 +98,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP3-T1",
     "WP3-T2",
     "WP3-T3",
+    "WP3-T4",
     "WP3-T5",
     "WP4-T1",
     "WP4-T2",
@@ -276,6 +277,42 @@ it("task WP3-T2 is proven by the checks of WP1-T1, core, db, the EPS suite, the 
     "packages/db/test/payments-repo.test.ts",
     "packages/db/test/payments-system.test.ts",
     "packages/db/test/cross-tenant.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP3-T4 is proven by the shared checks, one test line for each layer, the build check and the Playwright run", () => {
+  expect(TASKS["WP3-T4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["wallet-amount", "pnpm test --filter @tc/core topup-amount --no-passWithNoTests"],
+    ["wallet-db", "pnpm test --filter @tc/db wallet-repo cross-tenant --no-passWithNoTests"],
+    ["wallet-eps", "pnpm test --filter @tc/eps recheck redirect --no-passWithNoTests"],
+    ["wallet-web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+    ["wallet-build", "node scripts/smoke-apps.mjs --app web"],
+    ["wallet-e2e", "node scripts/smoke-wallet.mjs"],
+  ]);
+  expect(TASKS["WP3-T4"].find((c) => c.id === "wallet-e2e").title).toBe(
+    "WP3-T4: Playwright against fakes shows the balance after a faked EPS success",
+  );
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "packages/core/validation/topup-amount.test.ts",
+    "packages/db/test/wallet-repo.test.ts",
+    "packages/db/test/cross-tenant.test.ts",
+    "packages/eps/test/recheck.test.ts",
+    "packages/eps/test/redirect.test.ts",
+    "apps/web/app/[locale]/(panel)/wallet/topup/actions.test.ts",
+    "apps/web/app/[locale]/(panel)/wallet/mockup-anchors.test.tsx",
+    "scripts/lib/wallet-checks.test.mjs",
+    "scripts/smoke-wallet.mjs",
+    "tests/e2e/wallet.spec.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

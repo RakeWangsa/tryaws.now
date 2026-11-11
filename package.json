@@ -12,6 +12,7 @@
     "test": "node scripts/run-tests.mjs",
     "spec:split": "node scripts/split-plan.mjs",
     "spec:check": "node scripts/split-plan.mjs --check",
+    "e2e:wallet": "node scripts/smoke-wallet.mjs",
     "baseline:build": "node scripts/build-baseline.mjs",
     "baseline:check": "node scripts/build-baseline.mjs --check",
     "theme:sync": "node scripts/sync-theme.ts",

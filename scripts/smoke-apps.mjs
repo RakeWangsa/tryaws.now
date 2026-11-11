@@ -3,10 +3,16 @@
 // the headers and the HTML of the pages, and prove that /dev/ui is a 404 on the production stage.
 // Exit 0 only when every step passed. A step that cannot run (port refused, timeout) fails (R16).
 import { spawn } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { checkHtml, checkRouteTable } from "./lib/app-checks.mjs";
+import {
+  checkDevRoutesRefused,
+  checkNoFakeInBundle,
+  checkWalletRoutes,
+} from "./lib/wallet-checks.mjs";
 import { THEME_STYLESHEETS, themeAttributes } from "../packages/ui/theme/public.ts";
 
 const say = (line) => process.stdout.write(`${line}\n`);
@@ -92,6 +98,30 @@ async function run(command, args, limitMs = BUILD_LIMIT_MS) {
   ]);
   if (state.spawnError !== null) return { code: null, output: state.spawnError };
   return { code, output: state.output };
+}
+
+// ---- the bundle ----------------------------------------------------------------------------------
+
+// The code that runs: every file under .next/server and .next/static but the source maps.
+function bundleFiles(app) {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (!entry.name.endsWith(".map")) {
+        files.push({ path: full.slice(root.length + 1), text: readFileSync(full, "utf8") });
+      }
+    }
+  };
+  for (const folder of ["server", "static"]) {
+    try {
+      walk(resolve(root, "apps", app, ".next", folder));
+    } catch {
+      // a folder that is not there is read as no file; checkNoFakeInBundle refuses an empty list
+    }
+  }
+  return files;
 }
 
 // ---- results -------------------------------------------------------------------------------------
@@ -247,6 +277,24 @@ async function liveChecks(app, base) {
 
 async function productionCheck(app, base) {
   const problems = [];
+  if (app === "web") {
+    // WP3-T4: the dev sign-in and the fake EPS checkout are 404 on the production stage.
+    const responses = [];
+    for (const path of [
+      "/dev/sign-in?sub=x",
+      "/en/dev/sign-in?sub=x",
+      "/dev/eps/checkout?data=1",
+    ]) {
+      try {
+        responses.push({ path, status: (await get(base, path)).status });
+      } catch (error) {
+        problems.push(
+          `${path}: could not complete (${error instanceof Error ? error.message : "?"})`,
+        );
+      }
+    }
+    problems.push(...checkDevRoutesRefused(responses));
+  }
   for (const path of ["/dev/ui", "/en/dev/ui"]) {
     try {
       const r = await get(base, path);
@@ -287,6 +335,20 @@ async function smokeApp(app, { skipBuild }) {
         ? checkRouteTable(build.output)
         : [`build ended with ${String(build.code)}: ${build.output.slice(-400)}`];
     record(app, "next build, every route is dynamic", buildProblems);
+    if (app === "web" && build.code === 0) {
+      // WP3-T4: the wallet screens and the return routes are in the table, and a production build
+      // holds none of the fakes (the proof that the switch cannot be flipped at run time, R3).
+      record(
+        app,
+        "wallet routes are dynamic and /pay/eps/* are handlers",
+        checkWalletRoutes(build.output),
+      );
+      record(
+        app,
+        "the bundle holds no fake EPS and no dev verifier",
+        checkNoFakeInBundle(bundleFiles(app)),
+      );
+    }
   }
 
   const diff = await run("git", ["diff", "--exit-code", "--", `apps/${app}/tsconfig.json`]);
