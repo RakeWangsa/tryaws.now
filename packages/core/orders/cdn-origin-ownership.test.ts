@@ -38,20 +38,29 @@ async function cdnKit(flag = true): Promise<{ kit: Kit; cdnProductId: string }> 
      on conflict (key, market) do update set enabled = excluded.enabled`,
     [flag],
   );
+  // A distribution counts per pool account, not per Region (ACCOUNT_WIDE_CODES): its cell is "global".
   await t.pool.query(
     `insert into pool_capacity (id, pool_account_id, region, quota_code, quota_limit, used)
-     values (gen_random_uuid(), $1, $2, 'distribution', 20, 0)
+     values (gen_random_uuid(), $1, 'global', 'distribution', 20, 0)
      on conflict (pool_account_id, region, quota_code) do update set quota_limit = 20, used = 0`,
-    [kit.poolAccountId, CDN_REGION],
+    [kit.poolAccountId],
   );
-  const cdnProductId = await kit.newProduct({
-    family: "cdn",
-    aws_id: "small_1_0",
-    platform: null,
-    region: CDN_REGION,
-    specs: JSON.stringify({}),
-    feature_flag: "cdn",
-  });
+  // The aws_id must be a real CDN bundle and (family, aws_id, region) is unique in the table, which
+  // is shared by every test of this file: the product is created once and found again.
+  const found = await t.pool.query<{ id: string }>(
+    "select id from catalog_products where family = 'cdn' and aws_id = 'small_1_0' and region = $1",
+    [CDN_REGION],
+  );
+  const cdnProductId =
+    found.rows[0]?.id ??
+    (await kit.newProduct({
+      family: "cdn",
+      aws_id: "small_1_0",
+      platform: null,
+      region: CDN_REGION,
+      specs: JSON.stringify({}),
+      feature_flag: "cdn",
+    }));
   return { kit, cdnProductId };
 }
 
@@ -200,6 +209,6 @@ describe("runPurchase: the origin is checked again, before any write", () => {
       [resource.id],
     );
     expect(ops.rows.map((r) => r.kind)).toEqual(["create"]);
-    expect((await kit.used())[`${CDN_REGION}/distribution`]).toBe(1);
+    expect((await kit.used())["global/distribution"]).toBe(1);
   });
 });
