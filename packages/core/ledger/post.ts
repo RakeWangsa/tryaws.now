@@ -1,6 +1,7 @@
 import {
   addToWallet,
   findLedgerTransactionByKey,
+  findLedgerTransactionByReference,
   findPlatformAccounts,
   findWalletAccount,
   insertLedgerEntries,
@@ -13,7 +14,7 @@ import {
 } from "@tc/db";
 import type { Result } from "../types";
 import { LedgerError } from "./errors";
-import { checkPosting, samePosting, type NormalizedPosting } from "./rules";
+import { KIND_RULES, checkPosting, samePosting, type NormalizedPosting } from "./rules";
 import type { PlatformAccountType, PostTransactionInput } from "./types";
 
 export interface WriteOptions {
@@ -37,6 +38,7 @@ export async function postTransaction(tx: Tx, input: PostTransactionInput): Prom
 /**
  * Writes a checked posting. The order of the steps is the design: every `return` before step 5 has
  * written nothing, because a header without lines fails the COMMIT of the transaction (23514).
+ * Steps 5 and 6 are one savepoint.
  */
 export async function writePosting(
   tx: Tx,
@@ -98,9 +100,20 @@ export async function writePosting(
       ? { ok: true, value: { transactionId: stored.id } }
       : { ok: false, error: "conflict" };
 
-  // step 3: key
+  // step 3: key, then the reference
   const existing = await findLedgerTransactionByKey(tx, p.idempotencyKey);
   if (existing !== null) return answerFor(existing);
+  if (KIND_RULES[p.kind].onePerReference) {
+    // The key is not the same (it was just looked up), so a transaction here is another request for the
+    // same order: refuse it. The wallet lock serialises two such requests of one customer.
+    const taken = await findLedgerTransactionByReference(
+      tx,
+      p.kind,
+      p.referenceType,
+      p.referenceId,
+    );
+    if (taken !== null) return { ok: false, error: "conflict" };
+  }
   if (options?.findEarlier !== undefined) {
     const earlier = await options.findEarlier(tx);
     if (earlier !== null) return { ok: true, value: { transactionId: earlier } };
@@ -115,28 +128,33 @@ export async function writePosting(
     };
   }
 
-  // step 5: header
-  const id = await insertLedgerTransaction(tx, {
-    kind: p.kind,
-    referenceType: p.referenceType,
-    referenceId: p.referenceId,
-    idempotencyKey: p.idempotencyKey,
-    actorType: p.actor.type,
-    actorId: p.actor.id,
-    memo: p.memo,
-  });
-  if (id === null) {
-    const taken = await findLedgerTransactionByKey(tx, p.idempotencyKey);
-    if (taken === null) throw new LedgerError("invariant");
-    return answerFor(taken);
-  }
-
-  // step 6: lines and cache
-  await insertLedgerEntries(tx, id, lines);
-  if (wallet !== null) {
-    if ((await addToWallet(tx, wallet.id, p.walletDelta)) === null) {
-      throw new LedgerError("invariant");
+  // steps 5 and 6 run in a savepoint: a LedgerError("invariant") after the lines were written rolls the
+  // savepoint back, so a caller that catches the error and goes on cannot commit a header and lines
+  // without the cache. A DbError of the database rolls the whole transaction back anyway.
+  return tx.transaction(async (sp): Promise<Posted> => {
+    // step 5: header
+    const id = await insertLedgerTransaction(sp, {
+      kind: p.kind,
+      referenceType: p.referenceType,
+      referenceId: p.referenceId,
+      idempotencyKey: p.idempotencyKey,
+      actorType: p.actor.type,
+      actorId: p.actor.id,
+      memo: p.memo,
+    });
+    if (id === null) {
+      const taken = await findLedgerTransactionByKey(sp, p.idempotencyKey);
+      if (taken === null) throw new LedgerError("invariant");
+      return answerFor(taken);
     }
-  }
-  return { ok: true, value: { transactionId: id } };
+
+    // step 6: lines and cache
+    await insertLedgerEntries(sp, id, lines);
+    if (wallet !== null) {
+      if ((await addToWallet(sp, wallet.id, p.walletDelta)) === null) {
+        throw new LedgerError("invariant");
+      }
+    }
+    return { ok: true, value: { transactionId: id } };
+  });
 }

@@ -34,6 +34,8 @@ export interface LedgerKit {
   run<T>(fn: (tx: Tx) => Promise<T>, role?: DatabaseRole): Promise<T>;
   /** A customer, a wallet row and a customer_wallet account, made as web_rw by openWallet. */
   newWallet(over?: { currency?: string }): Promise<Wallet>;
+  /** An order of the customer that points at the ledger transaction (made as the owner); returns the order id. */
+  newOrder(customerId: string, ledgerTransactionId: string): Promise<string>;
   /** A verified top-up by the system (as worker_rw); returns the ledger transaction id. */
   fund(wallet: Wallet, amountMinor: bigint): Promise<string>;
   counts(): Promise<{ transactions: number; entries: number }>;
@@ -138,6 +140,15 @@ function makeKit(source: Source): LedgerKit {
       const opened = await run((tx) => openWallet(tx, customerId), "web_rw");
       if (!opened.ok) throw new Error(`openWallet failed: ${opened.error}`);
       return { customerId, walletId: opened.value.walletId, accountId: opened.value.accountId };
+    },
+    async newOrder(customerId, ledgerTransactionId) {
+      const orderId = crypto.randomUUID();
+      await source.pool.query(
+        `insert into orders (id, customer_id, kind, items, price_snapshot, total_minor, ledger_transaction_id, idempotency_key)
+         values ($1, $2, 'new', '[]', '{}', 0, $3, $4)`,
+        [orderId, customerId, ledgerTransactionId, `o-${hex32()}`],
+      );
+      return orderId;
     },
     async fund(wallet, amountMinor) {
       return transactionIdOf(

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { inputs, transactionIdOf, useLedgerDatabase, type Wallet } from "../test/ledger-fixtures";
 import { walletBalance, walletEntriesSum } from "./balance";
 import { LedgerError } from "./errors";
-import { postTransaction } from "./post";
+import { postTransaction, writePosting } from "./post";
+import { checkPosting } from "./rules";
 import type { PostTransactionInput } from "./types";
 
 const L = useLedgerDatabase();
@@ -239,5 +240,109 @@ describe.each(["web_rw", "admin_rw", "worker_rw"] as const)("as %s (migration 00
     expect(await post(inputs.spend(w.customerId, 20000n), role)).toMatchObject({ ok: true });
     expect(await L.cache(w.customerId)).toEqual({ balance: 0n, version: 2 });
     expect(await L.run((tx) => walletEntriesSum(tx, w.customerId), role)).toBe(0n);
+  });
+});
+
+describe("one ledger transaction for one reference (M1)", () => {
+  it("a second purchase of the same order under another key is a conflict, and nothing changes", async () => {
+    const w = await L.newWallet();
+    await L.fund(w, 1000n);
+    const first = inputs.spend(w.customerId, 100n);
+    const firstId = transactionIdOf(await post(first));
+    const before = await state(w);
+    const again = { ...first, idempotencyKey: `order:${crypto.randomUUID().replaceAll("-", "")}` };
+    expect(await post(again)).toEqual({ ok: false, error: "conflict" });
+    expect(await state(w)).toEqual(before);
+    // the same key still replays the first answer
+    expect(transactionIdOf(await post(first))).toBe(firstId);
+    expect(await state(w)).toEqual(before);
+  });
+
+  it("a conflict does not depend on the wallet: the other customer's purchase of the same order is refused too", async () => {
+    const a = await L.newWallet();
+    const b = await L.newWallet();
+    await L.fund(a, 1000n);
+    await L.fund(b, 1000n);
+    const first = inputs.spend(a.customerId, 100n);
+    await post(first);
+    const other = {
+      ...inputs.spend(b.customerId, 100n),
+      reference: first.reference,
+    };
+    expect(await post(other)).toEqual({ ok: false, error: "conflict" });
+    expect((await L.cache(b.customerId)).balance).toBe(1000n);
+  });
+
+  it("a renewal of another period of the same subscription is another request, not a duplicate", async () => {
+    const w = await L.newWallet();
+    await L.fund(w, 1000n);
+    const sub = crypto.randomUUID();
+    const renew = (at: string): PostTransactionInput => ({
+      ...inputs.spend(w.customerId, 100n),
+      kind: "renewal",
+      reference: { type: "subscription", id: sub },
+      idempotencyKey: `renew:${sub}:${at}`,
+    });
+    const a = transactionIdOf(await post(renew("2026-12-01T00:00:00.000Z")));
+    const b = transactionIdOf(await post(renew("2027-01-01T00:00:00.000Z")));
+    expect(b).not.toBe(a);
+    expect((await L.cache(w.customerId)).balance).toBe(800n);
+  });
+
+  it.each([
+    ["an adjustment", "adjustments", "adjustment"],
+    ["a refund", "refunds", "refund"],
+  ] as const)(
+    "%s of a reference that already has one is a conflict also under another key (writePosting called directly)",
+    async (_name, platform, kind) => {
+      const w = await L.newWallet();
+      await L.fund(w, 1000n);
+      const requestId = crypto.randomUUID();
+      const input = {
+        kind,
+        reference: { type: kind === "adjustment" ? "wallet_adjustment" : "payment", id: requestId },
+        idempotencyKey: `${kind}:${requestId}`,
+        actor: { type: "system" },
+        memo: "test",
+        postings: [
+          {
+            account: { type: "customer_wallet", customerId: w.customerId },
+            direction: "debit",
+            amountMinor: 10n,
+          },
+          { account: { type: platform }, direction: "credit", amountMinor: 10n },
+        ],
+      } as PostTransactionInput;
+      const checked = checkPosting(input);
+      if (!checked.ok) throw new Error(JSON.stringify(checked.fields));
+      expect(await L.run((tx) => writePosting(tx, checked.value))).toMatchObject({ ok: true });
+      const before = await state(w);
+      const elsewhere = { ...checked.value, idempotencyKey: `${kind}:${crypto.randomUUID()}` };
+      expect(await L.run((tx) => writePosting(tx, elsewhere))).toEqual({
+        ok: false,
+        error: "conflict",
+      });
+      expect(await state(w)).toEqual(before);
+    },
+  );
+});
+
+describe("an invariant that fails after the lines were written (m1)", () => {
+  it("a caller that swallows the error cannot commit the lines: the savepoint rolled them back", async () => {
+    const w = await L.newWallet();
+    // 100 paisa from the top of the range of the cache: the update of the cache is refused
+    await L.fund(w, 9223372036854775800n);
+    const before = await state(w);
+    const thrown = await L.run(async (tx) => {
+      try {
+        await postTransaction(tx, inputs.topup(w.customerId, 100n));
+        return null;
+      } catch (error) {
+        return error; // swallowed: the surrounding transaction goes on and commits
+      }
+    });
+    expect(thrown).toBeInstanceOf(LedgerError);
+    expect(await state(w)).toEqual(before);
+    expect(await L.run((tx) => walletEntriesSum(tx, w.customerId))).toBe(9223372036854775800n);
   });
 });

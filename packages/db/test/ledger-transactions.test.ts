@@ -3,9 +3,11 @@ import type { Tx } from "../client";
 import {
   findLedgerTransactionById,
   findLedgerTransactionByKey,
+  findLedgerTransactionByReference,
   findReversalOf,
   insertLedgerEntries,
   insertLedgerTransaction,
+  orderOwnsLedgerTransaction,
   type NewLedgerTransaction,
 } from "../ledger/transactions";
 import { runTransaction, type DatabaseRole } from "../tx";
@@ -108,6 +110,61 @@ describe("a ledger transaction", () => {
       return reversal!;
     });
     expect(await run((tx) => findReversalOf(tx, original))).toBe(made);
+  });
+  it("findLedgerTransactionByReference finds the transaction of a kind and a reference, and only that one", async () => {
+    const a = await accounts();
+    const referenceId = crypto.randomUUID();
+    const none = () =>
+      run((tx) => findLedgerTransactionByReference(tx, "topup", "payment", referenceId));
+    expect(await none()).toBeNull();
+    const made = await run(async (tx) => {
+      // another kind, another reference type and another reference id do not match
+      for (const over of [
+        { kind: "refund" },
+        { referenceType: "order" },
+        { referenceId: crypto.randomUUID() },
+      ]) {
+        const other = await insertLedgerTransaction(tx, {
+          ...header(`k:${uniqueSuffix()}`),
+          referenceId,
+          ...over,
+        });
+        await insertLedgerEntries(tx, other!, pair(a, 5n, 5n));
+      }
+      const mine = await insertLedgerTransaction(tx, {
+        ...header(`k:${uniqueSuffix()}`),
+        referenceId,
+      });
+      await insertLedgerEntries(tx, mine!, pair(a, 7n, 7n));
+      return mine!;
+    });
+    const found = await none();
+    expect(found).toMatchObject({
+      id: made,
+      kind: "topup",
+      referenceType: "payment",
+      referenceId,
+    });
+    expect(found?.entries).toHaveLength(2);
+  });
+  it("orderOwnsLedgerTransaction is true only for the order that points at that ledger transaction", async () => {
+    const a = await accounts();
+    const ledgerId = await run(async (tx) => {
+      const id = await insertLedgerTransaction(tx, header(`k:${uniqueSuffix()}`));
+      await insertLedgerEntries(tx, id!, pair(a, 5n, 5n));
+      return id!;
+    });
+    const orderId = crypto.randomUUID();
+    await t.pool.query(
+      `insert into orders (id, customer_id, kind, items, price_snapshot, total_minor, ledger_transaction_id, idempotency_key)
+       values ($1, $2, 'new', '[]', '{}', 5, $3, $4)`,
+      [orderId, a.customerId, ledgerId, `o-${uniqueSuffix()}`],
+    );
+    const owns = (order: string, ledger: string) =>
+      run((tx) => orderOwnsLedgerTransaction(tx, order, ledger));
+    expect(await owns(orderId, ledgerId)).toBe(true);
+    expect(await owns(orderId, crypto.randomUUID())).toBe(false);
+    expect(await owns(crypto.randomUUID(), ledgerId)).toBe(false);
   });
   it("cannot take a key twice: the second insert returns null, also with other content and in a later transaction", async () => {
     const a = await accounts();

@@ -31,6 +31,16 @@ describe("the postings of spec 9.1, one row per kind", () => {
       value: { kind: "metered_charge", referenceType: "resource", walletDelta: -74295n },
     });
   });
+  it("accepts the exact keys of ledgerKey for a renewal and a metered charge, an hourly period too", () => {
+    const at = "2026-12-01T00:00:00.000Z";
+    expect(checkPosting(renewal({ idempotencyKey: `renew:${REF}:${at}` })).ok).toBe(true);
+    for (const period of ["2026-11-11", "2026-11-11T07"]) {
+      expect(
+        checkPosting(metered({ idempotencyKey: `meter:${REF}:snapshot_gb:${period}` })).ok,
+        period,
+      ).toBe(true);
+    }
+  });
   it("accepts a purchase with a fifth credit line, markup_income, when the markup is above 0", () => {
     expect(checkPosting(withMarkup())).toMatchObject({ ok: true, value: { walletDelta: -74395n } });
     expect(checkPosting(withMarkup(renewal())).ok).toBe(true);
@@ -150,6 +160,52 @@ describe("the postings of spec 9.1, one row per kind", () => {
     [
       "a renewal under an order key",
       renewal({ idempotencyKey: "order:" + "a".repeat(32) }),
+      "idempotencyKey",
+    ],
+    // the key must have exactly the shape of ledgerKey, not only its prefix (M1): one request, one key
+    [
+      "a renewal key with a suffix after the period",
+      renewal({ idempotencyKey: `renew:${REF}:2026-12-01T00:00:00.000Z:again` }),
+      "idempotencyKey",
+    ],
+    [
+      "a renewal key whose period is not an ISO timestamp with milliseconds",
+      renewal({ idempotencyKey: `renew:${REF}:2026-12-01` }),
+      "idempotencyKey",
+    ],
+    [
+      "a renewal key whose period has no milliseconds",
+      renewal({ idempotencyKey: `renew:${REF}:2026-12-01T00:00:00Z` }),
+      "idempotencyKey",
+    ],
+    [
+      "a renewal key with a period that is not a date",
+      renewal({ idempotencyKey: `renew:${REF}:2026-13-45T00:00:00.000Z` }),
+      "idempotencyKey",
+    ],
+    [
+      "a renewal key with nothing after the subscription",
+      renewal({ idempotencyKey: `renew:${REF}:` }),
+      "idempotencyKey",
+    ],
+    [
+      "a metered key with a suffix after the period",
+      metered({ idempotencyKey: `meter:${REF}:snapshot_gb:2026-11-11:again` }),
+      "idempotencyKey",
+    ],
+    [
+      "a metered key with a metric of a wrong form",
+      metered({ idempotencyKey: `meter:${REF}:Snapshot-GB:2026-11-11` }),
+      "idempotencyKey",
+    ],
+    [
+      "a metered key with a period of a wrong form",
+      metered({ idempotencyKey: `meter:${REF}:snapshot_gb:november` }),
+      "idempotencyKey",
+    ],
+    [
+      "a metered key with no period",
+      metered({ idempotencyKey: `meter:${REF}:snapshot_gb` }),
       "idempotencyKey",
     ],
     // the lines, the reference and the reason

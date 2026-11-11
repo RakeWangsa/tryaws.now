@@ -118,6 +118,34 @@ export async function findLedgerTransactionById(
   return row === undefined ? null : withEntries(tx, row);
 }
 
+// The earliest transaction of the kind that refers to the row (type, id), or null. The index
+// ledger_transactions_reference_type_reference_id_idx serves it. @tc/core uses it, under the wallet
+// lock, to refuse a second transaction for the same order (or request) under another key.
+export async function findLedgerTransactionByReference(
+  tx: Tx,
+  kind: string,
+  referenceType: string,
+  referenceId: string,
+): Promise<StoredLedgerTransaction | null> {
+  const result = await tx.execute(
+    sql`select ${HEADER_COLUMNS} from ledger_transactions where kind = ${kind} and reference_type = ${referenceType} and reference_id = ${referenceId} order by id limit 1`,
+  );
+  const row = (result.rows as Row[])[0];
+  return row === undefined ? null : withEntries(tx, row);
+}
+
+// True when the order exists and points at that ledger transaction (orders.ledger_transaction_id).
+export async function orderOwnsLedgerTransaction(
+  tx: Tx,
+  orderId: string,
+  ledgerTransactionId: string,
+): Promise<boolean> {
+  const result = await tx.execute(
+    sql`select 1 as found from orders where id = ${orderId} and ledger_transaction_id = ${ledgerTransactionId}`,
+  );
+  return (result.rows as Row[]).length > 0;
+}
+
 // The id of a transaction of kind reversal that refers to `originalId`, or null. The index
 // ledger_transactions_reference_type_reference_id_idx serves it.
 export async function findReversalOf(tx: Tx, originalId: string): Promise<string | null> {

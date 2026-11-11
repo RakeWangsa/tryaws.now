@@ -1,4 +1,9 @@
-import { findLedgerTransactionById, findReversalOf, type Tx } from "@tc/db";
+import {
+  findLedgerTransactionById,
+  findReversalOf,
+  orderOwnsLedgerTransaction,
+  type Tx,
+} from "@tc/db";
 import type { Result } from "../types";
 import { ledgerKey } from "./keys";
 import { writePosting } from "./post";
@@ -49,6 +54,16 @@ export async function reverseTransaction(
       error: "validation",
       fields: { transactionId: "A reversal cannot be reversed." },
     };
+  }
+
+  // step 2b: the key order-reversal:<order id> is the key of the order, so the order must be the order of
+  // this very transaction (orders.ledger_transaction_id). Otherwise a caller could reverse a transaction
+  // under the key of an order that belongs to another, and block the real reversal of that order.
+  if (input.orderId !== undefined) {
+    const orderId = input.orderId.toLowerCase();
+    if (!(await orderOwnsLedgerTransaction(tx, orderId, original.id))) {
+      return { ok: false, error: "conflict" };
+    }
   }
 
   // step 3: the inverse lines, checked like any other posting (kind, key family, actor, reason)

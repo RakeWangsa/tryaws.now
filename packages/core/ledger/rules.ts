@@ -40,6 +40,13 @@ export interface KindRule {
   readonly referenceType: string | null;
   /** The key family of the kind; `referenceId` is in lower case. */
   readonly keyOk: (key: string, referenceId: string) => boolean;
+  /**
+   * True when one (kind, reference type, reference id) may have one ledger transaction only. `writePosting`
+   * refuses a second one under another key (`conflict`), under the wallet lock. Not for the kinds whose key
+   * already is the reference (topup, reversal) or that repeat by design (renewal and metered charge: the
+   * period is in the key).
+   */
+  readonly onePerReference: boolean;
   /** The actor types that must give a reason (9.1: "with reason"; R10). */
   readonly memoRequiredFor: readonly ActorType[];
   readonly shape: Shape;
@@ -56,6 +63,28 @@ const SALE: Shape = {
   required: ["revenue_aws_base"],
 };
 
+// A key is accepted only when `ledgerKey` makes exactly this text from its parts. A prefix check would let
+// `renew:<id>:<anything>` through, so one request could post twice under two spellings of one period.
+function renewalKeyOk(key: string, subscriptionId: string): boolean {
+  const prefix = `renew:${subscriptionId}:`;
+  if (!key.startsWith(prefix)) return false;
+  const period = key.slice(prefix.length);
+  const at = new Date(period);
+  return !Number.isNaN(at.getTime()) && ledgerKey.renewal(subscriptionId, at) === key;
+}
+
+function meteredKeyOk(key: string, resourceId: string): boolean {
+  const prefix = `meter:${resourceId}:`;
+  if (!key.startsWith(prefix)) return false;
+  const parts = key.slice(prefix.length).split(":");
+  if (parts.length !== 2) return false;
+  try {
+    return ledgerKey.metered(resourceId, parts[0]!, parts[1]!) === key;
+  } catch {
+    return false; // a metric or a period of a wrong form
+  }
+}
+
 const startsWith = (prefix: string) => (key: string) => key.startsWith(prefix);
 // A frozen row, typed as a `KindRule` so that the functions and the lists get their types from it.
 const row = (rule: KindRule): KindRule => Object.freeze(rule);
@@ -66,6 +95,7 @@ export const KIND_RULES: Readonly<Record<LedgerKind, KindRule>> = Object.freeze(
     actors: ["system", "admin"],
     referenceType: "payment",
     keyOk: (key, id) => key === ledgerKey.topup(id),
+    onePerReference: false,
     memoRequiredFor: [],
     shape: { pairs: [["gateway_clearing", "customer_wallet"]] },
   }),
@@ -73,20 +103,23 @@ export const KIND_RULES: Readonly<Record<LedgerKind, KindRule>> = Object.freeze(
     actors: ["customer", "system"],
     referenceType: "order",
     keyOk: startsWith("order:"),
+    onePerReference: true,
     memoRequiredFor: [],
     shape: SALE,
   }),
   renewal: row({
     actors: ["customer", "system"],
     referenceType: "subscription",
-    keyOk: (key, id) => key.startsWith(`renew:${id}:`),
+    keyOk: renewalKeyOk,
+    onePerReference: false,
     memoRequiredFor: [],
     shape: SALE,
   }),
   metered_charge: row({
     actors: ["system"],
     referenceType: "resource",
-    keyOk: (key, id) => key.startsWith(`meter:${id}:`),
+    keyOk: meteredKeyOk,
+    onePerReference: false,
     memoRequiredFor: [],
     shape: SALE,
   }),
@@ -98,6 +131,7 @@ export const KIND_RULES: Readonly<Record<LedgerKind, KindRule>> = Object.freeze(
       const prefix = "order-reversal:";
       return key.startsWith(prefix) && isUuid(key.slice(prefix.length));
     },
+    onePerReference: false,
     memoRequiredFor: ["admin"],
     shape: "free",
   }),
@@ -105,6 +139,7 @@ export const KIND_RULES: Readonly<Record<LedgerKind, KindRule>> = Object.freeze(
     actors: ["admin", "system"],
     referenceType: "wallet_adjustment",
     keyOk: (key, id) => key === ledgerKey.adjustment(id),
+    onePerReference: true,
     memoRequiredFor: ["admin", "system"],
     shape: {
       pairs: [
@@ -117,6 +152,7 @@ export const KIND_RULES: Readonly<Record<LedgerKind, KindRule>> = Object.freeze(
     actors: ["admin", "system"],
     referenceType: null,
     keyOk: (key, id) => key === ledgerKey.refund(id),
+    onePerReference: true,
     memoRequiredFor: ["admin", "system"],
     shape: { pairs: [["customer_wallet", "refunds"]] },
   }),
