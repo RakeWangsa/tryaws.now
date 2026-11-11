@@ -7,6 +7,16 @@ export type {
   ProductFamily,
   ResourceView,
 } from "./adapters/types";
+export {
+  METRIC_RANGES,
+  createLightsailReadSource,
+  type LiveReadSource,
+  type MetricName,
+  type MetricPoint,
+  type MetricRange,
+  type MetricSeries,
+  type ReadTargetRef,
+} from "./reader-source";
 export { AwsError, toAwsError, toLogFields, type AwsLogFields, type LocalReason } from "./errors";
 export { QUEUE_URL_PATTERN, createSqsClient, createSqsSend, type SqsLike } from "./queue";
 export {
