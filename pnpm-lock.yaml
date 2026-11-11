@@ -35,6 +35,9 @@ importers:
       '@tc/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@tc/db':
         specifier: workspace:*
         version: link:../../packages/db
