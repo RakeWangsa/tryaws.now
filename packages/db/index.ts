@@ -39,6 +39,13 @@ export { adminRepos } from "./repositories/admin/index";
 export type { AdminRepos, AdminActor, AdminRole, AdminScope } from "./repositories/admin/index";
 export type { FeatureFlagSetting } from "./repositories/admin/feature-flags";
 export type { FxRateInput, FxRateSaved, FxRatesAdminRepo } from "./repositories/admin/fx-rates";
+export type {
+  NotifiedEntry,
+  NotifyNextInput,
+  WaitlistAdminRepo,
+  WaitlistEntry,
+  WaitlistReason,
+} from "./repositories/admin/waitlist";
 export { readAdminApprover } from "./repositories/admin/approver";
 export { STEP_CODES } from "./repositories/admin/pricing-rules";
 export type {

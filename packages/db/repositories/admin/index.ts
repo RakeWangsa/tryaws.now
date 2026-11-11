@@ -4,6 +4,7 @@ import { isUuid } from "../scope";
 import { featureFlagsAdminRepo, type FeatureFlagsAdminRepo } from "./feature-flags";
 import { fxRatesAdminRepo, type FxRatesAdminRepo } from "./fx-rates";
 import { pricingRulesAdminRepo, type PricingRulesAdminRepo } from "./pricing-rules";
+import { waitlistAdminRepo, type WaitlistAdminRepo } from "./waitlist";
 
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
@@ -28,6 +29,7 @@ export interface AdminRepos {
   featureFlags: FeatureFlagsAdminRepo;
   fxRates: FxRatesAdminRepo;
   pricingRules: PricingRulesAdminRepo;
+  waitlist: WaitlistAdminRepo;
 }
 
 // Binds the actor once and builds every admin repository from it. Throws a TypeError for an actor
@@ -47,5 +49,6 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     featureFlags: featureFlagsAdminRepo(scope),
     fxRates: fxRatesAdminRepo(scope),
     pricingRules: pricingRulesAdminRepo(scope),
+    waitlist: waitlistAdminRepo(scope),
   };
 }

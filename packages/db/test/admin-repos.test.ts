@@ -56,9 +56,14 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       },
       "first rule",
     ),
+  "waitlist.notifyNext": (r) =>
+    r.waitlist.notifyNext(
+      { productFamily: "linux_instance", region: "ap-southeast-1", reason: "capacity", count: 1 },
+      "one unit freed",
+    ),
 };
 // Admin reads ("<repo>.<method>") that write no audit row. Empty until WP8 decides where admin reads live and whether a read is audited (open point 21).
-const ADMIN_READ_METHODS: readonly string[] = [];
+const ADMIN_READ_METHODS: readonly string[] = ["waitlist.list"];
 
 it("every method of adminRepos is a listed read or a write with an audit case", () => {
   const repos = adminRepos({} as Tx, { adminId: uuidv7(), role: "ops", ip: "203.0.113.9" });
