@@ -155,6 +155,16 @@ const PRODUCTS = [
   "parseInstanceConfig",
   "resolveInstance",
   "resolveProduct",
+  // WP3-T5: invoices (numbering, fiscal year, money text, lines, pure HTML)
+  "InvoiceError",
+  "buildInvoiceLines",
+  "escapeHtml",
+  "fiscalYearOf",
+  "formatInvoiceNumber",
+  "formatMinor",
+  "invoicePdfKey",
+  "parseLineAmount",
+  "renderInvoiceHtml",
   // WP1-T5: catalog sync (the mapping, the active rule, the plan, the BDT price on read)
   "decideActive",
   "mapInstanceBundle",
