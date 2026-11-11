@@ -66,6 +66,8 @@ const EXPORTS = {
     "./runtime": "./runtime/index.ts",
     "./messages": "./messages/index.ts",
     "./gallery": "./gallery/index.ts",
+    // The class inventory of the theme, for the mockup-anchors tests of the apps (WP3-T4).
+    "./class-inventory": "./test/class-inventory.ts",
   },
 };
 
