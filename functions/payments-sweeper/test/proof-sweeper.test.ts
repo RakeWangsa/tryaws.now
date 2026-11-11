@@ -255,7 +255,7 @@ describe("the sweeper credits a payment whose browser never returned, once", () 
 
   it("12. the limit is honoured: 30 paid payments, 25 then 5", async () => {
     const all = [];
-    for (let i = 0; i < 30; i++) all.push(await k.startPayment(5000n));
+    for (let i = 0; i < 30; i++) all.push(await k.startPayment(10000n));
     await k.isolate(...all);
     fresh();
     for (const s of all) k.eps.settle(s.merchantTransactionId, { status: "Success" });
@@ -270,7 +270,7 @@ describe("the sweeper credits a payment whose browser never returned, once", () 
     expect(second.backlog).toBe(false);
     for (const s of all) {
       expect(await k.ledgerRows(ledgerKey.topup(s.paymentId))).toBe(1);
-      expect(await k.balance(s.customerId)).toBe(5000n);
+      expect(await k.balance(s.customerId)).toBe(10000n);
     }
   });
 });
