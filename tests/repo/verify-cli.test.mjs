@@ -119,6 +119,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP7-T3",
     "WP7-T5",
     "WP8-T1",
+    "WP8-T2",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -408,6 +409,32 @@ it("task WP8-T1 is proven by the db, auth, admin and core suites and three proof
     "packages/db/test/admin-audited-active.test.ts",
     "packages/db/test/admin-repos.test.ts",
     "packages/db/test/admin-operations.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP8-T2 is proven by the db and admin suites and the line of the KYC document sentence", () => {
+  expect(TASKS["WP8-T2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["admin-customers-repo", "pnpm test --filter @tc/db admin-customers --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    [
+      "kyc-document-short-lived-never-cached",
+      "pnpm test --filter @tc/admin server/kyc-documents --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "packages/db/test/admin-customers.test.ts",
+    "apps/admin/server/kyc-documents.test.ts",
+    "apps/admin/customers-pages.test.tsx",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
