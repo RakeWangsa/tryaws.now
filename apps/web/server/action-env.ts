@@ -1,4 +1,5 @@
 import { requireCustomer } from "@tc/auth";
+import type { CustomerSession } from "@tc/auth";
 import { DEFAULT_LOCALE, isLocale } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { getLocale } from "next-intl/server";
@@ -30,9 +31,15 @@ export async function actionEnv(): Promise<ActionEnv> {
   return { config: runtime.config, eps: runtime.eps, headers: requestHeaders, locale };
 }
 
+/** The runtime configures the session check, so it is built before the first request for a session. */
+async function authenticate(): Promise<CustomerSession> {
+  await getRuntime();
+  return requireCustomer();
+}
+
 export function startDeps(redirect: (to: string) => never): StartDeps {
   return {
-    authenticate: requireCustomer,
+    authenticate,
     env: actionEnv,
     loadRange,
     redirect,
@@ -44,7 +51,7 @@ export function startDeps(redirect: (to: string) => never): StartDeps {
 }
 
 export const recheckDeps: RecheckDeps = {
-  authenticate: requireCustomer,
+  authenticate,
   env: actionEnv,
   readRow: async (session, paymentId) => {
     const found = await loadPayment(session, paymentId);

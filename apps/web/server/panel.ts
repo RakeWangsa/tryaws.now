@@ -10,6 +10,7 @@ import { cache } from "react";
 import { enabledFamilies } from "./families.ts";
 import { writeLog } from "./log.ts";
 import { requestId, safeNext } from "./request.ts";
+import { getRuntime } from "./runtime.ts";
 
 // What every page of the signed-in panel needs: the session, the name for the account menu, the
 // balance for the top bar and the families that are on. It is read once per request (`cache`), and
@@ -55,6 +56,8 @@ async function load(path: string): Promise<PanelOutcome> {
 
   let session: CustomerSession;
   try {
+    // The runtime configures the session check (configureAuth); on a cold server nothing else does.
+    await getRuntime();
     session = await requireCustomer();
   } catch {
     return refuse();

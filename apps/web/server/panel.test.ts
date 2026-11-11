@@ -15,6 +15,8 @@ const state = vi.hoisted(() => ({
     numerals: "beng" | "latn";
   },
   flags: [] as { key: string; enabled: boolean }[],
+  runtimeCalls: 0,
+  runtimeFails: false,
 }));
 
 vi.mock("@tc/auth", () => ({
@@ -41,6 +43,14 @@ vi.mock("next/navigation", () => ({
     throw new Error(`REDIRECT:${to}`);
   },
 }));
+// requireCustomer is configured by the runtime (configureAuth in runtime.ts): the panel builds it first.
+vi.mock("./runtime.ts", () => ({
+  getRuntime: async () => {
+    state.runtimeCalls += 1;
+    if (state.runtimeFails) throw new Error("web config: TC_STAGE is missing or unknown");
+    return {};
+  },
+}));
 vi.mock("react", async (importActual) => {
   const actual = await importActual<typeof import("react")>();
   // `cache` memoises per request in Next; a test makes one request per call.
@@ -59,6 +69,8 @@ beforeEach(() => {
   state.wallet = { balanceMinor: 150000n, currency: "BDT" };
   state.market = { code: "BD", numerals: "beng" };
   state.flags = [];
+  state.runtimeCalls = 0;
+  state.runtimeFails = false;
 });
 
 describe("enabledFamilies: the twelve product flags to the seven navigation families", () => {
@@ -96,6 +108,17 @@ describe("enabledFamilies: the twelve product flags to the seven navigation fami
 });
 
 describe("loadPanel", () => {
+  it("builds the runtime (which configures the session check) before it asks for the session", async () => {
+    await loadPanel("/wallet");
+    expect(state.runtimeCalls).toBe(1);
+  });
+
+  it("a runtime that cannot be built refuses like a missing session (R16)", async () => {
+    state.runtimeFails = true;
+    const outcome = await loadPanel("/wallet");
+    expect(outcome).toMatchObject({ ok: false, redirectTo: "/login?next=%2Fwallet" });
+  });
+
   it("without a session redirects to the login with the path as next (bn and en)", async () => {
     state.session = null;
     expect(await loadPanel("/wallet")).toEqual({
