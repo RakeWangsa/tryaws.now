@@ -3,6 +3,8 @@ import { parseSnapshot } from "../pricing/index";
 import { DRAFT_MAX_BYTES, DRAFT_TTL_SECONDS, type DraftClaims } from "./types";
 
 const MIN_SECRET_BYTES = 32;
+// A rotation list: the signing key and at most two older ones. A longer list only widens what may forge a draft.
+const MAX_SECRETS = 3;
 const B64URL = /^[A-Za-z0-9_-]+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CLAIM_KEYS = ["v", "c", "fam", "pid", "region", "cfg", "snap", "iat", "exp"] as const;
@@ -11,11 +13,12 @@ const MAC_LENGTH = 43; // base64url of 32 bytes, no padding
 export type DraftVerdict =
   { ok: true; claims: DraftClaims } | { ok: false; reason: "malformed" | "signature" | "expired" };
 
-/** Refuses an empty list and any key under 32 bytes. The text holds nothing about the key. */
+/** Refuses an empty list, more than three keys and any key under 32 bytes. The text holds nothing about the key. */
 export function assertSecrets(secrets: readonly Uint8Array[]): void {
   if (secrets.length === 0 || secrets.some((s) => s.length < MIN_SECRET_BYTES)) {
     throw new TypeError("orders: the draft secret is missing or too short");
   }
+  if (secrets.length > MAX_SECRETS) throw new TypeError("orders: too many draft secrets");
 }
 
 function mac(secret: Uint8Array, payload: string): Buffer {

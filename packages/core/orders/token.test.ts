@@ -113,6 +113,14 @@ describe("signDraft and verifyDraft", () => {
     expect(verifyDraft([SECRET_2], token, at(IAT)).ok).toBe(false);
   });
 
+  it("(e2) assertSecrets refuses more than three keys (a rotation list stays short)", () => {
+    expect(() => assertSecrets([SECRET_1, SECRET_2, SECRET_1])).not.toThrow();
+    expect(() => assertSecrets([SECRET_1, SECRET_2, SECRET_1, SECRET_2])).toThrow(TypeError);
+    expect(() => verifyDraft([SECRET_1, SECRET_2, SECRET_1, SECRET_2], "a.b", at(IAT))).toThrow(
+      TypeError,
+    );
+  });
+
   it("(e) assertSecrets refuses an empty list and a short key", () => {
     expect(() => assertSecrets([])).toThrow("orders: the draft secret is missing or too short");
     expect(() => assertSecrets([new Uint8Array(31)])).toThrow(TypeError);
