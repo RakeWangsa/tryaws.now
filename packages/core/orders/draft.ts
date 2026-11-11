@@ -1,6 +1,6 @@
 import { customerRepos, readCatalogProduct } from "@tc/db";
 import { checkCapacity } from "../capacity/check";
-import type { OperationQueue, RunTx } from "../operations/index";
+import type { Logger, OperationQueue, RunTx } from "../operations/index";
 import { resolveProduct } from "../products/instance";
 import { quoteInForce } from "../rates/in-force";
 import type { Clock, Result } from "../types";
@@ -17,6 +17,8 @@ export interface OrdersDeps {
   readonly clock: Clock;
   readonly secrets: readonly Uint8Array[];
   readonly queue: OperationQueue;
+  /** Fixed-text structured events only; never a token, a key or a person (R14). */
+  readonly log?: Logger;
 }
 
 const FAMILY = /^[a-z][a-z_]{0,39}$/;

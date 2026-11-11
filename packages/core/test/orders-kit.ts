@@ -73,7 +73,7 @@ export interface Kit extends Buyer {
   /** Updates columns of the customers row as the owner (the session is not touched). */
   setCustomer(customerId: string, columns: Record<string, string>): Promise<void>;
   setFlag(state: "on" | "off" | "missing"): Promise<void>;
-  /** Inserts a rate that is in force one hour after START and moves the clock past it. */
+  /** Inserts a rate that is in force a minute after START and moves the clock just past it (inside the 30 minutes of a draft). */
   changeFxRate(rate: string): Promise<void>;
   newProduct(over?: Record<string, unknown>): Promise<string>;
   balance(customerId?: string): Promise<bigint>;
@@ -225,7 +225,7 @@ export async function makeKit(t: TempDatabaseHandle, options: KitOptions = {}): 
     },
     async changeFxRate(rate) {
       rateCounter += 1;
-      const effective = new Date(START.getTime() + 3_600_000 + rateCounter * 1000);
+      const effective = new Date(START.getTime() + 60_000 + rateCounter * 1000);
       await insertRow(t.pool, "fx_rates", {
         market: "BD",
         rate,
