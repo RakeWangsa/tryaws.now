@@ -14,6 +14,11 @@ const APPS = ["web", "admin"];
 const START_LIMIT_MS = 30_000;
 const REQUEST_LIMIT_MS = 20_000;
 const BUILD_LIMIT_MS = 600_000;
+// `localhost`, never `127.0.0.1`: Next 16.4.6 builds the origin of its router from `--hostname` as it
+// is, but `NextURL` turns every `127.x.x.x` into `localhost`, so the rewrite of the proxy (`/` to
+// `/bn`) looks like an external rewrite, is fetched again and is answered by the redirect of `/bn`
+// to `/` (a self-redirect). `localhost` and `0.0.0.0` are consistent (JOURNEY: WPU-T4 proxy fix).
+const HOSTNAME = "localhost";
 const root = resolve(import.meta.dirname, "..");
 
 // ---- children: every one is killed on exit, on error and on SIGINT ------------------------------
@@ -135,13 +140,13 @@ async function startServer(app, env) {
       "next",
       "start",
       "--hostname",
-      "127.0.0.1",
+      HOSTNAME,
       "--port",
       String(port),
     ],
     { PORT: String(port), ...env },
   );
-  const base = `http://127.0.0.1:${port}`;
+  const base = `http://${HOSTNAME}:${port}`;
   const until = Date.now() + START_LIMIT_MS;
   for (;;) {
     if (state.exited) {
