@@ -213,7 +213,13 @@ describe("what tc.css may contain (U1, U3, U4)", () => {
     // have their own tests. Later tasks (sections 5 to 7) add tc- rules and may name theme classes in the ancestors.
     const classes = new Set<string>();
     parse(tc).walkRules((rule) => {
-      if (rule.selector.includes(":focus-visible") || rule.selector.includes("html[lang=")) return;
+      // Block 7a (WPU-T4) mirrors the theme's `:hover` rule of the product dropdown for `:focus-within`.
+      if (
+        rule.selector.includes(":focus-visible") ||
+        rule.selector.includes("html[lang=") ||
+        rule.selector.includes(":focus-within")
+      )
+        return;
       for (const selector of rule.selectors) {
         const subject =
           selector

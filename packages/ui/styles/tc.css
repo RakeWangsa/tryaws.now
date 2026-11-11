@@ -377,3 +377,34 @@ div.tc-modal-open {
 }
 
 /* ===== 7. Shells (WPU-T4) ===== */
+
+/* ---- 7a. PublicShell and AuthShell (WPU-T4) ---- */
+.tc-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
+.tc-skip-link:focus {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2000;
+  padding: 0.5rem 1rem;
+  background-color: #ffc107;
+  color: #000;
+}
+/* Same declarations as the theme's :hover rule, so keyboard users open the dropdown too. */
+.nav-menu .main-menu > .menu-item-has-children:focus-within > .sub-menu {
+  top: 35px;
+  opacity: 1;
+  visibility: visible;
+}
+.tc-auth-lang {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.tc-footer-aws {
+  margin-top: 16px;
+  font-size: 0.8125rem;
+}
