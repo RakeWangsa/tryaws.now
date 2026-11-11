@@ -328,6 +328,15 @@ TASKS["WP2-T3"] = [
   repo,
 ];
 
+// WP4-T3: capacity. The race for the last slot (10.2) on its own line; the filter names a file, and
+// tests/repo/verify-cli.test.mjs asserts that the file exists, because passWithNoTests is on.
+const capacityRace = {
+  id: "capacity-race",
+  title: "10.2: two concurrent orders for the last slot: one succeeds, one gets the waitlist",
+  command: ["pnpm", "test", "--filter", "@tc/core", "capacity/race"],
+};
+TASKS["WP4-T3"] = [specSync, baselineSync, lint, typecheck, format, db, capacityRace, core, repo];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

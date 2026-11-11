@@ -101,3 +101,19 @@ export async function setResourceState(
        set state = ${state}, deleted_at = case when ${state}::text = 'destroyed' then now() else null end
      where id = ${resourceId}`);
 }
+
+// What the purchase does after reserveCapacity: the resource row, with the record in its config.
+// Run it as web_rw.
+export async function insertPurchasedResource(
+  tx: Tx,
+  input: {
+    resourceId: string;
+    customerId: string;
+    poolAccountId: string;
+    region: string;
+    config: Record<string, unknown>;
+  },
+): Promise<void> {
+  await tx.execute(sql`insert into resources (id, customer_id, family, pool_account_id, region, config)
+     values (${input.resourceId}, ${input.customerId}, 'linux_instance', ${input.poolAccountId}, ${input.region}, ${JSON.stringify(input.config)}::jsonb)`);
+}
