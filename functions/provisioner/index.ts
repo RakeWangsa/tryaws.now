@@ -12,6 +12,7 @@ import {
 } from "@tc/core";
 import { withTx } from "@tc/db";
 import { createAdapterRegistry } from "./adapters";
+import { backupAdapter, diskAdapter } from "./backup";
 import { linuxInstanceAdapter } from "./linux";
 import { composeHooks } from "./hooks";
 import { orderHooks } from "./order-hooks";
@@ -110,7 +111,11 @@ function buildDeps(): StepDeps {
     // The registry is empty until WP4-T5, and the guard and the other hooks come with WP5-T4 and
     // WP5-T5: until then every operation ends in needs_attention (R16). The failed hook of a create
     // is the automatic reversal of WP4-T4; a rejected create runs it too (reject.ts).
-    adapters: createAdapterRegistry([linuxInstanceAdapter({ vpcCidr: process.env.TC_VPC_CIDR })]),
+    adapters: createAdapterRegistry([
+      linuxInstanceAdapter({ vpcCidr: process.env.TC_VPC_CIDR }),
+      backupAdapter(),
+      diskAdapter(),
+    ]),
     // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
     destructiveGuard,
     hooks: composeHooks(orderHooks({ clock }), lifecycleHooks({ clock })),

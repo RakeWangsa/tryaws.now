@@ -1,6 +1,7 @@
-import { createLinuxInstanceAdapter, type LinuxInstanceDeps } from "@tc/aws";
+import { createLinuxInstanceAdapter, withBackups, type LinuxInstanceDeps } from "@tc/aws";
 import { readLaunchInputs, withTx } from "@tc/db";
 import type { ProductAdapter } from "@tc/aws";
+import { backupDeps } from "./backup";
 
 // Not in the catalog row (WP4-T5 open point 1): one blueprint for every Linux instance until the
 // catalog or the config carries it. VERIFY the id with GetBlueprints in tc-pool-dev.
@@ -30,5 +31,10 @@ export function linuxInstanceAdapter(wiring: LinuxWiring = {}): ProductAdapter<u
     vpcCidr: async () => wiring.vpcCidr ?? null,
     bootstrapMarker: async () => "absent",
   };
-  return createLinuxInstanceAdapter(deps) as ProductAdapter<unknown>;
+  // WP5-T1: automatic backups, restore to a new server, the final snapshot and the purge.
+  return withBackups(
+    createLinuxInstanceAdapter(deps),
+    backupDeps(),
+    deps,
+  ) as ProductAdapter<unknown>;
 }

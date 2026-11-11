@@ -127,6 +127,7 @@ export {
 } from "./seed/launch";
 export { readCatalogProduct } from "./repositories/catalog";
 export { readLaunchInputs, type LaunchInputs } from "./repositories/launch";
+export { ensureFinalBackup, listBackupsOf, markFinalBackup } from "./repositories/backups";
 export { compensationRepo } from "./repositories/compensation";
 export type { CompensationOrder, CompensationRepo } from "./repositories/compensation";
 export type { CatalogProduct } from "./repositories/catalog";
