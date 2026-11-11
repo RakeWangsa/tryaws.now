@@ -39,6 +39,7 @@ export interface KycActionDeps {
 
 export type KycError =
   | "unauthenticated"
+  | "forbidden"
   | "kyc_verified"
   | "kyc_pending"
   | "validation"
