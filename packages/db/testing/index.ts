@@ -30,5 +30,13 @@ export {
 } from "./cross-tenant";
 export { unscopedStatements, type RecordedStatement } from "./sql-audit";
 export { statementsWithInlinedIds } from "./sql-audit";
+// For tests only; production reaches these through adminRepos(...).operations (R10).
+export {
+  approveOperation,
+  retryOperation,
+  rejectOperation,
+  type AdminMessage,
+  type AdminOutcome,
+} from "../operations/admin";
 export { withCustomerRepos } from "./repos";
 export { auditRowsOf, type AuditRow } from "./repos";

@@ -51,6 +51,10 @@ it("the testing entry exports every helper of WP1-T2 that exists so far", () => 
       // Task 6: the repositories under a role, and the audit of ids written into SQL text
       "withCustomerRepos",
       "statementsWithInlinedIds",
+      // WP4-T2 Task 8: the decisions of an admin, for tests only (R10)
+      "approveOperation",
+      "retryOperation",
+      "rejectOperation",
     ]),
   );
 });
@@ -68,6 +72,9 @@ it("the helpers of Tasks 3 to 6 are functions, and the two ownership maps are da
     "unscopedStatements",
     "withCustomerRepos",
     "statementsWithInlinedIds",
+    "approveOperation",
+    "retryOperation",
+    "rejectOperation",
   ]) {
     expect(typeof (testing as Record<string, unknown>)[name], name).toBe("function");
   }
