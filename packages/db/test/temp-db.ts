@@ -39,18 +39,26 @@ export function maintenanceUrl(url: string): string {
   return withDatabase(url, "postgres");
 }
 
-const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const LOCAL_URL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const LOCAL_DRIVER_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 
-// The tests create and drop databases and create server-wide roles, so they refuse every server that
-// is not on this machine. The message holds the host, never the URL, so it cannot leak the password.
-export function assertLocalServer(url: string): void {
-  const host = parseUrl(url).hostname;
-  if (LOCAL_HOSTS.has(host)) return;
-  throw new Error(
+const refuseHost = (host: string) =>
+  new Error(
     `refusing to use PostgreSQL at ${host === "" ? "(no host)" : host}: the tests create and drop ` +
       "databases and roles, so they run only against a server on this machine " +
       "(127.0.0.1, localhost or ::1)",
   );
+
+// The tests create and drop databases and create server-wide roles, so they refuse every server that
+// is not on this machine. The URL's host is checked first; then the driver is asked which host it
+// will use (its own parser takes a `host` query parameter in place of the URL's host). Building a
+// client opens no connection. Another port is not refused: it is another server on this machine.
+// The message holds the host, never the URL, so it cannot leak the password.
+export function assertLocalServer(url: string): void {
+  const host = parseUrl(url).hostname;
+  if (!LOCAL_URL_HOSTS.has(host)) throw refuseHost(host);
+  const driverHost = String(new pg.Client({ connectionString: url }).host ?? "");
+  if (!LOCAL_DRIVER_HOSTS.has(driverHost)) throw refuseHost(driverHost);
 }
 
 const TEST_DATABASE = /^tc_test_(\d+)_[0-9a-f]{8}$/;

@@ -500,9 +500,12 @@ it.each(["web_rw", "admin_rw", "worker_rw"] as const)(
   },
 );
 
-// Section 3.3 of the specification names five tables that web_rw cannot write. The grant matrix also
-// keeps it out of two tables that only the admin panel writes. The list stands here on purpose and is
-// not read from grants.expected.json: a grant that arrives together with an edit of that file fails here.
+// Tables that web_rw only reads, or does not see at all. The list stands here on purpose and is not
+// read from grants.expected.json: a grant that arrives together with an edit of that file fails here.
+//   - section 3.3 of the specification: fx_rates, pricing_rules, feature_flags, admin_users, pool_accounts
+//   - written only by the admin panel: wallet_adjustments, abuse_cases, settings
+//   - written only by the functions: catalog_products, tlds, usage_records
+//   - written by no application role: markets
 const WEB_CANNOT_WRITE = [
   "fx_rates",
   "pricing_rules",
@@ -511,10 +514,15 @@ const WEB_CANNOT_WRITE = [
   "pool_accounts",
   "wallet_adjustments",
   "abuse_cases",
+  "settings",
+  "catalog_products",
+  "tlds",
+  "usage_records",
+  "markets",
 ] as const;
 
 it.each(WEB_CANNOT_WRITE)(
-  "web_rw cannot write the admin-owned table %s (acceptance of WP1-T1)",
+  "web_rw cannot write %s (acceptance of WP1-T1: the admin-owned tables, and every other table it only reads)",
   async (table) => {
     const { rows } = await t.pool.query(
       `select has_any_column_privilege('web_rw', 'public.' || quote_ident($1), 'INSERT') as can_insert,

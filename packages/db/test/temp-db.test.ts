@@ -149,6 +149,10 @@ it("assertLocalServer accepts 127.0.0.1, localhost and ::1", () => {
     "postgres://u:p@127.0.0.1:5432/x",
     "postgres://u:p@localhost/x",
     "postgres://u:p@[::1]:5432/x",
+    // another port is another server on this machine
+    "postgres://u:p@localhost:6543/x?port=5433",
+    "postgres://u:p@localhost/x?application_name=tests",
+    "postgres://u:p@localhost/x?hostaddr=10.0.0.5",
   ]) {
     expect(() => assertLocalServer(url)).not.toThrow();
   }
@@ -162,6 +166,10 @@ it("assertLocalServer refuses every other host and never prints the password", (
     "postgres://u:secret-pw@localhost.example.test/x",
     "postgres://u:secret-pw@LOCALHOST/x",
     "postgres:///x?password=secret-pw",
+    // the driver takes a host query parameter in place of the host of the URL
+    "postgres://u:secret-pw@localhost/x?host=db.example.test",
+    "postgres://u:secret-pw@127.0.0.1/x?host=10.0.0.5&port=6543",
+    "postgres://u:secret-pw@localhost/x?host=/var/run/postgresql",
   ];
   for (const url of urls) {
     let err: Error | undefined;
@@ -177,17 +185,19 @@ it("assertLocalServer refuses every other host and never prints the password", (
 });
 
 it("createTempDatabase refuses another host before it opens a connection", async () => {
-  const err = await createTempDatabase({
-    url: "postgres://u:secret-pw@db.example.test:5432/x",
-    migrate: false,
-  }).then(
-    () => null,
-    (e: Error) => e,
-  );
-  expect(err).toBeInstanceOf(Error);
-  expect(err!.message).toMatch(REFUSAL);
-  expect(err!.message).toContain("db.example.test");
-  expect(err!.message).not.toContain("secret-pw");
+  for (const url of [
+    "postgres://u:secret-pw@db.example.test:5432/x",
+    "postgres://u:secret-pw@localhost/x?host=db.example.test",
+  ]) {
+    const err = await createTempDatabase({ url, migrate: false }).then(
+      () => null,
+      (e: Error) => e,
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect(err!.message).toMatch(REFUSAL);
+    expect(err!.message).toContain("db.example.test");
+    expect(err!.message).not.toContain("secret-pw");
+  }
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -238,7 +248,10 @@ it("leftoverTestDatabases by default keeps a live process, takes an exited one, 
 it("unconnectedTestDatabases lists a test database only while nobody is connected", async () => {
   const a = await createTempDatabase({ migrate: false });
   try {
-    expect(await withMaintenance(unconnectedTestDatabases)).toContain(a.name);
+    // An autovacuum worker may be connected for an instant: wait instead of looking once.
+    await expect
+      .poll(() => withMaintenance(unconnectedTestDatabases), { timeout: 5000 })
+      .toContain(a.name);
     const c = await a.pool.connect();
     try {
       expect(await withMaintenance(unconnectedTestDatabases)).not.toContain(a.name);
@@ -273,7 +286,10 @@ it("the sweep keeps a database of this process", async () => {
 }, 60_000);
 
 it("the sweep refuses another host", async () => {
-  await expect(
-    sweepLeftoverTestDatabases("postgres://u:secret-pw@db.example.test/x"),
-  ).rejects.toThrow(REFUSAL);
+  for (const url of [
+    "postgres://u:secret-pw@db.example.test/x",
+    "postgres://u:secret-pw@localhost/x?host=db.example.test",
+  ]) {
+    await expect(sweepLeftoverTestDatabases(url)).rejects.toThrow(REFUSAL);
+  }
 });
