@@ -211,6 +211,24 @@ const ROWS: readonly Row[] = [
 ];
 
 const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
+const ACCOUNT_ID_IN_NAME = /\d{12}/;
+const REQUEST_ID = /^[A-Za-z0-9+/=_-]{1,128}$/;
+
+// A request id is a response header: any text can arrive there, so only its plain form is kept.
+function plainRequestId(value: unknown): string | null {
+  return typeof value === "string" && REQUEST_ID.test(value) ? value : null;
+}
+
+const COMMAND_SUFFIX = "Command";
+
+/** The command name without its suffix `Command`, or null when it has no such plain form. */
+export function operationOf(commandName: unknown): string | null {
+  return typeof commandName === "string" &&
+    commandName.endsWith(COMMAND_SUFFIX) &&
+    commandName.length > COMMAND_SUFFIX.length
+    ? commandName.slice(0, -COMMAND_SUFFIX.length)
+    : null;
+}
 
 function str(value: unknown): string | null {
   return typeof value === "string" ? value : null;
@@ -228,13 +246,18 @@ function readFacts(error: unknown): Facts {
     name: str(e["name"]),
     code: str(e["code"]),
     message: str(e["message"]),
-    status: typeof status === "number" && Number.isFinite(status) ? status : null,
-    requestId: str(m["requestId"]),
+    status:
+      typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599
+        ? status
+        : null,
+    requestId: plainRequestId(m["requestId"]),
   };
 }
 
 function safeName(value: string | null): string {
-  return value !== null && IDENTIFIER.test(value) ? value : "Unknown";
+  return value !== null && IDENTIFIER.test(value) && !ACCOUNT_ID_IN_NAME.test(value)
+    ? value
+    : "Unknown";
 }
 
 const NETWORK_ROW = ROWS.length - 1;
@@ -308,7 +331,7 @@ export function mapErrors(client: LightsailClient | STSClient): void {
       try {
         return await next(args);
       } catch (error) {
-        const operation = context.commandName?.replace(/Command$/, "") ?? null;
+        const operation = operationOf(context.commandName);
         throw toAwsError(error, operation);
       }
     },

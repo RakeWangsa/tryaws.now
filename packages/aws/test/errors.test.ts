@@ -2,7 +2,7 @@ import { inspect } from "node:util";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { CreateInstancesCommand, LightsailClient } from "@aws-sdk/client-lightsail";
 import { expect, it } from "vitest";
-import { AwsError, mapErrors, toAwsError, toLogFields } from "../errors";
+import { AwsError, mapErrors, operationOf, toAwsError, toLogFields } from "../errors";
 import { LEAK, RAW_ACCESS_DENIED as RAW, fakeAws, lightsailError, stsError } from "./fake-aws";
 
 const sdk = (name: string, status: number | undefined, message = "x") =>
@@ -309,4 +309,166 @@ it("a real STS client throws AwsError without the ARNs of the raw message", asyn
     operation: "AssumeRole",
   });
   expect(JSON.stringify(error) + String((error as Error).stack)).not.toMatch(LEAK);
+});
+
+it("keeps a request id and a status only in their plain form", () => {
+  const withMeta = (requestId: unknown, httpStatusCode: unknown) =>
+    toAwsError(
+      Object.assign(new Error("x"), {
+        name: "ServiceException",
+        $metadata: { requestId, httpStatusCode },
+      }),
+      "GetRegions",
+    );
+  expect(withMeta("0b1c2d3e-4f5a-6b7c-8d9e-0f1a2b3c4d5e", 500)).toMatchObject({
+    requestId: "0b1c2d3e-4f5a-6b7c-8d9e-0f1a2b3c4d5e",
+    httpStatus: 500,
+  });
+  for (const bad of [RAW, "a b", "x".repeat(129), "", 12345, null, { toString: () => "abc" }]) {
+    expect(withMeta(bad, 500).requestId).toBeNull();
+  }
+  for (const bad of [-1, 0, 99, 600, 1e9, 200.5, "500", null, Number.NaN]) {
+    expect(withMeta("abc", bad).httpStatus).toBeNull();
+  }
+  // a status that is not kept does not classify either: -1 is not "500 to 599"
+  expect(withMeta("abc", -1)).toMatchObject({
+    code: "upstream_unavailable",
+    awsErrorName: "ServiceException",
+  });
+  expect(
+    toAwsError(
+      Object.assign(new Error("x"), { name: "Weird", $metadata: { httpStatusCode: "503" } }),
+      null,
+    ),
+  ).toMatchObject({
+    code: "internal",
+    httpStatus: null,
+  });
+});
+
+it("a name that holds an account id is not stored", () => {
+  const e = toAwsError(
+    Object.assign(new Error("x"), { name: "x210987654321", $metadata: { httpStatusCode: 400 } }),
+    "GetRegions",
+  );
+  expect(e.awsErrorName).toBe("Unknown");
+  expect(JSON.stringify(e) + e.message).not.toMatch(/210987654321/);
+});
+
+it("the operation is the command name without its suffix, or null", () => {
+  expect(operationOf("CreateInstancesCommand")).toBe("CreateInstances");
+  for (const odd of ["Command", "", "GetRegions", undefined, null, 7, { replace: () => "x" }]) {
+    expect(operationOf(odd)).toBeNull();
+  }
+});
+
+it.each([
+  [
+    "quota phrase and 'in use' together",
+    sdk(
+      "InvalidInputException",
+      400,
+      "You have reached the maximum number of instances; some names are already in use",
+    ),
+    "capacity_full",
+    true,
+    true,
+  ],
+  ["invalid input with HTTP 429", sdk("InvalidInputException", 429), "rate_limited", true, false],
+  ["access denied with HTTP 503", sdk("AccessDeniedException", 503), "forbidden", true, false],
+  [
+    "service fault with a quota phrase",
+    sdk("ServiceException", 500, "Quota exceeded"),
+    "capacity_full",
+    true,
+    true,
+  ],
+  ["not found with HTTP 500", sdk("NotFoundException", 500), "not_found", true, false],
+  [
+    "a socket error that the SDK renamed",
+    Object.assign(new Error("socket"), { name: "TimeoutError", code: "ECONNRESET" }),
+    "upstream_unavailable",
+    true,
+    false,
+  ],
+])("when two rows match, the earlier one wins: %s", (_label, input, code, retryable, poolFull) => {
+  const e = toAwsError(input, "CreateInstances");
+  expect({ code: e.code, retryable: e.retryable, poolFull: e.poolFull }).toEqual({
+    code,
+    retryable,
+    poolFull,
+  });
+});
+
+it.each([
+  "InvalidInputException",
+  "ValidationError",
+  "ValidationException",
+  "MalformedHttpRequestException",
+  "RequestEntityTooLargeException",
+  "UnknownOperationException",
+  "MalformedPolicyDocument",
+  "MalformedPolicyDocumentException",
+  "PackedPolicyTooLarge",
+  "PackedPolicyTooLargeException",
+])("%s is the request's own fault: final, never retried", (name) => {
+  expect(toAwsError(sdk(name, 400), "CreateInstances")).toMatchObject({
+    code: "validation",
+    retryable: false,
+    poolFull: false,
+  });
+});
+
+it("only the ten names of row 4 are final", () => {
+  const every = [
+    "ThrottlingException",
+    "NotFoundException",
+    "ResourceNotFoundException",
+    "NoSuchEntity",
+    "OperationFailureException",
+    "AccessDeniedException",
+    "AccessDenied",
+    "NotAuthorized",
+    "UnauthorizedOperation",
+    "OptInRequired",
+    "RegionDisabledException",
+    "UnauthenticatedException",
+    "ExpiredTokenException",
+    "AccountSetupInProgressException",
+    "RegionSetupInProgressException",
+    "ServiceException",
+    "InternalFailure",
+    "ServiceUnavailable",
+    "TimeoutError",
+    "AbortError",
+    "SomethingNew",
+    "Error",
+  ];
+  for (const name of every)
+    expect(toAwsError(sdk(name, 400), "CreateInstances").retryable).toBe(true);
+});
+
+it.each([
+  ["ServiceQuotaExceededException", "x"],
+  ["QuotaExceededException", "x"],
+  ["InvalidInputException", "You have reached the maximum number of static IPs"],
+  ["OperationFailureException", "limit exceeded"],
+  ["ServiceException", "You have exceeded your limit of disks"],
+  ["InvalidInputException", "You have reached the limit"],
+])("%s with %j marks the pool as full", (name, message) => {
+  expect(toAwsError(sdk(name, 400, message), "CreateInstances")).toMatchObject({
+    code: "capacity_full",
+    retryable: true,
+    poolFull: true,
+  });
+});
+
+it("'already exists' is a conflict, like 'already in use'", () => {
+  expect(
+    toAwsError(sdk("InvalidInputException", 400, "The key pair already exists"), "CreateKeyPair"),
+  ).toMatchObject({
+    code: "conflict",
+    retryable: true,
+    poolFull: false,
+  });
 });
