@@ -34,6 +34,13 @@ export type {
 } from "./repositories/customer/orders";
 export { customerOperationKey } from "./repositories/customer/operations";
 export type {
+  InvoiceCursor,
+  InvoicePage,
+  InvoiceRow,
+  InvoicesRepo,
+  NewInvoice,
+} from "./repositories/customer/invoices";
+export type {
   StatementLine,
   StatementPage,
   WalletRepo,
