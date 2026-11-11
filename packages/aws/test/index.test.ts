@@ -6,7 +6,10 @@ it("exports exactly the public API and no credentials function", () => {
     "AwsError",
     "CALLER_ROLES",
     "LIGHTSAIL_REGIONS",
+    "QUEUE_URL_PATTERN",
     "createAwsAccess",
+    "createSqsClient",
+    "createSqsSend",
     "toAwsError",
     "toLogFields",
   ]);

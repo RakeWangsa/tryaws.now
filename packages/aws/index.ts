@@ -7,6 +7,7 @@ export type {
   ResourceView,
 } from "./adapters/types";
 export { AwsError, toAwsError, toLogFields, type AwsLogFields, type LocalReason } from "./errors";
+export { QUEUE_URL_PATTERN, createSqsClient, createSqsSend, type SqsLike } from "./queue";
 export {
   CALLER_ROLES,
   LIGHTSAIL_REGIONS,
