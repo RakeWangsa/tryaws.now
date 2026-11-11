@@ -101,8 +101,14 @@ describe("metrics", () => {
 
   it("answers not_found, not validation, for a bad range on a resource of another customer", async () => {
     const { reader } = setup();
-    expect(await reader.metrics(RESOURCE_B, A, "1y")).toEqual({ ok: false, error: "not_found" });
-    expect(await reader.metrics(RESOURCE_A, A, "1y")).toEqual({ ok: false, error: "validation" });
+    expect(await reader.metrics(RESOURCE_B, A, "1y" as never)).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+    expect(await reader.metrics(RESOURCE_A, A, "1y" as never)).toEqual({
+      ok: false,
+      error: "validation",
+    });
     expect(await reader.metrics(RESOURCE_A, A, undefined as never)).toEqual({
       ok: false,
       error: "validation",
