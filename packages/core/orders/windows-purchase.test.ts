@@ -84,3 +84,60 @@ describe("selling a Windows plan: the same single purchase transaction", () => {
     expect(r.ok).toBe(false);
   });
 });
+
+// The trusted tier allows 20 instances: Linux and Windows count together.
+async function live(kit: Kit, family: string, count: number): Promise<void> {
+  for (let i = 0; i < count; i += 1) {
+    await t.pool.query(
+      `insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)
+       values (gen_random_uuid(), $1, $2, $3, $4, $5, '{}'::jsonb)`,
+      [kit.customerId, family, kit.productId, kit.poolAccountId, REGION],
+    );
+  }
+}
+
+describe("the instance limit counts every instance family together", () => {
+  it("refuses a Windows draft at the Linux limit and a Linux draft at the Windows limit", async () => {
+    const kit = await makeKit(t, { riskTier: "trusted" });
+    const win = await windowsProduct(kit);
+    await windowsFlag(kit, true);
+    await live(kit, "linux_instance", 20);
+    expect(await createDraft(kit.deps, kit.session, input(kit, win))).toMatchObject({
+      ok: false,
+      error: "limit_reached",
+    });
+    const other = await makeKit(t, { riskTier: "trusted" });
+    const win2 = await windowsProduct(other);
+    await live(other, "windows_instance", 20);
+    expect((await createDraft(other.deps, other.session, other.input())).ok).toBe(false);
+    expect((await createDraft(other.deps, other.session, input(other, win2))).ok).toBe(false);
+  });
+
+  it("counts one of each as two: 19 live plus a Windows order is allowed, 20 is not", async () => {
+    const kit = await makeKit(t, { riskTier: "trusted" });
+    const win = await windowsProduct(kit);
+    await windowsFlag(kit, true);
+    await live(kit, "linux_instance", 18);
+    await live(kit, "windows_instance", 1);
+    expect((await createDraft(kit.deps, kit.session, input(kit, win))).ok).toBe(true);
+    await live(kit, "linux_instance", 1);
+    expect((await createDraft(kit.deps, kit.session, input(kit, win))).ok).toBe(false);
+  });
+
+  it("re-checks at the purchase: a draft taken below the limit is refused once the limit is reached", async () => {
+    const kit = await makeKit(t, { riskTier: "trusted" });
+    const win = await windowsProduct(kit);
+    await windowsFlag(kit, true);
+    await live(kit, "linux_instance", 19);
+    const drafted = await createDraft(kit.deps, kit.session, input(kit, win));
+    if (!drafted.ok) throw new Error("the draft was refused: " + drafted.error);
+    await live(kit, "linux_instance", 1);
+    const before = await kit.balance();
+    const placed = await makeOrders(kit.deps).placeOrder(kit.session, {
+      token: drafted.value.token,
+      idempotencyKey: "k" + crypto.randomUUID().replaceAll("-", ""),
+    });
+    expect(placed.ok).toBe(false);
+    expect(await kit.balance()).toBe(before);
+  });
+});
