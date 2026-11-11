@@ -254,6 +254,18 @@ const WP3_T3 = [
 ];
 TASKS["WP3-T3"] = WP3_T3;
 
+// WP3-T5: invoices and receipts. What a machine can prove: the numbering, the invoice lines, the HTML
+// (packages/core/invoices), the tenant-scoped repository with its cross-tenant cases (the db suite) and the
+// invoice-renderer handler behind its PDF port. The PDF layout against the sample and the shaping of Bengali
+// text in the real engine are manual VERIFY steps recorded in JOURNEY.md.
+const invoiceRenderer = {
+  id: "invoice-renderer",
+  title: "functions/invoice-renderer: handler, fake PDF engine, boundaries",
+  command: ["pnpm", "test", "--filter", "@tc/fn-invoice-renderer", "--no-passWithNoTests"],
+};
+const WP3_T5 = [specSync, baselineSync, lint, typecheck, format, core, db, invoiceRenderer, repo];
+TASKS["WP3-T5"] = WP3_T5;
+
 // WPU-T2 and WPU-T3 (two backlog rows) share one proof: the component kit, its messages and the guard tests.
 const uiKit = {
   id: "ui-kit",

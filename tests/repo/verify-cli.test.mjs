@@ -97,6 +97,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP3-T1",
     "WP3-T2",
     "WP3-T3",
+    "WP3-T5",
     "WP4-T1",
     "WP4-T2",
     "WP4-T3",
@@ -260,6 +261,30 @@ it("task WP3-T2 is proven by the checks of WP1-T1, core, db, the EPS suite, the 
     "packages/db/test/payments-repo.test.ts",
     "packages/db/test/payments-system.test.ts",
     "packages/db/test/cross-tenant.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP3-T5 is proven by the shared checks, the core and db suites and the invoice-renderer suite", () => {
+  expect(TASKS["WP3-T5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "functions/invoice-renderer/handler.test.ts",
+    "functions/invoice-renderer/boundaries.test.ts",
+    "packages/core/invoices/invoices.test.ts",
+    "packages/core/invoices/render.test.ts",
+    "packages/db/test/invoices-repo.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
