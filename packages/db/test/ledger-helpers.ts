@@ -53,3 +53,15 @@ export function holdOpen<T>(
   result.catch(() => {});
   return { result, reached: reached.wait, release: release.open };
 }
+
+/** Switches the two deferred balance triggers off for `body` and on again in `finally` (table owner only). */
+export async function withTriggersOff(q: Queryable, body: () => Promise<void>) {
+  await q.query("alter table ledger_entries disable trigger ledger_entries_balanced");
+  await q.query("alter table ledger_transactions disable trigger ledger_transactions_balanced");
+  try {
+    await body();
+  } finally {
+    await q.query("alter table ledger_entries enable trigger ledger_entries_balanced");
+    await q.query("alter table ledger_transactions enable trigger ledger_transactions_balanced");
+  }
+}
