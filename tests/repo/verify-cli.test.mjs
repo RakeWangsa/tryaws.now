@@ -86,7 +86,21 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
   // every other key of TASKS is unchanged
-  expect(Object.keys(TASKS).sort()).toEqual(["WP0-T1", "WP1-T1", "WP1-T2", "WP4-T1"]);
+  expect(Object.keys(TASKS).sort()).toEqual(["WP0-T1", "WP1-T1", "WP1-T2", "WP4-T1", "WPU-T1"]);
+});
+
+it("task WPU-T1 is proven by lint, types, format, the ui tests, the two theme checks and the repository tests", () => {
+  expect(TASKS["WPU-T1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["theme-import", "pnpm theme:sync --stage import --check"],
+    ["theme-publish", "pnpm theme:sync --stage publish"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
 });
 
 it("task WP1-T2 is proven by the checks of WP1-T1, the cross-tenant proof and the tests of @tc/core", () => {

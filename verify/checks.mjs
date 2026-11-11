@@ -62,7 +62,40 @@ const WP1_T1 = [specSync, baselineSync, lint, typecheck, format, db, repo];
 const WP4_T1 = [specSync, baselineSync, lint, typecheck, format, aws, core, repo];
 const WP1_T2 = [specSync, baselineSync, lint, typecheck, format, db, crossTenant, core, repo];
 
-export const TASKS = { "WP0-T1": WP0_T1, "WP1-T1": WP1_T1, "WP1-T2": WP1_T2, "WP4-T1": WP4_T1 };
+const ui = {
+  id: "ui",
+  title: "packages/ui: theme sync, fonts, tc.css and the build-output scan",
+  command: ["pnpm", "test", "--filter", "@tc/ui"],
+};
+const themeImport = {
+  id: "theme-import",
+  title: "packages/ui/theme/assets is the 16.3 allow-list of the mockup",
+  command: ["pnpm", "theme:sync", "--stage", "import", "--check"],
+};
+const themePublish = {
+  id: "theme-publish",
+  title: "public/theme of both apps is built from it and holds no file from assets/js",
+  command: ["pnpm", "theme:sync", "--stage", "publish"],
+};
+const WPU_T1 = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  ui,
+  themeImport,
+  themePublish,
+  repo,
+];
+
+export const TASKS = {
+  "WP0-T1": WP0_T1,
+  "WP1-T1": WP1_T1,
+  "WP1-T2": WP1_T2,
+  "WP4-T1": WP4_T1,
+  "WPU-T1": WPU_T1,
+};
 
 export const GATES = {
   M0: WP0_T1,
