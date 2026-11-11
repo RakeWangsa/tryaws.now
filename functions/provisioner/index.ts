@@ -10,6 +10,8 @@ import {
 } from "@tc/core";
 import { withTx } from "@tc/db";
 import { createAdapterRegistry } from "./adapters";
+import { composeHooks } from "./hooks";
+import { orderHooks } from "./order-hooks";
 import { runStep } from "./step";
 import type { RunOutcome, StepDeps } from "./types";
 
@@ -97,13 +99,16 @@ export function readConfig(env: Record<string, string | undefined>): Provisioner
 
 function buildDeps(): StepDeps {
   const config = readConfig(process.env);
+  const clock = { now: () => new Date() };
   return {
     runTx: withTx,
-    clock: { now: () => new Date() },
+    clock,
     queue: createFifoQueue(createSqsSend(createSqsClient(config.region), config.queueUrl)),
-    // The registry is empty until WP4-T5, and the guard and the hooks come with WP5-T4, WP5-T5 and
-    // WP4-T4: until then every operation ends in needs_attention (R16).
+    // The registry is empty until WP4-T5, and the guard and the other hooks come with WP5-T4 and
+    // WP5-T5: until then every operation ends in needs_attention (R16). The failed hook of a create
+    // is the automatic reversal of WP4-T4; a rejected create runs it too (reject.ts).
     adapters: createAdapterRegistry([]),
+    hooks: composeHooks(orderHooks({ clock })),
     access: createAwsAccess({ caller: "provisioner" }),
     env: config.env,
     log: (e: LogEvent) => console.log(JSON.stringify(e)),

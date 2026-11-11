@@ -16,6 +16,8 @@ import { postTransaction } from "../ledger/post";
 import { createManualClock } from "../operations/manual-clock";
 import { createMemoryQueue, type MemoryQueue } from "../operations/queue";
 import { createDraft, type OrdersDeps } from "../orders/draft";
+import { childId } from "../orders/ids";
+import { makeOrders } from "../orders/place";
 import type { OrderDraft, OrderSession } from "../orders/types";
 import type { Clock, Result } from "../types";
 import { cells, P1, REGION } from "./capacity-helpers";
@@ -287,4 +289,23 @@ export async function countRows(
 ): Promise<number> {
   const r = await t.pool.query<{ n: number }>(`select count(*)::int as n from ${table}`);
   return r.rows[0]?.n ?? 0;
+}
+
+/** A paid order of the buyer (the kit's own by default), made through placeOrder. */
+export async function placeOne(
+  kit: Kit,
+  buyer: Buyer = kit,
+): Promise<{ orderId: string; resourceId: string; token: string; clientKey: string }> {
+  const { token } = await kit.draft({}, buyer);
+  const clientKey = "k" + crypto.randomUUID().replaceAll("-", "");
+  const placed = unwrap(
+    await makeOrders(kit.deps).placeOrder(buyer.session, { token, idempotencyKey: clientKey }),
+    "placeOrder",
+  );
+  return {
+    orderId: placed.orderId,
+    resourceId: childId(placed.orderId, "resource"),
+    token,
+    clientKey,
+  };
 }

@@ -111,6 +111,8 @@ export {
   type SeedResult,
 } from "./seed/launch";
 export { readCatalogProduct } from "./repositories/catalog";
+export { compensationRepo } from "./repositories/compensation";
+export type { CompensationOrder, CompensationRepo } from "./repositories/compensation";
 export type { CatalogProduct } from "./repositories/catalog";
 export * from "./capacity-keys";
 export { capacityRepo } from "./repositories/capacity";
