@@ -1,3 +1,6 @@
+import type { CatalogProduct } from "@tc/db";
+import type { CapacityNeed } from "../capacity/types";
+import type { ProductFacts } from "../orders/gates";
 import type { Result } from "../types";
 
 export interface BucketConfig {
@@ -48,4 +51,51 @@ export function parseBucketAccess(raw: unknown): BucketAccess | null {
   const { mode } = raw;
   if (mode !== "private" && mode !== "public") return null;
   return { getObject: mode, allowPublicOverrides: false };
+}
+
+export interface ResolvedBucket {
+  readonly family: "bucket";
+  readonly productId: string;
+  readonly region: string;
+  readonly featureFlag: string;
+  readonly awsPriceUsd: string;
+  readonly facts: ProductFacts;
+  readonly needs: readonly CapacityNeed[];
+  readonly resourceConfig: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * A bucket row of the catalog (its `aws_id` is the Lightsail bundle id, read again by the adapter).
+ * Fails closed (R16). The config holds three fields and no access setting: a new bucket is private
+ * and the adapter sets it so (R11, R12).
+ */
+export function resolveBucket(
+  config: BucketConfig,
+  product: CatalogProduct,
+): Result<ResolvedBucket> {
+  if (
+    product.id !== config.productId ||
+    product.family !== "bucket" ||
+    !product.active ||
+    product.region !== config.region
+  ) {
+    return { ok: false, error: "validation", fields: { productId: "unavailable" } };
+  }
+  return {
+    ok: true,
+    value: {
+      family: "bucket",
+      productId: product.id,
+      region: product.region,
+      featureFlag: product.featureFlag,
+      awsPriceUsd: product.awsPriceUsd,
+      facts: { bundleUsd: product.awsPriceUsd, windows: false, staticIps: 0 },
+      needs: [{ quotaCode: "bucket", amount: 1 }],
+      resourceConfig: {
+        productId: config.productId,
+        region: config.region,
+        displayName: config.displayName,
+      },
+    },
+  };
 }

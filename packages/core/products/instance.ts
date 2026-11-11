@@ -2,6 +2,8 @@ import type { CatalogProduct } from "@tc/db";
 import type { CapacityNeed } from "../capacity/types";
 import type { ProductFacts } from "../orders/gates";
 import type { Result } from "../types";
+import { parseBucketConfig, resolveBucket } from "./bucket";
+import { parseContainerConfig, resolveContainer } from "./container";
 import { parseDatabaseConfig, resolveDatabase } from "./database";
 
 export interface InstanceConfig {
@@ -13,7 +15,14 @@ export interface InstanceConfig {
 }
 
 export interface ResolvedProduct {
-  readonly family: "linux_instance" | "windows_instance" | "database" | "load_balancer" | "cdn";
+  readonly family:
+    | "linux_instance"
+    | "windows_instance"
+    | "database"
+    | "load_balancer"
+    | "cdn"
+    | "bucket"
+    | "container_service";
   readonly productId: string;
   readonly region: string;
   readonly featureFlag: string;
@@ -149,6 +158,20 @@ export async function resolveProduct(
       const product = await load(config.value.productId);
       if (product === null) return unavailable();
       return resolveDatabase(config.value, product);
+    }
+    case "bucket": {
+      const config = parseBucketConfig(rawConfig);
+      if (!config.ok) return config;
+      const product = await load(config.value.productId);
+      if (product === null) return unavailable();
+      return resolveBucket(config.value, product);
+    }
+    case "container_service": {
+      const config = parseContainerConfig(rawConfig);
+      if (!config.ok) return config;
+      const product = await load(config.value.productId);
+      if (product === null) return unavailable();
+      return resolveContainer(config.value, product);
     }
     default:
       return { ok: false, error: "validation", fields: { family: "unsupported" } };
