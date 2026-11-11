@@ -1,9 +1,15 @@
-import { inspect } from "node:util";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { CreateInstancesCommand, LightsailClient } from "@aws-sdk/client-lightsail";
 import { expect, it } from "vitest";
 import { AwsError, mapErrors, operationOf, toAwsError, toLogFields } from "../errors";
-import { LEAK, RAW_ACCESS_DENIED as RAW, fakeAws, lightsailError, stsError } from "./fake-aws";
+import {
+  LEAK,
+  RAW_ACCESS_DENIED as RAW,
+  expectNoLeak,
+  fakeAws,
+  lightsailError,
+  stsError,
+} from "./fake-aws";
 
 const sdk = (name: string, status: number | undefined, message = "x") =>
   Object.assign(new Error(message), {
@@ -72,10 +78,10 @@ it.each([
     "RegionSetupInProgressException",
   ],
   [
-    "invalid input",
+    "invalid input (Lightsail's generic 400: it may be a state conflict, so it is not final)",
     sdk("InvalidInputException", 400, "The blueprint is not valid"),
     "validation",
-    false,
+    true,
     false,
     "InvalidInputException",
   ],
@@ -201,25 +207,21 @@ it("keeps the request id and status, and writes a fixed message without AWS text
     requestId: "req-1",
     operation: "AssumeRole",
   });
-  for (const text of [
-    e.message,
-    String(e.stack),
-    JSON.stringify(e),
-    inspect(e, { depth: 5 }),
-    JSON.stringify(toLogFields(e)),
-  ]) {
-    expect(text).not.toMatch(LEAK);
-  }
+  expectNoLeak(e);
+  expectNoLeak(toLogFields(e));
+  expect(e.message).not.toMatch(LEAK);
   expect("cause" in e).toBe(false);
 });
 
-it("the log fields are exactly these eight", () => {
+it("the log fields are exactly these ten", () => {
   expect(
     Object.keys(toLogFields(toAwsError(sdk("ThrottlingException", 400), "GetRegions"))).sort(),
   ).toEqual([
     "awsErrorName",
     "errorCode",
     "httpStatus",
+    "mayHaveActed",
+    "nodeCode",
     "operation",
     "poolFull",
     "reason",
@@ -249,8 +251,11 @@ it("never throws, whatever it is given", () => {
     retryable: true,
     poolFull: false,
     awsErrorName: "Unknown",
+    mayHaveActed: true,
   });
-  expect(JSON.stringify(e) + String(e.stack)).not.toMatch(LEAK);
+  expectNoLeak(e);
+  // in the credentials step nothing of the caller's request was sent
+  expect(toAwsError(hostile, "AssumeRole")).toMatchObject({ retryable: true, mayHaveActed: false });
 });
 
 it("a real Lightsail client throws AwsError after the SDK has finished, named by the command", async () => {
@@ -308,7 +313,7 @@ it("a real STS client throws AwsError without the ARNs of the raw message", asyn
     awsErrorName: "AccessDenied",
     operation: "AssumeRole",
   });
-  expect(JSON.stringify(error) + String((error as Error).stack)).not.toMatch(LEAK);
+  expectNoLeak(error);
 });
 
 it("keeps a request id and a status only in their plain form", () => {
@@ -401,7 +406,6 @@ it.each([
 });
 
 it.each([
-  "InvalidInputException",
   "ValidationError",
   "ValidationException",
   "MalformedHttpRequestException",
@@ -419,7 +423,7 @@ it.each([
   });
 });
 
-it("only the ten names of row 4 are final", () => {
+it("only the nine names of row 4 are final", () => {
   const every = [
     "ThrottlingException",
     "NotFoundException",
@@ -443,9 +447,18 @@ it("only the ten names of row 4 are final", () => {
     "AbortError",
     "SomethingNew",
     "Error",
+    "InvalidInputException",
   ];
   for (const name of every)
     expect(toAwsError(sdk(name, 400), "CreateInstances").retryable).toBe(true);
+});
+
+it("InvalidInputException keeps the code validation but may be repeated: the real text is not known (W28)", () => {
+  for (const message of ["x", "The blueprint is not valid", "Some text no regex knows"]) {
+    expect(toAwsError(sdk("InvalidInputException", 400, message), "CreateInstances")).toMatchObject(
+      { code: "validation", retryable: true, poolFull: false },
+    );
+  }
 });
 
 it.each([
@@ -470,5 +483,216 @@ it("'already exists' is a conflict, like 'already in use'", () => {
     code: "conflict",
     retryable: true,
     poolFull: false,
+  });
+});
+// W29: one row per case. mayHaveActed is true when AWS may already have acted on the request.
+it.each([
+  [
+    "throttling (AWS does not run a throttled request)",
+    sdk("ThrottlingException", 400),
+    false,
+    null,
+  ],
+  ["HTTP 429 of an unknown name", sdk("SlowDownPlease", 429), false, null],
+  ["a modelled 4xx refusal (NotFound)", sdk("NotFoundException", 400), false, null],
+  ["a modelled 4xx refusal (AccessDenied)", sdk("AccessDeniedException", 403), false, null],
+  ["a modelled 4xx refusal (invalid input)", sdk("InvalidInputException", 400), false, null],
+  ["a quota refusal", sdk("ServiceQuotaExceededException", 400), false, null],
+  ["a name already in use", sdk("InvalidInputException", 400, "already in use"), false, null],
+  ["account setup in progress", sdk("AccountSetupInProgressException", 400), false, null],
+  ["an unauthenticated refusal", sdk("ExpiredTokenException", 403), false, null],
+  ["HTTP 500", sdk("ServiceException", 500), true, null],
+  ["HTTP 503", sdk("ServiceUnavailable", 503), true, null],
+  ["HTTP 502 of an unknown name", sdk("Weird", 502), true, null],
+  ["a modelled name with HTTP 503", sdk("AccessDeniedException", 503), true, null],
+  ["a 2xx answer whose body could not be read", sdk("SyntaxError", 200), true, null],
+  ["the request time-out", Object.assign(new Error("t"), { name: "TimeoutError" }), true, null],
+  [
+    "the connect time-out (it looks like the request time-out)",
+    Object.assign(new Error("t"), { name: "TimeoutError", code: "ETIMEDOUT" }),
+    true,
+    "ETIMEDOUT",
+  ],
+  ["abort", Object.assign(new Error("a"), { name: "AbortError" }), true, null],
+  ["ECONNRESET", net("ECONNRESET"), true, "ECONNRESET"],
+  ["EPIPE", net("EPIPE"), true, "EPIPE"],
+  ["ETIMEDOUT", net("ETIMEDOUT"), true, "ETIMEDOUT"],
+  ["ECONNREFUSED (nothing was sent)", net("ECONNREFUSED"), false, "ECONNREFUSED"],
+  ["ENOTFOUND (nothing was sent)", net("ENOTFOUND"), false, "ENOTFOUND"],
+  ["EAI_AGAIN (nothing was sent)", net("EAI_AGAIN"), false, "EAI_AGAIN"],
+  ["ENETUNREACH (nothing was sent)", net("ENETUNREACH"), false, "ENETUNREACH"],
+  ["EHOSTUNREACH (nothing was sent)", net("EHOSTUNREACH"), false, "EHOSTUNREACH"],
+  [
+    "the SDK's time-out that hides a Node code",
+    Object.assign(new Error("s"), { name: "TimeoutError", code: "ECONNRESET" }),
+    true,
+    "ECONNRESET",
+  ],
+  ["an unknown error (when unsure, assume it acted)", new Error("boom"), true, null],
+  ["a value that is not an error", "boom", true, null],
+])("mayHaveActed and nodeCode: %s", (_label, input, mayHaveActed, nodeCode) => {
+  const e = toAwsError(input, "CreateInstances");
+  expect({ mayHaveActed: e.mayHaveActed, nodeCode: e.nodeCode }).toEqual({
+    mayHaveActed,
+    nodeCode,
+  });
+  expect(toLogFields(e)).toMatchObject({ mayHaveActed, nodeCode });
+});
+
+it("an error of the credentials step never says that AWS acted, whatever the HTTP status", () => {
+  for (const input of [sdk("ServiceException", 500), net("ECONNRESET"), new Error("x")]) {
+    expect(toAwsError(input, "AssumeRole").mayHaveActed).toBe(false);
+  }
+});
+
+it("every error made by this package itself says that AWS did not act", () => {
+  const local = new AwsError({
+    code: "forbidden",
+    retryable: true,
+    reason: "role_not_allowed",
+  });
+  expect({ a: local.mayHaveActed, n: local.nodeCode }).toEqual({
+    a: false,
+    n: null,
+  });
+});
+
+// W32: nothing from the credentials step is final.
+it.each([
+  ["STS ValidationError", sdk("ValidationError", 400)],
+  ["MalformedPolicyDocument", sdk("MalformedPolicyDocument", 400)],
+  ["PackedPolicyTooLarge", sdk("PackedPolicyTooLarge", 400)],
+  ["InvalidInputException", sdk("InvalidInputException", 400)],
+])("%s from AssumeRole stays retryable (a platform fault waits for an admin)", (_label, input) => {
+  expect(toAwsError(input, "AssumeRole")).toMatchObject({
+    code: "validation",
+    retryable: true,
+  });
+});
+
+it("the same STS names stay final when a Lightsail call returns them", () => {
+  expect(toAwsError(sdk("ValidationError", 400), "CreateInstances").retryable).toBe(false);
+});
+
+// W37: every listed error name with a status that does not decide.
+it.each([
+  ["RegionDisabledException", "forbidden"],
+  ["NotAuthorized", "forbidden"],
+  ["UnauthorizedOperation", "forbidden"],
+  ["ResourceNotFoundException", "not_found"],
+  ["NoSuchEntity", "not_found"],
+  ["ExpiredToken", "unauthenticated"],
+  ["RequestExpired", "unauthenticated"],
+  ["RequestLimitExceeded", "rate_limited"],
+  ["LimitExceededException", "rate_limited"],
+  ["TooManyRequestsException", "rate_limited"],
+  ["InternalServerError", "upstream_unavailable"],
+  ["InternalServerErrorException", "upstream_unavailable"],
+  ["ServiceUnavailableException", "upstream_unavailable"],
+  ["RequestTimeout", "upstream_unavailable"],
+  ["RequestTimeoutException", "upstream_unavailable"],
+  ["RequestAbortedException", "upstream_unavailable"],
+])("the name %s maps to %s whatever the HTTP status says (400)", (name, code) => {
+  expect(toAwsError(sdk(name, 400), "CreateInstances").code).toBe(code);
+});
+
+it("a refused connection maps to upstream_unavailable and is named by its code", () => {
+  expect(toAwsError(net("ECONNREFUSED"), "CreateInstances")).toMatchObject({
+    code: "upstream_unavailable",
+    awsErrorName: "ECONNREFUSED",
+  });
+});
+
+it("toLogFields carries the values of the error", () => {
+  const throttled = toAwsError(sdk("ThrottlingException", 400), "CreateInstances");
+  expect(toLogFields(throttled)).toEqual({
+    errorCode: "rate_limited",
+    awsErrorName: "ThrottlingException",
+    reason: null,
+    operation: "CreateInstances",
+    retryable: true,
+    poolFull: false,
+    httpStatus: 400,
+    requestId: "req-1",
+    mayHaveActed: false,
+    nodeCode: null,
+  });
+  expect(
+    toLogFields(toAwsError(sdk("ServiceQuotaExceededException", 400), "CreateInstances")),
+  ).toMatchObject({
+    errorCode: "capacity_full",
+    retryable: true,
+    poolFull: true,
+  });
+  expect(toLogFields(toAwsError(sdk("ValidationException", 400), "CreateInstances"))).toMatchObject(
+    { errorCode: "validation", retryable: false },
+  );
+});
+
+// W33: the error object itself.
+it("an AwsError has exactly these own keys and is frozen", () => {
+  const e = toAwsError(sdk("ThrottlingException", 400), "GetRegions");
+  expect(Reflect.ownKeys(e).map(String).sort()).toEqual([
+    "awsErrorName",
+    "code",
+    "httpStatus",
+    "mayHaveActed",
+    "message",
+    "name",
+    "nodeCode",
+    "operation",
+    "poolFull",
+    "reason",
+    "requestId",
+    "retryable",
+    "stack",
+  ]);
+  expect(Object.isFrozen(e)).toBe(true);
+  expect(() => {
+    (e as { code: string }).code = "ok";
+  }).toThrow(TypeError);
+});
+
+it.each([
+  [
+    "awsErrorName with an account id",
+    { awsErrorName: "Role210987654321" },
+    "awsErrorName",
+    "Unknown",
+  ],
+  ["awsErrorName with a space", { awsErrorName: "arn: x" }, "awsErrorName", "Unknown"],
+  ["awsErrorName that is too long", { awsErrorName: "A".repeat(65) }, "awsErrorName", "Unknown"],
+  ["a requestId with text", { requestId: "User: arn:aws:sts::1" }, "requestId", null],
+  ["a requestId that is too long", { requestId: "a".repeat(129) }, "requestId", null],
+  ["an operation with a space", { operation: "Create Instances" }, "operation", null],
+  ["an operation that holds an ARN", { operation: "arn:aws:iam::210987654321" }, "operation", null],
+  ["an operation in lower case", { operation: "createInstances" }, "operation", null],
+  ["a nodeCode with text", { nodeCode: "connect to 210987654321" }, "nodeCode", null],
+  ["a reason that is not one of ours", { reason: "arn:aws:x" as never }, "reason", null],
+  ["an httpStatus out of range", { httpStatus: 42 }, "httpStatus", null],
+])("the constructor keeps only the plain form: %s", (_label, init, field, expected) => {
+  const e = new AwsError({ code: "internal", retryable: true, ...init });
+  expect(e[field as keyof AwsError]).toBe(expected);
+  expectNoLeak(e);
+});
+
+it("the constructor keeps plain values as they are", () => {
+  const e = new AwsError({
+    code: "rate_limited",
+    retryable: true,
+    awsErrorName: "ThrottlingException",
+    requestId: "0b1c2d3e-4f5a",
+    operation: "CreateInstances",
+    httpStatus: 400,
+    mayHaveActed: true,
+    nodeCode: "ECONNRESET",
+  });
+  expect(e).toMatchObject({
+    awsErrorName: "ThrottlingException",
+    requestId: "0b1c2d3e-4f5a",
+    operation: "CreateInstances",
+    httpStatus: 400,
+    mayHaveActed: true,
+    nodeCode: "ECONNRESET",
   });
 });

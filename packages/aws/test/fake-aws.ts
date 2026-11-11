@@ -1,4 +1,6 @@
+import { inspect } from "node:util";
 import { Readable } from "node:stream";
+import { expect } from "vitest";
 import type { AwsRequestHandler } from "../types";
 import { isNetworkGuardInstalled } from "./network-guard";
 
@@ -39,6 +41,49 @@ export const RAW_ACCESS_DENIED =
   "User: arn:aws:sts::111111111111:assumed-role/tc-provisioner/s is not authorized to perform: sts:AssumeRole on resource: arn:aws:iam::210987654321:role/TcProvisioner";
 
 export const LEAK = /arn:|111111111111|210987654321|not authorized/;
+
+/** Every value a test plants that must never come out of an error: ids, ExternalId, secrets. */
+export const PLANTED = [
+  "111111111111",
+  "210987654321",
+  "123456789012",
+  "tc-ext-7f3a9c",
+  "tc-ext-11aa22",
+  "tc-ext-rotated",
+  ASSUMED.accessKeyId,
+  ASSUMED.secretAccessKey,
+  ASSUMED.sessionToken,
+  "arn:",
+] as const;
+const SESSION_NAME = /tc-[a-z-]+-[0-9a-f]{16}/;
+
+/** All the text by which a value could show a secret: JSON, stack, inspect, every own key. */
+export function leakText(value: unknown): string {
+  const parts: string[] = [];
+  try {
+    parts.push(JSON.stringify(value) ?? "");
+  } catch {
+    // a value that cannot be serialised shows nothing that way
+  }
+  parts.push(String((value as { stack?: unknown } | null | undefined)?.stack ?? ""));
+  parts.push(inspect(value, { showHidden: true, depth: null }));
+  if (typeof value === "object" && value !== null) {
+    for (const key of Reflect.ownKeys(value)) {
+      parts.push(String(key));
+      const d = Object.getOwnPropertyDescriptor(value, key);
+      parts.push(inspect(d?.value, { showHidden: true, depth: null }));
+    }
+  }
+  return parts.join("\n");
+}
+
+/** The one leak check of this package's tests (R3, R14). */
+export function expectNoLeak(value: unknown): void {
+  const text = leakText(value);
+  for (const planted of PLANTED) expect(text).not.toContain(planted);
+  expect(text).not.toMatch(LEAK);
+  expect(text).not.toMatch(SESSION_NAME);
+}
 
 const STS_NS = "https://sts.amazonaws.com/doc/2011-06-15/";
 const LIGHTSAIL_TARGET_PREFIX = "Lightsail_20161128.";

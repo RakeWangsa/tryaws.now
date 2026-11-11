@@ -5,6 +5,19 @@ import type { ErrorCode } from "@tc/core";
 export type LocalReason =
   "role_not_allowed" | "region_not_allowed" | "account_ref_invalid" | "sts_response_invalid";
 
+const LOCAL_REASONS: readonly string[] = [
+  "role_not_allowed",
+  "region_not_allowed",
+  "account_ref_invalid",
+  "sts_response_invalid",
+];
+
+const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
+const OPERATION_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/;
+const NODE_CODE = /^[A-Z][A-Z0-9_]{1,31}$/;
+const ACCOUNT_ID_IN_NAME = /\d{12}/;
+const REQUEST_ID = /^[A-Za-z0-9+/=_-]{1,128}$/;
+
 export interface AwsErrorInit {
   code: ErrorCode;
   retryable: boolean;
@@ -14,11 +27,32 @@ export interface AwsErrorInit {
   operation?: string | null;
   httpStatus?: number | null;
   requestId?: string | null;
+  /** True when AWS may already have acted on the request. Local errors leave it false. */
+  mayHaveActed?: boolean;
+  /** The Node error code (ECONNRESET and the like), which the SDK's `TimeoutError` hides. */
+  nodeCode?: string | null;
+}
+
+function plainName(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return typeof value === "string" && IDENTIFIER.test(value) && !ACCOUNT_ID_IN_NAME.test(value)
+    ? value
+    : "Unknown";
+}
+
+function plainStatus(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599
+    ? value
+    : null;
 }
 
 /**
- * The one error of this package. It carries a platform code and two flags, never AWS text:
- * no message of AWS, no `cause`, no reference to the original error (16.13, R14).
+ * The one error of this package. It carries a platform code and flags, never AWS text:
+ * no message of AWS, no `cause`, no reference to the original error (16.13, R14). The constructor
+ * keeps every text field only in its plain form and the object is frozen.
+ *
+ * `retryable: true` never means "safe to send again without looking first": when `mayHaveActed`
+ * is true, AWS may already have done what the call asked.
  */
 export class AwsError extends Error {
   readonly name = "AwsError";
@@ -30,11 +64,17 @@ export class AwsError extends Error {
   readonly operation: string | null;
   readonly httpStatus: number | null;
   readonly requestId: string | null;
+  readonly mayHaveActed: boolean;
+  readonly nodeCode: string | null;
 
   constructor(init: AwsErrorInit) {
-    const awsErrorName = init.awsErrorName ?? null;
-    const reason = init.reason ?? null;
-    const operation = init.operation ?? null;
+    const awsErrorName = plainName(init.awsErrorName);
+    const reason =
+      typeof init.reason === "string" && LOCAL_REASONS.includes(init.reason) ? init.reason : null;
+    const operation =
+      typeof init.operation === "string" && OPERATION_NAME.test(init.operation)
+        ? init.operation
+        : null;
     super(
       `AWS ${operation ?? "call"} failed: ${init.code} (${awsErrorName ?? reason ?? "unknown"})`,
     );
@@ -44,8 +84,12 @@ export class AwsError extends Error {
     this.awsErrorName = awsErrorName;
     this.reason = reason;
     this.operation = operation;
-    this.httpStatus = init.httpStatus ?? null;
-    this.requestId = init.requestId ?? null;
+    this.httpStatus = plainStatus(init.httpStatus);
+    this.requestId = plainRequestId(init.requestId);
+    this.mayHaveActed = init.mayHaveActed === true;
+    this.nodeCode =
+      typeof init.nodeCode === "string" && NODE_CODE.test(init.nodeCode) ? init.nodeCode : null;
+    Object.freeze(this);
   }
 }
 
@@ -87,8 +131,9 @@ const isThrottleName = names(
   "ProvisionedThroughputExceededException",
   "TransactionInProgressException",
 );
+// InvalidInputException is not here: it is Lightsail's generic 400 and also carries quota,
+// duplicate-name and state conflicts, so it is validation but never final (the row after).
 const isValidationName = names(
-  "InvalidInputException",
   "ValidationError",
   "ValidationException",
   "MalformedHttpRequestException",
@@ -176,6 +221,12 @@ const ROWS: readonly Row[] = [
     poolFull: false,
   },
   { match: (f) => isValidationName(f.name), code: "validation", retryable: false, poolFull: false },
+  {
+    match: (f) => f.name === "InvalidInputException",
+    code: "validation",
+    retryable: true,
+    poolFull: false,
+  },
   { match: (f) => isNotFoundName(f.name), code: "not_found", retryable: true, poolFull: false },
   {
     match: (f) => f.name === "OperationFailureException",
@@ -209,10 +260,6 @@ const ROWS: readonly Row[] = [
     poolFull: false,
   },
 ];
-
-const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
-const ACCOUNT_ID_IN_NAME = /\d{12}/;
-const REQUEST_ID = /^[A-Za-z0-9+/=_-]{1,128}$/;
 
 // A request id is a response header: any text can arrive there, so only its plain form is kept.
 function plainRequestId(value: unknown): string | null {
@@ -255,26 +302,49 @@ function readFacts(error: unknown): Facts {
 }
 
 function safeName(value: string | null): string {
-  return value !== null && IDENTIFIER.test(value) && !ACCOUNT_ID_IN_NAME.test(value)
-    ? value
-    : "Unknown";
+  return plainName(value) ?? "Unknown";
 }
 
+// Node codes of a request that never left the machine: AWS cannot have acted on it.
+const NOT_SENT_CODES = new Set([
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+]);
+const ASSUME_ROLE = "AssumeRole";
+
 const NETWORK_ROW = ROWS.length - 1;
+
+// Conservative (R16): true unless the row proves that AWS did not run the request.
+function mayHaveActed(f: Facts, index: number, row: Row | undefined, nodeCode: string | null) {
+  if (f.status !== null && (f.status >= 500 || f.status < 300)) return true;
+  if (row === undefined) return true; // unknown error: when unsure, assume it acted
+  if (index === NETWORK_ROW) return nodeCode === null || !NOT_SENT_CODES.has(nodeCode);
+  // Server and time-out rows: the request may have been processed.
+  return row.code === "upstream_unavailable" && !isSetupName(f.name);
+}
 
 function classify(error: unknown, operation: string | null): AwsError {
   const f = readFacts(error);
   const index = ROWS.findIndex((r) => r.match(f));
   const row = ROWS[index];
+  const nodeCode = f.code !== null && NODE_CODE.test(f.code) ? f.code : null;
+  // An error of the credentials step is never final and never "acted": a platform fault waits
+  // for an admin and does not fail an order.
+  const credentialsStep = operation === ASSUME_ROLE;
   return new AwsError({
     code: row?.code ?? "internal",
-    retryable: row?.retryable ?? true,
+    retryable: credentialsStep ? true : (row?.retryable ?? true),
     poolFull: row?.poolFull ?? false,
     // Row 11 is the only row that names the error by its network code.
     awsErrorName: safeName(index === NETWORK_ROW ? f.code : f.name),
     operation,
     httpStatus: f.status,
     requestId: f.requestId,
+    mayHaveActed: credentialsStep ? false : mayHaveActed(f, index, row, nodeCode),
+    nodeCode,
   });
 }
 
@@ -293,6 +363,7 @@ export function toAwsError(error: unknown, operation: string | null): AwsError {
       retryable: true,
       awsErrorName: "Unknown",
       operation,
+      mayHaveActed: operation !== ASSUME_ROLE,
     });
   }
 }
@@ -306,6 +377,8 @@ export interface AwsLogFields {
   poolFull: boolean;
   httpStatus: number | null;
   requestId: string | null;
+  mayHaveActed: boolean;
+  nodeCode: string | null;
 }
 
 /** The fields a caller logs for an `AwsError` (R14). This package writes no log line itself. */
@@ -319,6 +392,8 @@ export function toLogFields(error: AwsError): AwsLogFields {
     poolFull: error.poolFull,
     httpStatus: error.httpStatus,
     requestId: error.requestId,
+    mayHaveActed: error.mayHaveActed,
+    nodeCode: error.nodeCode,
   };
 }
 
