@@ -12,6 +12,7 @@ import {
   displayNameOf,
 } from "./bucket-frame.ts";
 import type { FamilyActionDeps, FamilyResult } from "./bucket-frame.ts";
+import { PUBLIC_CONFIRMATION } from "./bucket-confirm.ts";
 import { publicErrorOf } from "./order-actions.ts";
 import type { DraftActionResult, OrderActionDeps } from "./order-actions.ts";
 
@@ -27,8 +28,7 @@ const LIVE_STATES = ["active", "stopped", "suspended"];
 /** The shape of a Lightsail access key id, the same as the adapter accepts (R11: nothing else). */
 const KEY_ID = /^[A-Za-z0-9_-]{8,128}$/;
 
-/** The text that a customer types to make a bucket public. Compared exactly, in every locale. */
-export const PUBLIC_CONFIRMATION = "PUBLIC";
+export { PUBLIC_CONFIRMATION };
 
 export const BUCKET_WRITE_LIMIT = limit("bucket.write", 30, 3600);
 export const BUCKET_DESTROY_LIMIT = limit("bucket.destroy", 5, 3600);
