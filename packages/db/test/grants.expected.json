@@ -390,10 +390,10 @@
       "selectColumns": ["id", "scope_key", "window_start", "count"]
     },
     "worker_rw": {
-      "table": [],
+      "table": ["DELETE"],
       "insertColumns": null,
       "updateColumns": null,
-      "selectColumns": null
+      "selectColumns": ["window_start"]
     },
     "report_ro": {
       "table": [],

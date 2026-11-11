@@ -135,3 +135,17 @@ export async function consumeRateLimits(
   }
   return { allowed: true };
 }
+
+// WP5-T4: the scheduler's purge. Deletes the windows that started before `before` and returns how many
+// there were. worker_rw may read window_start and delete, and nothing else on this table. The cutoff
+// comes from the injected Clock; a count only grows inside a window, so a window that started before
+// the cutoff is over.
+export async function purgeRateLimits(tx: Tx, before: Date): Promise<number> {
+  if (!(before instanceof Date) || Number.isNaN(before.getTime())) {
+    throw new TypeError("rate limit purge: before is not a valid Date");
+  }
+  const result = await tx.execute(
+    sql`delete from rate_limits where window_start < ${before.toISOString()}::timestamptz`,
+  );
+  return result.rowCount ?? 0;
+}

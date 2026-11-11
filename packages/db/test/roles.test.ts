@@ -197,13 +197,18 @@ it("only migrator may create objects in the schema", async () => {
   }).toEqual({ usage: true, create: true });
 });
 
-it("one DELETE in the whole matrix: the customer panel deletes an SSH key", async () => {
+it("two DELETEs in the whole matrix: the customer panel deletes an SSH key, the scheduler purges old rate-limit windows (migration 0007)", async () => {
   const { rows } = await t.pool.query(
     `select table_name, grantee from information_schema.role_table_grants
       where table_schema = 'public' and privilege_type = 'DELETE' and grantee = any($1)`,
     [[...ROLES]],
   );
-  expect(rows).toEqual([{ table_name: "ssh_keys", grantee: "web_rw" }]);
+  expect(
+    [...rows].sort((a, b) => String(a.table_name).localeCompare(String(b.table_name))),
+  ).toEqual([
+    { table_name: "rate_limits", grantee: "worker_rw" },
+    { table_name: "ssh_keys", grantee: "web_rw" },
+  ]);
   const tables = (
     await t.pool.query(
       "select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by 1",
@@ -211,7 +216,10 @@ it("one DELETE in the whole matrix: the customer panel deletes an SSH key", asyn
   ).rows.map((r) => r.table_name as string);
   for (const role of ROLES)
     for (const table of tables) {
-      if (role === "web_rw" && table === "ssh_keys") {
+      if (
+        (role === "web_rw" && table === "ssh_keys") ||
+        (role === "worker_rw" && table === "rate_limits")
+      ) {
         const res = await allowed(role, `delete from ${table} where false`);
         expect(res.rowCount).toBe(0);
       } else {
@@ -860,7 +868,10 @@ it("worker_rw: no admin data, no approval, no purge; the functions' steps work",
     s.admin,
     s.waitingDestroy,
   ]);
-  await refused("worker_rw", "delete from rate_limits");
+  // WP5-T4 (migration 0007): worker_rw purges old windows; it still reads no scope key.
+  await refused("worker_rw", "select scope_key from rate_limits");
+  await refused("worker_rw", "update rate_limits set count = 0");
+  await refused("web_rw", "delete from rate_limits");
   await refused("worker_rw", "select * from admin_users");
   await refused("worker_rw", "select cognito_sub from admin_users");
   await refused("worker_rw", "update admin_users set status = 'disabled' where id = $1", [s.admin]);
