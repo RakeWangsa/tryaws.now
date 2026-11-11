@@ -4,9 +4,18 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./testing": "./testing/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tc/core": "workspace:*",
+    "@tc/db": "workspace:*",
+    "aws-jwt-verify": "5.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2"
   }
 }
