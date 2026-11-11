@@ -52,6 +52,7 @@ const tsconfigExtras = {
 // @tc/db also publishes its test helpers to the test files of other packages (WP1-T2).
 const EXPORTS = {
   "packages/db": { ".": "./index.ts", "./testing": "./testing/index.ts" },
+  "packages/eps": { ".": "./index.ts", "./redirect": "./redirect.ts" },
   "packages/auth": { ".": "./index.ts", "./testing": "./testing/index.ts" },
   // @tc/ui also publishes the theme facts for the root layouts of both apps (WPU-T1).
   "packages/ui": {

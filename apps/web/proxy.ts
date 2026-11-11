@@ -1,7 +1,7 @@
 import createMiddleware from "next-intl/middleware";
 import { NextRequest } from "next/server";
 import type { NextResponse } from "next/server";
-import { gatewayFormOrigins } from "@tc/eps";
+import { gatewayFormOrigins } from "@tc/eps/redirect";
 import { CSP_REPORT_ONLY_HEADER, CSP_REPORT_PATH, buildCsp, createNonce } from "@tc/ui/runtime";
 import { routing } from "./i18n/routing.ts";
 

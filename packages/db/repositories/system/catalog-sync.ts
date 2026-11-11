@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Tx } from "../../client";
-import { catalogProducts, poolAccounts, tlds } from "../../schema/index";
+import { catalogProducts, poolAccounts } from "../../schema/index";
 import { newUuidV7 } from "../../ids";
 import { requireInstant } from "../config/args";
 import { isFeatureFlagKey } from "../config/feature-flags";
