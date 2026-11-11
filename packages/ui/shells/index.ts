@@ -7,3 +7,7 @@ export * from "./AuthShell.tsx";
 export * from "./parts/AwsLines.tsx";
 export * from "./parts/Logo.tsx";
 export * from "./parts/MobileMenu.tsx";
+export { AppShell } from "./AppShell.tsx";
+export type { AppShellProps } from "./AppShell.tsx";
+export { AdminShell } from "./AdminShell.tsx";
+export type { AdminShellProps } from "./AdminShell.tsx";

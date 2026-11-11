@@ -406,5 +406,52 @@ div.tc-modal-open {
 }
 .tc-footer-aws {
   margin-top: 16px;
+/* ---- 7b. AppShell and AdminShell (WPU-T4) ---- */
+/* The fixed OPS label next to the logo of the admin (16.4): a pill in the accent color. */
+.tc-ops-label {
+  display: inline-block;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 10px;
+  border: 2px solid var(--tc-accent);
+  border-radius: 999px;
+  margin-inline: 12px;
+}
+
+/* The current row is told by weight and color besides aria-current and the angle icon. */
+.tc-app-nav a[aria-current="page"] {
+  font-weight: 700;
+  color: var(--tc-accent);
+}
+
+/* The theme floats every span of a navigation row to the right (.categories .heading span); the
+   label and the badge of a row stay in line with the icon. */
+.tc-app-nav .heading span {
+  float: none;
+}
+
+/* The theme's #sidebar is position: fixed with width 420px from 992 px up. The panel sidebar sits in
+   its column and stays in view while the page scrolls. */
+.blog #sidebar.tc-app-nav {
+  position: sticky;
+  top: 16px;
+  width: auto !important;
+  margin-top: 0 !important;
+}
+
+/* The theme's .menu-wrap is absolute over a hero. The panel bar is a block in the flow. */
+.tc-app-bar {
+  position: relative;
+  top: 0;
+}
+
+/* The Bootstrap dropdown is absolute inside the box Radix positions; here the box is the position. */
+.tc-account-menu {
+  position: static;
+  min-width: 14rem;
+}
+
+.tc-app-footer {
+  padding: 16px 0;
   font-size: 0.8125rem;
 }
