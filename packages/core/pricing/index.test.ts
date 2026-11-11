@@ -4,6 +4,7 @@ import * as pricing from "./index";
 it("exports exactly the public API of the pricing engine", () => {
   expect(Object.keys(pricing).sort()).toEqual([
     "FX_SECOND_ADMIN_PERCENT",
+    "PREVIEW_SAMPLES",
     "PricingInputError",
     "SNAPSHOT_VERSION",
     "STEP_ACCOUNTS",
@@ -15,6 +16,8 @@ it("exports exactly the public API of the pricing engine", () => {
     "isPositiveDecimal",
     "isPricingRule",
     "parseSnapshot",
+    "previewPricing",
+    "problemFields",
     "quote",
     "snapshotToQuote",
     "toSnapshot",
