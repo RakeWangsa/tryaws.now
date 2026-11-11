@@ -6,3 +6,4 @@ export * from "./operations/index";
 export * from "./capacity/index";
 export * from "./rates/index";
 export * from "./validation/index";
+export * from "./flags/index";
