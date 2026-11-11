@@ -8,6 +8,8 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { adminMessages } from "./i18n/messages.ts";
+import { pricingEn } from "./messages/pricing.en.ts";
+import { pricingBn } from "./messages/pricing.ts";
 
 const ADMIN_ID = "0191a000-0000-7000-8000-0000000000ad";
 const OTHER_ID = "0191a000-0000-7000-8000-0000000000ae";
@@ -199,11 +201,11 @@ const params = (locale: string, search: Record<string, string> = {}) => ({
   params: Promise.resolve({ locale }),
   searchParams: Promise.resolve(search),
 });
-const msgs = (locale: Locale) =>
-  adminMessages[locale] as unknown as {
-    AdminPricing: Record<string, any>;
-    AdminCatalog: Record<string, any>;
-  };
+// The own trees of the screens, typed (the English tree has the type of both).
+const msgs = (locale: Locale): typeof pricingEn =>
+  (locale === "bn" ? pricingBn : pricingEn) as typeof pricingEn;
+const sampleText = (locale: Locale, id: string): string =>
+  (msgs(locale).AdminPricing.preview.samples as Record<string, string>)[id] ?? "";
 
 beforeEach(() => {
   state.asked = [];
@@ -246,7 +248,7 @@ describe("/pricing", () => {
       });
       const html = inProvider(await PricingPage(params(locale, { go: "1" })), locale);
       const m = msgs(locale).AdminPricing;
-      for (const id of SAMPLES) expect(html).toContain(m.preview.samples[id]);
+      for (const id of SAMPLES) expect(html).toContain(sampleText(locale, id));
       expect(html).toContain(m.preview.save);
       expect(html).toContain('id="rule-reason"');
       // The draft travels in hidden fields of the save form.
