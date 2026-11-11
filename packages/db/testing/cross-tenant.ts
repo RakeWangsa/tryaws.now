@@ -237,21 +237,29 @@ export async function checkTenantIsolation<S>(
       );
     }
 
+    // B goes first in every branch, between two snapshots of A: if A's own run came first it could
+    // apply a change that B's run would then repeat, and B's run would show no change.
     if (c.kind === "read") {
+      const beforeRead = await tenantSnapshot(pool, a);
+      const cross = await run(b, seededA);
+      const readChanged = changedTables(beforeRead, await tenantSnapshot(pool, a));
+      const crossGhost = await run(b, ghost);
       const own = await run(a, seededA);
       const ownGhost = await run(a, ghost);
       if (!(names(own, idsA) || own.norm !== ownGhost.norm)) {
         found("own-read", "customer A does not find its own rows; the case proves nothing");
       }
-      const cross = await run(b, seededA);
-      const crossGhost = await run(b, ghost);
+      if (readChanged.length > 0) {
+        found(
+          "cross-read",
+          `a read of customer B changed rows of customer A in: ${readChanged.join(", ")}`,
+        );
+      }
       if (names(cross, idsA)) found("cross-read", NAMES_A);
       else if (cross.norm !== crossGhost.norm) found("cross-read", differs(cross, crossGhost));
       continue;
     }
 
-    // B goes first: if B's run is allowed to change the rows of A, A's own run below would
-    // otherwise hide it by changing them first.
     const before = await tenantSnapshot(pool, a);
     const cross = await run(b, seededA);
     const after = await tenantSnapshot(pool, a);
