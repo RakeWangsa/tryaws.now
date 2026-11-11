@@ -15,14 +15,30 @@ import { tenantSnapshot } from "./snapshot";
 //               operation for a resource)
 //   self-write  a write that names no existing row and acts only on the actor's own data: an add, an
 //               update of the actor's own profile, an audit record
-// A case's `run` uses a fresh idempotency key on every call and derives every other value from
-// `target` or from fixed text, so that its run on ghostOf(target) is the same request about rows
-// that do not exist.
+//
+// The rules of a case author:
+//   - `run` uses a fresh idempotency key on every call and derives every other value from `target`
+//     or from fixed text, so that its run on the ghost of the target is the same request about rows
+//     that do not exist.
+//   - `target` identifies the rows by whole UUID strings, as a value or as a key of a plain object or
+//     array: ghostOf replaces only those. A name, a fingerprint, a transaction id, or an id inside a
+//     longer string ("/servers/<id>") stays real in the ghost. The helper refuses a ghost that still
+//     holds an id of customer A; a natural key that holds no UUID can be told apart from a missing
+//     row only if the case declares `ghost`.
+//   - The answer of a run must not contain the ids it was asked about. Map an error to its kind
+//     (not_found), never to a text with the id: the helper reads such a text as a leak.
+//   - A run resolves when its effects are committed. Work that a run starts and does not await (a
+//     floating promise, a timer, an after() hook) is not seen.
+//   - Every run gets its own copy of the target (structuredClone), so a run may change it.
 export interface TenantCase<S> {
   readonly name: string; // "<repo>.<method>", or the endpoint's action name
   readonly kind: "read" | "write" | "self-write";
   // Runs the case as customerId against the rows of target.
   run(customerId: string, target: S): Promise<unknown>;
+  // Makes the target of the same request about rows that do not exist. Default: ghostOf. A case that
+  // finds its row by a natural key says here how to make another one, for example
+  // (s) => ({ ...ghostOf(s), fingerprint: "SHA256:" + fresh() }).
+  ghost?(target: S): S;
 }
 
 export interface TenantIsolationOptions<S> {
@@ -47,6 +63,11 @@ export interface TenantFinding {
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const WHOLE_UUID = new RegExp(`^${UUID}$`, "i");
 const ANY_UUID = new RegExp(UUID, "gi");
+
+// createTempDatabase (test/temp-db.ts) names a database tc_test_<process id>_<8 lower-case hex
+// digits>. This literal mirrors its TEST_DATABASE, which that file does not export.
+const TEST_DATABASE = /^tc_test_\d+_[0-9a-f]{8}$/;
+const KINDS: readonly unknown[] = ["read", "write", "self-write"];
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== "object" || value === null) return false;
@@ -149,6 +170,19 @@ function changedTables(before: Snapshot, after: Snapshot): string[] {
     .sort();
 }
 
+// A case writes to the rows of two customers, some of them on purpose against their scope: fail
+// closed unless the pool is the throwaway database of a test.
+async function assertThrowawayDatabase(pool: pg.Pool): Promise<void> {
+  const { rows } = await pool.query<{ current_database: string }>("select current_database()");
+  const name = rows[0]?.current_database;
+  if (typeof name !== "string" || !TEST_DATABASE.test(name)) {
+    throw new Error(
+      `tenant isolation: the pool is not a throwaway test database (found ${JSON.stringify(name)}, ` +
+        "expected tc_test_<pid>_<hex>); the cases write to it",
+    );
+  }
+}
+
 const NAMES_A = "the answer to customer B names a row of customer A";
 const differs = (cross: Outcome, crossGhost: Outcome): string =>
   `customer B gets another answer for a row of customer A than for a missing row: ${cross.norm} | ${crossGhost.norm}`;
@@ -162,20 +196,46 @@ export async function checkTenantIsolation<S>(
   options: TenantIsolationOptions<S>,
 ): Promise<TenantFinding[]> {
   const { pool } = options;
+  // Everything is refused before the first write: no case, a case of an unknown kind, a pool that
+  // is not a throwaway test database.
+  if (options.cases.length === 0) throw new Error("tenant isolation: no case given");
+  for (const c of options.cases) {
+    if (!KINDS.includes(c.kind)) {
+      throw new TypeError(
+        `tenant isolation: the case ${c.name} has the kind ${JSON.stringify(c.kind)}; ` +
+          "use read, write or self-write",
+      );
+    }
+  }
+  await assertThrowawayDatabase(pool);
   const findings: TenantFinding[] = [];
   for (const c of options.cases) {
     const found = (check: TenantCheck, detail: string): void => {
       findings.push({ case: c.name, check, detail });
     };
-    const run = (customerId: string, target: S): Promise<Outcome> =>
-      outcome(() => c.run(customerId, target));
+    const run = (customerId: string, target: S): Promise<Outcome> => {
+      // Its own copy, made outside the try of outcome(): a target that cannot be copied fails the
+      // check, it is not an answer. A run that changes its target changes nothing for the next run.
+      const copy = structuredClone(target);
+      return outcome(() => c.run(customerId, copy));
+    };
 
     const a = await newCustomer(pool);
     const b = await newCustomer(pool);
     const seededA = await options.seed(pool, a);
     await options.seed(pool, b);
     const idsA = idsOwnedBy(a, seededA);
-    const ghost = ghostOf(seededA);
+    const ghost = c.ghost === undefined ? ghostOf(seededA) : c.ghost(seededA);
+    // A ghost that still holds an id of customer A is not a request about a missing row: its runs
+    // would be the real request, and an existence leak would compare equal to itself.
+    const ghostText = canonical({ ghost }).toLowerCase();
+    if (idsA.some((id) => ghostText.includes(id))) {
+      throw new Error(
+        `tenant isolation: the ghost of case ${c.name} still holds an id of customer A; ghostOf ` +
+          "replaces whole UUID strings only. Identify the rows by whole UUIDs in the target, or " +
+          "give the case a ghost that makes the request about a row that does not exist",
+      );
+    }
 
     if (c.kind === "read") {
       const own = await run(a, seededA);
