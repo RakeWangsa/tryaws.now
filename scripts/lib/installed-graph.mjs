@@ -1,4 +1,5 @@
-// What pnpm resolved and what it installed, for tests/repo/aws-boundary.test.mjs (rule R1).
+// What pnpm resolved and what the last full install recorded, for tests/repo/aws-boundary.test.mjs
+// (rule R1). It is a tripwire for accidents, not the boundary (IAM, WP0-T5, is).
 //
 // readInstalledGraph(root) reads pnpm-lock.yaml and node_modules/.pnpm/lock.yaml and returns the
 // dependency graph of the projects. It does not guess what pnpm would do with a dependency value;
@@ -32,7 +33,7 @@
 //   6. Third-party packages: every entry of packages holds only known keys and is resolved by
 //      integrity alone; every entry of snapshots holds only known keys, and each of its
 //      dependencies and optional dependencies has a registry form of rule 5.
-//   7. node_modules/.pnpm/lock.yaml, pnpm's record of the install, exists, passes rules 1 and 6,
+//   7. node_modules/.pnpm/lock.yaml, what the last full install recorded, exists, passes rules 1 and 6,
 //      and has the importers of pnpm-lock.yaml. Its packages and snapshots may hold leftovers of
 //      earlier installs, so they are not compared.
 // The result is { packages, graph }: packages maps a project folder to its name ("." is the
@@ -421,8 +422,17 @@ export function readInstalledGraph(root) {
   const recorded = Object.keys(importers).sort();
   if (JSON.stringify(known) !== JSON.stringify(recorded)) {
     const list = (dirs) => dirs.map((dir) => shown("folder", dir)).join(", ") || "none";
+    const onlyLock = recorded.filter((dir) => !known.includes(dir));
+    const onlyDisk = known.filter((dir) => !recorded.includes(dir));
+    const usual = [...onlyLock, ...onlyDisk].every((dir) =>
+      /^(apps|packages|functions)\//.test(dir),
+    );
     fail(
-      `the projects of pnpm-lock.yaml are not the packages of this repository (only in the lockfile: ${list(recorded.filter((dir) => !known.includes(dir)))}; only on disk: ${list(known.filter((dir) => !recorded.includes(dir)))}); if a folder is a new place for workspace packages, add it to WORKSPACE_FOLDERS in scripts/lib/changed-packages.mjs`,
+      `the projects of pnpm-lock.yaml are not the packages of this repository (only in the lockfile: ${list(onlyLock)}; only on disk: ${list(onlyDisk)}); ${
+        usual
+          ? "run pnpm install first"
+          : "if a folder is a new place for workspace packages, add it to WORKSPACE_FOLDERS in scripts/lib/changed-packages.mjs"
+      }`,
     );
   }
 
@@ -514,8 +524,9 @@ export function readDirectLinks(root, dir) {
 //             workspace projects) whose folder is packages/aws or under functions/, or that is
 //             one of `sdkNames`. A dependency of a third-party package is not followed: only that
 //             package can load it by name.
-//   installed: each entry of node_modules of the root, of an app or of a folder between, that
-//             does not lead to a package of pnpm's store (with a package.json) or to a project
+//   installed: each entry of node_modules of the root, of an app, of a folder between, or of a
+//             workspace project that an app or the root reaches (through declared dependencies),
+//             that does not lead to a package of pnpm's store (with a package.json) or to a project
 //             that is not the root, packages/aws or a function, or whose name or package name is
 //             that of packages/aws, of a function or one of `sdkNames`.
 export function boundaryProblems(root, sdkNames) {
@@ -542,6 +553,7 @@ export function boundaryProblems(root, sdkNames) {
   }
 
   const reach = [];
+  const reached = new Set();
   for (const dir of [...apps, "."]) {
     const seen = new Set();
     const todo = [packages[dir]];
@@ -556,6 +568,8 @@ export function boundaryProblems(root, sdkNames) {
     for (const d of [...seen].sort()) {
       if (dirOf.get(d) === "packages/aws" || isFunction(d) || sdkNames.includes(d)) {
         reach.push(`${shown("folder", dir)} reaches ${d}`);
+      } else if (dirOf.has(d)) {
+        reached.add(dirOf.get(d));
       }
     }
   }
@@ -571,7 +585,9 @@ export function boundaryProblems(root, sdkNames) {
     );
   };
   const installed = [];
-  for (const dir of loadFolders(apps)) {
+  // The folders that the code of an app or of the root loads from by name, plus the folder of each
+  // workspace project that an app or the root reaches (a postinstall can link into it).
+  for (const dir of [...new Set([...loadFolders(apps), ...reached])].sort()) {
     for (const link of readDirectLinks(root, dir)) {
       if (!allowed(link)) {
         installed.push(

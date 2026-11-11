@@ -11,25 +11,34 @@ import {
 } from "../../scripts/lib/installed-graph.mjs";
 
 // R1: the web app and the admin app never import packages/aws, and only packages/aws depends on
-// the six AWS packages of section 4. Three things are meant to keep that:
+// the six AWS packages (the five of section 4 and credential-providers, open point 17; aws-sdk of
+// v2 is banned in the lint rules too). Three things are meant to keep that:
 //   1. IAM: the roles of the apps get no permission to assume a pool role. That is the boundary.
 //      It is built and proven in WP0-T5, not here, and it does not exist yet.
 //   2. The lint rule on import statements (eslint.config.mjs).
 //   3. This file. It catches accidents and makes a deliberate route visible in review. It is not
 //      the boundary.
-// This file does not guess what pnpm will do with a dependency value. It reads what pnpm did
-// (scripts/lib/installed-graph.mjs):
+// Lint and this file are tripwires for accidents. They do not see: bridges outside the scanned
+// folders (a file in infra/, scripts/ or a new workspace folder that re-exports packages/aws; the
+// closure test, tests/repo/closure.test.mjs, covers the TypeScript programs of the apps and of the
+// packages), committed symbolic links, other AWS packages that are not on the lists, aliased
+// loaders, and calls that are not imports.
+// This file does not guess what pnpm will do with a dependency value. It reads what the last full
+// install recorded (scripts/lib/installed-graph.mjs):
 //   - pnpm-lock.yaml: the package that every dependency of every project resolved to. The reader
 //     checks that each dependency of each package.json is recorded with its value (or with the
 //     value of an override of that very name), and it stops at every top-level key, setting,
 //     dependency form and entry key that its rules do not list.
-//   - node_modules/.pnpm/lock.yaml, pnpm's record of what it installed: its projects must be those
-//     of pnpm-lock.yaml, and its third-party packages pass the same rules. The reader stops when a
-//     second lockfile (pnpm-lock.<branch>.yaml) or a second install inside a project exists.
+//   - node_modules/.pnpm/lock.yaml, pnpm's record of what the last full install recorded: its
+//     projects must be those of pnpm-lock.yaml, and its third-party packages pass the same rules.
+//     The reader stops when a second lockfile (pnpm-lock.<branch>.yaml) or a second install inside
+//     a project exists.
 //   - the node_modules folders that the code of an app or of the root loads from by name: the
-//     root's, each app's, and each folder between an app and the root. Each entry must lead to a
-//     package of pnpm's store or to a project that is not the root, packages/aws or a function.
-//     The node_modules folders of the other packages are not read.
+//     root's, each app's, each folder between an app and the root, and the folder of each
+//     workspace project that an app or the root reaches through its declared dependencies. Each
+//     entry must lead to a package of pnpm's store or to a project that is not the root,
+//     packages/aws or a function. The node_modules folders of the projects that no app and not the
+//     root reaches are not read.
 // What this file cannot see:
 //   - a registry package that holds a copy of this code under another name;
 //   - a third-party package that itself depends on one of the six: only that package can load it
@@ -42,7 +51,9 @@ import {
 //     the reader reads the standard places; and a node_modules folder above the repository;
 //   - what a bundler setting or a tsconfig path pulls in; an import of a path computed at run time;
 //   - the folder node_modules/.pnpm/node_modules, into which pnpm links every workspace package by
-//     default and from which only installed third-party packages load.
+//     default and from which only installed third-party packages load;
+//   - a lifecycle script is forbidden in every workspace package.json (tests/repo/wiring.test.mjs),
+//     so a postinstall cannot link packages/aws into a package after an install.
 
 // Part 1: the repository itself.
 const SDK = awsSdkClients;
@@ -50,7 +61,7 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const { packages, graph } = readInstalledGraph(ROOT);
 const problems = boundaryProblems(ROOT, SDK);
 
-it("the banned AWS packages are the six of the lint config", () => {
+it("the banned AWS packages are the six AWS packages (five of section 4 and credential-providers, open point 17) and aws-sdk of the lint config", () => {
   expect([...awsSdkClients].sort()).toEqual([
     "@aws-sdk/client-cost-explorer",
     "@aws-sdk/client-lightsail",
@@ -58,6 +69,7 @@ it("the banned AWS packages are the six of the lint config", () => {
     "@aws-sdk/client-route-53-domains",
     "@aws-sdk/client-sts",
     "@aws-sdk/credential-providers",
+    "aws-sdk",
   ]);
 });
 
@@ -661,8 +673,26 @@ importers:
       `${HEAD}\nimporters:\n\n  .: {}\n`,
     );
     expect(() => readInstalledGraph(onlyRoot)).toThrow(
-      /only in the lockfile: none; only on disk: apps\/web/,
+      /only in the lockfile: none; only on disk: apps\/web\); run pnpm install first$/,
     );
+    // a package added to or removed from apps/, packages/ or functions/ before pnpm install: the
+    // advice is to install, not to edit WORKSPACE_FOLDERS
+    const removed = workspace(
+      { ".": ROOT_PKG, "apps/web": WEB },
+      `${HEAD}\nimporters:\n\n  .: {}\n\n  apps/web: {}\n\n  packages/gone: {}\n`,
+    );
+    const messageOf = (dir) => {
+      try {
+        readInstalledGraph(dir);
+      } catch (error) {
+        return error.message;
+      }
+      return "";
+    };
+    expect(messageOf(removed)).toMatch(/only in the lockfile: packages\/gone; only on disk: none/);
+    expect(messageOf(removed)).toMatch(/run pnpm install first$/);
+    expect(messageOf(removed)).not.toMatch(/WORKSPACE_FOLDERS/);
+    expect(messageOf(onlyRoot)).not.toMatch(/WORKSPACE_FOLDERS/);
   });
 
   it("S5: a project without a name, with a name of another form, two projects with the same name", () => {
@@ -1282,7 +1312,7 @@ importers:
     });
   });
 
-  it("packages/core declares one of the six, and an app reaches it", () => {
+  it("packages/core declares one of the six AWS packages, and an app reaches it", () => {
     const root = workspace(
       {
         ".": ROOT_PKG,
@@ -1323,7 +1353,7 @@ snapshots:
     });
   });
 
-  it("LIMIT: a third-party package that depends on one of the six is not reported", () => {
+  it("LIMIT: a third-party package that depends on one of the six AWS packages is not reported", () => {
     const root = webDepends(
       { "@aws-sdk/rds-signer": "3.1166.0" },
       `      '@aws-sdk/rds-signer':
@@ -1412,6 +1442,70 @@ snapshots:
         "apps/web: x -> packages/aws",
       ],
     });
+  });
+
+  it("node_modules of every workspace project that an app or the root reaches is read too (a postinstall link, N1)", () => {
+    const lock = `${HEAD}
+importers:
+
+  .:
+    devDependencies:
+      '@tc/tool':
+        specifier: workspace:*
+        version: link:packages/tool
+
+  apps/web:
+    dependencies:
+      '@tc/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+
+  packages/aws: {}
+
+  packages/tool: {}
+
+  packages/ui:
+    dependencies:
+      '@tc/lib':
+        specifier: workspace:*
+        version: link:../lib
+
+  packages/lib: {}
+
+  packages/lonely: {}
+`;
+    const root = workspace(
+      {
+        ".": { ...ROOT_PKG, devDependencies: { "@tc/tool": "workspace:*" } },
+        "apps/web": { ...WEB, dependencies: { "@tc/ui": "workspace:*" } },
+        "packages/aws": { name: "@tc/aws" },
+        "packages/tool": { name: "@tc/tool" },
+        "packages/ui": { name: "@tc/ui", dependencies: { "@tc/lib": "workspace:*" } },
+        "packages/lib": { name: "@tc/lib" },
+        "packages/lonely": { name: "@tc/lonely" },
+      },
+      lock,
+      {
+        files: { "node_modules/.pnpm/ms@2.1.3/node_modules/ms/package.json": '{"name":"ms"}' },
+        links: {
+          // reached by the app (directly and through another package), and by the root
+          "packages/ui/node_modules/bridge": "../../aws",
+          "packages/lib/node_modules/bridge2": "../../aws",
+          "packages/tool/node_modules/bridge3": "../../aws",
+          // an honest link of a reached package
+          "packages/ui/node_modules/ms": "../../../node_modules/.pnpm/ms@2.1.3/node_modules/ms",
+          // not reached by an app or the root: not read
+          "packages/lonely/node_modules/bridge4": "../../aws",
+          // packages/aws itself is never read
+          "packages/aws/node_modules/ms": "../../../node_modules/.pnpm/ms@2.1.3/node_modules/ms",
+        },
+      },
+    );
+    expect(boundaryProblems(root, SDK).installed).toEqual([
+      "packages/lib: bridge2 -> packages/aws",
+      "packages/tool: bridge3 -> packages/aws",
+      "packages/ui: bridge -> packages/aws",
+    ]);
   });
 
   it("a link that leads out of the repository is reported without its path", () => {
