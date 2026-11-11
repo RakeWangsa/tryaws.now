@@ -68,9 +68,4 @@ export {
   type RecordChangeInput,
   type ZoneRecordView,
 } from "./adapters/dns-zone";
-export type {
-  R53Change,
-  R53RecordSet,
-  R53Zone,
-  Route53Port,
-} from "./adapters/route53-port";
+export type { R53Change, R53RecordSet, R53Zone, Route53Port } from "./adapters/route53-port";

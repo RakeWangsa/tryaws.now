@@ -112,6 +112,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP5-T5",
     "WP6-T4",
     "WP7-T1",
+    "WP7-T3",
+    "WP7-T5",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -397,6 +399,33 @@ it("task WP5-T4 is proven by the same checks as WP4-T2: the lifecycle scenario r
   expect(TASKS["WP5-T4"].find((c) => c.id === "scheduler").command.join(" ")).toBe(
     "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests",
   );
+});
+
+it("task WP7-T3 is proven by lint, types, format, the core and aws tests and the repository tests", () => {
+  expect(TASKS["WP7-T3"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "core",
+    "aws",
+    "repo",
+  ]);
+});
+
+it("task WP7-T5 is proven by lint, types, format, the db, core and scheduler tests and the repository tests", () => {
+  expect(TASKS["WP7-T5"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "db",
+    "core",
+    "scheduler",
+    "repo",
+  ]);
 });
 
 it("task WP4-T2 is proven by the checks of WP1-T1, the tests of core, aws and the two functions, and the repository tests", () => {

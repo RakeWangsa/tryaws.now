@@ -5,7 +5,6 @@ import {
   checkChange,
   stepDone,
   validateZoneName,
-  type OperationKind,
   type Result,
   type StepResult,
   type ValidRecord,
@@ -211,7 +210,7 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
         const zone = await deps.route53().getHostedZone(id);
         return { state: zone === null ? "missing" : "active" };
       },
-      async action(_kind: OperationKind): Promise<StepResult> {
+      async action(): Promise<StepResult> {
         // Record changes are not an operation kind yet (JOURNEY: needs decision); nothing else applies to a zone.
         throw fail("validation");
       },

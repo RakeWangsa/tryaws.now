@@ -423,6 +423,13 @@ TASKS["WP7-T1"] = [
   aws,
   repo,
 ];
+// WP7-T3: DNS zones and the record editor. The validation rules are pure and live in packages/core/dns;
+// the zone adapter and the fake Route 53 are in packages/aws (no Route 53 client is built yet).
+TASKS["WP7-T3"] = [specSync, baselineSync, lint, typecheck, format, core, aws, repo];
+
+// WP7-T5: metering. The daily charge (packages/core/pricing/metering.ts), the metering run and its DB
+// test (packages/core/metering) run with the core and db checks; the scheduler job with the scheduler check.
+TASKS["WP7-T5"] = [specSync, baselineSync, lint, typecheck, format, db, core, scheduler, repo];
 
 // WPU-T4: the two Next.js apps. Their tests run by package; the smoke script builds both apps,
 // scans the output, starts `next start` and reads the headers and the HTML (no database needed).

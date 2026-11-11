@@ -29,7 +29,12 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
   expect(report.lifecycle).toMatchObject({ examined: 0, failed: 0 });
   expect(report.metering).toMatchObject({ charged: 0, failed: 0, priceMissing: true });
   expect(report.rateLimitsPurged).toBe(1);
-  expect(logged.map((e) => e.event)).toEqual(["sweep", "lifecycle_run", "metering_run", "rate_limits_purged"]);
+  expect(logged.map((e) => e.event)).toEqual([
+    "sweep",
+    "lifecycle_run",
+    "metering_run",
+    "rate_limits_purged",
+  ]);
   // The second run purges nothing more.
   expect((await handler()).rateLimitsPurged).toBe(0);
 });
