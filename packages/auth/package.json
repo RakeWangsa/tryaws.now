@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
+    "./admin-ip": "./admin-ip.ts",
     "./testing": "./testing/index.ts"
   },
   "scripts": {
