@@ -124,6 +124,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP7-T2",
     "WP7-T3",
     "WP7-T5",
+    "WP7-T6",
     "WP8-T1",
     "WP8-T2",
     "WP8-T3",
@@ -603,6 +604,20 @@ it("task WP7-T5 is proven by lint, types, format, the db, core and scheduler tes
     "db",
     "core",
     "scheduler",
+    "repo",
+  ]);
+});
+
+it("task WP7-T6 is proven by lint, types, format, the db, core and reconciler tests and the repository tests", () => {
+  expect(TASKS["WP7-T6"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "db",
+    "core",
+    "reconciler",
     "repo",
   ]);
 });
