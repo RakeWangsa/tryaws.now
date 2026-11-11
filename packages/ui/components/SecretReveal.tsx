@@ -77,6 +77,7 @@ export function SecretReveal({ label, secret, hideAfterMs = 60_000, onHidden }: 
         <Button
           size="sm"
           variant="tertiary"
+          className="tc-nowrap"
           icon={state === "shown" ? "fas fa-eye-slash" : "fas fa-eye"}
           disabled={expired}
           onClick={toggle}
@@ -86,6 +87,7 @@ export function SecretReveal({ label, secret, hideAfterMs = 60_000, onHidden }: 
         <Button
           size="sm"
           variant="tertiary"
+          className="tc-nowrap"
           icon="fas fa-copy"
           disabled={expired}
           onClick={() => {

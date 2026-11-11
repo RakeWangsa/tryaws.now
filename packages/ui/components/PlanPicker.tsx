@@ -63,7 +63,6 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
   return (
     <fieldset>
       <legend className="seccolor h6 mb-4">{legend}</legend>
-      <input type="hidden" name={name} value={selected.id} />
       <ul className="tc-plan-list d-lg-none">
         {plans.map((plan, i) => {
           const id = `${base}-${i}`;
@@ -79,7 +78,7 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
                 onChange={() => choose(plan.id)}
               />
               <label htmlFor={id} className="tc-plan-card bg-seccolorstyle noshadow">
-                <span className="title mergecolor">{plan.name}</span>
+                <span className="title mergecolor tc-plan-name">{plan.name}</span>
                 {plan.lines.map((line) => (
                   <span key={line} className="d-block seccolor">
                     {line}
@@ -97,7 +96,7 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
       <div className="wpc-cloud-range d-none d-lg-block">
         <input
           type="range"
-          className="form-range"
+          className="form-range tc-plan-range"
           min={0}
           max={plans.length - 1}
           step={1}
@@ -106,12 +105,13 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
           aria-label={legend}
           aria-valuetext={valueText}
         />
-        <ul className="d-flex justify-content-between list-unstyled seccolor">
+        <ul className="tc-plan-range-labels d-flex justify-content-between list-unstyled seccolor">
           {plans.map((plan) => (
             <li key={plan.id}>{plan.name}</li>
           ))}
         </ul>
       </div>
+      <input type="hidden" name={name} value={selected.id} />
     </fieldset>
   );
 }

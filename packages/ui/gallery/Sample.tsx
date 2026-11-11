@@ -20,8 +20,8 @@ export function Sample({
   return (
     <div data-gallery={name} className="tc-gallery-sample mb-5">
       <h3 className="h5 mergecolor mb-1">{t(`${titleKey}.title`)}</h3>
-      <p className="tc-gallery-source small c-grey mb-3">
-        {gallery("mockup")}: <code>{t(`${titleKey}.source`)}</code>
+      <p className="tc-gallery-source small mb-3">
+        {gallery("mockup")}: <code className="tc-gallery-code">{t(`${titleKey}.source`)}</code>
       </p>
       {children}
     </div>

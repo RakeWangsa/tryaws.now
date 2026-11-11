@@ -41,18 +41,20 @@ export function Surfaces(): ReactElement {
         </Card>
       </Sample>
       <Sample name="StatTile" titleKey="Gallery.samples.statTile">
-        <div className="row">
-          <div className="col-md-6 col-lg-4">
-            <StatTile
-              value={formatMoney(DEMO_BALANCE_MINOR, { locale })}
-              description={t("stat.description")}
-              tag={{ text: t("stat.tag"), tone: "purple" }}
-            />
+        <div className="pricing special">
+          <div className="row">
+            <div className="col-md-6 col-lg-4">
+              <StatTile
+                value={formatMoney(DEMO_BALANCE_MINOR, { locale })}
+                description={t("stat.description")}
+                tag={{ text: t("stat.tag"), tone: "purple" }}
+              />
+            </div>
           </div>
         </div>
       </Sample>
       <Sample name="PlanCard" titleKey="Gallery.samples.planCard">
-        <section className="pricing">
+        <section className="pricing special">
           <div className="row">
             <div className="col-md-6 col-lg-4">
               <PlanCard

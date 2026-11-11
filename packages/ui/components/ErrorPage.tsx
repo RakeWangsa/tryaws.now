@@ -21,7 +21,9 @@ export function ErrorPage({ title, message, referenceId, retry, home }: ErrorPag
       <i className="fas fa-exclamation-triangle" aria-hidden="true" />
       <h2 className="h4 mergecolor">{title}</h2>
       <p className="seccolor">{message}</p>
-      {showReference ? <p className="small c-grey">{t("reference", { id: referenceId })}</p> : null}
+      {showReference ? (
+        <p className="small c-grey tc-dim">{t("reference", { id: referenceId })}</p>
+      ) : null}
       {retry}
       {home}
     </div>

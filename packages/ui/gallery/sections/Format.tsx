@@ -57,13 +57,15 @@ export function Format(): ReactElement {
         </ul>
       </Sample>
       <Sample name="LocaleSwitch" titleKey="Gallery.samples.localeSwitch">
-        <LocaleSwitch
-          current={locale}
-          items={[
-            { locale: "bn", href: hrefs.bn },
-            { locale: "en", href: hrefs.en },
-          ]}
-        />
+        <div className="tc-lang-static">
+          <LocaleSwitch
+            current={locale}
+            items={[
+              { locale: "bn", href: hrefs.bn },
+              { locale: "en", href: hrefs.en },
+            ]}
+          />
+        </div>
       </Sample>
       <Sample name="WalletChip" titleKey="Gallery.samples.walletChip">
         <WalletChip balanceMinor={DEMO_BALANCE_MINOR} topUpHref={localePath(locale, "/wallet")} />

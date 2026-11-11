@@ -34,7 +34,7 @@ export function KitGallery({ app = "web" }: { app?: "web" | "admin" }): ReactEle
   const other = locale === "bn" ? "en" : "bn";
   return (
     <div className="bg-colorstyle">
-      <div className="container tc-gallery pt-4 pb-5">
+      <div className="container tc-gallery pt-4">
         <h1 className="h3 mergecolor">{t("title")}</h1>
         <p className="seccolor">{t("intro")}</p>
         <nav aria-label={t("nav.label")} data-gallery-nav className="mb-4">

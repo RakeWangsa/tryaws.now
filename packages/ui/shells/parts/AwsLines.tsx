@@ -6,8 +6,8 @@ export function AwsLines({ variant }: { variant: "short" | "long" }): ReactEleme
   const t = useTranslations("Aws");
   return (
     <>
-      <p>{variant === "long" ? t("long") : t("short")}</p>
-      <p className="small">{t("trademark")}</p>
+      <p className="seccolor">{variant === "long" ? t("long") : t("short")}</p>
+      <p className="small seccolor">{t("trademark")}</p>
     </>
   );
 }

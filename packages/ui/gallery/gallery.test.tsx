@@ -157,7 +157,7 @@ describe("KitGallery", () => {
     for (const wanted of [
       "btn-default-yellow-fill",
       "btn-default-pink-fill",
-      "btn-outline-pink",
+      "btn-default-pink",
       "btn-danger",
     ]) {
       expect(

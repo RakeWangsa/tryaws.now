@@ -8,8 +8,8 @@ export type ButtonVariant = "primary" | "secondary" | "tertiary" | "destructive"
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: "btn-default-yellow-fill",
   secondary: "btn-default-pink-fill",
-  tertiary: "btn-outline-pink",
-  destructive: "btn-danger",
+  tertiary: "btn-default-pink",
+  destructive: "btn-danger tc-btn-danger",
   default: "btn-default-fill",
 };
 

@@ -150,9 +150,10 @@ describe("OptionGroup select", () => {
       <OptionGroup kind="select" name="os" legend="System" options={options} defaultValue="c" />,
     );
     const wrap = container.firstElementChild as HTMLElement;
-    expect([...wrap.classList]).toEqual(["cd-select"]);
+    expect([...wrap.classList]).toEqual(["cd-filter-block"]);
+    expect(wrap.querySelector(":scope > .cd-select > select")).not.toBeNull();
     const label = wrap.querySelector(":scope > label") as HTMLElement;
-    expect([...label.classList]).toEqual(["seccolor"]);
+    expect([...label.classList]).toEqual(["seccolor", "h6", "mb-3", "d-block"]);
     const select = getByLabelText("System") as HTMLSelectElement;
     expect(select.tagName).toBe("SELECT");
     expect(select.classList.contains("select-filter")).toBe(true);

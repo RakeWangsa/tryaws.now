@@ -8,8 +8,8 @@ import type { LinkComponent } from "./types";
 const VARIANTS = [
   ["primary", "btn btn-default-yellow-fill"],
   ["secondary", "btn btn-default-pink-fill"],
-  ["tertiary", "btn btn-outline-pink"],
-  ["destructive", "btn btn-danger"],
+  ["tertiary", "btn btn-default-pink"],
+  ["destructive", "btn btn-danger tc-btn-danger"],
   ["default", "btn btn-default-fill"],
 ] as const;
 
@@ -187,7 +187,7 @@ describe("Button", () => {
       const anchor = container.querySelector("a") as HTMLAnchorElement;
       expect(anchor.getAttribute("data-custom")).toBe("yes");
       expect(anchor.getAttribute("href")).toBe("/x");
-      expect(classesOf(anchor)).toEqual(expected("btn btn-outline-pink"));
+      expect(classesOf(anchor)).toEqual(expected("btn btn-default-pink"));
     });
   });
 

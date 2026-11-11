@@ -44,7 +44,7 @@ export function PriceBreakdown({ baseMinor, steps, totalMinor }: PriceBreakdownP
             <th scope="row" className="seccolor">
               {t("base")}
             </th>
-            <td className="text-end">
+            <td className="text-end seccolor">
               <MoneyText minor={baseMinor} mode="exact" />
             </td>
           </tr>
@@ -53,7 +53,7 @@ export function PriceBreakdown({ baseMinor, steps, totalMinor }: PriceBreakdownP
               <th scope="row" className="seccolor">
                 {step.label}
               </th>
-              <td className="text-end">
+              <td className="text-end seccolor">
                 <MoneyText minor={step.amountMinor} mode="exact" />
               </td>
             </tr>
@@ -62,7 +62,7 @@ export function PriceBreakdown({ baseMinor, steps, totalMinor }: PriceBreakdownP
             <th scope="row" className="seccolor">
               <b>{t("total")}</b>
             </th>
-            <td className="text-end">
+            <td className="text-end seccolor">
               <b>
                 <MoneyText minor={totalMinor} mode="exact" />
               </b>

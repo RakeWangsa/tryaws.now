@@ -73,7 +73,7 @@ export function Field({
         {optional ? (
           <>
             {" "}
-            <span className="c-grey">{t("optional")}</span>
+            <span className="c-grey tc-field-optional">{t("optional")}</span>
           </>
         ) : null}
       </label>

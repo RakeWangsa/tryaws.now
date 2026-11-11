@@ -59,8 +59,8 @@ export function Accordion({ items, defaultOpenId, headingLevel = 3, className }:
               aria-labelledby={buttonId}
               hidden={!open}
             >
-              <div className="wrapper-collapse">
-                <div className="info">{item.content}</div>
+              <div className="wrapper-collapse tc-accordion-body">
+                <div className="info seccolor">{item.content}</div>
               </div>
             </div>
           </div>

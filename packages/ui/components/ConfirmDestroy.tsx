@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { Button } from "./Button";
-import { Field } from "./Field";
+import { Field, FormBlock } from "./Field";
 import { Modal } from "./Modal";
 
 export interface ConfirmDestroyProps {
@@ -49,16 +49,18 @@ function ConfirmBody({ resourceName, onCancel, onConfirm, pending }: BodyProps) 
 
   return (
     <>
-      <Field
-        name="confirm-name"
-        label={t("typeName", { name: resourceName })}
-        value={typed}
-        onChange={(event) => setTyped(event.target.value)}
-        autoComplete="off"
-        spellCheck={false}
-        disabled={busy}
-        className="mt-3"
-      />
+      <FormBlock>
+        <Field
+          name="confirm-name"
+          label={t("typeName", { name: resourceName })}
+          value={typed}
+          onChange={(event) => setTyped(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          disabled={busy}
+          className="mt-3"
+        />
+      </FormBlock>
       <div className="d-flex justify-content-end gap-2">
         <Button variant="default" disabled={busy} onClick={onCancel}>
           {common("cancel")}

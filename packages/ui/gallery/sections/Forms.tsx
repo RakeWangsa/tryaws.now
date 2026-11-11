@@ -16,20 +16,22 @@ export function Forms(): ReactElement {
   return (
     <>
       <Sample name="Field" titleKey="Gallery.samples.field">
-        <div className="row">
-          <div className="col-md-6">
-            <Field name="demo-plain" label={t("field.label")} hint={t("field.hint")} />
-            <Field name="demo-optional" label={t("field.optionalLabel")} optional />
+        <FormBlock>
+          <div className="row">
+            <div className="col-md-6">
+              <Field name="demo-plain" label={t("field.label")} hint={t("field.hint")} />
+              <Field name="demo-optional" label={t("field.optionalLabel")} optional />
+            </div>
+            <div className="col-md-6">
+              <Field
+                name="demo-error"
+                label={t("field.errorLabel")}
+                error={t("field.error")}
+                defaultValue=""
+              />
+            </div>
           </div>
-          <div className="col-md-6">
-            <Field
-              name="demo-error"
-              label={t("field.errorLabel")}
-              error={t("field.error")}
-              defaultValue=""
-            />
-          </div>
-        </div>
+        </FormBlock>
       </Sample>
       <Sample name="FormBlock" titleKey="Gallery.samples.formBlock">
         <FormBlock>
@@ -77,7 +79,9 @@ export function Forms(): ReactElement {
         <SecretReveal label={t("secret.label")} secret={DEMO_SECRET} />
       </Sample>
       <Sample name="CopyField" titleKey="Gallery.samples.copyField">
-        <CopyField label={t("copy.label")} value={DEMO_IP} hint={t("copy.hint")} />
+        <FormBlock>
+          <CopyField label={t("copy.label")} value={DEMO_IP} hint={t("copy.hint")} />
+        </FormBlock>
       </Sample>
     </>
   );

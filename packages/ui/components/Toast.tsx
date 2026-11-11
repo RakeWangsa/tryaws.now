@@ -95,7 +95,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
               }}
             >
               <div className="toast-header">
-                <i className={`${ICON[tone]} me-2`} aria-hidden="true" />
+                <i className={`${ICON[tone]} text-${tone} me-2`} aria-hidden="true" />
                 <strong className="me-auto">{t(tone)}</strong>
                 <RadixToast.Close className="btn-close" aria-label={common("close")} />
               </div>

@@ -75,11 +75,11 @@ export function OptionGroup({
   if (kind === "select") {
     const chosen = typeof defaultValue === "string" ? defaultValue : undefined;
     return (
-      <>
+      <div className="cd-filter-block">
+        <label className="seccolor h6 mb-3 d-block" htmlFor={ids.input}>
+          {legend}
+        </label>
         <div className="cd-select">
-          <label className="seccolor" htmlFor={ids.input}>
-            {legend}
-          </label>
           <select
             id={ids.input}
             name={name}
@@ -96,7 +96,7 @@ export function OptionGroup({
           </select>
         </div>
         {note}
-      </>
+      </div>
     );
   }
 

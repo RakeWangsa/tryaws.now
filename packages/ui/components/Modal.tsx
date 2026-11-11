@@ -58,7 +58,7 @@ export function Modal({
                 )}
                 {children}
               </div>
-              <div className="modal-footer">{footer}</div>
+              {footer !== undefined && <div className="modal-footer">{footer}</div>}
             </div>
           </Dialog.Content>
         </div>

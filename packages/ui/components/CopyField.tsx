@@ -36,6 +36,7 @@ export function CopyField({ label, value, id, hint }: CopyFieldProps) {
         <Button
           size="sm"
           variant="tertiary"
+          className="tc-nowrap"
           icon="fas fa-copy"
           onClick={() => {
             void copy(value);

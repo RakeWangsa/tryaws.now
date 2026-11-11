@@ -118,6 +118,17 @@ html[lang="bn"] .btn.question {
 /* ===== 5. Kit, part one (WPU-T2) ===== */
 
 /* ===== 5.1 Button and Badge ===== */
+/* The mockup has no red button. The theme's .btn resets every Bootstrap button color, so the
+   destructive variant carries its own fill in the danger color of the theme tokens. */
+.tc-btn-danger {
+  background-color: var(--bs-danger);
+  border: 0;
+  color: #fff;
+}
+.tc-btn-danger:hover {
+  background-color: #bb2d3b;
+  color: #fff;
+}
 
 /* ===== 5.2 Card and Field ===== */
 /* The error text of a Field: bold and in the danger color; the icon and the hidden word carry the
@@ -128,6 +139,13 @@ html[lang="bn"] .btn.question {
   margin: 0.25rem 0 0;
 }
 
+/* The theme's grey is too dim on the dark page for the word "optional". */
+.tc-field-optional,
+.tc-dim {
+  color: var(--tc-text) !important;
+  opacity: 0.75;
+}
+
 /* ===== 5.3 Tabs and Accordion ===== */
 
 /* The theme hides .accordion .panel-collapse and opens panels with a script. The class on the title
@@ -135,6 +153,10 @@ html[lang="bn"] .btn.question {
    the hidden attribute, which Bootstrap enforces with !important. */
 .accordion .panel-title.active + .tc-accordion-panel {
   display: block;
+}
+
+.tc-accordion-body {
+  padding: 0.5rem 0 1rem;
 }
 
 .tc-accordion-heading {
@@ -214,6 +236,7 @@ div.tc-modal-open {
   height: 1px;
 }
 .tc-plan-card {
+  position: relative;
   display: block;
   padding: 1rem;
   border: 2px solid transparent;
@@ -225,11 +248,65 @@ div.tc-modal-open {
 }
 .tc-plan-radio:checked + .tc-plan-card::after {
   content: "\2713";
-  float: right;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--tc-accent);
+}
+.tc-plan-name {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
 }
 .tc-plan-radio:focus-visible + .tc-plan-card {
   outline: 3px solid var(--tc-focus);
+}
+
+/* The slider above 992 px looks like the noUiSlider of vps.html (section#custom): a dark 7 px track
+   and a 25 px round handle in the accent color. The control stays a native range input. */
+.tc-plan-range {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 25px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.tc-plan-range::-webkit-slider-runnable-track {
+  height: 7px;
+  border-radius: 12px;
+  background: #4c4a4a;
+}
+.tc-plan-range::-moz-range-track {
+  height: 7px;
+  border-radius: 12px;
+  background: #4c4a4a;
+}
+.tc-plan-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 25px;
+  height: 25px;
+  margin-top: -9px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tc-accent);
+}
+.tc-plan-range::-moz-range-thumb {
+  width: 25px;
+  height: 25px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tc-accent);
+}
+.tc-plan-range-labels {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
 }
 
 /* ===== 6.2 Choices ===== */
@@ -251,6 +328,7 @@ div.tc-modal-open {
 }
 .tc-image-tile-check {
   visibility: hidden;
+  color: var(--tc-accent);
 }
 .tc-image-tile-input:checked ~ .tc-image-tile-check {
   visibility: visible;
@@ -265,6 +343,10 @@ div.tc-modal-open {
 /* ===== 6.3 Summary ===== */
 /* Below 992 px the summary is a bar fixed to the bottom; the spacer keeps the page content clear
    of it. The details element opens upward by normal flow inside the bar. */
+.tc-summary {
+  padding: 2.5rem;
+  border-radius: var(--tc-radius-card);
+}
 .tc-summary-full {
   width: 100%;
 }
@@ -304,6 +386,13 @@ div.tc-modal-open {
 }
 .tc-timeline-current {
   font-weight: 700;
+}
+.tc-timeline-step i {
+  color: var(--tc-text);
+  margin-top: 0.2rem;
+}
+.tc-timeline-current i {
+  color: var(--tc-accent);
 }
 .tc-timeline-done i {
   color: var(--bs-success);
@@ -346,8 +435,12 @@ div.tc-modal-open {
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
+.tc-nowrap {
+  white-space: nowrap;
+}
 .tc-secret-output {
   min-width: 10rem;
+  color: var(--tc-text);
 }
 .tc-secret-value {
   overflow-wrap: anywhere;
@@ -407,18 +500,23 @@ div.tc-modal-open {
 /* The theme floats the language pills at the right edge of its hero. In the panel bar and above the
    sign-in card they sit in the flow. */
 .tc-app-bar .tc-locale-switch,
-.tc-auth-lang .tc-locale-switch {
+.tc-auth-lang .tc-locale-switch,
+.tc-lang-static .tc-locale-switch {
   position: static;
   display: flex;
   width: auto;
   line-height: normal;
 }
 .tc-app-bar .tc-locale-switch .tc-locale-link,
-.tc-auth-lang .tc-locale-switch .tc-locale-link {
+.tc-auth-lang .tc-locale-switch .tc-locale-link,
+.tc-lang-static .tc-locale-switch .tc-locale-link {
   display: inline-block;
   width: auto !important;
   height: auto !important;
   padding: 6px 12px !important;
+}
+.tc-lang-static .tc-locale-switch {
+  width: fit-content;
 }
 .tc-footer-aws {
   margin-top: 16px;
@@ -484,4 +582,26 @@ div.tc-modal-open {
 .tc-app-footer {
   padding: 16px 0;
   font-size: 0.8125rem;
+}
+
+/* ===== 8. Gallery (WPU-T4) ===== */
+/* The caption under each sample names the mockup page and class; the theme's grey is too dim on the
+   dark page, so it takes the page text color. */
+.tc-gallery-source {
+  color: var(--tc-text);
+  opacity: 0.85;
+}
+.tc-gallery-code {
+  color: var(--tc-accent);
+  overflow-wrap: anywhere;
+}
+.tc-gallery {
+  padding-bottom: 3rem;
+}
+/* Below 992 px the SummarySidebar sample is a bar fixed to the window; room at the end of the page
+   keeps the last samples clear of it. */
+@media (max-width: 991.98px) {
+  .tc-gallery {
+    padding-bottom: 9rem;
+  }
 }

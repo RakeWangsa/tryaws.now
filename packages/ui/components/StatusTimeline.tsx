@@ -46,7 +46,11 @@ export function StatusTimeline({ label, steps }: StatusTimelineProps) {
                 <span className="seccolor">{step.label}</span>
                 <span className="visually-hidden">{t(step.state)}</span>
                 {step.at !== undefined ? (
-                  <DateText value={step.at} variant="datetime" className="d-block small c-grey" />
+                  <DateText
+                    value={step.at}
+                    variant="datetime"
+                    className="d-block small c-grey tc-dim"
+                  />
                 ) : null}
               </div>
             </li>
