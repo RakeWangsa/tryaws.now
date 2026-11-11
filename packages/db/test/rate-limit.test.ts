@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import type { Tx } from "../client";
 import {
@@ -47,9 +48,79 @@ it("limitKey builds the key and refuses anything outside the format", () => {
     () => limitKey("phone", hex("a"), "otp.send", 86401),
     () => limitKey("phone", hex("a"), "otp.send", 1.5),
     () => limitKey("customer", "not-a-uuid", "x", 60),
-    () => limitKey("email" as never, hex("a"), "x", 60),
+    () => limitKey("foo" as never, hex("a"), "x", 60),
+    () => limitKey("email", "rahim@example.com", "signin", 900),
+    () => limitKey("email", hex("A"), "signin", 900),
   ])
     expect(bad).toThrow(TypeError);
+});
+
+it("limitKey builds the email key like the ip and phone keys", () => {
+  expect(limitKey("email", hex("9"), "signup", 3600)).toBe(`email:${hex("9")}:signup:3600`);
+});
+
+it("an email rule counts: allowed, allowed, refused with the seconds left in the window", async () => {
+  const r = rule({ kind: "email", subject: hex("1"), action: "forgot", limit: 2 });
+  expect(await asWeb((tx) => consumeRateLimits(tx, [r], NOW))).toEqual({ allowed: true });
+  expect(await asWeb((tx) => consumeRateLimits(tx, [r], NOW))).toEqual({ allowed: true });
+  const refused = await asWeb((tx) => consumeRateLimits(tx, [r], NOW));
+  expect(refused).toEqual({ allowed: false, action: "forgot", retryAfterSeconds: 3600 });
+  expect(await rowsOf(limitKey("email", hex("1"), "forgot", 3600))).toEqual([
+    { window_start: NOW, count: 2 },
+  ]);
+});
+
+it("an ip, an email and a phone rule with one subject and one action keep three counters", async () => {
+  const subject = hex("2");
+  for (const kind of ["ip", "email", "phone"] as const) {
+    await asWeb((tx) => consumeRateLimits(tx, [rule({ kind, subject, limit: 1 })], NOW));
+  }
+  for (const kind of ["ip", "email", "phone"] as const) {
+    expect(await rowsOf(limitKey(kind, subject, "otp.send", 3600))).toEqual([
+      { window_start: NOW, count: 1 },
+    ]);
+  }
+});
+
+it("two rules in one call apply in ascending key order and the first refusal stops the call", async () => {
+  const email = rule({ kind: "email", subject: hex("3"), action: "x", limit: 1 });
+  const ip = rule({ kind: "ip", subject: hex("4"), action: "x", limit: 5 });
+  await asWeb((tx) => consumeRateLimits(tx, [email], NOW)); // the email is at its limit
+  // "email:" sorts before "ip:", so the email refuses and the ip is never touched
+  expect(await asWeb((tx) => consumeRateLimits(tx, [ip, email], NOW))).toEqual({
+    allowed: false,
+    action: "x",
+    retryAfterSeconds: 3600,
+  });
+  expect(await rowsOf(limitKey("ip", hex("4"), "x", 3600))).toEqual([]);
+});
+
+it("an email rule with a subject that is not 32 lower-case hex is a TypeError", async () => {
+  for (const subject of ["rahim@example.com", hex("A"), "abc"]) {
+    await expect(
+      asWeb((tx) => consumeRateLimits(tx, [rule({ kind: "email", subject })], NOW)),
+    ).rejects.toThrow(TypeError);
+  }
+});
+
+it("the refusal of an unknown kind says only ip, phone and email are accepted", async () => {
+  for (const kind of ["customer", "foo"]) {
+    await expect(
+      asWeb((tx) => consumeRateLimits(tx, [rule({ kind: kind as never })], NOW)),
+    ).rejects.toThrow("rate limit: only ip, phone and email rules are accepted");
+  }
+});
+
+it("web_rw keeps the grants it had on rate_limits: no new column, no migration", () => {
+  const grants = JSON.parse(
+    readFileSync(new URL("./grants.expected.json", import.meta.url), "utf8"),
+  ) as Record<string, Record<string, { insertColumns: string[] | null }>>;
+  expect(grants["rate_limits"]!["web_rw"]!.insertColumns).toEqual([
+    "id",
+    "scope_key",
+    "window_start",
+    "count",
+  ]);
 });
 
 it.each([

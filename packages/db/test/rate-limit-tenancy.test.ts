@@ -22,7 +22,7 @@ it("rate_limits is a tenant table owned through the prefix customer:<id>:", () =
   expect(NON_TENANT_TABLES).not.toContain("rate_limits");
 });
 
-it("a snapshot holds the limit rows of its customer, none of another customer, and none of a phone or an IP", async () => {
+it("a snapshot holds the limit rows of its customer, none of another customer, and none of a phone, an IP or an email", async () => {
   const a = await newCustomer(t.pool);
   const b = await newCustomer(t.pool);
   await as(a, (r) => r.rateLimits.consume(topup, NOW));
@@ -44,6 +44,13 @@ it("a snapshot holds the limit rows of its customer, none of another customer, a
             kind: "ip",
             subject: "b".repeat(32),
             action: "otp.send",
+            limit: 3,
+            windowSeconds: 3600,
+          },
+          {
+            kind: "email",
+            subject: "c".repeat(32),
+            action: "signin",
             limit: 3,
             windowSeconds: 3600,
           },

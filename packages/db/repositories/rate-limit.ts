@@ -7,10 +7,11 @@ import type { Tx } from "../client";
 // caller (the injected Clock), never from SQL now(). The statement is a `sql` template with exactly the
 // columns that web_rw may insert (no created_at, no Drizzle insert()), and uses no .raw.
 
-export type LimitSubjectKind = "ip" | "phone";
+export type LimitSubjectKind = "ip" | "phone" | "email";
 
 // `subject` is 32 lower-case hex characters made by the caller from an HMAC: the limiter never sees a
-// phone number or an address.
+// phone number, an email address or an IP address. `email:` keys, like `ip:` and `phone:`, are system
+// keys, not tenant keys.
 export interface LimitRule {
   readonly kind: LimitSubjectKind;
   readonly subject: string;
@@ -43,7 +44,7 @@ export function limitKey(
   action: string,
   windowSeconds: number,
 ): string {
-  if (kind !== "customer" && kind !== "ip" && kind !== "phone") {
+  if (kind !== "customer" && kind !== "ip" && kind !== "phone" && kind !== "email") {
     throw new TypeError("rate limit: unknown subject kind");
   }
   if (typeof subject !== "string") throw new TypeError("rate limit: subject is not valid");
@@ -96,7 +97,7 @@ export async function countHit(
 
 // Applies the rules in ascending key order (so two callers never lock the same two rows in opposite
 // orders) and stops at the first refusal. It does not undo the increments before the refusal: the
-// caller's transaction must roll back (throw) when it wants all or nothing. Only ip and phone rules.
+// caller's transaction must roll back (throw) when it wants all or nothing. Only ip, phone and email rules.
 export async function consumeRateLimits(
   tx: Tx,
   rules: readonly LimitRule[],
@@ -106,8 +107,8 @@ export async function consumeRateLimits(
     throw new TypeError("rate limit: no rules");
   }
   const prepared = rules.map((rule) => {
-    if (rule.kind !== "ip" && rule.kind !== "phone") {
-      throw new TypeError("rate limit: only ip and phone rules are accepted");
+    if (rule.kind !== "ip" && rule.kind !== "phone" && rule.kind !== "email") {
+      throw new TypeError("rate limit: only ip, phone and email rules are accepted");
     }
     if (!Number.isInteger(rule.limit) || rule.limit < 1 || rule.limit > MAX_LIMIT) {
       throw new TypeError("rate limit: limit must be an integer from 1 to 10000");
