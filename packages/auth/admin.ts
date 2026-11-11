@@ -82,7 +82,7 @@ export async function authenticateAdmin(
     if (admin.status !== "active") return deny("forbidden", "disabled");
 
     // 6. TOTP is required, always: the token must say that the second factor was used.
-    if (!token.amr.includes(MFA_METHOD)) return deny("forbidden", "mfa_required");
+    if (!(token.amr ?? []).includes(MFA_METHOD)) return deny("forbidden", "mfa_required");
 
     // 7. The role guard (R9: authorize). An empty list allows nobody.
     if (!roles.includes(admin.role)) return deny("forbidden", "role_not_allowed");

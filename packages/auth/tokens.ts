@@ -16,7 +16,7 @@ export interface VerifiedToken {
   readonly expiresAt: Date; // exp
   // The `amr` claim (authentication methods) as a list of strings; [] when absent. The admin check
   // reads it for the second factor (6.2).
-  readonly amr: readonly string[];
+  readonly amr?: readonly string[];
 }
 
 export type TokenOutcome =
