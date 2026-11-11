@@ -1,3 +1,5 @@
+import { STEP_ACCOUNTS } from "../pricing/validate";
+import { ledgerKey } from "./keys";
 import {
   LEDGER_ACCOUNT_TYPES,
   LEDGER_CURRENCY,
@@ -6,14 +8,119 @@ import {
   MAX_MEMO_LENGTH,
   MAX_MINOR,
   MAX_POSTINGS,
+  type LedgerAccountRef,
   type LedgerAccountType,
   type LedgerKind,
+  type Posting,
 } from "./types";
 import { isUuid } from "./uuid";
 
-// Spec 9.1 and open point 5: the check of a posting request, part one (shape, amounts, currency, balance).
+// Spec 9.1 and open point 5: the check of a posting request (shape, amounts, currency, balance, then
+// the lines of each kind, who may post it, the key family and the reason).
 // Pure: no database, no clock, no throw. A text of a problem is a constant of this file, never built
 // from the input (R14), and an amount is compared as a bigint only after `typeof` said it is one (R4).
+
+export type ActorType = "customer" | "admin" | "system";
+
+export type Shape =
+  /** Exactly two lines: a debit and a credit whose account types form one of the pairs. */
+  | { readonly pairs: readonly (readonly [debit: LedgerAccountType, credit: LedgerAccountType])[] }
+  /** One debit line, one or more credit lines, each `required` type once. */
+  | {
+      readonly debit: LedgerAccountType;
+      readonly credits: readonly LedgerAccountType[];
+      readonly required: readonly LedgerAccountType[];
+    }
+  | "free";
+
+export interface KindRule {
+  /** The actor types that may post the kind. */
+  readonly actors: readonly ActorType[];
+  /** The type of the row that points at the ledger transaction; `null`: any word of the form of `reference.type`. */
+  readonly referenceType: string | null;
+  /** The key family of the kind; `referenceId` is in lower case. */
+  readonly keyOk: (key: string, referenceId: string) => boolean;
+  /** The actor types that must give a reason (9.1: "with reason"; R10). */
+  readonly memoRequiredFor: readonly ActorType[];
+  readonly shape: Shape;
+}
+
+// 9.1: a step above 0 is a credit line, a step of 0 posts no line; revenue_aws_base is always there.
+const SALE_CREDITS: readonly LedgerAccountType[] = [
+  "revenue_aws_base",
+  ...Object.values(STEP_ACCOUNTS),
+];
+const SALE: Shape = {
+  debit: "customer_wallet",
+  credits: SALE_CREDITS,
+  required: ["revenue_aws_base"],
+};
+
+const startsWith = (prefix: string) => (key: string) => key.startsWith(prefix);
+// A frozen row, typed as a `KindRule` so that the functions and the lists get their types from it.
+const row = (rule: KindRule): KindRule => Object.freeze(rule);
+
+/** The table of 9.1, one row per kind. The rows of `reversal` are used by `reverseTransaction` only. */
+export const KIND_RULES: Readonly<Record<LedgerKind, KindRule>> = Object.freeze({
+  topup: row({
+    actors: ["system", "admin"],
+    referenceType: "payment",
+    keyOk: (key, id) => key === ledgerKey.topup(id),
+    memoRequiredFor: [],
+    shape: { pairs: [["gateway_clearing", "customer_wallet"]] },
+  }),
+  purchase: row({
+    actors: ["customer", "system"],
+    referenceType: "order",
+    keyOk: startsWith("order:"),
+    memoRequiredFor: [],
+    shape: SALE,
+  }),
+  renewal: row({
+    actors: ["customer", "system"],
+    referenceType: "subscription",
+    keyOk: (key, id) => key.startsWith(`renew:${id}:`),
+    memoRequiredFor: [],
+    shape: SALE,
+  }),
+  metered_charge: row({
+    actors: ["system"],
+    referenceType: "resource",
+    keyOk: (key, id) => key.startsWith(`meter:${id}:`),
+    memoRequiredFor: [],
+    shape: SALE,
+  }),
+  reversal: row({
+    actors: ["admin", "system"],
+    referenceType: "ledger_transaction",
+    keyOk: (key, id) => {
+      if (key === ledgerKey.reversal(id)) return true;
+      const prefix = "order-reversal:";
+      return key.startsWith(prefix) && isUuid(key.slice(prefix.length));
+    },
+    memoRequiredFor: ["admin"],
+    shape: "free",
+  }),
+  adjustment: row({
+    actors: ["admin", "system"],
+    referenceType: "wallet_adjustment",
+    keyOk: (key, id) => key === ledgerKey.adjustment(id),
+    memoRequiredFor: ["admin", "system"],
+    shape: {
+      pairs: [
+        ["adjustments", "customer_wallet"],
+        ["customer_wallet", "adjustments"],
+      ],
+    },
+  }),
+  refund: row({
+    actors: ["admin", "system"],
+    referenceType: null,
+    keyOk: (key, id) => key === ledgerKey.refund(id),
+    memoRequiredFor: ["admin", "system"],
+    shape: { pairs: [["customer_wallet", "refunds"]] },
+  }),
+});
 
 export interface NormalizedLine {
   readonly account: {
@@ -251,8 +358,55 @@ function check(
     }
   }
 
+  // The rules of the kind (9.1): reference type, key family, reason and lines. They are shape problems,
+  // so they all come before the permission step.
+  if (kind !== null) {
+    const rule = KIND_RULES[kind];
+    if (
+      rule.referenceType !== null &&
+      typeof referenceType === "string" &&
+      REFERENCE_TYPE.test(referenceType) &&
+      referenceType !== rule.referenceType
+    ) {
+      flag("reference.type", "The reference type is not the one of this kind.");
+    }
+    if (
+      isUuid(referenceId) &&
+      !Object.hasOwn(bad, "idempotencyKey") &&
+      !rule.keyOk(key as string, referenceId.toLowerCase())
+    ) {
+      flag("idempotencyKey", "The key is not of the key family of this kind.");
+    }
+    if (
+      actor !== null &&
+      memo === null &&
+      !Object.hasOwn(bad, "memo") &&
+      rule.memoRequiredFor.includes(actor.type)
+    ) {
+      flag("memo", "This posting needs a reason.");
+    }
+    if (linesValid) checkShape(rule.shape, lines, flag);
+  }
+
   if (Object.keys(bad).length > 0 || kind === null || actor === null) {
     return { ok: false, error: "validation", fields: bad };
+  }
+
+  // Who may post (R6, R8). Only when nothing else is wrong, so a shape problem always wins.
+  const forbidden: Record<string, string> = {};
+  if (!KIND_RULES[kind].actors.includes(actor.type)) {
+    forbidden.actor = "This actor may not post this kind.";
+  }
+  if (actor.type === "customer") {
+    lines.forEach((line, i) => {
+      if (line.account.type === "customer_wallet" && line.account.customerId !== actor.id) {
+        forbidden[`postings[${i}].account.customerId`] =
+          "A customer may post to its own wallet only.";
+      }
+    });
+  }
+  if (Object.keys(forbidden).length > 0) {
+    return { ok: false, error: "forbidden", fields: forbidden };
   }
   return {
     ok: true,
@@ -269,4 +423,96 @@ function check(
       walletDelta,
     },
   };
+}
+
+/** The lines of a kind (9.1). One problem at `postings`, and one at `postings[i]` per credit line that is not allowed. */
+function checkShape(
+  shape: Shape,
+  lines: readonly NormalizedLine[],
+  flag: (path: string, text: string) => void,
+): void {
+  if (shape === "free") return;
+  const debits = lines.filter((l) => l.direction === "debit");
+  const credits = lines.filter((l) => l.direction === "credit");
+  let wrong: boolean;
+  if ("pairs" in shape) {
+    const debit = debits[0];
+    const credit = credits[0];
+    wrong =
+      lines.length !== 2 ||
+      debit === undefined ||
+      credit === undefined ||
+      debits.length !== 1 ||
+      !shape.pairs.some(([d, c]) => d === debit.account.type && c === credit.account.type);
+  } else {
+    wrong = debits.length !== 1 || debits[0]!.account.type !== shape.debit;
+    lines.forEach((line, i) => {
+      if (line.direction === "credit" && !shape.credits.includes(line.account.type)) {
+        flag(`postings[${i}]`, "This account may not be credited by this kind.");
+      }
+    });
+    for (const type of shape.required) {
+      if (credits.filter((l) => l.account.type === type).length !== 1) wrong = true;
+    }
+  }
+  if (wrong) flag("postings", "The postings are not the lines of this kind.");
+}
+
+/**
+ * The postings of the reversing transaction (R5): for each line, in the same order, the same account
+ * (its currency written out), the other side and the same amount.
+ */
+export function reversePostings(lines: readonly NormalizedLine[]): Posting[] {
+  return lines.map((line): Posting => {
+    const { type, customerId, currency } = line.account;
+    let account: LedgerAccountRef;
+    if (type === "customer_wallet") {
+      if (customerId === null)
+        throw new TypeError("reversePostings: a wallet line has no customer");
+      account = { type, customerId, currency };
+    } else {
+      account = { type, currency };
+    }
+    return {
+      account,
+      direction: line.direction === "debit" ? "credit" : "debit",
+      amountMinor: line.amountMinor,
+    };
+  });
+}
+
+export interface StoredPosting {
+  readonly kind: string;
+  readonly referenceType: string;
+  readonly referenceId: string;
+  readonly lines: readonly {
+    accountId: string;
+    direction: "debit" | "credit";
+    amountMinor: bigint;
+  }[];
+}
+
+/**
+ * True when the stored transaction and the wanted one are the same request: same kind and reference,
+ * and the same lines as a multiset of (account, side, amount). The actor and the memo are not compared.
+ */
+export function samePosting(stored: StoredPosting, wanted: StoredPosting): boolean {
+  if (
+    stored.kind !== wanted.kind ||
+    stored.referenceType !== wanted.referenceType ||
+    stored.referenceId !== wanted.referenceId ||
+    stored.lines.length !== wanted.lines.length
+  ) {
+    return false;
+  }
+  const count = new Map<string, number>();
+  const id = (l: StoredPosting["lines"][number]) =>
+    JSON.stringify([l.accountId, l.direction, l.amountMinor.toString()]);
+  for (const l of stored.lines) count.set(id(l), (count.get(id(l)) ?? 0) + 1);
+  for (const l of wanted.lines) {
+    const n = count.get(id(l)) ?? 0;
+    if (n === 0) return false;
+    count.set(id(l), n - 1);
+  }
+  return true;
 }
