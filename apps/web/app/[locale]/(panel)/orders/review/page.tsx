@@ -35,6 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ReviewPage({ params, searchParams }: Props) {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
+  const t = await getTranslations({ locale });
   const query = await searchParams;
   const token = query["d"];
   const panel = await startPanelPage("/orders/review");
@@ -52,6 +53,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
 
   return (
     <PanelFrame locale={locale} path="/orders/review" currentId="cloudServers" panel={panel}>
+      <h1 className="h3 mergecolor mb-4">{t("Orders.review.heading")}</h1>
       <ReviewContent
         locale={locale}
         review={review}

@@ -114,7 +114,7 @@ export function ServerDetailContent({
         </a>
       </p>
       <Card className="mb-4">
-        <h2 className="mergecolor h4 mb-2">{server.name === "" ? t("list.none") : server.name}</h2>
+        <h1 className="mergecolor h3 mb-2">{server.name === "" ? t("list.none") : server.name}</h1>
         <div className="d-flex flex-wrap align-items-center gap-3">
           <ServerState state={server.state} />
           <span className="seccolor">{t("detail.header.aws")}</span>

@@ -24,10 +24,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function NewServerPage({ params }: Props) {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
+  const t = await getTranslations({ locale });
   const panel = await startPanelPage("/servers/new");
   const screen = await loadConfigurator(panel.session, () => new Date());
   return (
     <PanelFrame locale={locale} path="/servers/new" currentId="cloudServers" panel={panel}>
+      <h1 className="h3 mergecolor mb-4">{t("Servers.new.heading")}</h1>
       <ConfiguratorContent locale={locale} screen={screen} action={createOrderDraftAction} />
     </PanelFrame>
   );
