@@ -60,7 +60,8 @@ const RESOURCE_COLUMNS = {
 // the repository (R11). The stored row keeps it; only the customer's copy is without it.
 function withoutInternals(config: unknown): unknown {
   if (typeof config !== "object" || config === null || Array.isArray(config)) return config;
-  const { capacityReservation: _internal, ...rest } = config as Record<string, unknown>;
+  const rest = { ...(config as Record<string, unknown>) };
+  delete rest.capacityReservation;
   return rest;
 }
 const toResource = (row: Record<keyof ResourceSummary, unknown>): ResourceSummary =>

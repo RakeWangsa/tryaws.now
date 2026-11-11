@@ -25,6 +25,8 @@ export interface OtpSent {
 
 const SEND_FAILED = "otp: send failed";
 const NOT_STORED = "otp: the challenge could not be stored";
+// Fixed text and no cause: the cause of a database error holds the number and the hash (R14).
+const sendFailed = (): Error => new Error(SEND_FAILED);
 
 // Thrown inside the transaction, so that the new challenge, the closing of the older ones and every
 // increment of this send roll back. It never leaves this file.
@@ -162,7 +164,7 @@ export async function sendPhoneOtp(
     if (error instanceof TypeError || (error instanceof Error && error.message === NOT_STORED)) {
       throw error;
     }
-    throw new Error(SEND_FAILED);
+    throw sendFailed();
   }
 
   // 5. Outside any transaction.
@@ -206,7 +208,7 @@ export async function sendPhoneOtp(
       await customerRepos(tx, session.customerId).otp.close(id, deps.clock.now());
     });
   } catch {
-    throw new Error(SEND_FAILED);
+    throw sendFailed();
   }
   return answer === "rejected"
     ? { ok: false, error: "validation", fields: { phone: "rejected" } }

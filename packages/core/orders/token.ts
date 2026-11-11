@@ -14,7 +14,7 @@ export type DraftVerdict =
   | { ok: true; claims: DraftClaims }
   | { ok: false; reason: "malformed" | "signature" }
   // A signed draft past its expiry: the claims are carried so a replay of its order can be answered.
-  | { ok: false; reason: "expired"; claims: DraftClaims };
+  | { ok: false; reason: "expired"; claims?: DraftClaims };
 
 /** Refuses an empty list, more than three keys and any key under 32 bytes. The text holds nothing about the key. */
 export function assertSecrets(secrets: readonly Uint8Array[]): void {

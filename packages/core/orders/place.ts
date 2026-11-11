@@ -79,7 +79,7 @@ export function makeOrders(deps: OrdersDeps): Orders {
       }
       // A draft that expired may still have become an order whose answer was lost: say so, and never
       // "expired", so the customer does not pay twice. Only for the customer the draft names.
-      if (verdict.claims.c !== session.customerId) return expired;
+      if (verdict.claims === undefined || verdict.claims.c !== session.customerId) return expired;
       const limitedEarly = await runGuarded(deps, (tx) =>
         customerRepos(tx, session.customerId).rateLimits.consume(ORDER_RATE_LIMITS, now),
       );

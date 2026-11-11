@@ -134,7 +134,13 @@ async function limitReturn(
 ): Promise<VerifyOutcome | null> {
   const now = deps.clock.now();
   // The payment subject is a keyed hash of a different label than an address, so the two never meet.
-  let rules: { kind: "ip"; subject: string; action: string; limit: number; windowSeconds: number }[];
+  let rules: {
+    kind: "ip";
+    subject: string;
+    action: string;
+    limit: number;
+    windowSeconds: number;
+  }[];
   if (part === "ip") {
     // An address that is given must be one (R16); an absent address skips only the per-address rule.
     if (clientIp === undefined) return null;
