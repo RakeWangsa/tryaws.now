@@ -11,6 +11,9 @@ import { fxRatesAdminRepo, type FxRatesAdminRepo } from "./fx-rates";
 import { operationsAdminRepo, type OperationsAdminRepo } from "./operations";
 import { paymentsAdminRepo, type PaymentsAdminRepo } from "./payments";
 import { pricingRulesAdminRepo, type PricingRulesAdminRepo } from "./pricing-rules";
+import { abuseAdminRepo, type AbuseAdminRepo } from "./abuse";
+import { reconciliationAdminRepo, type ReconciliationAdminRepo } from "./reconciliation";
+import { supportAdminRepo, type SupportAdminRepo } from "./support";
 import { waitlistAdminRepo, type WaitlistAdminRepo } from "./waitlist";
 import { walletsAdminRepo, type WalletsAdminRepo } from "./wallets";
 
@@ -44,6 +47,9 @@ export interface AdminRepos {
   operations: OperationsAdminRepo;
   payments: PaymentsAdminRepo;
   pricingRules: PricingRulesAdminRepo;
+  abuse: AbuseAdminRepo;
+  reconciliation: ReconciliationAdminRepo;
+  support: SupportAdminRepo;
   waitlist: WaitlistAdminRepo;
   wallets: WalletsAdminRepo;
 }
@@ -72,6 +78,9 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     operations: operationsAdminRepo(scope),
     payments: paymentsAdminRepo(scope),
     pricingRules: pricingRulesAdminRepo(scope),
+    abuse: abuseAdminRepo(scope),
+    reconciliation: reconciliationAdminRepo(scope),
+    support: supportAdminRepo(scope),
     waitlist: waitlistAdminRepo(scope),
     wallets: walletsAdminRepo(scope),
   };

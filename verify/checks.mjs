@@ -911,6 +911,55 @@ TASKS["WP8-T6"] = [
   repo,
 ];
 
+// WP8-T7: support, abuse and reconciliation (16.12, P1). The backlog proof is "listed in 16.12": the
+// repository half (roles, audit rows with actor, reason, IP and target, replays, suspendResource writes
+// an operation row and nothing else) and the app half (R9 order, the actor is the session admin, the
+// screens in bn and en, the mockup cross-check). `--no-passWithNoTests` makes a filter that selects no
+// file fail.
+const adminCaseRepos = {
+  id: "admin-case-repos",
+  title: "WP8-T7: support, abuse and reconciliation repositories: roles, audit rows, replays",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "admin-support",
+    "admin-abuse",
+    "admin-reconciliation",
+    "reconciliation-details",
+    "admin-repos",
+    "--no-passWithNoTests",
+  ],
+};
+const adminCaseApp = {
+  id: "admin-case-app",
+  title: "WP8-T7: flows in the order of R9, screens, messages and mockup",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/admin",
+    "case-flows",
+    "cases-pages",
+    "cases-messages",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP8-T7"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  adminCaseRepos,
+  adminCaseApp,
+  core,
+  admin,
+  repo,
+];
+
 // WP1-T4: the two halves of the backlog proof ("a new rate never changes a stored order", "preview equals
 // engine output") on their own lines. `--no-passWithNoTests` makes a filter that selects no file fail.
 const storedOrder = {

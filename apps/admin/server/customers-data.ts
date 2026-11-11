@@ -23,7 +23,7 @@ export interface ListQuery {
 
 type Answer<T> = { ok: true; value: T } | { ok: false; error: string };
 
-async function read<T>(
+export async function read<T>(
   admin: AdminActor,
   fn: (repos: AdminRepos) => Promise<Answer<T>>,
 ): Promise<Loaded<T>> {
