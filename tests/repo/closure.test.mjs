@@ -65,7 +65,7 @@ it("no app and no package except packages/aws loads packages/aws, a function or 
   );
   expect(problems).toEqual([]);
   expect(seconds).toBeLessThan(60);
-});
+}, 60_000);
 
 const TMP = realpathSync(mkdtempSync(join(tmpdir(), "tc-closure-")));
 afterAll(() => rmSync(TMP, { recursive: true, force: true }));

@@ -60,6 +60,21 @@ importers:
 
   apps/web:
     dependencies:
+      '@tc/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@tc/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@tc/eps':
+        specifier: workspace:*
+        version: link:../../packages/eps
+      '@tc/notify':
+        specifier: workspace:*
+        version: link:../../packages/notify
       '@tc/ui':
         specifier: workspace:*
         version: link:../../packages/ui
