@@ -13,4 +13,5 @@ verify/baseline.json
 packages/db/migrations/
 verify/report-*.json
 packages/ui/theme/assets/
+apps/*/public/theme/
 .pnpm-store/

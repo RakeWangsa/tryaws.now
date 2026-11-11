@@ -1,12 +1,25 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { diffTree, writeTree } from "./apply.ts";
+import { fontPackageDir } from "./font-faces.ts";
 import { buildImportTree } from "./import-tree.ts";
-import { MOCKUP_ASSETS, THEME_MANIFEST, VENDORED_ASSETS, type ThemeManifest } from "./manifest.ts";
+import {
+  APPS,
+  MOCKUP_ASSETS,
+  TC_CSS,
+  THEME_MANIFEST,
+  VENDORED_ASSETS,
+  appThemeDir,
+  type AppName,
+  type ThemeManifest,
+} from "./manifest.ts";
+import { buildPublishTree } from "./publish.ts";
+import { scanOutput } from "./scan-output.ts";
 import {
   SCRIPT_HASH_FILE,
   buildScriptList,
   formatScriptList,
+  readScriptList,
   scriptHashSet,
 } from "./script-hashes.ts";
 import { ThemeError, type RefReport, type Tree } from "./tree.ts";
@@ -17,47 +30,69 @@ export interface SyncContext {
   err(line: string): void;
   /** For tests only: the allow-list of the run. The default is `THEME_MANIFEST`. */
   manifest?: ThemeManifest;
+  /** For tests only: where the installed Fontsource packages are. The default is the real ones. */
+  fontPackageDir?(packageName: string): string;
 }
 
 export const USAGE: string[] = [
-  "usage: node scripts/sync-theme.ts --stage import [--check]",
-  "  --stage import  copy the 16.3 allow-list of design/mockup to packages/ui/theme/assets",
-  "                  and write the list of the theme's scripts",
-  "  --check         write nothing; exit 1 when the copy or the list differs",
-  "  --help          print this text",
+  "usage: node scripts/sync-theme.ts [--stage import|publish] [--app web|admin] [--check]",
+  "  --stage import   copy the 16.3 allow-list of design/mockup to packages/ui/theme/assets",
+  "                   and write the list of the theme's scripts",
+  "  --stage publish  write public/theme of the apps from the committed copy, tc.css and the",
+  "                   installed fonts, then scan what was written (needs no design/)",
+  "                   without --stage: import, then publish",
+  "  --app            publish: only this app (web or admin); the default is both",
+  "  --check          write nothing; exit 1 when a copy, the list or a public/theme differs",
+  "  --help           print this text",
 ];
 
 /** The most lines of one kind that a report prints. */
 const MAX_DIFF_LINES = 20;
 const MAX_DETAIL_LINES = 30;
 
-type Request = { kind: "help" } | { kind: "import"; check: boolean } | { kind: "usage" };
+type Stage = "import" | "publish";
+type Request =
+  | { kind: "help" }
+  | { kind: "run"; stages: readonly Stage[]; app: AppName | null; check: boolean }
+  | { kind: "usage" };
+
+function isApp(value: string): value is AppName {
+  return (APPS as readonly string[]).includes(value);
+}
 
 function parse(argv: readonly string[]): Request {
   if (argv.includes("--help")) return { kind: "help" };
   let stage: string | null = null;
+  let app: AppName | null = null;
   let check = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
+    const value = argv[i + 1];
     if (arg === "--check") check = true;
-    else if (arg === "--stage" && stage === null && argv[i + 1] !== undefined) {
-      stage = argv[i + 1] ?? "";
+    else if (arg === "--stage" && stage === null && value !== undefined) {
+      stage = value;
+      i++;
+    } else if (arg === "--app" && app === null && value !== undefined && isApp(value)) {
+      app = value;
       i++;
     } else return { kind: "usage" };
   }
-  return stage === "import" ? { kind: "import", check } : { kind: "usage" };
+  if (stage === null) return { kind: "run", stages: ["import", "publish"], app, check };
+  if (stage === "import" || stage === "publish")
+    return { kind: "run", stages: [stage], app, check };
+  return { kind: "usage" };
 }
 
-function refsLine(refs: RefReport): string {
+function refsLine(label: string, refs: RefReport): string {
   return (
-    `import: refs: ${refs.shipped} shipped, ${refs.neverShipped.length} never shipped, ` +
+    `${label}: refs: ${refs.shipped} shipped, ${refs.neverShipped.length} never shipped, ` +
     `${refs.knownMissing.length} known missing, ${refs.unshippedFallbacks.length} fallbacks not shipped`
   );
 }
 
-function summaryLine(tree: Tree): string {
+function summaryLine(label: string, tree: Tree): string {
   const bytes = tree.files.reduce((sum, file) => sum + file.bytes, 0);
-  return `import: ${tree.files.length} files, ${bytes} bytes, digest ${tree.digest}`;
+  return `${label}: ${tree.files.length} files, ${bytes} bytes, digest ${tree.digest}`;
 }
 
 function readTextOrNull(file: string): string | null {
@@ -76,8 +111,8 @@ function runImport(check: boolean, ctx: SyncContext): number {
   const scriptsLine = `import: scripts: ${scripts.length} listed, ${scriptHashSet(scripts).size} hashed`;
   const currentList = readTextOrNull(listFile);
 
-  ctx.out(summaryLine(tree));
-  ctx.out(refsLine(refs));
+  ctx.out(summaryLine("import", tree));
+  ctx.out(refsLine("import", refs));
 
   if (!check) {
     const { written, removed } = writeTree(tree, dest);
@@ -111,6 +146,71 @@ function runImport(check: boolean, ctx: SyncContext): number {
   return treeInSync && listInSync ? 0 : 1;
 }
 
+function diffLines(diff: { missing: string[]; changed: string[]; stray: string[] }): string[] {
+  return [
+    ...diff.missing.map((path) => `  missing: ${path}`),
+    ...diff.changed.map((path) => `  changed: ${path}`),
+    ...diff.stray.map((path) => `  stray: ${path}`),
+  ];
+}
+
+/** Scans the folder of one app. Returns true when it is clean. */
+function scanApp(
+  label: string,
+  dest: string,
+  hashes: ReadonlySet<string>,
+  ctx: SyncContext,
+): boolean {
+  const { files, findings } = scanOutput(dest, hashes);
+  ctx.out(`${label}: scanned ${files} files, ${findings.length} findings`);
+  for (const finding of findings)
+    ctx.err(`FOUND ${finding.rule} ${finding.file}: ${finding.detail}`);
+  return findings.length === 0;
+}
+
+function runPublish(app: AppName | null, check: boolean, ctx: SyncContext): number {
+  const manifest = ctx.manifest ?? THEME_MANIFEST;
+  const { tree, refs } = buildPublishTree({
+    vendoredRoot: join(ctx.repoRoot, VENDORED_ASSETS),
+    tcCssFile: join(ctx.repoRoot, TC_CSS),
+    fontPackageDir: ctx.fontPackageDir ?? fontPackageDir,
+    manifest,
+  });
+  // The scan needs the theme's scripts; without them nothing is written (R16).
+  const hashes = scriptHashSet(readScriptList(join(ctx.repoRoot, SCRIPT_HASH_FILE)));
+  if (hashes.size === 0)
+    throw new ThemeError("missing_input", "the list of the theme's scripts has no hash", [
+      SCRIPT_HASH_FILE,
+    ]);
+
+  ctx.out(summaryLine("publish", tree));
+  ctx.out(refsLine("publish", refs));
+
+  let clean = true;
+  for (const name of app === null ? APPS : [app]) {
+    const label = `publish ${name}`;
+    const dest = join(ctx.repoRoot, appThemeDir(name));
+    if (!check) {
+      const { written, removed } = writeTree(tree, dest);
+      ctx.out(
+        `${label}: ${written.length} written, ${removed.length} removed, ${tree.files.length - written.length} unchanged`,
+      );
+      if (!scanApp(label, dest, hashes, ctx)) clean = false;
+      continue;
+    }
+    const diff = diffTree(tree, dest);
+    if (diff.missing.length + diff.changed.length + diff.stray.length > 0 || !existsSync(dest)) {
+      ctx.err(`${label}: ${dest} differs from what the stage writes`);
+      for (const line of diffLines(diff).slice(0, MAX_DIFF_LINES)) ctx.err(line);
+      clean = false;
+      continue;
+    }
+    ctx.out(`${label}: in sync`);
+    if (!scanApp(label, dest, hashes, ctx)) clean = false;
+  }
+  return clean ? 0 : 1;
+}
+
 /** Runs the command. It never throws; it returns the exit code. */
 export function syncThemeMain(argv: readonly string[], ctx: SyncContext): number {
   const request = parse(argv);
@@ -123,7 +223,15 @@ export function syncThemeMain(argv: readonly string[], ctx: SyncContext): number
     return 1;
   }
   try {
-    return runImport(request.check, ctx);
+    let code = 0;
+    for (const stage of request.stages) {
+      const stageCode =
+        stage === "import"
+          ? runImport(request.check, ctx)
+          : runPublish(request.app, request.check, ctx);
+      code = Math.max(code, stageCode);
+    }
+    return code;
   } catch (error) {
     if (error instanceof ThemeError) {
       ctx.err(`theme-sync: ${error.message} (${error.code})`);
