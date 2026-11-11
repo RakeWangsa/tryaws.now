@@ -47,13 +47,17 @@ function isUniqueViolation(error: unknown): boolean {
   return sqlState(error) === "23505";
 }
 
-/** The purchase of this very token, if one is committed: the order and the ids it made. */
+/**
+ * The purchase of this very token, if one is committed: the order and the ids it made. An order that
+ * was reversed (the automatic refund of a failed create) is `"reversed"`: the purchase of the token
+ * is over, so a replay must not answer ok for it, and nothing may be charged again.
+ */
 async function findPurchase(
   tx: Tx,
   repos: Repos,
   orderId: string,
   tokenHash: string,
-): Promise<Purchased | null> {
+): Promise<Purchased | "reversed" | null> {
   const ledger = await findLedgerTransactionByKey(tx, ledgerKey.purchase(tokenHash));
   const order =
     ledger === null
@@ -65,6 +69,7 @@ async function findPurchase(
     return null;
   }
   if (order.id !== orderId) throw new Error("orders: the order of a purchase is another order");
+  if (order.status === "reversed") return "reversed";
   const resourceId = childId(orderId, "resource");
   const operation = (await repos.operations.listForResource(resourceId)).find(
     (op) => op.kind === "create",
@@ -102,6 +107,7 @@ export async function runPurchase(
 
   // 3. Replay. One draft gives at most one order, whatever the client key is.
   const earlier = await findPurchase(tx, repos, orderId, tokenHash);
+  if (earlier === "reversed") return { ok: false, error: "conflict" };
   if (earlier !== null) return { ok: true, value: earlier };
   if (await clientKeyIsTaken(repos, clientKey)) return { ok: false, error: "conflict" };
 
@@ -252,7 +258,9 @@ export async function runPurchase(
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
     const again = await findPurchase(tx, repos, orderId, tokenHash);
-    return again !== null ? { ok: true, value: again } : { ok: false, error: "conflict" };
+    return again !== null && again !== "reversed"
+      ? { ok: true, value: again }
+      : { ok: false, error: "conflict" };
   }
   return result;
 }

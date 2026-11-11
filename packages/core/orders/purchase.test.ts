@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { insertRow, useTempDatabase } from "@tc/db/testing";
+import { insertRow, runTransaction, useTempDatabase } from "@tc/db/testing";
 import { describe, expect, it } from "vitest";
 import {
   makeKit,
@@ -9,6 +9,7 @@ import {
   type Buyer,
   type Kit,
 } from "../test/orders-kit";
+import { compensateFailedCreate } from "./compensate";
 import { childId, draftHash, orderIdFor } from "./ids";
 import { runPurchase, type Purchased } from "./purchase";
 import { signDraft, verifyDraft } from "./token";
@@ -191,6 +192,37 @@ describe("runPurchase: the happy path", () => {
     const other = await purchase(kit, draft, "another-client-key-01");
     expect(other).toEqual({ ok: true, value: { ...first, replayed: true } });
     expect(await snapshotRows(t)).toEqual(after);
+  });
+
+  it("answers conflict, not ok, for a token whose order was reversed, and charges nothing", async () => {
+    const kit = await makeKit(t);
+    const start = await kit.balance();
+    const draft = await kit.draft();
+    const first = await bought(kit, draft, "reversed-client-key-01");
+    await runTransaction(
+      t.db,
+      (tx) =>
+        compensateFailedCreate(tx, kit.deps, {
+          resourceId: first.resourceId,
+          customerId: kit.customerId,
+          code: "step_failed",
+        }),
+      { role: "worker_rw" },
+    );
+    expect(await kit.balance()).toBe(start);
+    const after = await snapshotRows(t);
+    // the same client key and another one: the order is refunded, so neither is an answer of ok
+    expect(await purchase(kit, draft, "reversed-client-key-01")).toEqual({
+      ok: false,
+      error: "conflict",
+    });
+    expect(await purchase(kit, draft, "reversed-client-key-02")).toEqual({
+      ok: false,
+      error: "conflict",
+    });
+    expect(await kit.balance()).toBe(start);
+    expect(await snapshotRows(t)).toEqual(after);
+    expect(kit.queue.depth).toBe(0);
   });
 });
 
