@@ -6,6 +6,7 @@ import { capacityAdminRepo, type CapacityAdminRepo } from "./capacity";
 import { featureFlagsAdminRepo, type FeatureFlagsAdminRepo } from "./feature-flags";
 import { fxRatesAdminRepo, type FxRatesAdminRepo } from "./fx-rates";
 import { operationsAdminRepo, type OperationsAdminRepo } from "./operations";
+import { paymentsAdminRepo, type PaymentsAdminRepo } from "./payments";
 import { pricingRulesAdminRepo, type PricingRulesAdminRepo } from "./pricing-rules";
 import { waitlistAdminRepo, type WaitlistAdminRepo } from "./waitlist";
 import { walletsAdminRepo, type WalletsAdminRepo } from "./wallets";
@@ -35,6 +36,7 @@ export interface AdminRepos {
   featureFlags: FeatureFlagsAdminRepo;
   fxRates: FxRatesAdminRepo;
   operations: OperationsAdminRepo;
+  payments: PaymentsAdminRepo;
   pricingRules: PricingRulesAdminRepo;
   waitlist: WaitlistAdminRepo;
   wallets: WalletsAdminRepo;
@@ -59,6 +61,7 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     featureFlags: featureFlagsAdminRepo(scope),
     fxRates: fxRatesAdminRepo(scope),
     operations: operationsAdminRepo(scope),
+    payments: paymentsAdminRepo(scope),
     pricingRules: pricingRulesAdminRepo(scope),
     waitlist: waitlistAdminRepo(scope),
     wallets: walletsAdminRepo(scope),

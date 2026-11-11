@@ -227,3 +227,20 @@ export type {
   WalletLedgerLine,
   WalletsAdminRepo,
 } from "./repositories/admin/wallets";
+export type {
+  DiscrepancyListInput,
+  DiscrepancyResolveInput,
+  DiscrepancyResolved,
+  DiscrepancyRow,
+  PaymentAdminDetail,
+  PaymentFilter,
+  PaymentListRow,
+  PaymentReverified,
+  PaymentSearchInput,
+  PaymentSearchResult,
+  PaymentsAdminRepo,
+  RefundInput,
+  RefundLine,
+  RefundRecorded,
+  ReverifyInput,
+} from "./repositories/admin/payments";

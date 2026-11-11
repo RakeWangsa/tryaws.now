@@ -30,6 +30,7 @@ const one = async (sql: string, args: unknown[]) => (await t.pool.query(sql, arg
 
 const credit = (customerId: string, amountMinor: bigint, over: Record<string, unknown> = {}) => ({
   requestId: uuidv7(),
+  at: new Date(),
   customerId,
   direction: "credit" as const,
   amountMinor,
@@ -519,7 +520,7 @@ it("the ledger stays balanced and the cache equals the sum of the lines after a 
   const a = await actorOf();
   const b = await actorOf();
   const w = await fundedWallet(t.pool, 50_000n);
-  await setAdjustmentLimit(t.pool, "10000");
+  await setAdjustmentLimit(t.pool, "20000");
   const steps = [
     credit(w.customerId, 7_000n),
     credit(w.customerId, 9_000n, { direction: "debit", kind: "correction" }),
@@ -538,4 +539,79 @@ it("the ledger stays balanced and the cache equals the sum of the lines after a 
       having sum(case direction when 'debit' then amount_minor else -amount_minor end) <> 0`,
   );
   expect(unbalanced.rows).toEqual([]);
+});
+
+it("small adjustments that pass one by one but together exceed the limit: the one that crosses waits", async () => {
+  const a = await actorOf();
+  const w = await fundedWallet(t.pool, 10_000n);
+  await setAdjustmentLimit(t.pool, "10000");
+  const steps = [
+    credit(w.customerId, 4_000n),
+    credit(w.customerId, 4_000n, { direction: "debit", kind: "correction" }),
+    credit(w.customerId, 4_000n),
+  ];
+  const out = [];
+  for (const [i, s] of steps.entries()) {
+    out.push(await asAdmin(a, (r) => r.wallets.createAdjustment(s, `part ${i}`, testPoster)));
+  }
+  expect(out.map((x) => (x.ok ? x.value.status : "refused"))).toEqual([
+    "approved",
+    "approved",
+    "pending",
+  ]);
+  expect(await walletOf(t.pool, w.customerId)).toEqual({ balance: 10_000n, entriesSum: 10_000n });
+  // the same admin cannot approve their own pending one; a second one can
+  expect(
+    await asAdmin(a, (r) =>
+      r.wallets.approveAdjustment({ id: steps[2]!.requestId }, "me", testPoster),
+    ),
+  ).toEqual({ ok: false, error: "forbidden" });
+  const other = await actorOf();
+  expect(
+    (
+      await asAdmin(other, (r) =>
+        r.wallets.approveAdjustment({ id: steps[2]!.requestId }, "ok", testPoster),
+      )
+    ).ok,
+  ).toBe(true);
+  // a replay of the crossing request is a replay, not a second posting
+  expect(
+    await asAdmin(a, (r) => r.wallets.createAdjustment(steps[2]!, "part 2", testPoster)),
+  ).toMatchObject({ ok: true, replayed: true });
+  expect(await walletOf(t.pool, w.customerId)).toEqual({ balance: 14_000n, entriesSum: 14_000n });
+});
+
+it("two concurrent requests cannot both pass under the limit", async () => {
+  const a = await actorOf();
+  const w = await fundedWallet(t.pool, 0n);
+  await setAdjustmentLimit(t.pool, "10000");
+  const results = await Promise.all(
+    [6_000n, 6_000n].map((n) =>
+      asAdmin(a, (r) => r.wallets.createAdjustment(credit(w.customerId, n), "race", testPoster)),
+    ),
+  );
+  expect(results.map((x) => (x.ok ? x.value.status : "refused")).sort()).toEqual([
+    "approved",
+    "pending",
+  ]);
+});
+
+it("adjustments outside the window do not count; a bad clock is refused", async () => {
+  const a = await actorOf();
+  const w = await fundedWallet(t.pool, 0n);
+  await setAdjustmentLimit(t.pool, "10000");
+  await asAdmin(a, (r) =>
+    r.wallets.createAdjustment(credit(w.customerId, 9_000n), "old", testPoster),
+  );
+  const later = new Date(Date.now() + 25 * 60 * 60 * 1000);
+  expect(
+    await asAdmin(a, (r) =>
+      r.wallets.createAdjustment(credit(w.customerId, 9_000n, { at: later }), "new", testPoster),
+    ),
+  ).toMatchObject({ ok: true, value: { status: "approved" } });
+  expect(
+    await asAdmin(a, (r) =>
+      r.wallets.createAdjustment(credit(w.customerId, 1n, { at: "x" }), "bad", testPoster),
+    ),
+  ).toEqual({ ok: false, error: "validation" });
 });

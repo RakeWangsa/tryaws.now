@@ -21,6 +21,9 @@ const DECIDE_ROLES: readonly AdminRole[] = ["finance", "superadmin"];
 export const ADJUSTMENT_LIMIT_KEY = "wallet.adjustment_limit_minor";
 const MAX_MINOR = 9223372036854775807n;
 const MAX_EVIDENCE = 200;
+// Four-eyes rule against splitting: adjustments of one wallet that posted at once without a second
+// admin count together over this window; the one that crosses the limit waits for a second admin.
+export const SPLIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_PAGE = 100;
 const DEFAULT_PAGE = 50;
 const LIST_ROWS = 50;
@@ -87,6 +90,8 @@ export interface AdjustmentInput {
   amountMinor: bigint;
   kind: AdjustmentKind;
   evidenceRef?: string;
+  // The caller clock reading: the end of the window of the split rule (never the database clock).
+  at: Date;
 }
 
 export interface AdjustmentDecisionInput {
@@ -390,7 +395,7 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
 
     async createAdjustment(input, reason, post) {
       // Read once into locals, so a getter cannot answer differently on the second read.
-      const { requestId, customerId, direction, amountMinor, kind, evidenceRef } = input ?? {};
+      const { requestId, customerId, direction, amountMinor, kind, evidenceRef, at } = input ?? {};
       if (!CREATE_ROLES.includes(role)) return refused("forbidden");
       if (
         typeof requestId !== "string" ||
@@ -404,6 +409,8 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
           (typeof evidenceRef !== "string" ||
             evidenceRef.trim() === "" ||
             evidenceRef.length > MAX_EVIDENCE)) ||
+        !(at instanceof Date) ||
+        Number.isNaN(at.getTime()) ||
         typeof post !== "function"
       ) {
         return refused("validation");
@@ -450,12 +457,22 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
                 after: { ...meta, status: existing.status },
               };
             }
+            // The wallet lock comes first (the one the ledger takes): requests of one wallet are
+            // counted one after the other, so two of them cannot both pass the limit.
             const found = await tx.execute<{ id: string }>(
-              sql`select id from wallets where customer_id = ${customer}`,
+              sql`select id from wallets where customer_id = ${customer} for update`,
             );
             if (found.rows[0] === undefined) throw new Refusal("not_found");
+            // What posted without a second admin in the window counts together (no splitting).
+            const since = new Date(at.getTime() - SPLIT_WINDOW_MS);
+            const recent = await tx.execute<{ total: string }>(
+              sql`select coalesce(sum(amount_minor), 0)::text as total from wallet_adjustments
+                   where customer_id = ${customer} and status = 'approved' and approved_by is null
+                     and created_at > ${since}`,
+            );
+            const already = BigInt(recent.rows[0]?.total ?? "0");
             // Up to the limit it posts now; above it waits for a second admin (9.1).
-            const immediate = amountMinor <= (await limitOf(customer));
+            const immediate = amountMinor + already <= (await limitOf(customer));
             let ledgerTransactionId: string | null = null;
             if (immediate) {
               const posted = await post(

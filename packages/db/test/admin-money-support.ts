@@ -72,6 +72,8 @@ export const refusingPoster =
 export interface FundedWallet {
   customerId: string;
   walletId: string;
+  // The ledger transaction of the opening top-up (null for a balance of 0).
+  topupId: string | null;
 }
 
 // A customer with a wallet, its ledger accounts and a verified top-up of `balance` paisa, written as
@@ -91,6 +93,7 @@ export async function fundedWallet(pool: pg.Pool, balance: bigint): Promise<Fund
   const clearing = await systemAccount(pool, "gateway_clearing");
   await systemAccount(pool, "adjustments");
   await systemAccount(pool, "refunds");
+  let topupId: string | null = null;
   if (balance > 0n) {
     // The two lines balance only together: one transaction.
     await inTransaction(pool, async (c) => {
@@ -113,9 +116,10 @@ export async function fundedWallet(pool: pg.Pool, balance: bigint): Promise<Fund
         direction: "credit",
         amount_minor: balance,
       });
+      topupId = txId;
     });
   }
-  return { customerId, walletId };
+  return { customerId, walletId, topupId };
 }
 
 // The adjustment approval limit of the market of the customers of the tests (the market BD).
@@ -143,4 +147,27 @@ export async function walletOf(
     [customerId],
   );
   return { balance: BigInt(rows[0]?.balance ?? "0"), entriesSum: BigInt(rows[0]?.sum ?? "0") };
+}
+
+let paymentCounter = 0;
+
+// A payment row as the owner. A credited one needs the ledger transaction of its top-up.
+export async function newPayment(
+  pool: Queryable,
+  customerId: string,
+  over: Record<string, unknown> = {},
+): Promise<{ id: string; merchantTransactionId: string }> {
+  paymentCounter += 1;
+  const merchantTransactionId = `tcmt-${uuidv7()}-${paymentCounter}`;
+  const id = await insertRow(pool, "payments", {
+    customer_id: customerId,
+    gateway: "eps",
+    merchant_transaction_id: merchantTransactionId,
+    idempotency_key: "pay-" + uuidv7(),
+    amount_minor: 10_000n,
+    currency: "BDT",
+    status: "redirected",
+    ...over,
+  });
+  return { id, merchantTransactionId };
 }
