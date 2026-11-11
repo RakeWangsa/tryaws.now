@@ -1,0 +1,15 @@
+{
+  "kit": {
+    "state": {
+      "creating": "Creating",
+      "running": "Running",
+      "stopped": "Stopped",
+      "grace": "Suspended, renewal due",
+      "retained": "Deleted, backup kept",
+      "problem": "Problem",
+      "paid": "Paid",
+      "pending": "Pending",
+      "failed": "Failed"
+    }
+  }
+}
