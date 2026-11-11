@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "./route.ts";
 
 function post(body: string, contentType: string): Request {
   return new Request("http://localhost:3001/api/csp-report", {
     method: "POST",
-    headers: { "content-type": contentType },
+    headers: { "content-type": contentType, "cloudfront-viewer-address": "203.0.113.5:4000" },
     body,
   });
 }
@@ -22,8 +22,37 @@ const legacy = JSON.stringify({
   },
 });
 
+beforeEach(() => {
+  vi.stubEnv("ADMIN_IP_ALLOWLIST", "203.0.113.0/24");
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
+
+describe("POST /api/csp-report: the allowlist", () => {
+  it("answers 403 outside the allowlist and reads no body", async () => {
+    const request = new Request("http://localhost:3001/api/csp-report", {
+      method: "POST",
+      headers: {
+        "content-type": "application/csp-report",
+        "cloudfront-viewer-address": "198.51.100.1:1",
+      },
+      body: legacy,
+    });
+    const text = vi.spyOn(request, "text");
+    expect((await POST(request)).status).toBe(403);
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it("answers 403 without the header", async () => {
+    const request = new Request("http://localhost:3001/api/csp-report", {
+      method: "POST",
+      body: legacy,
+    });
+    expect((await POST(request)).status).toBe(403);
+  });
 });
 
 describe("POST /api/csp-report", () => {

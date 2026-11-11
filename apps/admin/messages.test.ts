@@ -8,7 +8,28 @@ import { en } from "./messages/en.ts";
 describe("Admin messages", () => {
   it("bn and en of Admin have the same keys", () => {
     expect(messageKeys(bn)).toEqual(messageKeys(en));
-    expect(messageKeys(bn)).toEqual(["Admin.home.body", "Admin.home.title", "Admin.meta.title"]);
+    expect(messageKeys(bn)).toEqual([
+      "Admin.home.body",
+      "Admin.home.title",
+      "Admin.login.code",
+      "Admin.login.codeHint",
+      "Admin.login.email",
+      "Admin.login.errors.denied",
+      "Admin.login.errors.invalid",
+      "Admin.login.errors.rate_limited",
+      "Admin.login.errors.unavailable",
+      "Admin.login.intro",
+      "Admin.login.password",
+      "Admin.login.submit",
+      "Admin.login.title",
+      "Admin.meta.title",
+      "Admin.noAccess.body",
+      "Admin.noAccess.login",
+      "Admin.noAccess.title",
+      "Admin.section.body",
+      "Admin.section.title",
+      "Admin.signOut",
+    ]);
   });
 
   it("holds the agreed texts", () => {

@@ -2,14 +2,15 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { getTranslations } from "next-intl/server";
-import { AdminShell, EmptyState } from "@tc/ui";
-import { isLocale, localeHrefs } from "@tc/ui/runtime";
+import { EmptyState } from "@tc/ui";
+import { isLocale } from "@tc/ui/runtime";
+import type { AdminActor } from "@tc/db";
 import type { Locale } from "@tc/ui/runtime";
+import { AdminFrame } from "../_components/AdminFrame.tsx";
+import { NoAccess } from "../_components/NoAccess.tsx";
+import { loadPageAdmin } from "../../server/page-admin.ts";
 
 type PageProps = { params: Promise<{ locale: string }> };
-
-// No person yet: the sign-in with TOTP and the IP allowlist (R10) come with the admin work.
-const PlaceholderAdmin = { displayName: "", role: "support" } as const;
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { locale } = await params;
@@ -17,23 +18,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return { title: t("title") };
 }
 
-function AdminHome({ locale }: { locale: Locale }) {
+function AdminHome({ locale, admin }: { locale: Locale; admin: AdminActor }) {
   const t = useTranslations("Admin.home");
   return (
-    <AdminShell
-      locale={locale}
-      localeHrefs={localeHrefs("/")}
-      currentId="today"
-      admin={PlaceholderAdmin}
-      visibleIds={["today"]}
-    >
+    <AdminFrame locale={locale} admin={admin} currentId="today">
       <EmptyState title={t("title")} description={t("body")} />
-    </AdminShell>
+    </AdminFrame>
   );
 }
 
+// 16.12 `/`: Today, for every role. The summary tiles come with the screens that own their data.
 export default async function Page({ params }: PageProps) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
-  return <AdminHome locale={locale} />;
+  const loaded = await loadPageAdmin(locale, "today");
+  if (loaded.kind === "denied") return <NoAccess locale={locale} path="/" />;
+  return <AdminHome locale={locale} admin={loaded.admin} />;
 }
