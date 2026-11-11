@@ -49,6 +49,8 @@ export interface LedgerKit {
   waitForLockWaiter(timeoutMs?: number): Promise<void>;
   /** The largest number of connections the pool of the database opens. */
   poolSize(): number;
+  /** Switches the two deferred balance triggers off for `body` and on again in `finally` (the owner's pool). */
+  withTriggersOff(body: () => Promise<void>): Promise<void>;
 }
 
 const hex32 = () => crypto.randomUUID().replaceAll("-", "");
@@ -173,6 +175,22 @@ function makeKit(source: Source): LedgerKit {
     },
     poolSize() {
       return source.pool.options.max ?? 10;
+    },
+    async withTriggersOff(body) {
+      await source.pool.query("alter table ledger_entries disable trigger ledger_entries_balanced");
+      await source.pool.query(
+        "alter table ledger_transactions disable trigger ledger_transactions_balanced",
+      );
+      try {
+        await body();
+      } finally {
+        await source.pool.query(
+          "alter table ledger_entries enable trigger ledger_entries_balanced",
+        );
+        await source.pool.query(
+          "alter table ledger_transactions enable trigger ledger_transactions_balanced",
+        );
+      }
     },
     async counts() {
       const r = await source.pool.query<{ transactions: number; entries: number }>(
