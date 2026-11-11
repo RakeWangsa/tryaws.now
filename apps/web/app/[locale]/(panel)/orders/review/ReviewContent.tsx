@@ -3,6 +3,7 @@ import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { FormState } from "../../../../../server/action-state.ts";
+import { familyScreen } from "../../../../../server/family-screens.ts";
 import type { ReviewScreen } from "../../../../../server/review-view.ts";
 import { PlaceForm } from "./PlaceForm.tsx";
 
@@ -21,11 +22,10 @@ export function ReviewContent({
   action: (previous: FormState, form: FormData) => Promise<FormState>;
 }) {
   const t = useTranslations("Orders.review");
-  // The form the draft came from: a CDN draft goes back to /cdn/new (WP7-T2), the rest to /servers/new.
-  const configureHref = localePath(
-    locale,
-    review.state === "ready" && review.family === "cdn" ? "/cdn/new" : "/servers/new",
-  );
+  // The form the draft came from: a family with its own screens (server/family-screens.ts) goes back to
+  // its /new, the rest to /servers/new.
+  const own = review.state === "ready" ? familyScreen(review.family) : undefined;
+  const configureHref = localePath(locale, own === undefined ? "/servers/new" : `${own.base}/new`);
 
   if (review.state !== "ready") {
     return (

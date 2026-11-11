@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
 import { getOrdersRuntime } from "../../../../../server/orders-runtime.ts";
+import { familyScreen } from "../../../../../server/family-screens.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { reviewFromToken } from "../../../../../server/review-view.ts";
 import type { ReviewScreen } from "../../../../../server/review-view.ts";
@@ -55,7 +56,9 @@ export default async function ReviewPage({ params, searchParams }: Props) {
     <PanelFrame
       locale={locale}
       path="/orders/review"
-      currentId={review.state === "ready" && review.family === "cdn" ? "cdn" : "cloudServers"}
+      currentId={
+        (review.state === "ready" ? familyScreen(review.family)?.nav : undefined) ?? "cloudServers"
+      }
       panel={panel}
     >
       <h1 className="h3 mergecolor mb-4">{t("Orders.review.heading")}</h1>

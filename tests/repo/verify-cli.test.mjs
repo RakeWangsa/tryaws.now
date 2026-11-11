@@ -120,6 +120,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP6-T2",
     "WP6-T3",
     "WP6-T4",
+    "WP6-T4s",
     "WP7-T1",
     "WP7-T2",
     "WP7-T3",
@@ -1134,6 +1135,44 @@ it("tasks WP6-T4 and WP7-T1 are proven by the adapter tests, each filter naming 
     "packages/core/products/bucket.test.ts",
     "packages/core/products/container.test.ts",
     "functions/provisioner/storage-wiring.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP6-T4s is proven by the core and web tests of the bucket and container screens, each filter naming a real test file", () => {
+  expect(TASKS["WP6-T4s"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "storage-screens-core",
+    "storage-screens-web",
+    "repo",
+  ]);
+  const line = (id) => TASKS["WP6-T4s"].find((c) => c.id === id).command.join(" ");
+  expect(line("storage-screens-core")).toBe(
+    "pnpm test --filter @tc/core products/bucket-resolve products/container-resolve orders/exports --no-passWithNoTests",
+  );
+  expect(line("storage-screens-web")).toBe(
+    "pnpm test --filter @tc/web bucket container family-screens --no-passWithNoTests",
+  );
+  for (const f of [
+    "packages/core/products/bucket-resolve.test.ts",
+    "packages/core/products/container-resolve.test.ts",
+    "packages/core/orders/exports.test.ts",
+    "apps/web/server/bucket-actions.test.ts",
+    "apps/web/server/bucket-keys.test.ts",
+    "apps/web/server/bucket-view.test.ts",
+    "apps/web/server/container-actions.test.ts",
+    "apps/web/server/container-view.test.ts",
+    "apps/web/server/family-screens.test.ts",
+    "apps/web/messages/bucket-messages.test.ts",
+    "apps/web/app/[locale]/(panel)/storage/bucket.test.tsx",
+    "apps/web/app/[locale]/(panel)/storage/bucket-anchors.test.tsx",
+    "apps/web/app/[locale]/(panel)/containers/container.test.tsx",
+    "apps/web/app/[locale]/(panel)/containers/container-anchors.test.tsx",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
