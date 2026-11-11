@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vitest";
+import { parse } from "yaml";
 import { readWorkspacePackages } from "../../scripts/lib/changed-packages.mjs";
 
 const packages = {
@@ -95,6 +96,21 @@ it("has the other folders of spec section 5", () => {
 
 it("no longer has mockup/ at the root", () => {
   expect(existsSync("mockup")).toBe(false);
+});
+
+// The places of workspace packages are named twice: WORKSPACE_FOLDERS (scripts/lib/changed-packages.mjs,
+// which --quick and the graph test read) and the globs of pnpm-workspace.yaml (which pnpm installs).
+// They must be the same three folders, so that no package is installed that the checks never read.
+it("WORKSPACE_FOLDERS and the globs of pnpm-workspace.yaml name the same folders", () => {
+  const source = readFileSync("scripts/lib/changed-packages.mjs", "utf8");
+  const folders = /const WORKSPACE_FOLDERS = (\[[^\]]*\]);/.exec(source)?.[1];
+  expect(folders).toBeDefined();
+  expect(JSON.parse(folders)).toEqual(["apps", "packages", "functions"]);
+  expect(parse(readFileSync("pnpm-workspace.yaml", "utf8")).packages).toEqual([
+    "apps/*",
+    "packages/*",
+    "functions/*",
+  ]);
 });
 
 it("runs on the Node version pinned in .nvmrc", () => {

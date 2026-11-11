@@ -35,18 +35,21 @@ const db = {
 const repo = {
   id: "repo",
   title: "Repository tests",
-  command: ["pnpm", "test", "--filter", "repo"],
+  command: ["pnpm", "test", "--filter", "repo", "--no-passWithNoTests"],
 };
 
+// The proofs aws, core and repo fail when their filter selects no test file: `--no-passWithNoTests`
+// overrides passWithNoTests of vitest.config.mjs (which stays true for `verify --quick`, where
+// packages without tests exist).
 const aws = {
   id: "aws",
   title: "packages/aws: STS, Lightsail clients, error mapping, no network",
-  command: ["pnpm", "test", "--filter", "@tc/aws"],
+  command: ["pnpm", "test", "--filter", "@tc/aws", "--no-passWithNoTests"],
 };
 const core = {
   id: "core",
   title: "packages/core: pricing and AWS names and tags",
-  command: ["pnpm", "test", "--filter", "@tc/core"],
+  command: ["pnpm", "test", "--filter", "@tc/core", "--no-passWithNoTests"],
 };
 
 const WP1_T1 = [specSync, baselineSync, lint, typecheck, format, db, repo];
@@ -75,7 +78,7 @@ export function quickChecks(packages) {
     {
       id: "lint",
       title: "ESLint on the changed packages",
-      command: ["pnpm", "exec", "eslint", ...folders],
+      command: ["pnpm", "exec", "eslint", "-c", "eslint.config.mjs", ...folders],
     },
     {
       id: "typecheck",

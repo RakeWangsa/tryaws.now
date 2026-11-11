@@ -69,7 +69,7 @@ it("task WP1-T1 is proven by the checks of M0 plus Prettier, the schema tests an
     ["typecheck", "pnpm typecheck"],
     ["format", "pnpm format:check"],
     ["db", "pnpm test --filter @tc/db"],
-    ["repo", "pnpm test --filter repo"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
   expect(TASKS["WP0-T1"]).toEqual(GATES.M0);
 });
@@ -81,9 +81,9 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     ["lint", "pnpm lint"],
     ["typecheck", "pnpm typecheck"],
     ["format", "pnpm format:check"],
-    ["aws", "pnpm test --filter @tc/aws"],
-    ["core", "pnpm test --filter @tc/core"],
-    ["repo", "pnpm test --filter repo"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
   // every other key of TASKS is unchanged
   expect(Object.keys(TASKS).sort()).toEqual(["WP0-T1", "WP1-T1", "WP4-T1"]);
