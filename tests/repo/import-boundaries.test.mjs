@@ -1,21 +1,19 @@
-import { spawnSync } from "node:child_process";
-import { URL, fileURLToPath } from "node:url";
+import { readdirSync } from "node:fs";
+import { posix } from "node:path";
 import { ESLint } from "eslint";
 import { expect, it } from "vitest";
-import { childEnv } from "./child-env.mjs";
+import { readWorkspacePackages } from "../../scripts/lib/changed-packages.mjs";
 
-const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-function listTracked(paths) {
-  const result = spawnSync("git", ["ls-files", "--", ...paths], {
-    cwd: ROOT,
-    encoding: "utf8",
-    env: childEnv(),
-  });
-  expect(result.status, result.stderr).toBe(0);
-  return result.stdout.split("\n").filter(Boolean);
-}
-
-const eslint = new ESLint();
+// These rows test the lint rules of eslint.config.mjs. The rules are tripwires for accidents: they
+// read import statements, export-from statements and import() calls with a literal source, and
+// nothing else. They do not see a bridge file outside apps/ and packages/, a committed symbolic
+// link, an AWS package that is not listed, a loader reached through an alias, or a call that is not
+// an import. IAM (WP0-T5, not built yet) is the boundary (R1).
+// A source folder of apps/ or packages/ must not be called dist: the config ignores every dist
+// folder, and the walk below skips it.
+// One config for every row: ESLint 10 looks up the config from the folder of each file, so a nested
+// eslint.config.mjs would otherwise replace the rules for its folder.
+const eslint = new ESLint({ overrideConfigFile: "eslint.config.mjs" });
 async function errors(filePath, code) {
   const [result] = await eslint.lintText(code, { filePath });
   return result.messages.filter((m) => m.severity === 2).map((m) => m.message);
@@ -138,6 +136,91 @@ it.each([
   ["packages/db/repositories/customer/x.ts", 'const name = "x"; await import(name);', "R1:"],
   ["packages/db/x.ts", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
   ["packages/db/repositories/x.ts", 'import "../../aws/x";', "R1:"],
+  // W38: an inline directive cannot switch R1 off (static and dynamic, a relative-path form).
+  [
+    "apps/web/x.ts",
+    '// eslint-disable-next-line no-restricted-imports\nimport "../../packages/aws/index";',
+    "R1:",
+  ],
+  [
+    "apps/web/x.ts",
+    '// eslint-disable-next-line\nawait import("../../packages/aws/index");',
+    "R1:",
+  ],
+  ["apps/web/x.ts", 'import "../../packages/aws/index"; // eslint-disable-line', "R1:"],
+  ["apps/web/x.ts", 'await import("../../packages/aws/index"); // eslint-disable-line', "R1:"],
+  ["apps/web/x.ts", '/* eslint-disable */\nimport "../../packages/aws/index";', "R1:"],
+  ["apps/web/x.ts", '/* eslint-disable */\nawait import("../../packages/aws/index");', "R1:"],
+  [
+    "packages/ui/x.ts",
+    '/* eslint-disable no-restricted-syntax */\nawait import("../../aws/index");',
+    "R1:",
+  ],
+  ["apps/web/x.ts", '/* eslint-disable */\nimport "@aws-sdk/client-sts";', "Spec section 4:"],
+  // W41a: a source that goes through a folder named node_modules.
+  ["apps/web/x.ts", 'import "../../node_modules/@tc/aws/index";', "R1:"],
+  ["apps/web/x.ts", 'import "./node_modules/foo";', "R1:"],
+  ["apps/web/x.ts", 'export * from "./node_modules/foo";', "R1:"],
+  ["packages/ui/x.ts", 'export { a } from "../node_modules/foo/a";', "R1:"],
+  ["apps/web/x.ts", 'await import("../node_modules/foo");', "R1:"],
+  ["packages/notify/x.ts", 'await import("../../node_modules/foo");', "R1:"],
+  ["apps/web/x.test.ts", 'await import("./node_modules/foo");', "R1:"],
+  ["packages/db/repositories/x.ts", 'await import("../node_modules/foo");', "R1:"],
+  ["packages/core/x.ts", 'import "../node_modules/foo";', "R1:"],
+  ["apps/web/x.ts", 'await import("../node_modules/foo");', "Spec section 4:"],
+  ["apps/web/x.test.ts", "await import(`../node_modules/foo`);", "Spec section 4:"],
+  ["packages/db/x.ts", 'import "../node_modules/foo";', "R1:"],
+  // W41b: a ? or # in an import source.
+  ["apps/web/x.ts", 'import "./a?x=1";', "a ? or # in an import source"],
+  ["apps/web/x.ts", 'import "./a#x";', "a ? or # in an import source"],
+  ["packages/ui/x.ts", 'export * from "./a?x";', "a ? or # in an import source"],
+  ["packages/ui/x.ts", 'export { a } from "./a#x";', "a ? or # in an import source"],
+  ["apps/web/x.ts", 'await import("./a?x");', "a ? or # in an import source"],
+  ["apps/web/x.test.ts", 'await import("./a#x");', "a ? or # in an import source"],
+  ["apps/web/x.test.ts", "await import(`./a?x`);", "a ? or # in an import source"],
+  ["packages/db/repositories/x.ts", 'await import("./a?x");', "a ? or # in an import source"],
+  // W41c: aws-sdk (v2) joins the ban list.
+  ["apps/web/x.ts", 'import "aws-sdk";', "Spec section 4:"],
+  ["apps/web/x.ts", 'import "aws-sdk/clients/s3";', "Spec section 4:"],
+  ["functions/reader/x.ts", 'import "aws-sdk";', "Spec section 4:"],
+  ["packages/ui/x.ts", 'await import("aws-sdk");', "Spec section 4:"],
+  // W41d: the second deny list.
+  ["apps/web/x.ts", 'import "node:module";', "R1: this module"],
+  ["packages/ui/x.ts", 'import "module";', "R1: this module"],
+  ["apps/web/x.ts", 'import "@aws-sdk/nested-clients";', "R1: this module"],
+  ["apps/web/x.ts", 'import "@aws-sdk/nested-clients/sts";', "R1: this module"],
+  ["packages/auth/x.ts", 'import "@aws-sdk/credential-provider-node";', "R1: this module"],
+  ["packages/auth/x.ts", 'import "@aws-sdk/credential-provider-ini/x";', "R1: this module"],
+  ["packages/db/x.ts", 'import "@smithy/signature-v4";', "R1: this module"],
+  ["packages/core/x.ts", 'import "node:module";', "R1: this module"],
+  ["apps/web/x.ts", 'import "node:vm";', "R1: this module"],
+  ["apps/admin/x.ts", 'import "node:child_process";', "R1: this module"],
+  ["apps/web/x.ts", 'import "node:worker_threads";', "R1: this module"],
+  [
+    "apps/web/x.ts",
+    'process["getBuiltinModule"]("module")["createRequire"](import.meta.url)("x");',
+    "R1: createRequire",
+  ],
+  ["apps/web/x.ts", 'x["createRequire"]("x");', "R1: createRequire"],
+  ["apps/web/x.test.ts", 'x["getBuiltinModule"]("x");', "R1: createRequire"],
+  ["packages/db/repositories/x.ts", 'x["createRequire"]("x");', "R1: createRequire"],
+  // W41e: packages/aws writes no log line.
+  ["packages/aws/x.ts", "const sts = { logger: console };", "packages/aws writes no log line"],
+  ["packages/aws/x.ts", "new Client({ logger: l });", "packages/aws writes no log line"],
+  ["packages/aws/x.ts", 'new Client({ "logger": l });', "packages/aws writes no log line"],
+  ["packages/aws/x.ts", "console.log(1);", "packages/aws writes no log line"],
+  ["packages/aws/clients/x.ts", "console.error(e);", "packages/aws writes no log line"],
+  ["packages/aws/x.ts", "client.logger = l;", "packages/aws writes no log line"],
+  // W40b: every extension and place of a source file under apps/.
+  ["apps/web/app/[locale]/x.tsx", 'import "@tc/aws";', "R1:"],
+  ["apps/web/app/[locale]/x.tsx", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
+  ["apps/admin/x.tsx", 'import "@tc/aws";', "R1:"],
+  ["apps/admin/x.tsx", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
+  ["apps/web/x.mjs", 'import "@tc/aws";', "R1:"],
+  ["apps/web/x.mjs", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
+  ["apps/web/x.test.tsx", 'import "@tc/aws";', "R1:"],
+  ["apps/web/x.test.tsx", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
+  ["apps/web/x.jsx", 'import "@tc/aws";', "R1:"],
 ])("rejects %s with %s", async (filePath, code, prefix) => {
   const messages = await errors(filePath, code);
   expect(
@@ -178,13 +261,76 @@ it.each([
   ["packages/db/x.ts", 'import "drizzle-orm";'],
   ["packages/db/tx.ts", 'import { sql } from "drizzle-orm";\nsql.raw("set local role web_rw");'],
   ["packages/db/repositories/customer/x.ts", "export const t = String.raw`a\\b`;"],
+  [
+    "packages/aws/x.ts",
+    'import { createRequire } from "node:module"; export const r = createRequire;',
+  ],
+  ["packages/aws/x.ts", 'import "@aws-sdk/credential-provider-node";'],
+  ["packages/aws/x.ts", "const o = { log: 1 }; o.log = 2;"],
+  ["packages/aws/x.test.ts", "console.log(1); export const x = { logger: 1 };"],
+  ["functions/reader/x.ts", 'import "node:vm";'],
+  ["functions/reader/x.ts", 'import "./a?x";'],
+  ["packages/ui/x.ts", 'import "node:vm";'],
+  ["packages/ui/x.ts", 'import "../node_modulesx/a";'],
+  ["apps/web/x.ts", 'await import("./a-b");'],
 ])("allows %s with %s", async (filePath, code) => {
   expect(await errors(filePath, code)).toEqual([]);
 });
 
-it("apps/ and packages/ hold no .jsx file, because the lint config does not cover .jsx yet (R1)", () => {
-  // When this fails: first make ESLint lint .jsx files and add R1 rows for them, then remove this test.
-  expect(listTracked(["apps"]).length).toBeGreaterThan(0);
-  const tracked = listTracked(["apps", "packages"]).filter((path) => path.endsWith(".jsx"));
-  expect(tracked).toEqual([]);
+// W40a: every workspace folder except packages/aws and functions/* gets the R1 error for @tc/aws.
+// packages/core is pure logic and names @tc/aws in its own rule, so it gets that message.
+const SCOPE_FOLDERS = Object.keys(readWorkspacePackages(".")).filter(
+  (dir) => dir !== "packages/aws" && !dir.startsWith("functions/"),
+);
+it("the workspace has apps and packages to test the scope with", () => {
+  expect(SCOPE_FOLDERS).toEqual(expect.arrayContaining(["apps/web", "apps/admin", "packages/db"]));
+});
+it.each(SCOPE_FOLDERS)("%s refuses an import of @tc/aws", async (dir) => {
+  const messages = await errors(`${dir}/x.ts`, 'import "@tc/aws";');
+  const expected = dir === "packages/core" ? "packages/core is pure logic:" : "R1:";
+  expect(
+    messages.some((m) => m.includes(expected)),
+    messages.join(" | "),
+  ).toBe(true);
+});
+it.each(Object.keys(readWorkspacePackages(".")).filter((dir) => dir.startsWith("functions/")))(
+  "%s may import @tc/aws",
+  async (dir) => {
+    expect(await errors(`${dir}/x.ts`, 'import "@tc/aws";')).toEqual([]);
+  },
+);
+
+// W40c: a walk over the source files of apps/ and packages/ (not git, so an untracked file counts).
+const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
+const SKIPPED = new Set(["node_modules", ".next", "dist", "coverage"]);
+function sourceFiles(dir) {
+  const found = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = posix.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (!SKIPPED.has(entry.name)) found.push(...sourceFiles(path));
+    } else if (SOURCE.test(entry.name)) {
+      found.push(path);
+    }
+  }
+  return found;
+}
+it("no source file of apps/ or packages/ is ignored, and R1 is switched on for each (except packages/aws)", async () => {
+  const files = [...sourceFiles("apps"), ...sourceFiles("packages")];
+  expect(files.length).toBeGreaterThan(20);
+  const problems = [];
+  for (const file of files) {
+    if (await eslint.isPathIgnored(file)) {
+      problems.push(`${file}: ignored by ESLint`);
+      continue;
+    }
+    if (file.startsWith("packages/aws/")) continue;
+    const config = await eslint.calculateConfigForFile(file);
+    const [severity, ...options] = config.rules["no-restricted-imports"] ?? [0];
+    const groups = options.flatMap((o) => o.patterns ?? []).flatMap((p) => p.group ?? []);
+    if (!(severity === 2 || severity === "error") || !groups.includes("@tc/aws")) {
+      problems.push(`${file}: the restriction on @tc/aws is not switched on`);
+    }
+  }
+  expect(problems).toEqual([]);
 });

@@ -24,7 +24,7 @@ it("prettier leaves the plans, the mockup and the generated or verbatim files al
 });
 
 it("eslint ignores design/, docs/ and .claude/", async () => {
-  const eslint = new ESLint();
+  const eslint = new ESLint({ overrideConfigFile: "eslint.config.mjs" });
   for (const file of [
     "design/mockup/template/assets/js/scripts.js",
     "docs/spec/INDEX.md",
@@ -35,7 +35,7 @@ it("eslint ignores design/, docs/ and .claude/", async () => {
 });
 
 it("eslint ignores build output and local tool folders, but not source files", async () => {
-  const eslint = new ESLint();
+  const eslint = new ESLint({ overrideConfigFile: "eslint.config.mjs" });
   for (const file of [
     "apps/web/.next/server/chunk.js",
     "apps/web/.open-next/x.mjs",
