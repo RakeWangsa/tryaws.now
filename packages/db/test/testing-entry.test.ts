@@ -32,6 +32,8 @@ it("the testing entry exports every helper of WP1-T2 that exists so far", () => 
       "newAdmin",
       "newCustomer",
       "newResource",
+      // WP4-T2: a paid order for the provisioner tests
+      "newOrder",
       // Task 3: a database bound to a role, and the transaction under a role
       "useBoundTestDatabase",
       "runTransaction",

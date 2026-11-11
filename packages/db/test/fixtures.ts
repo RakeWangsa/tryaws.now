@@ -115,6 +115,37 @@ export async function newResource(
   return insertRow(q, "resources", { customer_id: customerId, family: "linux_instance", ...over });
 }
 
+// Inserts a paid order of 100 paisa for the customer, with the balanced ledger transaction it needs
+// (the customer's wallet and the system account revenue_aws_base). The wallet is created once per
+// customer. A pool runs the ledger transaction in its own transaction; a client joins its caller's.
+// Returns the order id.
+export async function newOrder(q: Queryable, customerId: string): Promise<string> {
+  const found = await q.query<{ id: string }>(
+    "select id from ledger_accounts where type = 'customer_wallet' and customer_id = $1 and currency = 'BDT'",
+    [customerId],
+  );
+  const wallet = found.rows[0]?.id ?? (await newLedgerAccount(q, "customer_wallet", customerId));
+  const revenue = await systemAccount(q, "revenue_aws_base");
+  const lines: [string, "debit" | "credit", number][] = [
+    [wallet, "debit", 100],
+    [revenue, "credit", 100],
+  ];
+  const key = "order-" + uniqueSuffix();
+  const ledgerTransactionId =
+    "totalCount" in q
+      ? await inTransaction(q, (c) => postLedger(c, key, lines))
+      : await postLedger(q, key, lines);
+  return insertRow(q, "orders", {
+    customer_id: customerId,
+    kind: "new",
+    items: "[]",
+    price_snapshot: "{}",
+    total_minor: 100,
+    ledger_transaction_id: ledgerTransactionId,
+    idempotency_key: "o-" + uniqueSuffix(),
+  });
+}
+
 export const APPEND_ONLY_TABLES = [
   "ledger_transactions",
   "ledger_entries",
