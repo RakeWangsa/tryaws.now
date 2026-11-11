@@ -70,3 +70,11 @@ export {
   type SeedResult,
 } from "./seed/launch";
 export * from "./capacity-keys";
+export { capacityRepo } from "./repositories/capacity";
+export type {
+  CapacityCellRow,
+  CapacityRepo,
+  CellKey,
+  CellSelector,
+  UsedChange,
+} from "./repositories/capacity";

@@ -40,3 +40,11 @@ export {
 } from "../operations/admin";
 export { withCustomerRepos } from "./repos";
 export { auditRowsOf, type AuditRow } from "./repos";
+export {
+  holdUntilWaiter,
+  seedPool,
+  readUsed,
+  resetCapacity,
+  type PoolSeed,
+  type SeededPool,
+} from "./capacity";
