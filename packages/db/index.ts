@@ -48,6 +48,7 @@ export type {
   WalletRepo,
   WalletView,
 } from "./repositories/customer/wallet";
+export type { KycRepo, KycSubmissionView, NewKycSubmission } from "./repositories/customer/kyc";
 export { newUuidV7 } from "./ids";
 export type {
   ClaimedOtp,
