@@ -99,6 +99,31 @@ it.each([
     'import { sql } from "drizzle-orm";\nsql.raw("select 1");',
     "packages/db/repositories: sql.raw",
   ],
+  [
+    "packages/db/repositories/customer/x.ts",
+    'sql["raw"]("x");',
+    "packages/db/repositories: sql.raw",
+  ],
+  [
+    "packages/db/repositories/customer/x.ts",
+    'import { sql as s } from "drizzle-orm"; s.raw("x");',
+    "packages/db/repositories: sql.raw",
+  ],
+  [
+    "packages/db/repositories/customer/x.ts",
+    'const { raw } = sql; raw("x");',
+    "packages/db/repositories: sql.raw",
+  ],
+  [
+    "packages/db/repositories/customer/x.ts",
+    'sql[`raw`]("x");',
+    "packages/db/repositories: sql.raw",
+  ],
+  [
+    "packages/db/repositories/customer/x.ts",
+    'const { "raw": r } = sql; r("x");',
+    "packages/db/repositories: sql.raw",
+  ],
   ["packages/db/repositories/customer/x.ts", 'await import("@tc/aws");', "R1:"],
   [
     "packages/db/repositories/customer/x.ts",
@@ -111,6 +136,8 @@ it.each([
     "R1:",
   ],
   ["packages/db/repositories/customer/x.ts", 'const name = "x"; await import(name);', "R1:"],
+  ["packages/db/x.ts", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
+  ["packages/db/repositories/x.ts", 'import "../../aws/x";', "R1:"],
 ])("rejects %s with %s", async (filePath, code, prefix) => {
   const messages = await errors(filePath, code);
   expect(
@@ -150,6 +177,7 @@ it.each([
   ["apps/web/x.ts", 'await import("@aws-sdk-helpers/x");'],
   ["packages/db/x.ts", 'import "drizzle-orm";'],
   ["packages/db/tx.ts", 'import { sql } from "drizzle-orm";\nsql.raw("set local role web_rw");'],
+  ["packages/db/repositories/customer/x.ts", "export const t = String.raw`a\\b`;"],
 ])("allows %s with %s", async (filePath, code) => {
   expect(await errors(filePath, code)).toEqual([]);
 });

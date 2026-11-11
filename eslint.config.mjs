@@ -198,9 +198,15 @@ export default tseslint.config(
     rules: { "no-eval": "error", "no-implied-eval": "error", "no-new-func": "error" },
   },
   {
-    // Repositories build SQL only with bound parameters (R8: the scope is a parameter; R11).
+    // Repositories are meant to put values into SQL only as bound parameters (R8: the scope is a
+    // parameter; R11). This rule refuses the plain ways to put text into SQL without a parameter:
+    // a call of a member named raw on any object, written with a dot or with a string in brackets,
+    // and a destructuring that takes raw out of an object. String.raw as a template tag is not a
+    // call and stays allowed. The check that counts is the test that reads the statements really
+    // sent (packages/db/test/cross-tenant.test.ts, built in Tasks 5 and 6 of
+    // docs/superpowers/plans/2026-11-11-wp1-t2-tenant-scoped-repositories.md).
     // Flat config keeps only the no-restricted-syntax of the last matching block, so this block
-    // carries every selector of block A (DYNAMIC_IMPORT_SYNTAX) and adds sql.raw.
+    // carries every selector of block A (DYNAMIC_IMPORT_SYNTAX) and adds the selectors for raw.
     files: ["packages/db/repositories/**"],
     ignores: ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs"],
     rules: {
@@ -208,7 +214,18 @@ export default tseslint.config(
         "error",
         ...DYNAMIC_IMPORT_SYNTAX,
         {
-          selector: "CallExpression[callee.object.name='sql'][callee.property.name='raw']",
+          selector: [
+            // x.raw(...) for any x: sql.raw, an alias such as s.raw, x?.raw
+            "CallExpression[callee.computed=false][callee.property.name='raw']",
+            // x["raw"](...)
+            "CallExpression[callee.property.value='raw']",
+            // x[`raw`](...), a template literal without an expression
+            "CallExpression[callee.property.expressions.length=0][callee.property.quasis.0.value.cooked='raw']",
+            // const { raw } = x; const { raw: r } = x
+            "ObjectPattern > Property[computed=false][key.name='raw']",
+            // const { "raw": r } = x
+            "ObjectPattern > Property[key.value='raw']",
+          ].join(", "),
           message:
             "packages/db/repositories: sql.raw puts text into SQL without a parameter; use the sql template.",
         },

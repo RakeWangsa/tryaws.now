@@ -1,7 +1,11 @@
 import { posix } from "node:path";
 
 const ENTRY = "packages/db/testing";
-const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
+// A specifier is a string literal after `from`, `import`, `import(` or `require(` (the right side of
+// `import t = require("...")` too). A template literal counts when it holds no `${`: with one, a
+// scan cannot know the path. Group 1 is a quoted specifier, group 2 a template one.
+const SPECIFIER =
+  /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)(?:["']([^"']+)["']|`((?:[^`$]|\$(?!\{))+)`)/g;
 
 function namesTestingEntry(path, specifier) {
   if (specifier === "@tc/db/testing" || specifier.startsWith("@tc/db/testing/")) return true;
@@ -19,7 +23,7 @@ function namesTestingEntry(path, specifier) {
 export function importsOfTestingEntry(files) {
   return files
     .filter(([path, text]) =>
-      [...text.matchAll(SPECIFIER)].some((m) => namesTestingEntry(path, m[1])),
+      [...text.matchAll(SPECIFIER)].some((m) => namesTestingEntry(path, m[1] ?? m[2])),
     )
     .map(([path]) => path);
 }
