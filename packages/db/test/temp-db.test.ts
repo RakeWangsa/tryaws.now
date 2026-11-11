@@ -1,7 +1,18 @@
+import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import pg from "pg";
 import { expect, it } from "vitest";
 import { databaseUrl } from "../env";
-import { createTempDatabase, isNetworkError, maintenanceUrl, type TempDatabase } from "./temp-db";
+import {
+  assertLocalServer,
+  createTempDatabase,
+  isNetworkError,
+  leftoverTestDatabases,
+  maintenanceUrl,
+  sweepLeftoverTestDatabases,
+  unconnectedTestDatabases,
+  type TempDatabase,
+} from "./temp-db";
 
 async function databaseExists(...names: string[]): Promise<number> {
   const admin = new pg.Client({ connectionString: maintenanceUrl(databaseUrl()) });
@@ -127,3 +138,142 @@ it("hides the password of a malformed URL and of a real one", async () => {
     await a.drop();
   }
 }, 60_000);
+
+// ---------------------------------------------------------------------------------------------
+// Only a server on this machine
+
+const REFUSAL = /^refusing to use PostgreSQL at /;
+
+it("assertLocalServer accepts 127.0.0.1, localhost and ::1", () => {
+  for (const url of [
+    "postgres://u:p@127.0.0.1:5432/x",
+    "postgres://u:p@localhost/x",
+    "postgres://u:p@[::1]:5432/x",
+  ]) {
+    expect(() => assertLocalServer(url)).not.toThrow();
+  }
+});
+
+it("assertLocalServer refuses every other host and never prints the password", () => {
+  const urls = [
+    "postgres://u:secret-pw@db.example.test/x",
+    "postgres://u:secret-pw@10.0.0.5/x",
+    "postgres://u:secret-pw@127.0.0.2/x",
+    "postgres://u:secret-pw@localhost.example.test/x",
+    "postgres://u:secret-pw@LOCALHOST/x",
+    "postgres:///x?password=secret-pw",
+  ];
+  for (const url of urls) {
+    let err: Error | undefined;
+    try {
+      assertLocalServer(url);
+    } catch (e) {
+      err = e as Error;
+    }
+    expect({ url, refused: err instanceof Error }).toEqual({ url, refused: true });
+    expect(err!.message).toMatch(REFUSAL);
+    expect(err!.message).not.toContain("secret-pw");
+  }
+});
+
+it("createTempDatabase refuses another host before it opens a connection", async () => {
+  const err = await createTempDatabase({
+    url: "postgres://u:secret-pw@db.example.test:5432/x",
+    migrate: false,
+  }).then(
+    () => null,
+    (e: Error) => e,
+  );
+  expect(err).toBeInstanceOf(Error);
+  expect(err!.message).toMatch(REFUSAL);
+  expect(err!.message).toContain("db.example.test");
+  expect(err!.message).not.toContain("secret-pw");
+});
+
+// ---------------------------------------------------------------------------------------------
+// The databases of dead test runs
+
+function exitedPid(): number {
+  const pid = spawnSync(process.execPath, ["-e", ""]).pid;
+  if (pid === undefined) throw new Error("spawnSync gave no process id");
+  return pid;
+}
+
+async function withMaintenance<T>(fn: (admin: pg.Client) => Promise<T>): Promise<T> {
+  const admin = new pg.Client({ connectionString: maintenanceUrl(databaseUrl()) });
+  await admin.connect();
+  try {
+    return await fn(admin);
+  } finally {
+    await admin.end();
+  }
+}
+
+it("leftoverTestDatabases takes only the helper's exact names of a gone process", () => {
+  const names = [
+    "tc_test_123_deadbeef",
+    "tc_test_124_deadbeef",
+    "tc_test_123_DEADBEEF",
+    "tc_test_123_deadbee",
+    "tc_test_123_deadbeef0",
+    "tc_tests_123_deadbeef",
+    "xtc_test_123_deadbeef",
+    "tc_test__deadbeef",
+    "tc_test_12a_deadbeef",
+    "tc_test_123_deadbeef\n",
+    "ticoncloud",
+    "postgres",
+  ];
+  expect(leftoverTestDatabases(names, (pid) => pid === 123)).toEqual(["tc_test_123_deadbeef"]);
+});
+
+it("leftoverTestDatabases by default keeps a live process, takes an exited one, keeps a non-pid", () => {
+  const dead = exitedPid();
+  const live = `tc_test_${process.pid}_deadbeef`;
+  const gone = `tc_test_${dead}_deadbeef`;
+  const huge = "tc_test_99999999999999999999_deadbeef";
+  expect(leftoverTestDatabases([live, gone, huge])).toEqual([gone]);
+});
+
+it("unconnectedTestDatabases lists a test database only while nobody is connected", async () => {
+  const a = await createTempDatabase({ migrate: false });
+  try {
+    expect(await withMaintenance(unconnectedTestDatabases)).toContain(a.name);
+    const c = await a.pool.connect();
+    try {
+      expect(await withMaintenance(unconnectedTestDatabases)).not.toContain(a.name);
+    } finally {
+      c.release();
+    }
+  } finally {
+    await a.drop();
+  }
+}, 60_000);
+
+it("the sweep removes the database of an exited process", async () => {
+  const name = `tc_test_${exitedPid()}_${randomBytes(4).toString("hex")}`;
+  try {
+    await withMaintenance((admin) => admin.query(`CREATE DATABASE "${name}" TEMPLATE template0`));
+    await sweepLeftoverTestDatabases(databaseUrl());
+    // not the returned list: the sweep of another test file may have dropped it first
+    expect(await databaseExists(name)).toBe(0);
+  } finally {
+    await withMaintenance((admin) => admin.query(`DROP DATABASE IF EXISTS "${name}"`));
+  }
+}, 60_000);
+
+it("the sweep keeps a database of this process", async () => {
+  const a = await createTempDatabase({ migrate: false });
+  try {
+    await sweepLeftoverTestDatabases(databaseUrl());
+    expect(await databaseExists(a.name)).toBe(1);
+  } finally {
+    await a.drop();
+  }
+}, 60_000);
+
+it("the sweep refuses another host", async () => {
+  await expect(
+    sweepLeftoverTestDatabases("postgres://u:secret-pw@db.example.test/x"),
+  ).rejects.toThrow(REFUSAL);
+});
