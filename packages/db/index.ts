@@ -219,6 +219,14 @@ export type {
 } from "./repositories/system/lifecycle";
 export { registerCustomer, isNewCustomerValid } from "./repositories/system/registration";
 export type { LegalDocument, NewCustomer, Registered } from "./repositories/system/registration";
+export { reconcileRepo, RECONCILE_DISCREPANCY_KEYS } from "./repositories/system/reconcile";
+export type {
+  CapacityRowView,
+  OpenOperationView,
+  PoolAccountRef,
+  ReconcileRepo,
+  ResourceRowView,
+} from "./repositories/system/reconcile";
 export { meteringRepo } from "./repositories/system/metering";
 export type { MeteringRepo, TransferRow, UsageRow } from "./repositories/system/metering";
 export type {
