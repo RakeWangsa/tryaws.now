@@ -198,6 +198,7 @@ export default tseslint.config(
       "**/.next/**",
       "**/.open-next/**",
       "**/.sst/**",
+      "**/next-env.d.ts",
       ".superpowers/**",
       ".remember/**",
     ],

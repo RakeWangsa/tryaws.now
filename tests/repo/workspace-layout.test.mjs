@@ -39,6 +39,11 @@ const tsconfigExtras = {
       types: ["node"],
     },
   },
+  // Next.js rewrites the tsconfig of an app on `next dev` and `next build`; what it adds is pinned
+  // here (WPU-T4). The app program loads the raw .ts sources of @tc/ui, so it allows the extension.
+  "apps/web": {
+    compilerOptions: { allowImportingTsExtensions: true, jsx: "react-jsx" },
+  },
 };
 
 // @tc/db also publishes its test helpers to the test files of other packages (WP1-T2).

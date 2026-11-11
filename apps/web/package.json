@@ -7,7 +7,11 @@
     ".": "./index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "dev": "node ../../scripts/sync-theme.ts --stage publish --app web && next dev --port 3000",
+    "build": "node ../../scripts/sync-theme.ts --stage publish --app web && next build",
+    "start": "next start --port 3000",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint -c ../../eslint.config.mjs ."
   },
   "dependencies": {
     "@tc/ui": "workspace:*",

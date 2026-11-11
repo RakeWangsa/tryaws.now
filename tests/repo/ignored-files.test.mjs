@@ -17,6 +17,7 @@ it("prettier leaves the plans, the mockup and the generated or verbatim files al
     "pnpm-lock.yaml",
     "verify/baseline.json",
     "packages/db/migrations/meta/_journal.json",
+    "apps/web/next-env.d.ts",
   ]) {
     const info = await prettier.getFileInfo(file, { ignorePath: ".prettierignore" });
     expect(info.ignored, file).toBe(true);
@@ -39,6 +40,7 @@ it("eslint ignores build output and local tool folders, but not source files", a
   for (const file of [
     "apps/web/.next/server/chunk.js",
     "apps/web/.open-next/x.mjs",
+    "apps/web/next-env.d.ts",
     ".sst/platform/x.ts",
     ".superpowers/sdd/x.mjs",
     ".remember/x.mjs",
@@ -51,7 +53,11 @@ it("eslint ignores build output and local tool folders, but not source files", a
 it("git ignores the build output of Next.js and OpenNext, but not source files", () => {
   const ignored = (file) =>
     spawnSync("git", ["check-ignore", "--quiet", "--no-index", file]).status === 0;
-  for (const file of ["apps/web/.next/x.js", "apps/web/.open-next/x.js"]) {
+  for (const file of [
+    "apps/web/.next/x.js",
+    "apps/web/.open-next/x.js",
+    "apps/web/next-env.d.ts",
+  ]) {
     expect(ignored(file), file).toBe(true);
   }
   expect(ignored("apps/web/page.tsx")).toBe(false);

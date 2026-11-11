@@ -303,13 +303,15 @@ it.each(Object.keys(readWorkspacePackages(".")).filter((dir) => dir.startsWith("
 // W40c: a walk over the source files of apps/ and packages/ (not git, so an untracked file counts).
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
 const SKIPPED = new Set(["node_modules", ".next", "dist", "coverage"]);
+// Written by Next.js on dev and build, git-ignored, and holds only type references.
+const GENERATED = new Set(["next-env.d.ts"]);
 function sourceFiles(dir) {
   const found = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = posix.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (!SKIPPED.has(entry.name)) found.push(...sourceFiles(path));
-    } else if (SOURCE.test(entry.name)) {
+    } else if (SOURCE.test(entry.name) && !GENERATED.has(entry.name)) {
       found.push(path);
     }
   }
