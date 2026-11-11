@@ -65,6 +65,10 @@ export function parseLoadBalancerConfig(raw: unknown): Result<LoadBalancerConfig
   };
 }
 
+declare const checkedBrand: unique symbol;
+/** Target ids that passed checkLbTargets. Only that function makes one (a branded type). */
+export type CheckedTargets = readonly string[] & { readonly [checkedBrand]: true };
+
 /** What the adapter learns about a requested target from the customer-scoped lookup. */
 export interface TargetCandidate {
   readonly id: string;
@@ -78,7 +82,7 @@ export interface TargetCandidate {
 const TARGETS_INVALID: Result<never> = Object.freeze({
   ok: false,
   error: "validation",
-  fields: Object.freeze({ targets: "invalid" }),
+  fields: Object.freeze({ targetIds: "invalid" }),
 }) as Result<never>;
 
 /**
@@ -92,7 +96,7 @@ export function checkLbTargets(input: {
   readonly region: string;
   readonly requested: readonly string[];
   readonly candidates: readonly (TargetCandidate | null)[];
-}): Result<readonly string[]> {
+}): Result<CheckedTargets> {
   const { customerId, region, requested, candidates } = input;
   if (requested.length === 0 || requested.length > MAX_LB_TARGETS) return TARGETS_INVALID;
   if (new Set(requested).size !== requested.length) return TARGETS_INVALID;
@@ -109,17 +113,23 @@ export function checkLbTargets(input: {
       return TARGETS_INVALID;
     }
   }
-  return { ok: true, value: [...requested] };
+  return { ok: true, value: [...requested] as unknown as CheckedTargets };
 }
 
 function unavailable(): Result<never> {
   return { ok: false, error: "validation", fields: { productId: "unavailable" } };
 }
 
-/** A load balancer row of the catalog (an admin-editable price row, 8). Fails closed. */
+/**
+ * A load balancer row of the catalog (an admin-editable price row, 8). Fails closed. The targets of
+ * the result are `checked`, never `config.targetIds`: the caller must have run checkLbTargets on
+ * a customer-scoped read first (R8). resolveProduct does not know this family for that reason; the
+ * order path resolves it in orders/checks.ts after the check.
+ */
 export function resolveLoadBalancer(
   config: LoadBalancerConfig,
   product: CatalogProduct,
+  checked: CheckedTargets,
 ): Result<ResolvedLoadBalancer> {
   if (
     product.id !== config.productId ||
@@ -143,7 +153,7 @@ export function resolveLoadBalancer(
         productId: config.productId,
         region: config.region,
         displayName: config.displayName,
-        targetIds: [...config.targetIds],
+        targetIds: [...checked],
       },
     },
   };

@@ -1,4 +1,4 @@
-import { customerRepos, findLedgerTransactionByKey, readCatalogProduct, type Tx } from "@tc/db";
+import { customerRepos, findLedgerTransactionByKey, type Tx } from "@tc/db";
 import { reserveCapacity } from "../capacity/reserve";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
@@ -6,10 +6,9 @@ import { postTransaction } from "../ledger/post";
 import type { Posting } from "../ledger/types";
 import { makeEnqueueOperation } from "../operations/enqueue";
 import { accountFor } from "../pricing/index";
-import { resolveProduct } from "../products/instance";
 import { quoteInForce } from "../rates/in-force";
 import type { Result } from "../types";
-import { gateCustomer, gateKeyPair, gateProduct } from "./checks";
+import { gateCustomer, gateKeyPair, gateProduct, resolveOrderProduct } from "./checks";
 import { comparePrice } from "./compare";
 import type { OrdersDeps } from "./draft";
 import { sqlState } from "./guard";
@@ -109,7 +108,7 @@ export async function runPurchase(
   if (!customer.ok) return customer;
 
   // 5. Family, product, flag and limits, a second time.
-  const resolved = await resolveProduct(claims.fam, claims.cfg, (id) => readCatalogProduct(tx, id));
+  const resolved = await resolveOrderProduct(tx, repos, customerId, claims.fam, claims.cfg);
   if (!resolved.ok) return resolved;
   const product = resolved.value;
   if (product.productId !== claims.pid || product.region !== claims.region) {

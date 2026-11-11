@@ -3,7 +3,6 @@ import type { CapacityNeed } from "../capacity/types";
 import type { ProductFacts } from "../orders/gates";
 import type { Result } from "../types";
 import { parseDatabaseConfig, resolveDatabase } from "./database";
-import { parseLoadBalancerConfig, resolveLoadBalancer } from "./load-balancer";
 
 export interface InstanceConfig {
   readonly productId: string;
@@ -140,13 +139,6 @@ export async function resolveProduct(
       const product = await load(config.value.productId);
       if (product === null) return unavailable();
       return resolveDatabase(config.value, product);
-    }
-    case "load_balancer": {
-      const config = parseLoadBalancerConfig(rawConfig);
-      if (!config.ok) return config;
-      const product = await load(config.value.productId);
-      if (product === null) return unavailable();
-      return resolveLoadBalancer(config.value, product);
     }
     default:
       return { ok: false, error: "validation", fields: { family: "unsupported" } };

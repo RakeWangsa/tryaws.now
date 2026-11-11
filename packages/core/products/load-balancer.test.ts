@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { checkLbTargets, parseLoadBalancerConfig, type TargetCandidate } from "./load-balancer";
+import { resolveProduct } from "./instance";
+import {
+  checkLbTargets,
+  parseLoadBalancerConfig,
+  resolveLoadBalancer,
+  type TargetCandidate,
+} from "./load-balancer";
 
 const ME = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const OTHER = "ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee";
@@ -53,6 +59,43 @@ describe("checkLbTargets (pure)", () => {
 
   it("a candidate that was not requested does not count", () => {
     expect(check([T1], [cand({ id: T2 })]).ok).toBe(false);
+  });
+});
+
+describe("resolveLoadBalancer takes only checked targets", () => {
+  const row = {
+    id: T1,
+    family: "load_balancer",
+    awsId: "lb",
+    platform: null,
+    region: "ap-southeast-1",
+    specs: {},
+    awsPriceUsd: "18.0000",
+    billingUnit: "month",
+    featureFlag: "load_balancer",
+    active: true,
+  };
+  it("writes the checked ids, never the ones of the config, and resolveProduct refuses the family", async () => {
+    const config = {
+      productId: T1,
+      region: "ap-southeast-1",
+      displayName: "lb",
+      targetIds: [OTHER],
+    };
+    const checked = checkLbTargets({
+      customerId: ME,
+      region: "ap-southeast-1",
+      requested: [T2],
+      candidates: [cand({ id: T2 })],
+    });
+    if (!checked.ok) throw new Error("check");
+    const r = resolveLoadBalancer(config, row, checked.value);
+    expect(r).toMatchObject({ ok: true, value: { resourceConfig: { targetIds: [T2] } } });
+    expect(await resolveProduct("load_balancer", config, async () => row)).toEqual({
+      ok: false,
+      error: "validation",
+      fields: { family: "unsupported" },
+    });
   });
 });
 

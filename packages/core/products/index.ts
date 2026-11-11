@@ -33,6 +33,7 @@ export {
   checkLbTargets,
   parseLoadBalancerConfig,
   resolveLoadBalancer,
+  type CheckedTargets,
   type LoadBalancerConfig,
   type ResolvedLoadBalancer,
   type TargetCandidate,
