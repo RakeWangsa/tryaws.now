@@ -103,6 +103,8 @@ export {
   type SeedEnvironment,
   type SeedResult,
 } from "./seed/launch";
+export { readCatalogProduct } from "./repositories/catalog";
+export type { CatalogProduct } from "./repositories/catalog";
 export * from "./capacity-keys";
 export { capacityRepo } from "./repositories/capacity";
 export type {
