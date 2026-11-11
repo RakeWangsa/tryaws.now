@@ -20,7 +20,9 @@ import {
   type AdminActor,
   type AdminRepos,
 } from "@tc/db";
+import { postTransaction } from "@tc/core";
 import { adminGate } from "./gate.ts";
+import type { MoneyFlowDeps } from "./money-flow.ts";
 import type { CustomerFlowDeps } from "./customer-flow.ts";
 import { unavailableKycStore, type KycDocumentDeps } from "./kyc-documents.ts";
 import { makeSignIn, makeSignOut, type SignInDeps } from "./sign-in.ts";
@@ -158,6 +160,21 @@ export function customerFlowDeps(): CustomerFlowDeps {
     authorize: () => requireAdmin(["ops", "superadmin"]),
     limiter: adminLimiter("admin_customer_action", CUSTOMER_ACTION_LIMIT),
     run: runAsAdmin,
+    clock: { now: () => new Date() },
+  };
+}
+
+// The money actions of /wallets and /payments (WP8-T3): 30 for each admin in 10 minutes, the roles
+// are asked for by each kind, and every posting goes through postTransaction of @tc/core (R5).
+const MONEY_ACTION_LIMIT = 30;
+
+export function moneyFlowDeps(): MoneyFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_money_action", MONEY_ACTION_LIMIT),
+    run: runAsAdmin,
+    post: postTransaction,
     clock: { now: () => new Date() },
   };
 }
