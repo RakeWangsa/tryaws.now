@@ -11,6 +11,23 @@ const t = useTempDatabase();
 const as = <T>(customerId: string, fn: (r: CustomerRepos) => Promise<T>) =>
   withCustomerRepos(t.db, customerId, fn);
 
+it("profile.get({ lock: 'share' }) holds the customer row against an update until the transaction ends", async () => {
+  const id = await newCustomer(t.pool);
+  await as(id, async (r) => {
+    await r.profile.get({ lock: "share" });
+    await expect(
+      t.pool.query("select 1 from customers where id = $1 for update nowait", [id]),
+    ).rejects.toMatchObject({ code: "55P03" });
+  });
+  // without the option the row is not held
+  await as(id, async (r) => {
+    await r.profile.get();
+    await expect(
+      t.pool.query("select 1 from customers where id = $1 for update nowait", [id]),
+    ).resolves.toBeDefined();
+  });
+});
+
 it("customerRepos refuses a customer id that is not a UUID, before any query (R16)", () => {
   for (const bad of ["", "42", "not-a-uuid", " " + uuidv7(), undefined as unknown as string]) {
     expect(() => customerRepos({} as Tx, bad)).toThrow(

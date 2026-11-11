@@ -104,7 +104,9 @@ export async function runPurchase(
   if (await clientKeyIsTaken(repos, clientKey)) return { ok: false, error: "conflict" };
 
   // 4. Customer, from the row under the lock. The session is not an input.
-  const customer = await gateCustomer(repos);
+  // Read `for share`: a KYC revocation or a suspension that commits between this check and the
+  // charge waits for this transaction instead of being missed.
+  const customer = await gateCustomer(repos, { lock: "share" });
   if (!customer.ok) return customer;
 
   // 5. Family, product, flag and limits, a second time.

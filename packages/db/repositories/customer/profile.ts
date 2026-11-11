@@ -35,7 +35,10 @@ export interface ProfileUpdate {
 }
 
 export interface ProfileRepo {
-  get(): Promise<CustomerProfile | null>;
+  // `lock: "share"` keeps the row against a concurrent update (a KYC revocation, a suspension) until
+  // the transaction ends: the purchase reads the customer this way so a decision that commits
+  // between its check and its charge cannot be missed.
+  get(options?: { lock?: "share" }): Promise<CustomerProfile | null>;
   update(input: ProfileUpdate): Promise<Written<CustomerProfile>>;
   // Called by the OTP service after a code was verified (WP2-T3), never from a form.
   setVerifiedPhone(input: { phone: string; verifiedAt: Date }): Promise<Written<CustomerProfile>>;
@@ -71,11 +74,12 @@ const toProfile = (row: Record<keyof CustomerProfile, unknown>): CustomerProfile
 
 export function profileRepo(scope: TenantScope): ProfileRepo {
   return {
-    get: async () => {
-      const [row] = await scope.tx
+    get: async (options) => {
+      const query = scope.tx
         .select(PROFILE_COLUMNS)
         .from(customers)
         .where(eq(customers.id, scope.customerId));
+      const [row] = await (options?.lock === "share" ? query.for("share") : query);
       return row === undefined ? null : toProfile(row);
     },
 
