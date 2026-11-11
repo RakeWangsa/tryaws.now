@@ -1,0 +1,10 @@
+{
+  "kit": {
+    "timeline": {
+      "done": "Done",
+      "current": "In progress",
+      "pending": "Waiting",
+      "failed": "Failed"
+    }
+  }
+}

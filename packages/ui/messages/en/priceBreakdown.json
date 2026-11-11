@@ -1,0 +1,8 @@
+{
+  "kit": {
+    "priceBreakdown": {
+      "base": "AWS service price",
+      "total": "Total"
+    }
+  }
+}

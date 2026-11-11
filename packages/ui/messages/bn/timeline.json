@@ -1,0 +1,10 @@
+{
+  "kit": {
+    "timeline": {
+      "done": "সম্পন্ন",
+      "current": "চলছে",
+      "pending": "বাকি",
+      "failed": "ব্যর্থ"
+    }
+  }
+}

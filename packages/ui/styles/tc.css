@@ -225,8 +225,57 @@ html[lang="bn"] .btn.question {
 }
 
 /* ===== 6.3 Summary ===== */
+/* Below 992 px the summary is a bar fixed to the bottom; the spacer keeps the page content clear
+   of it. The details element opens upward by normal flow inside the bar. */
+.tc-summary-full {
+  width: 100%;
+}
+.tc-summary-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.tc-summary-more[open] {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+@media (max-width: 991.98px) {
+  .tc-summary {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1030;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border-radius: 0;
+  }
+  .tc-summary-spacer {
+    height: 6rem;
+  }
+}
 
 /* ===== 6.4 States and timeline ===== */
+.tc-timeline {
+  margin-bottom: 0;
+}
+.tc-timeline-step {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+.tc-timeline-current {
+  font-weight: 700;
+}
+.tc-timeline-done i {
+  color: var(--bs-success);
+}
+.tc-timeline-failed i {
+  color: var(--bs-danger);
+}
+.tc-timeline-pending {
+  opacity: 0.75;
+}
 
 /* ===== 6.5 Secret and copy ===== */
 .tc-secret {
