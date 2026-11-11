@@ -15,6 +15,12 @@ const asAdmin = <T>(actor: AdminActor, fn: (r: AdminRepos) => Promise<T>) =>
 
 const AT = new Date("2026-11-11T06:00:00.000Z");
 const CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
+  "customers.approveKyc": (r) =>
+    r.customers.approveKyc({ submissionId: uuidv7(), at: AT }, "documents match"),
+  "customers.setRiskTier": (r) =>
+    r.customers.setRiskTier({ customerId: uuidv7(), tier: "trusted" }, "known"),
+  "customers.suspend": (r) => r.customers.suspend({ customerId: uuidv7(), at: AT }, "abuse"),
+  "customers.documentRead": (r) => r.customers.documentRead({ submissionId: uuidv7(), index: 0 }),
   "featureFlags.set": (r) =>
     r.featureFlags.set({ key: "linux_instance", market: "BD", enabled: true }, "launch"),
   "fxRates.set": (r) =>

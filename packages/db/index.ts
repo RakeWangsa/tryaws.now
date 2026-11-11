@@ -77,6 +77,21 @@ export type {
   WaitlistEntry,
   WaitlistReason,
 } from "./repositories/admin/waitlist";
+export { maskEmail, maskPhone } from "./repositories/admin/customers";
+export type {
+  CustomerAuditRow,
+  CustomerChanged,
+  CustomerDetail,
+  CustomerListRow,
+  CustomerSearchInput,
+  CustomerSearchResult,
+  CustomersAdminRepo,
+  KycDecided,
+  KycDocumentRead,
+  KycQueueRow,
+  KycSubmissionView,
+  RiskTier,
+} from "./repositories/admin/customers";
 export { readAdminApprover } from "./repositories/admin/approver";
 export type {
   OperationDecision,
