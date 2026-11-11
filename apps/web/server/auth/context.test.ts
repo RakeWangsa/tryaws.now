@@ -15,6 +15,8 @@ function runtime(fakes: boolean): WebRuntime {
     identity: null,
     otp: null,
     authLimitKey: null,
+    kyc: null,
+    account: null,
   };
 }
 
