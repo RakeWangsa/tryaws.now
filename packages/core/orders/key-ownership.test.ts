@@ -1,0 +1,114 @@
+import { randomUUID } from "node:crypto";
+import { insertRow, uniqueSuffix, useTempDatabase } from "@tc/db/testing";
+import { describe, expect, it } from "vitest";
+import { makeKit, snapshotRows, type Buyer, type Kit } from "../test/orders-kit";
+import { createDraft } from "./draft";
+import { draftHash } from "./ids";
+import { makeOrders } from "./place";
+import { runPurchase } from "./purchase";
+import { signDraft, verifyDraft } from "./token";
+import type { DraftClaims } from "./types";
+
+// Defect 1 of the review: a keyPairId is accepted only if the key belongs to the session customer.
+// The draft and the purchase both check it, and a refusal writes nothing.
+const t = useTempDatabase();
+
+async function keyOf(customerId: string): Promise<string> {
+  return insertRow(t.pool, "ssh_keys", {
+    customer_id: customerId,
+    name: "laptop",
+    public_key: "ssh-ed25519 AAAAkey" + uniqueSuffix(),
+    fingerprint: "SHA256:key-" + uniqueSuffix(),
+  });
+}
+
+/** A token of the buyer whose configuration names `keyPairId`, signed like a real draft. */
+async function tokenNaming(kit: Kit, buyer: Buyer, keyPairId: string): Promise<string> {
+  const { token } = await kit.draft({}, buyer);
+  const verdict = verifyDraft(kit.secrets, token, kit.clock.now());
+  if (!verdict.ok) throw new Error("the draft does not verify");
+  const claims: DraftClaims = { ...verdict.claims, cfg: { ...verdict.claims.cfg, keyPairId } };
+  return signDraft(kit.secrets, claims);
+}
+
+const purchase = (kit: Kit, buyer: Buyer, token: string) => {
+  const verdict = verifyDraft(kit.secrets, token, kit.clock.now());
+  if (!verdict.ok) throw new Error("the token does not verify");
+  return kit.run((tx) =>
+    runPurchase(tx, kit.deps, {
+      claims: verdict.claims,
+      tokenHash: draftHash(token),
+      clientKey: "key-own-" + "a".repeat(16),
+      customerId: buyer.customerId,
+    }),
+  );
+};
+
+describe("createOrderDraft: the key pair must be the customer's", () => {
+  it("refuses another customer's key with keyPairId invalid and writes nothing", async () => {
+    const kit = await makeKit(t);
+    const other = await kit.newBuyer();
+    const foreign = await keyOf(other.customerId);
+    const before = await snapshotRows(t);
+    const r = await createDraft(kit.deps, kit.session, kit.input({ keyPairId: foreign }));
+    expect(r).toEqual({ ok: false, error: "validation", fields: { keyPairId: "invalid" } });
+    expect(await snapshotRows(t)).toEqual(before);
+  });
+
+  it("refuses a key id that does not exist", async () => {
+    const kit = await makeKit(t);
+    const r = await createDraft(kit.deps, kit.session, kit.input({ keyPairId: randomUUID() }));
+    expect(r).toEqual({ ok: false, error: "validation", fields: { keyPairId: "invalid" } });
+  });
+
+  it("accepts the customer's own key", async () => {
+    const kit = await makeKit(t);
+    const own = await keyOf(kit.customerId);
+    const r = await createDraft(kit.deps, kit.session, kit.input({ keyPairId: own }));
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("runPurchase: the key pair is checked again, before any write", () => {
+  it("refuses a token that names another customer's key and changes no row", async () => {
+    const kit = await makeKit(t);
+    const other = await kit.newBuyer();
+    const foreign = await keyOf(other.customerId);
+    const token = await tokenNaming(kit, kit, foreign);
+    const before = await snapshotRows(t);
+    expect(await purchase(kit, kit, token)).toEqual({
+      ok: false,
+      error: "validation",
+      fields: { keyPairId: "invalid" },
+    });
+    expect(await snapshotRows(t)).toEqual(before);
+    expect(kit.queue.depth).toBe(0);
+  });
+
+  it("refuses the same token through placeOrder, with no resource created", async () => {
+    const kit = await makeKit(t);
+    const other = await kit.newBuyer();
+    const foreign = await keyOf(other.customerId);
+    const token = await tokenNaming(kit, kit, foreign);
+    const before = await snapshotRows(t);
+    const r = await makeOrders(kit.deps).placeOrder(kit.session, {
+      token,
+      idempotencyKey: "key-own-" + "b".repeat(16),
+    });
+    expect(r).toEqual({ ok: false, error: "validation", fields: { keyPairId: "invalid" } });
+    expect(await snapshotRows(t)).toEqual(before);
+  });
+
+  it("buys with the customer's own key and stores it in the configuration", async () => {
+    const kit = await makeKit(t);
+    const own = await keyOf(kit.customerId);
+    const token = await tokenNaming(kit, kit, own);
+    const r = await purchase(kit, kit, token);
+    expect(r.ok).toBe(true);
+    const stored = await t.pool.query(
+      "select config->>'keyPairId' as k from resources where customer_id = $1",
+      [kit.customerId],
+    );
+    expect(stored.rows).toEqual([{ k: own }]);
+  });
+});

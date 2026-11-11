@@ -9,7 +9,7 @@ import { accountFor } from "../pricing/index";
 import { resolveProduct } from "../products/instance";
 import { quoteInForce } from "../rates/in-force";
 import type { Result } from "../types";
-import { gateCustomer, gateProduct } from "./checks";
+import { gateCustomer, gateKeyPair, gateProduct } from "./checks";
 import { comparePrice } from "./compare";
 import type { OrdersDeps } from "./draft";
 import { childId, orderIdFor } from "./ids";
@@ -118,6 +118,9 @@ export async function runPurchase(
   }
   const gated = await gateProduct(tx, repos, customer.value, product);
   if (!gated.ok) return gated;
+  // The key pair of the configuration is the customer's own, read through the scoped repository.
+  const keyed = await gateKeyPair(repos, product);
+  if (!keyed.ok) return keyed;
 
   // 6. Price, again, and compare with the token.
   const priced = await quoteInForce(

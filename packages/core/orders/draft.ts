@@ -4,7 +4,7 @@ import type { Logger, OperationQueue, RunTx } from "../operations/index";
 import { resolveProduct } from "../products/instance";
 import { quoteInForce } from "../rates/in-force";
 import type { Clock, Result } from "../types";
-import { gateCustomer, gateProduct } from "./checks";
+import { gateCustomer, gateKeyPair, gateProduct } from "./checks";
 import { assertSecrets, signDraft } from "./token";
 import { DRAFT_TTL_SECONDS, type DraftClaims, type OrderDraft, type OrderSession } from "./types";
 
@@ -66,6 +66,9 @@ export async function createDraft(
 
     const gated = await gateProduct(tx, repos, customer.value, product);
     if (!gated.ok) return gated;
+
+    const keyed = await gateKeyPair(repos, product);
+    if (!keyed.ok) return keyed;
 
     // "Available but not yet reserved": no lock, no unit taken, no waitlist entry.
     const room = await checkCapacity(tx, {

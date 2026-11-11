@@ -30,6 +30,24 @@ export async function gateCustomer(repos: CustomerRepos): Promise<Result<Gated>>
 }
 
 /**
+ * A key pair named in the configuration must be a key of the scope's customer. The tenant-scoped
+ * repository answers `null` for another customer's key as it does for a missing one, so both are
+ * `keyPairId: invalid` and the refusal says nothing about whose key it is. A read that fails throws
+ * and the action is refused (R16). Used by the draft and again by the purchase, before any write.
+ */
+export async function gateKeyPair(
+  repos: CustomerRepos,
+  product: ResolvedProduct,
+): Promise<Result<true>> {
+  const keyPairId = product.resourceConfig.keyPairId;
+  if (keyPairId === undefined || keyPairId === null) return { ok: true, value: true };
+  if (typeof keyPairId !== "string" || (await repos.sshKeys.get(keyPairId)) === null) {
+    return { ok: false, error: "validation", fields: { keyPairId: "invalid" } };
+  }
+  return { ok: true, value: true };
+}
+
+/**
  * The feature flag of the product family (R12) and the risk-tier limits counted from the database.
  * A key that is no flag, a missing row and a flag that is off are all `flag_off`. Used by the draft
  * and again by the purchase: the state may have changed in between.
