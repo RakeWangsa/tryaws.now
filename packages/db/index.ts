@@ -11,4 +11,11 @@ export type { CustomerRepos, MethodsTakingCustomerId } from "./repositories/cust
 export type { CustomerProfile, ProfileUpdate } from "./repositories/customer/profile";
 export type { AuditRepo, CustomerAuditInput } from "./repositories/customer/audit";
 export type { NewSshKey, SshKey, SshKeysRepo } from "./repositories/customer/ssh-keys";
+export type { ResourceSummary, ResourcesRepo } from "./repositories/customer/resources";
+export type {
+  CustomerOperation,
+  OperationRequest,
+  OperationsRepo,
+} from "./repositories/customer/operations";
+export { customerOperationKey } from "./repositories/customer/operations";
 export type { RepoErrorCode, Written } from "./repositories/result";
