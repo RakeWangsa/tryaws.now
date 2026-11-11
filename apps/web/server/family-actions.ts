@@ -73,7 +73,10 @@ export const FAMILY_DESTROY_LIMIT = (prefix: string): CustomerLimit[] =>
   limit(`${prefix}.destroy`, 5, 3600);
 
 export class Refusal extends Error {
-  constructor(readonly error: FamilyError) {
+  constructor(
+    readonly error: FamilyError,
+    readonly fields?: Record<string, string>,
+  ) {
     super(error);
   }
 }
@@ -128,7 +131,7 @@ export async function frame(
       return body(repos, session);
     });
   } catch (error) {
-    return error instanceof Refusal ? fail(error.error) : fail("unavailable");
+    return error instanceof Refusal ? fail(error.error, error.fields) : fail("unavailable");
   }
 }
 
