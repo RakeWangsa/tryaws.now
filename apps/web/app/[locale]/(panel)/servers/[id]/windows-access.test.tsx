@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import { windowsAccessBn } from "../../../../../messages/windows-access-bn.ts";
 import { windowsAccessEn } from "../../../../../messages/windows-access-en.ts";
 import { html } from "../mockup-states.tsx";
+import { detail } from "../servers.fixtures.ts";
+import { ServerDetailContent } from "./ServerDetailContent.tsx";
 import { WindowsAccess } from "./WindowsAccess.tsx";
 
 // The cross-check of the Windows part of the Access tab against the shared mockup (U1), in the way of
@@ -105,6 +107,22 @@ describe("the Windows part of the Access tab follows the shared mockup", () => {
     expect(STATES["windows.ready"]!("en")).toContain("Change it at your first sign-in");
     expect(STATES["windows.not_ready"]!("en")).not.toContain('type="submit"');
     expect(STATES["windows.ready"]!("bn")).toMatch(/[ঀ-৿]/);
+  });
+
+  it("the detail page of a Windows server shows the Windows access, not the SSH command", () => {
+    const win = detail({ family: "windows_instance", keyName: null });
+    const en = html(<ServerDetailContent locale="en" numerals="latn" server={win} />, "en");
+    expect(en).toContain("Change it at your first sign-in");
+    expect(en).toContain("Remote Desktop address");
+    expect(en).toContain('type="submit"');
+    expect(en).not.toContain("SSH command");
+    const stopped = detail({ family: "windows_instance", state: "creating" });
+    expect(
+      html(<ServerDetailContent locale="en" numerals="latn" server={stopped} />, "en"),
+    ).not.toContain('type="submit"');
+    const linux = html(<ServerDetailContent locale="en" numerals="latn" server={detail()} />, "en");
+    expect(linux).toContain("SSH command");
+    expect(linux).not.toContain("Change it at your first sign-in");
   });
 
   it("bn and en have the same keys, none empty, no forbidden wording", () => {

@@ -16,13 +16,25 @@ import type { CustomerSession } from "@tc/auth";
 export type RevealAnswer =
   { ok: true; value: { username: string; password: string } } | { ok: false; error: string };
 
+/**
+ * The transport to the access-details function. Implementations live outside this tier's imports of
+ * packages/aws (R1) and add no Lambda client here without a recorded reason (R17). TODO(infra, see the
+ * "Needs decision" of WP6-T1 in JOURNEY.md): invoke the function through a small HTTPS function URL
+ * signed with SigV4 (AWS_IAM auth), or add a Lambda client dependency. The customer id passed is
+ * always the session's (R8); the function checks the tenant again.
+ */
+export type RevealPort = (input: {
+  customerId: string;
+  resourceId: string;
+}) => Promise<RevealAnswer>;
+
 export interface WindowsAccessDeps {
   authenticate(): Promise<CustomerSession | null>;
   now(): Date;
   /** One hit against the customer's limit for this action; false when it is used up. */
   rateLimit(session: CustomerSession): Promise<boolean>;
   /** The invocation of access-details; the customer id is the session's (R8). null: not wired. */
-  reveal: ((input: { customerId: string; resourceId: string }) => Promise<RevealAnswer>) | null;
+  reveal: RevealPort | null;
 }
 
 export type WindowsAccessError =

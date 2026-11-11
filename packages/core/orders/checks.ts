@@ -12,6 +12,8 @@ import {
 import type { Result } from "../types";
 import { checkCustomer, checkLimits, DEFAULT_TIER_LIMITS, type CustomerFacts } from "./gates";
 
+const INSTANCE_FAMILIES = ["linux_instance", "windows_instance"] as const;
+
 export interface Gated {
   readonly riskTier: RiskTier;
   readonly market: string;
@@ -68,7 +70,14 @@ export async function gateProduct(
   if (!(await isEnabledIn(tx, product.featureFlag, customer.market))) {
     return { ok: false, error: "flag_off" };
   }
-  const instances = await repos.resources.countLive(product.family);
+  // Every instance family counts together toward the instance limit, so a customer at the Linux
+  // limit cannot order Windows, nor the other way round. Same customer-scoped repository (R8).
+  const families =
+    product.family === "linux_instance" || product.family === "windows_instance"
+      ? INSTANCE_FAMILIES
+      : [product.family];
+  let instances = 0;
+  for (const family of families) instances += await repos.resources.countLive(family);
   return checkLimits(DEFAULT_TIER_LIMITS[customer.riskTier], { instances }, product.facts);
 }
 

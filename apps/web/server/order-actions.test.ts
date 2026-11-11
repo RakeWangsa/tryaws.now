@@ -95,6 +95,13 @@ describe("createOrderDraftCore", () => {
     expect(calls).toEqual(["authenticate"]);
   });
 
+  it("sends the family given by the code for a Windows plan, never one from the form", async () => {
+    const { deps: d, calls } = deps();
+    await createOrderDraftCore(d, { ...form, family: "database" }, "windows_instance");
+    const sent = JSON.parse(calls[3] as string) as { family: string };
+    expect(sent.family).toBe("windows_instance");
+  });
+
   it("does not forward unknown form fields such as an AWS name or a customer id", async () => {
     const { deps: d, calls } = deps();
     await createOrderDraftCore(d, { ...form, awsName: "x", customerId: "y", family: "database" });

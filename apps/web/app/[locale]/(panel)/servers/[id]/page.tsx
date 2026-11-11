@@ -20,6 +20,7 @@ import {
   setAutoBackupAction,
   setAutoRenewAction,
 } from "./actions.ts";
+import { revealWindowsPasswordAction } from "./windows-actions.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,7 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
         server={server}
         extras={extras}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
+        windowsAction={revealWindowsPasswordAction}
       />
     </PanelFrame>
   );

@@ -20,6 +20,7 @@ import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
 import { orderHooks } from "./order-hooks";
+import { windowsInstanceAdapter } from "./windows";
 import { runStep } from "./step";
 import type { RunOutcome, StepDeps } from "./types";
 
@@ -117,6 +118,11 @@ function buildDeps(): StepDeps {
     // is the automatic reversal of WP4-T4; a rejected create runs it too (reject.ts).
     adapters: createAdapterRegistry([
       linuxInstanceAdapter({ vpcCidr: process.env.TC_VPC_CIDR }),
+      // WP6-T1: behind the flag windows_instance (R12), which the order flow checks.
+      windowsInstanceAdapter({
+        vpcCidr: process.env.TC_VPC_CIDR,
+        dhcpServer: process.env.TC_DHCP_SERVER,
+      }),
       backupAdapter(),
       diskAdapter(),
       // WP6-T4 and WP7-T1: behind their feature flags (R12), which the order flow checks.

@@ -6,6 +6,7 @@ import type { ServerDetail } from "../../../../../server/servers-view.ts";
 import { ServerState, useRegionLabel, useSpecLine } from "../ServerParts.tsx";
 import { useExtraTabs } from "./ExtrasTabs.tsx";
 import type { ExtrasBundle } from "./ExtrasTabs.tsx";
+import { WindowsAccess, type RevealResult } from "./WindowsAccess.tsx";
 
 // The content of /servers/[id] (16.10): a header and the tabs Overview, Access and Networking
 // (WP4). The other tabs belong to WP5. A server of another customer and a missing one give the same
@@ -13,12 +14,16 @@ import type { ExtrasBundle } from "./ExtrasTabs.tsx";
 
 type Numerals = "beng" | "latn";
 
+// Used when no Server Action is passed (the static mockup states): the reveal refuses (R16).
+const refuseReveal = async (): Promise<RevealResult> => ({ ok: false, error: "unavailable" });
+
 export function ServerDetailContent({
   locale,
   numerals,
   server,
   extras = null,
   defaultTab,
+  windowsAction = refuseReveal,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -26,6 +31,8 @@ export function ServerDetailContent({
   /** The tabs of WP5-T6; null while the flag is off or the data is not loaded. */
   extras?: ExtrasBundle | null;
   defaultTab?: string;
+  /** The Server Action of the Windows password; the page passes `revealWindowsPasswordAction`. */
+  windowsAction?: (form: FormData) => Promise<RevealResult>;
 }) {
   const t = useTranslations("Servers");
   const specLine = useSpecLine();
@@ -76,24 +83,44 @@ export function ServerDetailContent({
     </div>
   );
 
-  const access = (
-    <>
-      {sshCommand === null ? (
-        <p className="seccolor">{t("detail.access.pendingIp")}</p>
-      ) : (
-        <CopyField
-          label={t("detail.access.ssh")}
-          value={sshCommand}
-          hint={t("detail.access.sshHint")}
-        />
-      )}
-      <p className="seccolor mt-3">
-        <b>{t("detail.access.keyName")}</b>
-        {": "}
-        {server.keyName ?? t("detail.access.noKey")}
-      </p>
-    </>
-  );
+  const access =
+    server.family === "windows_instance" ? (
+      <>
+        {server.publicIp === null ? (
+          <p className="seccolor">{t("detail.access.pendingIp")}</p>
+        ) : (
+          <CopyField
+            label={t("detail.access.rdp")}
+            value={server.publicIp}
+            hint={t("detail.access.rdpHint")}
+          />
+        )}
+        <div className="mt-3">
+          <WindowsAccess
+            resourceId={server.id}
+            running={server.state === "active"}
+            action={windowsAction}
+          />
+        </div>
+      </>
+    ) : (
+      <>
+        {sshCommand === null ? (
+          <p className="seccolor">{t("detail.access.pendingIp")}</p>
+        ) : (
+          <CopyField
+            label={t("detail.access.ssh")}
+            value={sshCommand}
+            hint={t("detail.access.sshHint")}
+          />
+        )}
+        <p className="seccolor mt-3">
+          <b>{t("detail.access.keyName")}</b>
+          {": "}
+          {server.keyName ?? t("detail.access.noKey")}
+        </p>
+      </>
+    );
 
   const networking = (
     <>

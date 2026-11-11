@@ -116,6 +116,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP5-T5",
     "WP5-T6",
     "WP6-T1",
+    "WP6-T1b",
     "WP6-T2",
     "WP6-T3",
     "WP6-T4",
@@ -950,6 +951,30 @@ it("task WP6-T1 is proven by the Windows adapter, the access-details function an
     "packages/aws/test/bootstrap-windows.test.ts",
     "functions/access-details/handler.test.ts",
     "apps/web/server/windows-access.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP6-T1b is proven by the wiring tests, each naming real files", () => {
+  expect(TASKS["WP6-T1b"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "windows-provisioner",
+    "windows-order",
+    "windows-resolve",
+    "windows-detail",
+    "repo",
+  ]);
+  for (const f of [
+    "functions/provisioner/windows.test.ts",
+    "packages/core/orders/windows-purchase.test.ts",
+    "packages/core/products/instance.test.ts",
+    "apps/web/server/servers-view-windows.test.ts",
+    "apps/web/app/[locale]/(panel)/servers/[id]/windows-access.test.tsx",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

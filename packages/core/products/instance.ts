@@ -13,7 +13,7 @@ export interface InstanceConfig {
 }
 
 export interface ResolvedProduct {
-  readonly family: "linux_instance" | "database" | "load_balancer";
+  readonly family: "linux_instance" | "windows_instance" | "database" | "load_balancer";
   readonly productId: string;
   readonly region: string;
   readonly featureFlag: string;
@@ -78,12 +78,19 @@ export function resolveInstance(
   config: InstanceConfig,
   product: CatalogProduct,
 ): Result<ResolvedProduct> {
+  // The family and the platform of the row must agree (R16): a Windows bundle is sold only as
+  // `windows_instance`, a Linux one only as `linux_instance`.
+  const family =
+    product.family === "linux_instance" && product.platform === "linux"
+      ? "linux_instance"
+      : product.family === "windows_instance" && product.platform === "windows"
+        ? "windows_instance"
+        : null;
   if (
+    family === null ||
     product.id !== config.productId ||
-    product.family !== "linux_instance" ||
     !product.active ||
-    product.region !== config.region ||
-    (product.platform !== "linux" && product.platform !== "windows")
+    product.region !== config.region
   ) {
     return unavailable();
   }
@@ -92,7 +99,7 @@ export function resolveInstance(
   return {
     ok: true,
     value: {
-      family: "linux_instance",
+      family,
       productId: product.id,
       region: product.region,
       featureFlag: product.featureFlag,
@@ -110,7 +117,8 @@ export function resolveInstance(
         productId: config.productId,
         region: config.region,
         displayName: config.displayName,
-        keyPairId: config.keyPairId,
+        // Windows uses the pool's default key pair (10.3): no customer key is ever stored for it.
+        keyPairId: family === "windows_instance" ? null : config.keyPairId,
       },
     },
   };
@@ -126,11 +134,13 @@ export async function resolveProduct(
   load: (id: string) => Promise<CatalogProduct | null>,
 ): Promise<Result<ResolvedProduct>> {
   switch (family) {
-    case "linux_instance": {
+    case "linux_instance":
+    case "windows_instance": {
       const config = parseInstanceConfig(rawConfig);
       if (!config.ok) return config;
       const product = await load(config.value.productId);
-      if (product === null) return unavailable();
+      // The family of the order and the family of the catalog row must be the same one.
+      if (product === null || product.family !== family) return unavailable();
       return resolveInstance(config.value, product);
     }
     case "database": {

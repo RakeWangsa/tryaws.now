@@ -67,10 +67,15 @@ function text(input: Record<string, unknown>, key: string): unknown {
   return typeof value === "string" ? value.trim() : value;
 }
 
-/** /servers/new: the form's fields, nothing else, become the config of a Linux instance. */
+/**
+ * /servers/new: the form's fields, nothing else, become the config of an instance. The family is
+ * an argument of the code, never a form field: the page of a Windows plan passes `windows_instance`
+ * (behind its flag, R12, checked by the order code); the default is a Linux instance.
+ */
 export async function createOrderDraftCore(
   deps: OrderActionDeps,
   raw: unknown,
+  family: "linux_instance" | "windows_instance" = "linux_instance",
 ): Promise<DraftActionResult> {
   const session = await deps.authenticate();
   if (session === null) return { ok: false, error: "unauthenticated" };
@@ -98,7 +103,7 @@ export async function createOrderDraftCore(
   if (!allowed) return { ok: false, error: "rate_limited" };
 
   const result = await deps.orders.createOrderDraft(session, {
-    family: "linux_instance",
+    family,
     config: { ...parsed.value },
   });
   if (!result.ok) {
