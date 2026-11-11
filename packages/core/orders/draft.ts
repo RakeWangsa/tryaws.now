@@ -5,6 +5,7 @@ import { resolveProduct } from "../products/instance";
 import { quoteInForce } from "../rates/in-force";
 import type { Clock, Result } from "../types";
 import { gateCustomer, gateKeyPair, gateProduct } from "./checks";
+import { INTERNAL, runGuarded } from "./guard";
 import { assertSecrets, signDraft } from "./token";
 import { DRAFT_TTL_SECONDS, type DraftClaims, type OrderDraft, type OrderSession } from "./types";
 
@@ -53,7 +54,7 @@ export async function createDraft(
   if (!parsed.ok) return parsed;
   const now = deps.clock.now();
 
-  return deps.run(async (tx): Promise<Result<OrderDraft>> => {
+  const drafted = await runGuarded(deps, async (tx): Promise<Result<OrderDraft>> => {
     const resolved = await resolveProduct(parsed.value.family, parsed.value.config, (id) =>
       readCatalogProduct(tx, id),
     );
@@ -112,4 +113,6 @@ export async function createDraft(
       },
     };
   });
+  // A database error is `internal` and says nothing (R14, R16).
+  return drafted.done ? drafted.value : INTERNAL;
 }

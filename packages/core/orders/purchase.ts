@@ -12,6 +12,7 @@ import type { Result } from "../types";
 import { gateCustomer, gateKeyPair, gateProduct } from "./checks";
 import { comparePrice } from "./compare";
 import type { OrdersDeps } from "./draft";
+import { sqlState } from "./guard";
 import { childId, orderIdFor } from "./ids";
 import { DRAFT_TTL_SECONDS, type DraftClaims } from "./types";
 
@@ -33,14 +34,6 @@ const TERM_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type Repos = ReturnType<typeof customerRepos>;
-
-function sqlState(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const code = (error as { code?: unknown }).code;
-  if (typeof code === "string") return code;
-  const cause = (error as { cause?: unknown }).cause;
-  return typeof cause === "object" && cause !== null ? sqlState(cause) : undefined;
-}
 
 /** A unique violation (23505) of any statement of the writes, whatever layer wrapped it. */
 function isUniqueViolation(error: unknown): boolean {

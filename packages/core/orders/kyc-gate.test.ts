@@ -51,7 +51,8 @@ describe("placeOrder: the same table, through the whole order of work", () => {
           idempotencyKey: "gate-key-" + "b".repeat(16),
         });
       if (gate.expected === "throws") {
-        await expect(place()).rejects.toThrow();
+        // runPurchase throws (above); placeOrder turns the throw into `internal`, with no text.
+        expect(await place()).toEqual({ ok: false, error: "internal" });
       } else {
         expect(await place()).toMatchObject({ ok: false, error: gate.expected });
       }

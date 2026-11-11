@@ -3,6 +3,7 @@ import { firstMessage, sendAfterCommit } from "../operations/index";
 import { snapshotToQuote } from "../pricing/index";
 import type { Result } from "../types";
 import { createDraft, type OrdersDeps } from "./draft";
+import { INTERNAL, runGuarded } from "./guard";
 import { draftHash } from "./ids";
 import { runPurchase } from "./purchase";
 import { assertSecrets, signDraft, verifyDraft } from "./token";
@@ -83,9 +84,12 @@ export function makeOrders(deps: OrdersDeps): Orders {
     if (claims.c !== session.customerId) return { ok: false, error: "forbidden" };
 
     // R9, 2: rate limit, in a short transaction of its own that commits whatever follows.
-    const decision = await deps.run((tx) =>
+    // A database error in either transaction is `internal` and says nothing (R14, R16).
+    const limited = await runGuarded(deps, (tx) =>
       customerRepos(tx, session.customerId).rateLimits.consume(ORDER_RATE_LIMITS, now),
     );
+    if (!limited.done) return INTERNAL;
+    const decision = limited.value;
     if (!decision.allowed) {
       return {
         ok: false,
@@ -95,7 +99,7 @@ export function makeOrders(deps: OrdersDeps): Orders {
     }
 
     // R9, 3: execute. The audit entry of the purchase is the audit of the success.
-    const result = await deps.run((tx) =>
+    const executed = await runGuarded(deps, (tx) =>
       runPurchase(tx, deps, {
         claims,
         tokenHash: draftHash(text),
@@ -103,6 +107,8 @@ export function makeOrders(deps: OrdersDeps): Orders {
         customerId: session.customerId,
       }),
     );
+    if (!executed.done) return INTERNAL;
+    const result = executed.value;
     if (!result.ok) {
       if (result.error === "price_changed") {
         // A new draft for the same configuration at the new price; the old token is never reused.
@@ -126,6 +132,7 @@ export function makeOrders(deps: OrdersDeps): Orders {
   }
 
   return {
+    // createDraft guards its own transaction: the draft function is exported for tests as well.
     createOrderDraft: (session, input) => createDraft(deps, session, input),
     placeOrder,
   };
