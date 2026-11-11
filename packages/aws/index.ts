@@ -53,6 +53,14 @@ export {
   type BackupDeps,
 } from "./adapters/backup";
 export { createDiskAdapter, parseDiskConfig, type DiskConfig } from "./adapters/disk";
+export { LB_INSTANCE_PORT, createLoadBalancerAdapter } from "./adapters/load-balancer";
+export {
+  MASTER_DATABASE_NAME,
+  MASTER_USERNAME,
+  createDatabaseAdapter,
+  type DatabaseDeps,
+  type DatabaseLaunchSpec,
+} from "./adapters/database";
 export {
   createLinuxInstanceAdapter,
   parsePortRules,

@@ -108,8 +108,9 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP5-T2",
     "WP5-T3",
     "WP5-T4",
-
     "WP5-T5",
+    "WP6-T2",
+    "WP6-T3",
     "WP6-T4",
     "WP7-T1",
     "WP7-T3",
@@ -695,6 +696,41 @@ it("tasks WP6-T4 and WP7-T1 are proven by the adapter tests, each filter naming 
     "packages/core/products/bucket.test.ts",
     "packages/core/products/container.test.ts",
     "functions/provisioner/storage-wiring.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("tasks WP6-T2 and WP6-T3 are proven by the adapter, core and ownership tests, each filter naming a real file", () => {
+  expect(TASKS["WP6-T2"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "database-adapter",
+    "database-product",
+    "aws",
+    "repo",
+  ]);
+  expect(TASKS["WP6-T3"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "load-balancer-adapter",
+    "lb-target-rule",
+    "lb-target-ownership",
+    "aws",
+    "repo",
+  ]);
+  for (const f of [
+    "packages/aws/test/database.test.ts",
+    "packages/aws/test/load-balancer.test.ts",
+    "packages/core/products/database.test.ts",
+    "packages/core/products/load-balancer.test.ts",
+    "packages/core/orders/lb-target-ownership.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

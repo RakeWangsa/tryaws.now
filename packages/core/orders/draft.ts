@@ -1,10 +1,9 @@
-import { customerRepos, readCatalogProduct } from "@tc/db";
+import { customerRepos } from "@tc/db";
 import { checkCapacity } from "../capacity/check";
 import type { Logger, OperationQueue, RunTx } from "../operations/index";
-import { resolveProduct } from "../products/instance";
 import { quoteInForce } from "../rates/in-force";
 import type { Clock, Result } from "../types";
-import { gateCustomer, gateKeyPair, gateProduct } from "./checks";
+import { gateCustomer, gateKeyPair, gateProduct, resolveOrderProduct } from "./checks";
 import { INTERNAL, runGuarded } from "./guard";
 import { assertSecrets, signDraft } from "./token";
 import { DRAFT_TTL_SECONDS, type DraftClaims, type OrderDraft, type OrderSession } from "./types";
@@ -55,13 +54,17 @@ export async function createDraft(
   const now = deps.clock.now();
 
   const drafted = await runGuarded(deps, async (tx): Promise<Result<OrderDraft>> => {
-    const resolved = await resolveProduct(parsed.value.family, parsed.value.config, (id) =>
-      readCatalogProduct(tx, id),
+    const repos = customerRepos(tx, session.customerId);
+    const resolved = await resolveOrderProduct(
+      tx,
+      repos,
+      session.customerId,
+      parsed.value.family,
+      parsed.value.config,
     );
     if (!resolved.ok) return resolved;
     const product = resolved.value;
 
-    const repos = customerRepos(tx, session.customerId);
     const customer = await gateCustomer(repos);
     if (!customer.ok) return customer;
 
