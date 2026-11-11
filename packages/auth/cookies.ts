@@ -103,6 +103,41 @@ function cookieSpec(
   return { name, value, maxAge, path: "/", httpOnly: true, secure: true, sameSite: "lax" };
 }
 
+// The admin app has its own cookie: a customer cookie is never an admin session and the other way
+// round. One cookie, no refresh cookie: an admin session lives as long as the access token (8 h,
+// set on the admin app client) and then the admin signs in again with TOTP (6.2).
+export const ADMIN_ACCESS_COOKIE = "__Host-tc_admin_at";
+
+function serializeAdminCookie(value: string, maxAgeSeconds: number): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > MAX_VALUE_LENGTH ||
+    !VALUE.test(value)
+  ) {
+    throw new TypeError("cookie: value is not allowed");
+  }
+  const attributes: string[] = [`Max-Age=${maxAgeSeconds}`];
+  if (maxAgeSeconds === 0) attributes.push(`Expires=${EPOCH}`);
+  attributes.push(...FIXED_ATTRIBUTES);
+  const cookie = `${ADMIN_ACCESS_COOKIE}=${value}; ${attributes.join("; ")}`;
+  if (Buffer.byteLength(cookie) > MAX_SET_COOKIE_BYTES)
+    throw new TypeError("cookie: Set-Cookie is too large");
+  return cookie;
+}
+
+export function adminSessionSetCookie(
+  accessToken: string,
+  accessExpiresAt: Date,
+  clock: Clock,
+): string {
+  return serializeAdminCookie(accessToken, remainingSeconds(accessExpiresAt, clock));
+}
+
+export function clearAdminSessionSetCookie(): string {
+  return serializeAdminCookie(CLEARED_VALUE, 0);
+}
+
 function remainingSeconds(expiresAt: Date, clock: Clock): number {
   const ms = expiresAt.getTime() - clock.now().getTime();
   // floor: the cookie must not outlive the token. NaN (an invalid Date) gives 0.
