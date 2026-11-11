@@ -1,4 +1,5 @@
-export type NamingField = "type" | "id" | "env" | "customerId" | "resourceId" | "orderId" | "os";
+export type NamingField =
+  "type" | "id" | "input" | "env" | "customerId" | "resourceId" | "orderId" | "os";
 
 const ID_FIELDS: readonly NamingField[] = ["id", "customerId", "resourceId", "orderId"];
 

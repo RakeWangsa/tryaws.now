@@ -28,19 +28,22 @@ export function resourceTags(input: {
   orderId: string;
   os?: "linux" | "windows";
 }): ResourceTag[] {
-  if (!(TC_ENVS as readonly string[]).includes(input.env)) throw new NamingError("env");
-  assertLowercaseUuid("customerId", input.customerId);
-  assertLowercaseUuid("resourceId", input.resourceId);
-  assertLowercaseUuid("orderId", input.orderId);
-  if (input.os !== undefined && !(OS_VALUES as readonly string[]).includes(input.os)) {
+  if (typeof input !== "object" || input === null) throw new NamingError("input");
+  // Read every field once: the tags are built from what was checked, not from a second read.
+  const { env, customerId, resourceId, orderId, os } = input;
+  if (!(TC_ENVS as readonly string[]).includes(env)) throw new NamingError("env");
+  assertLowercaseUuid("customerId", customerId);
+  assertLowercaseUuid("resourceId", resourceId);
+  assertLowercaseUuid("orderId", orderId);
+  if (os !== undefined && !(OS_VALUES as readonly string[]).includes(os)) {
     throw new NamingError("os");
   }
   const tags: ResourceTag[] = [
-    { key: TAG_KEYS.env, value: input.env },
-    { key: TAG_KEYS.customer, value: input.customerId },
-    { key: TAG_KEYS.resource, value: input.resourceId },
-    { key: TAG_KEYS.order, value: input.orderId },
+    { key: TAG_KEYS.env, value: env },
+    { key: TAG_KEYS.customer, value: customerId },
+    { key: TAG_KEYS.resource, value: resourceId },
+    { key: TAG_KEYS.order, value: orderId },
   ];
-  if (input.os !== undefined) tags.push({ key: TAG_KEYS.os, value: input.os });
+  if (os !== undefined) tags.push({ key: TAG_KEYS.os, value: os });
   return tags;
 }

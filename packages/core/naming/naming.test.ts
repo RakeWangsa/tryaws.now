@@ -192,3 +192,36 @@ it("the exported lists cannot be changed at run time", () => {
   expect(() => (AWS_NAME_TYPES as unknown as string[]).push("evil")).toThrow(TypeError);
   expect(() => awsResourceName("evil" as never, ID)).toThrow(/^naming: type is not valid$/);
 });
+
+it("refuses an input that is not an object, with a NamingError and no value in the message", () => {
+  for (const bad of [null, undefined, "x", 7]) {
+    expect(() => resourceTags(bad as never)).toThrow(NamingError);
+    expect(() => resourceTags(bad as never)).toThrow(/^naming: input is not valid$/);
+  }
+});
+
+it("reads each field once, so a getter that changes between reads cannot get past the check", () => {
+  const reads: Record<string, number> = {};
+  const input = {};
+  const shifting = (field: string, good: string, bad: string) =>
+    Object.defineProperty(input, field, {
+      enumerable: true,
+      get() {
+        reads[field] = (reads[field] ?? 0) + 1;
+        return reads[field] === 1 ? good : bad;
+      },
+    });
+  shifting("env", "staging", "<evil>");
+  shifting("customerId", CUSTOMER, "My Server");
+  shifting("resourceId", ID, "My Server");
+  shifting("orderId", ORDER, "My Server");
+  shifting("os", "linux", "Windows; rm -rf /");
+  expect(resourceTags(input as never)).toEqual([
+    { key: "tc:env", value: "staging" },
+    { key: "tc:customer", value: CUSTOMER },
+    { key: "tc:resource", value: ID },
+    { key: "tc:order", value: ORDER },
+    { key: "tc:os", value: "linux" },
+  ]);
+  expect(reads).toEqual({ env: 1, customerId: 1, resourceId: 1, orderId: 1, os: 1 });
+});
