@@ -107,7 +107,11 @@ importers:
 
   functions/cognito-messages: {}
 
-  functions/invoice-renderer: {}
+  functions/invoice-renderer:
+    dependencies:
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
 
   functions/migrator: {}
 

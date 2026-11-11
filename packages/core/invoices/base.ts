@@ -95,3 +95,19 @@ export function buildInvoiceLines(input: InvoiceLinesInput): InvoiceLine[] {
   if (input.baseMinor < 0n || sum !== input.totalMinor) throw new InvoiceError("invalid_lines");
   return lines;
 }
+
+const KEY_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// The object key of a rendered PDF in the invoices bucket. Derived, never typed by a customer: both
+// ids must be UUIDs, the locale one of the two. The web app and invoice-renderer share this rule, so
+// the page can find the object without a stored key.
+export function invoicePdfKey(customerId: string, invoiceId: string, locale: Locale): string {
+  if (
+    !KEY_UUID.test(customerId) ||
+    !KEY_UUID.test(invoiceId) ||
+    (locale !== "bn" && locale !== "en")
+  ) {
+    throw new InvoiceError("invalid_number");
+  }
+  return `invoices/${customerId}/${invoiceId}.${locale}.pdf`;
+}

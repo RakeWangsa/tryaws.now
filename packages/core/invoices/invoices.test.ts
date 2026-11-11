@@ -5,8 +5,22 @@ import {
   fiscalYearOf,
   formatInvoiceNumber,
   formatMinor,
+  invoicePdfKey,
   parseLineAmount,
 } from "./index";
+
+describe("invoicePdfKey", () => {
+  const c = "0190a000-0000-7000-8000-000000000001";
+  const i = "0190a000-0000-7000-8000-000000000002";
+  it("is derived from the two ids and the locale", () => {
+    expect(invoicePdfKey(c, i, "bn")).toBe(`invoices/${c}/${i}.bn.pdf`);
+  });
+  it("refuses anything that is not a UUID or a known locale (no path from customer text)", () => {
+    expect(() => invoicePdfKey("../x", i, "en")).toThrow(InvoiceError);
+    expect(() => invoicePdfKey(c, `${i}/../..`, "en")).toThrow(InvoiceError);
+    expect(() => invoicePdfKey(c, i, "fr" as never)).toThrow(InvoiceError);
+  });
+});
 
 describe("fiscalYearOf: July to June, by the Dhaka calendar", () => {
   it("2026 is July 2026 to June 2027", () => {
