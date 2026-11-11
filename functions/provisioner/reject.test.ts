@@ -1,0 +1,168 @@
+import { rejectOperation, runTransaction } from "@tc/db/testing";
+import { describe, expect, it } from "vitest";
+import { runStep } from "./step";
+import { NOW, useHarness } from "./test/harness";
+import { operationRow, seedOperation, seedResource } from "./test/seed";
+
+const { t, world, setup, message, create, resourceRow } = useHarness();
+
+// a create that ran out of tries; its resource is still creating (the column default of resources.state)
+const stuckCreate = async () => {
+  const c = await create({
+    state: "needs_attention",
+    attempts: 5,
+    last_error: "upstream_unavailable:ServiceException",
+  });
+  expect((await resourceRow(c.resourceId)).state).toBe("creating");
+  return c;
+};
+// the admin rejects (Task 8): this inserts the reject_operation; the caller sends the returned message after the commit
+const reject = async (target: string, at = NOW) => {
+  const out = await runTransaction(t.db, (tx) => rejectOperation(tx, { operationId: target, at }), {
+    role: "admin_rw",
+  });
+  if (!out.ok || !out.message) throw new Error("reject did not queue an operation");
+  return out.message;
+};
+
+describe("reject_operation, run by the provisioner as worker_rw", () => {
+  it("a rejected create reaches failed and calls the failed hook once, with the code rejected, in the same transaction", async () => {
+    const events: unknown[] = [];
+    const attention: unknown[] = [];
+    const { deps, cloud } = setup({
+      hooks: {
+        failed: async (_tx, e) => {
+          events.push(e);
+        },
+        needsAttention: async (_tx, e) => {
+          attention.push(e);
+        },
+      },
+    });
+    const target = await stuckCreate();
+    const m = await reject(target.id);
+    expect(await runStep(deps, m)).toMatchObject({ outcome: "advanced", to: "succeeded" });
+    expect(await operationRow(t.pool, target.id)).toMatchObject({
+      state: "failed",
+      last_error: "rejected",
+      attempts: 5,
+    });
+    expect(await operationRow(t.pool, m.operationId)).toMatchObject({ state: "succeeded" });
+    expect(events).toEqual([
+      {
+        operationId: target.id,
+        resourceId: target.resourceId,
+        customerId: world.customerId,
+        kind: "create",
+        code: "rejected",
+      },
+    ]);
+    expect(attention).toEqual([
+      { operationId: target.id, resourceId: target.resourceId, kind: "create", code: "rejected" },
+    ]);
+    expect(cloud.createCalls).toBe(0);
+  });
+
+  it("a hook that throws rolls the whole rejection back: the target stays needs_attention, the reject operation stays running", async () => {
+    const { deps } = setup({
+      hooks: {
+        failed: async () => {
+          throw new Error("hook failed");
+        },
+      },
+    });
+    const target = await stuckCreate();
+    const m = await reject(target.id);
+    await expect(runStep(deps, m)).rejects.toThrow("hook failed");
+    expect(await operationRow(t.pool, target.id)).toMatchObject({ state: "needs_attention" });
+    expect(await operationRow(t.pool, m.operationId)).toMatchObject({ state: "running" });
+  });
+
+  it("with no failed hook a create is not rejected: the reject operation needs attention with failed_hook_missing and the target stays", async () => {
+    const { deps } = setup();
+    const target = await stuckCreate();
+    const m = await reject(target.id);
+    expect(await runStep(deps, m)).toMatchObject({ outcome: "advanced", to: "needs_attention" });
+    expect(await operationRow(t.pool, m.operationId)).toMatchObject({
+      state: "needs_attention",
+      last_error: "failed_hook_missing",
+    });
+    expect(await operationRow(t.pool, target.id)).toMatchObject({ state: "needs_attention" });
+  });
+
+  it("another kind is rejected without the failed hook; the hook is not called for it", async () => {
+    const events: unknown[] = [];
+    const { deps } = setup({
+      hooks: {
+        failed: async (_tx, e) => {
+          events.push(e);
+        },
+      },
+    });
+    const target = await create({ kind: "reboot", state: "needs_attention" });
+    const m = await reject(target.id);
+    expect(await runStep(deps, m)).toMatchObject({ to: "succeeded" });
+    expect(await operationRow(t.pool, target.id)).toMatchObject({
+      state: "failed",
+      last_error: "rejected",
+    });
+    expect(events).toEqual([]);
+  });
+
+  it("if an admin retried the target before the engine ran, the older queued target does not hold the rejection back: it does nothing and the reject operation succeeds", async () => {
+    const { deps } = setup({
+      hooks: {
+        failed: async () => {
+          throw new Error("must not run");
+        },
+      },
+    });
+    const target = await stuckCreate();
+    const m = await reject(target.id);
+    await t.pool.query("update operations set state = 'queued' where id = $1", [target.id]);
+    expect(await runStep(deps, m)).toEqual({ outcome: "advanced", to: "succeeded", sent: false });
+    expect(await operationRow(t.pool, m.operationId)).toMatchObject({ state: "succeeded" });
+    expect(await operationRow(t.pool, target.id)).toMatchObject({ state: "queued" });
+  });
+
+  it("a replay posts once: the second run finds the target failed and calls no hook", async () => {
+    const events: unknown[] = [];
+    const { deps } = setup({
+      hooks: {
+        failed: async (_tx, e) => {
+          events.push(e);
+        },
+      },
+    });
+    const target = await stuckCreate();
+    const m = await reject(target.id);
+    await runStep(deps, m);
+    await t.pool.query("update operations set state = 'queued' where id = $1", [m.operationId]);
+    expect(await runStep(deps, m)).toMatchObject({ to: "succeeded" });
+    expect(events).toHaveLength(1);
+  });
+
+  it("[Review Focus 6] a target of another resource is refused with owner_mismatch and nothing is written for it", async () => {
+    const { deps } = setup({ hooks: { failed: async () => {} } });
+    const target = await stuckCreate();
+    const elsewhere = await seedResource(t.pool, world);
+    const op = await seedOperation(t.pool, elsewhere, {
+      kind: "reject_operation",
+      payload: { targetOperationId: target.id },
+    });
+    expect(await runStep(deps, message(op, elsewhere))).toMatchObject({ to: "needs_attention" });
+    expect(await operationRow(t.pool, op)).toMatchObject({ last_error: "owner_mismatch" });
+    expect(await operationRow(t.pool, target.id)).toMatchObject({ state: "needs_attention" });
+  });
+
+  it("a payload without a UUID target is invalid_step_result", async () => {
+    const { deps } = setup({ hooks: { failed: async () => {} } });
+    const resourceId = await seedResource(t.pool, world);
+    const op = await seedOperation(t.pool, resourceId, {
+      kind: "reject_operation",
+      payload: { targetOperationId: "x" },
+    });
+    expect(await runStep(deps, message(op, resourceId))).toMatchObject({ to: "needs_attention" });
+    expect(await operationRow(t.pool, op)).toMatchObject({ last_error: "invalid_step_result" });
+  });
+});
