@@ -22,6 +22,7 @@ it("exports exactly the public API and no credentials function", () => {
     "createBucketAccessKey",
     "createBucketAdapter",
     "createCatalogSource",
+    "createCdnAdapter",
     "createContainerServiceAdapter",
     "createDatabaseAdapter",
     "createDiskAdapter",

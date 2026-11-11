@@ -57,6 +57,7 @@ export {
   type BucketAccessKey,
   type BucketAccessKeyInput,
 } from "./adapters/bucket-access";
+export { createCdnAdapter, type CdnDeps } from "./adapters/cdn";
 export {
   createContainerServiceAdapter,
   type ContainerServiceDeps,

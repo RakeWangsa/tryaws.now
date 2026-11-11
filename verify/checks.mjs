@@ -483,6 +483,49 @@ TASKS["WP7-T1"] = [
   aws,
   repo,
 ];
+// WP7-T2: the CDN adapter, the order seam and the customer screens. Each filter names a real test file.
+const cdnCore = {
+  id: "cdn-core",
+  title: "WP7-T2: CDN config, origin rule, and the origin checked through the scoped repository",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "products/cdn",
+    "orders/cdn-origin-ownership",
+    "--no-passWithNoTests",
+  ],
+};
+const cdnAdapterCycle = {
+  id: "cdn-adapter",
+  title: "WP7-T2: create, suspend, resume, enable, destroy against the fake Lightsail client",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "test/cdn.test", "--no-passWithNoTests"],
+};
+const cdnWiring = {
+  id: "cdn-wiring",
+  title: "WP7-T2: the adapter is registered in the provisioner and destroy passes the guard",
+  command: ["pnpm", "test", "--filter", "@tc/fn-provisioner", "cdn-wiring", "--no-passWithNoTests"],
+};
+const cdnWeb = {
+  id: "cdn-web",
+  title:
+    "WP7-T2: the action cores, the views, the messages and the screens with the mockup cross-check",
+  command: ["pnpm", "test", "--filter", "@tc/web", "cdn", "--no-passWithNoTests"],
+};
+TASKS["WP7-T2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  cdnCore,
+  cdnAdapterCycle,
+  cdnWiring,
+  cdnWeb,
+  aws,
+  repo,
+];
 // WP6-T1: the Windows instance adapter, the access-details function and the Access tab. Each filter
 // names a real test file.
 const windowsAdapter = {

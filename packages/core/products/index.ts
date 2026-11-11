@@ -23,6 +23,22 @@ export {
   type Deployment,
 } from "./container";
 export {
+  CDN_BUNDLES,
+  CDN_CACHE_BEHAVIORS,
+  CDN_ORIGIN_FAMILIES,
+  cdnBundleFrom,
+  cdnDefaultDomain,
+  checkCdnOrigin,
+  parseCdnConfig,
+  resolveCdn,
+  type CdnBundle,
+  type CdnCacheBehavior,
+  type CdnConfig,
+  type CheckedOrigin,
+  type OriginCandidate,
+  type ResolvedCdn,
+} from "./cdn";
+export {
   parseDatabaseConfig,
   resolveDatabase,
   type DatabaseConfig,

@@ -237,6 +237,8 @@ export interface OrderScreen {
   progress: OrderProgress;
   resourceId: string | null;
   serverName: string;
+  /** The product family of the first item, so a page can link to the right screen (WP7-T2). */
+  family?: string;
 }
 
 export async function loadOrder(session: CustomerSession, id: string): Promise<OrderScreen | null> {
@@ -245,6 +247,12 @@ export async function loadOrder(session: CustomerSession, id: string): Promise<O
     const order = await repos.orders.get(id);
     if (order === null) return null;
     const first = Array.isArray(order.items) ? (order.items[0] as unknown) : undefined;
+    const family =
+      typeof first === "object" &&
+      first !== null &&
+      typeof (first as { family?: unknown }).family === "string"
+        ? (first as { family: string }).family
+        : undefined;
     const resourceId =
       typeof first === "object" &&
       first !== null &&
@@ -261,6 +269,7 @@ export async function loadOrder(session: CustomerSession, id: string): Promise<O
       progress: orderProgress(create?.state ?? null),
       resourceId: resource?.id ?? null,
       serverName: resource === null ? "" : serverConfigOf(resource.config).displayName,
+      ...(family !== undefined ? { family } : {}),
     };
   });
 }

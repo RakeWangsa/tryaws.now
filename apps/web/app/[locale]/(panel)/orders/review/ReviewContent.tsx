@@ -21,7 +21,11 @@ export function ReviewContent({
   action: (previous: FormState, form: FormData) => Promise<FormState>;
 }) {
   const t = useTranslations("Orders.review");
-  const configureHref = localePath(locale, "/servers/new");
+  // The form the draft came from: a CDN draft goes back to /cdn/new (WP7-T2), the rest to /servers/new.
+  const configureHref = localePath(
+    locale,
+    review.state === "ready" && review.family === "cdn" ? "/cdn/new" : "/servers/new",
+  );
 
   if (review.state !== "ready") {
     return (

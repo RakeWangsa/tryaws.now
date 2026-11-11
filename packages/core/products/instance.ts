@@ -13,7 +13,7 @@ export interface InstanceConfig {
 }
 
 export interface ResolvedProduct {
-  readonly family: "linux_instance" | "windows_instance" | "database" | "load_balancer";
+  readonly family: "linux_instance" | "windows_instance" | "database" | "load_balancer" | "cdn";
   readonly productId: string;
   readonly region: string;
   readonly featureFlag: string;
