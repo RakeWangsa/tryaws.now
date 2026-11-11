@@ -10,3 +10,4 @@ export {
   type LedgerCheckResult,
   type LedgerFinding,
 } from "./check";
+export { reverseTransaction, type ReverseTransactionInput } from "./reverse";
