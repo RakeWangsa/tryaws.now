@@ -1,0 +1,229 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const seen = { customerIds: [] as string[] };
+const state = {
+  profile: { market: "BD", kycStatus: "verified" } as unknown,
+  flags: {} as Record<string, boolean | null>,
+  resources: [] as Array<Record<string, unknown>>,
+  children: [] as Array<Record<string, unknown>>,
+  catalog: [] as Array<Record<string, unknown>>,
+  priced: true,
+};
+vi.mock("@tc/db", () => ({
+  withTx: async (fn: (tx: unknown) => unknown) => fn({}),
+  customerRepos: (_tx: unknown, customerId: string) => {
+    seen.customerIds.push(customerId);
+    return {
+      profile: { get: async () => state.profile },
+      resources: {
+        // The scoped repository answers null for another customer's row (R8).
+        get: async (id: string) => state.resources.find((r) => r["id"] === id) ?? null,
+        list: async () => state.resources,
+        listChildren: async () => state.children,
+      },
+    };
+  },
+  readFeatureFlag: async (_tx: unknown, key: string) => state.flags[key] ?? null,
+  listCatalogProducts: async () => state.catalog,
+  readCatalogProduct: async (_tx: unknown, id: string) =>
+    state.catalog.find((c) => c["id"] === id) ?? null,
+}));
+vi.mock("@tc/core", () => ({
+  priceCatalog: async (_tx: unknown, rows: Array<Record<string, unknown>>) =>
+    state.priced
+      ? {
+          ok: true,
+          value: rows.map((r) => ({ ...r, priceBdt: { totalMinor: 250000n } })),
+        }
+      : { ok: false, error: "internal" },
+}));
+
+const {
+  databaseConfigOf,
+  databaseSpecsOf,
+  loadDatabaseConfigurator,
+  loadDatabaseDetail,
+  loadDatabaseList,
+} = await import("./databases-view.ts");
+
+const CUSTOMER = "11111111-1111-4111-8111-111111111111";
+const session = { customerId: CUSTOMER } as never;
+const DB_ID = "22222222-2222-4222-8222-222222222222";
+const PRODUCT = "33333333-3333-4333-8333-333333333333";
+const row = (over: Record<string, unknown> = {}) => ({
+  id: DB_ID,
+  family: "database",
+  state: "active",
+  region: "ap-southeast-1",
+  productId: PRODUCT,
+  config: {
+    displayName: "main-db",
+    endpointAddress: "ls-abc123.cxyz.ap-southeast-1.rds.amazonaws.com",
+    endpointPort: 3306,
+  },
+  createdAt: new Date("2026-11-10T00:00:00Z"),
+  ...over,
+});
+const plan = {
+  id: PRODUCT,
+  family: "database",
+  region: "ap-southeast-1",
+  awsId: "micro_2_0",
+  specs: { engine: "mysql", version: "8.0", vcpus: 2, ramGb: "1", diskGb: 40 },
+};
+
+beforeEach(() => {
+  seen.customerIds = [];
+  state.profile = { market: "BD", kycStatus: "verified" };
+  state.flags = { database: true };
+  state.resources = [];
+  state.children = [];
+  state.catalog = [plan];
+  state.priced = true;
+});
+
+describe("databaseConfigOf", () => {
+  it("reads the name, the endpoint and the port, field by field", () => {
+    expect(
+      databaseConfigOf({
+        displayName: "main-db",
+        endpointAddress: "ls-abc123.cxyz.ap-southeast-1.rds.amazonaws.com",
+        endpointPort: 5432,
+        masterPassword: "never shown",
+        accountId: "123456789012",
+        awsName: "tc-database-0123456789abcdef",
+      }),
+    ).toEqual({
+      name: "main-db",
+      endpoint: "ls-abc123.cxyz.ap-southeast-1.rds.amazonaws.com",
+      port: 5432,
+    });
+  });
+
+  it("drops an endpoint that is not a plain host name and a port that is no port", () => {
+    expect(
+      databaseConfigOf({ displayName: 5, endpointAddress: "<b>x</b>", endpointPort: 70000 }),
+    ).toEqual({ name: "", endpoint: null, port: null });
+    expect(databaseConfigOf({ endpointPort: 3.5 }).port).toBeNull();
+    expect(databaseConfigOf(null)).toEqual({ name: "", endpoint: null, port: null });
+  });
+});
+
+describe("databaseSpecsOf", () => {
+  it("reads sizes, the engine word and the version, and drops the rest", () => {
+    expect(databaseSpecsOf({ engine: "postgres", version: "16.4", vcpus: 2, ramGb: "1" })).toEqual({
+      engine: "postgres",
+      version: "16.4",
+      vcpus: 2,
+      ramGb: "1",
+    });
+    expect(databaseSpecsOf({ engine: "<script>", version: "8.0;drop", diskGb: -1 })).toEqual({});
+    expect(databaseSpecsOf(null)).toEqual({});
+  });
+});
+
+describe("loadDatabaseConfigurator", () => {
+  it("is flag_off when the flag is off, missing or unreadable (R12, R16)", async () => {
+    for (const flags of [{ database: false }, {}] as Record<string, boolean | null>[]) {
+      state.flags = flags;
+      expect(await loadDatabaseConfigurator(session, () => new Date())).toEqual({
+        state: "flag_off",
+      });
+    }
+  });
+
+  it("asks for identity verification before it offers a plan", async () => {
+    state.profile = { market: "BD", kycStatus: "pending" };
+    expect(await loadDatabaseConfigurator(session, () => new Date())).toEqual({
+      state: "kyc_required",
+    });
+  });
+
+  it("offers the priced plans with their engine and sizes, read for the session's customer (R8)", async () => {
+    const screen = await loadDatabaseConfigurator(session, () => new Date());
+    expect(screen).toEqual({
+      state: "ready",
+      regions: ["ap-southeast-1"],
+      plans: [
+        {
+          id: PRODUCT,
+          region: "ap-southeast-1",
+          priceMinor: 250000n,
+          specs: { engine: "mysql", version: "8.0", vcpus: 2, ramGb: "1", diskGb: 40 },
+        },
+      ],
+    });
+    expect(seen.customerIds).toEqual([CUSTOMER]);
+  });
+
+  it("refuses to show prices when the catalog cannot be priced (R16)", async () => {
+    state.priced = false;
+    await expect(loadDatabaseConfigurator(session, () => new Date())).rejects.toThrow();
+  });
+});
+
+describe("loadDatabaseList", () => {
+  it("lists only the customer's databases that are not destroyed, with endpoint and engine", async () => {
+    state.resources = [
+      row(),
+      row({ id: "d", state: "destroyed" }),
+      row({ id: "s", family: "linux_instance" }),
+    ];
+    const screen = await loadDatabaseList(session);
+    expect(screen.state === "ready" && screen.items.map((i) => i.id)).toEqual([DB_ID]);
+    expect(screen).toMatchObject({
+      items: [
+        {
+          name: "main-db",
+          endpoint: "ls-abc123.cxyz.ap-southeast-1.rds.amazonaws.com",
+          port: 3306,
+          engine: "mysql",
+          version: "8.0",
+        },
+      ],
+    });
+  });
+
+  it("is flag_off with the flag off", async () => {
+    state.flags = { database: false };
+    state.resources = [row()];
+    expect(await loadDatabaseList(session)).toEqual({ state: "flag_off" });
+  });
+});
+
+describe("loadDatabaseDetail", () => {
+  it("returns the database with its backups, endpoint and sizes", async () => {
+    state.resources = [row()];
+    state.children = [
+      {
+        id: "b1",
+        family: "backup",
+        state: "active",
+        region: "ap-southeast-1",
+        config: { displayName: "final", final: true, sizeGb: 40 },
+        createdAt: new Date("2026-11-11T00:00:00Z"),
+      },
+    ];
+    const detail = await loadDatabaseDetail(session, DB_ID);
+    expect(detail).toMatchObject({
+      id: DB_ID,
+      name: "main-db",
+      region: "ap-southeast-1",
+      port: 3306,
+      specs: { engine: "mysql", vcpus: 2 },
+      backups: [{ id: "b1", name: "final", final: true, sizeGb: 40, state: "active" }],
+    });
+    expect(JSON.stringify(detail)).not.toMatch(/arn:aws|tc-database-/);
+  });
+
+  it("answers null for a missing row, another customer's row, another family and a flag that is off (R8, R12)", async () => {
+    expect(await loadDatabaseDetail(session, DB_ID)).toBeNull();
+    state.resources = [row({ family: "linux_instance" })];
+    expect(await loadDatabaseDetail(session, DB_ID)).toBeNull();
+    state.resources = [row()];
+    state.flags = { database: false };
+    expect(await loadDatabaseDetail(session, DB_ID)).toBeNull();
+    state.flags = {};
+    expect(await loadDatabaseDetail(session, DB_ID)).toBeNull();
+  });
+});

@@ -118,6 +118,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP6-T1",
     "WP6-T1b",
     "WP6-T2",
+    "WP6-T2s",
     "WP6-T3",
     "WP6-T4",
     "WP6-T4s",
@@ -1298,6 +1299,45 @@ it("tasks WP6-T2 and WP6-T3 are proven by the adapter, core and ownership tests,
     "packages/core/products/database.test.ts",
     "packages/core/products/load-balancer.test.ts",
     "packages/core/orders/lb-target-ownership.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP6-T2s is proven by the cores, the views and the screens of databases and load balancers, each filter naming a real file", () => {
+  expect(TASKS["WP6-T2s"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "db-lb-cores",
+    "db-lb-views",
+    "db-lb-screens",
+    "repo",
+  ]);
+  const line = (id) => TASKS["WP6-T2s"].find((c) => c.id === id).command.join(" ");
+  expect(line("db-lb-cores")).toBe(
+    "pnpm test --filter @tc/web family-actions databases-actions databases-access load-balancers-actions --no-passWithNoTests",
+  );
+  expect(line("db-lb-views")).toBe(
+    "pnpm test --filter @tc/web databases-view load-balancers-view --no-passWithNoTests",
+  );
+  expect(line("db-lb-screens")).toContain("(panel)/databases (panel)/load-balancers");
+  for (const f of [
+    "apps/web/server/family-actions.test.ts",
+    "apps/web/server/databases-actions.test.ts",
+    "apps/web/server/databases-access.test.ts",
+    "apps/web/server/databases-view.test.ts",
+    "apps/web/server/load-balancers-actions.test.ts",
+    "apps/web/server/load-balancers-view.test.ts",
+    "apps/web/messages/databases-messages.test.ts",
+    "apps/web/messages/load-balancers-messages.test.ts",
+    "apps/web/app/[locale]/(panel)/databases/databases.test.tsx",
+    "apps/web/app/[locale]/(panel)/databases/mockup-anchors.test.tsx",
+    "apps/web/app/[locale]/(panel)/load-balancers/load-balancers.test.tsx",
+    "apps/web/app/[locale]/(panel)/load-balancers/mockup-anchors.test.tsx",
+    "apps/web/app/[locale]/(panel)/orders/family-links.test.tsx",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

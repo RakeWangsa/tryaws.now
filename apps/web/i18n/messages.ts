@@ -21,6 +21,10 @@ import { extrasBn } from "../messages/extras-bn.ts";
 import { extrasEn } from "../messages/extras-en.ts";
 import { cdnBn } from "../messages/cdn-bn.ts";
 import { cdnEn } from "../messages/cdn-en.ts";
+import { databasesBn } from "../messages/databases-bn.ts";
+import { databasesEn } from "../messages/databases-en.ts";
+import { loadBalancersBn } from "../messages/load-balancers-bn.ts";
+import { loadBalancersEn } from "../messages/load-balancers-en.ts";
 import { bucketBn } from "../messages/bucket-bn.ts";
 import { bucketEn } from "../messages/bucket-en.ts";
 import { containerBn } from "../messages/container-bn.ts";
@@ -46,6 +50,8 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     windowsAccessBn,
     extrasOwn.bn,
     cdnBn,
+    databasesBn,
+    loadBalancersBn,
     bucketBn,
     containerBn,
     authOwn.bn,
@@ -62,6 +68,8 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     windowsAccessEn,
     extrasOwn.en,
     cdnEn,
+    databasesEn,
+    loadBalancersEn,
     bucketEn,
     containerEn,
     authOwn.en,
