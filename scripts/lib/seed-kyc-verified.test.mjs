@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { SEED_STAGES, assertSeedStage, markKycVerified, parseArgs } from "./seed-kyc-verified.mjs";
 

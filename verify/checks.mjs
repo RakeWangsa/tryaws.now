@@ -643,6 +643,103 @@ TASKS["WP2-T3"] = [
   repo,
 ];
 
+// WP2-T4: /kyc. The sentences of the backlog row, each on its own line; every filter names files and
+// `--no-passWithNoTests` makes an empty selection fail (tests/repo/verify-cli.test.mjs also asserts
+// that the files exist). "No resource before verified" is proven in WP4-T4 (orders-kyc-gate).
+const kycRules = {
+  id: "kyc-rules",
+  title: "WP2-T4: KYC document types, limits, status transitions, object keys, no number in a key",
+  command: ["pnpm", "test", "--filter", "@tc/core", "kyc/rules", "--no-passWithNoTests"],
+};
+const kycWebRole = {
+  id: "kyc-web-role",
+  title:
+    "WP2-T4: the web role cannot read a KYC object or its keys, one open submission, cross-tenant",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "test/kyc-repo",
+    "test/cross-tenant",
+    "--no-passWithNoTests",
+  ],
+};
+const kycActions = {
+  id: "kyc-actions",
+  title: "WP2-T4: start upload and submit in R9 order, the port has no read, no number in a log",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "server/kyc-actions",
+    "server/kyc-view",
+    "kyc/",
+    "--no-passWithNoTests",
+  ],
+};
+const kycSeed = {
+  id: "kyc-seed",
+  title: "WP2-T4: the staging-only seed marks a test customer verified and refuses production",
+  command: ["pnpm", "test", "scripts/lib/seed-kyc-verified.test.mjs", "--no-passWithNoTests"],
+};
+TASKS["WP2-T4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  kycRules,
+  kycWebRole,
+  kycActions,
+  kycSeed,
+  web,
+  repo,
+];
+
+// WP2-T5: /settings/profile and /settings/security. "An e-mail or phone change needs a fresh sign-in
+// and a new verification" has its own line.
+const settingsFresh = {
+  id: "settings-fresh-sign-in",
+  title: "WP2-T5: e-mail, phone and password changes need a fresh sign-in and a new verification",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "server/settings-actions",
+    "--no-passWithNoTests",
+  ],
+};
+const settingsTenancy = {
+  id: "settings-profile-repo",
+  title: "WP2-T5: profile.setEmail changes only the session customer's row",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "test/profile-email",
+    "test/cross-tenant",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP2-T5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  settingsTenancy,
+  settingsFresh,
+  web,
+  repo,
+];
+
 // WP4-T3: capacity. The race for the last slot (10.2) on its own line; the filter names a file, and
 // tests/repo/verify-cli.test.mjs asserts that the file exists, because passWithNoTests is on.
 const capacityRace = {

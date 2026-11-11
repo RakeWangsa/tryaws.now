@@ -2,7 +2,7 @@
 // Staging only (WP2-T4). DATABASE_URL names the staging database; the stage guard runs first, before
 // any connection is opened. The address is never printed (R14).
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { assertSeedStage, markKycVerified, parseArgs } from "./lib/seed-kyc-verified.mjs";
 
 const args = parseArgs(process.argv.slice(2), process.env);
@@ -23,11 +23,15 @@ try {
       email: args.email,
       query: (sql, params) => pool.query(sql, params),
     });
-    console.log(updated === 1 ? "1 customer marked verified." : "No customer changed.");
+    process.stdout.write(
+      `${updated === 1 ? "1 customer marked verified." : "No customer changed."}\n`,
+    );
   } finally {
     await pool.end();
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.message : "seed-kyc-verified: failed.");
+  process.stderr.write(
+    `${error instanceof Error ? error.message : "seed-kyc-verified: failed."}\n`,
+  );
   process.exitCode = 1;
 }
