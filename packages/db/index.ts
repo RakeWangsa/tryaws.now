@@ -167,3 +167,11 @@ export {
   type ConfigPriceInput,
   type ConfigPriceKey,
 } from "./seed/config-prices";
+export { lifecycleRepo } from "./repositories/system/lifecycle";
+export type {
+  GuardFacts,
+  LifecycleRepo,
+  LifecycleRow,
+  NewLifecycleNotification,
+  SubscriptionStatus,
+} from "./repositories/system/lifecycle";

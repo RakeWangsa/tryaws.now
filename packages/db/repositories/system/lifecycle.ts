@@ -1,0 +1,188 @@
+import { sql } from "drizzle-orm";
+import { v7 as uuidv7 } from "uuid";
+import type { Tx } from "../../client";
+import { isUuid } from "../scope";
+
+// The statements of the lifecycle engine (WP5-T4), run as worker_rw. System code only: they take
+// no customer id from a session and filter by the ids of the rows the engine itself read. They
+// name only columns that worker_rw may read or write (grants.expected.json) and log nothing.
+
+export type SubscriptionStatus = "active" | "grace" | "retained" | "ended";
+
+export interface LifecycleRow {
+  readonly id: string;
+  readonly resourceId: string;
+  readonly customerId: string;
+  readonly market: string;
+  readonly termDays: number;
+  readonly priceSnapshot: unknown;
+  readonly periodStart: Date;
+  readonly periodEnd: Date;
+  readonly autoRenew: boolean;
+  readonly status: SubscriptionStatus;
+  readonly resource: {
+    readonly family: string;
+    readonly state: string;
+    readonly config: Record<string, unknown>;
+    readonly deletedAt: Date | null;
+  };
+}
+
+export interface GuardFacts {
+  readonly subscriptionStatus: SubscriptionStatus | null;
+  readonly family: string;
+  readonly hasFinalSnapshot: boolean;
+}
+
+export interface NewLifecycleNotification {
+  readonly customerId: string;
+  readonly channel: "email" | "sms";
+  readonly template: string;
+  readonly payload: Record<string, unknown>;
+  readonly dedupeKey: string;
+}
+
+type Raw = Record<string, unknown>;
+
+function toRow(r: Raw): LifecycleRow {
+  const asDate = (v: unknown): Date => (v instanceof Date ? v : new Date(String(v)));
+  const config = r.config;
+  return {
+    id: String(r.id),
+    resourceId: String(r.resource_id),
+    customerId: String(r.customer_id),
+    market: String(r.market),
+    termDays: Number(r.term_days),
+    priceSnapshot: r.price_snapshot,
+    periodStart: asDate(r.period_start),
+    periodEnd: asDate(r.period_end),
+    autoRenew: r.auto_renew === true,
+    status: r.status as SubscriptionStatus,
+    resource: {
+      family: String(r.family),
+      state: String(r.state),
+      config:
+        typeof config === "object" && config !== null && !Array.isArray(config)
+          ? (config as Record<string, unknown>)
+          : {},
+      deletedAt: r.deleted_at === null || r.deleted_at === undefined ? null : asDate(r.deleted_at),
+    },
+  };
+}
+
+const COLUMNS = sql`s.id, s.resource_id, s.customer_id, s.term_days, s.price_snapshot, s.period_start,
+  s.period_end, s.auto_renew, s.status, r.family, r.state, r.config, r.deleted_at, c.market`;
+
+function assertUuid(value: string, what: string): void {
+  if (typeof value !== "string" || !isUuid(value)) {
+    throw new TypeError(`lifecycle: ${what} is not a UUID`);
+  }
+}
+
+export function lifecycleRepo(tx: Tx) {
+  return {
+    // Settings of market BD and scope market. A key with no row is absent from the map.
+    async readSettings(keys: readonly string[]): Promise<Map<string, unknown>> {
+      const out = new Map<string, unknown>();
+      for (const key of keys) {
+        const { rows } = await tx.execute<{ value: unknown }>(sql`
+          select value from settings
+          where key = ${key} and market = 'BD' and scope = 'market' and scope_id is null limit 1`);
+        if (rows[0] !== undefined) out.set(key, rows[0].value);
+      }
+      return out;
+    },
+
+    // The subscriptions the clock may have something to do for. Ids only; each one is then read
+    // again under its lock. `reminderHorizonDays` is the largest reminder day.
+    async listCandidates(now: Date, reminderHorizonDays: number, limit: number): Promise<string[]> {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 5000) {
+        throw new RangeError("lifecycle: limit must be from 1 to 5000");
+      }
+      const horizon = new Date(now.getTime() + reminderHorizonDays * 86_400_000);
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        select s.id from subscriptions s
+        where (s.status = 'active' and s.period_end <= ${horizon.toISOString()}::timestamptz)
+           or s.status in ('grace', 'retained')
+        order by s.period_end, s.id limit ${limit}`);
+      return rows.map((r) => r.id);
+    },
+
+    // The row, locked FOR UPDATE: two scheduler runs never act on one subscription together.
+    async lock(subscriptionId: string): Promise<LifecycleRow | null> {
+      assertUuid(subscriptionId, "subscription id");
+      const { rows } = await tx.execute<Raw>(sql`
+        select ${COLUMNS}
+        from subscriptions s
+        join resources r on r.id = s.resource_id
+        join customers c on c.id = s.customer_id
+        where s.id = ${subscriptionId}
+        for update of s`);
+      return rows[0] === undefined ? null : toRow(rows[0]);
+    },
+
+    async setStatus(subscriptionId: string, status: SubscriptionStatus): Promise<void> {
+      assertUuid(subscriptionId, "subscription id");
+      await tx.execute(
+        sql`update subscriptions set status = ${status} where id = ${subscriptionId}`,
+      );
+    },
+
+    async setPeriod(
+      subscriptionId: string,
+      change: { status: SubscriptionStatus; periodStart: Date; periodEnd: Date },
+    ): Promise<void> {
+      assertUuid(subscriptionId, "subscription id");
+      await tx.execute(sql`
+        update subscriptions
+        set status = ${change.status}, period_start = ${change.periodStart.toISOString()}::timestamptz,
+            period_end = ${change.periodEnd.toISOString()}::timestamptz
+        where id = ${subscriptionId}`);
+    },
+
+    // resources_deleted_check: deleted_at is set exactly when the state is destroyed.
+    async setResourceState(resourceId: string, state: string, at: Date): Promise<void> {
+      assertUuid(resourceId, "resource id");
+      await tx.execute(
+        state === "destroyed"
+          ? sql`update resources set state = 'destroyed', deleted_at = ${at.toISOString()}::timestamptz where id = ${resourceId}`
+          : sql`update resources set state = ${state}, deleted_at = null where id = ${resourceId}`,
+      );
+    },
+
+    async resourceOfOperation(operationResourceId: string): Promise<GuardFacts | null> {
+      assertUuid(operationResourceId, "resource id");
+      const { rows } = await tx.execute<{
+        status: SubscriptionStatus | null;
+        family: string;
+        has_final: boolean;
+      }>(sql`
+        select s.status as status, r.family as family,
+          exists (select 1 from resources b
+            where b.parent_resource_id = r.id and b.family = 'backup' and b.state = 'active'
+              and b.deleted_at is null and b.config ->> 'final' = 'true') as has_final
+        from resources r left join subscriptions s on s.resource_id = r.id
+        where r.id = ${operationResourceId}`);
+      const row = rows[0];
+      if (row === undefined) return null;
+      return {
+        subscriptionStatus: row.status,
+        family: row.family,
+        hasFinalSnapshot: row.has_final === true,
+      };
+    },
+
+    // One row per dedupe key; a repeat answers false and writes nothing (R7).
+    async insertNotification(n: NewLifecycleNotification): Promise<boolean> {
+      assertUuid(n.customerId, "customer id");
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        insert into notifications (id, customer_id, channel, template, payload, dedupe_key)
+        values (${uuidv7()}, ${n.customerId}, ${n.channel}, ${n.template}, ${JSON.stringify(n.payload)}::jsonb, ${n.dedupeKey})
+        on conflict (dedupe_key) do nothing
+        returning id`);
+      return rows.length === 1;
+    },
+  };
+}
+
+export type LifecycleRepo = ReturnType<typeof lifecycleRepo>;
