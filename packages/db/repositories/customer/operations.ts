@@ -41,6 +41,8 @@ export function customerOperationKey(customerId: string, key: string): string {
 export interface OperationsRepo {
   get(id: string): Promise<CustomerOperation | null>;
   listForResource(resourceId: string): Promise<CustomerOperation[]>;
+  // The customer's newest operations over all its resources (the dashboard), at most 50.
+  listRecent(limit?: number): Promise<CustomerOperation[]>;
   request(input: OperationRequest): Promise<Written<CustomerOperation>>;
 }
 
@@ -103,6 +105,17 @@ export function operationsRepo(scope: TenantScope): OperationsRepo {
         from operations o join resources r on r.id = o.resource_id
         where o.resource_id = ${resourceId} and r.customer_id = ${scope.customerId}
         order by o.created_at desc, o.id desc`);
+      return rows.map(toOperation);
+    },
+
+    listRecent: async (limit = 5) => {
+      const bounded = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 50) : 5;
+      const { rows } = await scope.tx.execute<OperationRow>(sql`
+        select ${OPERATION_COLUMNS}
+        from operations o join resources r on r.id = o.resource_id
+        where r.customer_id = ${scope.customerId}
+        order by o.created_at desc, o.id desc
+        limit ${bounded}`);
       return rows.map(toOperation);
     },
 

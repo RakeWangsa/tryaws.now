@@ -35,6 +35,15 @@ export type {
   OrdersRepo,
 } from "./repositories/customer/orders";
 export { customerOperationKey } from "./repositories/customer/operations";
+export { NOTIFICATIONS_SHOWN } from "./repositories/customer/notifications";
+export type { NotificationRow, NotificationsRepo } from "./repositories/customer/notifications";
+export type {
+  DestroyQueued,
+  DestroyRequest,
+  SubscriptionRow,
+  SubscriptionsRepo,
+  SubscriptionStatus,
+} from "./repositories/customer/subscriptions";
 export type {
   InvoiceCursor,
   InvoicePage,

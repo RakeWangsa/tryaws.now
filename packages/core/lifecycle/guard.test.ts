@@ -49,9 +49,20 @@ describe("decideDestructive: purge_snapshots", () => {
   });
 });
 
+describe("decideDestructive: delete_backup (WP5-T6)", () => {
+  it("runs for a backup row whatever the state of the server, and for nothing else", () => {
+    expect(
+      decideDestructive("delete_backup", facts({ family: "backup", subscriptionStatus: null })),
+    ).toBe(true);
+    expect(decideDestructive("delete_backup", facts({ family: "backup" }))).toBe(true);
+    for (const family of ["linux_instance", "disk", "database", "mystery"]) {
+      expect(decideDestructive("delete_backup", facts({ family }))).toBe(false);
+    }
+  });
+});
+
 describe("decideDestructive: other destructive kinds", () => {
   it("refuses a kind that this guard does not know, even with every fact in order", () => {
-    expect(decideDestructive("delete_backup", facts())).toBe(false);
     expect(decideDestructive("reboot", facts())).toBe(false);
     expect(decideDestructive("nonsense", facts())).toBe(false);
   });

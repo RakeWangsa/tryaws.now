@@ -29,6 +29,10 @@ export function decideDestructive(kind: string, facts: GuardFacts): boolean {
     return KEPT_CONFIG_FAMILIES.includes(facts.family);
   }
   if (kind === "purge_snapshots") return facts.subscriptionStatus === "ended";
+  // WP5-T6: a customer's manual backup. The row is a `backup` child, it has no subscription of its
+  // own and outlives its server, so the family is the whole rule. The web tier already refuses the
+  // final backup (config.final), which only the lifecycle purges.
+  if (kind === "delete_backup") return facts.family === "backup";
   return false;
 }
 
