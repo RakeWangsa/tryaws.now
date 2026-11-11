@@ -369,7 +369,9 @@ function ActionForm({ locale, kind, id }: { locale: Locale; kind: OpsActionKind;
   return (
     <form action={operationAction} className="mb-3">
       <Hidden locale={locale} entries={{ kind, id }} />
-      <ReasonField ns="AdminOps" suffix={`${kind}-${id}`} hint={t(`actionHints.${kind}`)} />
+      <FormBlock>
+        <ReasonField ns="AdminOps" suffix={`${kind}-${id}`} hint={t(`actionHints.${kind}`)} />
+      </FormBlock>
       <SubmitButton variant={kind === "rejectOperation" ? "destructive" : "primary"} size="sm">
         {t(`actions.${kind}`)}
       </SubmitButton>
@@ -552,18 +554,20 @@ function PoolCard({
               quotaCode: r.quotaCode,
             }}
           />
-          <Field
-            name="limit"
-            id={`limit-${cellKey(r)}`}
-            label={t("edit.limit")}
-            hint={t("edit.hint")}
-            required
-            inputMode="numeric"
-            maxLength={7}
-            defaultValue={String(r.limit)}
-            autoComplete="off"
-          />
-          <ReasonField ns="AdminCapacity" suffix={cellKey(r)} />
+          <FormBlock>
+            <Field
+              name="limit"
+              id={`limit-${cellKey(r)}`}
+              label={t("edit.limit")}
+              hint={t("edit.hint")}
+              required
+              inputMode="numeric"
+              maxLength={7}
+              defaultValue={String(r.limit)}
+              autoComplete="off"
+            />
+            <ReasonField ns="AdminCapacity" suffix={cellKey(r)} />
+          </FormBlock>
           <SubmitButton variant="primary" size="sm">
             {t("edit.submit")}
           </SubmitButton>
@@ -617,16 +621,18 @@ function RecomputeCard({
         </p>
         <form method="get" action={localePath(locale, "/capacity")}>
           <input type="hidden" name="cell" value={cellKey(row)} />
-          <Field
-            name="live"
-            id="recompute-live"
-            label={t("live")}
-            required
-            inputMode="numeric"
-            maxLength={7}
-            defaultValue={live}
-            autoComplete="off"
-          />
+          <FormBlock>
+            <Field
+              name="live"
+              id="recompute-live"
+              label={t("live")}
+              required
+              inputMode="numeric"
+              maxLength={7}
+              defaultValue={live}
+              autoComplete="off"
+            />
+          </FormBlock>
           <Button type="submit" variant="primary" size="sm">
             {t("submit")}
           </Button>{" "}
@@ -686,21 +692,23 @@ function WaitlistCard({
               waitlistReason: r.reason,
             }}
           />
-          <Field
-            name="count"
-            id={`count-${r.productFamily}-${r.region}-${r.reason}`}
-            label={t("count")}
-            hint={t("hint")}
-            required
-            inputMode="numeric"
-            maxLength={3}
-            defaultValue="1"
-            autoComplete="off"
-          />
-          <ReasonField
-            ns="AdminCapacity"
-            suffix={`wl-${r.productFamily}-${r.region}-${r.reason}`}
-          />
+          <FormBlock>
+            <Field
+              name="count"
+              id={`count-${r.productFamily}-${r.region}-${r.reason}`}
+              label={t("count")}
+              hint={t("hint")}
+              required
+              inputMode="numeric"
+              maxLength={3}
+              defaultValue="1"
+              autoComplete="off"
+            />
+            <ReasonField
+              ns="AdminCapacity"
+              suffix={`wl-${r.productFamily}-${r.region}-${r.reason}`}
+            />
+          </FormBlock>
           <SubmitButton variant="primary" size="sm">
             {t("submit")}
           </SubmitButton>
