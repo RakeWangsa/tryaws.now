@@ -201,5 +201,8 @@ html[lang="bn"] .btn.question {
 }
 
 /* ===== 6.6 Locale and wallet ===== */
+.tc-wallet-chip {
+  white-space: nowrap;
+}
 
 /* ===== 7. Shells (WPU-T4) ===== */
