@@ -3,6 +3,7 @@ import type { TimelineStep } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
+import { familyScreen } from "../../../../../server/family-screens.ts";
 import type { OrderProgress, OrderScreen } from "../../../../../server/servers-view.ts";
 import { AutoRefresh } from "./AutoRefresh.tsx";
 
@@ -26,7 +27,8 @@ export function OrderStatusContent({
   order: OrderScreen | null;
 }) {
   const t = useTranslations("Orders.status");
-  const tc = useTranslations("Cdn");
+  const root = useTranslations();
+  const own = familyScreen(order?.family);
 
   if (order === null) {
     return (
@@ -63,9 +65,12 @@ export function OrderStatusContent({
           {t("ready")}
           {order.resourceId !== null ? (
             <div className="mt-3">
-              {order.family === "cdn" ? (
-                <Button variant="primary" href={localePath(locale, `/cdn/${order.resourceId}`)}>
-                  {tc("order.open")}
+              {own !== undefined ? (
+                <Button
+                  variant="primary"
+                  href={localePath(locale, `${own.base}/${order.resourceId}`)}
+                >
+                  {root(`${own.ns}.order.open`)}
                 </Button>
               ) : (
                 <Button variant="primary" href={localePath(locale, `/servers/${order.resourceId}`)}>

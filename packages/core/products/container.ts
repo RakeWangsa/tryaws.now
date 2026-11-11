@@ -1,3 +1,6 @@
+import type { CatalogProduct } from "@tc/db";
+import type { CapacityNeed } from "../capacity/types";
+import type { ProductFacts } from "../orders/gates";
 import type { Result } from "../types";
 
 export interface ContainerConfig {
@@ -205,4 +208,52 @@ export function parseDeployment(raw: unknown): Result<Deployment> {
     };
   }
   return { ok: true, value: result };
+}
+
+export interface ResolvedContainer {
+  readonly family: "container_service";
+  readonly productId: string;
+  readonly region: string;
+  readonly featureFlag: string;
+  readonly awsPriceUsd: string;
+  readonly facts: ProductFacts;
+  readonly needs: readonly CapacityNeed[];
+  readonly resourceConfig: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * A container service row of the catalog. The power and the scale must read back through
+ * containerPlanFrom, otherwise nothing is sold (R16). The config holds three fields: the deployment
+ * is a later, separate request (deploy_containers).
+ */
+export function resolveContainer(
+  config: ContainerConfig,
+  product: CatalogProduct,
+): Result<ResolvedContainer> {
+  if (
+    product.id !== config.productId ||
+    product.family !== "container_service" ||
+    !product.active ||
+    product.region !== config.region ||
+    containerPlanFrom(product.awsId, product.specs) === null
+  ) {
+    return { ok: false, error: "validation", fields: { productId: "unavailable" } };
+  }
+  return {
+    ok: true,
+    value: {
+      family: "container_service",
+      productId: product.id,
+      region: product.region,
+      featureFlag: product.featureFlag,
+      awsPriceUsd: product.awsPriceUsd,
+      facts: { bundleUsd: product.awsPriceUsd, windows: false, staticIps: 0 },
+      needs: [{ quotaCode: "container_service", amount: 1 }],
+      resourceConfig: {
+        productId: config.productId,
+        region: config.region,
+        displayName: config.displayName,
+      },
+    },
+  };
 }

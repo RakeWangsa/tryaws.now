@@ -8,8 +8,10 @@ export {
 export {
   parseBucketAccess,
   parseBucketConfig,
+  resolveBucket,
   type BucketAccess,
   type BucketConfig,
+  type ResolvedBucket,
 } from "./bucket";
 export {
   CONTAINER_POWERS,
@@ -17,10 +19,12 @@ export {
   containerPlanFrom,
   parseContainerConfig,
   parseDeployment,
+  resolveContainer,
   type ContainerConfig,
   type ContainerPlan,
   type ContainerPower,
   type Deployment,
+  type ResolvedContainer,
 } from "./container";
 export {
   CDN_BUNDLES,

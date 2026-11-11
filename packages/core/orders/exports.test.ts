@@ -183,6 +183,9 @@ const PRODUCTS = [
   "parseBucketConfig",
   "parseContainerConfig",
   "parseDeployment",
+  // WP6-T4s: the order seam of a bucket and of a container service
+  "resolveBucket",
+  "resolveContainer",
   // WP7-T2: the CDN seam and the pure origin rule
   "CDN_BUNDLES",
   "CDN_CACHE_BEHAVIORS",

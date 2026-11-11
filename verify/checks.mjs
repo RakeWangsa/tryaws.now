@@ -483,6 +483,47 @@ TASKS["WP7-T1"] = [
   aws,
   repo,
 ];
+// WP6-T4s: the customer screens of buckets (/storage) and container services (/containers). Each
+// filter names a real test file.
+const storageScreensCore = {
+  id: "storage-screens-core",
+  title: "WP6-T4s: the order seam of a bucket and of a container service",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "products/bucket-resolve",
+    "products/container-resolve",
+    "orders/exports",
+    "--no-passWithNoTests",
+  ],
+};
+const storageScreensWeb = {
+  id: "storage-screens-web",
+  title:
+    "WP6-T4s: the action cores, the secret key core, the views, the messages and the screens with the mockup cross-check",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "bucket",
+    "container",
+    "family-screens",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP6-T4s"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  storageScreensCore,
+  storageScreensWeb,
+  repo,
+];
 // WP7-T2: the CDN adapter, the order seam and the customer screens. Each filter names a real test file.
 const cdnCore = {
   id: "cdn-core",

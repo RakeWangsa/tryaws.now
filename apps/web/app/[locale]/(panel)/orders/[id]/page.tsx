@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
+import { familyScreen } from "../../../../../server/family-screens.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { loadOrder } from "../../../../../server/servers-view.ts";
 import { PanelFrame } from "../../PanelFrame.tsx";
@@ -30,7 +31,7 @@ export default async function OrderPage({ params }: Props) {
     <PanelFrame
       locale={locale}
       path={`/orders/${encodeURIComponent(id)}`}
-      currentId={order?.family === "cdn" ? "cdn" : "cloudServers"}
+      currentId={familyScreen(order?.family)?.nav ?? "cloudServers"}
       panel={panel}
     >
       <h1 className="h3 mergecolor mb-4">{t("Orders.status.heading")}</h1>
