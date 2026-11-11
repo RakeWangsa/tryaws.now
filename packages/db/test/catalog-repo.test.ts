@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { Tx } from "../client";
-import { readCatalogProduct } from "../repositories/catalog";
+import { listCatalogProducts, readCatalogProduct } from "../repositories/catalog";
 import { runTransaction, type DatabaseRole } from "../tx";
 import { insertRow } from "./sql";
 import { useTempDatabase } from "./temp-db";
@@ -61,4 +61,19 @@ it("reads an inactive product too; the caller decides what inactive means", asyn
   const id = await seed({ aws_id: "large_3_0", active: false });
   const row = await as("web_rw", (tx) => readCatalogProduct(tx, id));
   expect(row?.active).toBe(false);
+});
+
+it("lists the active rows of one family only, by Region and price, as web_rw", async () => {
+  const dear = await seed({ family: "linux_instance", aws_id: "large_3_0", aws_price_usd: "40" });
+  const cheap = await seed({ family: "linux_instance", aws_id: "nano_3_0", aws_price_usd: "5" });
+  await seed({ family: "linux_instance", aws_id: "old_3_0", active: false });
+  await seed({ family: "database", aws_id: "db_small" });
+  const rows = await as("web_rw", (tx) => listCatalogProducts(tx, "linux_instance"));
+  expect(rows.map((row) => row.id)).toEqual([cheap, dear]);
+});
+
+it("refuses a family text that is not a family name, before any query", async () => {
+  await expect(
+    as("web_rw", (tx) => listCatalogProducts(tx, "x'; drop table t;--")),
+  ).rejects.toBeInstanceOf(TypeError);
 });

@@ -135,7 +135,7 @@ export {
   type SeedEnvironment,
   type SeedResult,
 } from "./seed/launch";
-export { readCatalogProduct } from "./repositories/catalog";
+export { listCatalogProducts, readCatalogProduct } from "./repositories/catalog";
 export { readLaunchInputs, type LaunchInputs } from "./repositories/launch";
 export { ensureFinalBackup, listBackupsOf, markFinalBackup } from "./repositories/backups";
 export { compensationRepo } from "./repositories/compensation";
