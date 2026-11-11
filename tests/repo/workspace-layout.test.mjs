@@ -34,6 +34,8 @@ const tsconfigExtras = {
       allowImportingTsExtensions: true,
       erasableSyntaxOnly: true,
       verbatimModuleSyntax: true,
+      jsx: "react-jsx",
+      resolveJsonModule: true,
       types: ["node"],
     },
   },

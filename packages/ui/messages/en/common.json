@@ -1,0 +1,9 @@
+{
+  "kit": {
+    "common": {
+      "close": "Close",
+      "cancel": "Cancel",
+      "loading": "Loading"
+    }
+  }
+}
