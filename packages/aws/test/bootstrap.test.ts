@@ -1,36 +1,60 @@
 import { describe, expect, it } from "vitest";
 import {
   BOOTSTRAP_EXPECTED_VPC_CIDR,
+  BOOTSTRAP_FAIL_CLOSED_CIDRS,
   BOOTSTRAP_MARKER_FILE,
   BOOTSTRAP_OK_MARKER,
   bootstrapScript,
+  isValidCidr,
 } from "../adapters/bootstrap";
 
 // 10.4 item 1: what the fixed template opens and what it closes. A text test: the real proof is
 // tests/isolation in tc-pool-dev.
+const CIDR = BOOTSTRAP_EXPECTED_VPC_CIDR;
 function accepts(script: string): string[] {
   return script
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.endsWith(" accept") && !l.startsWith("type "));
 }
+const at = (script: string, text: string): number => {
+  const i = script.indexOf(text);
+  expect(i, text).toBeGreaterThanOrEqual(0);
+  return i;
+};
 
 describe("bootstrapScript (10.4)", () => {
-  const script = bootstrapScript();
+  const script = bootstrapScript({ vpcCidr: CIDR });
 
   it("is fixed text: the same on every call, no placeholder, no customer input", () => {
-    expect(bootstrapScript()).toBe(script);
+    expect(bootstrapScript({ vpcCidr: CIDR })).toBe(script);
     expect(script).not.toMatch(/\{\{|undefined|\[object/);
     expect(script.startsWith("#!/bin/bash\n")).toBe(true);
     expect(Buffer.byteLength(script, "utf8")).toBeLessThan(16 * 1024);
   });
 
-  it("reads the VPC CIDR with an IMDSv2 token and falls back to the expected value", () => {
-    expect(script).toContain("X-aws-ec2-metadata-token-ttl-seconds");
-    expect(script).toContain("X-aws-ec2-metadata-token:");
-    expect(script).toContain("vpc-ipv4-cidr-block");
-    expect(script).toContain(`FALLBACK_CIDR="${BOOTSTRAP_EXPECTED_VPC_CIDR}"`);
-    expect(script).toContain("^[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}$");
+  it("uses the persisted literal CIDR: no metadata call at boot, no silent fallback", () => {
+    expect(script).toContain(`ip saddr { ${CIDR} } drop`);
+    expect(script).not.toMatch(/169\.254\.169\.254|curl|FALLBACK|metadata/);
+  });
+
+  it("without a valid CIDR it drops every RFC 1918 source", () => {
+    for (const bad of [
+      undefined,
+      null,
+      "",
+      "garbage",
+      "300.1.1.1/16",
+      "10.0.0.0/33",
+      "10.0.0.0/8; reboot",
+    ]) {
+      const s = bootstrapScript({ vpcCidr: bad as never });
+      expect(s).toContain(`ip saddr { ${BOOTSTRAP_FAIL_CLOSED_CIDRS.join(", ")} } drop`);
+      expect(s).not.toContain(CIDR);
+    }
+    expect(BOOTSTRAP_FAIL_CLOSED_CIDRS).toEqual(["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]);
+    expect(isValidCidr(CIDR)).toBe(true);
+    expect(isValidCidr("10.0.0.0/8\n")).toBe(false);
   });
 
   it("by default opens only established/related and DHCP, and port 80 is not open", () => {
@@ -41,54 +65,61 @@ describe("bootstrapScript (10.4)", () => {
     expect(script).not.toMatch(/dport (22|80|443|3306)\b/);
   });
 
-  it("opens port 80 from the VPC CIDR only when the load balancer option is explicit", () => {
-    const withLb = bootstrapScript({ allowLoadBalancerHttp: true });
+  it("opens port 80 only when explicit, and only with a valid CIDR", () => {
+    const withLb = bootstrapScript({ vpcCidr: CIDR, allowLoadBalancerHttp: true });
     expect(accepts(withLb)).toEqual([
       "ct state established,related accept",
       "udp sport 67 udp dport 68 accept",
-      "ip saddr $CIDR tcp dport 80 accept",
+      `ip saddr { ${CIDR} } tcp dport 80 accept`,
     ]);
-    expect(withLb.indexOf("ip saddr $CIDR drop")).toBeGreaterThan(
-      withLb.indexOf("dport 80 accept"),
-    );
-    expect(bootstrapScript({ allowLoadBalancerHttp: false })).toBe(script);
+    expect(at(withLb, "} drop")).toBeGreaterThan(at(withLb, "dport 80 accept"));
+    expect(() => bootstrapScript({ allowLoadBalancerHttp: true })).toThrow(/VPC CIDR/);
+    expect(bootstrapScript({ vpcCidr: CIDR, allowLoadBalancerHttp: false })).toBe(script);
   });
 
-  it("drops everything else from the VPC CIDR, before NAT (an nftables inet table, not ufw)", () => {
+  it("drops the rest before NAT (an nftables inet table, not ufw)", () => {
     expect(script).toContain("table inet tc_isolation");
     expect(script).toMatch(/hook prerouting priority -150;/);
-    expect(script).toContain("ip saddr $CIDR drop");
     expect(script).not.toMatch(/\bufw\b/);
   });
 
-  it("fails closed: strict shell, no `|| true` on the install, nft checked, rules read back", () => {
+  it("fails closed: strict shell, no `|| true`, both tools installed and checked", () => {
     expect(script.match(/set -euo pipefail/g)?.length).toBe(2);
-    const install = script.split("\n").filter((l) => /apt-get|dnf/.test(l));
-    expect(install.length).toBeGreaterThan(0);
-    for (const line of install) expect(line).not.toContain("|| true");
+    expect(script).not.toContain("|| true");
+    // installed unconditionally, not inside a check for nft
+    expect(script).toContain("apt-get install -y nftables conntrack");
+    expect(script).toContain("dnf install -y nftables conntrack-tools");
+    expect(script).not.toMatch(/if ! command -v nft/);
     expect(script).toContain("command -v nft >/dev/null 2>&1 || exit 1");
-    expect(script).toContain("nft list table inet tc_isolation >/dev/null");
-    // the load is verified before the marker is written
-    expect(script.indexOf("nft list table inet tc_isolation")).toBeLessThan(
-      script.indexOf(`echo ${BOOTSTRAP_OK_MARKER} >`),
+    expect(script).toContain("command -v conntrack >/dev/null 2>&1 || exit 1");
+  });
+
+  it("the rules come first; reading them back precedes the flush; the flush is fatal except 'nothing matched'", () => {
+    const rules = script.slice(at(script, "TC_RULES_EOF'"), script.lastIndexOf("TC_RULES_EOF"));
+    expect(at(rules, "nft -f -")).toBeLessThan(at(rules, "nft list table inet tc_isolation"));
+    expect(at(rules, "nft list table")).toBeLessThan(at(rules, "conntrack -D"));
+    expect(rules).toContain('conntrack -D -s "$c" >/dev/null 2>&1 || [ $? -eq 1 ]');
+    expect(rules).toContain("command -v conntrack >/dev/null 2>&1 || exit 1");
+    // nothing about the marker, the directory or the file system can stop the rule load
+    expect(rules).not.toMatch(/install -d|rm -f|echo|var\/lib/);
+    expect(bootstrapScript({ vpcCidr: CIDR })).toContain(`for c in ${CIDR}; do`);
+  });
+
+  it("writes the marker in a separate last step, only after the unit started", () => {
+    expect(script.trimEnd().endsWith(`echo ${BOOTSTRAP_OK_MARKER}`)).toBe(true);
+    expect(at(script, "systemctl start tc-isolation.service")).toBeLessThan(
+      at(script, `echo ${BOOTSTRAP_OK_MARKER} > ${BOOTSTRAP_MARKER_FILE}`),
     );
   });
 
-  it("ends with a marker that only a complete run prints, and clears the old one first", () => {
-    expect(script.trimEnd().endsWith(`echo ${BOOTSTRAP_OK_MARKER}`)).toBe(true);
-    expect(script).toContain(`test -s ${BOOTSTRAP_MARKER_FILE}`);
-    expect(script).toContain(`rm -f ${BOOTSTRAP_MARKER_FILE}`);
-  });
-
-  it("loads the rules before any interface is up, and flushes the VPC conntrack entries", () => {
+  it("orders the unit before the network, after the mounts it needs", () => {
     expect(script).toContain("DefaultDependencies=no");
+    expect(script).toContain("After=local-fs.target");
+    expect(script).toContain("RequiresMountsFor=/var/lib /usr/local/sbin");
     expect(script).toContain("Before=network-pre.target");
     expect(script).toContain("Wants=network-pre.target");
-    expect(script).toContain('conntrack -D -s "$CIDR"');
-    // a missing conntrack tool is tolerated only after the rules were read back
-    expect(script.indexOf("nft list table")).toBeLessThan(script.indexOf("conntrack -D"));
     expect(script).toContain("Type=oneshot");
     expect(script).toContain("RemainAfterExit=yes");
-    expect(script).toContain("systemctl start tc-isolation.service");
+    expect(script).toContain("systemctl enable tc-isolation.service");
   });
 });
