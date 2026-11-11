@@ -36,6 +36,21 @@ export {
   bootstrapScript,
   type BootstrapOptions,
 } from "./adapters/bootstrap";
+export {
+  WINDOWS_BOOTSTRAP_MARKER_FILE,
+  windowsBootstrapScript,
+  type WindowsBootstrapOptions,
+} from "./adapters/bootstrap-windows";
+export {
+  createWindowsInstanceAdapter,
+  type WindowsInstanceDeps,
+  type WindowsLaunchSpec,
+} from "./adapters/windows-instance";
+export {
+  fetchWindowsPassword,
+  type WindowsPassword,
+  type WindowsPasswordInput,
+} from "./adapters/windows-access";
 export { createBucketAdapter, type BucketDeps } from "./adapters/bucket";
 export {
   createBucketAccessKey,
