@@ -13,6 +13,8 @@ import {
 import { withTx } from "@tc/db";
 import { createAdapterRegistry } from "./adapters";
 import { backupAdapter, diskAdapter } from "./backup";
+import { bucketAdapter } from "./bucket";
+import { containerServiceAdapter } from "./container";
 import { linuxInstanceAdapter } from "./linux";
 import { composeHooks } from "./hooks";
 import { orderHooks } from "./order-hooks";
@@ -115,6 +117,9 @@ function buildDeps(): StepDeps {
       linuxInstanceAdapter({ vpcCidr: process.env.TC_VPC_CIDR }),
       backupAdapter(),
       diskAdapter(),
+      // WP6-T4 and WP7-T1: behind their feature flags (R12), which the order flow checks.
+      bucketAdapter(),
+      containerServiceAdapter(),
     ]),
     // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
     destructiveGuard,
