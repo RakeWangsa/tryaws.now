@@ -183,6 +183,14 @@ const PRODUCTS = [
   "parseBucketConfig",
   "parseContainerConfig",
   "parseDeployment",
+  // WP7-T2: the CDN seam and the pure origin rule
+  "CDN_BUNDLES",
+  "CDN_CACHE_BEHAVIORS",
+  "CDN_ORIGIN_FAMILIES",
+  "cdnBundleFrom",
+  "checkCdnOrigin",
+  "parseCdnConfig",
+  "resolveCdn",
   // WP6-T2 and WP6-T3: the database and load balancer seams and the pure target rule
   "MAX_LB_TARGETS",
   "checkLbTargets",
