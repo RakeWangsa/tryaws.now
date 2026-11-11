@@ -97,6 +97,22 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
+    "WPU-T4",
+  ]);
+});
+
+it("task WPU-T4 is proven by lint, types, format, the ui, web and admin tests, the repository tests and the smoke script", () => {
+  expect(TASKS["WPU-T4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+    ["apps-smoke", "node scripts/smoke-apps.mjs"],
   ]);
 });
 

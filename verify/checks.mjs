@@ -213,6 +213,38 @@ TASKS["WP4-T2"] = [
   repo,
 ];
 
+// WPU-T4: the two Next.js apps. Their tests run by package; the smoke script builds both apps,
+// scans the output, starts `next start` and reads the headers and the HTML (no database needed).
+const web = {
+  id: "web",
+  title: "apps/web: proxy, CSP, messages, pages",
+  command: ["pnpm", "test", "--filter", "@tc/web", "--no-passWithNoTests"],
+};
+const admin = {
+  id: "admin",
+  title: "apps/admin: proxy, CSP, messages, pages",
+  command: ["pnpm", "test", "--filter", "@tc/admin", "--no-passWithNoTests"],
+};
+const appsSmoke = {
+  id: "apps-smoke",
+  title:
+    "next build routes are dynamic, scan of the output, CSP report-only with nonce, dev UI is 404 in production",
+  command: ["node", "scripts/smoke-apps.mjs"],
+  timeoutMs: 1_800_000,
+};
+TASKS["WPU-T4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  ui,
+  web,
+  admin,
+  repo,
+  appsSmoke,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],
