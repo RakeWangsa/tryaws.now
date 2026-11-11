@@ -2,9 +2,18 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
-import { describe, expect, it } from "vitest";
-import { WALLET_ANCHORS } from "./mockup-anchors.ts";
+import { describe, expect, it, vi } from "vitest";
+import { EXPLAINED_EXCEPTIONS, WALLET_ANCHORS } from "./mockup-anchors.ts";
 import { STATE_RENDERERS } from "./mockup-states.tsx";
+
+// The Server Actions are replaced: the screens only need a function to post to, and the client
+// router is not available outside Next.
+vi.mock("./topup/actions.ts", () => ({ startTopUpAction: async () => ({ status: "idle" }) }));
+vi.mock("./topup/[paymentId]/actions.ts", () => ({
+  recheckPaymentAction: async () => ({ state: "pending", review: false }),
+  checkAgainAction: async () => {},
+}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 
 // Not `new URL(..., import.meta.url)`: under jsdom Vite rewrites that form to an http URL.
 const here = dirname(fileURLToPath(import.meta.url));
@@ -57,4 +66,44 @@ describe("the wallet screens follow the shared mockup", () => {
   it("every state id of a row has a renderer", () => {
     for (const row of WALLET_ANCHORS) expect(STATE_RENDERERS[row.state]).toBeDefined();
   });
+
+  it("the top-up and status states are all covered by a row", () => {
+    const covered = new Set(WALLET_ANCHORS.map((row) => row.state));
+    for (const id of Object.keys(STATE_RENDERERS)) {
+      if (!id.startsWith("topup.") && !id.startsWith("status.")) continue;
+      // topup.form.noquick, topup.closed.noeps and topup.error.rate_limited share the rows of their screen.
+      const base = id.replace(/\.(noquick|noeps|rate_limited)$/, (m) =>
+        m === ".rate_limited" ? ".unavailable" : "",
+      );
+      expect(covered.has(base) || covered.has(id), id).toBe(true);
+    }
+  });
+});
+
+describe("classes of the mockup that the screens do not carry are explained (open point 11)", () => {
+  const known = knownClasses();
+  const topupAndStatus = Object.entries(STATE_RENDERERS).filter(
+    ([id]) => id.startsWith("topup.") || id.startsWith("status."),
+  );
+
+  for (const exception of EXPLAINED_EXCEPTIONS) {
+    it(`${exception.cls} (${exception.mockupFile}) is in the mockup, is not rendered, and its replacement is`, () => {
+      expect(mockupTokens(exception.mockupFile).has(exception.cls)).toBe(true);
+      for (const [id, render] of topupAndStatus) {
+        for (const locale of ["bn", "en"] as const) {
+          const rendered = renderedTokens(render(locale));
+          expect(rendered.has(exception.cls), `${id} ${locale}`).toBe(false);
+        }
+      }
+      // Each replacement is a class the build defines and that some state really uses.
+      const all = new Set<string>();
+      for (const [, render] of topupAndStatus) {
+        for (const token of renderedTokens(render("en"))) all.add(token);
+      }
+      for (const replacement of exception.replacedBy) {
+        expect(known.has(replacement), `${replacement} is defined`).toBe(true);
+        expect(all.has(replacement), `${replacement} is rendered`).toBe(true);
+      }
+    });
+  }
 });
