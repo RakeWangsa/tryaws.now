@@ -62,6 +62,10 @@ export async function listCatalogProducts(tx: Tx, family: string): Promise<Catal
     .select(columns)
     .from(catalogProducts)
     .where(and(eq(catalogProducts.family, family), eq(catalogProducts.active, true)))
-    .orderBy(asc(catalogProducts.region), asc(catalogProducts.awsPriceUsd), asc(catalogProducts.id));
+    .orderBy(
+      asc(catalogProducts.region),
+      asc(catalogProducts.awsPriceUsd),
+      asc(catalogProducts.id),
+    );
   return rows as CatalogProduct[];
 }

@@ -89,7 +89,7 @@ export async function createOrderDraftCore(
   }
 
   if (deps.orders === null) return { ok: false, error: "unavailable" };
-  let allowed = false;
+  let allowed: boolean;
   try {
     allowed = (await deps.rateLimit(session)).allowed;
   } catch {

@@ -27,7 +27,12 @@ export default async function OrderPage({ params }: Props) {
   const panel = await startPanelPage(`/orders/${encodeURIComponent(id)}`);
   const order = await loadOrder(panel.session, id);
   return (
-    <PanelFrame locale={locale} path={`/orders/${encodeURIComponent(id)}`} currentId="cloudServers" panel={panel}>
+    <PanelFrame
+      locale={locale}
+      path={`/orders/${encodeURIComponent(id)}`}
+      currentId="cloudServers"
+      panel={panel}
+    >
       <h1 className="h3 mergecolor mb-4">{t("Orders.status.heading")}</h1>
       <OrderStatusContent locale={locale} order={order} />
     </PanelFrame>

@@ -134,7 +134,9 @@ export function PlaceForm({
           {shortfallTaka !== null ? (
             <div className="alert alert-warning text-start" role="status">
               <i className="fas fa-wallet me-2" aria-hidden="true" />
-              {t("shortfallBody", { amount: formatMoney(shortfallTaka * 100n, { locale, mode: "wholeUp" }) })}
+              {t("shortfallBody", {
+                amount: formatMoney(shortfallTaka * 100n, { locale, mode: "wholeUp" }),
+              })}
               <div className="mt-3">
                 <Button variant="primary" href={topUpHref(locale, shortfallTaka, token)}>
                   {t("topUp")}

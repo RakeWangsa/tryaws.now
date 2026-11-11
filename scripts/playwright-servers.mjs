@@ -13,12 +13,15 @@
 // The state file comes from signing in once by hand (`playwright codegen --save-storage`). It holds
 // cookies: keep it outside the repository. This script reads no secret and prints no cookie.
 
+import { URL } from "node:url";
+
+const say = (line) => process.stdout.write(`${line}\n`);
 const VIEWPORT = { width: 360, height: 800 };
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
 function blocked(reason) {
-  console.log(`BLOCKED: ${reason}`);
-  console.log("BLOCKED is not a pass: nothing was proven.");
+  say(`BLOCKED: ${reason}`);
+  say("BLOCKED is not a pass: nothing was proven.");
   process.exit(2);
 }
 
@@ -65,12 +68,10 @@ async function main() {
   const step = async (name, run) => {
     try {
       await run();
-      console.log(`ok   ${name}`);
+      say(`ok   ${name}`);
     } catch (error) {
       failures.push(name);
-      console.log(
-        `FAIL ${name}: ${error instanceof Error ? error.message.split("\n")[0] : "error"}`,
-      );
+      say(`FAIL ${name}: ${error instanceof Error ? error.message.split("\n")[0] : "error"}`);
     }
   };
 
@@ -81,7 +82,7 @@ async function main() {
   });
   const page = await context.newPage();
   const noSideScroll = async () => {
-    const width = await page.evaluate(() => document.documentElement.scrollWidth);
+    const width = await page.evaluate("document.documentElement.scrollWidth");
     if (width > VIEWPORT.width) throw new Error(`horizontal scroll: ${width}px`);
   };
 
@@ -113,10 +114,10 @@ async function main() {
 
   await browser.close();
   if (failures.length > 0) {
-    console.log(`FAIL: ${failures.length} step(s) failed.`);
+    say(`FAIL: ${failures.length} step(s) failed.`);
     process.exit(1);
   }
-  console.log("PASS: a server was ordered at 360 px in bn against the given host.");
+  say("PASS: a server was ordered at 360 px in bn against the given host.");
 }
 
 // Not run when imported by the test.

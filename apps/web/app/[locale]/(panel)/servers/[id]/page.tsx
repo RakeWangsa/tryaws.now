@@ -26,7 +26,12 @@ export default async function ServerDetailPage({ params }: Props) {
   const panel = await startPanelPage(`/servers/${encodeURIComponent(id)}`);
   const server = await loadServerDetail(panel.session, id);
   return (
-    <PanelFrame locale={locale} path={`/servers/${encodeURIComponent(id)}`} currentId="cloudServers" panel={panel}>
+    <PanelFrame
+      locale={locale}
+      path={`/servers/${encodeURIComponent(id)}`}
+      currentId="cloudServers"
+      panel={panel}
+    >
       <ServerDetailContent locale={locale} numerals={numeralsFor(locale, panel)} server={server} />
     </PanelFrame>
   );

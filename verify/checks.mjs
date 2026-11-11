@@ -891,6 +891,64 @@ TASKS["WP5-T5"] = [
   repo,
 ];
 
+// WP4-T7: the server screens (list, configurator, review, order status, detail, SSH keys) with fakes,
+// the Server Action cores, and the Playwright smoke that says BLOCKED when it cannot run. The staging
+// proof (a server ordered at 360 px in bn, scripts/playwright-servers.mjs) and the database-backed
+// catalog reader test are manual VERIFY steps / the db gate (JOURNEY.md).
+const serverActionCores = {
+  id: "server-action-cores",
+  title:
+    "R9, R7, R8: draft, placement and SSH key actions: order of checks, public errors, no AWS text",
+  command: ["pnpm", "test", "--filter", "@tc/web", "server/order-actions", "--no-passWithNoTests"],
+};
+const serverKeyActions = {
+  id: "server-key-actions",
+  title: "U10: SSH key removal needs a fresh sign-in and the typed name; add is idempotent",
+  command: ["pnpm", "test", "--filter", "@tc/web", "server/key-actions", "--no-passWithNoTests"],
+};
+const serverPages = {
+  id: "server-pages",
+  title: "16.10, 16.11: the pages in bn and en, price_changed, shortfall, cross-tenant answers",
+  command: ["pnpm", "test", "--filter", "@tc/web", "servers/pages", "--no-passWithNoTests"],
+};
+const serverAnchors = {
+  id: "server-mockup-anchors",
+  title: "U1, U11: every screen state carries the classes of its shared mockup page, bn and en",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "servers/mockup-anchors",
+    "--no-passWithNoTests",
+  ],
+};
+const serverSmoke = {
+  id: "server-smoke-blocked",
+  title: "the Playwright smoke reports BLOCKED, never PASS, without a browser or a staging URL",
+  command: ["pnpm", "test", "--filter", "repo", "servers-smoke", "--no-passWithNoTests"],
+};
+const catalogList = {
+  id: "catalog-list",
+  title: "the configurator reads active catalog rows of one family as web_rw (database)",
+  command: ["pnpm", "test", "--filter", "@tc/db", "catalog-repo", "--no-passWithNoTests"],
+};
+TASKS["WP4-T7"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  serverActionCores,
+  serverKeyActions,
+  serverPages,
+  serverAnchors,
+  serverSmoke,
+  catalogList,
+  web,
+  repo,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

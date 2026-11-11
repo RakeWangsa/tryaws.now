@@ -71,7 +71,13 @@ describe("the server screens follow the shared mockup", () => {
         expect(STATE_RENDERERS[`${screen}.${state}`], `${screen}.${state}`).toBeDefined();
       }
     }
-    for (const id of ["servers.empty", "servers.flag_off", "new.flag_off", "keys.flag_off", "keys.empty"]) {
+    for (const id of [
+      "servers.empty",
+      "servers.flag_off",
+      "new.flag_off",
+      "keys.flag_off",
+      "keys.empty",
+    ]) {
       expect(STATE_RENDERERS[id], id).toBeDefined();
     }
   });
@@ -80,7 +86,9 @@ describe("the server screens follow the shared mockup", () => {
     for (const [state, render] of Object.entries(STATE_RENDERERS)) {
       for (const locale of ["bn", "en"] as const) {
         const html = render(locale);
-        expect(html, `${state} in ${locale}`).not.toMatch(/arn:aws|\b\d{12}\b|tc-[a-z]+-[0-9a-f]{6}|raw text must never show/);
+        expect(html, `${state} in ${locale}`).not.toMatch(
+          /arn:aws|\b\d{12}\b|tc-[a-z]+-[0-9a-f]{6}|raw text must never show/,
+        );
       }
     }
   });

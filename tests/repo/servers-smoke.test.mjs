@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { URL, fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { allowedBase } from "../../scripts/playwright-servers.mjs";
 
