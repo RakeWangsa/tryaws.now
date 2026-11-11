@@ -22,7 +22,12 @@ import {
   throttlingOnlyRetryStrategy,
 } from "../settings";
 
-const LIMITS = { connectionTimeout: 3000, requestTimeout: 15000, throwOnRequestTimeout: true };
+const LIMITS = {
+  connectionTimeout: 3000,
+  requestTimeout: 15000,
+  throwOnRequestTimeout: true,
+  socketTimeout: 15000,
+};
 
 it("each caller may ask only for the roles that trust it (3.2, 6.3)", () => {
   expect(CALLER_ROLES).toEqual({

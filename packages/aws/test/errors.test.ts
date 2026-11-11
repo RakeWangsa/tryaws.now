@@ -529,6 +529,8 @@ it.each([
     "ECONNRESET",
   ],
   ["an unknown error (when unsure, assume it acted)", new Error("boom"), true, null],
+  ["a code that looks like an access key is not kept", net("AKIA1234567890ABCD"), true, null],
+  ["a code that looks like an account id is not kept", net("210987654321"), true, null],
   ["a value that is not an error", "boom", true, null],
 ])("mayHaveActed and nodeCode: %s", (_label, input, mayHaveActed, nodeCode) => {
   const e = toAwsError(input, "CreateInstances");
@@ -668,6 +670,14 @@ it.each([
   ["an operation that holds an ARN", { operation: "arn:aws:iam::210987654321" }, "operation", null],
   ["an operation in lower case", { operation: "createInstances" }, "operation", null],
   ["a nodeCode with text", { nodeCode: "connect to 210987654321" }, "nodeCode", null],
+  [
+    "a nodeCode that looks like an access key",
+    { nodeCode: "AKIA1234567890ABCD" },
+    "nodeCode",
+    null,
+  ],
+  ["a nodeCode that looks like an account id", { nodeCode: "210987654321" }, "nodeCode", null],
+  ["a nodeCode that is only shaped like a Node code", { nodeCode: "EWHATEVER" }, "nodeCode", null],
   ["a reason that is not one of ours", { reason: "arn:aws:x" as never }, "reason", null],
   ["an httpStatus out of range", { httpStatus: 42 }, "httpStatus", null],
 ])("the constructor keeps only the plain form: %s", (_label, init, field, expected) => {

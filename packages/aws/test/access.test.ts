@@ -158,6 +158,7 @@ it("with the real transport, nothing leaves the machine, and the time limits are
     connectionTimeout: 3000,
     requestTimeout: 15000,
     throwOnRequestTimeout: true,
+    socketTimeout: 15000,
   });
   expect(blockedConnections).toEqual([
     "sts.ap-southeast-1.amazonaws.com:443",

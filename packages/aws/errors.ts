@@ -14,7 +14,18 @@ const LOCAL_REASONS: readonly string[] = [
 
 const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
 const OPERATION_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/;
-const NODE_CODE = /^[A-Z][A-Z0-9_]{1,31}$/;
+// Only these Node network codes are kept; any other text (an id, a key) becomes null.
+const NODE_CODES: ReadonlySet<string> = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ECONNABORTED",
+  "EPIPE",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+]);
 const ACCOUNT_ID_IN_NAME = /\d{12}/;
 const REQUEST_ID = /^[A-Za-z0-9+/=_-]{1,128}$/;
 
@@ -88,7 +99,7 @@ export class AwsError extends Error {
     this.requestId = plainRequestId(init.requestId);
     this.mayHaveActed = init.mayHaveActed === true;
     this.nodeCode =
-      typeof init.nodeCode === "string" && NODE_CODE.test(init.nodeCode) ? init.nodeCode : null;
+      typeof init.nodeCode === "string" && NODE_CODES.has(init.nodeCode) ? init.nodeCode : null;
     Object.freeze(this);
   }
 }
@@ -330,7 +341,7 @@ function classify(error: unknown, operation: string | null): AwsError {
   const f = readFacts(error);
   const index = ROWS.findIndex((r) => r.match(f));
   const row = ROWS[index];
-  const nodeCode = f.code !== null && NODE_CODE.test(f.code) ? f.code : null;
+  const nodeCode = f.code !== null && NODE_CODES.has(f.code) ? f.code : null;
   // An error of the credentials step is never final and never "acted": a platform fault waits
   // for an admin and does not fail an order.
   const credentialsStep = operation === ASSUME_ROLE;

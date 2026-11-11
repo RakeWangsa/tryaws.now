@@ -64,6 +64,9 @@ export const TIME_LIMITS = Object.freeze({
   connectionTimeout: CONNECTION_TIMEOUT_MS,
   requestTimeout: REQUEST_TIMEOUT_MS,
   throwOnRequestTimeout: true,
+  // `requestTimeout` ends when the response headers arrive: without this idle limit a stalled
+  // body would hang a call with no deadline.
+  socketTimeout: REQUEST_TIMEOUT_MS,
 } as const);
 
 export function clientSettings(
