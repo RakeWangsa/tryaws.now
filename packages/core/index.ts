@@ -8,5 +8,6 @@ export * from "./rates/index";
 export * from "./validation/index";
 export * from "./flags/index";
 export * from "./orders/index";
+export * from "./lifecycle/index";
 export * from "./products/index";
 export * from "./invoices/index";

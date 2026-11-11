@@ -150,6 +150,15 @@ export function lifecycleRepo(tx: Tx) {
       );
     },
 
+    // After a purge: the backups of a resource are gone, so their rows are destroyed too.
+    async retireBackups(parentResourceId: string, at: Date): Promise<number> {
+      assertUuid(parentResourceId, "resource id");
+      const result = await tx.execute(sql`
+        update resources set state = 'destroyed', deleted_at = ${at.toISOString()}::timestamptz
+        where parent_resource_id = ${parentResourceId} and family = 'backup' and state <> 'destroyed'`);
+      return result.rowCount ?? 0;
+    },
+
     async resourceOfOperation(operationResourceId: string): Promise<GuardFacts | null> {
       assertUuid(operationResourceId, "resource id");
       const { rows } = await tx.execute<{

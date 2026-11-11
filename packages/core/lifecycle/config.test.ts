@@ -8,7 +8,6 @@ describe("lifecycle config", () => {
       retentionDays: 14,
       reminderDays: [7, 3, 1],
       smsReminderDay: 1,
-      termDays: 30,
     });
     expect(Object.isFrozen(DEFAULT_LIFECYCLE_CONFIG)).toBe(true);
   });
@@ -21,12 +20,10 @@ describe("lifecycle config", () => {
     const rows = new Map<string, unknown>([
       [LIFECYCLE_SETTING_KEYS.graceHours, 1],
       [LIFECYCLE_SETTING_KEYS.retentionDays, 2],
-      [LIFECYCLE_SETTING_KEYS.termDays, 3],
     ]);
     expect(parseLifecycleConfig(rows)).toMatchObject({
       graceHours: 1,
       retentionDays: 2,
-      termDays: 3,
     });
   });
 

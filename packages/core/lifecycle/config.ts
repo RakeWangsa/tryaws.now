@@ -8,7 +8,6 @@ export interface LifecycleConfig {
   // Days before the period end; the email goes at each, the SMS only at smsReminderDay (16.14).
   readonly reminderDays: readonly number[];
   readonly smsReminderDay: number;
-  readonly termDays: number;
 }
 
 export const DEFAULT_LIFECYCLE_CONFIG: LifecycleConfig = Object.freeze({
@@ -16,13 +15,11 @@ export const DEFAULT_LIFECYCLE_CONFIG: LifecycleConfig = Object.freeze({
   retentionDays: 14,
   reminderDays: Object.freeze([7, 3, 1]) as readonly number[],
   smsReminderDay: 1,
-  termDays: 30,
 });
 
 export const LIFECYCLE_SETTING_KEYS = Object.freeze({
   graceHours: "lifecycle_grace_hours",
   retentionDays: "lifecycle_retention_days",
-  termDays: "lifecycle_term_days",
 });
 
 const MAX_VALUE = 100_000;
@@ -44,7 +41,6 @@ export function parseLifecycleConfig(rows: ReadonlyMap<string, unknown>): Lifecy
     ...DEFAULT_LIFECYCLE_CONFIG,
     graceHours: whole(rows, "graceHours"),
     retentionDays: whole(rows, "retentionDays"),
-    termDays: whole(rows, "termDays"),
   });
 }
 
