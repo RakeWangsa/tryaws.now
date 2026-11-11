@@ -218,6 +218,42 @@ const WP3_T2 = [
 ];
 TASKS["WP3-T2"] = WP3_T2;
 
+// WP3-T3: the payments sweeper function. The sentence of the backlog row (a payment whose browser never
+// returned is credited by the sweeper once; old ones expire) has its own line. The eps suite stays so
+// that a regression in the logic the function relies on fails this task too.
+const sweeperAll = {
+  id: "payments-sweeper",
+  title: "functions/payments-sweeper: handler, config, deps, boundaries, scenarios",
+  command: ["pnpm", "test", "--filter", "@tc/fn-payments-sweeper", "--no-passWithNoTests"],
+};
+const sweeperProof = {
+  id: "payments-sweeper-credits-once",
+  title:
+    "WP3-T3: a payment whose browser never returned is credited by the sweeper once; old ones expire",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/fn-payments-sweeper",
+    "test/proof-sweeper",
+    "--no-passWithNoTests",
+  ],
+};
+const WP3_T3 = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  epsAll,
+  sweeperAll,
+  sweeperProof,
+  repo,
+];
+TASKS["WP3-T3"] = WP3_T3;
+
 // WPU-T2 and WPU-T3 (two backlog rows) share one proof: the component kit, its messages and the guard tests.
 const uiKit = {
   id: "ui-kit",

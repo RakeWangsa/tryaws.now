@@ -96,6 +96,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP2-T3",
     "WP3-T1",
     "WP3-T2",
+    "WP3-T3",
     "WP4-T1",
     "WP4-T2",
     "WP4-T3",
@@ -259,6 +260,36 @@ it("task WP3-T2 is proven by the checks of WP1-T1, core, db, the EPS suite, the 
     "packages/db/test/payments-repo.test.ts",
     "packages/db/test/payments-system.test.ts",
     "packages/db/test/cross-tenant.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP3-T3 is proven by the checks of WP3-T2, the sweeper suite and the proof on its own line", () => {
+  expect(TASKS["WP3-T3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["eps", "pnpm test --filter @tc/eps --no-passWithNoTests"],
+    ["payments-sweeper", "pnpm test --filter @tc/fn-payments-sweeper --no-passWithNoTests"],
+    [
+      "payments-sweeper-credits-once",
+      "pnpm test --filter @tc/fn-payments-sweeper test/proof-sweeper --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  expect(TASKS["WP3-T3"].find((c) => c.id === "payments-sweeper-credits-once").title).toBe(
+    "WP3-T3: a payment whose browser never returned is credited by the sweeper once; old ones expire",
+  );
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "functions/payments-sweeper/test/proof-sweeper.test.ts",
+    "functions/payments-sweeper/handler.test.ts",
+    "functions/payments-sweeper/boundaries.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
