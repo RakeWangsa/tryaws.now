@@ -11,6 +11,7 @@ import {
 } from "@tc/db/testing";
 import type { EpsDeps, PaymentAlert } from "../deps";
 import { InMemoryEps } from "../fake";
+import { startTopUp } from "../topup";
 
 export const PLANTED_SECRET = "planted-secret-hash-key-0123456789";
 
@@ -42,6 +43,7 @@ export interface LogLine {
 
 export interface EpsKit {
   readonly pool: ReturnType<typeof useTempDatabase>["pool"];
+  readonly databaseName: string;
   readonly eps: InMemoryEps;
   readonly clock: FakeClock;
   readonly alerts: AlertEvent[];
@@ -86,6 +88,9 @@ export function useEpsKit(): EpsKit {
   const kit: EpsKit = {
     get pool() {
       return t.pool;
+    },
+    get databaseName() {
+      return t.name;
     },
     eps,
     clock,
@@ -157,8 +162,11 @@ export function useEpsKit(): EpsKit {
       const r = await t.pool.query("select details from discrepancies where kind = 'payment'");
       return r.rows as Array<{ details: Record<string, unknown> }>;
     },
+    // Clears what a test reads (calls, alerts, logs). The fake's counter of EPS ids is NOT reset: ids
+    // stay unique in the file's database, as the duplicate-id check of verify needs (R6).
     reset() {
-      eps.reset();
+      eps.initialized.length = 0;
+      eps.verifyCalls.length = 0;
       alerts.length = 0;
       logs.length = 0;
     },
@@ -171,4 +179,28 @@ let ipCounter = 0;
 export function freshIp(): string {
   ipCounter += 1;
   return `10.${(ipCounter >> 16) & 255}.${(ipCounter >> 8) & 255}.${ipCounter & 255}`;
+}
+
+export interface Started {
+  customerId: string;
+  paymentId: string;
+  merchantTransactionId: string;
+}
+
+/** A customer with a wallet and a top-up that EPS accepted (status redirected). */
+export async function startPayment(kit: EpsKit, amountMinor = 150000n): Promise<Started> {
+  const customerId = await kit.newCustomer();
+  const r = await startTopUp(
+    kit.deps(),
+    { customerId },
+    { amountMinor, idempotencyKey: "key-" + crypto.randomUUID() },
+    { clientIp: freshIp() },
+  );
+  if (!r.ok) throw new Error(`startTopUp failed: ${r.error}`);
+  const p = await kit.payment(r.value.paymentId);
+  return {
+    customerId,
+    paymentId: r.value.paymentId,
+    merchantTransactionId: p.merchantTransactionId,
+  };
 }

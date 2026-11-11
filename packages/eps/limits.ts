@@ -47,6 +47,17 @@ export function limitAddress(ip: unknown): string | null {
   return [a, b, c, d].map((n) => n.toString(16)).join(":");
 }
 
+/** The subject of the per-payment verify limit: a keyed hash of the merchant transaction id, so the limiter table never holds it (R14). */
+export function paymentSubject(key: string, merchantTransactionId: string): string | null {
+  if (typeof key !== "string" || key.length === 0) return null;
+  if (typeof merchantTransactionId !== "string" || merchantTransactionId.length === 0) return null;
+  return createHmac("sha256", Buffer.from(key, "utf8"))
+    .update("tc.rl.payment.v1:eps\0" + merchantTransactionId)
+    .digest()
+    .subarray(0, 16)
+    .toString("hex");
+}
+
 /** 128 bits of a keyed hash of the address: the limiter table never holds an address (R14). Null for a bad address. */
 export function ipSubject(key: string, ip: unknown): string | null {
   const address = limitAddress(ip);

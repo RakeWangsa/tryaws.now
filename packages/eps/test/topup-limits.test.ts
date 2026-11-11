@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ipSubject, limitAddress, RETURN_LIMITS, START_LIMITS } from "../limits";
+import { ipSubject, limitAddress, paymentSubject, RETURN_LIMITS, START_LIMITS } from "../limits";
 import { safeLog } from "../log";
 
 describe("limits", () => {
@@ -39,6 +39,19 @@ describe("ipSubject", () => {
       expect(ipSubject("k", bad)).toBeNull();
     }
     expect(ipSubject("", "203.0.113.7")).toBeNull();
+  });
+});
+
+describe("paymentSubject", () => {
+  it("is 32 hex characters, keyed, and holds no part of the id", () => {
+    const id = "TCP" + "a".repeat(32);
+    const s = paymentSubject("k1", id);
+    expect(s).toMatch(/^[0-9a-f]{32}$/);
+    expect(paymentSubject("k1", id)).toBe(s);
+    expect(paymentSubject("k2", id)).not.toBe(s);
+    expect(paymentSubject("k1", "TCP" + "b".repeat(32))).not.toBe(s);
+    expect(paymentSubject("", id)).toBeNull();
+    expect(paymentSubject("k1", "")).toBeNull();
   });
 });
 
