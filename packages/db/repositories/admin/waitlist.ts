@@ -42,7 +42,16 @@ export interface WaitlistListFilter {
   after?: string;
 }
 
+// The open entries of one family, Region and reason: not notified and not served.
+export interface WaitlistCount {
+  productFamily: string;
+  region: string;
+  reason: WaitlistReason;
+  open: number;
+}
+
 export interface WaitlistAdminRepo {
+  counts(): Promise<Written<WaitlistCount[]>>;
   list(filter?: WaitlistListFilter): Promise<WaitlistEntry[]>;
   notifyNext(input: NotifyNextInput, why: string): Promise<Written<NotifiedEntry[]>>;
 }
@@ -80,6 +89,29 @@ const asDate = (value: string | Date): Date => new Date(value);
 export function waitlistAdminRepo(scope: AdminScope): WaitlistAdminRepo {
   const { tx } = scope;
   return {
+    async counts() {
+      if (!["ops", "superadmin"].includes(scope.actor.role) || !(await isActiveAdmin(scope))) {
+        return refused("forbidden");
+      }
+      const { rows } = await tx.execute<WaitlistCount & Record<string, unknown>>(
+        sql`select e.product_family as "productFamily", e.region, e.reason, count(*)::int as open
+              from waitlist_entries e
+             where e.notified_at is null and (e.customer_id is null or not ${SERVED_EXISTS})
+             group by e.product_family, e.region, e.reason
+             order by e.product_family, e.region, e.reason`,
+      );
+      return {
+        ok: true,
+        replayed: false,
+        value: rows.map(({ productFamily, region, reason, open }) => ({
+          productFamily,
+          region,
+          reason,
+          open,
+        })),
+      };
+    },
+
     async list(filter = {}) {
       const { productFamily, region, reason, limit = DEFAULT_LIMIT, after } = filter;
       if (

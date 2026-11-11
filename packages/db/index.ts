@@ -76,6 +76,7 @@ export type {
   CapacityLimitInput,
   CapacityLimitSet,
   CapacityRow,
+  PendingInput,
   PoolAccountAdded,
   PoolAccountInput,
   ReserveSetting,
@@ -84,6 +85,7 @@ export type {
   NotifiedEntry,
   NotifyNextInput,
   WaitlistAdminRepo,
+  WaitlistCount,
   WaitlistEntry,
   WaitlistReason,
 } from "./repositories/admin/waitlist";
@@ -106,6 +108,13 @@ export { readAdminApprover } from "./repositories/admin/approver";
 export type {
   OperationDecision,
   OperationDecisionInput,
+  OperationDetail,
+  OperationQueueFilter,
+  OperationQueuePage,
+  OperationQueueRow,
+  OperationStateCounts,
+  OperationStateName,
+  OperationTrailEntry,
   OperationsAdminRepo,
 } from "./repositories/admin/operations";
 export type { AdminMessage } from "./operations/admin";

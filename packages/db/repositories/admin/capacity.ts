@@ -10,6 +10,7 @@ import {
 } from "../../capacity-keys";
 import { RISK_TIERS } from "../../schema/identity";
 import { QUOTA_CODES } from "../../schema/provisioning";
+import { capacityInventoryRepo } from "../capacity-inventory";
 import { refused, type Written } from "../result";
 import { isUuid } from "../scope";
 import { audited, isActiveAdmin } from "./audited";
@@ -68,7 +69,17 @@ export interface CapacityRow {
   checkedAt: Date | null;
 }
 
+export interface PendingInput {
+  poolAccountId: string;
+  region: string;
+  quotaCode: QuotaCode;
+}
+
 export interface CapacityAdminRepo {
+  // Units reserved by creates that have not succeeded yet in one cell (a read, for the recompute preview).
+  pending(input: PendingInput): Promise<Written<number>>;
+  // list(market) behind the active-admin and role check: what /capacity reads.
+  overview(market: string): Promise<Written<CapacityRow[]>>;
   addPoolAccount(input: PoolAccountInput, why: string): Promise<Written<PoolAccountAdded>>;
   setLimit(input: CapacityLimitInput, why: string): Promise<Written<CapacityLimitSet>>;
   setReserve(input: ReserveSetting, why: string): Promise<Written<ReserveSetting>>;
@@ -139,6 +150,35 @@ export function capacityAdminRepo(scope: AdminScope): CapacityAdminRepo {
   };
 
   return {
+    async overview(market) {
+      if (!["ops", "superadmin"].includes(actor.role) || !(await isActiveAdmin(scope))) {
+        return refused("forbidden");
+      }
+      if (typeof market !== "string" || !MARKET_PATTERN.test(market)) return refused("validation");
+      return { ok: true, replayed: false, value: await this.list(market) };
+    },
+
+    async pending(input) {
+      const { poolAccountId, region, quotaCode } = input;
+      if (!["ops", "superadmin"].includes(actor.role) || !(await isActiveAdmin(scope))) {
+        return refused("forbidden");
+      }
+      if (
+        typeof poolAccountId !== "string" ||
+        !isUuid(poolAccountId) ||
+        typeof region !== "string" ||
+        typeof quotaCode !== "string" ||
+        !isCellKey(quotaCode, region)
+      ) {
+        return refused("validation");
+      }
+      const value = await capacityInventoryRepo(tx).pendingFor(poolAccountId, {
+        region,
+        quotaCode,
+      });
+      return { ok: true, replayed: false, value };
+    },
+
     async addPoolAccount(input, why) {
       const { awsAccountId, name, tier, roleArn, externalId } = input;
       if (!(await isActiveAdmin(scope))) return refused("forbidden");
