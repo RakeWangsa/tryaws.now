@@ -90,7 +90,7 @@ export type {
   KycDecided,
   KycDocumentRead,
   KycQueueRow,
-  KycSubmissionView,
+  KycSubmissionView as AdminKycSubmissionView,
   RiskTier,
 } from "./repositories/admin/customers";
 export { readAdminApprover } from "./repositories/admin/approver";

@@ -10,7 +10,7 @@ import {
   SubmitButton,
   type DataTableColumn,
 } from "@tc/ui";
-import type { CustomerAuditRow, CustomerDetail, KycSubmissionView } from "@tc/db";
+import type { CustomerAuditRow, CustomerDetail, AdminKycSubmissionView } from "@tc/db";
 import { localePath, type Locale } from "@tc/ui/runtime";
 import { customerDecisionAction } from "../../server/customer-actions.ts";
 
@@ -134,7 +134,7 @@ function SubmissionCard({
   latest,
 }: {
   customer: CustomerDetail;
-  submission: KycSubmissionView;
+  submission: AdminKycSubmissionView;
   locale: Locale;
   canAct: boolean;
   latest: boolean;
