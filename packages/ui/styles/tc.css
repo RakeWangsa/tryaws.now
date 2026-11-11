@@ -130,6 +130,29 @@ html[lang="bn"] .btn.question {
 
 /* ===== 5.3 Tabs and Accordion ===== */
 
+/* The theme hides .accordion .panel-collapse and opens panels with a script. The class on the title
+   opens the next panel here, so the server HTML is correct without script. A closed panel also has
+   the hidden attribute, which Bootstrap enforces with !important. */
+.accordion .panel-title.active + .tc-accordion-panel {
+  display: block;
+}
+
+.tc-accordion-heading {
+  margin: 0;
+  font: inherit;
+}
+
+/* The global focus ring (section 3) uses !important and wins over all: unset. */
+.tc-accordion-trigger {
+  all: unset;
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
 /* ===== 5.4 Modal and Toast ===== */
 
 /* ===== 5.5 DataTable ===== */
