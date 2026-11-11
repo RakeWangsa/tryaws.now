@@ -186,6 +186,33 @@ const uiKit = {
 TASKS["WPU-T2"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, repo];
 TASKS["WPU-T3"] = TASKS["WPU-T2"];
 
+// WP4-T2: the operations engine. The two functions are proved by their own packages; the engine scenarios
+// (functions/provisioner/test/scenario.test.ts) are part of the provisioner check. `--no-passWithNoTests`
+// makes a filter that selects no file fail, as in the checks aws, core and repo.
+const provisioner = {
+  id: "provisioner",
+  title: "functions/provisioner: claim, step runner, batch handler and the engine scenarios",
+  command: ["pnpm", "test", "--filter", "@tc/fn-provisioner", "--no-passWithNoTests"],
+};
+const scheduler = {
+  id: "scheduler",
+  title: "functions/scheduler: the sweeper handler",
+  command: ["pnpm", "test", "--filter", "@tc/fn-scheduler", "--no-passWithNoTests"],
+};
+TASKS["WP4-T2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  core,
+  aws,
+  provisioner,
+  scheduler,
+  repo,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

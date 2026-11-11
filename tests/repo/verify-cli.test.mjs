@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, it } from "vitest";
 import { GATES, TASKS, quickChecks } from "../../verify/checks.mjs";
 
@@ -92,6 +93,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP1-T2",
     "WP3-T1",
     "WP4-T1",
+    "WP4-T2",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -203,5 +205,32 @@ it("task WP3-T1 is proven by the checks of WP1-T1, the files of the ledger by na
     "tests/repo/ledger-writers.test.mjs",
   ]) {
     expect(existsSync(f), f).toBe(true);
+  }
+});
+
+it("task WP4-T2 is proven by the checks of WP1-T1, the tests of core, aws and the two functions, and the repository tests", () => {
+  expect(TASKS["WP4-T2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // passWithNoTests is on: the filters must keep matching real files
+  // paths are built from the location of this file, so they hold whatever the working directory of Vitest is
+  for (const f of [
+    "functions/provisioner/test/scenario.test.ts",
+    "functions/provisioner/step-failures.test.ts",
+    "functions/provisioner/reject.test.ts",
+    "functions/scheduler/handler.test.ts",
+    "packages/db/test/operation-insert.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
 });
