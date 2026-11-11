@@ -11,10 +11,13 @@ import { walletBn } from "../messages/wallet-bn.ts";
 import { walletEn } from "../messages/wallet-en.ts";
 import { serversBn } from "../messages/servers-bn.ts";
 import { serversEn } from "../messages/servers-en.ts";
+import { extrasBn } from "../messages/extras-bn.ts";
+import { extrasEn } from "../messages/extras-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
 const serversOwn: Readonly<Record<Locale, Messages>> = { bn: serversBn, en: serversEn };
+const extrasOwn: Readonly<Record<Locale, Messages>> = { bn: extrasBn, en: extrasEn };
 const authOwn: Readonly<Record<Locale, Messages>> = { bn: authBn, en: authEn };
 
 // Kit (`kit`), shell (`Shell`, `Aws`) and app (`Web`, `Wallet`, `Auth`) messages: each owns top-level keys,
@@ -26,6 +29,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     appOwn.bn,
     walletOwn.bn,
     serversOwn.bn,
+    extrasOwn.bn,
     authOwn.bn,
     galleryMessages.bn,
   ),
@@ -35,6 +39,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     appOwn.en,
     walletOwn.en,
     serversOwn.en,
+    extrasOwn.en,
     authOwn.en,
     galleryMessages.en,
   ),

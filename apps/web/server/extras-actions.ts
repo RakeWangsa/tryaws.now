@@ -235,6 +235,7 @@ export async function deleteBackupCore(deps: ExtrasDeps, raw: unknown): Promise<
           subscriptionStatus: null,
           family: backup.family,
           hasFinalSnapshot: false,
+          isFinalBackup: facts.final,
         })
       ) {
         throw new Refusal("not_allowed");
@@ -369,6 +370,7 @@ async function destroyFlow(
       subscriptionStatus: "retained",
       family: row.family,
       hasFinalSnapshot: withFinalSnapshot,
+      isFinalBackup: false,
     })
   ) {
     throw new Refusal("not_allowed");

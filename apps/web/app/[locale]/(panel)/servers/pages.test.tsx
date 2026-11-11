@@ -79,6 +79,22 @@ vi.mock("../../../../server/servers-view.ts", async (importActual) => {
     loadSshKeys: record("keys", () => state.keys),
   };
 });
+// WP5-T6: the tabs of the detail page read their own loaders; the flag is off here, so the page keeps
+// its first three tabs. The tabs have their own tests in ../_extras/.
+vi.mock("../../../../server/extras-view.ts", async (importActual) => {
+  const actual = await importActual<typeof import("../../../../server/extras-view.ts")>();
+  return { ...actual, loadServerExtras: async () => ({ state: "flag_off" }) };
+});
+vi.mock("./[id]/actions.ts", () => ({
+  attachDiskAction: async () => ({}),
+  createBackupAction: async () => ({}),
+  deleteBackupAction: async () => ({}),
+  destroyDiskAction: async () => ({}),
+  destroyServerAction: async () => ({}),
+  detachDiskAction: async () => ({}),
+  setAutoBackupAction: async () => ({}),
+  setAutoRenewAction: async () => ({}),
+}));
 vi.mock("../../../../server/orders-runtime.ts", () => ({
   getOrdersRuntime: async () => state.runtime,
 }));

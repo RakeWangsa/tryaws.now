@@ -1,6 +1,7 @@
 import { currentCustomer } from "@tc/auth";
-import { customerRepos, withTx } from "@tc/db";
+import { customerRepos, readFeatureFlag, withTx } from "@tc/db";
 import { headers } from "next/headers";
+import type { ExtrasDeps } from "./extras-actions.ts";
 import type { KeyActionDeps } from "./key-actions.ts";
 import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
 import type { OrderActionDeps } from "./order-actions.ts";
@@ -43,6 +44,32 @@ export function keyActionDeps(): KeyActionDeps {
       withTx((tx) => {
         const repos = customerRepos(tx, customerId);
         return fn({ sshKeys: repos.sshKeys, audit: repos.audit, rateLimits: repos.rateLimits });
+      }),
+  };
+}
+
+/** The ports of the cores of the server tabs and the bell (extras-actions.ts). */
+export function extrasActionDeps(): ExtrasDeps {
+  return {
+    authenticate,
+    now: () => new Date(),
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({
+          resources: repos.resources,
+          subscriptions: repos.subscriptions,
+          operations: repos.operations,
+          audit: repos.audit,
+          rateLimits: repos.rateLimits,
+          notifications: repos.notifications,
+          // R12, R16: a flag that is off or unreadable is off.
+          serversOn: async () => {
+            const profile = await repos.profile.get();
+            if (profile === null) return false;
+            return (await readFeatureFlag(tx, "linux_instance", profile.market)) === true;
+          },
+        });
       }),
   };
 }
