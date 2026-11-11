@@ -25,6 +25,11 @@ export const serversBn = {
     field: {
       invalid: "এই ঘরের তথ্য ঠিক নয়।",
     },
+    screen: {
+      errorTitle: "পাতাটি খোলা গেল না",
+      errorBody: "সাময়িক সমস্যা হয়েছে। কিছুক্ষণ পরে আবার চেষ্টা করুন। আপনার টাকা নিরাপদ আছে।",
+      retry: "আবার চেষ্টা করুন",
+    },
   },
   Servers: {
     meta: { title: "ক্লাউড সার্ভার" },
@@ -219,6 +224,7 @@ export const serversBn = {
       notFound: {
         title: "অর্ডারটি পাওয়া যায়নি",
         body: "লিংকটি ঠিক আছে কিনা দেখুন।",
+        action: "সার্ভারের তালিকা",
       },
     },
   },

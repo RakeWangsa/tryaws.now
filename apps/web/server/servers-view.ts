@@ -245,6 +245,15 @@ export async function loadOrder(session: CustomerSession, id: string): Promise<O
   });
 }
 
-export async function loadSshKeys(session: CustomerSession): Promise<SshKey[]> {
-  return withTx((tx) => customerRepos(tx, session.customerId).sshKeys.list());
+export type SshKeysScreen = { state: "flag_off" } | { state: "ready"; keys: SshKey[] };
+
+export async function loadSshKeys(session: CustomerSession): Promise<SshKeysScreen> {
+  return withTx(async (tx) => {
+    const repos = customerRepos(tx, session.customerId);
+    const profile = await repos.profile.get();
+    if (profile === null) throw new Error("servers: no customer row");
+    // Keys are only used by servers: the flag of the family decides (R12).
+    if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return { state: "flag_off" };
+    return { state: "ready", keys: await repos.sshKeys.list() };
+  });
 }

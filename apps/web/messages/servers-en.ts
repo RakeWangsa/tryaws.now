@@ -24,6 +24,11 @@ export const serversEn: Same<typeof serversBn> = {
     field: {
       invalid: "The value in this field is not valid.",
     },
+    screen: {
+      errorTitle: "This page could not be opened",
+      errorBody: "A temporary problem happened. Please try again in a moment. Your money is safe.",
+      retry: "Try again",
+    },
   },
   Servers: {
     meta: { title: "Cloud Servers" },
@@ -219,6 +224,7 @@ export const serversEn: Same<typeof serversBn> = {
       notFound: {
         title: "Order not found",
         body: "Check the link.",
+        action: "Your servers",
       },
     },
   },
