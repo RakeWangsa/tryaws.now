@@ -483,6 +483,37 @@ TASKS["WP7-T1"] = [
   aws,
   repo,
 ];
+// WP6-T1: the Windows instance adapter, the access-details function and the Access tab. Each filter
+// names a real test file.
+const windowsAdapter = {
+  id: "windows-adapter",
+  title: "WP6-T1: Windows create from the blueprint, isolation bootstrap fails closed",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "windows", "--no-passWithNoTests"],
+};
+const accessDetailsFn = {
+  id: "access-details",
+  title:
+    "WP6-T1: the password is returned once, no-store, never logged, not released without audit",
+  command: ["pnpm", "test", "--filter", "@tc/fn-access-details", "--no-passWithNoTests"],
+};
+const windowsAccessWeb = {
+  id: "windows-access-web",
+  title: "WP6-T1: reveal core (R9 order, fresh sign-in, tenant) and the Access tab states",
+  command: ["pnpm", "test", "--filter", "@tc/web", "windows-access", "--no-passWithNoTests"],
+};
+TASKS["WP6-T1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  windowsAdapter,
+  accessDetailsFn,
+  windowsAccessWeb,
+  aws,
+  repo,
+];
+
 // WP7-T3: DNS zones and the record editor. The validation rules are pure and live in packages/core/dns;
 // the zone adapter and the fake Route 53 are in packages/aws (no Route 53 client is built yet).
 TASKS["WP7-T3"] = [specSync, baselineSync, lint, typecheck, format, core, aws, repo];
