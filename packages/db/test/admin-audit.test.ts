@@ -328,6 +328,57 @@ it("masks by normalised key for every type, separator-tolerant phones and long d
   expect(after.list[0]).toEqual({ token: "[masked]" });
 });
 
+it("a date or UUID is kept only when it stands alone; digits glued to one are masked", async () => {
+  const a = await actorOf("superadmin");
+  const uuid = "0191a000-0000-7000-8000-0000000000ad";
+  const id = await seed({
+    metadata: {
+      reason: "r",
+      after: {
+        a: "2026-11-12-01712345678",
+        b: `${uuid}-01712345678`,
+        c: "01712345678-2026-11-12",
+        d: "on 2026-11-12 and id " + uuid + ".",
+        e: "2026-11-12 01712345678",
+      },
+    },
+  });
+  const out = await asAdmin(a, (r) => r.audit.detail(id));
+  expect(out.ok).toBe(true);
+  if (!out.ok) return;
+  const after = out.value.after as Record<string, string>;
+  const text = JSON.stringify(after);
+  expect(text).not.toContain("1712345678");
+  expect(after.d).toBe("on 2026-11-12 and id " + uuid + ".");
+  expect(after.e).toBe("2026-11-12 [masked]");
+});
+
+it("every spelling of a key name is masked", async () => {
+  const a = await actorOf("superadmin");
+  const names = [
+    "apiKey",
+    "API_KEY",
+    "x-api-key",
+    "signingKey",
+    "accessKeyId",
+    "privateKey",
+    "secretKey",
+    "key",
+    "SSH_KEY",
+    "keys",
+  ];
+  const after: Record<string, string> = {};
+  for (const n of names) after[n] = "value-of-" + n;
+  after.keep = "plain";
+  const id = await seed({ metadata: { reason: "r", after } });
+  const out = await asAdmin(a, (r) => r.audit.detail(id));
+  expect(out.ok).toBe(true);
+  if (!out.ok) return;
+  const shown = out.value.after as Record<string, string>;
+  for (const n of names) expect(shown[n], n).toBe("[masked]");
+  expect(shown.keep).toBe("plain");
+});
+
 it("the export carries the same masked rows", async () => {
   const s = await actorOf("superadmin");
   const actor1 = uuidv7();

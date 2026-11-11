@@ -103,15 +103,21 @@ const normKey = (key: string): string =>
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
+const keyWords = (key: string): string[] =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w !== "");
 const SECRET_KEY =
-  /pass|token|secret|otp|^pin|pin$|code|authorization|cookie|credential|private|key$|^key|document|nid|nationalid|passport|licen[cs]e|signature|verifypayload|cvv|card/;
+  /apikey|accesskey|signingkey|privatekey|secretkey|pass|token|secret|otp|^pin|pin$|code|authorization|cookie|credential|private|key$|^key|document|nid|nationalid|passport|licen[cs]e|signature|verifypayload|cvv|card/;
 const PHONE_KEY = /phone|mobile|msisdn|whatsapp|contactno/;
 const EMAIL_KEY = /email/;
 const EMAIL_IN_TEXT = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-// A UUID and an ISO date are kept whole (not personal data); otherwise any run of 10 or more digits, with single
+// A UUID and an ISO date are kept only when they stand alone (a digit run glued to one is masked); otherwise any run of 10 or more digits, with single
 // spaces or dashes between them, is a phone or a document number and is masked.
 const UUID_OR_DIGITS =
-  /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{4}-\d{2}-\d{2})|(\+?\d(?:[\s-]?\d){9,})/gi;
+  /(?:(?<![\w-])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{4}-\d{2}-\d{2})(?![\w-]))|(\+?\d(?:[\s-]?\d){9,})/gi;
 const MASKED = "[masked]";
 
 const maskDigits = (raw: string): string => {
@@ -129,7 +135,7 @@ function maskText(text: string): string {
 function maskValue(key: string, value: unknown, depth: number): unknown {
   const k = normKey(key);
   // The key decides first, for every type (a numeric phone number is a number).
-  if (SECRET_KEY.test(k)) return MASKED;
+  if (SECRET_KEY.test(k) || keyWords(key).some((w) => w === "key" || w === "keys")) return MASKED;
   if (PHONE_KEY.test(k)) {
     return typeof value === "string" || typeof value === "number"
       ? maskDigits(String(value))
