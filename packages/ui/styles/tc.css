@@ -120,6 +120,13 @@ html[lang="bn"] .btn.question {
 /* ===== 5.1 Button and Badge ===== */
 
 /* ===== 5.2 Card and Field ===== */
+/* The error text of a Field: bold and in the danger color; the icon and the hidden word carry the
+   meaning too, so color is never the only signal (U11). */
+.tc-field-error {
+  font-weight: 600;
+  color: var(--bs-danger);
+  margin: 0.25rem 0 0;
+}
 
 /* ===== 5.3 Tabs and Accordion ===== */
 
