@@ -1,0 +1,8 @@
+{
+  "kit": {
+    "confirmDestroy": {
+      "typeName": "নিশ্চিত করতে {name} লিখুন",
+      "confirm": "মুছে ফেলুন"
+    }
+  }
+}

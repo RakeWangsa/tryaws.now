@@ -1,0 +1,11 @@
+{
+  "kit": {
+    "toast": {
+      "region": "Notifications",
+      "success": "Success",
+      "info": "Information",
+      "warning": "Warning",
+      "danger": "Problem"
+    }
+  }
+}

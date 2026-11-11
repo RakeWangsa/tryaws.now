@@ -1,0 +1,8 @@
+{
+  "kit": {
+    "confirmDestroy": {
+      "typeName": "Type {name} to confirm",
+      "confirm": "Delete"
+    }
+  }
+}

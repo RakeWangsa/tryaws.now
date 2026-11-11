@@ -154,6 +154,17 @@ html[lang="bn"] .btn.question {
 }
 
 /* ===== 5.4 Modal and Toast ===== */
+/* The theme's `.modal` is display: none until a script sets an inline style; Radix mounts the
+   markup only while open, so the class shows it. The tag in the selector outranks `.modal`; the
+   subject must be a tc- class (tc-tokens guard). */
+div.tc-modal-open {
+  display: block;
+}
+.tc-toast-viewport {
+  z-index: 1090;
+  max-width: 100%;
+  margin: 0;
+}
 
 /* ===== 5.5 DataTable ===== */
 
