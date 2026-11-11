@@ -1,4 +1,5 @@
 export * from "./schema/index";
+export * from "./ledger/index";
 export { createDatabase } from "./client";
 export type { Database, Tx } from "./client";
 export { runMigrations, MIGRATIONS_FOLDER } from "./migrate";
