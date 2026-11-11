@@ -276,6 +276,29 @@ html[lang="bn"] .btn.question {
 .tc-timeline-pending {
   opacity: 0.75;
 }
+.tc-illustration {
+  width: 120px;
+  height: 90px;
+  color: var(--tc-accent);
+}
+.tc-empty,
+.tc-error {
+  padding: 2rem 1rem;
+}
+.tc-error > i {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 2.5rem;
+  color: var(--bs-danger);
+}
+/* The theme sets font-size: 0 on .help-item, which would hide a Font Awesome icon. The theme's
+   .ico rule already centres the 60 px box. */
+.tc-help-icon {
+  font-size: 2.5rem;
+  line-height: 60px;
+  text-align: center;
+  color: var(--tc-accent);
+}
 
 /* ===== 6.5 Secret and copy ===== */
 .tc-secret {
