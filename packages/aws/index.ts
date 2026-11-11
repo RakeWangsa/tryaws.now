@@ -37,6 +37,14 @@ export {
   type BootstrapOptions,
 } from "./adapters/bootstrap";
 export {
+  createBackupAdapter,
+  runFinalSnapshot,
+  runPurgeSnapshots,
+  withBackups,
+  type BackupConfig,
+  type BackupDeps,
+} from "./adapters/backup";
+export {
   createLinuxInstanceAdapter,
   parsePortRules,
   type LinuxInstanceDeps,
