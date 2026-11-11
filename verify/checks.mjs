@@ -593,6 +593,41 @@ TASKS["WP8-T1"] = [
   repo,
 ];
 
+// WP8-T2: customers and KYC review. The backlog sentence ("document images come through short-lived URLs
+// and are never cached") has its own line; the rest is the db suite (repository, roles, audit rows,
+// replays, masking) and the admin suite (R9 order, pages in bn and en, mockup cross-check). The real S3
+// presigner is a manual VERIFY step in JOURNEY.md. `--no-passWithNoTests` makes a filter that selects no
+// file fail.
+const kycDocumentsNeverCached = {
+  id: "kyc-document-short-lived-never-cached",
+  title: "WP8-T2: KYC document images come through short-lived URLs and are never cached",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/admin",
+    "server/kyc-documents",
+    "--no-passWithNoTests",
+  ],
+};
+const adminCustomersRepo = {
+  id: "admin-customers-repo",
+  title: "WP8-T2: KYC and customer decisions: roles, audit rows, replays, masked fields",
+  command: ["pnpm", "test", "--filter", "@tc/db", "admin-customers", "--no-passWithNoTests"],
+};
+TASKS["WP8-T2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  adminCustomersRepo,
+  admin,
+  kycDocumentsNeverCached,
+  repo,
+];
+
 // WP1-T4: the two halves of the backlog proof ("a new rate never changes a stored order", "preview equals
 // engine output") on their own lines. `--no-passWithNoTests` makes a filter that selects no file fail.
 const storedOrder = {

@@ -42,8 +42,29 @@ async function seedOperation(state: string): Promise<string> {
   });
 }
 
+async function seedKyc(): Promise<string> {
+  return insertRow(t.pool, "kyc_submissions", {
+    customer_id: await newCustomer(t.pool, { kyc_status: "pending" }),
+    document_type: "nid",
+    document_number_encrypted: Buffer.from([1]),
+    s3_keys: ["kyc/x/front.jpg"],
+  });
+}
+
 // Every write of adminRepos has a case here; the completeness test below fails when one is missing (R10).
 const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
+  "customers.approveKyc": async (r) =>
+    r.customers.approveKyc({ submissionId: await seedKyc(), at: AT }, "documents match"),
+  "customers.rejectKyc": async (r) =>
+    r.customers.rejectKyc({ submissionId: await seedKyc(), at: AT }, "unreadable"),
+  "customers.setRiskTier": async (r) =>
+    r.customers.setRiskTier({ customerId: await newCustomer(t.pool), tier: "trusted" }, "known"),
+  "customers.suspend": async (r) =>
+    r.customers.suspend({ customerId: await newCustomer(t.pool), at: AT }, "abuse"),
+  "customers.resume": async (r) =>
+    r.customers.resume({ customerId: await newCustomer(t.pool), at: AT }, "cleared"),
+  "customers.documentRead": async (r) =>
+    r.customers.documentRead({ submissionId: await seedKyc(), index: 0 }),
   "featureFlags.set": (r) =>
     r.featureFlags.set(
       { key: "linux_instance", market: "BD", enabled: true },
@@ -117,7 +138,13 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
     ),
 };
 // Admin reads ("<repo>.<method>") that write no audit row. Empty until WP8 decides where admin reads live and whether a read is audited (open point 21).
-const ADMIN_READ_METHODS: readonly string[] = ["capacity.list", "waitlist.list"];
+const ADMIN_READ_METHODS: readonly string[] = [
+  "capacity.list",
+  "customers.detail",
+  "customers.kycQueue",
+  "customers.search",
+  "waitlist.list",
+];
 
 it("every method of adminRepos is a listed read or a write with an audit case", () => {
   const repos = adminRepos({} as Tx, { adminId: uuidv7(), role: "ops", ip: "203.0.113.9" });
