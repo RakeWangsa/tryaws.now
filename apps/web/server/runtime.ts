@@ -72,7 +72,11 @@ function buildDeps(gateway: EpsGateway, limitKey: string, urls: EpsDeps["urls"])
 export async function assembleRuntime(env: Env): Promise<Assembled> {
   const config = readWebConfig(env);
 
-  if (config.fakes) {
+  // `process.env.NODE_ENV` is replaced by the bundler at build time: in a production build the
+  // condition is the constant false, the branch is dead and the bundler follows neither import()
+  // below, so no fake reaches the production bundle. config.ts refuses fakes outside development
+  // and test anyway (R16), so nothing is lost at run time.
+  if (process.env.NODE_ENV !== "production" && config.fakes) {
     // Literal specifiers, so the boundary can be checked (tests/repo/web-fakes.test.mjs).
     const bridge = await import("./fakes/eps-bridge.ts");
     const auth = await import("./fakes/dev-auth.ts");
