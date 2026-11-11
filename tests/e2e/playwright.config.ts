@@ -1,16 +1,17 @@
 import { defineConfig } from "@playwright/test";
 
-// The wallet proof against fakes (WP3-T4 Task 8). Started by scripts/smoke-wallet.mjs, which runs the
-// dev server with the fake EPS and passes the seeded subjects in the environment. Two projects: Bengali
-// at 360 px (the narrowest screen of U11) and English at 1280 px. One worker: the projects use
-// different customers, but the dev server holds one fake EPS.
+// The browser proofs against fakes: wallet (WP3-T4 Task 8) and auth (WP2-T2 Task 10). Started by
+// scripts/smoke-wallet.mjs and scripts/smoke-auth.mjs, which run the dev server with the fake
+// switches in the environment; this file starts nothing. Two projects: Bengali at 360 px (the
+// narrowest screen of U11) and English at 1280 px. One worker and no parallelism: the specs share
+// one local database, one fake EPS and one in-memory identity provider.
 export default defineConfig({
   testDir: ".",
-  testMatch: "wallet.spec.ts",
+  testMatch: /(wallet|auth)\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 180_000,
+  timeout: 240_000,
   expect: { timeout: 15_000 },
   reporter: [["list"]],
   outputDir: "../../test-results",

@@ -23,12 +23,14 @@ const prod: WebConfig = {
   appOrigin: "https://cloud.example.com",
   epsMode: "production",
   fakes: false,
+  fake: { eps: false, idp: false, sms: false },
 };
 const fake: WebConfig = {
   stage: "local",
   appOrigin: "http://localhost:3000",
   epsMode: "sandbox",
   fakes: true,
+  fake: { eps: true, idp: false, sms: false },
 };
 const ID = "0123456789abcdef0123456789abcdef";
 const VIEWER = { "cloudfront-viewer-address": "203.0.113.9:44321" };

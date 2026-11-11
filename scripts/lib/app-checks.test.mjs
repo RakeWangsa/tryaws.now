@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { checkHtml, checkRouteTable, parseRouteTable } from "./app-checks.mjs";
+import {
+  FAKE_STRINGS,
+  checkHtml,
+  checkNoFakeInBundle,
+  checkRouteTable,
+  parseRouteTable,
+} from "./app-checks.mjs";
 
 const TABLE = [
   "▲ Next.js 16.4.6 (Turbopack)",
@@ -145,5 +151,35 @@ describe("checkHtml", () => {
     const h = headers();
     const map = { get: (n) => (n === "x-content-type-options" ? null : h.get(n)) };
     expect(checkHtml(page(), map, expectWeb)).toHaveLength(1);
+  });
+});
+
+describe("checkNoFakeInBundle (WP2-T2)", () => {
+  it("passes for client files without a fake string", () => {
+    expect(checkNoFakeInBundle([{ path: "a.js", text: "console.log('hello')" }])).toEqual([]);
+  });
+
+  it("fails on each planted string", () => {
+    expect(FAKE_STRINGS).toEqual(
+      expect.arrayContaining([
+        "InMemoryIdentityProvider",
+        "fakeRefreshPort",
+        "/dev/idp/outbox",
+        "/dev/sms/outbox",
+        "fake-rt.",
+      ]),
+    );
+    for (const needle of FAKE_STRINGS) {
+      const problems = checkNoFakeInBundle([
+        { path: "ok.js", text: "x" },
+        { path: "bad.js", text: `var a="${needle}";` },
+      ]);
+      expect(problems, needle).toEqual([`bad.js contains ${needle}`]);
+    }
+  });
+
+  it("no file to read is a problem, not a pass (R16)", () => {
+    expect(checkNoFakeInBundle([])).toHaveLength(1);
+    expect(checkNoFakeInBundle(undefined)).toHaveLength(1);
   });
 });

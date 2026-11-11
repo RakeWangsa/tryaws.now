@@ -111,3 +111,30 @@ export function checkHtml(html, headers, expect) {
   }
   return problems;
 }
+
+// WP2-T2 Task 11: the fakes of apps/web (the in-memory identity provider, its refresh port, the two dev
+// outbox routes, the fake refresh token prefix) must not reach the code that is sent to a browser. The
+// server build holds them in chunks that only runtime.ts, proxy-auth.ts and the dev routes load behind
+// the fake switches of server/config.ts (tests/repo/web-fakes.test.mjs), so this check reads the CLIENT
+// bundle (.next/static) and fails on any of these strings.
+export const FAKE_STRINGS = Object.freeze([
+  "InMemoryIdentityProvider",
+  "fakeRefreshPort",
+  "createFakeRefreshPort",
+  "/dev/idp/outbox",
+  "/dev/sms/outbox",
+  "fake-rt.",
+  "InMemoryEps",
+]);
+
+// `files` is a list of { path, text }. R16: no file to read is a problem, not a pass.
+export function checkNoFakeInBundle(files) {
+  if (!Array.isArray(files) || files.length === 0) return ["no client bundle file was read"];
+  const problems = [];
+  for (const file of files) {
+    for (const needle of FAKE_STRINGS) {
+      if (String(file.text).includes(needle)) problems.push(`${file.path} contains ${needle}`);
+    }
+  }
+  return problems;
+}

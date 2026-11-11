@@ -94,6 +94,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP1-T4",
     "WP1-T5",
     "WP2-T1",
+    "WP2-T2",
     "WP2-T3",
     "WP3-T1",
     "WP3-T2",
@@ -588,6 +589,40 @@ it("task WP1-T4 is proven by the checks of WP1-T1, the two halves of the backlog
     "packages/core/rates/stored-order.test.ts",
     "packages/core/pricing/preview.test.ts",
     "packages/core/rates/preview-equals-engine.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP2-T2 is proven by the checks of WP1-T1, the core, db, auth, notify and web suites, the two lines of the proof and the repository tests", () => {
+  expect(TASKS["WP2-T2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["auth", "pnpm test --filter @tc/auth --no-passWithNoTests"],
+    ["notify-otp", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["auth-pages", "pnpm test --filter @tc/web server/auth auth-pages --no-passWithNoTests"],
+    ["auth-smoke", "node scripts/smoke-auth.mjs"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  expect(TASKS["WP2-T2"].find((c) => c.id === "auth-smoke").timeoutMs).toBe(1_800_000);
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "packages/core/validation/auth-forms.test.ts",
+    "packages/db/test/registration.test.ts",
+    "packages/auth/test/identity-cognito.test.ts",
+    "packages/auth/test/sign-in.test.ts",
+    "apps/web/server/auth/enumeration.test.ts",
+    "apps/web/server/auth/forged-forwarded-for.test.ts",
+    "apps/web/server/auth/order.test.ts",
+    "apps/web/app/[locale]/(auth)/auth-pages.test.tsx",
+    "tests/e2e/auth.spec.ts",
+    "scripts/smoke-auth.mjs",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

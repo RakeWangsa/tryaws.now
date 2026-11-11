@@ -3,7 +3,12 @@ import type { CustomerIdentity } from "@tc/db";
 import { authConfigFromEnv, type AuthConfig } from "../config";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../cookies";
 import type { RefreshPort, RefreshResult } from "../refresh";
-import { authenticateRequest, refreshForProxy, type AuthRuntimeLike } from "../request";
+import {
+  authenticateRequest,
+  refreshForProxy,
+  signInDepsFor,
+  type AuthRuntimeLike,
+} from "../request";
 import { createAccessTokenVerifier, type AccessTokenVerifier } from "../tokens";
 import { createTestIssuer, type TestIssuer } from "../testing/keys";
 
@@ -168,5 +173,20 @@ describe("refreshForProxy", () => {
     const { port, refresh } = portOf({ kind: "rejected" });
     expect(await refreshForProxy(runtime({ port }), req())).toEqual({ action: "none" });
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("signInDepsFor", () => {
+  it("gives completeSignIn the verifier, the lookup, the clock and the cookie lifetime of the runtime", async () => {
+    const deps = signInDepsFor(runtime());
+    expect(deps.verifier).toBe(verifier);
+    expect(deps.clock).toBe(clock);
+    expect(deps.refreshMaxAgeSeconds).toBe(config.refreshCookieMaxAgeSeconds);
+    expect(await deps.lookup("any-sub")).toEqual(identity());
+  });
+
+  it("is the same object for the same runtime, so the JWKS cache is built once", () => {
+    const r = runtime();
+    expect(signInDepsFor(r).verifier).toBe(signInDepsFor(r).verifier);
   });
 });

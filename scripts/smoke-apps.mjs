@@ -7,7 +7,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
-import { checkHtml, checkRouteTable } from "./lib/app-checks.mjs";
+import {
+  checkHtml,
+  checkNoFakeInBundle as checkNoFakeInClientBundle,
+  checkRouteTable,
+} from "./lib/app-checks.mjs";
 import {
   checkDevRoutesRefused,
   checkNoFakeInBundle,
@@ -325,6 +329,19 @@ async function withServer(app, env, work) {
   }
 }
 
+// The .js files below a folder, for the check that the client bundle holds no fake (WP2-T2).
+function clientFiles(dir) {
+  try {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = resolve(dir, entry.name);
+      if (entry.isDirectory()) return clientFiles(path);
+      return entry.name.endsWith(".js") ? [{ path, text: readFileSync(path, "utf8") }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
 async function smokeApp(app, { skipBuild }) {
   if (skipBuild) {
     say(`SKIP ${app}: build and route table (--skip-build)`);
@@ -370,6 +387,14 @@ async function smokeApp(app, { skipBuild }) {
   else if (!/: 0 findings/.test(scan.output))
     scanProblems.push("theme:scan did not report 0 findings");
   record(app, "theme:scan reports zero findings", scanProblems);
+
+  if (app === "web") {
+    record(
+      app,
+      "no fake (identity provider, refresh port, dev outbox) in the client bundle",
+      checkNoFakeInClientBundle(clientFiles(resolve(root, "apps/web/.next/static"))),
+    );
+  }
 
   record(
     app,

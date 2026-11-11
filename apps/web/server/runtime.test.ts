@@ -95,6 +95,7 @@ describe("assembleRuntime: the real gateway", () => {
       appOrigin: "https://cloud.example.com",
       epsMode: "sandbox",
       fakes: false,
+      fake: { eps: false, idp: false, sms: false },
     });
     const shown = [
       JSON.stringify(runtime),
@@ -157,6 +158,73 @@ describe("assembleRuntime: fake mode", () => {
     const answer = await deps?.gateway.initialize(request);
     expect(answer?.ok).toBe(true);
     if (answer?.ok) expect(answer.redirectUrl).toMatch(/^\/dev\/eps\/checkout\?data=\d+$/);
+  });
+});
+
+describe("assembleRuntime: the auth parts", () => {
+  const POOL = {
+    COGNITO_CUSTOMER_POOL_ID: "eu-west-1_Abc123XyZ",
+    COGNITO_CUSTOMER_CLIENT_ID: "abcdefghij1234567890",
+  };
+  const KEYS = {
+    SST_RESOURCE_AuthLimitKey:
+      '{"type":"sst.sst.Secret","value":"planted-authkey-7777-0123456789abcdef"}',
+    SST_RESOURCE_OtpHashKey:
+      '{"type":"sst.sst.Secret","value":"planted-otpkey-8888-0123456789abcdef"}',
+  };
+
+  it("without AuthLimitKey authLimitKey is null; a key shorter than 32 characters is the same", async () => {
+    const { assembleRuntime } = await load();
+    expect((await assembleRuntime({ ...STAGING, ...POOL })).runtime.authLimitKey).toBeNull();
+    const short = { SST_RESOURCE_AuthLimitKey: '{"value":"short"}' };
+    expect(
+      (await assembleRuntime({ ...STAGING, ...POOL, ...short })).runtime.authLimitKey,
+    ).toBeNull();
+    const found = await assembleRuntime({ ...STAGING, ...POOL, ...KEYS });
+    expect(found.runtime.authLimitKey).toBe("planted-authkey-7777-0123456789abcdef");
+  });
+
+  it("with the pool variables missing or malformed identity is null", async () => {
+    const { assembleRuntime } = await load();
+    expect((await assembleRuntime({ ...STAGING })).runtime.identity).toBeNull();
+    const bad = { COGNITO_CUSTOMER_POOL_ID: "nope", COGNITO_CUSTOMER_CLIENT_ID: "x" };
+    expect((await assembleRuntime({ ...STAGING, ...bad })).runtime.identity).toBeNull();
+    const ok = await assembleRuntime({ ...STAGING, ...POOL });
+    expect(typeof ok.runtime.identity?.signUp).toBe("function");
+  });
+
+  it("outside fakes there is no OTP service yet (no SMS gateway)", async () => {
+    const { assembleRuntime } = await load();
+    expect((await assembleRuntime({ ...STAGING, ...POOL, ...KEYS })).runtime.otp).toBeNull();
+  });
+
+  it("the runtime never shows the OTP key, in JSON or in inspect", async () => {
+    const { assembleRuntime } = await load();
+    const { runtime } = await assembleRuntime({ ...STAGING, ...POOL, ...KEYS });
+    const shown = [JSON.stringify(runtime), inspect(runtime, { depth: 10, showHidden: true })];
+    expect(shown.join("\n")).not.toContain("planted-otpkey-8888");
+  });
+
+  it("fake mode builds the in-memory identity provider, the SMS provider and random keys", async () => {
+    const { assembleRuntime } = await load();
+    const { runtime } = await assembleRuntime({
+      ...FAKE,
+      ...POOL,
+      TC_IDP: "fake",
+      TC_SMS: "fake",
+    });
+    expect(runtime.config.fake).toEqual({ eps: true, idp: true, sms: true });
+    expect(runtime.identity?.constructor.name).toBe("InMemoryIdentityProvider");
+    expect(runtime.otp).not.toBeNull();
+    expect(typeof runtime.otp?.sms.send).toBe("function");
+    expect(runtime.authLimitKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("TC_IDP=fake in a production-like config throws before any fake loads", async () => {
+    const { assembleRuntime } = await load();
+    await expect(assembleRuntime({ ...STAGING, ...POOL, TC_IDP: "fake" })).rejects.toThrow();
+    await expect(assembleRuntime({ ...STAGING, ...POOL, TC_SMS: "fake" })).rejects.toThrow();
+    expect(state.authLoaded).toBe(0);
   });
 });
 

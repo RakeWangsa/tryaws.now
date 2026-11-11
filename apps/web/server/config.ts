@@ -9,8 +9,16 @@ export interface WebConfig {
   /** A plain origin, no path, no final slash: the only host a redirect or a form may name. */
   appOrigin: string;
   epsMode: "sandbox" | "production";
-  /** The fake EPS and the dev sign-in. True only in stage local or test in development or test. */
+  /** Any fake in use: the dev sign-in and a loopback client address. True only in stage local or test in development or test. */
   fakes: boolean;
+  /** Which fakes: the in-memory EPS, identity provider and SMS gateway. Same guards as `fakes`. */
+  fake: FakeSwitches;
+}
+
+export interface FakeSwitches {
+  eps: boolean;
+  idp: boolean;
+  sms: boolean;
 }
 
 export class WebConfigError extends Error {
@@ -57,19 +65,31 @@ export function readWebConfig(env: Readonly<Record<string, string | undefined>>)
   const stage = parseStage(env["TC_STAGE"]);
   const appOrigin = parseOrigin(env["APP_ORIGIN"], stage);
 
-  const eps = env["TC_EPS"];
-  let fakes = false;
-  if (eps !== undefined && eps !== "") {
-    // Two guards: the stage, and NODE_ENV (`next start` and every deployed build run as production).
-    // The third is the constructor of the in-memory EPS, which throws outside development and test.
-    const nodeEnv = env["NODE_ENV"];
-    const allowed =
-      eps === "fake" &&
-      (stage === "local" || stage === "test") &&
-      (nodeEnv === "development" || nodeEnv === "test");
-    if (!allowed) throw new WebConfigError("web config: TC_EPS is refused here");
-    fakes = true;
-  }
+  // Two guards: the stage, and NODE_ENV (`next start` and every deployed build run as production).
+  // The third is the constructor of each in-memory service, which throws outside development and test.
+  const nodeEnv = env["NODE_ENV"];
+  const fakeAllowed =
+    (stage === "local" || stage === "test") && (nodeEnv === "development" || nodeEnv === "test");
+  const switchOn = (name: "TC_EPS" | "TC_IDP" | "TC_SMS"): boolean => {
+    const value = env[name];
+    if (value === undefined || value === "") return false;
+    if (value !== "fake" || !fakeAllowed) {
+      throw new WebConfigError(`web config: ${name} is refused here`);
+    }
+    return true;
+  };
+  const fake: FakeSwitches = {
+    eps: switchOn("TC_EPS"),
+    idp: switchOn("TC_IDP"),
+    sms: switchOn("TC_SMS"),
+  };
+  const fakes = fake.eps || fake.idp || fake.sms;
 
-  return { stage, appOrigin, epsMode: stage === "production" ? "production" : "sandbox", fakes };
+  return {
+    stage,
+    appOrigin,
+    epsMode: stage === "production" ? "production" : "sandbox",
+    fakes,
+    fake,
+  };
 }

@@ -20,6 +20,7 @@ describe("readWebConfig: stages and fakes", () => {
       appOrigin: "http://localhost:3000",
       epsMode: "sandbox",
       fakes: true,
+      fake: { eps: true, idp: false, sms: false },
     });
     expect(
       readWebConfig({ ...base, TC_STAGE: "test", NODE_ENV: "test", TC_EPS: "fake" }).fakes,
@@ -53,6 +54,38 @@ describe("readWebConfig: stages and fakes", () => {
     expect(() => readWebConfig({ ...base, NODE_ENV: undefined, TC_EPS: "fake" })).toThrow(
       WebConfigError,
     );
+  });
+
+  it("TC_IDP=fake and TC_SMS=fake follow the rule of TC_EPS=fake", () => {
+    for (const name of ["TC_IDP", "TC_SMS"] as const) {
+      const on = readWebConfig({ ...base, [name]: "fake" });
+      expect(on.fakes, name).toBe(true);
+      expect(on.fake[name === "TC_IDP" ? "idp" : "sms"], name).toBe(true);
+      expect(on.fake.eps, name).toBe(false);
+      expect(
+        readWebConfig({ ...base, TC_STAGE: "test", NODE_ENV: "test", [name]: "fake" }).fakes,
+      ).toBe(true);
+      for (const stage of ["production", "staging"]) {
+        const env = {
+          TC_STAGE: stage,
+          APP_ORIGIN: "https://cloud.example.com",
+          NODE_ENV: "production",
+          [name]: "fake",
+        };
+        expect(() => readWebConfig(env), `${name} ${stage}`).toThrow(WebConfigError);
+      }
+      expect(() => readWebConfig({ ...base, NODE_ENV: "production", [name]: "fake" })).toThrow(
+        WebConfigError,
+      );
+      expect(() => readWebConfig({ ...base, [name]: "real" })).toThrow(WebConfigError);
+      const text = problem({ ...base, NODE_ENV: "production", [name]: "fake" }).message;
+      expect(text).not.toContain("fake");
+    }
+  });
+
+  it("all three switches may be on together", () => {
+    const all = readWebConfig({ ...base, TC_EPS: "fake", TC_IDP: "fake", TC_SMS: "fake" });
+    expect(all.fake).toEqual({ eps: true, idp: true, sms: true });
   });
 
   it("any other TC_EPS value is refused", () => {

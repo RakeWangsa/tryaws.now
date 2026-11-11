@@ -54,9 +54,12 @@ const EXPORTS = {
   "packages/db": { ".": "./index.ts", "./testing": "./testing/index.ts" },
   "packages/eps": { ".": "./index.ts", "./redirect": "./redirect.ts" },
   // "./admin-ip": the pure allowlist functions, light enough for the proxy of the admin app (WP8-T1).
+  // "./proxy": the session refresh and the pool config for proxy.ts of the customer app, which must
+  // not load the database driver (WP2-T2).
   "packages/auth": {
     ".": "./index.ts",
     "./admin-ip": "./admin-ip.ts",
+    "./proxy": "./proxy.ts",
     "./testing": "./testing/index.ts",
   },
   // @tc/ui also publishes the theme facts for the root layouts of both apps (WPU-T1).

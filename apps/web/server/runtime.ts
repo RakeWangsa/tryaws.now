@@ -1,5 +1,5 @@
-import { authConfigFromEnv, configureAuth } from "@tc/auth";
-import type { AccessTokenVerifier } from "@tc/auth";
+import { authConfigFromEnv, cognitoIdentityProvider, configureAuth } from "@tc/auth";
+import type { AccessTokenVerifier, IdentityProvider } from "@tc/auth";
 import { newUuidV7, withTx } from "@tc/db";
 import {
   EPS_RETURN_PATHS,
@@ -9,6 +9,8 @@ import {
   epsReturnUrls,
 } from "@tc/eps";
 import type { Eps, EpsDeps, EpsGateway } from "@tc/eps";
+import { OTP_SEND_RULES } from "@tc/notify";
+import type { OtpDeps, SmsProvider } from "@tc/notify";
 import { headers } from "next/headers";
 import { readWebConfig } from "./config.ts";
 import type { WebConfig } from "./config.ts";
@@ -24,6 +26,12 @@ export interface WebRuntime {
   config: WebConfig;
   /** null = not configured: the screens show the "not open" state (R16). */
   eps: Eps | null;
+  /** The identity provider behind the auth screens. null = not configured: "not available" (R16). */
+  identity: IdentityProvider | null;
+  /** The phone OTP service parts. null when the hashing key or an SMS provider is missing. */
+  otp: (OtpDeps & { sms: SmsProvider; limits: typeof OTP_SEND_RULES }) | null;
+  /** The key of the auth rate-limit subjects. null: every public auth action refuses (R16). */
+  authLimitKey: string | null;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -34,6 +42,10 @@ interface Assembled {
   deps: EpsDeps | null;
   verifier?: AccessTokenVerifier;
 }
+
+const MIN_KEY_LENGTH = 32;
+const usableKey = (value: string | undefined): string | null =>
+  typeof value === "string" && value.length >= MIN_KEY_LENGTH ? value : null;
 
 const EPS_CALL_TIMEOUT_MS = 8000;
 
@@ -71,15 +83,15 @@ function buildDeps(gateway: EpsGateway, limitKey: string, urls: EpsDeps["urls"])
 /** Pure of the process: the environment is the parameter. Exported for the tests. */
 export async function assembleRuntime(env: Env): Promise<Assembled> {
   const config = readWebConfig(env);
+  const secret = resourceSecrets(env);
 
-  // `process.env.NODE_ENV` is replaced by the bundler at build time: in a production build the
-  // condition is the constant false, the branch is dead and the bundler follows neither import()
-  // below, so no fake reaches the production bundle. config.ts refuses fakes outside development
-  // and test anyway (R16), so nothing is lost at run time.
-  if (process.env.NODE_ENV !== "production" && config.fakes) {
+  let eps: Eps | null = null;
+  let deps: EpsDeps | null = null;
+  let verifier: AccessTokenVerifier | undefined;
+
+  if (process.env.NODE_ENV !== "production" && config.fake.eps) {
     // Literal specifiers, so the boundary can be checked (tests/repo/web-fakes.test.mjs).
     const bridge = await import("./fakes/eps-bridge.ts");
-    const auth = await import("./fakes/dev-auth.ts");
     const dev = bridge.getDevEps();
     // epsReturnUrls wants https; in fake mode the origin is http://localhost:<port>.
     const urls = {
@@ -87,42 +99,84 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
       failUrl: config.appOrigin + EPS_RETURN_PATHS.fail,
       cancelUrl: config.appOrigin + EPS_RETURN_PATHS.cancel,
     };
-    const deps = buildDeps(dev.gateway, hex(randomBytes(32)), urls);
-    return {
-      runtime: { config, eps: createEps(deps) },
-      deps,
-      verifier: auth.devVerifier,
-    };
+    deps = buildDeps(dev.gateway, hex(randomBytes(32)), urls);
+    eps = createEps(deps);
+  } else {
+    const merchantId = secret("EpsMerchantId");
+    const storeId = secret("EpsStoreId");
+    const username = secret("EpsUsername");
+    const password = secret("EpsPassword");
+    const hashKey = secret("EpsHashKey");
+    const limitKey = secret("EpsLimitKey");
+    if (
+      merchantId !== undefined &&
+      storeId !== undefined &&
+      username !== undefined &&
+      password !== undefined &&
+      hashKey !== undefined &&
+      limitKey !== undefined
+    ) {
+      const gateway = createEpsGateway(
+        epsCredentials({ mode: config.epsMode, merchantId, storeId, username, password, hashKey }),
+        {
+          fetch: globalThis.fetch.bind(globalThis),
+          clock: { now: () => new Date() },
+          timeoutMs: EPS_CALL_TIMEOUT_MS,
+        },
+      );
+      deps = buildDeps(gateway, limitKey, epsReturnUrls(config.appOrigin));
+      eps = createEps(deps);
+    }
   }
 
-  const secret = resourceSecrets(env);
-  const merchantId = secret("EpsMerchantId");
-  const storeId = secret("EpsStoreId");
-  const username = secret("EpsUsername");
-  const password = secret("EpsPassword");
-  const hashKey = secret("EpsHashKey");
-  const limitKey = secret("EpsLimitKey");
-  if (
-    merchantId === undefined ||
-    storeId === undefined ||
-    username === undefined ||
-    password === undefined ||
-    hashKey === undefined ||
-    limitKey === undefined
-  ) {
-    return { runtime: { config, eps: null }, deps: null };
+  // The dev sign-in token `dev.<sub>` is accepted only when a fake that issues it is on.
+  if (process.env.NODE_ENV !== "production" && (config.fake.eps || config.fake.idp)) {
+    const auth = await import("./fakes/dev-auth.ts");
+    verifier = auth.devVerifier;
   }
 
-  const gateway = createEpsGateway(
-    epsCredentials({ mode: config.epsMode, merchantId, storeId, username, password, hashKey }),
-    {
-      fetch: globalThis.fetch.bind(globalThis),
-      clock: { now: () => new Date() },
-      timeoutMs: EPS_CALL_TIMEOUT_MS,
-    },
-  );
-  const deps = buildDeps(gateway, limitKey, epsReturnUrls(config.appOrigin));
-  return { runtime: { config, eps: createEps(deps) }, deps };
+  // Keys for the limiter and the OTP hash: from the secret port; in fake mode a random one for the
+  // life of the process when none is given. Shorter than 32 characters is the same as missing (R16).
+  let authLimitKey = usableKey(secret("AuthLimitKey"));
+  let otpKey = usableKey(secret("OtpHashKey"));
+  if (config.fakes) {
+    authLimitKey ??= hex(randomBytes(32));
+    otpKey ??= hex(randomBytes(32));
+  }
+
+  let identity: IdentityProvider | null;
+  if (process.env.NODE_ENV !== "production" && config.fake.idp) {
+    const fake = await import("./fakes/identity.ts");
+    identity = fake.createFakeIdentity({ stage: config.stage, fakes: config.fakes });
+  } else {
+    try {
+      identity = cognitoIdentityProvider(authConfigFromEnv(env).customer);
+    } catch {
+      identity = null; // pool variables missing or malformed: the screens show "not available"
+    }
+  }
+
+  let sms: SmsProvider | null = null;
+  if (process.env.NODE_ENV !== "production" && config.fake.sms) {
+    const outbox = await import("./fakes/outbox.ts");
+    sms = outbox.getFakeSms();
+  }
+  const otp =
+    sms !== null && otpKey !== null
+      ? {
+          run: withTx,
+          clock: { now: () => new Date() },
+          pepper: otpKey,
+          sms,
+          limits: OTP_SEND_RULES,
+        }
+      : null;
+
+  return {
+    runtime: { config, eps, identity, otp, authLimitKey },
+    deps,
+    ...(verifier !== undefined ? { verifier } : {}),
+  };
 }
 
 const CACHE_KEY = "__tcWebRuntime";

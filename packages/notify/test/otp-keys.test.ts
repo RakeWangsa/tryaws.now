@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { challengeIdFor, ipSubject, limitAddress, phoneSubject, viewerAddress } from "../otp/keys";
+import {
+  challengeIdFor,
+  emailSubject,
+  ipSubject,
+  limitAddress,
+  phoneSubject,
+  viewerAddress,
+} from "../otp/keys";
 import { PEPPER } from "./harness";
 
 const C = "01a1c989-a7aa-7337-aaf6-40387049a15d";
@@ -82,4 +89,22 @@ it("ipSubject is one subject per limit address: IPv4 and its mapped form, and tw
     ipSubject(PEPPER, "2001:db8:abcd:12::1"),
   );
   expect(ipSubject(PEPPER, "203.0.113.9")).not.toBe(phoneSubject(PEPPER, "203.0.113.9")); // the labels separate the uses
+});
+
+it("emailSubject is 32 hex, stable, differs by key, by address and by pair address, and from ipSubject", () => {
+  const s = emailSubject(PEPPER, "a@example.com");
+  expect(s).toMatch(/^[0-9a-f]{32}$/);
+  expect(emailSubject(PEPPER, "a@example.com")).toBe(s);
+  expect(emailSubject(PEPPER + "x", "a@example.com")).not.toBe(s);
+  expect(emailSubject(PEPPER, "b@example.com")).not.toBe(s);
+  const pair = emailSubject(PEPPER, "a@example.com", "203.0.113.9");
+  expect(pair).toMatch(/^[0-9a-f]{32}$/);
+  expect(pair).not.toBe(s);
+  expect(emailSubject(PEPPER, "a@example.com", "203.0.113.10")).not.toBe(pair);
+  expect(emailSubject(PEPPER, "203.0.113.9")).not.toBe(ipSubject(PEPPER, "203.0.113.9"));
+  expect(s).not.toContain("example");
+});
+
+it("emailSubject refuses an unusable pair address (fail closed)", () => {
+  expect(emailSubject(PEPPER, "a@example.com", "not-an-address")).toBeNull();
 });

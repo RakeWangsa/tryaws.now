@@ -28,7 +28,7 @@ export { ADMIN_ACCESS_COOKIE, adminSessionSetCookie, clearAdminSessionSetCookie 
 export { requireFreshSignIn } from "./fresh";
 export { authenticateCustomer } from "./session";
 export type { SessionOutcome, SessionDeps } from "./session";
-export { authenticateRequest, refreshForProxy } from "./request";
+export { authenticateRequest, refreshForProxy, signInDepsFor } from "./request";
 export type { AuthRuntimeLike } from "./request";
 export { authConfigFromEnv, FRESH_SIGN_IN_MINUTES } from "./config";
 export type { AuthConfig, PoolConfig } from "./config";

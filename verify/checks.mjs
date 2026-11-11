@@ -703,6 +703,49 @@ TASKS["WP2-T3"] = [
   repo,
 ];
 
+// WP2-T2: the five sign-in screens. The two lines of the backlog row are their own checks: the actions
+// run in the R9 order, enumeration-safe, with a forged forwarded-for limited under the CloudFront
+// address (auth-pages), and Playwright completes sign-up to sign-in in bn at 360 px against the fake
+// identity provider (auth-smoke). The filters name real files; tests/repo/verify-cli.test.mjs asserts
+// that they exist, because passWithNoTests is on. A missing browser, package, database or port makes
+// auth-smoke print BLOCKED and fail: never a pass.
+const authPages = {
+  id: "auth-pages",
+  title:
+    "WP2-T2: the actions run in the R9 order, enumeration-safe, forged forwarded-for limited under the CloudFront address",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "server/auth",
+    "auth-pages",
+    "--no-passWithNoTests",
+  ],
+};
+const authSmoke = {
+  id: "auth-smoke",
+  title:
+    "WP2-T2: Playwright completes sign-up to sign-in in bn at 360 px against the fake identity provider",
+  command: ["node", "scripts/smoke-auth.mjs"],
+  timeoutMs: 1_800_000,
+};
+TASKS["WP2-T2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  auth,
+  notifyOtp,
+  web,
+  authPages,
+  authSmoke,
+  repo,
+];
+
 // WP4-T3: capacity. The race for the last slot (10.2) on its own line; the filter names a file, and
 // tests/repo/verify-cli.test.mjs asserts that the file exists, because passWithNoTests is on.
 const capacityRace = {

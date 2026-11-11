@@ -11,7 +11,9 @@ export type SecretName =
   | "EpsPassword"
   | "EpsHashKey"
   | "EpsLimitKey"
-  | "OrderDraftSecret";
+  | "OrderDraftSecret"
+  | "AuthLimitKey"
+  | "OtpHashKey";
 
 export type SecretSource = (name: SecretName) => string | undefined;
 
