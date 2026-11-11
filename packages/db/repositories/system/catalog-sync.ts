@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Tx } from "../../client";
 import { catalogProducts, poolAccounts, tlds } from "../../schema/index";
+import { newUuidV7 } from "../../ids";
 import { requireInstant } from "../config/args";
 import { isFeatureFlagKey } from "../config/feature-flags";
 
@@ -129,34 +130,21 @@ export async function applyCatalogScope(
   let inserted = 0;
   let updated = 0;
   for (const row of input.rows) {
-    // `xmax = 0` is true for a row this statement inserted and false for one it updated.
-    const done = await tx
-      .insert(catalogProducts)
-      .values({
-        family: row.family,
-        awsId: row.awsId,
-        platform: row.platform,
-        region: row.region,
-        specs: row.specs,
-        awsPriceUsd: row.awsPriceUsd,
-        billingUnit: row.billingUnit,
-        featureFlag: row.featureFlag,
-        active: row.active,
-        syncedAt: input.at,
-      })
-      .onConflictDoUpdate({
-        target: [catalogProducts.family, catalogProducts.awsId, catalogProducts.region],
-        // Exactly the columns worker_rw may update. feature_flag and created_at stay as inserted.
-        set: {
-          platform: sql`excluded.platform`,
-          specs: sql`excluded.specs`,
-          awsPriceUsd: sql`excluded.aws_price_usd`,
-          billingUnit: sql`excluded.billing_unit`,
-          active: sql`excluded.active`,
-          syncedAt: sql`excluded.synced_at`,
-        },
-      })
-      .returning({ inserted: sql<boolean>`(xmax = 0)` });
+    // Raw SQL with the exact column list worker_rw may write: drizzle would also name created_at (a
+    // DEFAULT), which worker_rw has no INSERT grant on (42501). `xmax = 0` is true for a row this
+    // statement inserted and false for one it updated.
+    const res = await tx.execute<{ inserted: boolean }>(sql`
+      insert into catalog_products
+        (id, family, aws_id, platform, region, specs, aws_price_usd, billing_unit, feature_flag, active, synced_at)
+      values
+        (${newUuidV7()}, ${row.family}, ${row.awsId}, ${row.platform}, ${row.region},
+         ${JSON.stringify(row.specs)}::jsonb, ${row.awsPriceUsd}::numeric, ${row.billingUnit},
+         ${row.featureFlag}, ${row.active}, ${input.at.toISOString()}::timestamptz)
+      on conflict (family, aws_id, region) do update set
+        platform = excluded.platform, specs = excluded.specs, aws_price_usd = excluded.aws_price_usd,
+        billing_unit = excluded.billing_unit, active = excluded.active, synced_at = excluded.synced_at
+      returning (xmax = 0) as inserted`);
+    const done = res.rows;
     if (done[0]?.inserted === true) inserted += 1;
     else updated += 1;
   }
@@ -193,27 +181,19 @@ export async function applyTlds(
   let inserted = 0;
   let updated = 0;
   for (const row of input.rows) {
-    const done = await tx
-      .insert(tlds)
-      .values({
-        tld: row.tld,
-        registrationPriceUsd: row.registrationUsd,
-        renewalPriceUsd: row.renewalUsd,
-        transferPriceUsd: row.transferUsd,
-        needsExtraParams: row.needsExtraParams,
-        syncedAt: input.at,
-      })
-      .onConflictDoUpdate({
-        target: tlds.tld,
-        set: {
-          registrationPriceUsd: sql`excluded.registration_price_usd`,
-          renewalPriceUsd: sql`excluded.renewal_price_usd`,
-          transferPriceUsd: sql`excluded.transfer_price_usd`,
-          needsExtraParams: sql`excluded.needs_extra_params`,
-          syncedAt: sql`excluded.synced_at`,
-        },
-      })
-      .returning({ inserted: sql<boolean>`(xmax = 0)` });
+    const res = await tx.execute<{ inserted: boolean }>(sql`
+      insert into tlds
+        (id, tld, registration_price_usd, renewal_price_usd, transfer_price_usd, needs_extra_params, synced_at)
+      values
+        (${newUuidV7()}, ${row.tld}, ${row.registrationUsd}::numeric, ${row.renewalUsd}::numeric,
+         ${row.transferUsd}::numeric, ${row.needsExtraParams}, ${input.at.toISOString()}::timestamptz)
+      on conflict (tld) do update set
+        registration_price_usd = excluded.registration_price_usd,
+        renewal_price_usd = excluded.renewal_price_usd,
+        transfer_price_usd = excluded.transfer_price_usd,
+        needs_extra_params = excluded.needs_extra_params, synced_at = excluded.synced_at
+      returning (xmax = 0) as inserted`);
+    const done = res.rows;
     if (done[0]?.inserted === true) inserted += 1;
     else updated += 1;
   }
