@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
+import { DbError } from "../../errors";
 import { isMarketCode } from "../config/args";
 import { isStorableFxRate } from "../config/fx-rates";
 import { refused, type Written } from "../result";
@@ -118,6 +119,8 @@ export function fxChangesAdminRepo(scope: AdminScope): FxChangesAdminRepo {
 
   return {
     async read(market) {
+      // A plain value, so a refusal throws (R10, R16; WP9-T2 sweep): any active admin may read it.
+      if (!(await isActiveAdmin(scope))) throw new DbError("42501");
       if (!isMarketCode(market)) return null;
       return load(market, false);
     },
