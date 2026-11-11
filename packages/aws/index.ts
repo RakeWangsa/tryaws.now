@@ -59,3 +59,18 @@ export {
   type LinuxInstanceDeps,
   type LinuxLaunchSpec,
 } from "./adapters/linux-instance";
+export {
+  applyRecordChange,
+  createDnsZoneAdapter,
+  listZoneRecords,
+  type DnsZoneConfig,
+  type DnsZoneDeps,
+  type RecordChangeInput,
+  type ZoneRecordView,
+} from "./adapters/dns-zone";
+export type {
+  R53Change,
+  R53RecordSet,
+  R53Zone,
+  Route53Port,
+} from "./adapters/route53-port";
