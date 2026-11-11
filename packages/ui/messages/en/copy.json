@@ -1,0 +1,9 @@
+{
+  "kit": {
+    "copy": {
+      "copy": "Copy",
+      "copied": "Copied",
+      "failed": "Could not copy"
+    }
+  }
+}

@@ -168,6 +168,37 @@ html[lang="bn"] .btn.question {
 /* ===== 6.4 States and timeline ===== */
 
 /* ===== 6.5 Secret and copy ===== */
+.tc-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.tc-secret-output {
+  min-width: 10rem;
+}
+.tc-secret-value {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.tc-secret-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.tc-secret > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.tc-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tc-copy-row > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
 /* ===== 6.6 Locale and wallet ===== */
 
