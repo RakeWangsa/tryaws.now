@@ -65,7 +65,7 @@ export interface EpsKit {
     ledgerTransactionId: string | null;
     verifyPayload: unknown;
   }>;
-  discrepancies(): Promise<Array<{ details: Record<string, unknown> }>>;
+  discrepancies(paymentId?: string): Promise<Array<{ details: Record<string, unknown> }>>;
   reset(): void;
 }
 
@@ -118,6 +118,8 @@ export function useEpsKit(): EpsKit {
     },
     async newCustomer() {
       const customerId = await newCustomer(t.pool);
+      // the fixture market is inserted inactive (the column defaults to false); a top-up needs it active
+      await t.pool.query("update markets set active = true where code = 'BD'");
       const opened = await runTransaction(t.db, (tx) => openWallet(tx, customerId), {
         role: "web_rw",
       });
@@ -158,8 +160,11 @@ export function useEpsKit(): EpsKit {
         verifyPayload: row.verify_payload as unknown,
       };
     },
-    async discrepancies() {
-      const r = await t.pool.query("select details from discrepancies where kind = 'payment'");
+    async discrepancies(paymentId) {
+      const r = await t.pool.query(
+        "select details from discrepancies where kind = 'payment' and ($1::text is null or details->>'paymentId' = $1) order by created_at",
+        [paymentId ?? null],
+      );
       return r.rows as Array<{ details: Record<string, unknown> }>;
     },
     // Clears what a test reads (calls, alerts, logs). The fake's counter of EPS ids is NOT reset: ids

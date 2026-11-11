@@ -139,7 +139,7 @@ describe("a success that does not match goes to review, never to the wallet", ()
     expect((await k.payment(s.paymentId)).status).toBe("review");
     expect(await k.balance(s.customerId)).toBe(0n);
     expect(await k.ledgerRows(ledgerKey.topup(s.paymentId))).toBe(0);
-    const d = await k.discrepancies();
+    const d = await k.discrepancies(s.paymentId);
     expect(d).toHaveLength(1);
     expect(d[0]?.details).toMatchObject({
       paymentId: s.paymentId,
@@ -150,7 +150,7 @@ describe("a success that does not match goes to review, never to the wallet", ()
     expect(k.alerts[0]).toMatchObject({ paymentId: s.paymentId, expectedMinor: 150000n });
     // a second callback changes nothing and raises nothing
     expect(await verify(s.merchantTransactionId)).toEqual(pending);
-    expect(await k.discrepancies()).toHaveLength(1);
+    expect(await k.discrepancies(s.paymentId)).toHaveLength(1);
     expect(k.alerts).toHaveLength(1);
   });
 
@@ -203,7 +203,7 @@ describe("a success that does not match goes to review, never to the wallet", ()
     expect(await verify(s.merchantTransactionId)).toEqual(pending);
     expect((await k.payment(s.paymentId)).status).toBe("review");
     expect(await k.balance(s.customerId)).toBe(0n);
-    expect((await k.discrepancies()).at(-1)?.details).toMatchObject({ reason: "late_success" });
+    expect((await k.discrepancies(s.paymentId)).at(-1)?.details).toMatchObject({ reason: "late_success" });
   });
 
   it("a failed answer for an expired row leaves it expired", async () => {

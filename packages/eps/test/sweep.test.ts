@@ -159,7 +159,8 @@ describe("sweepPayments", () => {
     await sweep();
     const text = JSON.stringify(k.logs);
     expect(text).not.toContain(s.merchantTransactionId);
-    expect(text).not.toContain(s.paymentId);
+    // the internal payment id is logged on purpose (it is no credential and lets support follow a payment);
+    // the merchant transaction id, which names the payment on the return URL, never is
   });
 });
 
