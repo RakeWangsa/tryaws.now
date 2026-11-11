@@ -124,6 +124,7 @@ export {
   type SeedResult,
 } from "./seed/launch";
 export { readCatalogProduct } from "./repositories/catalog";
+export { readLaunchInputs, type LaunchInputs } from "./repositories/launch";
 export { compensationRepo } from "./repositories/compensation";
 export type { CompensationOrder, CompensationRepo } from "./repositories/compensation";
 export type { CatalogProduct } from "./repositories/catalog";

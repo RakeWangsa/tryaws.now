@@ -10,6 +10,7 @@ import {
 } from "@tc/core";
 import { withTx } from "@tc/db";
 import { createAdapterRegistry } from "./adapters";
+import { linuxInstanceAdapter } from "./linux";
 import { composeHooks } from "./hooks";
 import { orderHooks } from "./order-hooks";
 import { runStep } from "./step";
@@ -107,7 +108,7 @@ function buildDeps(): StepDeps {
     // The registry is empty until WP4-T5, and the guard and the other hooks come with WP5-T4 and
     // WP5-T5: until then every operation ends in needs_attention (R16). The failed hook of a create
     // is the automatic reversal of WP4-T4; a rejected create runs it too (reject.ts).
-    adapters: createAdapterRegistry([]),
+    adapters: createAdapterRegistry([linuxInstanceAdapter({ vpcCidr: process.env.TC_VPC_CIDR })]),
     hooks: composeHooks(orderHooks({ clock })),
     access: createAwsAccess({ caller: "provisioner" }),
     env: config.env,

@@ -9,6 +9,10 @@ export default defineConfig({
       "packages/*",
       "functions/*",
       {
+        // tests/isolation: the local checks always run; the real-pool part skips itself (10.4).
+        test: { name: "isolation", include: ["tests/isolation/**/*.test.ts"] },
+      },
+      {
         test: {
           name: "repo",
           include: ["tests/repo/**/*.test.mjs", "scripts/**/*.test.mjs"],
