@@ -143,16 +143,32 @@ it("hides the password of a malformed URL and of a real one", async () => {
 // Only a server on this machine
 
 const REFUSAL = /^refusing to use PostgreSQL at /;
+const ANY_REFUSAL = /^refusing to use /;
 
-it("assertLocalServer accepts 127.0.0.1, localhost and ::1", () => {
+// The driver's parser and URL disagree on these: after re-serialising, the maintenance URL goes to
+// another host than the one the driver reads from the URL as given.
+const PARSER_GAPS = [
+  "postgres://u:secret-pw@localhost/x?h%6fst=db.example.test&a=b c",
+  "postgres://u:secret-pw@localhost/x?h%6Fst=10.0.0.5&p%6Frt=6543&a=b c",
+  "postgres://u:secret-pw@localhost/x b?h%6fst=db.example.test",
+];
+
+function refusal(fn: () => void): Error | undefined {
+  try {
+    fn();
+  } catch (e) {
+    return e as Error;
+  }
+  return undefined;
+}
+
+it("assertLocalServer accepts 127.0.0.1, localhost and ::1 on any port", () => {
   for (const url of [
     "postgres://u:p@127.0.0.1:5432/x",
     "postgres://u:p@localhost/x",
     "postgres://u:p@[::1]:5432/x",
     // another port is another server on this machine
-    "postgres://u:p@localhost:6543/x?port=5433",
-    "postgres://u:p@localhost/x?application_name=tests",
-    "postgres://u:p@localhost/x?hostaddr=10.0.0.5",
+    "postgres://u:p@localhost:6543/x",
   ]) {
     expect(() => assertLocalServer(url)).not.toThrow();
   }
@@ -165,38 +181,73 @@ it("assertLocalServer refuses every other host and never prints the password", (
     "postgres://u:secret-pw@127.0.0.2/x",
     "postgres://u:secret-pw@localhost.example.test/x",
     "postgres://u:secret-pw@LOCALHOST/x",
-    "postgres:///x?password=secret-pw",
-    // the driver takes a host query parameter in place of the host of the URL
-    "postgres://u:secret-pw@localhost/x?host=db.example.test",
-    "postgres://u:secret-pw@127.0.0.1/x?host=10.0.0.5&port=6543",
-    "postgres://u:secret-pw@localhost/x?host=/var/run/postgresql",
   ];
   for (const url of urls) {
-    let err: Error | undefined;
-    try {
-      assertLocalServer(url);
-    } catch (e) {
-      err = e as Error;
-    }
+    const err = refusal(() => assertLocalServer(url));
     expect({ url, refused: err instanceof Error }).toEqual({ url, refused: true });
     expect(err!.message).toMatch(REFUSAL);
     expect(err!.message).not.toContain("secret-pw");
   }
+  expect(refusal(() => assertLocalServer("postgres:///x"))?.message).toMatch(
+    /^refusing to use PostgreSQL at \(no host\): /,
+  );
+});
+
+it("assertLocalServer refuses a URL with query parameters or a fragment, naming no part of it", () => {
+  const urls = [
+    ...PARSER_GAPS,
+    "postgres://u:secret-pw@localhost/x?host=db.example.test",
+    "postgres://u:secret-pw@localhost/x?port=5433",
+    "postgres://u:secret-pw@localhost/x?application_name=tests",
+    "postgres://u:secret-pw@localhost/x?hostaddr=10.0.0.5",
+    "postgres://u:secret-pw@localhost/x#frag",
+    // the driver's parser would read this file or refuse this value: it never gets the string
+    "postgres://u:secret-pw@localhost/x?sslcert=/nonexistent/example.crt",
+    "postgres://u:secret-pw@localhost/x?sslnegotiation=example",
+  ];
+  for (const url of urls) {
+    const err = refusal(() => assertLocalServer(url));
+    expect({ url, refused: err instanceof Error }).toEqual({ url, refused: true });
+    expect({ url, message: err!.message }).toEqual({
+      url,
+      message:
+        "refusing to use this DATABASE_URL: a URL for the tests may not carry query parameters or a fragment",
+    });
+    expect(err!.message).toMatch(ANY_REFUSAL);
+    expect(err!.message).not.toContain("secret-pw");
+    expect(err!.message).not.toContain("example");
+  }
 });
 
 it("createTempDatabase refuses another host before it opens a connection", async () => {
-  for (const url of [
-    "postgres://u:secret-pw@db.example.test:5432/x",
-    "postgres://u:secret-pw@localhost/x?host=db.example.test",
-  ]) {
-    const err = await createTempDatabase({ url, migrate: false }).then(
-      () => null,
-      (e: Error) => e,
-    );
-    expect(err).toBeInstanceOf(Error);
-    expect(err!.message).toMatch(REFUSAL);
-    expect(err!.message).toContain("db.example.test");
-    expect(err!.message).not.toContain("secret-pw");
+  const err = await createTempDatabase({
+    url: "postgres://u:secret-pw@db.example.test:5432/x",
+    migrate: false,
+  }).then(
+    () => null,
+    (e: Error) => e,
+  );
+  expect(err).toBeInstanceOf(Error);
+  expect(err!.message).toMatch(REFUSAL);
+  expect(err!.message).toContain("db.example.test");
+  expect(err!.message).not.toContain("secret-pw");
+});
+
+it("createTempDatabase and the sweep refuse the URLs on which the two parsers disagree", async () => {
+  for (const url of PARSER_GAPS) {
+    for (const attempt of [
+      () => createTempDatabase({ url, migrate: false }),
+      () => sweepLeftoverTestDatabases(url),
+    ]) {
+      const err = await attempt().then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect({ url, refused: err instanceof Error }).toEqual({ url, refused: true });
+      expect(err!.message).toMatch(ANY_REFUSAL);
+      expect(err!.message).not.toContain("secret-pw");
+      expect(err!.message).not.toContain("example");
+    }
   }
 });
 
@@ -286,10 +337,7 @@ it("the sweep keeps a database of this process", async () => {
 }, 60_000);
 
 it("the sweep refuses another host", async () => {
-  for (const url of [
-    "postgres://u:secret-pw@db.example.test/x",
-    "postgres://u:secret-pw@localhost/x?host=db.example.test",
-  ]) {
-    await expect(sweepLeftoverTestDatabases(url)).rejects.toThrow(REFUSAL);
-  }
+  await expect(
+    sweepLeftoverTestDatabases("postgres://u:secret-pw@db.example.test/x"),
+  ).rejects.toThrow(REFUSAL);
 });

@@ -50,12 +50,20 @@ const refuseHost = (host: string) =>
   );
 
 // The tests create and drop databases and create server-wide roles, so they refuse every server that
-// is not on this machine. The URL's host is checked first; then the driver is asked which host it
-// will use (its own parser takes a `host` query parameter in place of the URL's host). Building a
-// client opens no connection. Another port is not refused: it is another server on this machine.
-// The message holds the host, never the URL, so it cannot leak the password.
+// is not on this machine. Three rules: (1) no query parameters and no fragment: every difference found
+// between URL and the driver's parser (pg-connection-string) needs one, and the driver's parser reads
+// ssl files named in them; (2) the URL's host, and then the host that the driver takes from the same
+// string (building a client opens no connection), are local; (3) the callers in this file check every
+// string they hand to the driver, right before they hand it over. Another port is not refused: it is
+// another server on this machine. The messages never hold the URL, so they cannot leak the password.
 export function assertLocalServer(url: string): void {
-  const host = parseUrl(url).hostname;
+  const parsed = parseUrl(url);
+  if (parsed.search !== "" || parsed.hash !== "") {
+    throw new Error(
+      "refusing to use this DATABASE_URL: a URL for the tests may not carry query parameters or a fragment",
+    );
+  }
+  const host = parsed.hostname;
   if (!LOCAL_URL_HOSTS.has(host)) throw refuseHost(host);
   const driverHost = String(new pg.Client({ connectionString: url }).host ?? "");
   if (!LOCAL_DRIVER_HOSTS.has(driverHost)) throw refuseHost(driverHost);
@@ -107,10 +115,9 @@ export async function unconnectedTestDatabases(admin: pg.Client): Promise<string
 // have connected in between).
 export async function sweepLeftoverTestDatabases(url: string): Promise<string[]> {
   assertLocalServer(url);
-  const admin = new pg.Client({
-    connectionString: maintenanceUrl(url),
-    connectionTimeoutMillis: 5000,
-  });
+  const adminUrl = maintenanceUrl(url);
+  assertLocalServer(adminUrl); // the very string the driver gets (see assertLocalServer)
+  const admin = new pg.Client({ connectionString: adminUrl, connectionTimeoutMillis: 5000 });
   try {
     await admin.connect();
     const dropped: string[] = [];
@@ -168,6 +175,9 @@ export async function createTempDatabase(
   const name = `tc_test_${process.pid}_${randomBytes(4).toString("hex")}`;
   const adminUrl = maintenanceUrl(baseUrl); // also refuses a malformed URL
   assertLocalServer(baseUrl); // before any connection is opened
+  // Two strings that look alike can give the driver two hosts, so the driver is asked about the very
+  // string it will get: the maintenance URL (create and drop) and the URL of the new database.
+  assertLocalServer(adminUrl);
   // A sweep that fails never fails a test: the error of the CREATE DATABASE below is the one that counts.
   await sweepLeftoverTestDatabases(baseUrl).catch(() => undefined);
 
@@ -182,6 +192,7 @@ export async function createTempDatabase(
   }
 
   const url = withDatabase(baseUrl, name);
+  assertLocalServer(url); // before createDatabase and runMigrations get it
   const { db, pool } = createDatabase(url);
   let poolEnded = false;
   let finished = false;
@@ -236,7 +247,10 @@ export function useTempDatabase(options: { migrate?: boolean } = {}): TempDataba
     // Create and store first, then migrate: afterAll drops the database also when the
     // migration fails or the time limit of this hook fires during it.
     temp = await createTempDatabase({ ...options, migrate: false });
-    if (options.migrate ?? true) await runMigrations(temp.url);
+    if (options.migrate ?? true) {
+      assertLocalServer(temp.url);
+      await runMigrations(temp.url);
+    }
   }, 60_000);
   afterAll(async () => {
     if (temp) await temp.drop();
