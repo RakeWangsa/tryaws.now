@@ -205,7 +205,14 @@ importers:
         specifier: ^0.31.11
         version: 0.31.11
 
-  packages/eps: {}
+  packages/eps:
+    dependencies:
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../core
+      '@tc/db':
+        specifier: workspace:*
+        version: link:../db
 
   packages/notify:
     dependencies:
