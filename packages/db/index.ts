@@ -140,3 +140,18 @@ export type { CustomerLimit, RateLimitsRepo } from "./repositories/customer/rate
 export type { NewPayment, PaymentRow, PaymentsRepo } from "./repositories/customer/payments";
 export { systemPayments, PAYMENT_DISCREPANCY_KEYS } from "./repositories/system/payments";
 export type { OutcomeFields, SystemPayments } from "./repositories/system/payments";
+export {
+  applyCatalogScope,
+  applyTlds,
+  listCatalogKeys,
+  readPoolAccountRef,
+} from "./repositories/system/catalog-sync";
+export type { CatalogKey, CatalogRowWrite, TldWrite } from "./repositories/system/catalog-sync";
+export {
+  CONFIG_PRICE_KEYS,
+  STAGING_CONFIG_PRICES,
+  readConfigPrices,
+  seedConfigPrices,
+  type ConfigPriceInput,
+  type ConfigPriceKey,
+} from "./seed/config-prices";
