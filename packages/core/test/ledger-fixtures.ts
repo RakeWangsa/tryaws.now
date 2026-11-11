@@ -3,8 +3,6 @@ import type { Database, Tx } from "@tc/db";
 import {
   attachErrorListeners,
   createTempDatabase,
-  inTransaction,
-  insertRow,
   newCustomer,
   runTransaction,
   useTempDatabase,
@@ -13,6 +11,7 @@ import {
   type TempDatabaseHandle,
 } from "@tc/db/testing";
 import { ensureSystemAccounts, openWallet } from "../ledger/accounts";
+import { postTransaction } from "../ledger/post";
 import type { PostTransactionInput } from "../ledger/types";
 import type { Result } from "../types";
 
@@ -138,36 +137,13 @@ function makeKit(source: Source): LedgerKit {
       if (!opened.ok) throw new Error(`openWallet failed: ${opened.error}`);
       return { customerId, walletId: opened.value.walletId, accountId: opened.value.accountId };
     },
-    // STAND-IN until Task 8: a raw insert by the table owner, which production never does.
-    // postTransaction does not exist yet in Task 7; Task 8 replaces the body by a call of it.
     async fund(wallet, amountMinor) {
-      const clearing = await kit.platformAccount("gateway_clearing");
-      const paymentId = crypto.randomUUID();
-      return inTransaction(source.pool, async (c) => {
-        const id = await insertRow(c, "ledger_transactions", {
-          kind: "topup",
-          reference_type: "payment",
-          reference_id: paymentId,
-          idempotency_key: `topup:${paymentId}`,
-          actor_type: "system",
-        });
-        for (const [account_id, direction] of [
-          [clearing, "debit"],
-          [wallet.accountId, "credit"],
-        ] as const) {
-          await insertRow(c, "ledger_entries", {
-            transaction_id: id,
-            account_id,
-            direction,
-            amount_minor: amountMinor.toString(),
-          });
-        }
-        await c.query(
-          "update wallets set balance_minor = balance_minor + $1::bigint, version = version + 1 where id = $2",
-          [amountMinor.toString(), wallet.walletId],
-        );
-        return id;
-      });
+      return transactionIdOf(
+        await run(
+          (tx) => postTransaction(tx, inputs.topup(wallet.customerId, amountMinor)),
+          "worker_rw",
+        ),
+      );
     },
     async platformAccount(type, currency = "BDT") {
       const r = await source.pool.query<{ id: string }>(
