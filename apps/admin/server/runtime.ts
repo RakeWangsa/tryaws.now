@@ -23,11 +23,18 @@ import {
 import { notifyWaitlist, postTransaction } from "@tc/core";
 import type { OperationQueue } from "@tc/core";
 import type { Tx } from "@tc/db";
+import { unavailableAdminDirectory, type AdminDirectory } from "./admin-directory.ts";
+import type { AdminsFlowDeps } from "./admins-flow.ts";
+import type { AuditExportDeps } from "./audit-export.ts";
 import { adminGate } from "./gate.ts";
 import type { MoneyFlowDeps } from "./money-flow.ts";
 import type { CustomerFlowDeps } from "./customer-flow.ts";
 import type { CapacityFlowDeps } from "./capacity-flow.ts";
 import type { OpsFlowDeps } from "./ops-flow.ts";
+import type { AbuseFlowDeps } from "./abuse-flow.ts";
+import type { CaseFlowDeps } from "./case-flow-common.ts";
+import type { SupportFlowDeps } from "./support-flow.ts";
+import { SUPPORT_REPLY_ENABLED } from "./support-reply.ts";
 import { unavailableKycStore, type KycDocumentDeps } from "./kyc-documents.ts";
 import { makeSignIn, makeSignOut, type SignInDeps } from "./sign-in.ts";
 
@@ -232,5 +239,73 @@ export function capacityFlowDeps(): CapacityFlowDeps {
   };
 }
 
+// The actions of /support, /abuse and /reconciliation (WP8-T7): 30 for each admin in 10 minutes. The
+// admin app has no queue client (R1): the send of a suspension is refused here on purpose and the
+// scheduler sends the message again from the row (3.4).
+const CASE_ACTION_LIMIT = 30;
+
+export function supportFlowDeps(): SupportFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_support_action", CASE_ACTION_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+    replyEnabled: SUPPORT_REPLY_ENABLED,
+  };
+}
+
+export function abuseFlowDeps(): AbuseFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_abuse_action", CASE_ACTION_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+    queue: SCHEDULER_ONLY_QUEUE,
+  };
+}
+
+export function reconciliationFlowDeps(): CaseFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_reconciliation_action", CASE_ACTION_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+  };
+}
+
 // The reads of the customer screens, in one transaction of the admin.
 export const readAsAdmin = runAsAdmin;
+
+// The Cognito admin pool behind /admins. Until the real adapter is wired (a manual VERIFY against the
+// admin pool, WP8-T6) every call refuses and the screen fails closed (R16).
+export const adminDirectory = (): AdminDirectory => unavailableAdminDirectory;
+
+// /admins (WP8-T6): superadmin only, 20 changes for each admin in 10 minutes.
+const ADMINS_ACTION_LIMIT = 20;
+
+export function adminsFlowDeps(): AdminsFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_users_action", ADMINS_ACTION_LIMIT),
+    run: runAsAdmin,
+    directory: adminDirectory(),
+    clock: { now: () => new Date() },
+  };
+}
+
+// The CSV export of /audit: superadmin only, 5 exports for each admin in 10 minutes.
+const AUDIT_EXPORT_LIMIT = 5;
+
+export function auditExportDeps(): AuditExportDeps {
+  ensureAdminAuth();
+  return {
+    authorize: () => requireAdmin(["superadmin"]),
+    limiter: adminLimiter("admin_audit_export", AUDIT_EXPORT_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+  };
+}

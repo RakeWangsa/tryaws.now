@@ -483,6 +483,47 @@ TASKS["WP7-T1"] = [
   aws,
   repo,
 ];
+// WP6-T4s: the customer screens of buckets (/storage) and container services (/containers). Each
+// filter names a real test file.
+const storageScreensCore = {
+  id: "storage-screens-core",
+  title: "WP6-T4s: the order seam of a bucket and of a container service",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "products/bucket-resolve",
+    "products/container-resolve",
+    "orders/exports",
+    "--no-passWithNoTests",
+  ],
+};
+const storageScreensWeb = {
+  id: "storage-screens-web",
+  title:
+    "WP6-T4s: the action cores, the secret key core, the views, the messages and the screens with the mockup cross-check",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "bucket",
+    "container",
+    "family-screens",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP6-T4s"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  storageScreensCore,
+  storageScreensWeb,
+  repo,
+];
 // WP7-T2: the CDN adapter, the order seam and the customer screens. Each filter names a real test file.
 const cdnCore = {
   id: "cdn-core",
@@ -572,7 +613,6 @@ const dbLbScreens = {
     "databases-messages",
     "load-balancers-messages",
     "family-links",
-    "family-routes",
     "--no-passWithNoTests",
   ],
 };
@@ -931,6 +971,91 @@ TASKS["WP8-T5"] = [
   db,
   adminOpsRepos,
   adminOpsApp,
+  core,
+  admin,
+  repo,
+];
+
+// WP8-T6: audit search and admin users. The backlog sentence ("every admin action has an audit row") is
+// the completeness test of the admin repositories (every write has a case that checks the audit row with
+// actor, reason, IP and target); the rules of /admins (superadmin only, the actor is the session, the last
+// superadmin stays) and the masked, read-only audit repository have their own db lines. The rest is the
+// admin suite (flows in the order of R9, pages in bn and en, mockup cross-check, messages).
+// `--no-passWithNoTests` makes a filter that selects no file fail.
+const everyAdminActionAudited = {
+  id: "every-admin-action-audited",
+  title:
+    "WP8-T6: every write of the admin repositories has an audit row with actor, reason, IP and target",
+  command: ["pnpm", "test", "--filter", "@tc/db", "admin-repos", "--no-passWithNoTests"],
+};
+const adminUsersRules = {
+  id: "admin-users-rules",
+  title:
+    "WP8-T6: admin users are changed by a superadmin only, never oneself, and the last one stays",
+  command: ["pnpm", "test", "--filter", "@tc/db", "admin-users", "--no-passWithNoTests"],
+};
+const auditReadOnlyMasked = {
+  id: "audit-read-only-masked",
+  title: "WP8-T6: the audit repository is read only and masks secrets and personal data",
+  command: ["pnpm", "test", "--filter", "@tc/db", "admin-audit.test", "--no-passWithNoTests"],
+};
+TASKS["WP8-T6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  everyAdminActionAudited,
+  adminUsersRules,
+  auditReadOnlyMasked,
+  admin,
+  repo,
+];
+
+// WP8-T7: support, abuse and reconciliation (16.12, P1). The backlog proof is "listed in 16.12": the
+// repository half (roles, audit rows with actor, reason, IP and target, replays, suspendResource writes
+// an operation row and nothing else) and the app half (R9 order, the actor is the session admin, the
+// screens in bn and en, the mockup cross-check). `--no-passWithNoTests` makes a filter that selects no
+// file fail.
+const adminCaseRepos = {
+  id: "admin-case-repos",
+  title: "WP8-T7: support, abuse and reconciliation repositories: roles, audit rows, replays",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "admin-support",
+    "admin-abuse",
+    "admin-reconciliation",
+    "reconciliation-details",
+    "admin-repos",
+    "--no-passWithNoTests",
+  ],
+};
+const adminCaseApp = {
+  id: "admin-case-app",
+  title: "WP8-T7: flows in the order of R9, screens, messages and mockup",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/admin",
+    "case-flows",
+    "cases-pages",
+    "cases-messages",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP8-T7"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  adminCaseRepos,
+  adminCaseApp,
   core,
   admin,
   repo,

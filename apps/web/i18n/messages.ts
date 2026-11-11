@@ -25,6 +25,10 @@ import { databasesBn } from "../messages/databases-bn.ts";
 import { databasesEn } from "../messages/databases-en.ts";
 import { loadBalancersBn } from "../messages/load-balancers-bn.ts";
 import { loadBalancersEn } from "../messages/load-balancers-en.ts";
+import { bucketBn } from "../messages/bucket-bn.ts";
+import { bucketEn } from "../messages/bucket-en.ts";
+import { containerBn } from "../messages/container-bn.ts";
+import { containerEn } from "../messages/container-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
@@ -48,6 +52,8 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     cdnBn,
     databasesBn,
     loadBalancersBn,
+    bucketBn,
+    containerBn,
     authOwn.bn,
     kycOwn.bn,
     settingsOwn.bn,
@@ -64,6 +70,8 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     cdnEn,
     databasesEn,
     loadBalancersEn,
+    bucketEn,
+    containerEn,
     authOwn.en,
     kycOwn.en,
     settingsOwn.en,

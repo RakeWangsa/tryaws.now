@@ -121,6 +121,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP6-T2s",
     "WP6-T3",
     "WP6-T4",
+    "WP6-T4s",
     "WP7-T1",
     "WP7-T2",
     "WP7-T3",
@@ -131,6 +132,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP8-T3",
     "WP8-T4",
     "WP8-T5",
+    "WP8-T6",
+    "WP8-T7",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -538,6 +541,60 @@ it("task WP8-T5 is proven by the db read and decision suites and the admin flow 
     "packages/db/test/admin-ops-reads.test.ts",
     "apps/admin/server/ops-flow.test.ts",
     "apps/admin/ops-pages.test.tsx",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP8-T6 is proven by the db audit and admin-users suites, the completeness test and the admin suite", () => {
+  expect(TASKS["WP8-T6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["every-admin-action-audited", "pnpm test --filter @tc/db admin-repos --no-passWithNoTests"],
+    ["admin-users-rules", "pnpm test --filter @tc/db admin-users --no-passWithNoTests"],
+    ["audit-read-only-masked", "pnpm test --filter @tc/db admin-audit.test --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/db/test/admin-repos.test.ts",
+    "packages/db/test/admin-users.test.ts",
+    "packages/db/test/admin-audit.test.ts",
+    "apps/admin/audit-admins-pages.test.tsx",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP8-T7 is proven by the db case suites and the admin flow, screen and message suites", () => {
+  expect(TASKS["WP8-T7"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    [
+      "admin-case-repos",
+      "pnpm test --filter @tc/db admin-support admin-abuse admin-reconciliation reconciliation-details admin-repos --no-passWithNoTests",
+    ],
+    [
+      "admin-case-app",
+      "pnpm test --filter @tc/admin case-flows cases-pages cases-messages --no-passWithNoTests",
+    ],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/db/test/admin-support.test.ts",
+    "packages/db/test/admin-abuse.test.ts",
+    "packages/db/test/admin-reconciliation.test.ts",
+    "apps/admin/server/case-flows.test.ts",
+    "apps/admin/cases-pages.test.tsx",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
@@ -1140,6 +1197,44 @@ it("tasks WP6-T4 and WP7-T1 are proven by the adapter tests, each filter naming 
   }
 });
 
+it("task WP6-T4s is proven by the core and web tests of the bucket and container screens, each filter naming a real test file", () => {
+  expect(TASKS["WP6-T4s"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "storage-screens-core",
+    "storage-screens-web",
+    "repo",
+  ]);
+  const line = (id) => TASKS["WP6-T4s"].find((c) => c.id === id).command.join(" ");
+  expect(line("storage-screens-core")).toBe(
+    "pnpm test --filter @tc/core products/bucket-resolve products/container-resolve orders/exports --no-passWithNoTests",
+  );
+  expect(line("storage-screens-web")).toBe(
+    "pnpm test --filter @tc/web bucket container family-screens --no-passWithNoTests",
+  );
+  for (const f of [
+    "packages/core/products/bucket-resolve.test.ts",
+    "packages/core/products/container-resolve.test.ts",
+    "packages/core/orders/exports.test.ts",
+    "apps/web/server/bucket-actions.test.ts",
+    "apps/web/server/bucket-keys.test.ts",
+    "apps/web/server/bucket-view.test.ts",
+    "apps/web/server/container-actions.test.ts",
+    "apps/web/server/container-view.test.ts",
+    "apps/web/server/family-screens.test.ts",
+    "apps/web/messages/bucket-messages.test.ts",
+    "apps/web/app/[locale]/(panel)/storage/bucket.test.tsx",
+    "apps/web/app/[locale]/(panel)/storage/bucket-anchors.test.tsx",
+    "apps/web/app/[locale]/(panel)/containers/container.test.tsx",
+    "apps/web/app/[locale]/(panel)/containers/container-anchors.test.tsx",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
 it("task WP7-T2 is proven by the core, adapter, wiring and web tests, each filter naming a real test file", () => {
   expect(TASKS["WP7-T2"].map((c) => c.id)).toEqual([
     "spec-sync",
@@ -1236,7 +1331,6 @@ it("task WP6-T2s is proven by the cores, the views and the screens of databases 
     "apps/web/server/databases-view.test.ts",
     "apps/web/server/load-balancers-actions.test.ts",
     "apps/web/server/load-balancers-view.test.ts",
-    "apps/web/server/family-routes.test.ts",
     "apps/web/messages/databases-messages.test.ts",
     "apps/web/messages/load-balancers-messages.test.ts",
     "apps/web/app/[locale]/(panel)/databases/databases.test.tsx",

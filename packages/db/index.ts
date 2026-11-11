@@ -90,6 +90,41 @@ export type {
   WaitlistReason,
 } from "./repositories/admin/waitlist";
 export { maskEmail, maskPhone } from "./repositories/admin/customers";
+export { ABUSE_SOURCES } from "./repositories/admin/abuse";
+export type {
+  AbuseAdminRepo,
+  AbuseCaseDetail,
+  AbuseCaseRow,
+  AbuseClosed,
+  AbuseListResult,
+  AbuseNoted,
+  AbuseOpened,
+  AbuseSource,
+  AbuseStatus,
+  AbuseSuspended,
+  AbuseTrailRow,
+} from "./repositories/admin/abuse";
+export { DETAIL_KEYS } from "./repositories/admin/reconciliation";
+export type {
+  DetailEntry,
+  DiscrepancyKind,
+  DiscrepancyState,
+  ReconciliationAdminRepo,
+  ReconciliationListResult,
+  ReconciliationOverview,
+  ReconciliationRow,
+} from "./repositories/admin/reconciliation";
+export { SUPPORT_REPLY_TEMPLATE } from "./repositories/admin/support";
+export type {
+  CaseStatus,
+  SupportAdminRepo,
+  SupportClosed,
+  SupportListResult,
+  SupportReplied,
+  SupportRequestDetail,
+  SupportRequestRow,
+  SupportTrailRow,
+} from "./repositories/admin/support";
 export type {
   CustomerAuditRow,
   CustomerChanged,
@@ -274,3 +309,20 @@ export type {
   RefundRecorded,
   ReverifyInput,
 } from "./repositories/admin/payments";
+export { AUDIT_EXPORT_CAP, AUDIT_PAGE_DEFAULT, AUDIT_PAGE_MAX } from "./repositories/admin/audit";
+export type {
+  AuditAdminRepo,
+  AuditExportResult,
+  AuditFilter,
+  AuditRow,
+  AuditSearchInput,
+  AuditSearchResult,
+} from "./repositories/admin/audit";
+export { DIRECTORY_ACTIONS } from "./repositories/admin/admin-users";
+export type {
+  AdminUserChanged,
+  AdminUserListInput,
+  AdminUserListResult,
+  AdminUserRow,
+  AdminUsersAdminRepo,
+} from "./repositories/admin/admin-users";

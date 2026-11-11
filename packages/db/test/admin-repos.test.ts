@@ -70,13 +70,74 @@ async function seedReviewPayment(): Promise<string> {
 
 // The money writes are for finance; the discrepancy queue is for ops too.
 const roleOf = (name: string): AdminActor["role"] =>
-  (name.startsWith("wallets.") || name.startsWith("payments.")) &&
-  name !== "payments.resolveDiscrepancy"
-    ? "finance"
-    : "ops";
+  name.startsWith("adminUsers.")
+    ? "superadmin"
+    : name.startsWith("support.")
+      ? "support"
+      : (name.startsWith("wallets.") || name.startsWith("payments.")) &&
+          name !== "payments.resolveDiscrepancy"
+        ? "finance"
+        : "ops";
+
+async function seedAbuseCase(): Promise<string> {
+  return insertRow(t.pool, "abuse_cases", {
+    resource_id: await newResource(t.pool, await newCustomer(t.pool), { state: "active" }),
+    source: "monitoring",
+  });
+}
+
+async function seedSupportRequest(): Promise<string> {
+  return insertRow(t.pool, "support_requests", {
+    customer_id: await newCustomer(t.pool),
+    category: "billing",
+    subject: "Question",
+    message: "Hello",
+  });
+}
 
 // Every write of adminRepos has a case here; the completeness test below fails when one is missing (R10).
 const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
+  "adminUsers.create": (r) =>
+    r.adminUsers.create({ cognitoSub: "sub-" + uniqueSuffix(), role: "support" }, "new support"),
+  "adminUsers.setRole": async (r) =>
+    r.adminUsers.setRole({ adminId: await newAdmin(t.pool, "support"), role: "ops" }, "to ops"),
+  "adminUsers.disable": async (r) =>
+    r.adminUsers.disable({ adminId: await newAdmin(t.pool, "support") }, "left"),
+  "adminUsers.enable": async (r) => {
+    const id = await newAdmin(t.pool, "support");
+    await t.pool.query("update admin_users set status = 'disabled' where id = $1", [id]);
+    return r.adminUsers.enable({ adminId: id }, "back");
+  },
+  "adminUsers.recordDirectoryAction": async (r) =>
+    r.adminUsers.recordDirectoryAction(
+      { adminId: await newAdmin(t.pool, "support"), kind: "mfa_reset" },
+      "lost phone",
+    ),
+  "abuse.open": async (r) =>
+    r.abuse.open(
+      {
+        caseId: uuidv7(),
+        resourceId: await newResource(t.pool, await newCustomer(t.pool)),
+        source: "monitoring",
+      },
+      "alert",
+    ),
+  "abuse.addNote": async (r) =>
+    r.abuse.addNote(
+      { caseId: await seedAbuseCase(), noteId: uuidv7(), note: "called", at: AT },
+      "follow-up",
+    ),
+  "abuse.close": async (r) =>
+    r.abuse.close({ caseId: await seedAbuseCase(), at: AT }, "false alarm"),
+  "abuse.suspendResource": async (r) =>
+    r.abuse.suspendResource({ caseId: await seedAbuseCase(), at: AT }, "spam"),
+  "support.reply": async (r) =>
+    r.support.reply(
+      { requestId: await seedSupportRequest(), replyId: uuidv7(), body: "Hello" },
+      "reply",
+    ),
+  "support.close": async (r) =>
+    r.support.close({ requestId: await seedSupportRequest() }, "answered"),
   "customers.approveKyc": async (r) =>
     r.customers.approveKyc({ submissionId: await seedKyc(), at: AT }, "documents match"),
   "customers.rejectKyc": async (r) =>
@@ -232,6 +293,17 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
 };
 // Admin reads ("<repo>.<method>") that write no audit row. Empty until WP8 decides where admin reads live and whether a read is audited (open point 21).
 const ADMIN_READ_METHODS: readonly string[] = [
+  "adminUsers.detail",
+  "adminUsers.list",
+  "audit.detail",
+  "audit.export",
+  "audit.search",
+  "abuse.detail",
+  "abuse.list",
+  "reconciliation.list",
+  "reconciliation.overview",
+  "support.detail",
+  "support.list",
   "capacity.list",
   "capacity.overview",
   "capacity.pending",
