@@ -8,5 +8,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tc/core": "workspace:*",
+    "@tc/db": "workspace:*"
   }
 }

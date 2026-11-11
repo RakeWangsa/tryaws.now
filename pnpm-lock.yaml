@@ -207,7 +207,14 @@ importers:
 
   packages/eps: {}
 
-  packages/notify: {}
+  packages/notify:
+    dependencies:
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../core
+      '@tc/db':
+        specifier: workspace:*
+        version: link:../db
 
   packages/ui:
     dependencies:
