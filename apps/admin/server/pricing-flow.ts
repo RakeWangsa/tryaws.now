@@ -5,7 +5,7 @@ import type {
   setFxRate as SetFxRate,
 } from "@tc/core";
 import { isFeatureFlag, isFxRateText } from "@tc/core";
-import type { AdminActor, AdminRole, Tx } from "@tc/db";
+import type { AdminActor, AdminRepos, AdminRole, Tx } from "@tc/db";
 import { MAX_DRAFT_STEPS, startOf } from "./pricing-draft.ts";
 
 // The actions of /pricing and /catalog in the order of R9: authenticate and authorize (the roles of the
@@ -26,9 +26,18 @@ export interface CorePorts {
   readonly savePricingRule: typeof SavePricingRule;
   readonly setFxRate: typeof SetFxRate;
   readonly setFeatureFlag: typeof SetFeatureFlag;
+  // The rate in force for a market at an instant (readFxRateInForce), or null.
+  readonly fxInForce: (tx: Tx, market: string, at: Date) => Promise<{ rate: string } | null>;
+  // fxChangeNeedsSecondAdmin of the pricing engine.
+  readonly needsSecondAdmin: (current: string, next: string) => boolean;
 }
 
+// How long a large FX change waits for the second admin.
+export const FX_PENDING_HOURS = 24;
+
 export interface PricingFlowDeps {
+  // The admin repositories of the actor in this transaction (adminRepos), for the pending FX change.
+  readonly repos: (tx: Tx, actor: AdminActor) => Pick<AdminRepos, "fxChanges">;
   // requireAdmin(roles): rejects when there is no admin session or the role is wrong.
   readonly authorize: (roles: readonly AdminRole[]) => Promise<AdminActor>;
   // True when the hit was counted, false over the limit.
@@ -71,8 +80,20 @@ export interface SetFxRequest {
   readonly rate: unknown;
   readonly from: unknown;
   readonly reason: unknown;
-  // The id of the second admin ("" when none).
-  readonly requestedBy: unknown;
+  // There is deliberately no field for a second admin: an approver is never named by a request. A change
+  // above the percent waits until a different admin approves it from their own session (approveFx).
+}
+
+export interface ApproveFxRequest {
+  readonly market: unknown;
+  readonly reason: unknown;
+}
+
+export interface FxResult {
+  // "set": the rate is stored. "pending": it waits for a different admin.
+  readonly kind: "set" | "pending" | "approved";
+  readonly rate: string;
+  readonly effectiveFrom: Date | null;
 }
 
 export interface SetFlagRequest {
@@ -82,7 +103,6 @@ export interface SetFlagRequest {
   readonly reason: unknown;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MARKET = /^[A-Z]{2}$/;
 const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_.[\]]{0,39}$/;
 const SECOND_ADMIN_TOKENS: readonly FlowCode[] = [
@@ -131,11 +151,34 @@ function refusal(result: {
   }
 }
 
+class Rollback extends Error {
+  constructor(readonly answer: FlowAnswer<never>) {
+    super("rolled back");
+  }
+}
+
+// What a repository refused, as a fixed code.
+function repoRefusal(error: string): FlowAnswer<never> {
+  switch (error) {
+    case "forbidden":
+      return fail("denied");
+    case "validation":
+      return fail("invalid");
+    case "conflict":
+      return fail("conflict");
+    case "not_found":
+      return fail("not_found");
+    default:
+      return fail("unavailable");
+  }
+}
+
 type Authorized = { ok: true; actor: AdminActor } | { ok: false; answer: FlowAnswer<never> };
 
 export interface PricingFlow {
   saveRule(request: SaveRuleRequest): Promise<FlowAnswer<{ ruleId: string; effectiveFrom: Date }>>;
-  setFx(request: SetFxRequest): Promise<FlowAnswer<{ rate: string; effectiveFrom: Date }>>;
+  setFx(request: SetFxRequest): Promise<FlowAnswer<FxResult>>;
+  approveFx(request: ApproveFxRequest): Promise<FlowAnswer<FxResult>>;
   setFlag(request: SetFlagRequest): Promise<FlowAnswer<{ key: string; enabled: boolean }>>;
 }
 
@@ -160,7 +203,9 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       const at = deps.clock.now();
       if (!(await deps.limiter(actor, at))) return fail("rate_limited");
       return await deps.run(actor, (tx) => work(tx, at));
-    } catch {
+    } catch (error) {
+      // A refusal after a write has to roll the transaction back: it is thrown with its answer.
+      if (error instanceof Rollback) return error.answer;
       return fail("unavailable");
     }
   };
@@ -222,7 +267,8 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
     },
 
     async setFx(request) {
-      const { market, rate, from, reason, requestedBy } = request;
+      // Only these four are read; any other field of the request (a forged approver, say) is ignored.
+      const { market, rate, from, reason } = request;
       const auth = await authorize(PRICING_ROLES);
       if (!auth.ok) return auth.answer;
       const bad: string[] = [];
@@ -233,26 +279,41 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       if (start === null) bad.push("from");
       const why = readReason(reason);
       if (!why.ok) bad.push("reason");
-      let second: string | undefined;
-      if (requestedBy !== undefined && requestedBy !== null && requestedBy !== "") {
-        if (typeof requestedBy !== "string" || !UUID.test(requestedBy.trim())) {
-          bad.push("requestedBy");
-        } else second = requestedBy.trim();
-      }
       if (bad.length > 0 || typeof market !== "string" || typeof rate !== "string") {
         return fail("invalid", bad);
       }
       const actor = auth.actor;
+      const next = rate.trim();
+      const effectiveFrom = start === undefined || start === null ? null : start;
       return execute(actor, async (tx, at) => {
+        const current = await deps.core.fxInForce(tx, market, at);
+        if (current !== null && deps.core.needsSecondAdmin(current.rate, next)) {
+          // Above the percent: nothing changes now. The change waits for a different admin (R10).
+          const asked = await deps.repos(tx, actor).fxChanges.request(
+            {
+              market,
+              rate: next,
+              effectiveFrom,
+              at,
+              expiresAt: new Date(at.getTime() + FX_PENDING_HOURS * 3_600_000),
+            },
+            why.text,
+          );
+          if (!asked.ok) return repoRefusal(asked.error);
+          return {
+            ok: true,
+            replayed: asked.replayed,
+            value: { kind: "pending", rate: asked.value.rate, effectiveFrom },
+          };
+        }
         const saved = await deps.core.setFxRate(
           tx,
           actor,
           {
             market,
-            rate: rate.trim(),
-            ...(start === undefined || start === null ? {} : { effectiveFrom: start }),
+            rate: next,
+            ...(effectiveFrom === null ? {} : { effectiveFrom }),
             reason: why.text,
-            ...(second === undefined ? {} : { requestedBy: second }),
           },
           { now: () => at },
         );
@@ -260,7 +321,65 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
         return {
           ok: true,
           replayed: saved.value.replayed,
-          value: { rate: saved.value.fx.rate, effectiveFrom: saved.value.fx.effectiveFrom },
+          value: {
+            kind: "set",
+            rate: saved.value.fx.rate,
+            effectiveFrom: saved.value.fx.effectiveFrom,
+          },
+        };
+      });
+    },
+
+    async approveFx(request) {
+      const { market, reason } = request;
+      const auth = await authorize(PRICING_ROLES);
+      if (!auth.ok) return auth.answer;
+      const bad: string[] = [];
+      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      const why = readReason(reason);
+      if (!why.ok) bad.push("reason");
+      if (bad.length > 0 || typeof market !== "string") return fail("invalid", bad);
+      // The approver is the actor of the verified session; the request cannot name anyone.
+      const actor = auth.actor;
+      return execute(actor, async (tx, at) => {
+        const decided = await deps.repos(tx, actor).fxChanges.approve({ market, at }, why.text);
+        if (!decided.ok) return repoRefusal(decided.error);
+        const change = decided.value;
+        if (decided.replayed) {
+          return {
+            ok: true,
+            replayed: true,
+            value: { kind: "approved", rate: change.rate, effectiveFrom: change.effectiveFrom },
+          };
+        }
+        // Only now does the rate change. The requester is read from the stored change, never from the
+        // request. A start that has passed in the meantime becomes "now".
+        const start =
+          change.effectiveFrom !== null && change.effectiveFrom.getTime() > at.getTime()
+            ? { effectiveFrom: change.effectiveFrom }
+            : {};
+        const saved = await deps.core.setFxRate(
+          tx,
+          actor,
+          {
+            market,
+            rate: change.rate,
+            ...start,
+            reason: change.reason,
+            requestedBy: change.requestedBy,
+          },
+          { now: () => at },
+        );
+        // The approval and the rate are one transaction: a refusal undoes the approval too.
+        if (!saved.ok) throw new Rollback(refusal(saved));
+        return {
+          ok: true,
+          replayed: false,
+          value: {
+            kind: "approved",
+            rate: saved.value.fx.rate,
+            effectiveFrom: saved.value.fx.effectiveFrom,
+          },
         };
       });
     },

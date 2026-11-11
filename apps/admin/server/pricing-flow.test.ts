@@ -49,8 +49,34 @@ function setup(role: AdminRole = "finance", over: Partial<PricingFlowDeps> = {})
         value: { key: "backup", market: "BD", enabled: true, replayed: false },
       };
     }) as never,
+    fxInForce: vi.fn(async () => ({ rate: "122" })),
+    needsSecondAdmin: vi.fn(() => false),
+  };
+  const pending = {
+    market: "BD",
+    rate: "140",
+    effectiveFrom: null,
+    reason: "bank rate moved",
+    requestedBy: OTHER_ID,
+    requestedAt: NOW,
+    expiresAt: new Date(NOW.getTime() + 86_400_000),
+    status: "pending",
+    approvedBy: null,
+    approvedAt: null,
+  };
+  const fxChanges = {
+    read: vi.fn(),
+    request: vi.fn(async () => {
+      order.push("request");
+      return { ok: true, replayed: false, value: pending };
+    }),
+    approve: vi.fn(async () => {
+      order.push("approve");
+      return { ok: true, replayed: false, value: { ...pending, status: "approved" } };
+    }),
   };
   const deps: PricingFlowDeps = {
+    repos: () => ({ fxChanges }) as never,
     authorize: vi.fn(async (roles: readonly AdminRole[]) => {
       order.push("authorize");
       if (!roles.includes(role)) throw new Error("no");
@@ -69,7 +95,7 @@ function setup(role: AdminRole = "finance", over: Partial<PricingFlowDeps> = {})
     stage: "staging",
     ...over,
   };
-  return { deps, core, order, flow: makePricingFlow(deps) };
+  return { deps, core, order, fxChanges, flow: makePricingFlow(deps) };
 }
 
 describe("roles", () => {
@@ -81,9 +107,16 @@ describe("roles", () => {
   it.each(["support", "ops"] as const)("%s cannot save a rule or set a rate", async (role) => {
     const { flow, core, deps } = setup(role);
     expect(await flow.saveRule(RULE)).toEqual({ ok: false, code: "denied", fields: [] });
-    expect(
-      await flow.setFx({ market: "BD", rate: "122", from: "", reason: "why", requestedBy: "" }),
-    ).toEqual({ ok: false, code: "denied", fields: [] });
+    expect(await flow.setFx({ market: "BD", rate: "122", from: "", reason: "why" })).toEqual({
+      ok: false,
+      code: "denied",
+      fields: [],
+    });
+    expect(await flow.approveFx({ market: "BD", reason: "why" })).toEqual({
+      ok: false,
+      code: "denied",
+      fields: [],
+    });
     expect(core.savePricingRule).not.toHaveBeenCalled();
     expect(core.setFxRate).not.toHaveBeenCalled();
     expect(deps.run).not.toHaveBeenCalled();
@@ -253,9 +286,9 @@ describe("saveRule: R9 order and the preview", () => {
 });
 
 describe("setFx", () => {
-  const FX = { market: "BD", rate: "122.5", from: "", reason: "bank rate", requestedBy: "" };
+  const FX = { market: "BD", rate: "122.5", from: "", reason: "bank rate" };
 
-  it("saves a rate in the order of R9 and gives no second admin when none was named", async () => {
+  it("saves a small change at once, in the order of R9, with no second admin", async () => {
     const { flow, core, order } = setup();
     const answer = await flow.setFx(FX);
     expect(answer).toMatchObject({ ok: true, replayed: false });
@@ -268,37 +301,195 @@ describe("setFx", () => {
     );
   });
 
-  it("passes the second admin when one is named", async () => {
-    const { flow, core } = setup();
-    await flow.setFx({ ...FX, requestedBy: OTHER_ID });
-    expect((core.setFxRate as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]).toMatchObject({
-      requestedBy: OTHER_ID,
-    });
+  it("a forged requestedBy in the request is never read: it reaches neither the engine nor the repository", async () => {
+    const { flow, core, fxChanges } = setup();
+    await flow.setFx({ ...FX, requestedBy: OTHER_ID } as never);
+    expect((core.setFxRate as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]).not.toHaveProperty(
+      "requestedBy",
+    );
+    const big = setup();
+    (big.core.needsSecondAdmin as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    await big.flow.setFx({ ...FX, requestedBy: OTHER_ID } as never);
+    expect(JSON.stringify(big.fxChanges.request.mock.calls)).not.toContain(OTHER_ID);
+    expect(fxChanges.request).not.toHaveBeenCalled();
   });
 
-  it.each(["second_admin_required", "must_differ_from_actor", "not_an_approver"])(
-    "a change above the percent is answered %s",
-    async (token) => {
-      const { flow, core } = setup();
-      (core.setFxRate as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: false,
-        error: "forbidden",
-        fields: { requestedBy: token },
-      });
-      expect(await flow.setFx(FX)).toEqual({ ok: false, code: token, fields: [] });
-    },
-  );
+  it("a change above the percent only asks: the rate does not change before approval", async () => {
+    const { flow, core, fxChanges, order } = setup();
+    (core.needsSecondAdmin as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    const answer = await flow.setFx(FX);
+    expect(answer).toMatchObject({ ok: true, replayed: false, value: { kind: "pending" } });
+    expect(core.setFxRate).not.toHaveBeenCalled();
+    expect(order).toEqual(["authorize", "limit", "run", "request"]);
+    expect(fxChanges.request).toHaveBeenCalledWith(
+      {
+        market: "BD",
+        rate: "122.5",
+        effectiveFrom: null,
+        at: NOW,
+        expiresAt: new Date(NOW.getTime() + 24 * 3_600_000),
+      },
+      "bank rate",
+    );
+  });
+
+  it("the first rate of a market (none in force) needs no second admin", async () => {
+    const { flow, core } = setup();
+    (core.fxInForce as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (core.needsSecondAdmin as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    expect(await flow.setFx(FX)).toMatchObject({ ok: true, value: { kind: "set" } });
+  });
+
+  it("asking twice for the same change is a replay (R7); a different one while it waits is a conflict", async () => {
+    const { flow, core, fxChanges } = setup();
+    (core.needsSecondAdmin as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    fxChanges.request.mockResolvedValueOnce({
+      ok: true,
+      replayed: true,
+      value: { rate: "122.5" },
+    } as never);
+    expect(await flow.setFx(FX)).toMatchObject({ ok: true, replayed: true });
+    fxChanges.request.mockResolvedValueOnce({ ok: false, error: "conflict" } as never);
+    expect(await flow.setFx(FX)).toEqual({ ok: false, code: "conflict", fields: [] });
+  });
 
   it.each([
     ["a rate with an exponent", { rate: "1e2" }],
     ["a rate that is a number", { rate: 122.5 }],
-    ["a second admin that is no id", { requestedBy: "me" }],
     ["no reason", { reason: "" }],
   ])("rejects %s", async (_name, over) => {
     const { flow, core } = setup();
     const answer = await flow.setFx({ ...FX, ...over } as never);
     expect(answer).toMatchObject({ ok: false, code: "invalid" });
     expect(core.setFxRate).not.toHaveBeenCalled();
+  });
+});
+
+describe("approveFx: the second admin", () => {
+  const APPROVE = { market: "BD", reason: "checked against the bank" };
+
+  it("approves a change that another admin asked for, then sets the rate with the requester read from the stored change", async () => {
+    const { flow, core, fxChanges, order } = setup("superadmin");
+    const answer = await flow.approveFx({ ...APPROVE, requestedBy: ADMIN_ID } as never);
+    expect(answer).toMatchObject({ ok: true, replayed: false, value: { kind: "approved" } });
+    expect(order).toEqual(["authorize", "limit", "run", "approve", "fx"]);
+    expect(fxChanges.approve).toHaveBeenCalledWith(
+      { market: "BD", at: NOW },
+      "checked against the bank",
+    );
+    expect(core.setFxRate).toHaveBeenCalledWith(
+      TX,
+      actorOf("superadmin"),
+      {
+        market: "BD",
+        rate: "140",
+        reason: "bank rate moved",
+        requestedBy: OTHER_ID,
+      },
+      deps_clock(),
+    );
+  });
+
+  it("self-approval is refused by the repository and no rate is set", async () => {
+    const { flow, core, fxChanges } = setup("finance");
+    fxChanges.approve.mockResolvedValueOnce({ ok: false, error: "forbidden" } as never);
+    expect(await flow.approveFx(APPROVE)).toEqual({ ok: false, code: "denied", fields: [] });
+    expect(core.setFxRate).not.toHaveBeenCalled();
+  });
+
+  it("an expired change cannot be approved (conflict) and sets no rate", async () => {
+    const { flow, core, fxChanges } = setup("finance");
+    fxChanges.approve.mockResolvedValueOnce({ ok: false, error: "conflict" } as never);
+    expect(await flow.approveFx(APPROVE)).toEqual({ ok: false, code: "conflict", fields: [] });
+    expect(core.setFxRate).not.toHaveBeenCalled();
+  });
+
+  it("a role without access (support, ops) is refused before anything is read", async () => {
+    for (const role of ["support", "ops"] as const) {
+      const { flow, fxChanges, deps } = setup(role);
+      expect(await flow.approveFx(APPROVE)).toEqual({ ok: false, code: "denied", fields: [] });
+      expect(fxChanges.approve).not.toHaveBeenCalled();
+      expect(deps.run).not.toHaveBeenCalled();
+    }
+  });
+
+  it("an approval replayed answers the earlier result and sets nothing again (R7)", async () => {
+    const { flow, core, fxChanges } = setup("superadmin");
+    fxChanges.approve.mockResolvedValueOnce({
+      ok: true,
+      replayed: true,
+      value: { rate: "140", effectiveFrom: null },
+    } as never);
+    expect(await flow.approveFx(APPROVE)).toMatchObject({ ok: true, replayed: true });
+    expect(core.setFxRate).not.toHaveBeenCalled();
+  });
+
+  it("when the engine refuses the rate the approval is rolled back (the transaction fails)", async () => {
+    let rolledBack = false;
+    const { flow, core } = setup("superadmin", {
+      run: async (_actor, fn) => {
+        try {
+          return await fn(TX);
+        } catch (error) {
+          rolledBack = true;
+          throw error;
+        }
+      },
+    });
+    (core.setFxRate as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      error: "forbidden",
+      fields: { requestedBy: "not_an_approver" },
+    });
+    expect(await flow.approveFx(APPROVE)).toEqual({
+      ok: false,
+      code: "not_an_approver",
+      fields: [],
+    });
+    expect(rolledBack).toBe(true);
+  });
+
+  it("a start that has passed becomes now; a start still ahead is kept", async () => {
+    const ahead = new Date(NOW.getTime() + 3_600_000);
+    const kept = setup("superadmin");
+    kept.fxChanges.approve.mockResolvedValueOnce({
+      ok: true,
+      replayed: false,
+      value: {
+        market: "BD",
+        rate: "140",
+        effectiveFrom: ahead,
+        reason: "r",
+        requestedBy: OTHER_ID,
+      },
+    } as never);
+    await kept.flow.approveFx(APPROVE);
+    expect((kept.core.setFxRate as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]).toMatchObject({
+      effectiveFrom: ahead,
+    });
+    const passed = setup("superadmin");
+    passed.fxChanges.approve.mockResolvedValueOnce({
+      ok: true,
+      replayed: false,
+      value: {
+        market: "BD",
+        rate: "140",
+        effectiveFrom: new Date(NOW.getTime() - 1000),
+        reason: "r",
+        requestedBy: OTHER_ID,
+      },
+    } as never);
+    await passed.flow.approveFx(APPROVE);
+    expect(
+      (passed.core.setFxRate as ReturnType<typeof vi.fn>).mock.calls[0]?.[2],
+    ).not.toHaveProperty("effectiveFrom");
+  });
+
+  it("rejects a market that is not two capitals and an empty reason", async () => {
+    const { flow, fxChanges } = setup("finance");
+    expect((await flow.approveFx({ market: "x", reason: "r" })).ok).toBe(false);
+    expect((await flow.approveFx({ market: "BD", reason: " " })).ok).toBe(false);
+    expect(fxChanges.approve).not.toHaveBeenCalled();
   });
 });
 
