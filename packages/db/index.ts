@@ -29,3 +29,17 @@ export type { RepoErrorCode, Written } from "./repositories/result";
 export { adminRepos } from "./repositories/admin/index";
 export type { AdminRepos, AdminActor, AdminRole, AdminScope } from "./repositories/admin/index";
 export type { FeatureFlagSetting } from "./repositories/admin/feature-flags";
+export {
+  isStorableFxRate,
+  readFxRateInForce,
+  readFxRates,
+  type FxRateRow,
+} from "./repositories/config/fx-rates";
+export {
+  readPricingRuleById,
+  readPricingRuleInForce,
+  readPricingRules,
+  type PricingRuleRow,
+} from "./repositories/config/pricing-rules";
+export { lockFxRateWrites, lockPricingRuleWrites } from "./repositories/config/locks";
+export { isFlagKeyText, isMarketCode } from "./repositories/config/args";
