@@ -105,6 +105,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP4-T4",
     "WP4-T5",
     "WP5-T4",
+
+    "WP5-T5",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -511,6 +513,40 @@ it("task WP4-T5 is proven by the adapter, bootstrap and isolation tests, each fi
     "packages/aws/test/bootstrap.test.ts",
     "tests/isolation/plan.test.ts",
     "tests/isolation/isolation.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP5-T5 is proven by the shared checks, core, db, notify, the two sentences of the proof and the notifier handler", () => {
+  expect(TASKS["WP5-T5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["notify", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    [
+      "triggers-send-once",
+      "pnpm test --filter @tc/notify test/run.test test/trigger-map --no-passWithNoTests",
+    ],
+    [
+      "no-secret",
+      "pnpm test --filter @tc/notify test/guards test/templates test/notify.test --no-passWithNoTests",
+    ],
+    ["notifier-fn", "pnpm test --filter @tc/fn-notifier --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // the filters must keep matching real files
+  for (const f of [
+    "packages/notify/test/run.test.ts",
+    "packages/notify/test/trigger-map.test.ts",
+    "packages/notify/test/guards.test.ts",
+    "packages/notify/test/templates.test.ts",
+    "packages/notify/test/notify.test.ts",
+    "functions/notifier/handler.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

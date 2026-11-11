@@ -540,6 +540,63 @@ TASKS["WP4-T4"] = [
   repo,
 ];
 
+// WP5-T5: notifications. The two sentences of the backlog row, each on its own line: "every trigger
+// of 16.14 sends once" (the delivery loop over all 22 messages and the 16.14 table as data) and "no
+// secret in any message" (the scan, the strict data and every rendered message). Both need no
+// database. Each filter names files, `--no-passWithNoTests` makes an empty selection fail, and
+// tests/repo/verify-cli.test.mjs asserts that the files exist.
+const notifyAll = {
+  id: "notify",
+  title: "packages/notify: templates, providers, queue, delivery loop, OTP",
+  command: ["pnpm", "test", "--filter", "@tc/notify", "--no-passWithNoTests"],
+};
+const notifyTriggers = {
+  id: "triggers-send-once",
+  title: "16.14: every trigger sends once per channel, a second run sends nothing",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/notify",
+    "test/run.test",
+    "test/trigger-map",
+    "--no-passWithNoTests",
+  ],
+};
+const notifyNoSecret = {
+  id: "no-secret",
+  title: "R14 and 16.14: no secret, OTP, password, full phone or email in any message",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/notify",
+    "test/guards",
+    "test/templates",
+    "test/notify.test",
+    "--no-passWithNoTests",
+  ],
+};
+const notifierFn = {
+  id: "notifier-fn",
+  title: "functions/notifier: the handler",
+  command: ["pnpm", "test", "--filter", "@tc/fn-notifier", "--no-passWithNoTests"],
+};
+TASKS["WP5-T5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  notifyAll,
+  notifyTriggers,
+  notifyNoSecret,
+  notifierFn,
+  repo,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],
