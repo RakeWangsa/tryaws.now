@@ -71,6 +71,26 @@ describe("signDraft and verifyDraft", () => {
     }
   });
 
+  it("(b2) accepts only the canonical mac text: the spare bits of the last character make no second token", () => {
+    // 43 base64url characters carry 258 bits for a 256-bit mac, so four last characters decode to the same
+    // bytes. The ledger key and the order id come from the token text; each variant would be a new order.
+    const token = signDraft([SECRET_1], claims());
+    const [p, m] = token.split(".") as [string, string];
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const variants = [...alphabet]
+      .map((ch) => `${p}.${m.slice(0, -1)}${ch}`)
+      .filter((t) => t !== token)
+      .filter((t) =>
+        Buffer.from(t.split(".")[1] as string, "base64url").equals(Buffer.from(m, "base64url")),
+      );
+    expect(variants.length).toBe(3); // the same bytes under three other texts
+    for (const t of variants) {
+      const v = verifyDraft([SECRET_1], t, at(IAT));
+      expect(v.ok).toBe(false);
+    }
+    expect(verifyDraft([SECRET_1], token, at(IAT)).ok).toBe(true);
+  });
+
   it("(c) is expired at exp and fine one second before", () => {
     const token = signDraft([SECRET_1], claims());
     const exp = IAT + DRAFT_TTL_SECONDS;

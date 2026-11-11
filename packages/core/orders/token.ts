@@ -93,6 +93,10 @@ export function verifyDraft(
     return { ok: false, reason: "malformed" };
   }
   const givenBytes = Buffer.from(given, "base64url");
+  // 43 characters carry 258 bits for a 256-bit mac: the last character has two spare bits, so four texts
+  // decode to the same mac. The ledger key and the order id are built from the token text, so only the
+  // canonical text is accepted; otherwise one draft could be submitted as four orders.
+  if (givenBytes.toString("base64url") !== given) return { ok: false, reason: "malformed" };
   let signed = false;
   for (const secret of secrets) {
     const expected = mac(secret, payload);
