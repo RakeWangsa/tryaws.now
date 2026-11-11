@@ -105,6 +105,42 @@ describe("compensateFailedCreate", () => {
     expect(await kit.balance()).toBe(start);
   });
 
+  it("refuses to refund a resource that became active: it throws a fixed text and leaves every row as it was", async () => {
+    const kit = await makeKit(t);
+    const { orderId, resourceId } = await placeOne(kit);
+    await t.pool.query("update resources set state = 'active' where id = $1", [resourceId]);
+    const before = await snapshotRows(t);
+    const failure = await compensate(kit, resourceId).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+    expect(failure?.message).toBe("orders: a failed create cannot be reversed in this state");
+    expect(failure?.message).not.toContain(orderId);
+    expect(failure?.message).not.toContain(resourceId);
+    expect(await snapshotRows(t)).toEqual(before);
+    expect(
+      (
+        await rows(
+          "select count(*)::int as n from ledger_transactions where idempotency_key = $1",
+          ["order-reversal:" + orderId],
+        )
+      )[0],
+    ).toEqual({ n: 0 });
+  });
+
+  it("refuses to refund a fulfilled order and leaves every row as it was", async () => {
+    const kit = await makeKit(t);
+    const { resourceId } = await placeOne(kit);
+    await t.pool.query("update orders set status = 'fulfilled' where customer_id = $1", [
+      kit.customerId,
+    ]);
+    const before = await snapshotRows(t);
+    await expect(compensate(kit, resourceId)).rejects.toThrow(
+      "orders: a failed create cannot be reversed in this state",
+    );
+    expect(await snapshotRows(t)).toEqual(before);
+  });
+
   it("throws for a resource that has no order and leaves every row as it was", async () => {
     const kit = await makeKit(t);
     await placeOne(kit);

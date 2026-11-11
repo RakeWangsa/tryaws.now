@@ -15,6 +15,8 @@ export interface Compensated {
 
 // The code is an engine word (`validation:InvalidInputException`, `rejected`). Anything else is
 // replaced, so a memo can never hold customer text (R14).
+// Fixed text: no id, no state, no amount in the message (R14).
+const NOT_REVERSIBLE = "orders: a failed create cannot be reversed in this state";
 const ENGINE_CODE = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 /**
@@ -41,8 +43,15 @@ export async function compensateFailedCreate(
     throw new Error("orders: a failed create has no order");
   }
 
-  // The release needs the state `failed`.
-  await repo.failResource(event.resourceId);
+  // Money moves back only for an order that is still paid. A reversed order is the idempotent no-op
+  // below; any other status (a fulfilled order) is a refund of a service that exists, so it throws a
+  // fixed text and the sweeper escalates (R16). Nothing has been written yet.
+  if (order.status !== "paid" && order.status !== "reversed") throw new Error(NOT_REVERSIBLE);
+
+  // The release needs the state `failed`. For a paid order the resource must be `creating` or
+  // `failed` already: a resource that became active is never refunded by a stale failed event.
+  const failed = await repo.failResource(event.resourceId);
+  if (!failed && order.status === "paid") throw new Error(NOT_REVERSIBLE);
 
   const code = ENGINE_CODE.test(event.code) ? event.code : "unknown";
   const reversal = await reverseTransaction(tx, {
