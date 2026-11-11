@@ -20,7 +20,13 @@ export function decide(input: {
   if (reading.merchantTransactionId !== payment.merchantTransactionId) {
     return reading.status === "success"
       ? { type: "review", reason: "id_mismatch" }
-      : { type: "noop", reason: "unknown" };
+      : {
+          type: "noop",
+          reason:
+            reading.status === "pending" && reading.merchantTransactionId === null
+              ? "pending"
+              : "unknown",
+        };
   }
 
   const open = isOpen(payment.status);
@@ -29,6 +35,10 @@ export function decide(input: {
       if (reading.totalAmountMinor === null || reading.totalAmountMinor !== payment.amountMinor) {
         return { type: "review", reason: "amount_mismatch" };
       }
+      // A success that also carries an error code is not a clean success: finance looks at it (R16).
+      // (VERIFY: whether EPS sends an empty value or a zero code on success; zeros count as none.)
+      if (reading.errorCode !== null && !/^0+$/.test(reading.errorCode))
+        return { type: "review", reason: "error_code" };
       if (!open) return { type: "review", reason: "late_success" };
       if (gatewayIdUsedElsewhere) return { type: "review", reason: "gateway_id_reused" };
       return { type: "credit", gatewayTransactionId: reading.epsTransactionId };

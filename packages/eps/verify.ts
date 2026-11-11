@@ -305,7 +305,7 @@ async function settle(
         options.expireBefore !== undefined &&
         isOpen(payment.status) &&
         payment.createdAt.getTime() <= options.expireBefore.getTime() &&
-        (action.reason === "pending" || action.reason === "unknown")
+        action.reason === "pending"
       ) {
         const moved = await systemPayments.applyOutcome(
           tx,

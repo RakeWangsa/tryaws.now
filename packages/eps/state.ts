@@ -63,6 +63,12 @@ export type Action =
   | { type: "move"; to: "failed" | "cancelled" }
   | {
       type: "review";
-      reason: "amount_mismatch" | "id_mismatch" | "late_success" | "gateway_id_reused" | "currency";
+      reason:
+        | "amount_mismatch"
+        | "id_mismatch"
+        | "late_success"
+        | "gateway_id_reused"
+        | "currency"
+        | "error_code";
     }
   | { type: "noop"; reason: "pending" | "unknown" | "closed" | "already_credited" | "in_review" };
