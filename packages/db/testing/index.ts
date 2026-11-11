@@ -24,3 +24,4 @@ export {
 export { unscopedStatements, type RecordedStatement } from "./sql-audit";
 export { statementsWithInlinedIds } from "./sql-audit";
 export { withCustomerRepos } from "./repos";
+export { auditRowsOf, type AuditRow } from "./repos";

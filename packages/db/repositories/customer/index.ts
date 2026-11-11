@@ -1,10 +1,12 @@
 import type { Tx } from "../../client";
 import { tenantScope } from "../scope";
 import { profileRepo, type ProfileRepo } from "./profile";
+import { auditRepo, type AuditRepo } from "./audit";
 
 // The repositories of one customer (R8). Tasks 7 to 9 add sshKeys, resources, operations, audit.
 export interface CustomerRepos {
   profile: ProfileRepo;
+  audit: AuditRepo;
 }
 
 // Binds the customer once; every repository is built from that scope and no method takes a
@@ -13,6 +15,7 @@ export function customerRepos(tx: Tx, customerId: string): CustomerRepos {
   const scope = tenantScope(tx, customerId);
   return {
     profile: profileRepo(scope),
+    audit: auditRepo(scope),
   };
 }
 

@@ -9,4 +9,5 @@ export type { DatabaseRole } from "./tx";
 export { customerRepos } from "./repositories/customer/index";
 export type { CustomerRepos, MethodsTakingCustomerId } from "./repositories/customer/index";
 export type { CustomerProfile, ProfileUpdate } from "./repositories/customer/profile";
+export type { AuditRepo, CustomerAuditInput } from "./repositories/customer/audit";
 export type { RepoErrorCode, Written } from "./repositories/result";

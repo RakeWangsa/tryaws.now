@@ -1,5 +1,6 @@
 import type { CaseSet } from "./define";
 import { profileCases } from "./profile";
+import { auditCases } from "./audit";
 
 // Every repository of customerRepos has one case module in this folder. To add a repository: create
 // <repo>.ts with defineCaseSet and add one import line and one entry here. Do not edit
@@ -9,4 +10,5 @@ import { profileCases } from "./profile";
 // prettier-ignore
 export const CASE_SETS: readonly CaseSet[] = [
   profileCases,
+  auditCases,
 ];
