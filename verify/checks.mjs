@@ -38,9 +38,21 @@ const repo = {
   command: ["pnpm", "test", "--filter", "repo"],
 };
 
-const WP1_T1 = [specSync, baselineSync, lint, typecheck, format, db, repo];
+const aws = {
+  id: "aws",
+  title: "packages/aws: STS, Lightsail clients, error mapping, no network",
+  command: ["pnpm", "test", "--filter", "@tc/aws"],
+};
+const core = {
+  id: "core",
+  title: "packages/core: pricing and AWS names and tags",
+  command: ["pnpm", "test", "--filter", "@tc/core"],
+};
 
-export const TASKS = { "WP0-T1": WP0_T1, "WP1-T1": WP1_T1 };
+const WP1_T1 = [specSync, baselineSync, lint, typecheck, format, db, repo];
+const WP4_T1 = [specSync, baselineSync, lint, typecheck, format, aws, core, repo];
+
+export const TASKS = { "WP0-T1": WP0_T1, "WP1-T1": WP1_T1, "WP4-T1": WP4_T1 };
 
 export const GATES = {
   M0: WP0_T1,
