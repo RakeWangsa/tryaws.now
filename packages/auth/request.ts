@@ -5,6 +5,7 @@ import type { RefreshOutcome, RefreshPort } from "./refresh";
 import { parseCookieHeader } from "./cookies";
 import { authenticateCustomer } from "./session";
 import type { SessionDeps, SessionOutcome } from "./session";
+import type { SignInDeps } from "./sign-in";
 import { createAccessTokenVerifier } from "./tokens";
 import type { Clock } from "./types";
 
@@ -41,6 +42,19 @@ function build(runtime: AuthRuntimeLike): Built {
   };
   built.set(runtime, made);
   return made;
+}
+
+// The dependencies completeSignIn needs, from the same runtime object that authenticateRequest and
+// refreshForProxy use, so an app that cannot name the lookup (only this package turns a sub into a
+// customer id, R8) can finish a sign-in. The customer pool's verifier and the cookie lifetime come
+// from the runtime config; nothing here reads the environment.
+export function signInDepsFor(runtime: AuthRuntimeLike): SignInDeps {
+  const { session, clock } = build(runtime);
+  return {
+    ...session,
+    clock,
+    refreshMaxAgeSeconds: runtime.config.refreshCookieMaxAgeSeconds,
+  };
 }
 
 // Only the Cookie header is read. Authorization, X-Customer-Id and Origin are never looked at, so a
