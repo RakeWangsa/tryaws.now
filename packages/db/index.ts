@@ -35,6 +35,13 @@ export type {
 } from "./repositories/customer/orders";
 export { customerOperationKey } from "./repositories/customer/operations";
 export type {
+  StatementLine,
+  StatementPage,
+  WalletRepo,
+  WalletView,
+} from "./repositories/customer/wallet";
+export { newUuidV7 } from "./ids";
+export type {
   ClaimedOtp,
   NewOtpChallenge,
   OtpChallenge,
