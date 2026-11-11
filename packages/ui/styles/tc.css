@@ -44,11 +44,76 @@
     U+1CED, U+1CF2, U+1CF5-1CF7, U+200C-200D, U+20B9, U+25CC, U+A8F1;
 }
 
-/* ===== 2. Tokens (16.4) ===== */
+/* ===== 2. Tokens (16.4) =====
+   The values of the theme itself (a test reads them from theme.min.css and bootstrap.min.css).
+   Components use the theme's helper classes (bg-colorstyle, bg-seccolorstyle, mergecolor, seccolor),
+   not these variables; the variables are for the rules of this file. */
+:root {
+  --tc-yellow: #fdd700;
+  --tc-muted: #6c757d;
+  --tc-radius-card: 12px;
+  --tc-radius-plan: 15px;
+}
+body[data-background="dark"] {
+  --tc-page: #15212a;
+  --tc-card: #101920;
+  --tc-text: #ffffff;
+  --tc-focus: #fdd700;
+}
+body[data-background="light"] {
+  --tc-page: #ffffff;
+  --tc-card: #ebeff5;
+  --tc-text: #212122;
+  --tc-focus: #212122;
+}
+body[data-color="pink"] {
+  --tc-accent: #ee5586;
+  --tc-accent-2: #a5215e;
+}
+body[data-color="blue"] {
+  --tc-accent: #55bde5;
+  --tc-accent-2: #1697bf;
+}
 
-/* ===== 3. Keyboard focus ===== */
+/* ===== 3. Keyboard focus =====
+   The theme removes the outline with !important (a, .btn:focus, .form-control:focus). Without a
+   visible focus a keyboard user cannot see where they are, and 16.16 asks that every P0 flow can be
+   completed with the keyboard. This rule is more specific than those and comes later. */
+body
+  :is(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    .btn,
+    .form-control,
+    .form-select
+  ):focus-visible {
+  outline: 3px solid var(--tc-focus) !important;
+  outline-offset: 2px;
+}
 
-/* ===== 4. Bengali (16.4) ===== */
+/* ===== 4. Bengali (16.4) =====
+   The root layout sets lang on the html element. Conjuncts and vowel signs need room above and below
+   the line; letter-spacing breaks conjuncts; Bengali has no capital letters. The step-down of long
+   titles at 360 px is not built (it needs a device; open point 13). */
+html[lang="bn"] body {
+  line-height: 1.6;
+}
+html[lang="bn"] *,
+html[lang="bn"] *::before,
+html[lang="bn"] *::after {
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+/* The theme's .btn.question sets letter-spacing and capitals with !important at (0,2,0), which the
+   rule above (0,1,1) cannot beat. This rule is (0,3,1). */
+html[lang="bn"] .btn.question {
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
 
 /* ===== 5. Kit, part one (WPU-T2) ===== */
 
