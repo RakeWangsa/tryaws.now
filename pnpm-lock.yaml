@@ -52,7 +52,14 @@ importers:
 
   functions/reader: {}
 
-  functions/reconciler: {}
+  functions/reconciler:
+    dependencies:
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@tc/db':
+        specifier: workspace:*
+        version: link:../../packages/db
 
   functions/scheduler: {}
 
