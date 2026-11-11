@@ -736,6 +736,57 @@ TASKS["WP8-T3"] = [
   repo,
 ];
 
+// WP8-T5: capacity and the operations queue. The backlog sentence ("a destructive operation runs only
+// after approval") has the repository half (approve is the only way out of needs_approval, the reads are
+// refused to anyone but an active ops or superadmin admin) and the app half (only moves of
+// ADMIN_TRANSITIONS reach the repository, the approver is the session admin, the R9 order, the screens
+// and the mockup cross-check). `--no-passWithNoTests` makes a filter that selects no file fail.
+const adminOpsRepos = {
+  id: "admin-ops-repos",
+  title:
+    "WP8-T5: queue, detail, counts, waitlist and capacity reads; approval and retry; role checks",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "admin-ops-reads",
+    "admin-operations",
+    "operation-approval",
+    "--no-passWithNoTests",
+  ],
+};
+const adminOpsApp = {
+  id: "admin-ops-app",
+  title:
+    "WP8-T5: flows in the order of R9, ADMIN_TRANSITIONS only, mapped errors, screens and mockup",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/admin",
+    "ops-map",
+    "ops-flow",
+    "capacity-flow",
+    "ops-pages",
+    "ops-messages",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP8-T5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  adminOpsRepos,
+  adminOpsApp,
+  core,
+  admin,
+  repo,
+];
+
 // WP1-T4: the two halves of the backlog proof ("a new rate never changes a stored order", "preview equals
 // engine output") on their own lines. `--no-passWithNoTests` makes a filter that selects no file fail.
 const storedOrder = {
