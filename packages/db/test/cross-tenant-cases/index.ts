@@ -4,6 +4,8 @@ import { auditCases } from "./audit";
 import { sshKeysCases } from "./ssh-keys";
 import { resourcesCases } from "./resources";
 import { operationsCases } from "./operations";
+import { homesCases } from "./homes";
+import { waitlistCases } from "./waitlist";
 
 // Every repository of customerRepos has one case module in this folder. To add a repository: create
 // <repo>.ts with defineCaseSet and add one import line and one entry here. Do not edit
@@ -17,4 +19,6 @@ export const CASE_SETS: readonly CaseSet[] = [
   sshKeysCases,
   resourcesCases,
   operationsCases,
+  homesCases,
+  waitlistCases,
 ];

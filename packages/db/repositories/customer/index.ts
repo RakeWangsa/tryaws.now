@@ -5,6 +5,8 @@ import { auditRepo, type AuditRepo } from "./audit";
 import { sshKeysRepo, type SshKeysRepo } from "./ssh-keys";
 import { resourcesRepo, type ResourcesRepo } from "./resources";
 import { operationsRepo, type OperationsRepo } from "./operations";
+import { homesRepo, type HomesRepo } from "./homes";
+import { waitlistRepo, type WaitlistRepo } from "./waitlist";
 
 // The repositories of one customer (R8). Tasks 7 to 9 add sshKeys, resources, operations, audit.
 export interface CustomerRepos {
@@ -13,6 +15,8 @@ export interface CustomerRepos {
   sshKeys: SshKeysRepo;
   resources: ResourcesRepo;
   operations: OperationsRepo;
+  homes: HomesRepo;
+  waitlist: WaitlistRepo;
 }
 
 // Binds the customer once; every repository is built from that scope and no method takes a
@@ -25,6 +29,8 @@ export function customerRepos(tx: Tx, customerId: string): CustomerRepos {
     sshKeys: sshKeysRepo(scope),
     resources: resourcesRepo(scope),
     operations: operationsRepo(scope),
+    homes: homesRepo(scope),
+    waitlist: waitlistRepo(scope),
   };
 }
 

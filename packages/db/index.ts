@@ -24,6 +24,8 @@ export type {
   OperationRequest,
   OperationsRepo,
 } from "./repositories/customer/operations";
+export type { CustomerHome, HomesRepo } from "./repositories/customer/homes";
+export type { WaitlistJoin, WaitlistRepo } from "./repositories/customer/waitlist";
 export { customerOperationKey } from "./repositories/customer/operations";
 export type { RepoErrorCode, Written } from "./repositories/result";
 export { adminRepos } from "./repositories/admin/index";
