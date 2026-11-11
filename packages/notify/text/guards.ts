@@ -19,12 +19,16 @@ const latin = (s: string): string => s.replace(/[০-৯]/g, (d) => BENGALI_TO_L
 const RULES: ReadonlyArray<readonly [string, RegExp]> = [
   ["private_key", /-----BEGIN [A-Z ]*-----/],
   ["aws_access_key", /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/],
+  // A secret word that is given a value ("password: x", "token=x", "password is x"), or a bearer
+  // header. Prose that only names the word ("change your password now") is not a secret.
   [
     "secret_word",
-    /\b(?:password|passwd|passcode|secret|api[_ -]?key|token|bearer)\b\s*[:=]?\s*\S/i,
+    /\b(?:password|passwd|passcode|secret|api[_ -]?key|token)\b\s*(?:[:=]|\bis\b)\s*\S|\bbearer\s+[A-Za-z0-9._~+/-]{8,}/i,
   ],
   ["long_hex", /\b[0-9a-f]{32,}\b/i],
-  ["long_token", /[A-Za-z0-9+/_-]{40,}/],
+  // Two classes, so that a panel link (slashes between short path segments) does not match: a
+  // base64 run with slashes, and a url-safe run with hyphens. A UUID is 36 characters.
+  ["long_token", /[A-Za-z0-9+/]{40,}|[A-Za-z0-9_-]{40,}/],
   // +880 1712 345678, 01712345678: a full mobile number of Bangladesh
   ["phone_number", /(?:\+?880|\b0)[\s-]?1[3-9](?:[\s-]?\d){8}/],
   // a document number: a long run of digits (invoice numbers have hyphens between short groups)
