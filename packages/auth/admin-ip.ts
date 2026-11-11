@@ -74,7 +74,7 @@ export function parseCidr(text: string): Block | null {
   const parsed = toBits(address);
   if (parsed === null) return null;
   const width = WIDTH[parsed.family];
-  let prefix = width;
+  let prefix: number = width;
   if (slash >= 0) {
     const raw = text.slice(slash + 1);
     if (!/^\d{1,3}$/.test(raw)) return null;
