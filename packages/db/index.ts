@@ -266,3 +266,11 @@ export type {
   AuditSearchInput,
   AuditSearchResult,
 } from "./repositories/admin/audit";
+export { DIRECTORY_ACTIONS } from "./repositories/admin/admin-users";
+export type {
+  AdminUserChanged,
+  AdminUserListInput,
+  AdminUserListResult,
+  AdminUserRow,
+  AdminUsersAdminRepo,
+} from "./repositories/admin/admin-users";

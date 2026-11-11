@@ -1,6 +1,7 @@
 import type { Tx } from "../../client";
 import type { ADMIN_ROLES } from "../../schema/admins";
 import { isUuid } from "../scope";
+import { adminUsersAdminRepo, type AdminUsersAdminRepo } from "./admin-users";
 import { auditAdminRepo, type AuditAdminRepo } from "./audit";
 import { customersAdminRepo, type CustomersAdminRepo } from "./customers";
 import { capacityAdminRepo, type CapacityAdminRepo } from "./capacity";
@@ -33,6 +34,7 @@ export interface AdminScope {
 
 // WP8 tasks add a repository as repositories/admin/<name>.ts exporting <name>AdminRepo(scope).
 export interface AdminRepos {
+  adminUsers: AdminUsersAdminRepo;
   audit: AuditAdminRepo;
   capacity: CapacityAdminRepo;
   customers: CustomersAdminRepo;
@@ -60,6 +62,7 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
   }
   const scope: AdminScope = Object.freeze({ tx, actor: Object.freeze({ ...actor }) });
   return {
+    adminUsers: adminUsersAdminRepo(scope),
     audit: auditAdminRepo(scope),
     capacity: capacityAdminRepo(scope),
     customers: customersAdminRepo(scope),

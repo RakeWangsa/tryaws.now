@@ -130,9 +130,13 @@ it("the last active superadmin stays: a lone superadmin cannot demote or disable
   const sole = await onlySuperadmin();
   expect(await activeSuperadmins()).toBe(1);
   expect(
-    await asAdmin(sole, (r) => r.adminUsers.setRole({ adminId: sole.adminId, role: "ops" }, "step down")),
+    await asAdmin(sole, (r) =>
+      r.adminUsers.setRole({ adminId: sole.adminId, role: "ops" }, "step down"),
+    ),
   ).toEqual({ ok: false, error: "forbidden" });
-  expect(await asAdmin(sole, (r) => r.adminUsers.disable({ adminId: sole.adminId }, "leave"))).toEqual({
+  expect(
+    await asAdmin(sole, (r) => r.adminUsers.disable({ adminId: sole.adminId }, "leave")),
+  ).toEqual({
     ok: false,
     error: "forbidden",
   });
@@ -140,7 +144,9 @@ it("the last active superadmin stays: a lone superadmin cannot demote or disable
   // with a peer, the actor may demote or disable the peer and stays active
   const peer = await actorOf("superadmin");
   expect(
-    await asAdmin(sole, (r) => r.adminUsers.setRole({ adminId: peer.adminId, role: "ops" }, "peer to ops")),
+    await asAdmin(sole, (r) =>
+      r.adminUsers.setRole({ adminId: peer.adminId, role: "ops" }, "peer to ops"),
+    ),
   ).toMatchObject({ ok: true });
   expect(await activeSuperadmins()).toBe(1);
   expect(await row(sole.adminId)).toMatchObject({ role: "superadmin", status: "active" });
