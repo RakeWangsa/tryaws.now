@@ -1,4 +1,5 @@
 export { createAwsAccess, type AwsAccess, type CreateAwsAccessOptions } from "./access";
+export { createCatalogSource, type CatalogSource, type TldPrice } from "./catalog";
 export type {
   LiveState,
   OpCtx,

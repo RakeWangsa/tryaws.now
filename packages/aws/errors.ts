@@ -3,13 +3,22 @@ import type { STSClient } from "@aws-sdk/client-sts";
 import type { ErrorCode } from "@tc/core";
 
 export type LocalReason =
-  "role_not_allowed" | "region_not_allowed" | "account_ref_invalid" | "sts_response_invalid";
+  | "role_not_allowed"
+  | "region_not_allowed"
+  | "account_ref_invalid"
+  | "sts_response_invalid"
+  | "catalog_response_invalid"
+  | "catalog_pages_exceeded"
+  | "not_configured";
 
 const LOCAL_REASONS: readonly string[] = [
   "role_not_allowed",
   "region_not_allowed",
   "account_ref_invalid",
   "sts_response_invalid",
+  "catalog_response_invalid",
+  "catalog_pages_exceeded",
+  "not_configured",
 ];
 
 const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
