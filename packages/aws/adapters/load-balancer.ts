@@ -16,7 +16,6 @@ import {
   stepNext,
   stepWait,
   type LoadBalancerConfig,
-  type OperationKind,
   type StepResult,
   type TargetCandidate,
 } from "@tc/core";
@@ -230,7 +229,7 @@ export function createLoadBalancerAdapter(): ProductAdapter<LoadBalancerConfig> 
     return { state: got?.loadBalancer?.state ?? "missing" };
   }
 
-  async function action(_kind: OperationKind, _ctx: Ctx): Promise<StepResult> {
+  async function action(): Promise<StepResult> {
     // No action is built for this family (changing targets needs its own operation kind): refuse (R16).
     throw fail("validation");
   }

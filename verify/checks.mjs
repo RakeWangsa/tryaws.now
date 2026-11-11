@@ -685,6 +685,73 @@ TASKS["WP5-T2"] = [
   repo,
 ];
 
+// WP6-T2 / WP6-T3: the managed database and load balancer adapters against a fake Lightsail, the pure
+// target rule and the order-path ownership gate. The database-backed order test (lb-target-ownership)
+// runs in the db gate; the real tc-pool-dev cycle is a manual VERIFY step (JOURNEY.md).
+const databaseAdapter = {
+  id: "database-adapter",
+  title:
+    "10.3: create, stop, start, snapshot, destroy; no password handled; a retried step makes one",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "test/database", "--no-passWithNoTests"],
+};
+const loadBalancerAdapter = {
+  id: "load-balancer-adapter",
+  title: "10.3: targets limited to the customer's own active instances in the same Region",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "test/load-balancer", "--no-passWithNoTests"],
+};
+const lbTargetRule = {
+  id: "lb-target-rule",
+  title: "R8: the pure target rule and the product seams of both families",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "products/load-balancer",
+    "--no-passWithNoTests",
+  ],
+};
+const dbProductSeam = {
+  id: "database-product",
+  title: "the database product seam holds no secret and needs one database slot",
+  command: ["pnpm", "test", "--filter", "@tc/core", "products/database", "--no-passWithNoTests"],
+};
+TASKS["WP6-T2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  databaseAdapter,
+  dbProductSeam,
+  aws,
+  repo,
+];
+TASKS["WP6-T3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  loadBalancerAdapter,
+  lbTargetRule,
+  {
+    id: "lb-target-ownership",
+    title:
+      "R8: a draft and a purchase naming another customer's instance are refused and write nothing",
+    command: [
+      "pnpm",
+      "test",
+      "--filter",
+      "@tc/core",
+      "orders/lb-target-ownership",
+      "--no-passWithNoTests",
+    ],
+  },
+  aws,
+  repo,
+];
+
 TASKS["WP4-T4"] = [
   specSync,
   baselineSync,
