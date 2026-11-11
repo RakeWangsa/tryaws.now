@@ -143,7 +143,7 @@ export function PlaceForm({
             </div>
           ) : null}
 
-          <div className="checkbox-group mb-4">
+          <div className="cd-filter-content mb-4">
             <input
               type="checkbox"
               id={`${base}-terms`}
