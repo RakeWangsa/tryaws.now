@@ -28,6 +28,10 @@ import type { MoneyFlowDeps } from "./money-flow.ts";
 import type { CustomerFlowDeps } from "./customer-flow.ts";
 import type { CapacityFlowDeps } from "./capacity-flow.ts";
 import type { OpsFlowDeps } from "./ops-flow.ts";
+import type { AbuseFlowDeps } from "./abuse-flow.ts";
+import type { CaseFlowDeps } from "./case-flow-common.ts";
+import type { SupportFlowDeps } from "./support-flow.ts";
+import { SUPPORT_REPLY_ENABLED } from "./support-reply.ts";
 import { unavailableKycStore, type KycDocumentDeps } from "./kyc-documents.ts";
 import { makeSignIn, makeSignOut, type SignInDeps } from "./sign-in.ts";
 
@@ -228,6 +232,43 @@ export function capacityFlowDeps(): CapacityFlowDeps {
       notifyWaitlist(tx, actor, input, async () => {
         throw new Error("waitlist: no notifier template");
       }),
+    clock: { now: () => new Date() },
+  };
+}
+
+// The actions of /support, /abuse and /reconciliation (WP8-T7): 30 for each admin in 10 minutes. The
+// admin app has no queue client (R1): the send of a suspension is refused here on purpose and the
+// scheduler sends the message again from the row (3.4).
+const CASE_ACTION_LIMIT = 30;
+
+export function supportFlowDeps(): SupportFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_support_action", CASE_ACTION_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+    replyEnabled: SUPPORT_REPLY_ENABLED,
+  };
+}
+
+export function abuseFlowDeps(): AbuseFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_abuse_action", CASE_ACTION_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+    queue: SCHEDULER_ONLY_QUEUE,
+  };
+}
+
+export function reconciliationFlowDeps(): CaseFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_reconciliation_action", CASE_ACTION_LIMIT),
+    run: runAsAdmin,
     clock: { now: () => new Date() },
   };
 }

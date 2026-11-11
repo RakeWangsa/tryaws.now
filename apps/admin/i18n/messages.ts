@@ -13,11 +13,14 @@ import { pricingBn } from "../messages/pricing.ts";
 import { pricingEn } from "../messages/pricing.en.ts";
 import { opsBn } from "../messages/ops.ts";
 import { opsEn } from "../messages/ops.en.ts";
+import { casesBn } from "../messages/cases.ts";
+import { casesEn } from "../messages/cases.en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const customers: Readonly<Record<Locale, Messages>> = { bn: customersBn, en: customersEn };
 const money: Readonly<Record<Locale, Messages>> = { bn: moneyBn, en: moneyEn };
 const ops: Readonly<Record<Locale, Messages>> = { bn: opsBn, en: opsEn };
+const cases: Readonly<Record<Locale, Messages>> = { bn: casesBn, en: casesEn };
 
 // The kit owns only the top-level key `kit`, so composing it with Shell, Aws and Admin cannot clash.
 export const adminMessages: Readonly<Record<Locale, Messages>> = {
@@ -29,6 +32,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     money.bn,
     pricingBn,
     ops.bn,
+    cases.bn,
     galleryMessages.bn,
   ),
   en: composeMessages(
@@ -39,6 +43,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     money.en,
     pricingEn,
     ops.en,
+    cases.en,
     galleryMessages.en,
   ),
 };

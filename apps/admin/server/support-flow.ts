@@ -63,7 +63,10 @@ export function makeSupportAction(
       if (!(await deps.limiter(actor, deps.clock.now())))
         return { ok: false, code: "rate_limited" };
       // 5 and 6. Execute and audit, in one transaction.
-      const written = await deps.run(actor, (repos) =>
+      const written = await deps.run<
+        | { ok: true; replayed: boolean }
+        | { ok: false; error: "not_found" | "conflict" | "validation" | "forbidden" }
+      >(actor, (repos) =>
         kind === "replyByEmail"
           ? repos.support.reply({ requestId, replyId: rid, body: text }, why)
           : repos.support.close({ requestId }, why),
