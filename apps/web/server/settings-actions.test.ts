@@ -229,6 +229,15 @@ describe("phone change (fresh sign-in and a new verification)", () => {
     expect(w.otp.calls).toEqual(["send"]);
     expect(w.calls.slice(-1)).toEqual(["audit:profile.phone_change_started"]);
   });
+  it("start: refuses when the address of the request is not trusted (R16)", async () => {
+    const w = world();
+    const r = await startPhoneChangeCore(
+      { ...w.deps, clientIp: () => null },
+      { phone: "01712345678", idempotencyKey: KEY },
+    );
+    expect(r).toEqual({ ok: false, error: "unavailable" });
+    expect(w.otp.calls).toEqual([]);
+  });
   it("start: refuses a number that is not a Bangladesh mobile and a bad key", async () => {
     const w = world();
     expect(

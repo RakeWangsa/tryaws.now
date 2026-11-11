@@ -3,10 +3,11 @@ import { customerRepos, newUuidV7, withTx } from "@tc/db";
 import { headers } from "next/headers";
 import type { KeyActionDeps } from "./key-actions.ts";
 import type { KycActionDeps } from "./kyc-actions.ts";
+import type { SettingsDeps } from "./settings-actions.ts";
 import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
 import type { OrderActionDeps } from "./order-actions.ts";
 import { getOrdersRuntime } from "./orders-runtime.ts";
-import { assertSameOrigin } from "./request.ts";
+import { assertSameOrigin, clientIpOf } from "./request.ts";
 import { getRuntime } from "./runtime.ts";
 
 // The real ports of the cores of the Server Actions. Only the thin "use server" files import this.
@@ -60,5 +61,21 @@ export async function kycActionDeps(): Promise<KycActionDeps> {
         return fn({ kyc: repos.kyc, audit: repos.audit, rateLimits: repos.rateLimits });
       }),
     ports: kyc,
+  };
+}
+
+export async function settingsActionDeps(): Promise<SettingsDeps> {
+  const { account, config } = await getRuntime();
+  const ip = clientIpOf(await headers(), config);
+  return {
+    authenticate,
+    now: () => new Date(),
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({ profile: repos.profile, audit: repos.audit, rateLimits: repos.rateLimits });
+      }),
+    ports: account,
+    clientIp: () => ip,
   };
 }

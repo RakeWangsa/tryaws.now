@@ -66,7 +66,7 @@ export interface SettingsDeps {
   /** null = not configured: the actions that need it refuse (R16). */
   ports: AccountPorts | null;
   /** The address of the request, for the per-IP limit of the OTP service. */
-  clientIp(): string;
+  clientIp(): string | null;
 }
 
 export type SettingsError =
@@ -360,13 +360,15 @@ export async function startPhoneChangeCore(
   if (phone === null || typeof key !== "string" || fields["idempotencyKey"] !== undefined) {
     return fail("validation", fields);
   }
-  if (deps.ports === null) return fail("unavailable");
+  const ip = deps.clientIp();
+  // Without a trusted address the per-address limit cannot be applied: refuse (R16).
+  if (deps.ports === null || ip === null) return fail("unavailable");
 
   try {
     // The OTP service applies its own limits (3 sends an hour per number and per address, 1 a minute).
     const sent = await deps.ports.otp.send(session, {
       phone,
-      ip: deps.clientIp(),
+      ip,
       idempotencyKey: key,
     });
     if (!sent.ok) return otpFailure(sent);
