@@ -155,6 +155,21 @@ const PRODUCTS = [
   "parseInstanceConfig",
   "resolveInstance",
   "resolveProduct",
+  // WP6-T4 and WP7-T1: bucket and container seams (pinned here by the WP6-T2/T3 merge)
+  "CONTAINER_POWERS",
+  "MAX_SCALE",
+  "containerPlanFrom",
+  "parseBucketAccess",
+  "parseBucketConfig",
+  "parseContainerConfig",
+  "parseDeployment",
+  // WP6-T2 and WP6-T3: the database and load balancer seams and the pure target rule
+  "MAX_LB_TARGETS",
+  "checkLbTargets",
+  "parseDatabaseConfig",
+  "parseLoadBalancerConfig",
+  "resolveDatabase",
+  "resolveLoadBalancer",
   // WP2-T2: email, password policy, display name and the auth form parsers
   "PASSWORD_MAX_LENGTH",
   "PASSWORD_MIN_LENGTH",
