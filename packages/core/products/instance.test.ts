@@ -120,9 +120,39 @@ describe("resolveInstance", () => {
     });
   });
 
-  it("marks a Windows product in the facts", () => {
-    const r = resolveInstance(config, product({ platform: "windows" }));
-    expect(r.ok && r.value.facts.windows).toBe(true);
+  const windows = (over: Partial<CatalogProduct> = {}) =>
+    product({
+      family: "windows_instance",
+      platform: "windows",
+      featureFlag: "windows_instance",
+      ...over,
+    });
+
+  it("resolves a Windows product under its own family, flag and the windows fact", () => {
+    const r = resolveInstance(config, windows());
+    expect(r).toMatchObject({
+      ok: true,
+      value: {
+        family: "windows_instance",
+        featureFlag: "windows_instance",
+        facts: { bundleUsd: "12.0000", windows: true, staticIps: 1 },
+        needs: [
+          { quotaCode: "instance_vcpu", amount: 2 },
+          { quotaCode: "static_ip", amount: 1 },
+        ],
+      },
+    });
+  });
+
+  it("never stores a customer key for Windows: the pool default key pair is used (10.3)", () => {
+    const r = resolveInstance({ ...config, keyPairId: KEY_ID }, windows());
+    expect(r.ok && r.value.resourceConfig.keyPairId).toBe(null);
+  });
+
+  it("refuses a platform that does not match the family (R16)", () => {
+    const unavailable = { ok: false, error: "validation", fields: { productId: "unavailable" } };
+    expect(resolveInstance(config, product({ platform: "windows" }))).toEqual(unavailable);
+    expect(resolveInstance(config, windows({ platform: "linux" }))).toEqual(unavailable);
   });
 
   it("stores the validated config, never the raw input", () => {
@@ -186,5 +216,20 @@ describe("resolveProduct", () => {
   it("resolves a loaded product", async () => {
     const r = await resolveProduct("linux_instance", GOOD, async () => product());
     expect(r.ok).toBe(true);
+  });
+
+  it("resolves a Windows product only for the family windows_instance", async () => {
+    const win = product({ family: "windows_instance", platform: "windows" });
+    const ok = await resolveProduct("windows_instance", GOOD, async () => win);
+    expect(ok.ok && ok.value.family).toBe("windows_instance");
+    // The family asked for and the family of the row must agree.
+    expect((await resolveProduct("linux_instance", GOOD, async () => win)).ok).toBe(false);
+    expect((await resolveProduct("windows_instance", GOOD, async () => product())).ok).toBe(false);
+  });
+
+  it("does not load when a Windows config is invalid", async () => {
+    const load = vi.fn();
+    expect((await resolveProduct("windows_instance", {}, load)).ok).toBe(false);
+    expect(load).not.toHaveBeenCalled();
   });
 });
