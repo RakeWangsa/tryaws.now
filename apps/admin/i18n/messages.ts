@@ -9,6 +9,8 @@ import { customersEn } from "../messages/customers.en.ts";
 import { en } from "../messages/en.ts";
 import { moneyBn } from "../messages/money.ts";
 import { moneyEn } from "../messages/money.en.ts";
+import { pricingBn } from "../messages/pricing.ts";
+import { pricingEn } from "../messages/pricing.en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const customers: Readonly<Record<Locale, Messages>> = { bn: customersBn, en: customersEn };
@@ -22,6 +24,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     appOwn.bn,
     customers.bn,
     money.bn,
+    pricingBn,
     galleryMessages.bn,
   ),
   en: composeMessages(
@@ -30,6 +33,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     appOwn.en,
     customers.en,
     money.en,
+    pricingEn,
     galleryMessages.en,
   ),
 };

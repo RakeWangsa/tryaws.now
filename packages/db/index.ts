@@ -70,6 +70,7 @@ export { adminRepos } from "./repositories/admin/index";
 export type { AdminRepos, AdminActor, AdminRole, AdminScope } from "./repositories/admin/index";
 export type { FeatureFlagSetting } from "./repositories/admin/feature-flags";
 export type { FxRateInput, FxRateSaved, FxRatesAdminRepo } from "./repositories/admin/fx-rates";
+export type { FxChange, FxChangesAdminRepo } from "./repositories/admin/fx-changes";
 export type {
   CapacityAdminRepo,
   CapacityLimitInput,
@@ -159,12 +160,16 @@ export {
   type SeedEnvironment,
   type SeedResult,
 } from "./seed/launch";
-export { listCatalogProducts, readCatalogProduct } from "./repositories/catalog";
+export {
+  listCatalogProducts,
+  listCatalogProductsForAdmin,
+  readCatalogProduct,
+} from "./repositories/catalog";
 export { readLaunchInputs, type LaunchInputs } from "./repositories/launch";
 export { ensureFinalBackup, listBackupsOf, markFinalBackup } from "./repositories/backups";
 export { compensationRepo } from "./repositories/compensation";
 export type { CompensationOrder, CompensationRepo } from "./repositories/compensation";
-export type { CatalogProduct } from "./repositories/catalog";
+export type { CatalogAdminRow, CatalogProduct } from "./repositories/catalog";
 export * from "./capacity-keys";
 export { capacityRepo } from "./repositories/capacity";
 export type {

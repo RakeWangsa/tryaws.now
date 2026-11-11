@@ -69,3 +69,34 @@ export async function listCatalogProducts(tx: Tx, family: string): Promise<Catal
     );
   return rows as CatalogProduct[];
 }
+
+/** A catalog row as the admin screen shows it: the customer columns and the time of the last sync. */
+export interface CatalogAdminRow extends CatalogProduct {
+  readonly syncedAt: Date;
+}
+
+/**
+ * Every synced row, inactive ones too, for the admin catalog screen (16.12 /catalog), optionally of one
+ * family. Read-only: admin_rw has SELECT on catalog_products and nothing else, the sync (worker_rw)
+ * owns the AWS facts and `active`. Not tenant data. The message holds no input (R14).
+ */
+export async function listCatalogProductsForAdmin(
+  tx: Tx,
+  input: { family?: string },
+): Promise<CatalogAdminRow[]> {
+  const { family } = input;
+  if (family !== undefined && (typeof family !== "string" || !/^[a-z][a-z_]{0,39}$/.test(family))) {
+    throw new TypeError("listCatalogProductsForAdmin: family is not a family name");
+  }
+  const rows = await tx
+    .select({ ...columns, syncedAt: catalogProducts.syncedAt })
+    .from(catalogProducts)
+    .where(family === undefined ? undefined : eq(catalogProducts.family, family))
+    .orderBy(
+      asc(catalogProducts.family),
+      asc(catalogProducts.region),
+      asc(catalogProducts.awsPriceUsd),
+      asc(catalogProducts.id),
+    );
+  return rows as CatalogAdminRow[];
+}

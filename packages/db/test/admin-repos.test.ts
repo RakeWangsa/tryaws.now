@@ -94,6 +94,38 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       { key: "linux_instance", market: "BD", enabled: true },
       "launch of Linux servers",
     ),
+  "fxChanges.request": (r) =>
+    r.fxChanges.request(
+      {
+        market: "BD",
+        rate: "150",
+        effectiveFrom: null,
+        at: AT,
+        expiresAt: new Date(AT.getTime() + 86_400_000),
+      },
+      "bank rate moved",
+    ),
+  "fxChanges.approve": async (r) => {
+    // A change that another admin asked for (a random id), pending at AT.
+    const value = JSON.stringify({
+      rate: "150",
+      effectiveFrom: null,
+      reason: "bank rate moved",
+      requestedBy: uuidv7(),
+      requestedAt: AT.toISOString(),
+      expiresAt: new Date(AT.getTime() + 86_400_000).toISOString(),
+      status: "pending",
+      approvedBy: null,
+      approvedAt: null,
+    });
+    await t.pool.query(
+      `insert into settings (id, key, market, scope, scope_id, value)
+       values ($1, 'fx_change_pending', 'BD', 'market', null, $2::jsonb)
+       on conflict (key, market, scope, scope_id) do update set value = excluded.value`,
+      [uuidv7(), value],
+    );
+    return r.fxChanges.approve({ market: "BD", at: AT }, "checked");
+  },
   "fxRates.set": (r) =>
     r.fxRates.set(
       {
@@ -207,6 +239,7 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "payments.detail",
   "payments.discrepancies",
   "payments.search",
+  "fxChanges.read",
   "waitlist.list",
   "wallets.detail",
 ];

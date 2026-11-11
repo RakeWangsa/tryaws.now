@@ -126,6 +126,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP8-T1",
     "WP8-T2",
     "WP8-T3",
+    "WP8-T4",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -478,6 +479,32 @@ it("task WP8-T3 is proven by the db, core and admin suites and the line of the s
     "packages/core/test/admin-money.db.test.ts",
     "apps/admin/money-pages.test.tsx",
     "apps/admin/server/money-flow.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP8-T4 is proven by the admin suite, the preview-first line, the two-person FX line and the catalog read", () => {
+  expect(TASKS["WP8-T4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["catalog-admin-read", "pnpm test --filter @tc/db catalog-admin-list --no-passWithNoTests"],
+    ["fx-second-admin", "pnpm test --filter @tc/db admin-fx-changes --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    [
+      "pricing-preview-before-save",
+      "pnpm test --filter @tc/admin pricing-pages pricing-flow --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/db/test/admin-fx-changes.test.ts",
+    "packages/db/test/catalog-admin-list.test.ts",
+    "apps/admin/pricing-pages.test.tsx",
+    "apps/admin/server/pricing-flow.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

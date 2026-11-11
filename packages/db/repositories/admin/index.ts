@@ -4,6 +4,7 @@ import { isUuid } from "../scope";
 import { customersAdminRepo, type CustomersAdminRepo } from "./customers";
 import { capacityAdminRepo, type CapacityAdminRepo } from "./capacity";
 import { featureFlagsAdminRepo, type FeatureFlagsAdminRepo } from "./feature-flags";
+import { fxChangesAdminRepo, type FxChangesAdminRepo } from "./fx-changes";
 import { fxRatesAdminRepo, type FxRatesAdminRepo } from "./fx-rates";
 import { operationsAdminRepo, type OperationsAdminRepo } from "./operations";
 import { paymentsAdminRepo, type PaymentsAdminRepo } from "./payments";
@@ -34,6 +35,7 @@ export interface AdminRepos {
   capacity: CapacityAdminRepo;
   customers: CustomersAdminRepo;
   featureFlags: FeatureFlagsAdminRepo;
+  fxChanges: FxChangesAdminRepo;
   fxRates: FxRatesAdminRepo;
   operations: OperationsAdminRepo;
   payments: PaymentsAdminRepo;
@@ -59,6 +61,7 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     capacity: capacityAdminRepo(scope),
     customers: customersAdminRepo(scope),
     featureFlags: featureFlagsAdminRepo(scope),
+    fxChanges: fxChangesAdminRepo(scope),
     fxRates: fxRatesAdminRepo(scope),
     operations: operationsAdminRepo(scope),
     payments: paymentsAdminRepo(scope),

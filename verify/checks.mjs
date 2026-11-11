@@ -736,6 +736,46 @@ TASKS["WP8-T3"] = [
   repo,
 ];
 
+// WP8-T4: pricing, catalog and flags. The backlog sentence ("saving a rule shows the five-product preview
+// first") and the two-person rule of a large FX change have their own lines; the rest is the admin suite
+// (flows in the order of R9, roles, pages in bn and en, mockup cross-check) and the db tests of the new
+// reads and of the pending change. `--no-passWithNoTests` makes a filter that selects no file fail.
+const pricingPreviewFirst = {
+  id: "pricing-preview-before-save",
+  title: "WP8-T4: the save form of a rule exists only under a good preview of five products",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/admin",
+    "pricing-pages",
+    "pricing-flow",
+    "--no-passWithNoTests",
+  ],
+};
+const fxSecondAdmin = {
+  id: "fx-second-admin",
+  title: "WP8-T4: a large FX change is approved by a different admin, never named by a request",
+  command: ["pnpm", "test", "--filter", "@tc/db", "admin-fx-changes", "--no-passWithNoTests"],
+};
+const catalogAdminRead = {
+  id: "catalog-admin-read",
+  title: "WP8-T4: the catalog list for the admin is read-only (no write grant)",
+  command: ["pnpm", "test", "--filter", "@tc/db", "catalog-admin-list", "--no-passWithNoTests"],
+};
+TASKS["WP8-T4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  catalogAdminRead,
+  fxSecondAdmin,
+  admin,
+  pricingPreviewFirst,
+  repo,
+];
+
 // WP1-T4: the two halves of the backlog proof ("a new rate never changes a stored order", "preview equals
 // engine output") on their own lines. `--no-passWithNoTests` makes a filter that selects no file fail.
 const storedOrder = {
