@@ -56,8 +56,16 @@ const RESOURCE_COLUMNS = {
 
 // The parameter type makes the compiler check that the row holds all nine fields. The state column
 // holds only the values of its CHECK, so narrowing it to the union with the cast is exact.
+// The capacity reservation of the purchase names the pool account: it is internal and never leaves
+// the repository (R11). The stored row keeps it; only the customer's copy is without it.
+function withoutInternals(config: unknown): unknown {
+  if (typeof config !== "object" || config === null || Array.isArray(config)) return config;
+  const rest = { ...(config as Record<string, unknown>) };
+  delete rest.capacityReservation;
+  return rest;
+}
 const toResource = (row: Record<keyof ResourceSummary, unknown>): ResourceSummary =>
-  row as unknown as ResourceSummary;
+  ({ ...row, config: withoutInternals(row.config) }) as unknown as ResourceSummary;
 
 export function resourcesRepo(scope: TenantScope): ResourcesRepo {
   return {

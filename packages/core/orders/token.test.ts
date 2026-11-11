@@ -95,7 +95,11 @@ describe("signDraft and verifyDraft", () => {
     const token = signDraft([SECRET_1], claims());
     const exp = IAT + DRAFT_TTL_SECONDS;
     expect(verifyDraft([SECRET_1], token, at(exp - 1)).ok).toBe(true);
-    expect(verifyDraft([SECRET_1], token, at(exp))).toEqual({ ok: false, reason: "expired" });
+    expect(verifyDraft([SECRET_1], token, at(exp))).toEqual({
+      ok: false,
+      reason: "expired",
+      claims: claims(),
+    });
   });
 
   it("(d) accepts any listed secret and refuses an unknown one", () => {
@@ -111,6 +115,14 @@ describe("signDraft and verifyDraft", () => {
     const token = signDraft([SECRET_1, SECRET_2], claims());
     expect(verifyDraft([SECRET_1], token, at(IAT)).ok).toBe(true);
     expect(verifyDraft([SECRET_2], token, at(IAT)).ok).toBe(false);
+  });
+
+  it("(e2) assertSecrets refuses more than three keys (a rotation list stays short)", () => {
+    expect(() => assertSecrets([SECRET_1, SECRET_2, SECRET_1])).not.toThrow();
+    expect(() => assertSecrets([SECRET_1, SECRET_2, SECRET_1, SECRET_2])).toThrow(TypeError);
+    expect(() => verifyDraft([SECRET_1, SECRET_2, SECRET_1, SECRET_2], "a.b", at(IAT))).toThrow(
+      TypeError,
+    );
   });
 
   it("(e) assertSecrets refuses an empty list and a short key", () => {

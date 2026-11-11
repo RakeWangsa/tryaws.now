@@ -191,6 +191,29 @@ it.each([
   },
 );
 
+it("a database error inside the send leaves as fixed text: no number, no hash, no cause (R14)", async () => {
+  const s = await customer();
+  const phone = freshPhone();
+  const to = normalizeBdMobile(phone)!;
+  const failing = deps({
+    run: () =>
+      Promise.reject(
+        Object.assign(new Error(`insert into otp_challenges params: ${to}, v1.${"a".repeat(64)}`), {
+          cause: new Error(to),
+        }),
+      ),
+  });
+  const error = await send(s, { phone }, failing).then(
+    () => null,
+    (e: unknown) => e as Error,
+  );
+  expect(error).toBeInstanceOf(Error);
+  expect(error!.message).toBe("otp: send failed");
+  expect(error!.message).not.toContain(to);
+  expect((error as { cause?: unknown }).cause).toBeUndefined();
+  expect(sms.sent).toHaveLength(0);
+});
+
 it("the timeout timer of the gateway call is cleared once the gateway has answered", async () => {
   const s = await customer();
   const set = vi.spyOn(globalThis, "setTimeout");

@@ -24,8 +24,11 @@ export interface Gated {
  * Reads the customer row of the scope and applies the customer gate. The session is never an input:
  * only the row decides (R16). A missing row is `forbidden`.
  */
-export async function gateCustomer(repos: CustomerRepos): Promise<Result<Gated>> {
-  const profile = await repos.profile.get();
+export async function gateCustomer(
+  repos: CustomerRepos,
+  options?: { lock?: "share" },
+): Promise<Result<Gated>> {
+  const profile = await repos.profile.get(options);
   const facts: CustomerFacts | null =
     profile === null
       ? null

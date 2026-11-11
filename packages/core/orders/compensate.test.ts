@@ -96,6 +96,19 @@ describe("compensateFailedCreate", () => {
     expect(txn?.memo).toBe("automatic reversal of a failed create: unknown");
   });
 
+  it.each(["arn:aws:iam::123456789012:role", "validation:Account123456789012", "ARN:x"])(
+    "puts a code that holds an ARN or a 12-digit account id into the memo as `unknown` (%s)",
+    async (code) => {
+      const kit = await makeKit(t);
+      const { orderId, resourceId } = await placeOne(kit);
+      await compensate(kit, resourceId, kit.customerId, code);
+      const [txn] = await rows("select memo from ledger_transactions where idempotency_key = $1", [
+        "order-reversal:" + orderId,
+      ]);
+      expect(txn?.memo).toBe("automatic reversal of a failed create: unknown");
+    },
+  );
+
   it("gives the refund to a customer whose KYC was revoked after the order", async () => {
     const kit = await makeKit(t);
     const start = await kit.balance();

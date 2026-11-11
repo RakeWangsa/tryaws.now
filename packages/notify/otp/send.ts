@@ -23,6 +23,11 @@ export interface OtpSent {
   readonly replayed: boolean;
 }
 
+const SEND_FAILED = "otp: send failed";
+const NOT_STORED = "otp: the challenge could not be stored";
+// Fixed text and no cause: the cause of a database error holds the number and the hash (R14).
+const sendFailed = (): Error => new Error(SEND_FAILED);
+
 // Thrown inside the transaction, so that the new challenge, the closing of the older ones and every
 // increment of this send roll back. It never leaves this file.
 class SendRefused extends Error {
@@ -126,7 +131,7 @@ export async function sendPhoneOtp(
       const issued = await r.otp.issue({ id, phone, codeHash, expiresAt, now });
       if (!issued.ok) {
         if (issued.error === "conflict") return { kind: "conflict" };
-        throw new Error("otp: the challenge could not be stored");
+        throw new Error(NOT_STORED);
       }
       if (issued.replayed) return { kind: "replayed", challenge: issued.value };
       if (customerLimits.length > 0) {
@@ -152,7 +157,14 @@ export async function sendPhoneOtp(
         data: { retryAfterSeconds: error.retryAfterSeconds },
       };
     }
-    throw error;
+    // A database error holds the statement and its parameters (the number, the hash). Only fixed
+    // text leaves, with no cause (R14); the transaction has rolled back, so nothing was sent. The
+    // package's own fixed-text faults (a TypeError of a bad configuration or id, the store fault)
+    // pass as they are.
+    if (error instanceof TypeError || (error instanceof Error && error.message === NOT_STORED)) {
+      throw error;
+    }
+    throw sendFailed();
   }
 
   // 5. Outside any transaction.
@@ -191,9 +203,13 @@ export async function sendPhoneOtp(
     };
   }
   // The send stays counted (open point 8). If the closing throws, the error leaves (fail closed).
-  await deps.run(async (tx) => {
-    await customerRepos(tx, session.customerId).otp.close(id, deps.clock.now());
-  });
+  try {
+    await deps.run(async (tx) => {
+      await customerRepos(tx, session.customerId).otp.close(id, deps.clock.now());
+    });
+  } catch {
+    throw sendFailed();
+  }
   return answer === "rejected"
     ? { ok: false, error: "validation", fields: { phone: "rejected" } }
     : { ok: false, error: "upstream_unavailable" };

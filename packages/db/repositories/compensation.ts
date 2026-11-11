@@ -3,8 +3,8 @@ import type { Tx } from "../client";
 import { isUuid } from "./scope";
 
 // A job path (the failed hook of a create, as worker_rw), not a customer repository: the customer id
-// is read from the operation row by the caller and compared with the order's own, and no function
-// here takes a customer id from a request. It reads the tenant tables `orders`, `subscriptions` and
+// is read from the operation row by the caller and bound to the repository; every statement is also
+// filtered by it (R8, defence in depth), and no function here takes a customer id from a request. It reads the tenant tables `orders`, `subscriptions` and
 // `resources` by resource id (the id comes from the operation), like repositories/system/payments.ts.
 
 export interface CompensationOrder {
@@ -32,7 +32,8 @@ function requireUuid(value: unknown): asserts value is string {
   }
 }
 
-export function compensationRepo(tx: Tx): CompensationRepo {
+export function compensationRepo(tx: Tx, customerId: string): CompensationRepo {
+  requireUuid(customerId);
   return {
     findOrderOfResource: async (resourceId) => {
       requireUuid(resourceId);
@@ -44,7 +45,7 @@ export function compensationRepo(tx: Tx): CompensationRepo {
       }>(sql`select o.id, o.ledger_transaction_id as "ledgerTransactionId",
                     o.customer_id as "customerId", o.status
                from orders o
-              where o.items @> ${JSON.stringify([{ resourceId }])}::jsonb
+              where o.customer_id = ${customerId} and o.items @> ${JSON.stringify([{ resourceId }])}::jsonb
               order by o.created_at, o.id
               limit 1`);
       const row = rows[0];
@@ -62,7 +63,7 @@ export function compensationRepo(tx: Tx): CompensationRepo {
       requireUuid(orderId);
       const { rows } = await tx.execute<{ id: string }>(sql`update orders
            set status = 'reversed'
-         where id = ${orderId} and status = 'paid'
+         where id = ${orderId} and customer_id = ${customerId} and status = 'paid'
         returning id`);
       return rows.length === 1;
     },
@@ -71,7 +72,7 @@ export function compensationRepo(tx: Tx): CompensationRepo {
       requireUuid(resourceId);
       const { rows } = await tx.execute<{ id: string }>(sql`update subscriptions
            set status = 'ended'
-         where resource_id = ${resourceId} and status <> 'ended'
+         where resource_id = ${resourceId} and customer_id = ${customerId} and status <> 'ended'
         returning id`);
       return rows.length > 0;
     },
@@ -80,7 +81,7 @@ export function compensationRepo(tx: Tx): CompensationRepo {
       requireUuid(resourceId);
       const { rows } = await tx.execute<{ id: string }>(sql`update resources
            set state = 'failed'
-         where id = ${resourceId} and state in ('creating', 'failed')
+         where id = ${resourceId} and customer_id = ${customerId} and state in ('creating', 'failed')
         returning id`);
       return rows.length === 1;
     },

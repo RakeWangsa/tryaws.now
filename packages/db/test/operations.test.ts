@@ -52,6 +52,24 @@ it("resources.list and resources.get show own resources without pool or AWS inte
   expect(await as(c, (r) => r.resources.get("abc"))).toBeNull();
 });
 
+it("resources.list and resources.get never return the capacity reservation (it names the pool account)", async () => {
+  const c = await newCustomer(t.pool);
+  const config = JSON.stringify({
+    displayName: "web",
+    capacityReservation: { poolAccountId: "123456789012", units: 1 },
+  });
+  const id = await newResource(t.pool, c, { config });
+  const listed = await as(c, (r) => r.resources.list());
+  const got = await as(c, (r) => r.resources.get(id));
+  for (const row of [listed[0]!, got!]) {
+    expect(JSON.stringify(row)).not.toContain("123456789012");
+    expect(JSON.stringify(row)).not.toContain("capacityReservation");
+    expect(row.config).toMatchObject({ displayName: "web" });
+  }
+  const stored = await t.pool.query("select config from resources where id = $1", [id]);
+  expect(stored.rows[0].config.capacityReservation).toBeDefined();
+});
+
 it("request queues an operation for an own resource, under the column grants of web_rw", async () => {
   const c = await newCustomer(t.pool);
   const resourceId = await newResource(t.pool, c);
