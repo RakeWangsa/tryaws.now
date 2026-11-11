@@ -2,6 +2,7 @@ import type { Tx } from "../../client";
 import type { ADMIN_ROLES } from "../../schema/admins";
 import { isUuid } from "../scope";
 import { featureFlagsAdminRepo, type FeatureFlagsAdminRepo } from "./feature-flags";
+import { fxRatesAdminRepo, type FxRatesAdminRepo } from "./fx-rates";
 
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
@@ -24,6 +25,7 @@ export interface AdminScope {
 // WP8 tasks add a repository as repositories/admin/<name>.ts exporting <name>AdminRepo(scope).
 export interface AdminRepos {
   featureFlags: FeatureFlagsAdminRepo;
+  fxRates: FxRatesAdminRepo;
 }
 
 // Binds the actor once and builds every admin repository from it. Throws a TypeError for an actor
@@ -39,5 +41,5 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     throw new TypeError("adminRepos: the admin actor is incomplete");
   }
   const scope: AdminScope = Object.freeze({ tx, actor: Object.freeze({ ...actor }) });
-  return { featureFlags: featureFlagsAdminRepo(scope) };
+  return { featureFlags: featureFlagsAdminRepo(scope), fxRates: fxRatesAdminRepo(scope) };
 }
