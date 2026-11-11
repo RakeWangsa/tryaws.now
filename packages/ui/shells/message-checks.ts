@@ -1,4 +1,4 @@
-import type { Messages } from "./runtime-local.ts";
+import type { Messages } from "../runtime/index.ts";
 
 /** Sorted dotted paths of the string leaves of a message tree. */
 export function messageKeys(messages: Messages): string[] {

@@ -1,4 +1,4 @@
-import type { Locale, Messages } from "../runtime-local.ts";
+import type { Locale, Messages } from "../../runtime/index.ts";
 import { bn } from "./bn.ts";
 import { en } from "./en.ts";
 

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { forbiddenWording, messageKeys, missingKeys } from "./message-checks.ts";
 import { shellMessages } from "./messages/index.ts";
-import type { Messages } from "./runtime-local.ts";
+import type { Messages } from "../runtime/index.ts";
 import type { AdminNavId, AppNavId } from "./types.ts";
 
 const specPath = fileURLToPath(
