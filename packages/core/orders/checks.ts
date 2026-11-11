@@ -2,6 +2,7 @@ import { readCatalogProduct, type CustomerRepos, type Tx } from "@tc/db";
 import type { RiskTier } from "../capacity/types";
 import { isEnabledIn } from "../flags/is-enabled";
 import { isFeatureFlag } from "../flags/keys";
+import { checkCdnOrigin, parseCdnConfig, resolveCdn } from "../products/cdn";
 import { resolveProduct, type ResolvedProduct } from "../products/instance";
 import {
   checkLbTargets,
@@ -82,8 +83,11 @@ export async function gateProduct(
 }
 
 /**
- * The product of an order. Every family but the load balancer is resolved by `resolveProduct`. A
- * load balancer names targets, and a target must be the scope customer's own active instance in the
+ * The product of an order. Every family but the load balancer and the CDN is resolved by
+ * `resolveProduct`. A distribution names an origin: the customer's own active server, load balancer
+ * or bucket, read through the tenant-scoped repository, which answers `null` for another customer's
+ * resource as for a missing one (R8); checkCdnOrigin decides and only the checked id reaches the
+ * resource config. A load balancer names targets, and a target must be the scope customer's own active instance in the
  * Region of the load balancer: each id is read through the tenant-scoped repository, which answers
  * `null` for another customer's resource as for a missing one (R8), and checkLbTargets decides.
  * Only the ids that passed reach the resource config. Used by the draft and again by the purchase,
@@ -96,6 +100,23 @@ export async function resolveOrderProduct(
   family: string,
   rawConfig: unknown,
 ): Promise<Result<ResolvedProduct>> {
+  if (family === "cdn") {
+    const config = parseCdnConfig(rawConfig);
+    if (!config.ok) return config;
+    const product = await readCatalogProduct(tx, config.value.productId);
+    if (product === null) {
+      return { ok: false, error: "validation", fields: { productId: "unavailable" } };
+    }
+    const row = await repos.resources.get(config.value.originId);
+    const checked = checkCdnOrigin({
+      customerId,
+      requested: config.value.originId,
+      candidate:
+        row === null ? null : { id: row.id, customerId, family: row.family, state: row.state },
+    });
+    if (!checked.ok) return checked;
+    return resolveCdn(config.value, product, checked.value);
+  }
   if (family !== "load_balancer") {
     return resolveProduct(family, rawConfig, (id) => readCatalogProduct(tx, id));
   }
