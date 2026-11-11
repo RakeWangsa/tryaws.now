@@ -112,7 +112,9 @@ it("a refused AssumeRole stops the call before Lightsail is reached (R16)", asyn
     .send(new GetRegionsCommand({}))
     .catch((e: unknown) => e);
   expect(error).toMatchObject({ name: "AwsError", code: "forbidden", operation: "AssumeRole" });
-  expect(String((error as Error).message)).not.toMatch(LEAK);
+  expect(
+    String((error as Error).message) + JSON.stringify(error) + String((error as Error).stack),
+  ).not.toMatch(LEAK);
   expect(aws.seen.filter((r) => r.service === "lightsail")).toHaveLength(0);
 });
 
@@ -121,7 +123,12 @@ it("the client does not print the secret, and the access object holds only calle
   aws.on("lightsail", "GetRegions", lightsailOk({ regions: [] }));
   const client = access.lightsail(POOL, "ap-southeast-1", "TcProvisioner");
   await client.send(new GetRegionsCommand({}));
-  expect(inspect(client, { depth: 12 })).not.toContain("tc-test-assumed-secret-1");
+  const printed =
+    inspect(client, { depth: 12, showHidden: true }) +
+    inspect(access, { depth: 12, showHidden: true });
+  for (const secret of ["tc-test-assumed-secret-1", "tc-test-assumed-token-1", "tc-ext-7f3a9c"]) {
+    expect(printed).not.toContain(secret);
+  }
   expect(Object.keys(access).sort()).toEqual(["caller", "lightsail"]);
 });
 
@@ -132,14 +139,30 @@ it("with the real transport, nothing leaves the machine, and the time limits are
   const error = await client.send(new GetRegionsCommand({})).catch((e: unknown) => e);
   expect(error).toBeInstanceOf(AwsError);
   expect(blockedConnections).toEqual(["sts.ap-southeast-1.amazonaws.com:443"]);
-  // The handler resolves its settings on its first request, which never happens here (STS is
-  // refused first), so the settings are read from the handler's own provider.
-  const handler = client.config.requestHandler as unknown as { configProvider: Promise<object> };
-  await expect(handler.configProvider).resolves.toMatchObject({
+  const handler = client.config.requestHandler as unknown as {
+    handle(request: object): Promise<unknown>;
+    httpHandlerConfigs(): object;
+  };
+  await handler
+    .handle({
+      protocol: "https:",
+      hostname: "lightsail.ap-southeast-1.amazonaws.com",
+      port: 443,
+      method: "POST",
+      path: "/",
+      headers: {},
+      query: {},
+    })
+    .catch(() => undefined); // blocked by the network guard
+  expect(handler.httpHandlerConfigs()).toMatchObject({
     connectionTimeout: 3000,
     requestTimeout: 15000,
     throwOnRequestTimeout: true,
   });
+  expect(blockedConnections).toEqual([
+    "sts.ap-southeast-1.amazonaws.com:443",
+    "lightsail.ap-southeast-1.amazonaws.com:443",
+  ]);
 });
 
 it("refuses a caller that is not one of the platform's functions", () => {
@@ -176,4 +199,35 @@ it("uses the account reference it checked, read once, and gives no client a logg
   );
   // the SDK's default logger writes nothing; a real logger would get the raw AWS error text
   expect(client.config.logger?.constructor?.name).toBe("NoOpLogger");
+});
+
+it.each([
+  ["HTTP 500", lightsailError(500, "ServiceException", "internal")],
+  ["a socket timeout (ETIMEDOUT)", { networkCode: "ETIMEDOUT" }],
+  ["the SDK request timeout", { errorName: "TimeoutError" }],
+] as const)(
+  "a reader call that fails with %s is sent 3 times (reads are safe to repeat)",
+  async (_label, reply) => {
+    const { aws, access } = setup("reader");
+    aws.on("lightsail", "GetRegions", reply);
+    const client = access.lightsail(POOL, "ap-southeast-1", "TcReader");
+    await expect(client.send(new GetRegionsCommand({}))).rejects.toMatchObject({
+      name: "AwsError",
+      code: "upstream_unavailable",
+    });
+    expect(aws.seen.filter((r) => r.service === "lightsail")).toHaveLength(3);
+  },
+  15_000,
+);
+
+it("the access object cannot be changed, and its caller stays the one it was made for", () => {
+  const { access } = setup("reader");
+  expect(Object.isFrozen(access)).toBe(true);
+  expect(() => {
+    (access as { caller: string }).caller = "provisioner";
+  }).toThrow(TypeError);
+  expect(access.caller).toBe("reader");
+  expect(() => access.lightsail(POOL, "ap-southeast-1", "TcProvisioner" as never)).toThrow(
+    /role_not_allowed/,
+  );
 });

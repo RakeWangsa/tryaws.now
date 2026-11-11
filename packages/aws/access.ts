@@ -79,5 +79,5 @@ export function createAwsAccess<C extends Caller>(
     return client;
   }
 
-  return { caller, lightsail };
+  return Object.freeze({ caller, lightsail });
 }
