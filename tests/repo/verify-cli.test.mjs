@@ -121,6 +121,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP6-T3",
     "WP6-T4",
     "WP7-T1",
+    "WP7-T2",
     "WP7-T3",
     "WP7-T5",
     "WP8-T1",
@@ -1023,6 +1024,40 @@ it("tasks WP6-T4 and WP7-T1 are proven by the adapter tests, each filter naming 
     "packages/core/products/bucket.test.ts",
     "packages/core/products/container.test.ts",
     "functions/provisioner/storage-wiring.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP7-T2 is proven by the core, adapter, wiring and web tests, each filter naming a real test file", () => {
+  expect(TASKS["WP7-T2"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "cdn-core",
+    "cdn-adapter",
+    "cdn-wiring",
+    "cdn-web",
+    "aws",
+    "repo",
+  ]);
+  const line = (id) => TASKS["WP7-T2"].find((c) => c.id === id).command.join(" ");
+  expect(line("cdn-adapter")).toBe("pnpm test --filter @tc/aws test/cdn.test --no-passWithNoTests");
+  expect(line("cdn-wiring")).toBe(
+    "pnpm test --filter @tc/fn-provisioner cdn-wiring --no-passWithNoTests",
+  );
+  for (const f of [
+    "packages/aws/test/cdn.test.ts",
+    "packages/core/products/cdn.test.ts",
+    "packages/core/orders/cdn-origin-ownership.test.ts",
+    "functions/provisioner/cdn-wiring.test.ts",
+    "apps/web/server/cdn-actions.test.ts",
+    "apps/web/server/cdn-view.test.ts",
+    "apps/web/messages/cdn-messages.test.ts",
+    "apps/web/app/[locale]/(panel)/cdn/cdn.test.tsx",
+    "apps/web/app/[locale]/(panel)/cdn/mockup-anchors.test.tsx",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
