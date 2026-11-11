@@ -11,3 +11,4 @@ export * from "./orders/index";
 export * from "./lifecycle/index";
 export * from "./products/index";
 export * from "./invoices/index";
+export * from "./dns/index";
