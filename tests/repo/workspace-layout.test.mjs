@@ -44,6 +44,9 @@ const tsconfigExtras = {
   "apps/web": {
     compilerOptions: { allowImportingTsExtensions: true, jsx: "react-jsx" },
   },
+  "apps/admin": {
+    compilerOptions: { allowImportingTsExtensions: true, jsx: "react-jsx" },
+  },
 };
 
 // @tc/db also publishes its test helpers to the test files of other packages (WP1-T2).
