@@ -3,7 +3,7 @@ import { newCustomer, runTransaction, useTempDatabase, type DatabaseRole } from 
 import { expect, it } from "vitest";
 import { notify } from "../queue/notify";
 import { createPgStore } from "../queue/store";
-import { IDS, SAMPLES } from "./samples";
+import { SAMPLES } from "./samples";
 
 // Needs the local PostgreSQL (pnpm db:up). These tests run the real insert and the real store as
 // the roles of migration 0006, so the column grants are exercised: web_rw and admin_rw cannot read
@@ -29,7 +29,7 @@ it.each(["web_rw", "admin_rw", "worker_rw"] as const)(
       customerId,
       template: "kyc_approved" as const,
       data: SAMPLES.kyc_approved.data,
-      dedupeKey: IDS.submission,
+      dedupeKey: crypto.randomUUID(), // the unique key is global: one key per role
     };
     await as(role)((tx) => notify(tx, input));
     // the replay, and a later statement in the same transaction
@@ -77,14 +77,14 @@ it("the store, as worker_rw: due rows, the claim is a compare-and-set, sent and 
   );
   const store = createPgStore(as("worker_rw"));
   const now = new Date(Date.now() + 1000);
-  const due = (await store.due(now, 50)).filter((r) => r.customerId === customerId);
+  const due = (await store.due(now, 1000)).filter((r) => r.customerId === customerId);
   expect(due.map((r) => r.channel).sort()).toEqual(["email", "in_app"]);
   const email = due.find((r) => r.channel === "email")!;
   // two claims for the same number: exactly one wins
   const claims = await Promise.all([store.claim(email.id, 0), store.claim(email.id, 0)]);
   expect(claims.filter(Boolean)).toHaveLength(1);
   // attempt 2 is not due for a minute after creation
-  expect((await store.due(now, 50)).some((r) => r.id === email.id)).toBe(false);
+  expect((await store.due(now, 1000)).some((r) => r.id === email.id)).toBe(false);
   await store.markSent(email.id, now);
   await store.markFailed(email.id); // no effect on a sent row
   const { rows: got } = await t.pool.query(

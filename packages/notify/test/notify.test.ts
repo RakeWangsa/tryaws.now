@@ -123,29 +123,30 @@ describe("planRows", () => {
 });
 
 describe("notify", () => {
-  // The smallest tx that records what notify sends: insert().values().onConflictDoNothing().
+  // The smallest tx that records what notify sends: one raw execute (the insert).
   const fakeTx = () => {
-    const calls: { values: unknown[]; conflict: unknown }[] = [];
+    const calls: { sql: unknown }[] = [];
     const tx = {
-      insert: () => ({
-        values: (v: unknown[]) => ({
-          onConflictDoNothing: (...args: unknown[]) => {
-            calls.push({ values: v, conflict: args[0] });
-            return Promise.resolve();
-          },
-        }),
-      }),
+      execute: (q: unknown) => {
+        calls.push({ sql: q });
+        return Promise.resolve({ rows: [] });
+      },
     } as unknown as Tx;
     return { tx, calls };
   };
 
-  it("inserts all rows in one statement with ON CONFLICT DO NOTHING and no conflict target", async () => {
+  it("inserts all rows in one raw statement that names no conflict target", async () => {
     const { tx, calls } = fakeTx();
     await notify(tx, { ...base, template: "kyc_approved", data: SAMPLES.kyc_approved.data });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.conflict).toBeUndefined();
-    expect(calls[0]?.values).toHaveLength(3);
-    for (const v of calls[0]?.values as { id: string }[]) expect(v.id).toMatch(/^[0-9a-f-]{36}$/);
+    // the three channel rows of the template go in ONE statement; the text carries ON CONFLICT DO NOTHING
+    // and no target (web_rw cannot read dedupe_key)
+    const text = JSON.stringify(calls[0]?.sql);
+    expect(text).toContain("on conflict do nothing");
+    expect(text).not.toMatch(/on conflict \(/);
+    expect(
+      planRows({ ...base, template: "kyc_approved", data: SAMPLES.kyc_approved.data }),
+    ).toHaveLength(3);
   });
 
   it("writes nothing when the input is refused", async () => {

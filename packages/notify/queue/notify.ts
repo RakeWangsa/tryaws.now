@@ -1,4 +1,5 @@
-import { newUuidV7, notifications, type Tx } from "@tc/db";
+import { newUuidV7, type Tx } from "@tc/db";
+import { sql } from "drizzle-orm";
 import { scanSecrets } from "../text/guards";
 import { channelsOf, isTemplateId, parseTemplateData } from "../templates/render";
 import { DIRECT_ONLY_IDS, NotifyError, type Channel, type TemplateId } from "./types";
@@ -89,18 +90,15 @@ export function planRows(input: NotifyInput): PlannedRow[] {
 export async function notify(tx: Tx, input: NotifyInput): Promise<void> {
   const rows = planRows(input);
   if (rows.length === 0) return;
-  await tx
-    .insert(notifications)
-    .values(
-      rows.map((r) => ({
-        id: newUuidV7(),
-        customerId: r.customerId,
-        email: r.email,
-        channel: r.channel,
-        template: r.template,
-        payload: r.payload,
-        dedupeKey: r.dedupeKey,
-      })),
-    )
-    .onConflictDoNothing();
+  // Raw SQL with exactly the columns web_rw, admin_rw and worker_rw may insert (migration 0006):
+  // drizzle also lists the defaulted columns (status, attempts, created_at) and PostgreSQL then asks for
+  // an INSERT grant on them (42501).
+  const values = rows.map(
+    (r) =>
+      sql`(${newUuidV7()}, ${r.customerId}, ${r.email}, ${r.channel}, ${r.template}, ${JSON.stringify(r.payload)}::jsonb, ${r.dedupeKey})`,
+  );
+  await tx.execute(
+    sql`insert into notifications (id, customer_id, email, channel, template, payload, dedupe_key)
+        values ${sql.join(values, sql`, `)} on conflict do nothing`,
+  );
 }
