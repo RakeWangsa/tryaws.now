@@ -21,3 +21,4 @@ export {
 } from "./snapshot";
 export type { PriceQuote, PricingRule, PricingStep, QuoteInput } from "./types";
 export { STEP_ACCOUNTS, accountFor, isPricingRule, validateRule, type StepCode } from "./validate";
+export { allowanceLevel, dailyMeteredChargeMinor, type AllowanceLevel } from "./metering";

@@ -10,6 +10,8 @@ it("exports exactly the public API of the pricing engine", () => {
     "STEP_ACCOUNTS",
     "SnapshotError",
     "accountFor",
+    "allowanceLevel",
+    "dailyMeteredChargeMinor",
     "decimalAtMost",
     "fxChangeNeedsSecondAdmin",
     "isFxRateText",
