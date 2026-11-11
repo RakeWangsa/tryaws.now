@@ -104,6 +104,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP4-T3",
     "WP4-T4",
     "WP4-T5",
+    "WP4-T7",
     "WP5-T1",
     "WP5-T2",
     "WP5-T3",
@@ -620,6 +621,37 @@ it("task WP4-T5 is proven by the adapter, bootstrap and isolation tests, each fi
     "packages/aws/test/bootstrap.test.ts",
     "tests/isolation/plan.test.ts",
     "tests/isolation/isolation.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP4-T7 is proven by the action, page, anchor and smoke tests, each filter naming a real file", () => {
+  expect(TASKS["WP4-T7"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["server-action-cores", "pnpm test --filter @tc/web server/order-actions --no-passWithNoTests"],
+    ["server-key-actions", "pnpm test --filter @tc/web server/key-actions --no-passWithNoTests"],
+    ["server-pages", "pnpm test --filter @tc/web servers/pages --no-passWithNoTests"],
+    [
+      "server-mockup-anchors",
+      "pnpm test --filter @tc/web servers/mockup-anchors --no-passWithNoTests",
+    ],
+    ["server-smoke-blocked", "pnpm test --filter repo servers-smoke --no-passWithNoTests"],
+    ["catalog-list", "pnpm test --filter @tc/db catalog-repo --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "apps/web/server/order-actions.test.ts",
+    "apps/web/server/key-actions.test.ts",
+    "apps/web/app/[locale]/(panel)/servers/pages.test.tsx",
+    "apps/web/app/[locale]/(panel)/servers/mockup-anchors.test.tsx",
+    "tests/repo/servers-smoke.test.mjs",
+    "packages/db/test/catalog-repo.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

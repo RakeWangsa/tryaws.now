@@ -5,7 +5,13 @@
 // in a module constant; an unreadable one is `undefined`, and the caller fails closed (R16).
 
 export type SecretName =
-  "EpsMerchantId" | "EpsStoreId" | "EpsUsername" | "EpsPassword" | "EpsHashKey" | "EpsLimitKey";
+  | "EpsMerchantId"
+  | "EpsStoreId"
+  | "EpsUsername"
+  | "EpsPassword"
+  | "EpsHashKey"
+  | "EpsLimitKey"
+  | "OrderDraftSecret";
 
 export type SecretSource = (name: SecretName) => string | undefined;
 

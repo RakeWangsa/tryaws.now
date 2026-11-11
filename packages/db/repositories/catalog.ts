@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { Tx } from "../client";
 import { catalogProducts } from "../schema/index";
 
@@ -47,4 +47,25 @@ export async function readCatalogProduct(tx: Tx, id: string): Promise<CatalogPro
     .where(eq(catalogProducts.id, id))
     .limit(1);
   return (rows[0] as CatalogProduct | undefined) ?? null;
+}
+
+/**
+ * The active catalog rows of one family, cheapest first within a Region, for the configurator. Like
+ * `readCatalogProduct` it is not tenant data. Whether the family may be sold in the customer's market
+ * is the caller's decision (the feature flag).
+ */
+export async function listCatalogProducts(tx: Tx, family: string): Promise<CatalogProduct[]> {
+  if (typeof family !== "string" || !/^[a-z][a-z_]{0,39}$/.test(family)) {
+    throw new TypeError("listCatalogProducts: family is not a family name");
+  }
+  const rows = await tx
+    .select(columns)
+    .from(catalogProducts)
+    .where(and(eq(catalogProducts.family, family), eq(catalogProducts.active, true)))
+    .orderBy(
+      asc(catalogProducts.region),
+      asc(catalogProducts.awsPriceUsd),
+      asc(catalogProducts.id),
+    );
+  return rows as CatalogProduct[];
 }
