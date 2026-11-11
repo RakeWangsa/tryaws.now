@@ -1,8 +1,9 @@
 import type pg from "pg";
 import { v7 as uuidv7 } from "uuid";
+import type { DatabaseRole } from "../tx";
 
 export type Queryable = pg.Pool | pg.PoolClient;
-export type AppRole = "web_rw" | "admin_rw" | "worker_rw" | "report_ro";
+export type AppRole = DatabaseRole;
 
 const ROLES: readonly AppRole[] = ["web_rw", "admin_rw", "worker_rw", "report_ro"];
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;

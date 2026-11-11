@@ -8,3 +8,5 @@ export {
 } from "../test/temp-db";
 export { type Queryable, insertRow, inTransaction } from "../test/sql";
 export { uniqueSuffix, ensureMarket, newAdmin, newCustomer, newResource } from "../test/fixtures";
+export { useBoundTestDatabase } from "./bind";
+export { runTransaction, bindDatabase, attachErrorListeners, type DatabaseRole } from "../tx";
