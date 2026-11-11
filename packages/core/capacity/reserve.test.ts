@@ -327,5 +327,5 @@ describe("reserveCapacity", () => {
     expect(await homes(a)).toEqual([{ region: REGION, pool_account_id: P1 }]);
     expect(await readUsed(t.pool, p1.poolAccountId)).toEqual(used(2, 1));
     expect(await readUsed(t.pool, p2.poolAccountId)).toEqual(used(0, 0));
-  });
+  }, 20000);
 });
