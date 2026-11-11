@@ -24,5 +24,7 @@ export async function completeRestore(
   if (Number.isNaN(now.getTime())) return { ok: false, error: "internal" };
   const periodEnd = new Date(now.getTime() + row.termDays * DAY_MS);
   await repo.setPeriod(row.id, { status: "active", periodStart: now, periodEnd });
+  // R13: the final snapshot of this retention must not allow the destroy of the next one.
+  await repo.supersedeFinalBackups(row.resourceId);
   return { ok: true, value: { periodEnd } };
 }

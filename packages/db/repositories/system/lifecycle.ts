@@ -159,6 +159,15 @@ export function lifecycleRepo(tx: Tx) {
       return result.rowCount ?? 0;
     },
 
+    // A restore ends the retention: its final snapshots no longer count for a later destroy (R13).
+    async supersedeFinalBackups(parentResourceId: string): Promise<number> {
+      assertUuid(parentResourceId, "resource id");
+      const result = await tx.execute(sql`
+        update resources set config = config || '{"final": false}'::jsonb
+        where parent_resource_id = ${parentResourceId} and family = 'backup' and config ->> 'final' = 'true'`);
+      return result.rowCount ?? 0;
+    },
+
     async resourceOfOperation(operationResourceId: string): Promise<GuardFacts | null> {
       assertUuid(operationResourceId, "resource id");
       const { rows } = await tx.execute<{
@@ -169,7 +178,9 @@ export function lifecycleRepo(tx: Tx) {
         select s.status as status, r.family as family,
           exists (select 1 from resources b
             where b.parent_resource_id = r.id and b.family = 'backup' and b.state = 'active'
-              and b.deleted_at is null and b.config ->> 'final' = 'true') as has_final
+              and b.deleted_at is null and b.config ->> 'final' = 'true'
+              and b.created_at >= (select max(o.created_at) from operations o
+                where o.resource_id = r.id and o.kind = 'final_snapshot')) as has_final
         from resources r left join subscriptions s on s.resource_id = r.id
         where r.id = ${operationResourceId}`);
       const row = rows[0];
