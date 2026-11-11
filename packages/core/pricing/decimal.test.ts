@@ -1,6 +1,6 @@
 import Big from "big.js";
 import { expect, it } from "vitest";
-import { isPlainDecimal, isPositiveDecimal, parseDecimal, toMinor } from "./decimal";
+import { decimalAtMost, isPlainDecimal, isPositiveDecimal, parseDecimal, toMinor } from "./decimal";
 import { PricingInputError } from "./errors";
 
 const PARSES = ["5", "9.50", "0.50", "127", "124.77", "0", "0.0333333333"];
@@ -95,4 +95,19 @@ it.each<[string, unknown]>([
   const error = thrown(() => parseDecimal(value, "fxRate"));
   expect(error).toBeInstanceOf(PricingInputError);
   expect((error as Error).message.length).toBeLessThan(120);
+});
+
+it("decimalAtMost compares plain decimals exactly", () => {
+  expect(decimalAtMost("24", "24")).toBe(true);
+  expect(decimalAtMost("24.0001", "24")).toBe(false);
+  expect(decimalAtMost("0.1", "0.10")).toBe(true);
+  expect(decimalAtMost("9.99", "24")).toBe(true);
+  expect(decimalAtMost("0", "0")).toBe(true);
+});
+
+it("decimalAtMost throws RangeError for text that is not a plain decimal", () => {
+  expect(() => decimalAtMost("abc", "1")).toThrow(RangeError);
+  expect(() => decimalAtMost("1", "-1")).toThrow(RangeError);
+  expect(() => decimalAtMost("1e3", "1")).toThrow(RangeError);
+  expect(() => decimalAtMost("1", "")).toThrow(RangeError);
 });

@@ -1,4 +1,4 @@
-export { isPlainDecimal, isPositiveDecimal } from "./decimal";
+export { decimalAtMost, isPlainDecimal, isPositiveDecimal } from "./decimal";
 export { PricingInputError, type PricingProblem } from "./errors";
 export { FX_SECOND_ADMIN_PERCENT, fxChangeNeedsSecondAdmin, isFxRateText } from "./fx-rate";
 export {

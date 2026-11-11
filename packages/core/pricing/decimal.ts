@@ -20,6 +20,17 @@ export function isPositiveDecimal(text: unknown): text is string {
   return isPlainDecimal(text) && /[1-9]/.test(text);
 }
 
+/**
+ * True when a is at most b, both plain non-negative decimal text. The one place outside the engine's
+ * arithmetic where callers compare decimals, so that no other package imports big.js (R4).
+ */
+export function decimalAtMost(a: string, b: string): boolean {
+  if (!isPlainDecimal(a) || !isPlainDecimal(b)) {
+    throw new RangeError("decimalAtMost: both values must be plain decimal text");
+  }
+  return new D(a).lte(new D(b));
+}
+
 /** How a refused value is shown in a message: short, and never by calling the value itself. */
 function describe(value: unknown): string {
   if (typeof value === "string") return JSON.stringify(value).slice(0, 40);
