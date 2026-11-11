@@ -27,8 +27,9 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
     sendFailures: 0,
   });
   expect(report.lifecycle).toMatchObject({ examined: 0, failed: 0 });
+  expect(report.metering).toMatchObject({ charged: 0, failed: 0, priceMissing: true });
   expect(report.rateLimitsPurged).toBe(1);
-  expect(logged.map((e) => e.event)).toEqual(["sweep", "lifecycle_run", "rate_limits_purged"]);
+  expect(logged.map((e) => e.event)).toEqual(["sweep", "lifecycle_run", "metering_run", "rate_limits_purged"]);
   // The second run purges nothing more.
   expect((await handler()).rateLimitsPurged).toBe(0);
 });
@@ -52,6 +53,7 @@ it("a failing job does not stop the others; the run then rejects (R16)", async (
   expect(logged.map((e) => e.event)).toEqual([
     "scheduler_job_failed",
     "lifecycle_run",
+    "metering_run",
     "rate_limits_purged",
   ]);
   expect(JSON.stringify(logged)).not.toContain("secret");

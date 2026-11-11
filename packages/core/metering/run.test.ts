@@ -214,7 +214,7 @@ describe("snapshot storage: one charge per resource and day", () => {
       const w = world({ price, usage: [snap(1, "10", "2026-11-10")] });
       const report = await w.run();
       expect(report).toMatchObject({ charged: 0, priceMissing: true });
-      expect(report.failed).toBeGreaterThan(0);
+      expect(report.failed).toBe(0); // reported by the flag, not as a failed row
       expect(w.state.postCalls).toBe(0);
     },
   );

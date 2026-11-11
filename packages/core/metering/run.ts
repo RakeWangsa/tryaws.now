@@ -122,10 +122,6 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
     ops.repo(tx).readSettings([METERING_SETTING_KEYS.snapshotGbMonthMinor]),
   );
   const price = readPrice(settings.get(METERING_SETTING_KEYS.snapshotGbMonthMinor));
-  if (price === null) {
-    count.failed += 1;
-    deps.log({ event: "metering_price_missing" });
-  }
 
   // 1. snapshot storage: the days that ended, oldest first.
   if (price !== null) {
