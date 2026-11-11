@@ -245,6 +245,15 @@ TASKS["WPU-T4"] = [
   appsSmoke,
 ];
 
+// WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
+// `--no-passWithNoTests` makes a filter that selects no file fail.
+const auth = {
+  id: "auth",
+  title: "packages/auth: tokens, cookies, session, refresh",
+  command: ["pnpm", "test", "--filter", "@tc/auth", "--no-passWithNoTests"],
+};
+TASKS["WP2-T1"] = [specSync, baselineSync, lint, typecheck, format, db, auth, repo];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

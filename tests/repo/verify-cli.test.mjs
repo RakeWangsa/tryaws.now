@@ -91,6 +91,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP0-T1",
     "WP1-T1",
     "WP1-T2",
+    "WP2-T1",
     "WP3-T1",
     "WP4-T1",
     "WP4-T2",
@@ -221,6 +222,22 @@ it("task WP3-T1 is proven by the checks of WP1-T1, the files of the ledger by na
     "tests/repo/ledger-writers.test.mjs",
   ]) {
     expect(existsSync(f), f).toBe(true);
+  }
+});
+
+it("task WP2-T1 is proven by the checks of WP1-T1, the db suite, the tests of @tc/auth and the repository tests", () => {
+  expect(TASKS["WP2-T1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["auth", "pnpm test --filter @tc/auth --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of ["packages/auth/test/request.test.ts", "tests/repo/auth-boundaries.test.mjs"]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
 });
 
