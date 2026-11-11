@@ -2,6 +2,7 @@ export * from "./schema/index";
 export * from "./ledger/index";
 export * from "./operations/kinds";
 export * from "./operations/approval";
+export * from "./operations/insert";
 export { createDatabase } from "./client";
 export type { Database, Tx } from "./client";
 export { runMigrations, MIGRATIONS_FOLDER } from "./migrate";

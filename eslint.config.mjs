@@ -100,6 +100,21 @@ const APP_MODULES = {
     "node:worker_threads",
   ],
 };
+// The statements that write operations as the system or decide on them as an admin. A Server Action
+// of apps/ uses the tenant-scoped repositories instead.
+const SYSTEM_WRITES = {
+  group: ["@tc/db", "@tc/core"],
+  importNames: [
+    "enqueueOperation",
+    "makeEnqueueOperation",
+    "insertOperation",
+    "approveOperation",
+    "retryOperation",
+    "rejectOperation",
+  ],
+  message:
+    "R8/R10: customer actions use customerRepos(...).operations.request; admin decisions go through adminRepos(...).",
+};
 // packages/core already bans the SDK clients and @tc/aws through PURE_CORE, so R1 adds the
 // function packages and the path forms.
 const R1_PATHS = { ...R1, group: ["@tc/fn-*", "@tc/fn-*/*", ...R1_PATH_FORMS] };
@@ -231,7 +246,7 @@ export default tseslint.config(
   {
     // apps/**: the same, plus the modules that only a server process may use.
     files: ["apps/**"],
-    rules: restrict(R1, SDK, DECIMAL, AWS_LOADERS, APP_MODULES),
+    rules: restrict(R1, SDK, DECIMAL, AWS_LOADERS, APP_MODULES, SYSTEM_WRITES),
   },
   {
     // packages/db: R1, the SDK rule, R4, and the direction of the dependency on packages/core.
@@ -320,7 +335,7 @@ export default tseslint.config(
     // docs/superpowers/plans/2026-11-11-wp1-t2-tenant-scoped-repositories.md).
     // Flat config keeps only the no-restricted-syntax of the last matching block, so this block
     // carries every selector of block A (DYNAMIC_IMPORT_SYNTAX) and adds the selectors for raw.
-    files: ["packages/db/repositories/**"],
+    files: ["packages/db/repositories/**", "packages/db/operations/**"],
     ignores: ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs"],
     rules: {
       "no-restricted-syntax": [

@@ -221,6 +221,14 @@ it.each([
   ["apps/web/x.test.tsx", 'import "@tc/aws";', "R1:"],
   ["apps/web/x.test.tsx", 'import "@aws-sdk/client-sts";', "Spec section 4:"],
   ["apps/web/x.jsx", 'import "@tc/aws";', "R1:"],
+  // The system writes of operations are not for the apps.
+  ["apps/web/x.ts", 'import { enqueueOperation } from "@tc/core";', "R8/R10:"],
+  ["apps/admin/x.ts", 'import { approveOperation } from "@tc/db";', "R8/R10:"],
+  [
+    "packages/db/operations/x.ts",
+    'import { sql } from "drizzle-orm";\nsql.raw("select 1");',
+    "packages/db/repositories: sql.raw",
+  ],
 ])("rejects %s with %s", async (filePath, code, prefix) => {
   const messages = await errors(filePath, code);
   expect(
@@ -273,6 +281,11 @@ it.each([
   ["packages/ui/x.ts", 'import "node:vm";'],
   ["packages/ui/x.ts", 'import "../node_modulesx/a";'],
   ["apps/web/x.ts", 'await import("./a-b");'],
+  ["packages/core/x.ts", 'import { insertOperation } from "@tc/db";\nvoid insertOperation;'],
+  [
+    "functions/provisioner/x.ts",
+    'import { enqueueOperation } from "@tc/core";\nvoid enqueueOperation;',
+  ],
 ])("allows %s with %s", async (filePath, code) => {
   expect(await errors(filePath, code)).toEqual([]);
 });
