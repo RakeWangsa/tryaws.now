@@ -28,7 +28,16 @@ const packages = {
 
 // The shared form of a package's tsconfig.json (kit plan, Task 7). A package that needs more, for
 // example "jsx" in a Next.js app, gets its difference here, so that it is reviewed with this file.
-const tsconfigExtras = {};
+const tsconfigExtras = {
+  "packages/ui": {
+    compilerOptions: {
+      allowImportingTsExtensions: true,
+      erasableSyntaxOnly: true,
+      verbatimModuleSyntax: true,
+      types: ["node"],
+    },
+  },
+};
 
 // @tc/db also publishes its test helpers to the test files of other packages (WP1-T2).
 const EXPORTS = { "packages/db": { ".": "./index.ts", "./testing": "./testing/index.ts" } };
