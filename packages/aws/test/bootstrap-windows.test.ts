@@ -45,8 +45,17 @@ describe("windowsBootstrapScript", () => {
 
   it("exempts DHCP by remote port 67 only, not a whole UDP port", () => {
     const s = windowsBootstrapScript({ vpcCidr: CIDR });
-    expect(s).toContain("-Protocol UDP -RemotePort '0-66,68-65535'");
-    expect(s).not.toMatch(/-Protocol UDP -LocalPort/);
+    expect(s).toContain("-Protocol UDP -LocalPort '1-67,69-65535'");
+    expect(s).toContain("-Protocol UDP -LocalPort '68' -RemotePort '0-66,68-65535'");
+  });
+
+  it("has no rule whose exemption is only a remote port (the sender controls it)", () => {
+    const s = windowsBootstrapScript({ vpcCidr: CIDR });
+    for (const line of s.split("\n").filter((l) => l.includes("-Protocol UDP"))) {
+      expect(line, line).toContain("-LocalPort");
+    }
+    expect(s).toContain("tc-isolation-udp-dhcp");
+    expect(WINDOWS_BOOTSTRAP_RULE_COUNT).toBe(257);
   });
 
   it("covers ICMP and every other protocol number, but not TCP or UDP twice", () => {
@@ -60,7 +69,6 @@ describe("windowsBootstrapScript", () => {
     expect(list).not.toContain(6);
     expect(list).not.toContain(17);
     expect(list).toHaveLength(254);
-    expect(WINDOWS_BOOTSTRAP_RULE_COUNT).toBe(256);
   });
 
   it("reads every rule back and fails closed on a mismatch, before the marker", () => {

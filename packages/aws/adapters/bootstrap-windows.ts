@@ -5,7 +5,10 @@ import { BOOTSTRAP_FAIL_CLOSED_CIDRS, BOOTSTRAP_OK_MARKER, isValidCidr } from ".
 // R11). Same stance as the Linux bootstrap: fail closed. Windows Firewall lets a block rule win over
 // an allow rule, so the exemptions are written into the block rules themselves:
 //  - TCP: every port is blocked from the private sources; port 80 only by opt-in (a load balancer).
-//  - UDP: every packet is blocked except those whose REMOTE port is 67 (DHCP server replies).
+//  - UDP: every local port is blocked except 68, and local port 68 is blocked except from remote
+//    port 67 (DHCP server replies). The exemption is keyed on the LOCAL port first: a sender
+//    controls its source port, so a remote-port-only exemption would let any tenant through.
+//    VERIFY: limit the DHCP exemption to the VPC router address once it is known.
 //  - every other IP protocol (ICMP and the rest, numbers 0-255 except 6 and 17) has a rule of its
 //    own; one "any protocol" rule would also block DHCP, because a block rule beats an exemption.
 // The marker is written only after every rule was read back: name, enabled, block, inbound. A rule
@@ -20,7 +23,7 @@ const RULE_PREFIX = "tc-isolation";
 const OTHER_PROTOCOLS = Array.from({ length: 256 }, (_, n) => n).filter((n) => n !== 6 && n !== 17);
 
 /** The number of block rules the script creates and reads back. */
-export const WINDOWS_BOOTSTRAP_RULE_COUNT = 2 + OTHER_PROTOCOLS.length;
+export const WINDOWS_BOOTSTRAP_RULE_COUNT = 3 + OTHER_PROTOCOLS.length;
 
 export interface WindowsBootstrapOptions {
   /** The verified VPC CIDR as a literal. Missing or invalid: every RFC 1918 source is blocked. */
@@ -47,7 +50,8 @@ $ErrorActionPreference = 'Stop'
 $sources = @(${list})
 Get-NetFirewallRule -DisplayName '${RULE_PREFIX}-*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName '${RULE_PREFIX}-tcp' -Direction Inbound -Action Block -Protocol TCP -LocalPort '${tcpPorts}' -RemoteAddress $sources -Profile Any | Out-Null
-New-NetFirewallRule -DisplayName '${RULE_PREFIX}-udp' -Direction Inbound -Action Block -Protocol UDP -RemotePort '0-66,68-65535' -RemoteAddress $sources -Profile Any | Out-Null
+New-NetFirewallRule -DisplayName '${RULE_PREFIX}-udp' -Direction Inbound -Action Block -Protocol UDP -LocalPort '1-67,69-65535' -RemoteAddress $sources -Profile Any | Out-Null
+New-NetFirewallRule -DisplayName '${RULE_PREFIX}-udp-dhcp' -Direction Inbound -Action Block -Protocol UDP -LocalPort '68' -RemotePort '0-66,68-65535' -RemoteAddress $sources -Profile Any | Out-Null
 foreach ($p in @(${protocols})) {
   New-NetFirewallRule -DisplayName "${RULE_PREFIX}-proto-$p" -Direction Inbound -Action Block -Protocol $p -RemoteAddress $sources -Profile Any | Out-Null
 }
