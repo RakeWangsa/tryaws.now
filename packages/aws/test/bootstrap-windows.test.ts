@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BOOTSTRAP_OK_MARKER } from "../adapters/bootstrap";
 import {
+  cidrWithout,
   WINDOWS_BOOTSTRAP_RULE_COUNT,
   windowsBootstrapScript,
 } from "../adapters/bootstrap-windows";
@@ -46,7 +47,53 @@ describe("windowsBootstrapScript", () => {
   it("exempts DHCP by remote port 67 only, not a whole UDP port", () => {
     const s = windowsBootstrapScript({ vpcCidr: CIDR });
     expect(s).toContain("-Protocol UDP -LocalPort '1-67,69-65535'");
-    expect(s).toContain("-Protocol UDP -LocalPort '68' -RemotePort '0-66,68-65535'");
+    // no address given: strict, local 68 is blocked from every source
+    expect(s).toContain("-Protocol UDP -LocalPort '68' -RemoteAddress $sources");
+    expect(s).not.toContain("-RemotePort");
+  });
+
+  it("lets UDP 68 through only from the one DHCP /32; everything else of the CIDR stays blocked", () => {
+    const s = windowsBootstrapScript({ vpcCidr: CIDR, dhcpServer: "172.26.0.1" });
+    expect(s).toContain(
+      "-Protocol UDP -LocalPort '68' -RemoteAddress @('172.26.0.0-172.26.0.0','172.26.0.2-172.26.255.255')",
+    );
+    // the other UDP and TCP rules still cover the whole CIDR, the server's address included
+    expect(s).toContain("-Protocol UDP -LocalPort '1-67,69-65535' -RemoteAddress $sources");
+    expect(s).toContain("-LocalPort '1-65535' -RemoteAddress $sources");
+    expect(s).not.toContain("-RemotePort");
+    expect(cidrWithout(CIDR, "172.26.0.1")).toEqual([
+      "172.26.0.0-172.26.0.0",
+      "172.26.0.2-172.26.255.255",
+    ]);
+  });
+
+  it("falls back to strict mode for a missing, malformed or foreign DHCP address, never loosening", () => {
+    const strict = "-Protocol UDP -LocalPort '68' -RemoteAddress $sources";
+    for (const dhcpServer of [
+      null,
+      undefined,
+      "",
+      "x",
+      "172.27.0.1",
+      "172.26.0.256",
+      "172.26.0.1/32",
+    ]) {
+      expect(windowsBootstrapScript({ vpcCidr: CIDR, dhcpServer }), String(dhcpServer)).toContain(
+        strict,
+      );
+    }
+    // an address with no valid CIDR is not honoured either
+    expect(windowsBootstrapScript({ vpcCidr: null, dhcpServer: "172.26.0.1" })).toContain(strict);
+  });
+
+  it("checks for a DHCP lease before the marker, in both modes", () => {
+    for (const dhcpServer of [null, "172.26.0.1"]) {
+      const s = windowsBootstrapScript({ vpcCidr: CIDR, dhcpServer });
+      const lease = s.indexOf("PrefixOrigin -eq 'Dhcp'");
+      expect(lease).toBeGreaterThan(-1);
+      expect(s.indexOf("if ($lease.Count -lt 1) { exit 1 }")).toBeGreaterThan(lease);
+      expect(s.indexOf(BOOTSTRAP_OK_MARKER)).toBeGreaterThan(lease);
+    }
   });
 
   it("has no rule whose exemption is only a remote port (the sender controls it)", () => {

@@ -11,6 +11,8 @@ import { walletBn } from "../messages/wallet-bn.ts";
 import { walletEn } from "../messages/wallet-en.ts";
 import { serversBn } from "../messages/servers-bn.ts";
 import { serversEn } from "../messages/servers-en.ts";
+import { windowsAccessBn } from "../messages/windows-access-bn.ts";
+import { windowsAccessEn } from "../messages/windows-access-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
@@ -26,6 +28,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     appOwn.bn,
     walletOwn.bn,
     serversOwn.bn,
+    windowsAccessBn,
     authOwn.bn,
     galleryMessages.bn,
   ),
@@ -35,6 +38,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     appOwn.en,
     walletOwn.en,
     serversOwn.en,
+    windowsAccessEn,
     authOwn.en,
     galleryMessages.en,
   ),

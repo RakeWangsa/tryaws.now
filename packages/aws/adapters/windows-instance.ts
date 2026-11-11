@@ -38,6 +38,12 @@ export interface WindowsInstanceDeps {
   }): Promise<WindowsLaunchSpec | null>;
   /** The verified VPC CIDR of the pool account and Region; null (unknown) blocks every RFC 1918 source. */
   vpcCidr(input: { readonly region: string }): Promise<string | null>;
+  /**
+   * The DHCP server address of the subnet (inside the VPC CIDR), for the one UDP 68 exemption of the
+   * bootstrap. Optional: without it the bootstrap is strict (UDP 68 blocked from every source and a
+   * DHCP lease checked). A VERIFY item; never guessed here.
+   */
+  dhcpServer?(input: { readonly region: string }): Promise<string | null>;
   /** Has the bootstrap printed its marker? Without it the instance is never handed over (R16). VERIFY how it is read. */
   bootstrapMarker: LinuxInstanceDeps["bootstrapMarker"];
 }
@@ -95,7 +101,10 @@ export function createWindowsInstanceAdapter(
         bundleId: spec.bundleId,
         // No keyPairName: Lightsail uses the Region's default key pair, which is what
         // GetInstanceAccessDetails decrypts the password with.
-        userData: windowsBootstrapScript({ vpcCidr: await deps.vpcCidr({ region: ctx.region }) }),
+        userData: windowsBootstrapScript({
+          vpcCidr: await deps.vpcCidr({ region: ctx.region }),
+          dhcpServer: deps.dhcpServer ? await deps.dhcpServer({ region: ctx.region }) : null,
+        }),
         ipAddressType: "ipv4",
         tags: resourceTags({
           env: ctx.env,
