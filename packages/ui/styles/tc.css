@@ -195,6 +195,34 @@ html[lang="bn"] .btn.question {
 }
 
 /* ===== 6.2 Choices ===== */
+/* ImageTile: a native input behind a logo. The check mark shows the choice besides the border, so
+   color is never the only signal (U11). */
+.tc-image-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 2px solid transparent;
+}
+.tc-image-tile-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.tc-image-tile-check {
+  visibility: hidden;
+}
+.tc-image-tile-input:checked ~ .tc-image-tile-check {
+  visibility: visible;
+}
+.tc-image-tile:has(.tc-image-tile-input:checked) {
+  border-color: var(--tc-accent);
+}
+.tc-image-tile:has(.tc-image-tile-input:focus-visible) {
+  outline: 3px solid var(--tc-focus);
+}
 
 /* ===== 6.3 Summary ===== */
 
