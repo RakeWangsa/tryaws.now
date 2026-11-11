@@ -7,4 +7,5 @@ export * from "./capacity/index";
 export * from "./rates/index";
 export * from "./validation/index";
 export * from "./flags/index";
-export { compensateFailedCreate, type Compensated } from "./orders/compensate";
+export * from "./orders/index";
+export * from "./products/index";
