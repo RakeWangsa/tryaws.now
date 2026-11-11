@@ -5,6 +5,7 @@ import { AwsError } from "../errors";
 import { createCredentialCache, createStsClient } from "../credentials";
 import type { Caller } from "../roles";
 import { ASSUMED, LEAK, RAW_ACCESS_DENIED, assumeRoleOk, fakeAws, stsError } from "./fake-aws";
+import { blockedConnections } from "./network-guard";
 
 const POOL = { awsAccountId: "210987654321", externalId: "tc-ext-7f3a9c" };
 const OTHER = { awsAccountId: "123456789012", externalId: "tc-ext-11aa22" };
@@ -147,6 +148,7 @@ it("the SDK retries a throttled AssumeRole by itself", async () => {
 });
 
 it("the production STS client (no test handler) has both time limits", async () => {
+  blockedConnections.length = 0;
   const sts = createStsClient();
   await sts
     .send(
@@ -160,6 +162,7 @@ it("the production STS client (no test handler) has both time limits", async () 
   expect(
     (sts.config.requestHandler as unknown as { httpHandlerConfigs(): object }).httpHandlerConfigs(),
   ).toMatchObject({ connectionTimeout: 3000, requestTimeout: 15000, throwOnRequestTimeout: true });
+  expect(blockedConnections).toEqual(["sts.ap-southeast-1.amazonaws.com:443"]);
 });
 
 it("refuses a bad account reference before any request", async () => {
@@ -177,7 +180,8 @@ it("credentials cannot be serialised or printed by accident (R3, R14)", async ()
   expect(JSON.stringify({ creds })).toBe('{"creds":"[temporary AWS credentials]"}');
   expect(inspect(creds)).toBe("[temporary AWS credentials]");
   expect(`${creds}`).toBe("[temporary AWS credentials]");
-  expect(inspect(cache, { depth: 10 })).not.toContain("tc-test-assumed-secret-1");
+  expect(inspect(cache, { depth: 10, showHidden: true })).not.toContain("tc-test-assumed-secret-1");
+  expect(JSON.stringify(cache)).not.toContain("tc-test-assumed");
   expect(creds.secretAccessKey).toBe("tc-test-assumed-secret-1");
 });
 
@@ -216,5 +220,117 @@ it("every failure of get is an AwsError, also a failure of this package's own co
   const error = await cache.get(POOL, "TcProvisioner").catch((e: unknown) => e);
   expect(error).toBeInstanceOf(AwsError);
   expect(error).toMatchObject({ code: "internal", retryable: true, operation: "AssumeRole" });
+  expect(aws.seen).toHaveLength(0);
+});
+
+it("a refresh that fails inside the margin refuses, although the old credentials are still valid", async () => {
+  const { aws, cache, at } = setup();
+  aws.on(
+    "sts",
+    "AssumeRole",
+    ok(),
+    stsError(403, "AccessDenied", "denied"),
+    ok("2026-11-11T14:00:00Z"),
+  );
+  await cache.get(POOL, "TcProvisioner");
+  at("2026-11-11T12:56:00.000Z");
+  await expect(cache.get(POOL, "TcProvisioner")).rejects.toMatchObject({
+    code: "forbidden",
+    operation: "AssumeRole",
+  });
+  const next = await cache.get(POOL, "TcProvisioner");
+  expect(next.expiration.toISOString()).toBe("2026-11-11T14:00:00.000Z");
+  expect(aws.seen).toHaveLength(3);
+});
+
+it("five concurrent callers share one failed AssumeRole, and the next call tries again", async () => {
+  const { aws, cache } = setup();
+  aws.on("sts", "AssumeRole", stsError(403, "AccessDenied", "denied"), ok());
+  const results = await Promise.allSettled(
+    [1, 2, 3, 4, 5].map(() => cache.get(POOL, "TcProvisioner")),
+  );
+  expect(results.map((r) => r.status)).toEqual([
+    "rejected",
+    "rejected",
+    "rejected",
+    "rejected",
+    "rejected",
+  ]);
+  expect(aws.seen).toHaveLength(1);
+  await expect(cache.get(POOL, "TcProvisioner")).resolves.toMatchObject({
+    accessKeyId: "tc-test-assumed-key-1",
+  });
+  expect(aws.seen).toHaveLength(2);
+});
+
+it("five concurrent callers inside the margin share one refresh and all get the new credentials", async () => {
+  const { aws, cache, at } = setup();
+  aws.on("sts", "AssumeRole", ok(), ok("2026-11-11T14:00:00Z"));
+  const old = await cache.get(POOL, "TcProvisioner");
+  at("2026-11-11T12:57:00.000Z");
+  const all = await Promise.all([1, 2, 3, 4, 5].map(() => cache.get(POOL, "TcProvisioner")));
+  expect(aws.seen).toHaveLength(2);
+  expect(new Set(all).size).toBe(1);
+  expect(all[0]).not.toBe(old);
+  expect(all[0]!.expiration.toISOString()).toBe("2026-11-11T14:00:00.000Z");
+});
+
+it.each([
+  [
+    "no access key id",
+    assumeRoleOk({ ...ASSUMED, accessKeyId: "", expiration: "2026-11-11T13:00:00Z" }),
+  ],
+  [
+    "no secret access key",
+    assumeRoleOk({ ...ASSUMED, secretAccessKey: "", expiration: "2026-11-11T13:00:00Z" }),
+  ],
+  ["an expiration in the past", ok("2026-11-11T11:00:00Z")],
+  ["an expiration exactly at the margin", ok("2026-11-11T12:05:00Z")],
+])("refuses an STS answer with %s, and caches nothing", async (_label, reply) => {
+  const { aws, cache } = setup();
+  aws.on("sts", "AssumeRole", reply, ok());
+  await expect(cache.get(POOL, "TcProvisioner")).rejects.toMatchObject({
+    code: "upstream_unavailable",
+    retryable: true,
+    reason: "sts_response_invalid",
+    operation: "AssumeRole",
+  });
+  await expect(cache.get(POOL, "TcProvisioner")).resolves.toMatchObject({
+    accessKeyId: "tc-test-assumed-key-1",
+  });
+  expect(aws.seen).toHaveLength(2);
+});
+
+it("an answer whose expiration is not a date fails closed", async () => {
+  // the SDK itself refuses the answer while it parses it; the caller gets an AwsError and nothing is cached
+  const { aws, cache } = setup();
+  aws.on("sts", "AssumeRole", ok("soon"), ok());
+  const error = await cache.get(POOL, "TcProvisioner").catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(AwsError);
+  expect(error).toMatchObject({ retryable: true, operation: "AssumeRole" });
+  expect(JSON.stringify(error) + String((error as Error).stack)).not.toMatch(
+    /soon|tc-test-assumed/,
+  );
+  await expect(cache.get(POOL, "TcProvisioner")).resolves.toBeDefined();
+  expect(aws.seen).toHaveLength(2);
+});
+
+it("the role is refused before the account reference is looked at, and a getter that throws gives an AwsError", async () => {
+  const { aws, cache } = setup("reader");
+  await expect(
+    cache.get({ awsAccountId: "12", externalId: "" }, "TcProvisioner"),
+  ).rejects.toMatchObject({
+    reason: "role_not_allowed",
+  });
+  const broken = {
+    get awsAccountId(): string {
+      throw new Error("arn:aws:iam::210987654321:role/Secret");
+    },
+    externalId: "tc-ext-7f3a9c",
+  };
+  const error = await cache.get(broken, "TcReader").catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(AwsError);
+  expect(error).toMatchObject({ code: "internal", retryable: true, operation: "AssumeRole" });
+  expect(JSON.stringify(error) + String((error as Error).stack)).not.toMatch(LEAK);
   expect(aws.seen).toHaveLength(0);
 });

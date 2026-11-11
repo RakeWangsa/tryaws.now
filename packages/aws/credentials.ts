@@ -30,6 +30,9 @@ export function createStsClient(requestHandler?: AwsRequestHandler): STSClient {
   return client;
 }
 
+// toJSON, toString and the inspect hook protect this object. A copy made with spread,
+// Object.entries or structuredClone is a plain object that holds the secrets: never copy it and
+// never pass it to a logger, a message to a worker or an error.
 /**
  * Temporary credentials of a pool account role. The fields are plain and enumerable because the
  * SDK reads (and annotates) the object; printing or serialising it shows no secret (R3, R14).
@@ -129,6 +132,12 @@ export function createCredentialCache(deps: CredentialCacheDeps): CredentialCach
       key = `${ref.awsAccountId}:${ref.externalId}:${role}`;
     } catch (error) {
       throw toAwsError(error, OPERATION);
+    }
+
+    // Drop every expired entry (any key), so secrets of a rotated or unused account do not linger.
+    const nowMs = clock.now().getTime();
+    for (const [k, entry] of entries) {
+      if (entry.expiration.getTime() <= nowMs) entries.delete(k);
     }
 
     const cached = entries.get(key);
