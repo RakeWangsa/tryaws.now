@@ -36,6 +36,16 @@ export {
   bootstrapScript,
   type BootstrapOptions,
 } from "./adapters/bootstrap";
+export { createBucketAdapter, type BucketDeps } from "./adapters/bucket";
+export {
+  createBucketAccessKey,
+  type BucketAccessKey,
+  type BucketAccessKeyInput,
+} from "./adapters/bucket-access";
+export {
+  createContainerServiceAdapter,
+  type ContainerServiceDeps,
+} from "./adapters/container-service";
 export {
   createBackupAdapter,
   withBackups,

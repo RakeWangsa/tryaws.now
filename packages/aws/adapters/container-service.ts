@@ -1,0 +1,295 @@
+import {
+  CreateContainerServiceCommand,
+  CreateContainerServiceDeploymentCommand,
+  DeleteContainerServiceCommand,
+  GetContainerServicesCommand,
+  UpdateContainerServiceCommand,
+  type ContainerService,
+  type LightsailClient,
+} from "@aws-sdk/client-lightsail";
+import {
+  awsResourceName,
+  parseContainerConfig,
+  parseDeployment,
+  resourceTags,
+  stepDone,
+  stepNext,
+  stepWait,
+  type ContainerConfig,
+  type ContainerPlan,
+  type Deployment,
+  type OperationKind,
+  type StepResult,
+} from "@tc/core";
+import { AwsError } from "../errors";
+import type { LiveState, OpCtx, ProductAdapter } from "./types";
+
+/**
+ * What the adapter needs and OpCtx does not carry: the power and scale of a catalog product, read
+ * with the customer id of the resource row (never a payload). null when the product is not a
+ * container product: the call then fails closed (R16).
+ *
+ * Public registry images only (10.3): the adapter has no way to hand out a registry credential and
+ * never touches the private registry access of a service.
+ */
+export interface ContainerServiceDeps {
+  loadPlan(input: {
+    readonly customerId: string;
+    readonly productId: string;
+  }): Promise<ContainerPlan | null>;
+}
+
+const POLL_SECONDS = 15;
+const MAX_WAIT_MS = 20 * 60 * 1000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function fail(code: "validation" | "conflict" | "upstream_unavailable" | "internal"): AwsError {
+  return new AwsError({ code, retryable: false });
+}
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof AwsError && error.code === "not_found";
+}
+
+async function orNull<T>(call: () => Promise<T>): Promise<T | null> {
+  try {
+    return await call();
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+}
+
+function client(ctx: OpCtx<ContainerConfig>): LightsailClient {
+  return ctx.access.lightsail(ctx.account, ctx.region, "TcProvisioner");
+}
+
+function checkWaitBudget(ctx: OpCtx<ContainerConfig>): void {
+  if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
+    throw fail("upstream_unavailable");
+  }
+}
+
+function pollAt(ctx: OpCtx<ContainerConfig>): Date {
+  return new Date(ctx.clock.now().getTime() + POLL_SECONDS * 1000);
+}
+
+async function findService(
+  lightsail: LightsailClient,
+  name: string,
+): Promise<ContainerService | null> {
+  const got = await orNull(() =>
+    lightsail.send(new GetContainerServicesCommand({ serviceName: name })),
+  );
+  return got?.containerServices?.find((s) => s.containerServiceName === name) ?? null;
+}
+
+function awsDeployment(serviceName: string, deployment: Deployment) {
+  const endpoint = deployment.publicEndpoint;
+  return {
+    serviceName,
+    containers: Object.fromEntries(
+      Object.entries(deployment.containers).map(([name, c]) => [
+        name,
+        {
+          image: c.image,
+          ...(c.command ? { command: [...c.command] } : {}),
+          ...(c.environment ? { environment: { ...c.environment } } : {}),
+          ...(c.ports ? { ports: { ...c.ports } } : {}),
+        },
+      ]),
+    ),
+    ...(endpoint
+      ? {
+          publicEndpoint: {
+            containerName: endpoint.containerName,
+            containerPort: endpoint.containerPort,
+            ...(endpoint.healthCheckPath
+              ? { healthCheck: { path: endpoint.healthCheckPath } }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function savedDeployment(ctx: OpCtx<ContainerConfig>): Deployment | null {
+  const config = ctx.resource.config;
+  if (typeof config !== "object" || config === null) return null;
+  const raw = (config as Record<string, unknown>).deployment;
+  if (raw === undefined || raw === null) return null;
+  const parsed = parseDeployment(raw);
+  // A saved deployment that does not hold any more is refused, not skipped (R16).
+  if (!parsed.ok) throw fail("validation");
+  return parsed.value;
+}
+
+export function createContainerServiceAdapter(
+  deps: ContainerServiceDeps,
+): ProductAdapter<ContainerConfig> {
+  const serviceName = (ctx: OpCtx<ContainerConfig>) =>
+    awsResourceName("container", ctx.resource.id);
+
+  async function create(ctx: OpCtx<ContainerConfig>): Promise<StepResult> {
+    const name = serviceName(ctx);
+    const lightsail = client(ctx);
+    switch (ctx.operation.step) {
+      case null:
+      case "create_service": {
+        const plan = await deps.loadPlan({
+          customerId: ctx.resource.customerId,
+          productId: ctx.config.productId,
+        });
+        if (plan === null) throw fail("validation");
+        const found = await findService(lightsail, name);
+        if (found !== null) {
+          const ours = (found.tags ?? []).some(
+            (t) => t.key === "tc:resource" && t.value === ctx.resource.id,
+          );
+          if (!ours) throw fail("conflict");
+          return stepNext("wait_ready", { awsName: name });
+        }
+        const orderId = (ctx.operation.payload as { orderId?: unknown } | null)?.orderId;
+        await lightsail.send(
+          new CreateContainerServiceCommand({
+            serviceName: name,
+            power: plan.power,
+            scale: plan.scale,
+            tags: resourceTags({
+              env: ctx.env,
+              customerId: ctx.resource.customerId,
+              resourceId: ctx.resource.id,
+              orderId: orderId as string,
+            }),
+          }),
+        );
+        return stepNext("wait_ready", { awsName: name });
+      }
+      case "wait_ready": {
+        const state = (await findService(lightsail, name))?.state;
+        if (state === "READY" || state === "RUNNING") return stepNext("deploy");
+        if (state === "PENDING" || state === "UPDATING" || state === undefined) {
+          checkWaitBudget(ctx);
+          return stepWait("wait_ready", pollAt(ctx));
+        }
+        throw fail("upstream_unavailable");
+      }
+      case "deploy": {
+        const deployment = savedDeployment(ctx);
+        if (deployment === null) return stepDone({ state: "active", awsName: name });
+        const service = await findService(lightsail, name);
+        if (service === null) throw fail("upstream_unavailable");
+        // A retry does not make a second deployment.
+        if (service.currentDeployment !== undefined || service.nextDeployment !== undefined) {
+          return stepNext("wait_deploy");
+        }
+        await lightsail.send(
+          new CreateContainerServiceDeploymentCommand(awsDeployment(name, deployment)),
+        );
+        return stepNext("wait_deploy");
+      }
+      case "wait_deploy": {
+        const state = (await findService(lightsail, name))?.state;
+        if (state === "RUNNING") return stepDone({ state: "active", awsName: name });
+        if (state === "DEPLOYING" || state === "UPDATING" || state === "PENDING") {
+          checkWaitBudget(ctx);
+          return stepWait("wait_deploy", pollAt(ctx));
+        }
+        throw fail("upstream_unavailable");
+      }
+      default:
+        throw fail("internal");
+    }
+  }
+
+  // Suspend (10.3): AWS still bills a disabled service. The settings stay in resources.config.
+  async function suspend(ctx: OpCtx<ContainerConfig>): Promise<StepResult> {
+    await client(ctx).send(
+      new UpdateContainerServiceCommand({ serviceName: serviceName(ctx), isDisabled: true }),
+    );
+    return stepDone({ state: "suspended" });
+  }
+
+  async function resume(ctx: OpCtx<ContainerConfig>): Promise<StepResult> {
+    await client(ctx).send(
+      new UpdateContainerServiceCommand({ serviceName: serviceName(ctx), isDisabled: false }),
+    );
+    return stepDone({ state: "active" });
+  }
+
+  // No snapshot exists for a container service: the settings in resources.config are what is kept.
+  async function noSnapshot(): Promise<StepResult> {
+    return stepDone();
+  }
+
+  async function destroy(ctx: OpCtx<ContainerConfig>): Promise<StepResult> {
+    if (ctx.resource.state !== "suspended") throw fail("conflict");
+    try {
+      await client(ctx).send(new DeleteContainerServiceCommand({ serviceName: serviceName(ctx) }));
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+    return stepDone({ state: "destroyed" });
+  }
+
+  async function describe(ctx: OpCtx<ContainerConfig>): Promise<LiveState> {
+    const service = await findService(client(ctx), serviceName(ctx));
+    return { state: service === null ? "missing" : (service.state ?? "unknown").toLowerCase() };
+  }
+
+  async function action(kind: OperationKind, ctx: OpCtx<ContainerConfig>): Promise<StepResult> {
+    const name = serviceName(ctx);
+    const lightsail = client(ctx);
+    const payload = ctx.operation.payload as Record<string, unknown> | null;
+    switch (kind) {
+      case "deploy_containers": {
+        // The payload is written by the web tier: it is input (R9).
+        const parsed = parseDeployment(payload);
+        if (!parsed.ok) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await lightsail.send(
+          new CreateContainerServiceDeploymentCommand(awsDeployment(name, parsed.value)),
+        );
+        return stepDone({ configMerge: { deployment: parsed.value } });
+      }
+      case "scale_container": {
+        // Power and scale come from a catalog product that the order flow charged for, never from
+        // numbers in the payload.
+        const productId = payload?.productId;
+        if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const plan = await deps.loadPlan({ customerId: ctx.resource.customerId, productId });
+        if (plan === null) throw fail("validation");
+        await lightsail.send(
+          new UpdateContainerServiceCommand({
+            serviceName: name,
+            power: plan.power,
+            scale: plan.scale,
+          }),
+        );
+        return stepDone({ configMerge: { productId } });
+      }
+      default:
+        throw fail("validation");
+    }
+  }
+
+  return {
+    family: "container_service",
+    parseConfig(input: unknown): ContainerConfig {
+      const parsed = parseContainerConfig(input);
+      if (!parsed.ok) throw fail("validation");
+      return parsed.value;
+    },
+    aws: {
+      create,
+      suspend,
+      resume,
+      finalSnapshot: noSnapshot,
+      destroy,
+      purgeSnapshots: noSnapshot,
+      describe,
+      action,
+    },
+  };
+}
