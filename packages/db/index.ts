@@ -40,6 +40,15 @@ export type { AdminRepos, AdminActor, AdminRole, AdminScope } from "./repositori
 export type { FeatureFlagSetting } from "./repositories/admin/feature-flags";
 export type { FxRateInput, FxRateSaved, FxRatesAdminRepo } from "./repositories/admin/fx-rates";
 export type {
+  CapacityAdminRepo,
+  CapacityLimitInput,
+  CapacityLimitSet,
+  CapacityRow,
+  PoolAccountAdded,
+  PoolAccountInput,
+  ReserveSetting,
+} from "./repositories/admin/capacity";
+export type {
   NotifiedEntry,
   NotifyNextInput,
   WaitlistAdminRepo,

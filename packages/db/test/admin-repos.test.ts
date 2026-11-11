@@ -5,7 +5,7 @@ import { adminRepos, type AdminActor, type AdminRepos } from "../repositories/ad
 import { auditRowsOf } from "../testing/repos";
 import { runTransaction } from "../tx";
 import { useTempDatabase } from "./temp-db";
-import { ensureMarket, newAdmin } from "./fixtures";
+import { ensureMarket, newAdmin, newPoolAccount } from "./fixtures";
 
 const t = useTempDatabase();
 const asAdmin = <T>(actor: AdminActor, fn: (r: AdminRepos) => Promise<T>) =>
@@ -56,6 +56,33 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       },
       "first rule",
     ),
+  "capacity.addPoolAccount": (r) =>
+    r.capacity.addPoolAccount(
+      {
+        awsAccountId: "123456789012",
+        name: "tc-pool-case",
+        tier: "new",
+        roleArn: "arn:aws:iam::123456789012:role/TcProvisioner",
+        externalId: "ext-case",
+        limits: [{ region: "ap-southeast-1", quotaCode: "static_ip", limit: 5 }],
+      },
+      "launch pool",
+    ),
+  "capacity.setLimit": async (r) =>
+    r.capacity.setLimit(
+      {
+        poolAccountId: await newPoolAccount(t.pool),
+        region: "ap-southeast-1",
+        quotaCode: "static_ip",
+        limit: 5,
+      },
+      "quota raised",
+    ),
+  "capacity.setReserve": (r) =>
+    r.capacity.setReserve(
+      { market: "BD", quotaCode: "instance_vcpu", reserve: 1 },
+      "keep one vCPU",
+    ),
   "waitlist.notifyNext": (r) =>
     r.waitlist.notifyNext(
       { productFamily: "linux_instance", region: "ap-southeast-1", reason: "capacity", count: 1 },
@@ -63,7 +90,7 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
     ),
 };
 // Admin reads ("<repo>.<method>") that write no audit row. Empty until WP8 decides where admin reads live and whether a read is audited (open point 21).
-const ADMIN_READ_METHODS: readonly string[] = ["waitlist.list"];
+const ADMIN_READ_METHODS: readonly string[] = ["capacity.list", "waitlist.list"];
 
 it("every method of adminRepos is a listed read or a write with an audit case", () => {
   const repos = adminRepos({} as Tx, { adminId: uuidv7(), role: "ops", ip: "203.0.113.9" });
