@@ -8,11 +8,12 @@ it("every table has a uuid id without a database default as its only primary key
     select t.table_name,
       (select string_agg(k.column_name, ',') from information_schema.table_constraints c
          join information_schema.key_column_usage k on k.constraint_name = c.constraint_name and k.table_name = c.table_name
-        where c.table_name = t.table_name and c.constraint_type = 'PRIMARY KEY') as pk,
-      (select udt_name from information_schema.columns where table_name = t.table_name and column_name = 'id') as id_type,
-      (select column_default from information_schema.columns where table_name = t.table_name and column_name = 'id') as id_default,
+          and k.table_schema = c.table_schema and k.constraint_schema = c.constraint_schema
+        where c.table_schema = 'public' and c.table_name = t.table_name and c.constraint_type = 'PRIMARY KEY') as pk,
+      (select udt_name from information_schema.columns where table_schema = 'public' and table_name = t.table_name and column_name = 'id') as id_type,
+      (select column_default from information_schema.columns where table_schema = 'public' and table_name = t.table_name and column_name = 'id') as id_default,
       (select is_nullable || ' ' || udt_name || ' ' || coalesce(column_default, '') from information_schema.columns
-        where table_name = t.table_name and column_name = 'created_at') as created
+        where table_schema = 'public' and table_name = t.table_name and column_name = 'created_at') as created
     from information_schema.tables t where t.table_schema = 'public' and t.table_type = 'BASE TABLE'`);
   for (const r of rows)
     expect(r, r.table_name).toEqual({

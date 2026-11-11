@@ -120,6 +120,23 @@ it("a journal that is not valid JSON is refused with a clear message", () => {
   expect(() => checkForwardOnly(broken, base)).toThrow(message);
 });
 
+it.each([
+  "null",
+  "[]",
+  '{"entries": 5}',
+  '{"entries": [null]}',
+  '{"entries": [{"when": "1", "tag": "0000_x"}]}',
+  '{"entries": [{"when": 1}]}',
+])("a journal of the wrong shape is refused with a clear message: %s", (text) => {
+  const current: MigrationTree = new Map([
+    ["0000_x.sql", "-- 0000_x.sql"],
+    ["meta/_journal.json", text],
+  ]);
+  expect(() => checkForwardOnly(tree([]), current)).toThrow(
+    "forward-only check: meta/_journal.json has the wrong shape",
+  );
+});
+
 it("checks the order and the files of the journal even when the base is empty", () => {
   const empty = tree([]);
   expect(

@@ -10,16 +10,29 @@ export type MigrationTree = ReadonlyMap<string, string>;
 const JOURNAL = "meta/_journal.json";
 const MIGRATIONS_PATH = "packages/db/migrations";
 
-type JournalEntry = { when: number; tag: string };
+// Other fields of an entry stay as they are: rule 2 compares whole entries.
+type JournalEntry = { when: number; tag: string; [field: string]: unknown };
 
-function journalEntries(tree: MigrationTree): unknown[] {
-  let parsed: { entries?: unknown[] };
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isEntry = (value: unknown): value is JournalEntry =>
+  isObject(value) && typeof value.when === "number" && typeof value.tag === "string";
+
+function journalEntries(tree: MigrationTree): JournalEntry[] {
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(tree.get(JOURNAL) ?? "{}") as { entries?: unknown[] };
+    parsed = JSON.parse(tree.get(JOURNAL) ?? "{}");
   } catch {
     throw new Error(`forward-only check: ${JOURNAL} is not valid JSON`);
   }
-  return parsed.entries ?? [];
+  const wrongShape = () => new Error(`forward-only check: ${JOURNAL} has the wrong shape`);
+  if (!isObject(parsed)) throw wrongShape();
+  if (parsed.entries === undefined) return [];
+  if (!Array.isArray(parsed.entries)) throw wrongShape();
+  const entries: unknown[] = parsed.entries;
+  if (!entries.every(isEntry)) throw wrongShape();
+  return entries;
 }
 
 // Rules, in the order of their messages: 1 committed files are not deleted or changed; 2 committed
@@ -53,9 +66,8 @@ export function checkForwardOnly(base: MigrationTree, current: MigrationTree): s
 
   // Rule 3: order and files of the current journal (drizzle skips an older `when` in silence).
   if (current.has(JOURNAL)) {
-    const entries = currentEntries as JournalEntry[];
-    entries.forEach((entry, i) => {
-      if (i > 0 && !(entry.when > entries[i - 1]!.when))
+    currentEntries.forEach((entry, i) => {
+      if (i > 0 && !(entry.when > currentEntries[i - 1]!.when))
         problems.push(`${JOURNAL} entry ${i} is not newer than entry ${i - 1}`);
       if (!current.has(`${entry.tag}.sql`))
         problems.push(`${JOURNAL} entry ${i} has no ${entry.tag}.sql`);
@@ -75,7 +87,7 @@ export function checkForwardOnly(base: MigrationTree, current: MigrationTree): s
 
   // Rule 5: an SQL file that the journal does not name is a migration that never runs.
   if (current.has(JOURNAL)) {
-    const named = new Set((currentEntries as JournalEntry[]).map((e) => `${e.tag}.sql`));
+    const named = new Set(currentEntries.map((e) => `${e.tag}.sql`));
     const orphans = [...current.keys()].filter(
       (p) => !p.includes("/") && p.endsWith(".sql") && !named.has(p),
     );
