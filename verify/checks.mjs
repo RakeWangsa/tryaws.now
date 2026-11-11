@@ -659,6 +659,50 @@ TASKS["WP8-T2"] = [
   repo,
 ];
 
+// WP8-T3: wallets, payments and adjustments with a second approval. The backlog sentence ("an adjustment
+// above the limit waits for a second admin") has its own line: the db suite of the wallet repository
+// (pending above the limit, the requester refused, the 24 hour split rule, replays, audit rows). The
+// ledger invariant with the real postTransaction is the core line; the screens, the R9 order and the
+// mockup cross-check are the admin suite. `--no-passWithNoTests` makes a filter that selects no file fail.
+const adjustmentWaitsForSecondAdmin = {
+  id: "adjustment-above-limit-waits-for-second-admin",
+  title:
+    "WP8-T3: an adjustment above the limit waits for a second admin (and splitting does not help)",
+  command: ["pnpm", "test", "--filter", "@tc/db", "admin-wallets", "--no-passWithNoTests"],
+};
+const adminMoneyRepos = {
+  id: "admin-money-repos",
+  title: "WP8-T3: payments, refunds and discrepancies: roles, audit rows, replays",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "admin-payments",
+    "admin-repos",
+    "--no-passWithNoTests",
+  ],
+};
+const adminMoneyLedger = {
+  id: "admin-money-ledger-invariant",
+  title: "WP8-T3: the admin postings balance with the real postTransaction",
+  command: ["pnpm", "test", "--filter", "@tc/core", "test/admin-money", "--no-passWithNoTests"],
+};
+TASKS["WP8-T3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  adjustmentWaitsForSecondAdmin,
+  adminMoneyRepos,
+  adminMoneyLedger,
+  core,
+  admin,
+  repo,
+];
+
 // WP1-T4: the two halves of the backlog proof ("a new rate never changes a stored order", "preview equals
 // engine output") on their own lines. `--no-passWithNoTests` makes a filter that selects no file fail.
 const storedOrder = {

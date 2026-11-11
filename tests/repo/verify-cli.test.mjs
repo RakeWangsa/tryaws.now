@@ -123,6 +123,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP7-T5",
     "WP8-T1",
     "WP8-T2",
+    "WP8-T3",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -438,6 +439,43 @@ it("task WP8-T2 is proven by the db and admin suites and the line of the KYC doc
     "packages/db/test/admin-customers.test.ts",
     "apps/admin/server/kyc-documents.test.ts",
     "apps/admin/customers-pages.test.tsx",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP8-T3 is proven by the db, core and admin suites and the line of the second-approval sentence", () => {
+  expect(TASKS["WP8-T3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    [
+      "adjustment-above-limit-waits-for-second-admin",
+      "pnpm test --filter @tc/db admin-wallets --no-passWithNoTests",
+    ],
+    [
+      "admin-money-repos",
+      "pnpm test --filter @tc/db admin-payments admin-repos --no-passWithNoTests",
+    ],
+    [
+      "admin-money-ledger-invariant",
+      "pnpm test --filter @tc/core test/admin-money --no-passWithNoTests",
+    ],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "packages/db/test/admin-wallets.test.ts",
+    "packages/db/test/admin-payments.test.ts",
+    "packages/db/test/admin-repos.test.ts",
+    "packages/core/test/admin-money.db.test.ts",
+    "apps/admin/money-pages.test.tsx",
+    "apps/admin/server/money-flow.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
