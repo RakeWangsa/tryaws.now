@@ -283,7 +283,9 @@ describe("/customers/[id]", () => {
   it.each(["ok", "replayed", "conflict", "unavailable"])("shows the result %s", async (result) => {
     as("ops");
     const html = inProvider(await DetailPage(detailParams("en", CUSTOMER_ID, { result })), "en");
-    expect(html).toContain(msgs("en").result[result as keyof typeof customersEn.AdminCustomers.result]);
+    expect(html).toContain(
+      msgs("en").result[result as keyof typeof customersEn.AdminCustomers.result],
+    );
   });
 
   it("ignores a result code that is not one of ours", async () => {
