@@ -10,6 +10,7 @@ const facts = (over: Partial<GuardFacts> = {}): GuardFacts => ({
   subscriptionStatus: "retained",
   family: "linux_instance",
   hasFinalSnapshot: true,
+  isFinalBackup: false,
   ...over,
 });
 
@@ -55,7 +56,9 @@ describe("decideDestructive: delete_backup (WP5-T6)", () => {
       decideDestructive("delete_backup", facts({ family: "backup", subscriptionStatus: null })),
     ).toBe(true);
     expect(decideDestructive("delete_backup", facts({ family: "backup" }))).toBe(true);
-    expect(decideDestructive("delete_backup", facts({ family: "backup", isFinalBackup: true }))).toBe(false);
+    expect(
+      decideDestructive("delete_backup", facts({ family: "backup", isFinalBackup: true })),
+    ).toBe(false);
     for (const family of ["linux_instance", "disk", "database", "mystery"]) {
       expect(decideDestructive("delete_backup", facts({ family }))).toBe(false);
     }

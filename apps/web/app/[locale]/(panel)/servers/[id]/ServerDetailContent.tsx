@@ -138,7 +138,9 @@ export function ServerDetailContent({
             { id: "networking", title: t("detail.tab.networking"), content: networking },
             ...extraTabs,
           ]}
-          {...(defaultTab !== undefined && ["backups", "storage", "metrics", "billing", "destroy"].includes(defaultTab) && extraTabs.length > 0
+          {...(defaultTab !== undefined &&
+          ["backups", "storage", "metrics", "billing", "destroy"].includes(defaultTab) &&
+          extraTabs.length > 0
             ? { defaultId: defaultTab }
             : {})}
         />

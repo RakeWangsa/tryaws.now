@@ -994,6 +994,77 @@ TASKS["WP5-T5"] = [
   repo,
 ];
 
+// WP5-T6: the server tabs Backups, Storage, Metrics, Billing and Destroy, /dashboard, /notifications
+// and the bell. The backlog proof, "Destroy needs the typed name and a fresh sign-in", is on its own
+// line (the action cores), next to the tenant proof of the new repositories (R8), the screens in bn
+// and en, the cross-check against the shared mockup and the messages. Each filter names files and
+// `--no-passWithNoTests` makes an empty selection fail; tests/repo/verify-cli.test.mjs asserts that
+// the files exist.
+const extrasCores = {
+  id: "extras-cores",
+  title:
+    "U10, R9, R13: Destroy needs the typed name and a fresh sign-in; order of checks; cross-tenant answers",
+  command: ["pnpm", "test", "--filter", "@tc/web", "server/extras-actions", "--no-passWithNoTests"],
+};
+const extrasViews = {
+  id: "extras-views",
+  title:
+    "R4, R16: price lines, metrics through the reader port, notifications rendered without payload",
+  command: ["pnpm", "test", "--filter", "@tc/web", "server/extras-view", "--no-passWithNoTests"],
+};
+const extrasRepos = {
+  id: "extras-repos",
+  title:
+    "R8, R13: notifications, subscriptions, backup rows, recent operations; a final backup is never deleted (database)",
+  command: ["pnpm", "test", "--filter", "@tc/db", "extras-repos", "--no-passWithNoTests"],
+};
+const extrasGuard = {
+  id: "extras-guard",
+  title: "R13: the destroy guard and delete_backup (a final backup is refused)",
+  command: ["pnpm", "test", "--filter", "@tc/core", "lifecycle/guard", "--no-passWithNoTests"],
+};
+const extrasPages = {
+  id: "extras-pages",
+  title:
+    "16.10: the tabs, the dashboard and the bell in bn and en; flag off; another customer's server",
+  command: ["pnpm", "test", "--filter", "@tc/web", "_extras/pages", "--no-passWithNoTests"],
+};
+const extrasAnchors = {
+  id: "extras-mockup-anchors",
+  title: "U1, U11: every state carries the classes of its shared mockup page, bn and en",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "_extras/mockup-anchors",
+    "--no-passWithNoTests",
+  ],
+};
+const extrasMessages = {
+  id: "extras-messages",
+  title: "U5: bn and en have the same keys and no forbidden wording",
+  command: ["pnpm", "test", "--filter", "@tc/web", "messages/extras", "--no-passWithNoTests"],
+};
+TASKS["WP5-T6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  crossTenant,
+  extrasCores,
+  extrasGuard,
+  extrasRepos,
+  extrasViews,
+  extrasPages,
+  extrasAnchors,
+  extrasMessages,
+  repo,
+];
+
 // WP4-T7: the server screens (list, configurator, review, order status, detail, SSH keys) with fakes,
 // the Server Action cores, and the Playwright smoke that says BLOCKED when it cannot run. The staging
 // proof (a server ordered at 360 px in bn, scripts/playwright-servers.mjs) and the database-backed
