@@ -68,14 +68,18 @@ export interface ReconciliationAdminRepo {
   list(input: ReconciliationListInput): Promise<Written<ReconciliationListResult>>;
 }
 
+function hasControlCharacter(text: string): boolean {
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) < 0x20) return true;
+  return false;
+}
+
 function safeValue(value: unknown): string | null {
   let text: string;
   if (typeof value === "string") text = value;
   else if (typeof value === "number" && Number.isFinite(value)) text = String(value);
   else if (typeof value === "boolean") text = String(value);
   else return null;
-  // eslint-disable-next-line no-control-regex
-  if (text === "" || text.length > MAX_VALUE || /[\u0000-\u001f]/.test(text)) return null;
+  if (text === "" || text.length > MAX_VALUE || hasControlCharacter(text)) return null;
   // An ARN, an account id (12 digits) and a secret-looking token stay out of the screen.
   if (/arn:/i.test(text) || /(?<![0-9])[0-9]{12}(?![0-9])/.test(text)) return null;
   return text;
