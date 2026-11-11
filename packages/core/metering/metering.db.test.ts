@@ -67,7 +67,7 @@ it("charges 10 GB at 300 paisa a month as 100 paisa a day, once, and sends 80% a
 });
 
 it("the usage row is replaced by a newer measurement of the same period (R7)", async () => {
-  const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+  const buyer = await kit.newBuyer();
   const { resourceId } = await placeOne(kit, buyer);
   await worker((tx) => meteringRepo(tx).upsertUsage(resourceId, "snapshot_gb", "2026-11-10", "1"));
   await worker((tx) =>
