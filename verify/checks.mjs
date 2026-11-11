@@ -454,6 +454,37 @@ const ordersKycGate = {
     "6.2 and 16.11: an order from a customer who is not verified creates no resource (full rows compared)",
   command: ["pnpm", "test", "--filter", "@tc/core", "orders/kyc-gate", "--no-passWithNoTests"],
 };
+// WP4-T5 / WP4-T6: the Linux instance adapter against a fake Lightsail, the bootstrap firewall text
+// and the local part of tests/isolation. The real-pool isolation test and the staging proof are
+// manual VERIFY steps (JOURNEY.md); the database-backed provisioner tests run in the db gate.
+const linuxAdapter = {
+  id: "linux-adapter",
+  title: "10.3: key import, instance, bootstrap marker, static IP, ports; a retried step makes one",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "linux-instance", "--no-passWithNoTests"],
+};
+const bootstrapFirewall = {
+  id: "bootstrap-firewall",
+  title: "10.4: the fixed bootstrap template opens and closes exactly what it should",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "bootstrap", "--no-passWithNoTests"],
+};
+const isolationLocal = {
+  id: "isolation-local",
+  title: "10.4: tests/isolation case list; the real-pool part skips itself with a reason",
+  command: ["pnpm", "test", "--filter", "isolation", "--no-passWithNoTests"],
+};
+TASKS["WP4-T5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  linuxAdapter,
+  bootstrapFirewall,
+  isolationLocal,
+  aws,
+  repo,
+];
+
 TASKS["WP4-T4"] = [
   specSync,
   baselineSync,
