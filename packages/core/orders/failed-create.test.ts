@@ -1,3 +1,4 @@
+import { compensationRepo } from "@tc/db";
 import { newAdmin, runTransaction, useTempDatabase } from "@tc/db/testing";
 import { describe, expect, it } from "vitest";
 import { walletEntriesSum } from "../ledger/balance";
@@ -144,5 +145,35 @@ describe("the failed hook of a create", () => {
           .rows[0] as { status: string }
       ).status,
     ).toBe("paid");
+  });
+
+  it("(j) the repository writes only rows of the customer it was made for (defence in depth)", async () => {
+    const kit = await makeKit(t);
+    const other = await kit.newBuyer();
+    const mine = await placeOne(kit);
+    const asOther = await runTransaction(
+      t.db,
+      async (tx) => {
+        const repo = compensationRepo(tx, other.customerId);
+        return {
+          found: await repo.findOrderOfResource(mine.resourceId),
+          reversed: await repo.markOrderReversed(mine.orderId),
+          ended: await repo.endSubscription(mine.resourceId),
+          failed: await repo.failResource(mine.resourceId),
+        };
+      },
+      { role: "worker_rw" },
+    );
+    expect(asOther).toEqual({ found: null, reversed: false, ended: false, failed: false });
+    const row = async (q: string, id: string) => (await t.pool.query(q, [id])).rows[0];
+    expect(await row("select status from orders where id = $1", mine.orderId)).toEqual({
+      status: "paid",
+    });
+    expect(await row("select state from resources where id = $1", mine.resourceId)).toEqual({
+      state: "creating",
+    });
+    expect(
+      await row("select status from subscriptions where resource_id = $1", mine.resourceId),
+    ).not.toEqual({ status: "ended" });
   });
 });

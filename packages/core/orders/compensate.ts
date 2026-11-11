@@ -35,7 +35,7 @@ export async function compensateFailedCreate(
   event: { readonly resourceId: string; readonly customerId: string; readonly code: string },
 ): Promise<Compensated> {
   await lockWallet(tx, event.customerId);
-  const repo = compensationRepo(tx);
+  const repo = compensationRepo(tx, event.customerId);
 
   const order = await repo.findOrderOfResource(event.resourceId);
   // A create without an order must never be silent (R16): the sweeper escalates.
