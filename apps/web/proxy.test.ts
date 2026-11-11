@@ -110,7 +110,32 @@ describe("proxy: matcher", () => {
     }
   });
 
-  it("is the next-intl matcher", () => {
-    expect(config.matcher).toBe("/((?!api|trpc|_next|_vercel|.*\\..*).*)");
+  it("is the next-intl matcher, without the return routes of the payment gateway", () => {
+    expect(config.matcher).toBe("/((?!api|trpc|_next|_vercel|pay/|.*\\..*).*)");
+  });
+
+  it("does not match /pay/eps/*: the gateway returns there, no locale, no rewrite", () => {
+    for (const path of [
+      "/pay/eps/success",
+      "/pay/eps/fail",
+      "/pay/eps/cancel",
+      "/pay/eps/success?MerchantTransactionId=x",
+    ]) {
+      expect(matches(path.split("?")[0] as string), path).toBe(false);
+    }
+  });
+
+  it("still matches the wallet pages in both locales and a path that only starts with pay", () => {
+    for (const path of ["/wallet", "/en/wallet", "/wallet/topup", "/payments", "/en/pay/eps/x"]) {
+      expect(matches(path), path).toBe(true);
+    }
+  });
+});
+
+describe("proxy: form-action", () => {
+  it("lets forms post to the gateway origin and nowhere else (CSP form-action)", () => {
+    const csp = run("/wallet/topup").headers.get("content-security-policy-report-only") ?? "";
+    expect(csp).toContain("form-action 'self' https://pg.eps.com.bd;");
+    expect(csp).not.toContain("pg.eps.test");
   });
 });

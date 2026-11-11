@@ -14,11 +14,26 @@ export function createNonce(
 
 const NONCE_FORMAT = /^[A-Za-z0-9+/]+={0,2}$/;
 
-export function buildCsp(o: { nonce: string; dev: boolean }): string {
+// A form-action origin is `https://host` with an optional port: no path, query, credentials,
+// wildcard, quote, space or semicolon, so a value cannot add a directive or widen the source list.
+const FORM_ORIGIN_FORMAT = /^https:\/\/[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?$/;
+
+export function buildCsp(o: {
+  nonce: string;
+  dev: boolean;
+  /** Origins a page may post a form to besides itself (the payment gateway, open point 9). */
+  formActionOrigins?: readonly string[];
+}): string {
   if (!NONCE_FORMAT.test(o.nonce)) {
     throw new RangeError("nonce must be base64");
   }
   const { nonce, dev } = o;
+  const formOrigins = o.formActionOrigins ?? [];
+  for (const origin of formOrigins) {
+    if (typeof origin !== "string" || !FORM_ORIGIN_FORMAT.test(origin)) {
+      throw new RangeError("form-action origin must be a plain https origin");
+    }
+  }
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
@@ -28,7 +43,7 @@ export function buildCsp(o: { nonce: string; dev: boolean }): string {
     `connect-src 'self'${dev ? " ws: wss:" : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    ["form-action 'self'", ...formOrigins].join(" "),
     "frame-ancestors 'none'",
     ...(dev ? [] : ["upgrade-insecure-requests"]),
     `report-uri ${CSP_REPORT_PATH}`,

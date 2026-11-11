@@ -127,3 +127,56 @@ describe("buildCsp", () => {
     );
   });
 });
+
+describe("buildCsp: formActionOrigins", () => {
+  it("no argument, undefined and an empty list keep form-action 'self'", () => {
+    const plain = buildCsp({ nonce: "AAAA", dev: false });
+    expect(directive(plain, "form-action")).toBe("form-action 'self'");
+    expect(buildCsp({ nonce: "AAAA", dev: false, formActionOrigins: undefined })).toBe(plain);
+    expect(buildCsp({ nonce: "AAAA", dev: false, formActionOrigins: [] })).toBe(plain);
+  });
+
+  it("adds the origins after 'self', in order, and changes no other directive", () => {
+    const plain = buildCsp({ nonce: "AAAA", dev: false });
+    const csp = buildCsp({
+      nonce: "AAAA",
+      dev: false,
+      formActionOrigins: ["https://pg.eps.com.bd", "https://other.example:8443"],
+    });
+    expect(directive(csp, "form-action")).toBe(
+      "form-action 'self' https://pg.eps.com.bd https://other.example:8443",
+    );
+    expect(csp.replace(/form-action [^;]*/, "form-action 'self'")).toBe(plain);
+  });
+
+  it("keeps the directive in the same place", () => {
+    const csp = buildCsp({
+      nonce: "AAAA",
+      dev: true,
+      formActionOrigins: ["https://pg.eps.com.bd"],
+    });
+    const names = csp.split("; ").map((d) => d.split(" ")[0]);
+    expect(names.indexOf("form-action")).toBe(names.indexOf("base-uri") + 1);
+  });
+
+  it.each([
+    "https://pg.eps.com.bd/path",
+    "https://pg.eps.com.bd/",
+    "https://pg.eps.com.bd'",
+    "https://pg.eps com.bd",
+    "https://pg.eps.com.bd; script-src *",
+    "http://pg.eps.com.bd",
+    "https://*.eps.com.bd",
+    "'self'",
+    "*",
+    "pg.eps.com.bd",
+    "https://",
+    "https://pg.eps.com.bd?x=1",
+    "https://user@pg.eps.com.bd",
+    "",
+  ])("the origin %j throws RangeError", (origin) => {
+    expect(() => buildCsp({ nonce: "AAAA", dev: false, formActionOrigins: [origin] })).toThrow(
+      RangeError,
+    );
+  });
+});

@@ -1,6 +1,7 @@
 import createMiddleware from "next-intl/middleware";
 import { NextRequest } from "next/server";
 import type { NextResponse } from "next/server";
+import { gatewayFormOrigins } from "@tc/eps";
 import { CSP_REPORT_ONLY_HEADER, CSP_REPORT_PATH, buildCsp, createNonce } from "@tc/ui/runtime";
 import { routing } from "./i18n/routing.ts";
 
@@ -11,7 +12,11 @@ const handleI18n = createMiddleware(routing);
 // from it to put on its own scripts, and it is never sent to the browser (open point 12).
 export default function proxy(request: NextRequest): NextResponse {
   const nonce = createNonce();
-  const csp = buildCsp({ nonce, dev: process.env.NODE_ENV === "development" });
+  const csp = buildCsp({
+    nonce,
+    dev: process.env.NODE_ENV === "development",
+    formActionOrigins: gatewayFormOrigins(),
+  });
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
@@ -28,7 +33,9 @@ export default function proxy(request: NextRequest): NextResponse {
   return response;
 }
 
-// The next-intl matcher: `/theme/...` and `/brand/...` hold a dot, so they are skipped.
+// The next-intl matcher: `/theme/...` and `/brand/...` hold a dot, so they are skipped. `/pay/...`
+// is skipped too: the payment gateway returns there with a fixed URL, which a locale redirect or
+// rewrite would break (the route handlers of app/pay/eps put the customer into the right locale).
 export const config = {
-  matcher: "/((?!api|trpc|_next|_vercel|.*\\..*).*)",
+  matcher: "/((?!api|trpc|_next|_vercel|pay/|.*\\..*).*)",
 };
