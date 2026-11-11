@@ -465,6 +465,67 @@ const auth = {
 };
 TASKS["WP2-T1"] = [specSync, baselineSync, lint, typecheck, format, db, auth, repo];
 
+// WP8-T1: the admin app shell, the admin session and the active-admin rule of `audited` (H1). The
+// three sentences of the backlog row have their own lines; what only WAF and the function URL can
+// prove (the real 403 at CloudFront and at the Lambda URL) is a manual staging VERIFY step in
+// JOURNEY.md. `--no-passWithNoTests` makes a filter that selects no file fail.
+const adminNoMfa = {
+  id: "admin-no-mfa-no-sign-in",
+  title: "WP8-T1: no MFA means no sign-in (token claim, TOTP challenge, no cookie)",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/auth",
+    "test/admin-signin",
+    "test/admin.test",
+    "--no-passWithNoTests",
+  ],
+};
+const adminAllowlist = {
+  id: "admin-outside-allowlist-403",
+  title: "WP8-T1: outside the allowlist and without the CloudFront header the admin app gets 403",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/admin",
+    "proxy.test",
+    "server/gate",
+    "route.test",
+    "--no-passWithNoTests",
+  ],
+};
+const adminActiveActor = {
+  id: "admin-audited-active-actor",
+  title: "WP8-T1: every admin writer refuses a disabled or missing admin and appends no audit row",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "admin-audited-active",
+    "admin-repos",
+    "admin-operations",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP8-T1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  adminActiveActor,
+  auth,
+  adminNoMfa,
+  admin,
+  adminAllowlist,
+  core,
+  repo,
+];
+
 // WP1-T4: the two halves of the backlog proof ("a new rate never changes a stored order", "preview equals
 // engine output") on their own lines. `--no-passWithNoTests` makes a filter that selects no file fail.
 const storedOrder = {

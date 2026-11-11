@@ -119,11 +119,17 @@ async function freePort() {
   });
 }
 
+// The admin app answers 403 to an address outside its allowlist (WP8-T1, 6.2): the smoke run starts
+// it with this documentation range as the list and sends a CloudFront header from inside it.
+const SMOKE_VIEWER = "203.0.113.5:44321";
+const SMOKE_ALLOWLIST = "203.0.113.0/24";
+
 async function get(base, path, init = {}) {
   const response = await globalThis.fetch(`${base}${path}`, {
     redirect: "manual",
     signal: globalThis.AbortSignal.timeout(REQUEST_LIMIT_MS),
     ...init,
+    headers: { "CloudFront-Viewer-Address": SMOKE_VIEWER, ...init.headers },
   });
   const text = await response.text();
   return { status: response.status, headers: response.headers, text };
@@ -170,9 +176,11 @@ async function startServer(app, env) {
 
 function pagesOf(app) {
   const demos = app === "web" ? ["app", "public", "auth"] : ["admin"];
+  // The home of the admin app needs a session and redirects to the sign-in; the sign-in is its open page.
+  const home = app === "admin" ? "/login" : "/";
   return [
-    { path: "/", locale: "bn", headers: { "Accept-Language": "en" } },
-    { path: "/en", locale: "en" },
+    { path: home, locale: "bn", headers: { "Accept-Language": "en" } },
+    { path: app === "admin" ? "/en/login" : "/en", locale: "en" },
     { path: "/dev/ui", locale: "bn" },
     { path: "/en/dev/ui", locale: "en" },
     ...demos.map((demo) => ({ path: `/dev/ui/${demo}`, locale: "bn" })),
@@ -304,13 +312,19 @@ async function smokeApp(app, { skipBuild }) {
   record(
     app,
     "next start: pages, headers, CSP report, redirect, 404",
-    await withServer(app, { TC_DEV_UI: "on", TC_STAGE: "" }, (base) => liveChecks(app, base)),
+    await withServer(
+      app,
+      { TC_DEV_UI: "on", TC_STAGE: "", ADMIN_IP_ALLOWLIST: SMOKE_ALLOWLIST },
+      (base) => liveChecks(app, base),
+    ),
   );
   record(
     app,
     "TC_STAGE=production: /dev/ui is 404",
-    await withServer(app, { TC_DEV_UI: "on", TC_STAGE: "production" }, (base) =>
-      productionCheck(app, base),
+    await withServer(
+      app,
+      { TC_DEV_UI: "on", TC_STAGE: "production", ADMIN_IP_ALLOWLIST: SMOKE_ALLOWLIST },
+      (base) => productionCheck(app, base),
     ),
   );
 }
