@@ -290,6 +290,15 @@ const WP7 = [
   "validateZoneName",
 ];
 
+// WP7-T6: the pure cores of the reconciler (packages/core/reconcile).
+const RECONCILE = [
+  "compareInventory",
+  "dayKeyOf",
+  "findingId",
+  "planCapacityChecks",
+  "staleOperations",
+];
+
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
     expect(Object.keys(orders).sort()).toEqual(ORDERS_VALUES);
@@ -320,6 +329,7 @@ describe("the public surface of the order flow", () => {
           ...WP7,
           ...STORAGE_CONTAINER,
           ...KYC,
+          ...RECONCILE,
         ]),
       ].sort(),
     );

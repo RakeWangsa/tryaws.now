@@ -598,6 +598,11 @@ TASKS["WP7-T3"] = [specSync, baselineSync, lint, typecheck, format, core, aws, r
 // test (packages/core/metering) run with the core and db checks; the scheduler job with the scheduler check.
 TASKS["WP7-T5"] = [specSync, baselineSync, lint, typecheck, format, db, core, scheduler, repo];
 
+// WP7-T6: the reconciler. The pure comparison cores (packages/core/reconcile), the worker_rw repository
+// (packages/db, its DB test) and the run with a fake inventory port (functions/reconciler) run with the
+// db, core and reconciler checks. The real STS inventory is a manual VERIFY.
+TASKS["WP7-T6"] = [specSync, baselineSync, lint, typecheck, format, db, core, reconciler, repo];
+
 // WPU-T4: the two Next.js apps. Their tests run by package; the smoke script builds both apps,
 // scans the output, starts `next start` and reads the headers and the HTML (no database needed).
 const web = {
