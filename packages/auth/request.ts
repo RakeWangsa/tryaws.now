@@ -1,4 +1,3 @@
-import { lookupCustomerBySub, withTx } from "@tc/db";
 import type { AuthConfig } from "./config";
 import { cognitoRefreshPort, needsRefresh, refreshSession } from "./refresh";
 import type { RefreshOutcome, RefreshPort } from "./refresh";
@@ -33,7 +32,15 @@ function build(runtime: AuthRuntimeLike): Built {
   const known = built.get(runtime);
   if (known) return known;
   const verifier = runtime.verifier ?? createAccessTokenVerifier(runtime.config.customer);
-  const lookup = runtime.lookup ?? ((sub: string) => withTx((tx) => lookupCustomerBySub(tx, sub)));
+  // The database is loaded when a customer is first looked up, not when this module is: proxy.ts
+  // imports this file for refreshForProxy, which never looks anybody up, and the proxy bundle must
+  // not carry the PostgreSQL driver.
+  const lookup =
+    runtime.lookup ??
+    (async (sub: string) => {
+      const db = await import("@tc/db");
+      return db.withTx((tx) => db.lookupCustomerBySub(tx, sub));
+    });
   const onDenied = runtime.onDenied;
   const made: Built = {
     session: { verifier, lookup, ...(onDenied ? { onDenied } : {}) },

@@ -1,5 +1,5 @@
-import { authConfigFromEnv } from "@tc/auth";
-import type { AuthRuntimeLike } from "@tc/auth";
+import { authConfigFromEnv } from "@tc/auth/proxy";
+import type { AuthRuntimeLike } from "@tc/auth/proxy";
 import { readWebConfig } from "./config.ts";
 
 // The auth runtime of proxy.ts (open point 20), built from the environment alone: no database, no

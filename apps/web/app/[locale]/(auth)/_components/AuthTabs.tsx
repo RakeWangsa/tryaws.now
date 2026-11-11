@@ -1,7 +1,7 @@
 import { useTranslations } from "next-intl";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
-import { safeNext } from "../../../../server/request.ts";
+import { safeNext } from "../../../../server/next-path.ts";
 
 /**
  * The two tabs of login.html as links (open point 23): the mockup switches them with a script, the

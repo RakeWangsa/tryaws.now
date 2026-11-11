@@ -6,6 +6,7 @@
   "exports": {
     ".": "./index.ts",
     "./admin-ip": "./admin-ip.ts",
+    "./proxy": "./proxy.ts",
     "./testing": "./testing/index.ts"
   },
   "scripts": {

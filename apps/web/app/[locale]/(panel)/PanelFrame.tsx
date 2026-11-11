@@ -5,6 +5,7 @@ import type { AppNavId } from "@tc/ui";
 import { localeHrefs } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import type { PanelData } from "../../../server/panel.ts";
+import { SignOutForm } from "./sign-out.tsx";
 
 /**
  * The customer shell of one page of the panel: top bar with the wallet chip, left navigation, slim
@@ -35,6 +36,7 @@ export function PanelFrame({
       balanceMinor={panel.balanceMinor}
       enabledFamilies={panel.enabledFamilies}
       soonFamilies={panel.soonFamilies}
+      signOut={<SignOutForm locale={locale} />}
     >
       {children}
     </AppShell>

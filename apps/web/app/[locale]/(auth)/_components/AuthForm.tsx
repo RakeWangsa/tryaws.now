@@ -24,6 +24,8 @@ export interface AuthFormViewProps {
   submitIcon?: string;
   /** Shown inside the failure alert for `sign_in_failed`, such as the link to /verify. */
   failureExtra?: ReactNode;
+  /** Next to the submit button, such as the "forgot password" link of login.html. */
+  afterSubmit?: ReactNode;
   children: (s: FormChildState) => ReactNode;
 }
 
@@ -35,6 +37,7 @@ export function AuthFormView({
   submitLabel,
   submitIcon,
   failureExtra,
+  afterSubmit,
   children,
 }: AuthFormViewProps) {
   const t = useTranslations("Auth.field.error");
@@ -62,10 +65,19 @@ export function AuthFormView({
         <input key={name} type="hidden" name={name} value={value} />
       ))}
       {children({ fields, values, error })}
-      {submitLabel !== undefined ? (
-        <SubmitButton variant="primary" {...(submitIcon !== undefined ? { icon: submitIcon } : {})}>
-          {submitLabel}
-        </SubmitButton>
+      {submitLabel !== undefined || afterSubmit !== undefined ? (
+        <div className="mt-5 position-relative">
+          {submitLabel !== undefined ? (
+            <SubmitButton
+              variant="primary"
+              className="mt-0 mb-3 me-3"
+              {...(submitIcon !== undefined ? { icon: submitIcon } : {})}
+            >
+              {submitLabel}
+            </SubmitButton>
+          ) : null}
+          {afterSubmit}
+        </div>
       ) : null}
     </form>
   );

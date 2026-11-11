@@ -27,12 +27,34 @@ export const PANEL_NOINDEX_SOURCES: readonly string[] = NEXT_PREFIXES.flatMap((p
   `/en${prefix}/:path*`,
 ]);
 
+// The five sign-in screens (WP2-T2) are never cached and never indexed, in both locales (open point 21).
+export const AUTH_PATHS: readonly string[] = [
+  "/signup",
+  "/verify",
+  "/login",
+  "/forgot-password",
+  "/reset-password",
+];
+export const AUTH_NOINDEX_SOURCES: readonly string[] = AUTH_PATHS.flatMap((path) => [
+  path,
+  `/en${path}`,
+]);
+
 const nextConfig: NextConfig = {
   async headers() {
-    return PANEL_NOINDEX_SOURCES.map((source) => ({
-      source,
-      headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
-    }));
+    return [
+      ...PANEL_NOINDEX_SOURCES.map((source) => ({
+        source,
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      })),
+      ...AUTH_NOINDEX_SOURCES.map((source) => ({
+        source,
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      })),
+    ];
   },
   reactStrictMode: true,
   poweredByHeader: false,

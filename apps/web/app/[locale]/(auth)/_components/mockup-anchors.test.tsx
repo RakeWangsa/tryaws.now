@@ -2,9 +2,24 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AUTH_ANCHORS } from "./mockup-anchors.ts";
-import { STATE_RENDERERS } from "./mockup-states.tsx";
+
+// The forms of the screens import their Server Actions, which import the Next runtime.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined, set: () => undefined }),
+  headers: async () => new Headers(),
+}));
+vi.mock("next/navigation", () => ({
+  redirect: (to: string) => {
+    throw new Error(`REDIRECT:${to}`);
+  },
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
+}));
+
+const { STATE_RENDERERS } = await import("./mockup-states.tsx");
 
 // Not `new URL(..., import.meta.url)`: under jsdom Vite rewrites that form to an http URL.
 const here = dirname(fileURLToPath(import.meta.url));
