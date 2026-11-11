@@ -32,6 +32,12 @@ importers:
 
   apps/admin:
     dependencies:
+      '@tc/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@tc/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@tc/ui':
         specifier: workspace:*
         version: link:../../packages/ui

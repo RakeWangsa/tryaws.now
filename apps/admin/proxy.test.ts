@@ -1,10 +1,54 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import proxy, { config } from "./proxy.ts";
 
+const ALLOWED = "203.0.113.5:44321";
+
+beforeEach(() => {
+  vi.stubEnv("ADMIN_IP_ALLOWLIST", "203.0.113.0/24");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+// Every request comes from an allowed address unless the test says otherwise (6.2).
 function run(path: string, headers: Record<string, string> = {}) {
-  return proxy(new NextRequest(`http://localhost:3001${path}`, { headers }));
+  return proxy(
+    new NextRequest(`http://localhost:3001${path}`, {
+      headers: { "cloudfront-viewer-address": ALLOWED, ...headers },
+    }),
+  );
 }
+
+describe("proxy: the IP allowlist (6.2, R10)", () => {
+  it("outside the allowlist gets 403 with no body, no locale work and no CSP nonce", () => {
+    const response = run("/", { "cloudfront-viewer-address": "198.51.100.1:80" });
+    expect(response.status).toBe(403);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.has("x-middleware-request-x-nonce")).toBe(false);
+    expect(response.headers.has("location")).toBe(false);
+  });
+
+  it("no CloudFront header at all (a direct request to the function URL) gets 403", () => {
+    const response = proxy(new NextRequest("http://localhost:3001/en/customers"));
+    expect(response.status).toBe(403);
+  });
+
+  it("an unreadable header gets 403 on every page path", () => {
+    for (const path of ["/", "/en", "/login", "/en/payments", "/bn/x"]) {
+      expect(run(path, { "cloudfront-viewer-address": "garbage" }).status, path).toBe(403);
+    }
+  });
+
+  it("with no allowlist configured every request gets 403 (R16)", () => {
+    vi.stubEnv("ADMIN_IP_ALLOWLIST", "");
+    expect(run("/").status).toBe(403);
+  });
+
+  it("inside the allowlist the page is served", () => {
+    expect(run("/").status).toBeLessThan(300);
+  });
+});
 
 function nonceOf(csp: string): string {
   const match = /'nonce-([A-Za-z0-9+/]+={0,2})'/.exec(csp);

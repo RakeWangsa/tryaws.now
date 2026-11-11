@@ -6,7 +6,7 @@ import { isStorableFxRate, type FxRateRow } from "../config/fx-rates";
 import { lockFxRateWrites } from "../config/locks";
 import { refused, type Written } from "../result";
 import { isUuid } from "../scope";
-import { audited } from "./audited";
+import { audited, isActiveAdmin } from "./audited";
 import type { AdminScope } from "./index";
 
 export interface FxRateInput {
@@ -41,6 +41,7 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
     async set(input, reason) {
       // Read once into locals, so a getter cannot answer differently on the second read.
       const { market, rate, effectiveFrom, at, approvedBy } = input;
+      if (!(await isActiveAdmin(scope))) return refused("forbidden");
       if (
         !isMarketCode(market) ||
         !isStorableFxRate(rate) ||

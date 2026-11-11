@@ -1,8 +1,9 @@
 // Test code only: for the cross-tenant (IDOR) tests of the endpoints (R8). The endpoint test calls
 // the action as customer A with withRequireCustomerAs(sessionFor(A)) and tries to reach B's row.
-import type { CustomerIdentity } from "@tc/db";
+import type { AdminRole, CustomerIdentity } from "@tc/db";
+import { configureAdminAuth, resetAdminAuthForTests } from "../admin";
 import type { AuthConfig } from "../config";
-import { ACCESS_COOKIE } from "../cookies";
+import { ACCESS_COOKIE, ADMIN_ACCESS_COOKIE } from "../cookies";
 import { configureAuth, resetAuthForTests } from "../require";
 import type { AccessTokenVerifier } from "../tokens";
 import type { CustomerSession } from "../types";
@@ -44,6 +45,7 @@ export function withRequireCustomerAs(session: CustomerSession): () => void {
           issuedAt: new Date(),
           authTime: session.signedInAt,
           expiresAt: new Date(Date.now() + 3_600_000),
+          amr: [],
         },
       }),
   };
@@ -61,4 +63,50 @@ export function withRequireCustomerAs(session: CustomerSession): () => void {
     deps: { verifier, lookup: () => Promise.resolve(identity) },
   });
   return resetAuthForTests;
+}
+
+// requireAdmin() yields exactly this actor, for the endpoint tests of the admin app (R10). The
+// verifier, the lookup and the allowlist are stubs: a role outside the list the action names is
+// still refused by the real guard, so a test of the role check keeps working.
+export function withRequireAdminAs(actor: {
+  adminId: string;
+  role: AdminRole;
+  ip?: string;
+  userAgent?: string;
+}): () => void {
+  const ip = actor.ip ?? "203.0.113.10";
+  const verifier: AccessTokenVerifier = {
+    verify: () =>
+      Promise.resolve({
+        ok: true,
+        token: {
+          sub: `stub-admin-${actor.adminId}`,
+          issuedAt: new Date(),
+          authTime: new Date(),
+          expiresAt: new Date(Date.now() + 3_600_000),
+          amr: ["pwd", "mfa"],
+        },
+      }),
+  };
+  configureAdminAuth({
+    config: {
+      admin: {
+        region: "ap-southeast-1",
+        userPoolId: "ap-southeast-1_STUBADMIN1",
+        clientId: "stubadminclient012345",
+      },
+      allowlist: [ip],
+    },
+    readRequest: () =>
+      Promise.resolve({
+        cookieHeader: `${ADMIN_ACCESS_COOKIE}=stub`,
+        viewerAddress: `${ip}:443`,
+        userAgent: actor.userAgent ?? null,
+      }),
+    deps: {
+      verifier,
+      lookup: () => Promise.resolve({ id: actor.adminId, role: actor.role, status: "active" }),
+    },
+  });
+  return resetAdminAuthForTests;
 }

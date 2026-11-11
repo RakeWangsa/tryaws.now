@@ -25,7 +25,13 @@ export type AuthReason =
   | "suspended"
   | "unavailable"
   | "not_configured"
-  | "fresh_sign_in_required";
+  | "fresh_sign_in_required"
+  // The admin app (6.2): outside the IP allowlist, a disabled admin, no second factor in the token,
+  // a role the action does not allow.
+  | "ip_not_allowed"
+  | "disabled"
+  | "mfa_required"
+  | "role_not_allowed";
 
 export type AuthErrorCode = Extract<
   ErrorCode,

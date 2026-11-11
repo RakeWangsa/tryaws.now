@@ -1,4 +1,5 @@
 import { parseCspReports, violationLogLine } from "@tc/ui/runtime";
+import { adminGate } from "../../../server/gate.ts";
 
 // Anonymous by design (R9, open point: no rate limit yet): the body is capped, parsed defensively
 // and never echoed. Only the sanitized fields of a report are logged (R14).
@@ -16,6 +17,10 @@ function parseJson(text: string): unknown {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  // The proxy does not run for /api (its matcher is the next-intl one), so the allowlist is checked here.
+  if (!adminGate(request.headers.get("cloudfront-viewer-address"), process.env)) {
+    return new Response(null, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
   const text = await request.text();
   if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
     return new Response(null, { status: 413 });

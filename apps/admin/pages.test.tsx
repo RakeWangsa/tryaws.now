@@ -13,7 +13,27 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { adminMessages } from "./i18n/messages.ts";
 
-const state = vi.hoisted(() => ({ locale: "bn", nonceReads: 0 }));
+const state = vi.hoisted(() => ({
+  locale: "bn",
+  nonceReads: 0,
+  // What loadPageAdmin answers: a signed-in admin of a role, or a refusal.
+  page: {
+    kind: "ok",
+    admin: { adminId: "0191a000-0000-7000-8000-0000000000ad", role: "ops", ip: "203.0.113.5" },
+  } as { kind: "ok"; admin: { adminId: string; role: string; ip: string } } | { kind: "denied" },
+  asked: [] as unknown[],
+}));
+
+vi.mock("./server/page-admin.ts", () => ({
+  loadPageAdmin: async (locale: string, id: string) => {
+    state.asked.push([locale, id]);
+    return state.page;
+  },
+}));
+vi.mock("./server/actions.ts", () => ({
+  signInAction: async () => ({ error: null }),
+  signOutAction: async () => {},
+}));
 
 vi.mock("next-intl/server", () => ({
   getLocale: async () => state.locale,
@@ -48,6 +68,9 @@ const { default: RootLayout, metadata } = await import("./app/layout.tsx");
 const { default: LocaleLayout } = await import("./app/[locale]/layout.tsx");
 const { default: Page, generateMetadata } = await import("./app/[locale]/page.tsx");
 const { default: NotFound } = await import("./app/not-found.tsx");
+const { default: LoginPage, generateMetadata: loginMetadata } =
+  await import("./app/[locale]/login/page.tsx");
+const { default: SectionPage } = await import("./app/[locale]/[section]/page.tsx");
 
 const LOCALES: readonly Locale[] = ["bn", "en"];
 
@@ -65,9 +88,14 @@ const adminShellText = (locale: Locale) =>
 beforeEach(() => {
   state.locale = "bn";
   state.nonceReads = 0;
+  state.asked = [];
+  state.page = {
+    kind: "ok",
+    admin: { adminId: "0191a000-0000-7000-8000-0000000000ad", role: "ops", ip: "203.0.113.5" },
+  };
 });
 
-describe("admin placeholder page", () => {
+describe("admin today page", () => {
   it.each(LOCALES)("shows the OPS label, the title and the body (%s)", async (locale) => {
     const element = await Page({ params: Promise.resolve({ locale }) });
     const html = inProvider(element, locale);
@@ -77,28 +105,43 @@ describe("admin placeholder page", () => {
     expect(html).toContain(messages.home.body);
   });
 
-  it.each(LOCALES)(
-    "has one h2 for the title and no person in the account menu (%s)",
-    async (locale) => {
-      const element = await Page({ params: Promise.resolve({ locale }) });
-      const html = inProvider(element, locale);
-      expect(html.match(/<h2[ >]/g)).toHaveLength(1);
-      expect(html).not.toContain("<h1");
-    },
-  );
+  it("asks the guard for the today area in the locale of the request", async () => {
+    await Page({ params: Promise.resolve({ locale: "en" }) });
+    expect(state.asked).toEqual([["en", "today"]]);
+  });
 
-  it("lists only today in the navigation and marks it current", async () => {
+  it.each(LOCALES)("has one h2 for the title and no h1 (%s)", async (locale) => {
+    const element = await Page({ params: Promise.resolve({ locale }) });
+    const html = inProvider(element, locale);
+    expect(html.match(/<h2[ >]/g)).toHaveLength(1);
+    expect(html).not.toContain("<h1");
+  });
+
+  it("lists the entries of the role ops in the navigation and marks today current", async () => {
     const element = await Page({ params: Promise.resolve({ locale: "en" }) });
     const html = inProvider(element, "en");
     const side = /<[^>]*id="sidebar"[\s\S]*?<\/(?:aside|nav|div)>/.exec(html)?.[0] ?? "";
     expect(side.match(/aria-current="page"/g)).toHaveLength(1);
-    expect(html).not.toContain('href="/en/customers"');
+    expect(html).toContain('href="/en/customers"');
+    expect(html).toContain('href="/en/operations"');
+    expect(html).not.toContain('href="/en/payments"');
+    expect(html).not.toContain('href="/en/admins"');
   });
 
   it("links the locale switch to / and /en", async () => {
     const element = await Page({ params: Promise.resolve({ locale: "bn" }) });
     const html = inProvider(element, "bn");
     expect(html).toContain('href="/en"');
+  });
+
+  it("shows the neutral page, and no shell and no navigation, when the guard refuses", async () => {
+    state.page = { kind: "denied" };
+    const html = inProvider(await Page({ params: Promise.resolve({ locale: "en" }) }), "en");
+    const messages = adminMessages.en["Admin"] as { noAccess: { title: string } };
+    expect(html).toContain(messages.noAccess.title);
+    expect(html).not.toContain("tc-ops-label");
+    expect(html).not.toContain("/en/customers");
+    expect(html).not.toMatch(/mfa|allowlist|disabled|totp/i);
   });
 
   it("calls notFound for an unknown locale", async () => {
@@ -111,6 +154,66 @@ describe("admin placeholder page", () => {
     const meta = await generateMetadata({ params: Promise.resolve({ locale }) });
     const messages = adminMessages[locale]["Admin"] as { meta: { title: string } };
     expect(meta.title).toBe(messages.meta.title);
+  });
+});
+
+describe("admin login page", () => {
+  it.each(LOCALES)(
+    "shows the three fields and the submit, with no admin shell (%s)",
+    async (locale) => {
+      const html = inProvider(await LoginPage({ params: Promise.resolve({ locale }) }), locale);
+      const t = (adminMessages[locale]["Admin"] as { login: Record<string, string> }).login;
+      for (const key of ["title", "email", "password", "code", "submit"]) {
+        expect(html).toContain(t[key]);
+      }
+      expect(html).toContain('name="email"');
+      expect(html).toContain('type="password"');
+      expect(html).toContain('autoComplete="one-time-code"');
+      expect(html).toContain(`name="locale" value="${locale}"`);
+      expect(html).not.toContain("tc-ops-label");
+    },
+  );
+
+  it("does not need a session: the guard is not asked", async () => {
+    state.asked = [];
+    await LoginPage({ params: Promise.resolve({ locale: "bn" }) });
+    expect(state.asked).toEqual([]);
+  });
+
+  it("calls notFound for an unknown locale and gives a title", async () => {
+    await expect(LoginPage({ params: Promise.resolve({ locale: "fr" }) })).rejects.toThrow(
+      "NEXT_NOT_FOUND",
+    );
+    const meta = await loginMetadata({ params: Promise.resolve({ locale: "en" }) });
+    expect(meta.title).toBe("Admin sign-in");
+  });
+});
+
+describe("admin section placeholder pages", () => {
+  const params = (locale: string, section: string) => Promise.resolve({ locale, section });
+
+  it("shows the frame with the title of the area and asks the guard for that area", async () => {
+    const html = inProvider(await SectionPage({ params: params("en", "capacity") }), "en");
+    expect(state.asked).toEqual([["en", "capacity"]]);
+    expect(html).toContain("tc-ops-label");
+    expect(html).toContain("Coming in the next step");
+  });
+
+  it("an unknown segment, today and a prototype name are 404", async () => {
+    for (const section of ["nonsense", "today", "__proto__", "constructor", "login"]) {
+      await expect(SectionPage({ params: params("en", section) }), section).rejects.toThrow(
+        "NEXT_NOT_FOUND",
+      );
+    }
+  });
+
+  it("a refusal of the guard shows the neutral page", async () => {
+    state.page = { kind: "denied" };
+    const html = inProvider(await SectionPage({ params: params("bn", "admins") }), "bn");
+    expect(html).not.toContain("tc-ops-label");
+    expect(html).toContain(
+      (adminMessages.bn["Admin"] as { noAccess: { title: string } }).noAccess.title,
+    );
   });
 });
 

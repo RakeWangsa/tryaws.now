@@ -10,6 +10,21 @@ export type {
 export { AuthError, toResult } from "./types";
 export { requireCustomer, currentCustomer, configureAuth } from "./require";
 export type { AuthRuntime } from "./require";
+export { requireAdmin, currentAdmin, configureAdminAuth, authenticateAdmin } from "./admin";
+export type { AdminAuthRuntime, AdminOutcome, AdminRequestInfo, AdminSessionDeps } from "./admin";
+export { MFA_METHOD } from "./admin";
+export { signInAdmin, cognitoAdminSignInPort, isValidSignInShape } from "./admin-signin";
+export type {
+  AdminSignInInput,
+  AdminSignInOutcome,
+  AdminSignInPort,
+  ConfirmResult,
+  StartResult,
+} from "./admin-signin";
+export { ipAllowed, parseViewerAddress, parseCidr } from "./admin-ip";
+export { adminAuthConfigFromEnv, ADMIN_SESSION_SECONDS } from "./config";
+export type { AdminAuthConfig } from "./config";
+export { ADMIN_ACCESS_COOKIE, adminSessionSetCookie, clearAdminSessionSetCookie } from "./cookies";
 export { requireFreshSignIn } from "./fresh";
 export { authenticateCustomer } from "./session";
 export type { SessionOutcome, SessionDeps } from "./session";

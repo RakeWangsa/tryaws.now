@@ -78,6 +78,16 @@ export type {
   WaitlistReason,
 } from "./repositories/admin/waitlist";
 export { readAdminApprover } from "./repositories/admin/approver";
+export type {
+  OperationDecision,
+  OperationDecisionInput,
+  OperationsAdminRepo,
+} from "./repositories/admin/operations";
+export type { AdminMessage } from "./operations/admin";
+export { recordAdminAccess } from "./repositories/admin/access-audit";
+export type { AdminAccessEntry } from "./repositories/admin/access-audit";
+export { lookupAdminBySub } from "./repositories/admin/identity";
+export type { AdminIdentity } from "./repositories/admin/identity";
 export { STEP_CODES } from "./repositories/admin/pricing-rules";
 export type {
   PricingRuleInput,

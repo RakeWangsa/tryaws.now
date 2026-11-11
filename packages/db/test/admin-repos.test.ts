@@ -5,7 +5,15 @@ import { adminRepos, type AdminActor, type AdminRepos } from "../repositories/ad
 import { auditRowsOf } from "../testing/repos";
 import { runTransaction } from "../tx";
 import { useTempDatabase } from "./temp-db";
-import { ensureMarket, newAdmin, newPoolAccount } from "./fixtures";
+import {
+  ensureMarket,
+  newAdmin,
+  newCustomer,
+  newPoolAccount,
+  newResource,
+  uniqueSuffix,
+} from "./fixtures";
+import { insertRow } from "./sql";
 
 const t = useTempDatabase();
 const asAdmin = <T>(actor: AdminActor, fn: (r: AdminRepos) => Promise<T>) =>
@@ -20,6 +28,19 @@ const auditRows = (actorId: string) => auditRowsOf(t.pool, actorId);
 const flag = async (key: string) =>
   (await t.pool.query("select enabled from feature_flags where key = $1 and market = 'BD'", [key]))
     .rows;
+
+const AT = new Date("2030-01-01T00:00:00.000Z");
+// An operation of a destroy kind (not a create, which a reject sends through the compensation path).
+async function seedOperation(state: string): Promise<string> {
+  const resourceId = await newResource(t.pool, await newCustomer(t.pool));
+  return insertRow(t.pool, "operations", {
+    resource_id: resourceId,
+    kind: "reboot",
+    state,
+    idempotency_key: "a:" + uniqueSuffix(),
+    ...(state === "needs_approval" ? { needs_approval: true } : {}),
+  });
+}
 
 // Every write of adminRepos has a case here; the completeness test below fails when one is missing (R10).
 const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
@@ -83,6 +104,12 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       { market: "BD", quotaCode: "instance_vcpu", reserve: 1 },
       "keep one vCPU",
     ),
+  "operations.approve": async (r) =>
+    r.operations.approve({ operationId: await seedOperation("needs_approval"), at: AT }, "checked"),
+  "operations.retry": async (r) =>
+    r.operations.retry({ operationId: await seedOperation("needs_attention"), at: AT }, "retry"),
+  "operations.reject": async (r) =>
+    r.operations.reject({ operationId: await seedOperation("needs_approval"), at: AT }, "no"),
   "waitlist.notifyNext": (r) =>
     r.waitlist.notifyNext(
       { productFamily: "linux_instance", region: "ap-southeast-1", reason: "capacity", count: 1 },

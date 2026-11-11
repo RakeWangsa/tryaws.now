@@ -4,6 +4,7 @@ import { isUuid } from "../scope";
 import { capacityAdminRepo, type CapacityAdminRepo } from "./capacity";
 import { featureFlagsAdminRepo, type FeatureFlagsAdminRepo } from "./feature-flags";
 import { fxRatesAdminRepo, type FxRatesAdminRepo } from "./fx-rates";
+import { operationsAdminRepo, type OperationsAdminRepo } from "./operations";
 import { pricingRulesAdminRepo, type PricingRulesAdminRepo } from "./pricing-rules";
 import { waitlistAdminRepo, type WaitlistAdminRepo } from "./waitlist";
 
@@ -30,6 +31,7 @@ export interface AdminRepos {
   capacity: CapacityAdminRepo;
   featureFlags: FeatureFlagsAdminRepo;
   fxRates: FxRatesAdminRepo;
+  operations: OperationsAdminRepo;
   pricingRules: PricingRulesAdminRepo;
   waitlist: WaitlistAdminRepo;
 }
@@ -51,6 +53,7 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     capacity: capacityAdminRepo(scope),
     featureFlags: featureFlagsAdminRepo(scope),
     fxRates: fxRatesAdminRepo(scope),
+    operations: operationsAdminRepo(scope),
     pricingRules: pricingRulesAdminRepo(scope),
     waitlist: waitlistAdminRepo(scope),
   };

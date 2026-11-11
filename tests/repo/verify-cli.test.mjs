@@ -115,6 +115,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP7-T1",
     "WP7-T3",
     "WP7-T5",
+    "WP8-T1",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -328,6 +329,46 @@ it("task WP3-T3 is proven by the checks of WP3-T2, the sweeper suite and the pro
     "functions/payments-sweeper/test/proof-sweeper.test.ts",
     "functions/payments-sweeper/handler.test.ts",
     "functions/payments-sweeper/boundaries.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP8-T1 is proven by the db, auth, admin and core suites and three proof lines of the backlog sentence", () => {
+  expect(TASKS["WP8-T1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    [
+      "admin-audited-active-actor",
+      "pnpm test --filter @tc/db admin-audited-active admin-repos admin-operations --no-passWithNoTests",
+    ],
+    ["auth", "pnpm test --filter @tc/auth --no-passWithNoTests"],
+    [
+      "admin-no-mfa-no-sign-in",
+      "pnpm test --filter @tc/auth test/admin-signin test/admin.test --no-passWithNoTests",
+    ],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    [
+      "admin-outside-allowlist-403",
+      "pnpm test --filter @tc/admin proxy.test server/gate route.test --no-passWithNoTests",
+    ],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "packages/auth/test/admin-signin.test.ts",
+    "packages/auth/test/admin.test.ts",
+    "apps/admin/proxy.test.ts",
+    "apps/admin/server/gate.test.ts",
+    "apps/admin/app/api/csp-report/route.test.ts",
+    "packages/db/test/admin-audited-active.test.ts",
+    "packages/db/test/admin-repos.test.ts",
+    "packages/db/test/admin-operations.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
