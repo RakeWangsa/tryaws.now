@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { v7 as uuidv7 } from "uuid";
 import { expect, it } from "vitest";
 import type { Database, Tx } from "../client";
+import { APPROVAL_SETTING } from "../operations/approval";
 import * as schema from "../schema/index";
 import { customerRepos, type CustomerRepos } from "../repositories/customer/index";
 import type { TenantFinding } from "../testing/cross-tenant";
@@ -37,6 +38,17 @@ async function asCustomer<T>(customerId: string, fn: (r: CustomerRepos) => Promi
     actor = null;
   }
 }
+
+// operations.request reads the end date of R13 (readApprovalUntil): the settings row of the market, which
+// no customer owns. The audit sees a statement about the tenant table `settings` without the customer id,
+// so this one statement is named exactly: the key, the market and the scope 'market' as parameters, and
+// the row without a scope id. A read of the settings of a customer does not match it and is still reported.
+const isMarketSettingRead = (s: RecordedStatement): boolean =>
+  s.params[0] === APPROVAL_SETTING.key &&
+  s.params[1] === APPROVAL_SETTING.market &&
+  s.params[2] === APPROVAL_SETTING.scope &&
+  s.sql.startsWith('select "value" from "settings" where') &&
+  s.sql.includes('"settings"."scope_id" is null');
 
 // The cases live in one module per repository (test/cross-tenant-cases/, listed in CASE_SETS). This
 // file owns the recorder and asCustomer, runs every set, and audits the statements they sent.
@@ -80,7 +92,12 @@ it("customer A cannot read or write the rows of customer B, and every statement 
   const ran = statements.filter((s) => s.actor !== null);
   expect(ran.length).toBeGreaterThan(0);
   // One list, no duplicates: a statement that is in both audits is named once.
-  const unscoped = [...new Set([...unscopedStatements(ran), ...statementsWithInlinedIds(ran)])];
+  const unscoped = [
+    ...new Set([
+      ...unscopedStatements(ran.filter((s) => !isMarketSettingRead(s))),
+      ...statementsWithInlinedIds(ran),
+    ]),
+  ];
   expect({
     findings: findings.map((f) => `${f.case} ${f.check}: ${f.detail}`),
     unscoped: unscoped.map((s) => s.sql),

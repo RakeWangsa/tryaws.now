@@ -1,11 +1,29 @@
 import { v7 as uuidv7 } from "uuid";
-import { expect, it } from "vitest";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import { APPROVAL_SETTING } from "../operations/approval";
+import { APPROVAL_UNTIL } from "../operations/kinds";
 import type { CustomerRepos } from "../repositories/customer/index";
 import { withCustomerRepos } from "../testing/repos";
 import { useTempDatabase } from "./temp-db";
-import { newCustomer, newResource } from "./fixtures";
+import { ensureMarket, newCustomer, newResource } from "./fixtures";
 
 const t = useTempDatabase();
+afterEach(() => {
+  vi.useRealTimers();
+});
+// the end date of R13 is a settings row (Task 1); without it every destructive request would need approval
+beforeAll(async () => {
+  await ensureMarket(t.pool, "BD");
+  await t.pool.query(
+    "insert into settings (id, key, market, scope, scope_id, value) values (gen_random_uuid(), $1, $2, $3, null, $4::jsonb)",
+    [
+      APPROVAL_SETTING.key,
+      APPROVAL_SETTING.market,
+      APPROVAL_SETTING.scope,
+      JSON.stringify(APPROVAL_UNTIL),
+    ],
+  );
+});
 const as = <T>(c: string, fn: (r: CustomerRepos) => Promise<T>) => withCustomerRepos(t.db, c, fn);
 const ops = async () =>
   (await t.pool.query("select count(*)::int as n from operations")).rows[0].n as number;
@@ -77,11 +95,16 @@ it("an operation that needs approval waits in needs_approval (R13)", async () =>
   ).toMatchObject({ ok: true, value: { state: "needs_approval", needsApproval: true } });
 });
 
-it("the same key again is a replay, also with another payload (web_rw cannot read it); with another resource, kind or approval it is a conflict", async () => {
+it("the same key again is a replay, also with another payload (web_rw cannot read it); with another resource or kind it is a conflict", async () => {
   const c = await newCustomer(t.pool);
   const resourceId = await newResource(t.pool, c);
   const other = await newResource(t.pool, c);
-  const req = { resourceId, kind: "reboot", idempotencyKey: "k2", payload: { a: 1, b: 2 } };
+  const req = {
+    resourceId,
+    kind: "reboot" as const,
+    idempotencyKey: "k2",
+    payload: { a: 1, b: 2 },
+  };
   const first = await as(c, (x) => x.operations.request(req));
   expect(await as(c, (x) => x.operations.request(req))).toEqual({
     ok: true,
@@ -102,8 +125,9 @@ it("the same key again is a replay, also with another payload (web_rw cannot rea
     value: first.ok ? first.value : null,
   });
   expect(await as(c, (x) => x.operations.request({ ...req, needsApproval: true }))).toEqual({
-    ok: false,
-    error: "conflict",
+    ok: true,
+    replayed: true,
+    value: first.ok ? first.value : null,
   });
 });
 
@@ -149,7 +173,7 @@ it("two customers may use the same client key", async () => {
 it("two requests with the same key at the same moment: one row, one created and one replayed", async () => {
   const c = await newCustomer(t.pool);
   const resourceId = await newResource(t.pool, c);
-  const req = { resourceId, kind: "reboot", idempotencyKey: "race" };
+  const req = { resourceId, kind: "reboot" as const, idempotencyKey: "race" };
   const results = await Promise.all([
     as(c, (x) => x.operations.request(req)),
     as(c, (x) => x.operations.request(req)),
@@ -215,7 +239,7 @@ it("a raw row's createdAt is a valid Date; request, get and listForResource give
 it("a replay inside a longer transaction does not abort it: the next statement of the same action works", async () => {
   const c = await newCustomer(t.pool);
   const resourceId = await newResource(t.pool, c);
-  const req = { resourceId, kind: "reboot", idempotencyKey: "tx1" };
+  const req = { resourceId, kind: "reboot" as const, idempotencyKey: "tx1" };
   const seen = await as(c, async (x) => {
     const first = await x.operations.request(req);
     const again = await x.operations.request(req);
@@ -234,4 +258,112 @@ it("a key of exactly 128 characters is accepted", async () => {
   expect(
     await as(c, (x) => x.operations.request({ resourceId, kind: "reboot", idempotencyKey })),
   ).toMatchObject({ ok: true, replayed: false });
+});
+
+it("request stores a destructive kind as needs_approval with the flag, whatever the caller asks (R13)", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-11T10:00:00Z"));
+  const c = await newCustomer(t.pool);
+  const resourceId = await newResource(t.pool, c);
+  for (const needsApproval of [undefined, false, true]) {
+    const r = await as(c, (x) =>
+      x.operations.request({
+        resourceId,
+        kind: "destroy",
+        idempotencyKey: "k-" + String(needsApproval),
+        needsApproval,
+      }),
+    );
+    expect(r).toMatchObject({ ok: true, value: { state: "needs_approval", needsApproval: true } });
+  }
+});
+
+it("after the end date the same request is queued without the flag, and a replay after it answers replayed", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-11T10:00:00Z"));
+  const c = await newCustomer(t.pool);
+  const resourceId = await newResource(t.pool, c);
+  const first = await as(c, (x) =>
+    x.operations.request({ resourceId, kind: "destroy", idempotencyKey: "k-late" }),
+  );
+  vi.setSystemTime(new Date("2026-12-02T10:00:00Z"));
+  const again = await as(c, (x) =>
+    x.operations.request({ resourceId, kind: "destroy", idempotencyKey: "k-late" }),
+  );
+  expect(again).toEqual({ ok: true, replayed: true, value: first.ok ? first.value : null });
+  const fresh = await as(c, (x) =>
+    x.operations.request({ resourceId, kind: "destroy", idempotencyKey: "k-new" }),
+  );
+  expect(fresh).toMatchObject({ ok: true, value: { state: "queued", needsApproval: false } });
+});
+
+it("request refuses an unknown kind, a key with a space and a bad payload as validation, and inserts nothing", async () => {
+  const c = await newCustomer(t.pool);
+  const resourceId = await newResource(t.pool, c);
+  const before = await ops();
+  for (const input of [
+    { kind: "teleport" as never, idempotencyKey: "k1" },
+    { kind: "reboot" as const, idempotencyKey: "has space" },
+    { kind: "reboot" as const, idempotencyKey: "k2", payload: { x: "a".repeat(17_000) } },
+    { kind: "reboot" as const, idempotencyKey: "k3", payload: { x: "a\u0000b" } },
+  ]) {
+    expect(await as(c, (x) => x.operations.request({ resourceId, ...input }))).toEqual({
+      ok: false,
+      error: "validation",
+    });
+  }
+  expect(await ops()).toBe(before);
+});
+
+it("a customer cannot request the kinds that the purchase, the lifecycle or an admin make, and no row is written", async () => {
+  const c = await newCustomer(t.pool);
+  const resourceId = await newResource(t.pool, c);
+  const before = await ops();
+  for (const kind of [
+    "create",
+    "suspend",
+    "resume",
+    "final_snapshot",
+    "purge_snapshots",
+    "reject_operation",
+  ] as const) {
+    expect(
+      await as(c, (x) => x.operations.request({ resourceId, kind, idempotencyKey: "k-" + kind })),
+      kind,
+    ).toEqual({ ok: false, error: "validation" });
+  }
+  expect(await ops()).toBe(before);
+  expect(
+    await as(c, (x) =>
+      x.operations.request({
+        resourceId,
+        kind: "rename",
+        idempotencyKey: "k-rename",
+        payload: { label: "web 1" },
+      }),
+    ),
+  ).toMatchObject({ ok: true });
+});
+
+it("a non-UUID resource id is still not_found, not validation", async () => {
+  const c = await newCustomer(t.pool);
+  expect(
+    await as(c, (x) =>
+      x.operations.request({ resourceId: "abc", kind: "reboot", idempotencyKey: "k4" }),
+    ),
+  ).toEqual({ ok: false, error: "not_found" });
+});
+
+it("the stored key of a customer request is built from the customer of the session and the client key", async () => {
+  const c = await newCustomer(t.pool);
+  const resourceId = await newResource(t.pool, c);
+  expect(
+    await as(c, (x) => x.operations.request({ resourceId, kind: "reboot", idempotencyKey: "k5" })),
+  ).toMatchObject({ ok: true });
+  const rows = (
+    await t.pool.query("select idempotency_key from operations where resource_id = $1", [
+      resourceId,
+    ])
+  ).rows;
+  expect(rows).toEqual([{ idempotency_key: `customer:${c}:k5` }]);
 });

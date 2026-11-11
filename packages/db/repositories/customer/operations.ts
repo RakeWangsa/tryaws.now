@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
-import { v7 as uuidv7 } from "uuid";
+import { readApprovalUntil } from "../../operations/approval";
+import { operationInsertValues, type OperationInsertValues } from "../../operations/insert";
+import { isOperationKind, OPERATION_KIND_INFO, type OperationKind } from "../../operations/kinds";
 import { created, refused, replayed, type Written } from "../result";
 import { isUuid, type TenantScope } from "../scope";
 
@@ -19,9 +21,10 @@ export interface CustomerOperation {
 
 export interface OperationRequest {
   resourceId: string;
-  kind: string;
+  kind: OperationKind;
   idempotencyKey: string;
   payload?: Record<string, unknown>;
+  // D21: the table kind -> approval decides. true raises the gate; false and undefined never lower it.
   needsApproval?: boolean;
 }
 
@@ -70,7 +73,14 @@ const toOperation = (row: OperationRow): CustomerOperation => ({
   createdAt: new Date(row.createdAt),
 });
 
-const MAX_KEY_LENGTH = 128;
+// The client key: at most 128 characters, so that "customer:" + a UUID + ":" + the key stays within
+// the 200 characters that operationInsertValues allows.
+const CLIENT_KEY_PATTERN = /^[A-Za-z0-9:_.-]{1,128}$/;
+
+// A customer asks only for the kinds that OPERATION_KIND_INFO marks as customer-requestable. The
+// database does not limit the kind, so this is the one check (R8, R16).
+const isCustomerKind = (kind: unknown): kind is OperationKind =>
+  isOperationKind(kind) && OPERATION_KIND_INFO[kind].customerRequestable;
 
 export function operationsRepo(scope: TenantScope): OperationsRepo {
   return {
@@ -97,17 +107,36 @@ export function operationsRepo(scope: TenantScope): OperationsRepo {
     },
 
     request: async (input) => {
-      // Both checks answer before any query.
-      if (input.idempotencyKey.length === 0 || input.idempotencyKey.length > MAX_KEY_LENGTH) {
+      // The checks answer before any query, in this order.
+      if (
+        typeof input.idempotencyKey !== "string" ||
+        !CLIENT_KEY_PATTERN.test(input.idempotencyKey)
+      ) {
         return refused("validation");
       }
       if (!isUuid(input.resourceId)) return refused("not_found");
+      if (!isCustomerKind(input.kind)) return refused("validation");
 
-      const key = customerOperationKey(scope.customerId, input.idempotencyKey);
-      const needsApproval = input.needsApproval ?? false;
-      // An operation that needs approval waits for it (R13); the other one is queued.
-      const state = needsApproval ? "needs_approval" : "queued";
-      const payload = JSON.stringify(input.payload ?? {});
+      // The one function of defaults for both insert paths: the flag comes from the kind and the
+      // date, and the caller can only raise it (D21, R13).
+      const until = await readApprovalUntil(scope.tx);
+      let values: OperationInsertValues;
+      try {
+        values = operationInsertValues(
+          {
+            resourceId: input.resourceId,
+            kind: input.kind,
+            payload: input.payload ?? {},
+            idempotencyKey: customerOperationKey(scope.customerId, input.idempotencyKey),
+            needsApproval: input.needsApproval,
+          },
+          new Date(),
+          until,
+        );
+      } catch (error) {
+        if (error instanceof RangeError) return refused("validation");
+        throw error;
+      }
 
       // The sql template, not a Drizzle insert(): a Drizzle insert names step, attempts, enqueue_seq,
       // next_run_at, last_error, approved_by and created_at, which web_rw may not insert. The row
@@ -116,9 +145,9 @@ export function operationsRepo(scope: TenantScope): OperationsRepo {
       // transaction.
       const inserted = await scope.tx.execute<OperationRow>(sql`
         insert into operations as o (id, resource_id, kind, state, idempotency_key, payload, needs_approval)
-        select ${uuidv7()}, r.id, ${input.kind}, ${state}, ${key}, ${payload}::jsonb, ${needsApproval}
+        select ${values.id}, r.id, ${values.kind}, ${values.state}, ${values.idempotencyKey}, ${values.payloadJson}::jsonb, ${values.needsApproval}
         from resources r
-        where r.id = ${input.resourceId} and r.customer_id = ${scope.customerId}
+        where r.id = ${values.resourceId} and r.customer_id = ${scope.customerId}
         on conflict (idempotency_key) do nothing
         returning ${OPERATION_COLUMNS}`);
       const [row] = inserted.rows;
@@ -126,13 +155,14 @@ export function operationsRepo(scope: TenantScope): OperationsRepo {
 
       // No row: the resource is not the customer's (or the key is taken). Look the key up through
       // the customer's resources. The payload is not compared, because web_rw has no SELECT on it
-      // (open point 8): a replay with another payload answers with the stored row.
+      // (open point 8): a replay with another payload answers with the stored row. The flag is not
+      // compared either: it is derived from the kind and the date, so it can differ between two
+      // sends of the same request.
       const found = await scope.tx.execute<OperationRow & { sameRequest: boolean }>(sql`
         select ${OPERATION_COLUMNS},
-          (o.resource_id = ${input.resourceId}::uuid and o.kind = ${input.kind}
-            and o.needs_approval = ${needsApproval}) as "sameRequest"
+          (o.resource_id = ${values.resourceId}::uuid and o.kind = ${values.kind}) as "sameRequest"
         from operations o join resources r on r.id = o.resource_id
-        where o.idempotency_key = ${key} and r.customer_id = ${scope.customerId}`);
+        where o.idempotency_key = ${values.idempotencyKey} and r.customer_id = ${scope.customerId}`);
       const [existing] = found.rows;
       if (existing === undefined) return refused("not_found");
       return existing.sameRequest ? replayed(toOperation(existing)) : refused("conflict");
