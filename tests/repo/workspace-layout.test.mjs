@@ -54,6 +54,7 @@ const EXPORTS = {
     ".": "./index.ts",
     "./theme": "./theme/public.ts",
     "./runtime": "./runtime/index.ts",
+    "./messages": "./messages/index.ts",
   },
 };
 

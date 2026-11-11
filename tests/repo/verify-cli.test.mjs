@@ -93,7 +93,40 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP3-T1",
     "WP4-T1",
     "WPU-T1",
+    "WPU-T2",
+    "WPU-T3",
   ]);
+});
+
+it("tasks WPU-T2 and WPU-T3 share one proof: the kit tests with real path filters", () => {
+  expect(TASKS["WPU-T2"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "ui",
+    "ui-kit",
+    "repo",
+  ]);
+  expect(TASKS["WPU-T3"]).toEqual(TASKS["WPU-T2"]);
+  const kit = TASKS["WPU-T2"].find((c) => c.id === "ui-kit");
+  expect(kit.command).toEqual([
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/ui",
+    "components/",
+    "messages/",
+    "test/",
+    "--no-passWithNoTests",
+  ]);
+  for (const file of [
+    "packages/ui/components/Button.test.tsx",
+    "packages/ui/messages/messages.test.ts",
+    "packages/ui/test/render.test.tsx",
+  ])
+    expect(existsSync(file), file).toBe(true);
 });
 
 it("task WPU-T1 is proven by lint, types, format, the ui tests, the two theme checks and the repository tests", () => {

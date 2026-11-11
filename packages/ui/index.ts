@@ -1,2 +1,35 @@
-export {};
+// The component kit (WPU-T2). The theme stays on @tc/ui/theme, the messages on @tc/ui/messages.
+// This file has no client directive: each client component keeps its own.
 export * from "./shells/index.ts";
+export * from "./components/Accordion.tsx";
+export * from "./components/Badge.tsx";
+export * from "./components/Button.tsx";
+export * from "./components/Card.tsx";
+export * from "./components/ConfirmDestroy.tsx";
+export * from "./components/CopyField.tsx";
+export * from "./components/DataTable.tsx";
+export * from "./components/DateText.tsx";
+export * from "./components/EmptyState.tsx";
+export * from "./components/ErrorPage.tsx";
+export * from "./components/Field.tsx";
+export * from "./components/HelpStrip.tsx";
+export * from "./components/ImageTile.tsx";
+export * from "./components/LocaleSwitch.tsx";
+export * from "./components/Modal.tsx";
+export * from "./components/MoneyText.tsx";
+export * from "./components/OptionGroup.tsx";
+export * from "./components/PlanCard.tsx";
+export * from "./components/PlanPicker.tsx";
+export * from "./components/PriceBreakdown.tsx";
+export * from "./components/SecretReveal.tsx";
+export * from "./components/Skeleton.tsx";
+export * from "./components/StatTile.tsx";
+export * from "./components/StatusTimeline.tsx";
+export * from "./components/SubmitButton.tsx";
+export * from "./components/SummarySidebar.tsx";
+export * from "./components/Tabs.tsx";
+export * from "./components/Toast.tsx";
+export * from "./components/WalletChip.tsx";
+export { formatMoney, formatDate } from "./components/format.ts";
+export type * from "./components/types.ts";
+export { toLocale } from "./components/types.ts";

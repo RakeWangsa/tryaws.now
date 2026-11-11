@@ -168,6 +168,24 @@ const WP3_T1 = [
 ];
 TASKS["WP3-T1"] = WP3_T1;
 
+// WPU-T2 and WPU-T3 (two backlog rows) share one proof: the component kit, its messages and the guard tests.
+const uiKit = {
+  id: "ui-kit",
+  title: "packages/ui: component kit, messages and guard tests",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/ui",
+    "components/",
+    "messages/",
+    "test/",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WPU-T2"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, repo];
+TASKS["WPU-T3"] = TASKS["WPU-T2"];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],
