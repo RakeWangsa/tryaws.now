@@ -4,6 +4,12 @@ import { lookupCustomerBySub } from "../repositories/identity";
 import { registerCustomer, type NewCustomer } from "../repositories/system/registration";
 import { runTransaction } from "../tx";
 import { ensureMarket, uniqueSuffix } from "./fixtures";
+
+// The fixture market is inserted inactive (markets.active defaults to false); registration needs it open.
+async function openMarket(): Promise<void> {
+  await ensureMarket(t.pool);
+  await t.pool.query("update markets set active = true where code = 'BD'");
+}
 import { useTempDatabase } from "./temp-db";
 
 // The injected failure: a stand-in for insertAudit that throws when the flag is on.
@@ -62,7 +68,7 @@ const totals = async () => ({
 });
 
 it("creates the customer, a wallet, its ledger account, three acceptances and one audit row", async () => {
-  await ensureMarket(t.pool);
+  await openMarket();
   const i = input();
   const r = await asWeb((tx) => registerCustomer(tx, i));
   expect(r).toMatchObject({ ok: true, replayed: false });
@@ -152,12 +158,11 @@ it("the same call again is a replay: same id, nothing added", async () => {
   expect(await counts(first.customerId)).toEqual(before);
 });
 
-it("a replay after the wallet and its account were lost repairs both", async () => {
+it("a replay after the wallet was lost repairs it (a ledger account is append-only and stays)", async () => {
   const i = input();
   const first = await asWeb((tx) => registerCustomer(tx, i));
   if (!first.ok) throw new Error("not registered");
   await t.pool.query("delete from wallets where customer_id = $1", [first.customerId]);
-  await t.pool.query("delete from ledger_accounts where customer_id = $1", [first.customerId]);
   const again = await asWeb((tx) => registerCustomer(tx, i));
   expect(again).toMatchObject({ ok: true, replayed: true });
   expect(await counts(first.customerId)).toEqual({
@@ -206,7 +211,7 @@ it.each<[string, Partial<NewCustomer>]>([
   ],
   ["a market that is not a code", { market: "bd" }],
 ])("%s is a validation error and writes nothing", async (_name, over) => {
-  await ensureMarket(t.pool);
+  await openMarket();
   const before = await totals();
   const r = await asWeb((tx) => registerCustomer(tx, input(over)));
   expect(r).toEqual({ ok: false, error: "validation" });
@@ -214,7 +219,7 @@ it.each<[string, Partial<NewCustomer>]>([
 });
 
 it("an unknown market and an inactive market are market_unavailable and write nothing", async () => {
-  await ensureMarket(t.pool);
+  await openMarket();
   await ensureMarket(t.pool, "XX");
   await t.pool.query("update markets set active = false where code = 'XX'");
   const before = await totals();

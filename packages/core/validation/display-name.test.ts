@@ -6,6 +6,19 @@ it("collapses and trims whitespace", () => {
   expect(normalizeDisplayName("Rahim  Uddin")).toBe("Rahim Uddin");
 });
 
+it("accepts a ZWJ or ZWNJ between letters, as correct Bengali spelling needs", () => {
+  expect(normalizeDisplayName("র‍্যাব")).toBe("র‍্যাব");
+  expect(normalizeDisplayName("আবদুল‌লাহ")).toBe("আবদুল‌লাহ");
+});
+
+it("still refuses a joiner at an edge or doubled, and other format characters", () => {
+  expect(normalizeDisplayName("‍রাব")).toBeNull();
+  expect(normalizeDisplayName("রাব‍")).toBeNull();
+  expect(normalizeDisplayName("রা‍‍ব")).toBeNull();
+  expect(normalizeDisplayName("রা​ব")).toBeNull();
+  expect(normalizeDisplayName("রা‮ব")).toBeNull();
+});
+
 it("normalises to NFC", () => {
   expect(normalizeDisplayName("Café Owner")).toBe("Café Owner");
 });
