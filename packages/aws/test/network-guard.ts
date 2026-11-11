@@ -1,26 +1,34 @@
 import net from "node:net";
 
-/** Every blocked connection attempt, as `<host>:<port>`. */
+// Not covered: a worker thread (it has its own `net`), UDP (`dgram`), a direct `dns.lookup` or
+// `dns.resolve`, and a child process. Nothing in this package uses them, and the SDK clients for
+// Lightsail and STS do not. A later task that adds one of them must block it as well.
+
+/** Every blocked connection attempt: `<host>:<port>`, `[<ipv6>]:<port>` or `unix:<path>`. */
 export const blockedConnections: string[] = [];
 
 const GUARD_MARK = Symbol.for("tc.aws.network-guard");
 
-function target(args: unknown[]): string {
+function target(args: unknown[]): { entry: string; label: string } {
   const first = args[0];
   const o = (
     Array.isArray(first)
       ? first[0]
       : typeof first === "object" && first !== null
         ? first
-        : { port: first, host: args[1] }
-  ) as { host?: string; servername?: string; port?: unknown };
-  return `${o.host ?? o.servername ?? "localhost"}:${String(o.port)}`;
+        : typeof first === "string" && args[1] === undefined
+          ? { path: first }
+          : { port: first, host: args[1] }
+  ) as { host?: string; servername?: string; port?: unknown; path?: string };
+  if (typeof o.path === "string") return { entry: `unix:${o.path}`, label: o.path };
+  const host = o.host ?? o.servername ?? "localhost";
+  const shown = host.includes(":") ? `[${host}]` : host;
+  return { entry: `${shown}:${String(o.port)}`, label: host };
 }
 
 function guardedConnect(this: unknown, ...args: unknown[]): never {
-  const entry = target(args);
+  const { entry, label: host } = target(args);
   blockedConnections.push(entry);
-  const host = entry.slice(0, entry.lastIndexOf(":"));
   throw Object.assign(new Error(`network blocked in packages/aws tests: ${host}`), {
     code: "ERR_TC_NETWORK_BLOCKED",
   });

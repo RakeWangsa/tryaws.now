@@ -94,15 +94,17 @@ export function lightsailError(status: number, type: string, message: string): F
   };
 }
 
-interface FakeRequest {
-  hostname?: string;
-  headers?: Record<string, string>;
-  body?: unknown;
+type FakeHandler = Extract<AwsRequestHandler, { handle: unknown }>;
+
+function serviceOf(host: string): "sts" | "lightsail" | undefined {
+  if (host.startsWith("sts.")) return "sts";
+  if (host.startsWith("lightsail.") || host.startsWith("lightsail-fips.")) return "lightsail";
+  return undefined;
 }
 
-function header(headers: Record<string, string> | undefined, name: string): string {
+function header(headers: Record<string, string>, name: string): string {
   const wanted = name.toLowerCase();
-  for (const [key, value] of Object.entries(headers ?? {})) {
+  for (const [key, value] of Object.entries(headers)) {
     if (key.toLowerCase() === wanted) return value;
   }
   return "";
@@ -119,14 +121,15 @@ export function fakeAws(): FakeAws {
   const scripts = new Map<string, { replies: FakeReply[]; used: number }>();
   let counter = 0;
 
-  const handler = {
-    async handle(request: FakeRequest) {
+  const handler: FakeHandler = {
+    async handle(request: Parameters<FakeHandler["handle"]>[0]) {
+      const host = request.hostname;
+      const service = serviceOf(host);
+      if (service === undefined) throw new Error(`fake-aws: unknown service host ${host}`);
       counter += 1;
       const requestId = `fake-request-${counter}`;
-      const host = request.hostname ?? "";
       const body = bodyText(request.body);
       const authorization = header(request.headers, "authorization");
-      const service: "sts" | "lightsail" = host.startsWith("sts.") ? "sts" : "lightsail";
       let action: string;
       if (service === "sts") {
         action = new URLSearchParams(body).get("Action") ?? "";
@@ -166,7 +169,7 @@ export function fakeAws(): FakeAws {
   };
 
   return {
-    handler: handler as unknown as AwsRequestHandler,
+    handler,
     seen,
     on(service, action, ...replies) {
       scripts.set(`${service} ${action}`, { replies, used: 0 });
