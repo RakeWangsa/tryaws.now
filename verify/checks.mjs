@@ -387,6 +387,39 @@ const capacityRace = {
 };
 TASKS["WP4-T3"] = [specSync, baselineSync, lint, typecheck, format, db, capacityRace, core, repo];
 
+// WP4-T4: orders. The three sentences of the backlog row, each on its own line. Each filter names a
+// file and `--no-passWithNoTests` makes an empty selection fail; tests/repo/verify-cli.test.mjs also
+// asserts that the three files exist.
+const ordersDoubleSubmit = {
+  id: "orders-double-submit",
+  title: "9.1: one draft, one key: the wallet is charged once, whatever the number of submits",
+  command: ["pnpm", "test", "--filter", "@tc/core", "orders/double-submit", "--no-passWithNoTests"],
+};
+const ordersFailedCreate = {
+  id: "orders-failed-create",
+  title: "10.1: a failed create refunds once and gives the capacity back",
+  command: ["pnpm", "test", "--filter", "@tc/core", "orders/failed-create", "--no-passWithNoTests"],
+};
+const ordersKycGate = {
+  id: "orders-kyc-gate",
+  title:
+    "6.2 and 16.11: an order from a customer who is not verified creates no resource (full rows compared)",
+  command: ["pnpm", "test", "--filter", "@tc/core", "orders/kyc-gate", "--no-passWithNoTests"],
+};
+TASKS["WP4-T4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  ordersDoubleSubmit,
+  ordersFailedCreate,
+  ordersKycGate,
+  core,
+  repo,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

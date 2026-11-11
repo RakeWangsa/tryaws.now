@@ -138,4 +138,36 @@ describe("compensateFailedCreate", () => {
     await expect(compensate(kit, "not-a-uuid")).rejects.toThrow(TypeError);
     expect(await snapshotRows(t)).toEqual(before);
   });
+
+  it("locks the wallet row before it writes the resource, as the purchase does (the lock order)", async () => {
+    const kit = await makeKit(t);
+    const { resourceId } = await placeOne(kit);
+    // record the text of every locking or updating statement the driver sends during the hook
+    const probe = await t.pool.connect();
+    const proto = Object.getPrototypeOf(probe) as { query: (...args: unknown[]) => unknown };
+    probe.release();
+    const original = proto.query;
+    const seen: string[] = [];
+    proto.query = function (this: unknown, ...args: unknown[]) {
+      const first = args[0];
+      const text =
+        typeof first === "string"
+          ? first
+          : typeof first === "object" && first !== null && "text" in first
+            ? String((first as { text: unknown }).text)
+            : "";
+      if (/for update|^\s*update\s/i.test(text)) seen.push(text);
+      return original.apply(this, args);
+    };
+    try {
+      await compensate(kit, resourceId);
+    } finally {
+      proto.query = original;
+    }
+    const wallet = seen.findIndex((s) => /wallets/i.test(s) && /for update/i.test(s));
+    const resource = seen.findIndex((s) => /resources/i.test(s) && /^\s*update\s/i.test(s));
+    expect(wallet).toBeGreaterThanOrEqual(0);
+    expect(resource).toBeGreaterThanOrEqual(0);
+    expect(wallet).toBeLessThan(resource);
+  });
 });

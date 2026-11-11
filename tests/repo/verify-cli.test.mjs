@@ -99,6 +99,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP4-T1",
     "WP4-T2",
     "WP4-T3",
+    "WP4-T4",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -377,4 +378,34 @@ it("task WP4-T3 is proven by the checks of WP1-T1, the race for the last slot on
   expect(
     existsSync(resolve(import.meta.dirname, "../..", "packages/core/capacity/race.test.ts")),
   ).toBe(true);
+});
+
+it("task WP4-T4 is proven by the shared checks, the db suite, and the three sentences of the proof", () => {
+  expect(TASKS["WP4-T4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    [
+      "orders-double-submit",
+      "pnpm test --filter @tc/core orders/double-submit --no-passWithNoTests",
+    ],
+    [
+      "orders-failed-create",
+      "pnpm test --filter @tc/core orders/failed-create --no-passWithNoTests",
+    ],
+    ["orders-kyc-gate", "pnpm test --filter @tc/core orders/kyc-gate --no-passWithNoTests"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // passWithNoTests is on in some filters: every proof filter must keep matching a real file
+  for (const f of [
+    "packages/core/orders/double-submit.test.ts",
+    "packages/core/orders/failed-create.test.ts",
+    "packages/core/orders/kyc-gate.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
 });
