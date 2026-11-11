@@ -28,3 +28,11 @@ export { createAccessTokenVerifier } from "./tokens";
 export type { AccessTokenVerifier, TokenOutcome, VerifiedToken } from "./tokens";
 export { cognitoRefreshPort, needsRefresh, refreshSession } from "./refresh";
 export type { RefreshPort, RefreshResult, RefreshOutcome } from "./refresh";
+export { cognitoIdentityProvider } from "./cognito-identity";
+export type {
+  IdentityProvider,
+  IdpFailure,
+  IdpResult,
+  SignInOutcome,
+  SignUpOutcome,
+} from "./identity";
