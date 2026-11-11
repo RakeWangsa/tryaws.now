@@ -12,3 +12,13 @@ export { useBoundTestDatabase } from "./bind";
 export { runTransaction, bindDatabase, attachErrorListeners, type DatabaseRole } from "../tx";
 export { tenantSnapshot } from "./snapshot";
 export { TENANT_TABLES, NON_TENANT_TABLES } from "../tenancy";
+export {
+  checkTenantIsolation,
+  expectTenantIsolation,
+  ghostOf,
+  type TenantCase,
+  type TenantCheck,
+  type TenantFinding,
+  type TenantIsolationOptions,
+} from "./cross-tenant";
+export { unscopedStatements, type RecordedStatement } from "./sql-audit";
