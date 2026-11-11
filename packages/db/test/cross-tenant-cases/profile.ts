@@ -9,6 +9,10 @@ export const profileCases: CaseSet = defineCaseSet<{ customerId: string }>({
       kind: "self-write",
       run: (c) => asCustomer(c, (r) => r.profile.update({ name: "Rahim" })),
     },
+    "profile.setEmail": {
+      kind: "self-write",
+      run: (c) => asCustomer(c, (r) => r.profile.setEmail("changed@example.test")),
+    },
     "profile.setVerifiedPhone": {
       kind: "self-write",
       run: (c) =>

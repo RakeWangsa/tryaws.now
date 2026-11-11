@@ -14,6 +14,7 @@ import { readWebConfig } from "./config.ts";
 import type { WebConfig } from "./config.ts";
 import type { KycPorts } from "./kyc-actions.ts";
 import { writeLog } from "./log.ts";
+import type { AccountPorts } from "./settings-actions.ts";
 import { resourceSecrets } from "./secrets.ts";
 
 // The one composition of apps/web (open point 1): configuration from the environment, secrets
@@ -31,6 +32,12 @@ export interface WebRuntime {
    * shows the "not open" state (R16).
    */
   kyc: KycPorts | null;
+  /**
+   * The identity provider's change calls and the phone OTP service of /settings (WP2-T5). null =
+   * not configured: the changes of e-mail, phone and password refuse (R16). Only local and test
+   * have it until the Cognito and SMS adapters are verified on staging.
+   */
+  account: AccountPorts | null;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -84,6 +91,7 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     const bridge = await import("./fakes/eps-bridge.ts");
     const auth = await import("./fakes/dev-auth.ts");
     const kyc = await import("./fakes/kyc-fakes.ts");
+    const account = await import("./fakes/account-fakes.ts");
     const dev = bridge.getDevEps();
     // epsReturnUrls wants https; in fake mode the origin is http://localhost:<port>.
     const urls = {
@@ -93,7 +101,12 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     };
     const deps = buildDeps(dev.gateway, hex(randomBytes(32)), urls);
     return {
-      runtime: { config, eps: createEps(deps), kyc: kyc.getDevKyc() },
+      runtime: {
+        config,
+        eps: createEps(deps),
+        kyc: kyc.getDevKyc(),
+        account: account.getDevAccount(),
+      },
       deps,
       verifier: auth.devVerifier,
     };
@@ -114,7 +127,7 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     hashKey === undefined ||
     limitKey === undefined
   ) {
-    return { runtime: { config, eps: null, kyc: null }, deps: null };
+    return { runtime: { config, eps: null, kyc: null, account: null }, deps: null };
   }
 
   const gateway = createEpsGateway(
@@ -126,7 +139,7 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     },
   );
   const deps = buildDeps(gateway, limitKey, epsReturnUrls(config.appOrigin));
-  return { runtime: { config, eps: createEps(deps), kyc: null }, deps };
+  return { runtime: { config, eps: createEps(deps), kyc: null, account: null }, deps };
 }
 
 const CACHE_KEY = "__tcWebRuntime";
