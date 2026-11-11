@@ -13,6 +13,7 @@
     "@types/big.js": "^7.0.0"
   },
   "dependencies": {
+    "@tc/db": "workspace:*",
     "big.js": "^7.0.1"
   }
 }

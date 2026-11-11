@@ -76,6 +76,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@tc/db':
+        specifier: workspace:*
+        version: link:../db
       big.js:
         specifier: ^7.0.1
         version: 7.0.1
