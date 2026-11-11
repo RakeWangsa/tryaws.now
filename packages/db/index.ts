@@ -42,7 +42,6 @@ export type {
   DestroyRequest,
   SubscriptionRow,
   SubscriptionsRepo,
-  SubscriptionStatus,
 } from "./repositories/customer/subscriptions";
 export type {
   InvoiceCursor,

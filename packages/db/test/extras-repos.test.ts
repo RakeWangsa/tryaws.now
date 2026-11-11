@@ -190,6 +190,39 @@ it("createBackupRow: a child row of the customer's server, idempotent by id, not
   ).toEqual({ ok: false, error: "validation" });
 });
 
+it("operations.request refuses delete_backup for a final backup and for a non-backup row, and queues it for a normal backup (R13)", async () => {
+  const a = await newCustomer(t.pool);
+  const parent = await newResource(t.pool, a);
+  const normal = await newResource(t.pool, a, {
+    family: "backup",
+    parent_resource_id: parent,
+    state: "active",
+    config: JSON.stringify({ displayName: "n" }),
+  });
+  const final = await newResource(t.pool, a, {
+    family: "backup",
+    parent_resource_id: parent,
+    state: "active",
+    config: JSON.stringify({ final: true }),
+  });
+  const ask = (resourceId: string, key: string) =>
+    as(a, (r) => r.operations.request({ resourceId, kind: "delete_backup", idempotencyKey: key }));
+  expect(await ask(final, "k-final")).toEqual({ ok: false, error: "not_found" });
+  expect(await ask(parent, "k-parent")).toEqual({ ok: false, error: "not_found" });
+  expect(await ask(normal, "k-normal")).toMatchObject({ ok: true });
+  // Cross-tenant: another customer asking for A's normal backup is told it does not exist.
+  const b = await newCustomer(t.pool);
+  expect(
+    await as(b, (r) =>
+      r.operations.request({ resourceId: normal, kind: "delete_backup", idempotencyKey: "k-b" }),
+    ),
+  ).toEqual({ ok: false, error: "not_found" });
+  const n = await t.pool.query("select 1 from operations where resource_id = any($1)", [
+    [final, parent],
+  ]);
+  expect(n.rowCount).toBe(0);
+});
+
 it("resources.listChildren: the backups of one parent, destroyed ones left out; operations.listRecent: newest first, own only", async () => {
   const a = await newCustomer(t.pool);
   const b = await newCustomer(t.pool);

@@ -32,6 +32,9 @@ export interface GuardFacts {
   readonly subscriptionStatus: SubscriptionStatus | null;
   readonly family: string;
   readonly hasFinalSnapshot: boolean;
+  // true when the row itself is a final backup (config.final = true). The guard never lets a
+  // customer's delete_backup remove it: the destroy guard relies on it (R13).
+  readonly isFinalBackup: boolean;
 }
 
 export interface NewLifecycleNotification {
@@ -174,13 +177,15 @@ export function lifecycleRepo(tx: Tx) {
         status: SubscriptionStatus | null;
         family: string;
         has_final: boolean;
+        is_final: boolean;
       }>(sql`
         select s.status as status, r.family as family,
           exists (select 1 from resources b
             where b.parent_resource_id = r.id and b.family = 'backup' and b.state = 'active'
               and b.deleted_at is null and b.config ->> 'final' = 'true'
               and b.created_at >= (select max(o.created_at) from operations o
-                where o.resource_id = r.id and o.kind = 'final_snapshot')) as has_final
+                where o.resource_id = r.id and o.kind = 'final_snapshot')) as has_final,
+          (r.config ->> 'final') is not distinct from 'true' as is_final
         from resources r left join subscriptions s on s.resource_id = r.id
         where r.id = ${operationResourceId}`);
       const row = rows[0];
@@ -189,6 +194,7 @@ export function lifecycleRepo(tx: Tx) {
         subscriptionStatus: row.status,
         family: row.family,
         hasFinalSnapshot: row.has_final === true,
+        isFinalBackup: row.is_final === true,
       };
     },
 

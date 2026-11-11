@@ -78,6 +78,11 @@ describe("markFinalBackup and the lifecycle guard", () => {
       markFinalBackup(tx, { id, customerId, awsName: "tc-snapshot-0123456789abcdef", sizeGb: 40 }),
     );
     expect((await facts())?.hasFinalSnapshot).toBe(true);
+    // WP5-T6: the row itself is flagged as a final backup, the parent is not.
+    expect((await facts())?.isFinalBackup).toBe(false);
+    expect((await worker((tx) => lifecycleRepo(tx).resourceOfOperation(id)))?.isFinalBackup).toBe(
+      true,
+    );
     const { rows } = await t.pool.query(
       "select state, aws_name, config from resources where id = $1",
       [id],

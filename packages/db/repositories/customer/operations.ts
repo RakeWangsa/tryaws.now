@@ -161,6 +161,8 @@ export function operationsRepo(scope: TenantScope): OperationsRepo {
         select ${values.id}, r.id, ${values.kind}, ${values.state}, ${values.idempotencyKey}, ${values.payloadJson}::jsonb, ${values.needsApproval}
         from resources r
         where r.id = ${values.resourceId} and r.customer_id = ${scope.customerId}
+          and (${values.kind} <> 'delete_backup'
+               or (r.family = 'backup' and (r.config ->> 'final') is distinct from 'true'))
         on conflict (idempotency_key) do nothing
         returning ${OPERATION_COLUMNS}`);
       const [row] = inserted.rows;

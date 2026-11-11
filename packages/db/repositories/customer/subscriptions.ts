@@ -8,7 +8,7 @@ import { isUuid, type TenantScope } from "../scope";
 // The subscription of one of the customer's resources, as the Billing tab, the dashboard and the
 // destroy flow read it. The customer id is not a field: the scope holds it (R8). `priceSnapshot` is
 // the stored pricing snapshot (amounts as decimal text); the screens parse it with @tc/core.
-export type SubscriptionStatus = "active" | "grace" | "retained" | "ended";
+import type { SubscriptionStatus } from "../system/lifecycle";
 
 export interface SubscriptionRow {
   id: string;
