@@ -5,13 +5,24 @@ import {
   cognitoAdminSignInPort,
   configureAdminAuth,
   createAccessTokenVerifier,
+  requireAdmin,
   signInAdmin,
   type AdminAuthConfig,
   type AdminSessionDeps,
   type AdminSignInPort,
 } from "@tc/auth";
-import { consumeRateLimits, lookupAdminBySub, recordAdminAccess, withTx } from "@tc/db";
+import {
+  adminRepos,
+  consumeRateLimits,
+  lookupAdminBySub,
+  recordAdminAccess,
+  withTx,
+  type AdminActor,
+  type AdminRepos,
+} from "@tc/db";
 import { adminGate } from "./gate.ts";
+import type { CustomerFlowDeps } from "./customer-flow.ts";
+import { unavailableKycStore, type KycDocumentDeps } from "./kyc-documents.ts";
 import { makeSignIn, makeSignOut, type SignInDeps } from "./sign-in.ts";
 
 // The composition of the operator app (the pattern of the web app: one module that builds the
@@ -111,3 +122,57 @@ export const signOutAudit = () =>
   makeSignOut({
     audit: (entry) => withTx((tx) => recordAdminAccess(tx, { action: "admin.sign_out", ...entry })),
   });
+
+// The decisions of /customers (ops and superadmin act) and the document viewer (support reads too).
+// 30 decisions and 60 document views for each admin in 10 minutes: a review session needs many, a
+// script a lot more.
+const CUSTOMER_ACTION_LIMIT = 30;
+const DOCUMENT_VIEW_LIMIT = 60;
+
+const adminLimiter =
+  (action: string, limit: number) =>
+  (actor: AdminActor, now: Date): Promise<boolean> =>
+    withTx(async (tx) => {
+      const decision = await consumeRateLimits(
+        tx,
+        [
+          {
+            kind: "ip",
+            subject: subjectOf(actor.adminId),
+            action,
+            limit,
+            windowSeconds: SIGN_IN_WINDOW_SECONDS,
+          },
+        ],
+        now,
+      );
+      return decision.allowed;
+    });
+
+const runAsAdmin = <T>(actor: AdminActor, fn: (repos: AdminRepos) => Promise<T>): Promise<T> =>
+  withTx((tx) => fn(adminRepos(tx, actor)));
+
+export function customerFlowDeps(): CustomerFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: () => requireAdmin(["ops", "superadmin"]),
+    limiter: adminLimiter("admin_customer_action", CUSTOMER_ACTION_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+  };
+}
+
+// Until the S3 presigner is wired (a manual VERIFY of WP8-T2) the store refuses every view.
+export function kycDocumentDeps(): KycDocumentDeps {
+  ensureAdminAuth();
+  return {
+    authorize: () => requireAdmin(["support", "ops", "superadmin"]),
+    limiter: adminLimiter("admin_kyc_document", DOCUMENT_VIEW_LIMIT),
+    run: runAsAdmin,
+    store: unavailableKycStore,
+    clock: { now: () => new Date() },
+  };
+}
+
+// The reads of the customer screens, in one transaction of the admin.
+export const readAsAdmin = runAsAdmin;

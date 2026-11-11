@@ -159,7 +159,7 @@ class Refusal extends Error {
   }
 }
 
-interface ListDbRow {
+type ListDbRow = {
   id: string;
   name: string | null;
   email: string;
@@ -168,7 +168,7 @@ interface ListDbRow {
   risk_tier: string;
   status: string;
   created_at: Date;
-}
+};
 
 const toListRow = (r: ListDbRow): CustomerListRow => ({
   id: r.id,
