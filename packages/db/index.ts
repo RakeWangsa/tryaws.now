@@ -257,3 +257,12 @@ export type {
   RefundRecorded,
   ReverifyInput,
 } from "./repositories/admin/payments";
+export { AUDIT_EXPORT_CAP, AUDIT_PAGE_DEFAULT, AUDIT_PAGE_MAX } from "./repositories/admin/audit";
+export type {
+  AuditAdminRepo,
+  AuditExportResult,
+  AuditFilter,
+  AuditRow,
+  AuditSearchInput,
+  AuditSearchResult,
+} from "./repositories/admin/audit";
