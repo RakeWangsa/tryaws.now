@@ -68,6 +68,24 @@ it("drop() shares a running call, is a no-op afterwards and leaves the database 
   }
 }, 60_000);
 
+// pg-pool's end() resolves as soon as its list of clients is empty, before their sockets are closed.
+// The forced DROP DATABASE that follows can kill the backend of a client that is already ending; the
+// client's error reaches the pool, which emits "error", and a pool nobody listens to throws it as an
+// uncaught exception that fails the whole run (57P01, seen once in roles.test.ts). The teardown ignores
+// the error of a connection it is closing; an error during a test still surfaces.
+it("drop() listens for the errors of the connections it closes, and only drop() does", async () => {
+  const a = await createTempDatabase({ migrate: false });
+  try {
+    expect(a.pool.listenerCount("error")).toBe(0);
+    await a.pool.query("select 1");
+    await a.drop();
+    expect(a.pool.listenerCount("error")).toBeGreaterThan(0);
+    expect(() => a.pool.emit("error", new Error("x"))).not.toThrow();
+  } finally {
+    await a.drop().catch(() => undefined);
+  }
+}, 60_000);
+
 it("fails with a clear message, without the password, when the server cannot be reached", async () => {
   for (const host of ["127.0.0.1", "localhost"]) {
     const err = await createTempDatabase({

@@ -200,6 +200,13 @@ export async function createTempDatabase(
   const dropOnce = async (): Promise<void> => {
     if (!poolEnded) {
       poolEnded = true;
+      // pg-pool's end() resolves as soon as its list of clients is empty, before their sockets are
+      // closed, and the forced DROP DATABASE below can kill the backend of a client that is already
+      // ending. That client's error reaches the pool, which emits "error"; a pool nobody listens to
+      // makes Node throw it as an uncaught exception and fail the whole run (57P01). The teardown
+      // ignores the error of a connection it is closing. Before this point createDatabase has no
+      // listener, so an error during a test still surfaces.
+      pool.on("error", () => undefined);
       await pool.end();
     }
     const c = new pg.Client({ connectionString: adminUrl, connectionTimeoutMillis: 5000 });
