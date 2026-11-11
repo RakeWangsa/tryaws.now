@@ -142,7 +142,11 @@ describe("no code path builds a cookie string", () => {
   const walk = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
       const path = join(dir, entry.name);
-      if (entry.isDirectory()) return entry.name === "node_modules" ? [] : walk(path);
+      // `dev` is the development-only surface (404 unless devSurfaceEnabled, checked by the
+      // production smoke); its sign-in route sets the dev session cookie on purpose.
+      if (entry.isDirectory()) {
+        return entry.name === "node_modules" || entry.name === "dev" ? [] : walk(path);
+      }
       return /\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
     });
 

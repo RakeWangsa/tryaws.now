@@ -32,6 +32,7 @@ const config = (fakes: boolean): WebConfig => ({
   appOrigin: ORIGIN,
   epsMode: "sandbox",
   fakes,
+  fake: { eps: fakes, idp: fakes, sms: fakes },
 });
 const goodHeaders = () =>
   new Headers({

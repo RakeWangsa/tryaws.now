@@ -12,6 +12,7 @@ const config = (over: Partial<WebConfig>): WebConfig => ({
   appOrigin: "https://staging.example.com",
   epsMode: "sandbox",
   fakes: false,
+  fake: { eps: false, idp: false, sms: false },
   ...over,
 });
 const SECRET = "x".repeat(40);
