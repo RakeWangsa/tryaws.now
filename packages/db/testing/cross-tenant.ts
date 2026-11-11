@@ -11,7 +11,7 @@ import { tenantSnapshot } from "./snapshot";
 //
 // What it sees, and what it does not:
 //   - The rows of A that it compares are those of the tables of TENANT_TABLES. A write outside them
-//     (rate_limits, discrepancies, a row that only an e-mail address names) is invisible to the
+//     (the phone and IP rows of rate_limits, discrepancies, a row that only an e-mail address names) is invisible to the
 //     snapshot: a case that touches such a table asserts it in its own test.
 //   - It compares what a run answers, returned or thrown, as plain data. An answer it cannot show as
 //     plain data (a Map, a class instance) is refused.

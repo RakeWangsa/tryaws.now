@@ -3,7 +3,7 @@ import { v7 as uuidv7 } from "uuid";
 import { inTransaction, insertRow } from "./sql";
 import { newAdmin, newPoolAccount, systemAccount, uniqueSuffix } from "./fixtures";
 
-// Seeds for test/tenancy*.test.ts: a row in every one of the 26 tenant tables for a customer, and the
+// Seeds for test/tenancy*.test.ts: a row in every one of the 27 tenant tables for a customer, and the
 // rows of one customer that point at the rows of another. The seed reads like the Ownership map: a
 // new tenant table has no seed, and the test that compares the seeded table names with the map fails
 // until this file has one.
@@ -60,7 +60,7 @@ export async function seedShared(pool: pg.Pool): Promise<SeedShared> {
   };
 }
 
-// One row in each of the 26 tenant tables for the customer, which must exist. Every row is the
+// One row in each of the 27 tenant tables for the customer, which must exist. Every row is the
 // customer's own (customer_id, or the resource, account or actor that the owner predicate follows).
 export async function seedCustomer(
   pool: pg.Pool,
@@ -100,6 +100,11 @@ export async function seedCustomer(
     ip: "203.0.113.7",
   });
   await add("wallets", { customer_id: customerId, currency: "BDT" });
+  await add("rate_limits", {
+    scope_key: `customer:${customerId}:topup.start:3600`,
+    window_start: "2026-11-11T10:00:00.000Z",
+    count: 1,
+  });
 
   // The ledger. The clearing entry belongs to an account without an owner, so it is in no snapshot.
   const wallet = await add("ledger_accounts", {

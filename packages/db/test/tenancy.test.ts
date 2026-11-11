@@ -26,6 +26,7 @@ const TENANT = [
   "orders",
   "otp_challenges",
   "payments",
+  "rate_limits",
   "resources",
   "settings",
   "ssh_keys",
@@ -46,7 +47,6 @@ const NON_TENANT = [
   "pool_accounts",
   "pool_capacity",
   "pricing_rules",
-  "rate_limits",
   "tlds",
 ];
 
@@ -94,7 +94,7 @@ it("every table is a tenant table or a named non-tenant table, never both", asyn
   expect([...tenant, ...NON_TENANT_TABLES].sort()).toEqual(await tables());
 });
 
-it("the split is the Ownership map: 26 tenant tables and 11 named non-tenant tables", () => {
+it("the split is the Ownership map: 27 tenant tables and 10 named non-tenant tables", () => {
   expect(Object.keys(TENANT_TABLES).sort()).toEqual(TENANT);
   expect([...NON_TENANT_TABLES].sort()).toEqual(NON_TENANT);
 });

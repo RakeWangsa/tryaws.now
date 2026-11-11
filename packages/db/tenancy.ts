@@ -63,6 +63,9 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   // that was passed in cannot matter; a value that is no uuid is refused by the cast, as in the
   // other predicates.
   settings: "t.scope = 'customer' and t.scope_id = $1::uuid::text",
+  // A row belongs to a customer when its key starts with `customer:<id>:`; phone and IP rows belong
+  // to nobody and are in no snapshot. The id is compared as text, as for settings.
+  rate_limits: "starts_with(t.scope_key, 'customer:' || $1::uuid::text || ':')",
 });
 
 // The tables that no single customer owns, and why:
@@ -75,18 +78,12 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
 //   admin_users       the staff accounts of the admin app, not customers
 //   pool_accounts     TiCON's own AWS pool accounts
 //   pool_capacity     the quota and use of the pool accounts per Region
-//   rate_limits       for now: its key format is not fixed yet (see the note below)
 //   discrepancies     admin reconciliation data
-//
-// Note on rate_limits: section 7 allows a key that names a customer, and such a row belongs to
-// that customer. WP2-T3 fixes the key format and moves the table to TENANT_TABLES with a predicate
-// on it; until then a snapshot cannot see the limit rows of a customer.
 //
 // Known blind spots of the snapshot, one per line, with the work package that adds the path:
 //   - notifications, waitlist_entries, support_requests with a null customer_id name the customer by e-mail: WP5-T5, WP4-T3, WP9-T4
 //   - audit_log rows ABOUT a customer, written by an admin or the system (the predicate is the actor path only): WP8-T1
 //   - ledger_transactions whose actor or reference is the customer but that have no line on its account: WP3-T4
-//   - rate_limits, whose scope key can name a customer (see the note above): WP2-T3
 //   - discrepancies, whose details can name a customer or a payment, and which customers cannot read: WP7-T6, WP8-T7
 export const NON_TENANT_TABLES: readonly string[] = Object.freeze([
   "markets",
@@ -98,6 +95,5 @@ export const NON_TENANT_TABLES: readonly string[] = Object.freeze([
   "admin_users",
   "pool_accounts",
   "pool_capacity",
-  "rate_limits",
   "discrepancies",
 ]);
