@@ -27,3 +27,7 @@ apps/*/public/theme/
 
 # Written by Next.js on dev and build
 next-env.d.ts
+
+# local tooling output
+.playwright-mcp/
+apps/*/AGENTS.md

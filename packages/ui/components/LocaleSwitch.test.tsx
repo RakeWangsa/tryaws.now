@@ -101,7 +101,7 @@ describe("LocaleSwitch", () => {
       <LocaleSwitch current="en" items={[...ITEMS]} linkAs={Custom} />,
     );
     expect(container.querySelectorAll("a[data-custom]")).toHaveLength(2);
-    expect(seen[0]).toMatchObject({ href: "/bn/billing", hreflang: "bn", lang: "bn" });
+    expect(seen[0]).toMatchObject({ href: "/bn/billing", hrefLang: "bn", lang: "bn" });
     expect(seen[1]).toMatchObject({ href: "/en/billing", "aria-current": "true" });
     expect(String(seen[1]?.["className"])).toContain("active");
   });

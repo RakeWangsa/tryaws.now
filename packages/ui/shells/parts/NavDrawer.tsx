@@ -25,7 +25,11 @@ export function NavDrawer({
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
-        <button type="button" className="btn btn-link d-lg-none p-0 me-3" aria-label={openLabel}>
+        <button
+          type="button"
+          className="btn btn-link mergecolor d-lg-none p-0 me-3"
+          aria-label={openLabel}
+        >
           <i className="fas fa-bars" aria-hidden="true" />
         </button>
       </Dialog.Trigger>

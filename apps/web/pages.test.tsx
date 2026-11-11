@@ -76,7 +76,7 @@ describe("landing page", () => {
   it("follows the mockup: a section.sec-normal with a container, in the main landmark", async () => {
     const html = intl(await HomePage({ params: Promise.resolve({ locale: "bn" }) }), "bn");
     expect(html).toContain(
-      '<main id="main"><section class="sec-normal notfound"><div class="container">',
+      '<main id="main" class="bg-colorstyle"><section class="sec-normal notfound pt-150"><div class="container">',
     );
     expect(html).not.toContain("style=");
     expect(html).not.toContain("<script");

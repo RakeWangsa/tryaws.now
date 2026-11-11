@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { headers } from "next/headers";
@@ -9,6 +10,8 @@ import {
   fontPreloads,
   themeAttributes,
 } from "@tc/ui/theme";
+
+export const metadata: Metadata = { icons: { icon: "/brand/symbol.svg" } };
 
 // Every route is rendered per request: the proxy puts a fresh CSP nonce on each one (U4).
 export const dynamic = "force-dynamic";

@@ -42,7 +42,7 @@ export function AuthShell({ locale, localeHrefs, children }: AuthShellProps): Re
               {t("auth.backHome")}
             </a>
           </p>
-          <div className="tc-footer-aws">
+          <div className="mergecolor tc-footer-aws">
             <AwsLines variant="short" />
           </div>
         </div>

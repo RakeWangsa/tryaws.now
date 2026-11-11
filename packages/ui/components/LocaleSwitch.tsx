@@ -17,7 +17,7 @@ export interface LocaleSwitchProps {
 
 /** The anchor props a locale link carries; a framework link (such as next/link) passes them to its `<a>`. */
 type LocaleLinkProps = ComponentProps<LinkComponent> & {
-  hreflang: string;
+  hrefLang: string;
   lang: string;
   "aria-current"?: "true";
 };
@@ -32,14 +32,22 @@ export function LocaleSwitch({ current, items, linkAs }: LocaleSwitchProps) {
   const Link = (linkAs ?? "a") as ComponentType<LocaleLinkProps> | "a";
 
   return (
-    <div className="btn-group btn-group-toggle toplang" role="group" aria-label={t("label")}>
+    <div
+      className="btn-group btn-group-toggle toplang tc-locale-switch"
+      role="group"
+      aria-label={t("label")}
+    >
       {items.map((item, index): ReactNode => {
         const active = item.locale === current;
         const props: LocaleLinkProps = {
           href: item.href,
-          hreflang: item.locale,
+          hrefLang: item.locale,
           lang: item.locale,
-          className: cx("btn btn-secondary", index === 0 && "me-1", active && "active"),
+          className: cx(
+            "btn btn-secondary tc-locale-link",
+            index === 0 && "me-1",
+            active && "active",
+          ),
           ...(active ? { "aria-current": "true" as const } : {}),
         };
         const text = item.locale === "bn" ? t("bn") : t("en");

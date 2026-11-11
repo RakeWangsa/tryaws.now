@@ -45,52 +45,57 @@ export function AppFrame({
       <a className="tc-skip-link" href="#main">
         {t("skip")}
       </a>
-      <header className="menu-wrap tc-app-bar">
-        <div className="nav-menu">
-          <div className="container-fluid">
-            <div className="row align-items-center">
-              <div className="col-auto d-flex align-items-center">
-                <NavDrawer openLabel={t("app.openNav")} closeLabel={t("close")} title={navLabel}>
+      <div className="tc-shell-fill bg-colorstyle">
+        <header className="menu-wrap tc-app-bar">
+          <div className="nav-menu">
+            <div className="container-fluid">
+              <div className="row align-items-center">
+                <div className="col-auto d-flex align-items-center">
+                  <NavDrawer openLabel={t("app.openNav")} closeLabel={t("close")} title={navLabel}>
+                    {navigation}
+                  </NavDrawer>
+                  <a href={homeHref} aria-label={t("homeLabel")}>
+                    <Logo />
+                  </a>
+                  {brandExtra}
+                </div>
+                <div className="col d-flex flex-wrap align-items-center justify-content-end gap-2 gap-md-3">
+                  <LocaleSwitch
+                    current={locale}
+                    items={LOCALES.map((item) => ({ locale: item, href: localeHrefs[item] }))}
+                  />
+                  {topExtras}
+                  {account}
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+        <section className="blog motpath pb-80 bg-colorstyle">
+          <div className="container-fluid pt-4">
+            <div className="row">
+              <div className="col-lg-3 d-none d-lg-block">
+                <aside
+                  id="sidebar"
+                  className="sidebar sec-bg1 bg-seccolorstyle noshadow tc-app-nav"
+                >
                   {navigation}
-                </NavDrawer>
-                <a href={homeHref} aria-label={t("homeLabel")}>
-                  <Logo />
-                </a>
-                {brandExtra}
+                </aside>
               </div>
-              <div className="col d-flex align-items-center justify-content-end gap-3">
-                <LocaleSwitch
-                  current={locale}
-                  items={LOCALES.map((item) => ({ locale: item, href: localeHrefs[item] }))}
-                />
-                {topExtras}
-                {account}
+              <div className="col-lg-9">
+                <div id="sidebar_content" className="wrap-blog">
+                  <main id="main">{children}</main>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </header>
-      <section className="blog motpath pb-80 bg-colorstyle">
-        <div className="container-fluid pt-4">
-          <div className="row">
-            <div className="col-lg-3 d-none d-lg-block">
-              <aside id="sidebar" className="sidebar sec-bg1 bg-seccolorstyle noshadow tc-app-nav">
-                {navigation}
-              </aside>
-            </div>
-            <div className="col-lg-9">
-              <div id="sidebar_content" className="wrap-blog">
-                <main id="main">{children}</main>
-              </div>
-            </div>
+        </section>
+        <footer className="tc-app-footer bg-colorstyle mergecolor">
+          <div className="container-fluid">
+            <AwsLines variant="short" />
           </div>
-        </div>
-      </section>
-      <footer className="tc-app-footer">
-        <div className="container-fluid">
-          <AwsLines variant="short" />
-        </div>
-      </footer>
+        </footer>
+      </div>
     </>
   );
 }

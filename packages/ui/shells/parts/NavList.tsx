@@ -29,10 +29,10 @@ export function NavList<Id extends string>({
         if (soon) {
           return (
             <div key={entry.id} className="heading pt-2">
-              <span className="seccolor" aria-disabled="true">
+              <span className="seccolor tc-nav-label" aria-disabled="true">
                 {icon}
-                <span>{labelOf(entry.id)}</span>
-                <span className="badge bg-grey ms-2">{soonLabel}</span>
+                <span className="tc-nav-label">{labelOf(entry.id)}</span>
+                <span className="badge bg-grey ms-2 tc-nav-label">{soonLabel}</span>
               </span>
             </div>
           );
@@ -46,7 +46,7 @@ export function NavList<Id extends string>({
               {...(current ? { "aria-current": "page" as const } : {})}
             >
               {icon}
-              <span>{labelOf(entry.id)}</span>
+              <span className="tc-nav-label">{labelOf(entry.id)}</span>
               {current && <i className="fas fa-angle-right ms-2" aria-hidden="true" />}
             </a>
           </div>

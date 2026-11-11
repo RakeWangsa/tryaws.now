@@ -31,7 +31,7 @@ export function EmptyState({
   );
   if (!fullPage) return state;
   return (
-    <section className="sec-normal notfound">
+    <section className="sec-normal notfound pt-150">
       <div className="container">{state}</div>
     </section>
   );

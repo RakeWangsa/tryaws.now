@@ -33,37 +33,39 @@ export function KitGallery({ app = "web" }: { app?: "web" | "admin" }): ReactEle
   const locale = toLocale(useLocale());
   const other = locale === "bn" ? "en" : "bn";
   return (
-    <div className="container tc-gallery pt-4">
-      <h1 className="h3 mergecolor">{t("title")}</h1>
-      <p className="seccolor">{t("intro")}</p>
-      <nav aria-label={t("nav.label")} data-gallery-nav className="mb-4">
-        <ul className="list-inline mb-0">
-          <li className="list-inline-item">
-            <a
-              className="golink"
-              href={localeHrefs("/dev/ui")[other]}
-              hrefLang={other}
-              lang={other}
-            >
-              {t("nav.otherLocale")}
-            </a>
-          </li>
-          {GALLERY_SHELLS[app].map((shell) => (
-            <li key={shell} className="list-inline-item">
-              <a className="golink" href={localePath(locale, `/dev/ui/${shell}`)}>
-                {t("nav.shells")}: {t(`nav.shell.${shell}`)}
+    <div className="bg-colorstyle">
+      <div className="container tc-gallery pt-4 pb-5">
+        <h1 className="h3 mergecolor">{t("title")}</h1>
+        <p className="seccolor">{t("intro")}</p>
+        <nav aria-label={t("nav.label")} data-gallery-nav className="mb-4">
+          <ul className="list-inline mb-0">
+            <li className="list-inline-item">
+              <a
+                className="golink"
+                href={localeHrefs("/dev/ui")[other]}
+                hrefLang={other}
+                lang={other}
+              >
+                {t("nav.otherLocale")}
               </a>
             </li>
-          ))}
-        </ul>
-      </nav>
-      <AttributeSwitch app={app} />
-      {GROUPS.map(({ id, Section }) => (
-        <section key={id} data-gallery-group={id} className="mb-5">
-          <h2 className="h4 mergecolor mb-4">{t(`groups.${id}`)}</h2>
-          <Section />
-        </section>
-      ))}
+            {GALLERY_SHELLS[app].map((shell) => (
+              <li key={shell} className="list-inline-item">
+                <a className="golink" href={localePath(locale, `/dev/ui/${shell}`)}>
+                  {t("nav.shells")}: {t(`nav.shell.${shell}`)}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <AttributeSwitch app={app} />
+        {GROUPS.map(({ id, Section }) => (
+          <section key={id} data-gallery-group={id} className="mb-5">
+            <h2 className="h4 mergecolor mb-4">{t(`groups.${id}`)}</h2>
+            <Section />
+          </section>
+        ))}
+      </div>
     </div>
   );
 }

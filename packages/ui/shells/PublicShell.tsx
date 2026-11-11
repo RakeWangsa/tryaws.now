@@ -84,190 +84,194 @@ export function PublicShell({
       <a className="tc-skip-link" href="#main">
         {t("skip")}
       </a>
-      <header>
-        {hasTopLine ? (
-          <div className="sec-bg3 infonews">
-            <div className="container-fluid">
-              <div className="row">
-                <div className="col-6 col-md-7 news">
-                  {announcement !== null ? <span>{announcement}</span> : null}
-                </div>
-                <div className="col-6 col-md-5 link">
-                  <div className="infonews-nav float-end">
-                    {phoneHref !== null ? (
-                      <a
-                        className="iconews tabphone"
-                        href={phoneHref}
-                        title={t("public.supportPhone")}
-                      >
-                        {supportPhone}
-                      </a>
-                    ) : null}
+      <div className="tc-shell-fill bg-colorstyle">
+        <header>
+          {hasTopLine ? (
+            <div className="sec-bg3 infonews">
+              <div className="container-fluid">
+                <div className="row">
+                  <div className="col-6 col-md-7 news">
+                    {announcement !== null ? <span>{announcement}</span> : null}
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-        <div className="menu-wrap">
-          <div className="nav-menu">
-            <div className="container">
-              <div className="row align-items-center">
-                <div className="col-2 col-md-2">
-                  <a href={homeHref} aria-label={t("homeLabel")}>
-                    <Logo />
-                  </a>
-                </div>
-                <nav id="menu" className="col-10 col-md-10" aria-label={t("public.menuLabel")}>
-                  <div className="navigation float-end">
-                    <div className="main-menu nav navbar-nav navbar-right">
-                      {products.length > 0 ? (
-                        <div className="menu-item menu-item-has-children">
-                          <a href="#menu" aria-haspopup="true">
-                            {t("public.products")}
-                          </a>
-                          <ul className="sub-menu dropdown bg-colorstyle">
-                            {products.map((product) => (
-                              <li key={product.family} className="menu-item">
-                                <a className="mergecolor" href={product.href}>
-                                  {t(`nav.${product.family}`)}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                  <div className="col-6 col-md-5 link">
+                    <div className="infonews-nav float-end">
+                      {phoneHref !== null ? (
+                        <a
+                          className="iconews tabphone"
+                          href={phoneHref}
+                          title={t("public.supportPhone")}
+                        >
+                          {supportPhone}
+                        </a>
                       ) : null}
-                      <div className="menu-item">
-                        <a href={p("/pricing")}>{t("public.pricing")}</a>
-                      </div>
-                      {domainsOpen ? (
-                        <div className="menu-item">
-                          <a href={p("/products/domains")}>{t("public.domains")}</a>
-                        </div>
-                      ) : null}
-                      <div className="menu-item">
-                        <a href={p("/help")}>{t("public.help")}</a>
-                      </div>
-                      <div className="menu-item">{switcher}</div>
-                      <div className="menu-item">{accountButton}</div>
                     </div>
                   </div>
-                </nav>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-        <MobileMenu
-          label={t("menu")}
-          brand={
-            <a href={homeHref} aria-label={t("homeLabel")}>
-              <Logo />
-            </a>
-          }
-        >
-          {products.map((product) => (
-            <div key={product.family} className="menu-item">
-              <a className="mergecolor" href={product.href}>
-                {t(`nav.${product.family}`)}
-              </a>
-            </div>
-          ))}
-          <div className="menu-item">
-            <a className="mergecolor" href={p("/pricing")}>
-              {t("public.pricing")}
-            </a>
-          </div>
-          {domainsOpen ? (
-            <div className="menu-item">
-              <a className="mergecolor" href={p("/products/domains")}>
-                {t("public.domains")}
-              </a>
             </div>
           ) : null}
-          <div className="menu-item">
-            <a className="mergecolor" href={p("/help")}>
-              {t("public.help")}
-            </a>
-          </div>
-          <div className="menu-item">{switcher}</div>
-          <div className="menu-item">{accountButton}</div>
-        </MobileMenu>
-      </header>
-      <main id="main">{children}</main>
-      <footer className="footer">
-        <div className="container">
-          <div className="footer-top">
-            <div className="row">
-              <div className="col-sm-6 col-md-3">
-                <div className="heading">{t("footer.products")}</div>
-                <ul className="footer-menu">
-                  {products.map((product) => (
-                    <li key={product.family} className="menu-item">
-                      <a href={product.href}>{t(`nav.${product.family}`)}</a>
-                    </li>
-                  ))}
-                  {domainsOpen ? (
-                    <li className="menu-item">
-                      <a href={p("/products/domains")}>{t("public.domains")}</a>
-                    </li>
-                  ) : null}
-                </ul>
-              </div>
-              <div className="col-sm-6 col-md-3">
-                <div className="heading">{t("footer.company")}</div>
-                <ul className="footer-menu">
-                  <li className="menu-item">
-                    <a href={p("/pricing")}>{t("footer.pricing")}</a>
-                  </li>
-                  <li className="menu-item">
-                    <a href={p("/payments")}>{t("footer.payments")}</a>
-                  </li>
-                </ul>
-              </div>
-              <div className="col-sm-6 col-md-3">
-                <div className="heading">{t("footer.support")}</div>
-                <ul className="footer-menu">
-                  <li className="menu-item">
-                    <a href={p("/help")}>{t("footer.help")}</a>
-                  </li>
-                  <li className="menu-item">
-                    <a href={p("/support")}>{t("footer.contact")}</a>
-                  </li>
-                </ul>
-              </div>
-              <div className="col-sm-6 col-md-3">
-                <div className="heading">{t("footer.legal")}</div>
-                <ul className="footer-menu">
-                  <li className="menu-item">
-                    <a href={p("/legal/terms")}>{t("footer.terms")}</a>
-                  </li>
-                  <li className="menu-item">
-                    <a href={p("/legal/privacy")}>{t("footer.privacy")}</a>
-                  </li>
-                </ul>
+          <div className="menu-wrap">
+            <div className="nav-menu">
+              <div className="container">
+                <div className="row align-items-center">
+                  <div className="col-2 col-md-2">
+                    <a href={homeHref} aria-label={t("homeLabel")}>
+                      <Logo />
+                    </a>
+                  </div>
+                  <nav id="menu" className="col-10 col-md-10" aria-label={t("public.menuLabel")}>
+                    <div className="navigation float-end">
+                      <div className="main-menu nav navbar-nav navbar-right">
+                        {products.length > 0 ? (
+                          <div className="menu-item menu-item-has-children">
+                            <a href="#menu" aria-haspopup="true">
+                              {t("public.products")}
+                            </a>
+                            <ul className="sub-menu dropdown bg-colorstyle">
+                              {products.map((product) => (
+                                <li key={product.family} className="menu-item">
+                                  <a className="mergecolor" href={product.href}>
+                                    {t(`nav.${product.family}`)}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        <div className="menu-item">
+                          <a href={p("/pricing")}>{t("public.pricing")}</a>
+                        </div>
+                        {domainsOpen ? (
+                          <div className="menu-item">
+                            <a href={p("/products/domains")}>{t("public.domains")}</a>
+                          </div>
+                        ) : null}
+                        <div className="menu-item">
+                          <a href={p("/help")}>{t("public.help")}</a>
+                        </div>
+                        <div className="menu-item">{switcher}</div>
+                        <div className="menu-item">{accountButton}</div>
+                      </div>
+                    </div>
+                  </nav>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div className="footer-bottom">
+          <MobileMenu
+            label={t("menu")}
+            brand={
+              <a href={homeHref} aria-label={t("homeLabel")}>
+                <Logo />
+              </a>
+            }
+          >
+            {products.map((product) => (
+              <div key={product.family} className="menu-item">
+                <a className="mergecolor" href={product.href}>
+                  {t(`nav.${product.family}`)}
+                </a>
+              </div>
+            ))}
+            <div className="menu-item">
+              <a className="mergecolor" href={p("/pricing")}>
+                {t("public.pricing")}
+              </a>
+            </div>
+            {domainsOpen ? (
+              <div className="menu-item">
+                <a className="mergecolor" href={p("/products/domains")}>
+                  {t("public.domains")}
+                </a>
+              </div>
+            ) : null}
+            <div className="menu-item">
+              <a className="mergecolor" href={p("/help")}>
+                {t("public.help")}
+              </a>
+            </div>
+            <div className="menu-item">{switcher}</div>
+            <div className="menu-item">{accountButton}</div>
+          </MobileMenu>
+        </header>
+        <main id="main" className="bg-colorstyle">
+          {children}
+        </main>
+        <footer className="footer">
           <div className="container">
-            <div className="row">
-              <div className="col-lg-6">
-                <p>
-                  <strong>{t("footer.companyName")}</strong>
-                </p>
-                <p>{t("footer.address")}</p>
-              </div>
-              <div className="col-lg-6">{paymentBanner}</div>
-            </div>
-            <div className="row">
-              <div className="col-12 tc-footer-aws">
-                <AwsLines variant="short" />
+            <div className="footer-top">
+              <div className="row">
+                <div className="col-sm-6 col-md-3">
+                  <div className="heading">{t("footer.products")}</div>
+                  <ul className="footer-menu">
+                    {products.map((product) => (
+                      <li key={product.family} className="menu-item">
+                        <a href={product.href}>{t(`nav.${product.family}`)}</a>
+                      </li>
+                    ))}
+                    {domainsOpen ? (
+                      <li className="menu-item">
+                        <a href={p("/products/domains")}>{t("public.domains")}</a>
+                      </li>
+                    ) : null}
+                  </ul>
+                </div>
+                <div className="col-sm-6 col-md-3">
+                  <div className="heading">{t("footer.company")}</div>
+                  <ul className="footer-menu">
+                    <li className="menu-item">
+                      <a href={p("/pricing")}>{t("footer.pricing")}</a>
+                    </li>
+                    <li className="menu-item">
+                      <a href={p("/payments")}>{t("footer.payments")}</a>
+                    </li>
+                  </ul>
+                </div>
+                <div className="col-sm-6 col-md-3">
+                  <div className="heading">{t("footer.support")}</div>
+                  <ul className="footer-menu">
+                    <li className="menu-item">
+                      <a href={p("/help")}>{t("footer.help")}</a>
+                    </li>
+                    <li className="menu-item">
+                      <a href={p("/support")}>{t("footer.contact")}</a>
+                    </li>
+                  </ul>
+                </div>
+                <div className="col-sm-6 col-md-3">
+                  <div className="heading">{t("footer.legal")}</div>
+                  <ul className="footer-menu">
+                    <li className="menu-item">
+                      <a href={p("/legal/terms")}>{t("footer.terms")}</a>
+                    </li>
+                    <li className="menu-item">
+                      <a href={p("/legal/privacy")}>{t("footer.privacy")}</a>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </footer>
+          <div className="footer-bottom">
+            <div className="container">
+              <div className="row">
+                <div className="col-lg-6">
+                  <p className="contact">
+                    <strong>{t("footer.companyName")}</strong>
+                  </p>
+                  <p className="contact">{t("footer.address")}</p>
+                </div>
+                <div className="col-lg-6">{paymentBanner}</div>
+              </div>
+              <div className="row">
+                <div className="col-12 contact tc-footer-aws">
+                  <AwsLines variant="short" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </div>
     </>
   );
 }

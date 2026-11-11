@@ -1,7 +1,7 @@
 import { useTranslations } from "next-intl";
 import type { ReactElement } from "react";
 import { Card } from "../components/Card.tsx";
-import { Field } from "../components/Field.tsx";
+import { Field, FormBlock } from "../components/Field.tsx";
 import { Tabs } from "../components/Tabs.tsx";
 import { localeHrefs, localePath, type Locale } from "../runtime/index.ts";
 import { AdminShell } from "../shells/AdminShell.tsx";
@@ -58,7 +58,7 @@ function PublicDemo({ locale }: { locale: Locale }): ReactElement {
       announcement={t("announcement")}
       supportPhone={null}
     >
-      <div className="container pt-4">
+      <div className="container pt-150">
         <SampleContent />
       </div>
     </PublicShell>
@@ -76,7 +76,7 @@ function AuthDemo({ locale }: { locale: Locale }): ReactElement {
             id: "one",
             title: t("tabs.one"),
             content: (
-              <>
+              <FormBlock>
                 <Field name="demo-email" type="email" label={t("field.email")} />
                 <Field
                   name="demo-password"
@@ -84,7 +84,7 @@ function AuthDemo({ locale }: { locale: Locale }): ReactElement {
                   label={t("field.password")}
                   autoComplete="off"
                 />
-              </>
+              </FormBlock>
             ),
           },
           {
