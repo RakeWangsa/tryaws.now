@@ -151,7 +151,18 @@ const BEFORE = [
 ];
 
 // The products seam that Task 9 adds to @tc/core.
-const PRODUCTS = ["parseInstanceConfig", "resolveInstance", "resolveProduct"];
+const PRODUCTS = [
+  "parseInstanceConfig",
+  "resolveInstance",
+  "resolveProduct",
+  // WP1-T5: catalog sync (the mapping, the active rule, the plan, the BDT price on read)
+  "decideActive",
+  "mapInstanceBundle",
+  "planIsSafe",
+  "planScopeSync",
+  "priceCatalog",
+  "priceRows",
+];
 
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
