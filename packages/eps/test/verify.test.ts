@@ -278,6 +278,23 @@ describe("what is refused before EPS is called", () => {
     });
   });
 
+  it("an id that is not stored writes only the address row, never a per-payment row", async () => {
+    k.reset();
+    const deps = k.deps();
+    const ip = freshIp();
+    const count = async (): Promise<number> =>
+      Number((await k.pool.query("select count(*) as n from rate_limits")).rows[0].n);
+    const before = await count();
+    for (let i = 0; i < 5; i++) {
+      const id = "TCP" + (i + 4096).toString(16).padStart(32, "0");
+      expect(await verifyPayment(deps, id, { clientIp: ip })).toEqual({
+        ok: false,
+        error: "not_found",
+      });
+    }
+    expect((await count()) - before).toBe(1);
+  });
+
   it("a client address that is not an address is refused", async () => {
     const s = await startPayment(k);
     expect(await verifyPayment(k.deps(), s.merchantTransactionId, { clientIp: "x" })).toMatchObject(

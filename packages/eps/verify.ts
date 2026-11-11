@@ -74,9 +74,10 @@ async function run(
   const id = parseMerchantTransactionId(merchantTransactionId);
   if (id === null) return refused("not_found");
 
-  // 2. Rate limits of the browser-facing path (a caller with an address).
+  // 2. The address rule of the browser-facing path (a caller with an address). The per-payment rule
+  // waits for a payment that exists, so random well-formed ids cannot grow the limiter table.
   if (options.ctx !== undefined) {
-    const limited = await limitReturn(deps, id, options.ctx.clientIp);
+    const limited = await limitReturn(deps, id, options.ctx.clientIp, "ip");
     if (limited !== null) return { result: limited, kind: "error" };
   }
 
@@ -85,6 +86,10 @@ async function run(
     systemPayments.byMerchantTransactionId(tx, id, { lock: false }),
   );
   if (first === null) return refused("not_found");
+  if (options.ctx !== undefined) {
+    const limited = await limitReturn(deps, id, options.ctx.clientIp, "payment");
+    if (limited !== null) return { result: limited, kind: "error" };
+  }
   if (first.status === "credited") return answered("credited", "unchanged");
   if (first.status === "review") return answered("pending", "unchanged");
 
@@ -125,18 +130,22 @@ async function limitReturn(
   deps: EpsDeps,
   id: string,
   clientIp: string | undefined,
+  part: "ip" | "payment",
 ): Promise<VerifyOutcome | null> {
-  // An address that is given must be one (R16); an absent address skips only the per-address rule.
-  const ip = clientIp === undefined ? undefined : ipSubject(deps.limitKey, clientIp);
-  if (ip === null) return { ok: false, error: "validation", fields: { clientIp: "invalid" } };
-  const payment = paymentSubject(deps.limitKey, id);
-  if (payment === null) return { ok: false, error: "internal" };
   const now = deps.clock.now();
   // The payment subject is a keyed hash of a different label than an address, so the two never meet.
-  const rules = [
-    ...(ip === undefined ? [] : [{ kind: "ip" as const, subject: ip, ...RETURN_LIMITS.ip }]),
-    { kind: "ip" as const, subject: payment, ...RETURN_LIMITS.payment },
-  ];
+  let rules: { kind: "ip"; subject: string; action: string; limit: number; windowSeconds: number }[];
+  if (part === "ip") {
+    // An address that is given must be one (R16); an absent address skips only the per-address rule.
+    if (clientIp === undefined) return null;
+    const ip = ipSubject(deps.limitKey, clientIp);
+    if (ip === null) return { ok: false, error: "validation", fields: { clientIp: "invalid" } };
+    rules = [{ kind: "ip", subject: ip, ...RETURN_LIMITS.ip }];
+  } else {
+    const payment = paymentSubject(deps.limitKey, id);
+    if (payment === null) return { ok: false, error: "internal" };
+    rules = [{ kind: "ip", subject: payment, ...RETURN_LIMITS.payment }];
+  }
   const decision = await deps.run((tx) => consumeRateLimits(tx, rules, now));
   return decision.allowed
     ? null
