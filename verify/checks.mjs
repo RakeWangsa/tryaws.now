@@ -288,6 +288,46 @@ const WP1_T4 = [
 ];
 TASKS["WP1-T4"] = WP1_T4;
 
+// WP2-T3: phone OTP. The two lines of the backlog row (limits, tenancy) are their own checks; the
+// filters fail when they select no file (`--no-passWithNoTests`).
+const notifyOtp = {
+  id: "notify-otp",
+  title: "packages/notify: SMS port and fake, OTP codes, send and verify",
+  command: ["pnpm", "test", "--filter", "@tc/notify", "--no-passWithNoTests"],
+};
+const otpLimits = {
+  id: "otp-limits",
+  title: "WP2-T3: 5 attempts, 3 sends an hour per number and per IP, codes stored hashed",
+  command: ["pnpm", "test", "--filter", "@tc/notify", "test/otp-limits", "--no-passWithNoTests"],
+};
+const otpTenancy = {
+  id: "otp-tenancy",
+  title: "WP2-T3: rate_limits and otp_challenges rows belong to their customer",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "test/rate-limit",
+    "test/otp-repo",
+    "test/cross-tenant",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP2-T3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  notifyOtp,
+  otpLimits,
+  otpTenancy,
+  repo,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

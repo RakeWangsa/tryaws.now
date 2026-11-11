@@ -93,6 +93,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP1-T2",
     "WP1-T4",
     "WP2-T1",
+    "WP2-T3",
     "WP3-T1",
     "WP4-T1",
     "WP4-T2",
@@ -290,6 +291,35 @@ it("task WP1-T4 is proven by the checks of WP1-T1, the two halves of the backlog
     "packages/core/rates/stored-order.test.ts",
     "packages/core/pricing/preview.test.ts",
     "packages/core/rates/preview-equals-engine.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP2-T3 is proven by the checks of WP1-T1, the tests of core, db and notify, and the two lines of the proof", () => {
+  expect(TASKS["WP2-T3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["notify-otp", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["otp-limits", "pnpm test --filter @tc/notify test/otp-limits --no-passWithNoTests"],
+    [
+      "otp-tenancy",
+      "pnpm test --filter @tc/db test/rate-limit test/otp-repo test/cross-tenant --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // the filters must keep matching real files
+  for (const f of [
+    "packages/notify/test/otp-limits.test.ts",
+    "packages/db/test/rate-limit.test.ts",
+    "packages/db/test/rate-limit-tenancy.test.ts",
+    "packages/db/test/otp-repo.test.ts",
+    "packages/db/test/cross-tenant.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
