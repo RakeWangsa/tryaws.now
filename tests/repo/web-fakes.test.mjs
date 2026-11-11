@@ -75,7 +75,11 @@ it("runtime.ts imports the fakes only through a literal dynamic import()", () =>
   const text = read(RUNTIME);
   expect(staticFakes(text)).toEqual([]);
   const dynamic = dynamicFakes(text);
-  expect(dynamic.sort()).toEqual(["./fakes/dev-auth.ts", "./fakes/eps-bridge.ts"]);
+  expect(dynamic.sort()).toEqual([
+    "./fakes/dev-auth.ts",
+    "./fakes/eps-bridge.ts",
+    "./fakes/kyc-fakes.ts",
+  ]);
   // Every import( in the file has a string literal: nothing is computed.
   const all = stripComments(text).match(/\bimport\s*\(/g) ?? [];
   expect(all).toHaveLength(dynamic.length);

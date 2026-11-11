@@ -12,6 +12,7 @@ import type { Eps, EpsDeps, EpsGateway } from "@tc/eps";
 import { headers } from "next/headers";
 import { readWebConfig } from "./config.ts";
 import type { WebConfig } from "./config.ts";
+import type { KycPorts } from "./kyc-actions.ts";
 import { writeLog } from "./log.ts";
 import { resourceSecrets } from "./secrets.ts";
 
@@ -24,6 +25,12 @@ export interface WebRuntime {
   config: WebConfig;
   /** null = not configured: the screens show the "not open" state (R16). */
   eps: Eps | null;
+  /**
+   * The object store and the crypto of the identity check (WP2-T4). null = not configured, which is
+   * every stage but local and test until the S3 and KMS adapters are verified on staging: /kyc then
+   * shows the "not open" state (R16).
+   */
+  kyc: KycPorts | null;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -76,6 +83,7 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     // Literal specifiers, so the boundary can be checked (tests/repo/web-fakes.test.mjs).
     const bridge = await import("./fakes/eps-bridge.ts");
     const auth = await import("./fakes/dev-auth.ts");
+    const kyc = await import("./fakes/kyc-fakes.ts");
     const dev = bridge.getDevEps();
     // epsReturnUrls wants https; in fake mode the origin is http://localhost:<port>.
     const urls = {
@@ -85,7 +93,7 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     };
     const deps = buildDeps(dev.gateway, hex(randomBytes(32)), urls);
     return {
-      runtime: { config, eps: createEps(deps) },
+      runtime: { config, eps: createEps(deps), kyc: kyc.getDevKyc() },
       deps,
       verifier: auth.devVerifier,
     };
@@ -106,7 +114,7 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     hashKey === undefined ||
     limitKey === undefined
   ) {
-    return { runtime: { config, eps: null }, deps: null };
+    return { runtime: { config, eps: null, kyc: null }, deps: null };
   }
 
   const gateway = createEpsGateway(
@@ -118,7 +126,7 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     },
   );
   const deps = buildDeps(gateway, limitKey, epsReturnUrls(config.appOrigin));
-  return { runtime: { config, eps: createEps(deps) }, deps };
+  return { runtime: { config, eps: createEps(deps), kyc: null }, deps };
 }
 
 const CACHE_KEY = "__tcWebRuntime";

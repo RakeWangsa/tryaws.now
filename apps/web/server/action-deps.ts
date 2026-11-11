@@ -1,7 +1,8 @@
 import { currentCustomer } from "@tc/auth";
-import { customerRepos, withTx } from "@tc/db";
+import { customerRepos, newUuidV7, withTx } from "@tc/db";
 import { headers } from "next/headers";
 import type { KeyActionDeps } from "./key-actions.ts";
+import type { KycActionDeps } from "./kyc-actions.ts";
 import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
 import type { OrderActionDeps } from "./order-actions.ts";
 import { getOrdersRuntime } from "./orders-runtime.ts";
@@ -44,5 +45,20 @@ export function keyActionDeps(): KeyActionDeps {
         const repos = customerRepos(tx, customerId);
         return fn({ sshKeys: repos.sshKeys, audit: repos.audit, rateLimits: repos.rateLimits });
       }),
+  };
+}
+
+export async function kycActionDeps(): Promise<KycActionDeps> {
+  const { kyc } = await getRuntime();
+  return {
+    authenticate,
+    now: () => new Date(),
+    newId: newUuidV7,
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({ kyc: repos.kyc, audit: repos.audit, rateLimits: repos.rateLimits });
+      }),
+    ports: kyc,
   };
 }
