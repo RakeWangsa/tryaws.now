@@ -1,0 +1,9 @@
+{
+  "kit": {
+    "plan": {
+      "perPeriod": "/ 30 days",
+      "recommended": "Recommended",
+      "none": "No plans available"
+    }
+  }
+}

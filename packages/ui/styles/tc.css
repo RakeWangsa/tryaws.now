@@ -160,6 +160,39 @@ html[lang="bn"] .btn.question {
 /* ===== 6. Kit, part two (WPU-T3) ===== */
 
 /* ===== 6.1 Plans ===== */
+/* The radio cards of PlanPicker. The input is hidden but stays focusable; the check mark keeps the
+   selection from being shown by color alone (U11). */
+.tc-plan-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.tc-plan-radio {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.tc-plan-card {
+  display: block;
+  padding: 1rem;
+  border: 2px solid transparent;
+  border-radius: var(--tc-radius-card);
+  cursor: pointer;
+}
+.tc-plan-radio:checked + .tc-plan-card {
+  border-color: var(--tc-accent);
+}
+.tc-plan-radio:checked + .tc-plan-card::after {
+  content: "\2713";
+  float: right;
+  font-weight: 700;
+}
+.tc-plan-radio:focus-visible + .tc-plan-card {
+  outline: 3px solid var(--tc-focus);
+}
 
 /* ===== 6.2 Choices ===== */
 
