@@ -4,6 +4,7 @@ import {
   CDN_BUNDLES,
   CDN_ORIGIN_FAMILIES,
   cdnBundleFrom,
+  cdnDefaultDomain,
   checkCdnOrigin,
   parseCdnConfig,
   resolveCdn,
@@ -182,5 +183,30 @@ describe("resolveCdn takes only a checked origin", () => {
       error: "validation",
       fields: { family: "unsupported" },
     });
+  });
+});
+
+describe("cdnDefaultDomain", () => {
+  it("keeps a plain host name, which the customer needs in order to use the distribution (U6)", () => {
+    expect(cdnDefaultDomain("d1a2b3c4d5e6f7.cloudfront.net")).toBe("d1a2b3c4d5e6f7.cloudfront.net");
+  });
+
+  it("drops anything that is not a plain host name, so it can never become markup or a URL", () => {
+    for (const bad of [
+      "",
+      "https://d1.cloudfront.net",
+      "d1.cloudfront.net/path",
+      "<b>x</b>.example.com",
+      "a b.example.com",
+      "localhost",
+      "-bad.example.com",
+      `${"a".repeat(64)}.example.com`,
+      `${"a.".repeat(130)}com`,
+      null,
+      undefined,
+      42,
+    ]) {
+      expect(cdnDefaultDomain(bad), String(bad)).toBeNull();
+    }
   });
 });

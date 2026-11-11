@@ -188,6 +188,7 @@ const PRODUCTS = [
   "CDN_CACHE_BEHAVIORS",
   "CDN_ORIGIN_FAMILIES",
   "cdnBundleFrom",
+  "cdnDefaultDomain",
   "checkCdnOrigin",
   "parseCdnConfig",
   "resolveCdn",

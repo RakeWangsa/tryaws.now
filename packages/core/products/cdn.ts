@@ -129,6 +129,18 @@ export function cdnBundleFrom(awsId: unknown): CdnBundle | null {
     : null;
 }
 
+const HOST_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const HOST = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL}){1,5}$`);
+
+/**
+ * The default domain of a distribution as it came back from AWS, or null when it is not a plain host
+ * name. It is shown to the customer because they need it (U6), so it is checked before it is stored
+ * or rendered: lowercase letters, digits and hyphens in two to six labels, nothing else.
+ */
+export function cdnDefaultDomain(raw: unknown): string | null {
+  return typeof raw === "string" && raw.length <= 253 && HOST.test(raw) ? raw : null;
+}
+
 function unavailable(): Result<never> {
   return { ok: false, error: "validation", fields: { productId: "unavailable" } };
 }
