@@ -20,3 +20,4 @@ coverage/
 .env.*
 .sst/
 verify/report-*.json
+.pnpm-store/
