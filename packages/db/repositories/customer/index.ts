@@ -14,6 +14,8 @@ import { ordersRepo, type OrdersRepo } from "./orders";
 import { walletRepo, type WalletRepo } from "./wallet";
 import { invoicesRepo, type InvoicesRepo } from "./invoices";
 import { kycRepo, type KycRepo } from "./kyc";
+import { notificationsRepo, type NotificationsRepo } from "./notifications";
+import { subscriptionsRepo, type SubscriptionsRepo } from "./subscriptions";
 
 // The repositories of one customer (R8). Tasks 7 to 9 add sshKeys, resources, operations, audit.
 export interface CustomerRepos {
@@ -31,6 +33,8 @@ export interface CustomerRepos {
   wallet: WalletRepo;
   invoices: InvoicesRepo;
   kyc: KycRepo;
+  notifications: NotificationsRepo;
+  subscriptions: SubscriptionsRepo;
 }
 
 // Binds the customer once; every repository is built from that scope and no method takes a
@@ -52,6 +56,8 @@ export function customerRepos(tx: Tx, customerId: string): CustomerRepos {
     wallet: walletRepo(scope),
     invoices: invoicesRepo(scope),
     kyc: kycRepo(scope),
+    notifications: notificationsRepo(scope),
+    subscriptions: subscriptionsRepo(scope),
   };
 }
 

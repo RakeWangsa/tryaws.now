@@ -33,6 +33,7 @@ vi.mock("@tc/db", () => ({
   customerRepos: () => ({
     profile: { get: async () => state.profile },
     wallet: { view: async () => state.wallet },
+    notifications: { unreadCount: async () => 3 },
   }),
   readMarketBasics: async () => state.market,
   readFeatureFlags: async () => state.flags,
@@ -159,6 +160,7 @@ describe("loadPanel", () => {
     expect(outcome.data.market).toEqual({ code: "BD", numerals: "beng" });
     expect(outcome.data.enabledFamilies).toEqual(["cloudServers"]);
     expect(outcome.data.soonFamilies).toEqual([]);
+    expect(outcome.data.unreadCount).toBe(3);
   });
 
   it("a customer without a name has an empty display name, not an e-mail address", async () => {

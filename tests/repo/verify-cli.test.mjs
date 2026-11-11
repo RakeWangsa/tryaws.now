@@ -115,6 +115,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP5-T4",
     "WP5-T5",
     "WP6-T1",
+    "WP5-T6",
     "WP6-T2",
     "WP6-T3",
     "WP6-T4",
@@ -850,6 +851,42 @@ it("tasks WP5-T1 and WP5-T2 are proven by the adapter, row and wiring tests, eac
     "packages/aws/test/disk.test.ts",
     "packages/db/test/backups-repo.test.ts",
     "functions/provisioner/backup.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP5-T6 is proven by the shared checks, core, db, the cross-tenant test, the Destroy proof, the screens, the anchors and the messages", () => {
+  expect(TASKS["WP5-T6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["cross-tenant", "pnpm test --filter @tc/db test/cross-tenant --no-passWithNoTests"],
+    ["extras-cores", "pnpm test --filter @tc/web server/extras-actions --no-passWithNoTests"],
+    ["extras-guard", "pnpm test --filter @tc/core lifecycle/guard --no-passWithNoTests"],
+    ["extras-repos", "pnpm test --filter @tc/db extras-repos --no-passWithNoTests"],
+    ["extras-views", "pnpm test --filter @tc/web server/extras-view --no-passWithNoTests"],
+    ["extras-pages", "pnpm test --filter @tc/web _extras/pages --no-passWithNoTests"],
+    [
+      "extras-mockup-anchors",
+      "pnpm test --filter @tc/web _extras/mockup-anchors --no-passWithNoTests",
+    ],
+    ["extras-messages", "pnpm test --filter @tc/web messages/extras --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // the filters must keep matching real files
+  for (const f of [
+    "apps/web/server/extras-actions.test.ts",
+    "apps/web/server/extras-view.test.ts",
+    "apps/web/app/[locale]/(panel)/_extras/pages.test.tsx",
+    "apps/web/app/[locale]/(panel)/_extras/mockup-anchors.test.tsx",
+    "apps/web/messages/extras-messages.test.ts",
+    "packages/db/test/extras-repos.test.ts",
+    "packages/core/lifecycle/guard.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

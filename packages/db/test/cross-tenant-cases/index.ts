@@ -13,6 +13,8 @@ import { ordersCases } from "./orders";
 import { walletCases } from "./wallet";
 import { invoicesCases } from "./invoices";
 import { kycCases } from "./kyc";
+import { notificationsCases } from "./notifications";
+import { subscriptionsCases } from "./subscriptions";
 
 // Every repository of customerRepos has one case module in this folder. To add a repository: create
 // <repo>.ts with defineCaseSet and add one import line and one entry here. Do not edit
@@ -35,4 +37,6 @@ export const CASE_SETS: readonly CaseSet[] = [
   walletCases,
   invoicesCases,
   kycCases,
+  notificationsCases,
+  subscriptionsCases,
 ];

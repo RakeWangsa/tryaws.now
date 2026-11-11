@@ -1,6 +1,7 @@
 import { currentCustomer } from "@tc/auth";
-import { customerRepos, newUuidV7, withTx } from "@tc/db";
+import { customerRepos, newUuidV7, readFeatureFlag, withTx } from "@tc/db";
 import { headers } from "next/headers";
+import type { ExtrasDeps } from "./extras-actions.ts";
 import type { KeyActionDeps } from "./key-actions.ts";
 import type { KycActionDeps } from "./kyc-actions.ts";
 import type { SettingsDeps } from "./settings-actions.ts";
@@ -77,5 +78,31 @@ export async function settingsActionDeps(): Promise<SettingsDeps> {
       }),
     ports: account,
     clientIp: () => ip,
+  };
+}
+
+/** The ports of the cores of the server tabs and the bell (extras-actions.ts). */
+export function extrasActionDeps(): ExtrasDeps {
+  return {
+    authenticate,
+    now: () => new Date(),
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({
+          resources: repos.resources,
+          subscriptions: repos.subscriptions,
+          operations: repos.operations,
+          audit: repos.audit,
+          rateLimits: repos.rateLimits,
+          notifications: repos.notifications,
+          // R12, R16: a flag that is off or unreadable is off.
+          serversOn: async () => {
+            const profile = await repos.profile.get();
+            if (profile === null) return false;
+            return (await readFeatureFlag(tx, "linux_instance", profile.market)) === true;
+          },
+        });
+      }),
   };
 }

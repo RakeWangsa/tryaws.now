@@ -4,6 +4,8 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { ServerDetail } from "../../../../../server/servers-view.ts";
 import { ServerState, useRegionLabel, useSpecLine } from "../ServerParts.tsx";
+import { useExtraTabs } from "./ExtrasTabs.tsx";
+import type { ExtrasBundle } from "./ExtrasTabs.tsx";
 
 // The content of /servers/[id] (16.10): a header and the tabs Overview, Access and Networking
 // (WP4). The other tabs belong to WP5. A server of another customer and a missing one give the same
@@ -15,15 +17,21 @@ export function ServerDetailContent({
   locale,
   numerals,
   server,
+  extras = null,
+  defaultTab,
 }: {
   locale: Locale;
   numerals: Numerals;
   server: ServerDetail | null;
+  /** The tabs of WP5-T6; null while the flag is off or the data is not loaded. */
+  extras?: ExtrasBundle | null;
+  defaultTab?: string;
 }) {
   const t = useTranslations("Servers");
   const specLine = useSpecLine();
   const regionLabel = useRegionLabel();
   const listHref = localePath(locale, "/servers");
+  const extraTabs = useExtraTabs(extras, locale, numerals);
 
   if (server === null) {
     return (
@@ -128,7 +136,13 @@ export function ServerDetailContent({
             { id: "overview", title: t("detail.tab.overview"), content: overview },
             { id: "access", title: t("detail.tab.access"), content: access },
             { id: "networking", title: t("detail.tab.networking"), content: networking },
+            ...extraTabs,
           ]}
+          {...(defaultTab !== undefined &&
+          ["backups", "storage", "metrics", "billing", "destroy"].includes(defaultTab) &&
+          extraTabs.length > 0
+            ? { defaultId: defaultTab }
+            : {})}
         />
       </Card>
     </>

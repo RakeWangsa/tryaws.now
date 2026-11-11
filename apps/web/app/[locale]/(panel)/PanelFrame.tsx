@@ -36,6 +36,7 @@ export function PanelFrame({
       balanceMinor={panel.balanceMinor}
       enabledFamilies={panel.enabledFamilies}
       soonFamilies={panel.soonFamilies}
+      {...(panel.unreadCount > 0 ? { unreadCount: panel.unreadCount } : {})}
       signOut={<SignOutForm locale={locale} />}
     >
       {children}

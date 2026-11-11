@@ -25,6 +25,8 @@ export interface PanelData {
   market: { code: string; numerals: "beng" | "latn" };
   enabledFamilies: ProductFamily[];
   soonFamilies: ProductFamily[];
+  /** Unread in-app notifications: the badge of the bell (WP5-T6). */
+  unreadCount: number;
 }
 
 export type PanelOutcome =
@@ -66,7 +68,11 @@ async function load(path: string): Promise<PanelOutcome> {
   try {
     return await withTx(async (tx) => {
       const repos = customerRepos(tx, session.customerId);
-      const [profile, wallet] = await Promise.all([repos.profile.get(), repos.wallet.view()]);
+      const [profile, wallet, unread] = await Promise.all([
+        repos.profile.get(),
+        repos.wallet.view(),
+        repos.notifications.unreadCount(),
+      ]);
       // A session without a customer row cannot happen after requireCustomer; refuse if it does (R16).
       if (profile === null) return refuse();
       const [market, flags] = await Promise.all([
@@ -81,6 +87,7 @@ async function load(path: string): Promise<PanelOutcome> {
         market: { code: market.code, numerals: market.numerals },
         enabledFamilies: enabledFamilies(flags),
         soonFamilies: [],
+        unreadCount: unread,
       };
       return { ok: true, data } satisfies PanelOutcome;
     });

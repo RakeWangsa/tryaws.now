@@ -22,6 +22,11 @@ export const operationsCases: CaseSet = defineCaseSet<{ resourceId: string; oper
       kind: "read",
       run: (c, s) => asCustomer(c, (r) => r.operations.listForResource(s.resourceId)),
     },
+    // Names no row: the newest operations of B are B's own, whatever the target is.
+    "operations.listRecent": {
+      kind: "read",
+      run: (c) => asCustomer(c, (r) => r.operations.listRecent(5)),
+    },
     // A fresh idempotency key on every call, so that the run on the ghost is the same request.
     "operations.request": {
       kind: "write",

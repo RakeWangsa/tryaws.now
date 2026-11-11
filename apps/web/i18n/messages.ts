@@ -17,10 +17,13 @@ import { settingsBn } from "../messages/settings-bn.ts";
 import { settingsEn } from "../messages/settings-en.ts";
 import { windowsAccessBn } from "../messages/windows-access-bn.ts";
 import { windowsAccessEn } from "../messages/windows-access-en.ts";
+import { extrasBn } from "../messages/extras-bn.ts";
+import { extrasEn } from "../messages/extras-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
 const serversOwn: Readonly<Record<Locale, Messages>> = { bn: serversBn, en: serversEn };
+const extrasOwn: Readonly<Record<Locale, Messages>> = { bn: extrasBn, en: extrasEn };
 const authOwn: Readonly<Record<Locale, Messages>> = { bn: authBn, en: authEn };
 const kycOwn: Readonly<Record<Locale, Messages>> = { bn: kycBn, en: kycEn };
 const settingsOwn: Readonly<Record<Locale, Messages>> = { bn: settingsBn, en: settingsEn };
@@ -35,6 +38,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     walletOwn.bn,
     serversOwn.bn,
     windowsAccessBn,
+    extrasOwn.bn,
     authOwn.bn,
     kycOwn.bn,
     settingsOwn.bn,
@@ -47,6 +51,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     walletOwn.en,
     serversOwn.en,
     windowsAccessEn,
+    extrasOwn.en,
     authOwn.en,
     kycOwn.en,
     settingsOwn.en,
