@@ -11,3 +11,10 @@ export {
   type LedgerFinding,
 } from "./check";
 export { reverseTransaction, type ReverseTransactionInput } from "./reverse";
+export {
+  runLedgerCheck,
+  LedgerMismatchError,
+  type LedgerAlert,
+  type LedgerAlertEvent,
+  type LedgerCheckDeps,
+} from "./nightly";
