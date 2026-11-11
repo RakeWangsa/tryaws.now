@@ -51,11 +51,18 @@ const core = {
   title: "packages/core: pricing and AWS names and tags",
   command: ["pnpm", "test", "--filter", "@tc/core", "--no-passWithNoTests"],
 };
+// The proof of the backlog row of WP1-T2 on its own line: the cross-tenant test and the tests of its helper.
+const crossTenant = {
+  id: "cross-tenant",
+  title: "R8: customer A cannot read or write the rows of customer B",
+  command: ["pnpm", "test", "--filter", "@tc/db", "test/cross-tenant", "--no-passWithNoTests"],
+};
 
 const WP1_T1 = [specSync, baselineSync, lint, typecheck, format, db, repo];
 const WP4_T1 = [specSync, baselineSync, lint, typecheck, format, aws, core, repo];
+const WP1_T2 = [specSync, baselineSync, lint, typecheck, format, db, crossTenant, core, repo];
 
-export const TASKS = { "WP0-T1": WP0_T1, "WP1-T1": WP1_T1, "WP4-T1": WP4_T1 };
+export const TASKS = { "WP0-T1": WP0_T1, "WP1-T1": WP1_T1, "WP1-T2": WP1_T2, "WP4-T1": WP4_T1 };
 
 export const GATES = {
   M0: WP0_T1,

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { expect, it } from "vitest";
 import { GATES, TASKS, quickChecks } from "../../verify/checks.mjs";
 
@@ -86,5 +86,25 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
   // every other key of TASKS is unchanged
-  expect(Object.keys(TASKS).sort()).toEqual(["WP0-T1", "WP1-T1", "WP4-T1"]);
+  expect(Object.keys(TASKS).sort()).toEqual(["WP0-T1", "WP1-T1", "WP1-T2", "WP4-T1"]);
+});
+
+it("task WP1-T2 is proven by the checks of WP1-T1, the cross-tenant proof and the tests of @tc/core", () => {
+  expect(TASKS["WP1-T2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["cross-tenant", "pnpm test --filter @tc/db test/cross-tenant --no-passWithNoTests"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // the filter must keep matching real files
+  for (const f of [
+    "packages/db/test/cross-tenant.test.ts",
+    "packages/db/test/cross-tenant-helper.test.ts",
+  ])
+    expect(existsSync(f), f).toBe(true);
 });
