@@ -43,3 +43,17 @@ export {
 } from "./repositories/config/pricing-rules";
 export { lockFxRateWrites, lockPricingRuleWrites } from "./repositories/config/locks";
 export { isFlagKeyText, isMarketCode } from "./repositories/config/args";
+export {
+  readMarket,
+  readMarkets,
+  readMarketBasics,
+  type Market,
+  type MarketBasics,
+} from "./repositories/config/markets";
+export {
+  FEATURE_FLAG_KEYS,
+  isFeatureFlagKey,
+  readFeatureFlag,
+  readFeatureFlags,
+  type FeatureFlagKey,
+} from "./repositories/config/feature-flags";
