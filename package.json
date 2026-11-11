@@ -16,6 +16,7 @@
     "baseline:check": "node scripts/build-baseline.mjs --check",
     "theme:sync": "node scripts/sync-theme.ts",
     "verify": "node scripts/verify.mjs",
+    "theme:scan": "node scripts/scan-theme-output.ts",
     "db:up": "docker compose up -d --wait postgres",
     "db:migrate": "pnpm --filter @tc/db migrate",
     "format": "prettier --write .",
