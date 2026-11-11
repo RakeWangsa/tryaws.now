@@ -90,3 +90,14 @@ export async function holdUntilWaiter(tx: Tx, maxSeconds: number): Promise<boole
   }
   return false;
 }
+
+// What the failure step and the destroy step do before they release. Run it as worker_rw.
+export async function setResourceState(
+  tx: Tx,
+  resourceId: string,
+  state: "active" | "failed" | "destroyed",
+): Promise<void> {
+  await tx.execute(sql`update resources
+       set state = ${state}, deleted_at = case when ${state}::text = 'destroyed' then now() else null end
+     where id = ${resourceId}`);
+}

@@ -48,3 +48,4 @@ export {
   type PoolSeed,
   type SeededPool,
 } from "./capacity";
+export { setResourceState } from "./capacity";

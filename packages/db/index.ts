@@ -87,3 +87,5 @@ export type {
   CellSelector,
   UsedChange,
 } from "./repositories/capacity";
+export { capacityReleaseRepo } from "./repositories/capacity-release";
+export type { CapacityReleaseRepo, ReservationState } from "./repositories/capacity-release";
