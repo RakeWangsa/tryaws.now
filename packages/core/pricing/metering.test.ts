@@ -42,7 +42,7 @@ describe("dailyMeteredChargeMinor: GB x price per GB-month / 30, half-up, paisa"
   it.each([5, undefined, null, 1.5])("refuses GB that is not text: %j", (gb) => {
     expect(() => dailyMeteredChargeMinor(gb as never, 100n)).toThrow(PricingInputError);
   });
-  it.each([-1n, 1 as never, "100" as never, 1.5 as never])("refuses the price %j", (price) => {
+  it.each([-1n, 1 as never, "100" as never, 1.5 as never])("refuses the price (case %#)", (price) => {
     expect(() => dailyMeteredChargeMinor("1", price)).toThrow(PricingInputError);
   });
 });
@@ -57,7 +57,7 @@ describe("allowanceLevel", () => {
     ["250", "100", 100],
     ["8", "10", 80],
     ["7.9", "10", 0],
-    ["1500.5", "2000", 80],
+    ["1600.5", "2000", 80],
     ["0", "0.5", 0],
     ["0.4", "0.5", 80],
   ])("used %s of %s GB is level %s", (used, allowance, level) => {

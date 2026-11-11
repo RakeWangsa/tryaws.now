@@ -180,3 +180,5 @@ export type {
 } from "./repositories/system/lifecycle";
 export { registerCustomer, isNewCustomerValid } from "./repositories/system/registration";
 export type { LegalDocument, NewCustomer, Registered } from "./repositories/system/registration";
+export { meteringRepo } from "./repositories/system/metering";
+export type { MeteringRepo, TransferRow, UsageRow } from "./repositories/system/metering";
