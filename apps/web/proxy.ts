@@ -36,6 +36,8 @@ export default function proxy(request: NextRequest): NextResponse {
 // The next-intl matcher: `/theme/...` and `/brand/...` hold a dot, so they are skipped. `/pay/...`
 // is skipped too: the payment gateway returns there with a fixed URL, which a locale redirect or
 // rewrite would break (the route handlers of app/pay/eps put the customer into the right locale).
+// `/dev/idp/` and `/dev/sms/` are the two dev outbox routes of the fakes (they answer 404 outside
+// the fake switches); they have no locale either.
 export const config = {
-  matcher: "/((?!api|trpc|_next|_vercel|pay/|.*\\..*).*)",
+  matcher: "/((?!api|trpc|_next|_vercel|pay/|dev/(?:idp|sms)/|.*\\..*).*)",
 };

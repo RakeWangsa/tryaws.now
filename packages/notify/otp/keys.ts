@@ -59,6 +59,18 @@ export function ipSubject(pepper: string, ip: string): string | null {
     : mac(pepper, "tc.rl.ip.v1", address).subarray(0, 16).toString("hex");
 }
 
+// The subject of a rate-limit key for an email address (normalised by the caller): 128 bits of a keyed
+// hash, so the key table never holds an address (R14). With `pairIp` the counter is per address
+// and per client network (the sign-in pair rule); an unusable pair address is null (R16).
+export function emailSubject(pepper: string, email: string, pairIp?: string): string | null {
+  if (pairIp === undefined) {
+    return mac(pepper, "tc.rl.email.v1", email).subarray(0, 16).toString("hex");
+  }
+  const address = limitAddress(pairIp);
+  if (address === null) return null;
+  return mac(pepper, "tc.rl.email.v1", email, address).subarray(0, 16).toString("hex");
+}
+
 const PORT = /^[0-9]{1,5}$/;
 const validPort = (text: string): boolean =>
   PORT.test(text) && Number(text) >= 1 && Number(text) <= 65535;

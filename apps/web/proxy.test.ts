@@ -111,7 +111,7 @@ describe("proxy: matcher", () => {
   });
 
   it("is the next-intl matcher, without the return routes of the payment gateway", () => {
-    expect(config.matcher).toBe("/((?!api|trpc|_next|_vercel|pay/|.*\\..*).*)");
+    expect(config.matcher).toBe("/((?!api|trpc|_next|_vercel|pay/|dev/(?:idp|sms)/|.*\\..*).*)");
   });
 
   it("does not match /pay/eps/*: the gateway returns there, no locale, no rewrite", () => {
@@ -122,6 +122,15 @@ describe("proxy: matcher", () => {
       "/pay/eps/success?MerchantTransactionId=x",
     ]) {
       expect(matches(path.split("?")[0] as string), path).toBe(false);
+    }
+  });
+
+  it("does not match the two dev outbox routes, and still matches the dev UI pages", () => {
+    for (const path of ["/dev/idp/outbox", "/dev/sms/outbox"]) {
+      expect(matches(path), path).toBe(false);
+    }
+    for (const path of ["/dev/ui", "/en/dev/ui", "/dev/identity"]) {
+      expect(matches(path), path).toBe(true);
     }
   });
 
