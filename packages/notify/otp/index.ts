@@ -5,3 +5,5 @@ export { viewerAddress } from "./keys";
 export type { OtpDeps, OtpSession, SendOtpDeps } from "./deps";
 export { verifyPhoneOtp } from "./verify";
 export type { VerifyPhoneOtpInput, OtpVerified } from "./verify";
+export { sendPhoneOtp } from "./send";
+export type { OtpSent, SendPhoneOtpInput } from "./send";
