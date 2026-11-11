@@ -1,0 +1,66 @@
+// Namespace `AdminAudit`: the audit log screens of 16.12 (/audit and /audit/[id]). A namespace of its
+// own, so that the other admin screens add theirs without touching this file. Bengali first (rule U5);
+// the English tree is typed from it, so a missing key fails `tsc`.
+export const auditBn = {
+  AdminAudit: {
+    title: "অডিট লগ",
+    intro:
+      "অ্যাডমিন ও সিস্টেমের প্রতিটি কাজের রেকর্ড। এটি শুধু দেখার জন্য: এখান থেকে কিছু লেখা বা বদলানো যায় না। পাসওয়ার্ড, টোকেন, পুরো ফোন নম্বর, ইমেইল ও নথির নম্বর এখানে ঢাকা থাকে।",
+    system: "সিস্টেম",
+    filters: {
+      actor: "কে করেছে (আইডি)",
+      actorHint: "অ্যাডমিন বা গ্রাহকের আইডি, পুরোটা।",
+      actorType: "কাজ করেছে",
+      all: "সব",
+      targetType: "বিষয়ের ধরন",
+      targetTypeHint: "যেমন payment, customer, admin_user",
+      targetId: "বিষয়ের আইডি",
+      action: "কাজের নাম",
+      actionHint: "পুরো নাম, অথবা শেষে বিন্দু দিয়ে শুরুর অংশ, যেমন payment.",
+      from: "শুরুর তারিখ",
+      to: "শেষ তারিখ",
+      dateHint: "বছর-মাস-দিন, ঢাকার সময়",
+      submit: "খুঁজুন",
+      reset: "ফিল্টার মুছুন",
+    },
+    actorTypes: { admin: "অ্যাডমিন", customer: "গ্রাহক", system: "সিস্টেম" },
+    table: {
+      caption: "অডিট লগের তালিকা, নতুন আগে",
+      when: "সময়",
+      actor: "কাজ করেছে",
+      action: "কাজ",
+      target: "বিষয়",
+      ip: "আইপি",
+      open: "বিবরণ",
+    },
+    empty: { title: "কোনো রেকর্ড পাওয়া যায়নি", body: "ফিল্টার বদলে আবার খুঁজুন।" },
+    unavailable: {
+      title: "তথ্য আনা যায়নি",
+      body: "এখন তথ্য পাওয়া যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
+    },
+    next: "পরের পাতা",
+    export: {
+      link: "CSV হিসেবে নামান",
+      hint: "বর্তমান ফিল্টারের সর্বোচ্চ ৫০০০ সারি। শুধু সুপারঅ্যাডমিন নামাতে পারেন।",
+    },
+    detail: {
+      title: "অডিট রেকর্ড",
+      back: "অডিট লগে ফিরুন",
+      id: "রেকর্ডের আইডি",
+      when: "সময়",
+      actorType: "কাজ করেছে",
+      actor: "কর্তার আইডি",
+      action: "কাজ",
+      target: "বিষয়",
+      ip: "আইপি",
+      userAgent: "ব্রাউজার",
+      reason: "কারণ",
+      noReason: "কারণ লেখা নেই",
+      before: "আগে",
+      after: "পরে",
+      extra: "অন্য তথ্য",
+      none: "কিছু নেই",
+      masked: "গোপন তথ্য ঢাকা আছে।",
+    },
+  },
+};
