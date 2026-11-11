@@ -7,6 +7,7 @@ const awsSdkClients = [
   "@aws-sdk/client-route-53-domains",
   "@aws-sdk/client-sts",
   "@aws-sdk/client-cost-explorer",
+  "@aws-sdk/credential-providers",
 ];
 
 // Each group matches the bare package and every sub-path of it.
@@ -58,6 +59,14 @@ const DECIMAL = {
 // function packages and the path forms.
 const R1_PATHS = { ...R1, group: ["@tc/fn-*", "@tc/fn-*/*", ...R1_PATH_FORMS] };
 
+// R1 for dynamic imports: no-restricted-imports does not check import() (ESLint 10.14.0).
+const R1_DYNAMIC_SOURCE =
+  "/^@tc\\/aws(\\/|$)|^@tc\\/fn-|(^|\\/)packages\\/aws(\\/|$)|(^|\\/)functions\\/|^\\.\\.\\/(.*\\/)?aws(\\/|$)/";
+const R1_DYNAMIC = {
+  selector: `ImportExpression[source.value=${R1_DYNAMIC_SOURCE}]`,
+  message: R1.message,
+};
+
 const restrict = (...patterns) => ({
   "no-restricted-imports": ["error", { patterns }],
 });
@@ -106,6 +115,30 @@ export default tseslint.config(
     // packages/core/pricing: pure logic, and the only scope that may import a decimal library.
     files: ["packages/core/pricing/**"],
     rules: restrict(PURE_CORE, R1_PATHS),
+  },
+  {
+    // Dynamic imports, block A: every file of apps/ and packages/ except tests. The source must
+    // be a string literal, so the boundary can be checked. Flat config keeps only the last
+    // matching block's no-restricted-syntax, so blocks A and B match disjoint files.
+    files: ["apps/**", "packages/**"],
+    ignores: ["packages/aws/**", "**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        R1_DYNAMIC,
+        {
+          selector: 'ImportExpression:not([source.type="Literal"])',
+          message:
+            "R1: dynamic imports in apps/ and packages/ take a string literal, so the boundary can be checked.",
+        },
+      ],
+    },
+  },
+  {
+    // Dynamic imports, block B: test files (not bundled) get only the R1 path selector.
+    files: ["apps/**/*.test.*", "packages/**/*.test.*"],
+    ignores: ["packages/aws/**"],
+    rules: { "no-restricted-syntax": ["error", R1_DYNAMIC] },
   },
   {
     // functions/** and everything else outside apps/ and packages/: the SDK rule and R4.

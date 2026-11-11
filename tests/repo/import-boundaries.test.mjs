@@ -26,6 +26,26 @@ it.each([
   ["apps/admin/x.ts", 'import "../../functions/reader/index";', "R1:"],
   ["packages/db/x.ts", 'import "@tc/fn-reader";', "R1:"],
   ["packages/core/pricing/x.ts", 'import "../../aws/index";', "R1:"],
+  ["apps/web/x.ts", 'await import("@tc/aws");', "R1:"],
+  ["apps/admin/x.ts", 'await import("@tc/aws/adapters/linux");', "R1:"],
+  ["apps/web/x.ts", 'await import("../../packages/aws/index");', "R1:"],
+  ["apps/web/x.ts", "await import(`@tc/aws`);", "R1:"],
+  ["apps/web/x.ts", 'const name = "@tc/aws"; await import(name);', "R1:"],
+  ["packages/notify/x.ts", 'await import("@tc/aws");', "R1:"],
+  ["packages/core/x.ts", 'await import("../aws/index");', "R1:"],
+  ["packages/ui/x.tsx", 'export * from "@tc/aws";', "R1:"],
+  ["packages/auth/x.ts", 'export { createAwsAccess } from "@tc/aws";', "R1:"],
+  [
+    "packages/core/x.ts",
+    'export { createAwsAccess } from "@tc/aws";',
+    "packages/core is pure logic:",
+  ],
+  ["apps/web/x.ts", 'import type { AwsError } from "@tc/aws"; export type E = AwsError;', "R1:"],
+  ["apps/web/x.ts", 'const aws = require("@tc/aws"); export default aws;', "require()"],
+  ["apps/web/x.ts", 'import "@aws-sdk/credential-providers";', "Spec section 4:"],
+  ["apps/web/x.test.ts", 'await import("@tc/aws");', "R1:"],
+  ["packages/db/test/helper.ts", 'const name = "x"; await import(name);', "R1:"],
+  ["packages/ui/x.tsx", 'await import("../../functions/reader/index");', "R1:"],
 ])("rejects %s with %s", async (filePath, code, prefix) => {
   const messages = await errors(filePath, code);
   expect(
@@ -41,6 +61,16 @@ it.each([
   ["packages/core/x.ts", 'import "@tc/db";'],
   ["packages/core/pricing/x.ts", 'import "big.js";'],
   ["functions/scheduler/x.ts", 'import "@tc/fn-reader";'],
+  ["functions/provisioner/x.ts", 'await import("@tc/aws");'],
+  ["apps/web/x.ts", 'await import("./chart");'],
+  ["apps/web/x.ts", 'await import("@tc/awsome");'],
+  ["packages/aws/x.ts", 'await import("@aws-sdk/client-lightsail");'],
+  ["packages/core/naming/x.ts", 'import "../types";'],
+  [
+    "packages/core/pricing/x.test.ts",
+    'const u = new URL("a.json", import.meta.url); await import(u.href, { with: { type: "json" } });',
+  ],
+  ["functions/reader/x.ts", 'const name = "x"; await import(name);'],
 ])("allows %s with %s", async (filePath, code) => {
   expect(await errors(filePath, code)).toEqual([]);
 });
