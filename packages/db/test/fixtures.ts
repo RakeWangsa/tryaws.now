@@ -115,11 +115,10 @@ export async function newResource(
   return insertRow(q, "resources", { customer_id: customerId, family: "linux_instance", ...over });
 }
 
-// Inserts a paid order of 100 paisa for the customer, with the balanced ledger transaction it needs
-// (the customer's wallet and the system account revenue_aws_base). The wallet is created once per
-// customer. A pool runs the ledger transaction in its own transaction; a client joins its caller's.
-// Returns the order id.
-export async function newOrder(q: Queryable, customerId: string): Promise<string> {
+// Inserts a balanced ledger transaction of 100 paisa (the customer's wallet debited, the system
+// account revenue_aws_base credited). The wallet account is created once per customer. A pool runs
+// it in its own transaction; a client joins its caller's. Returns the transaction id.
+export async function newLedgerTransaction(q: Queryable, customerId: string): Promise<string> {
   const found = await q.query<{ id: string }>(
     "select id from ledger_accounts where type = 'customer_wallet' and customer_id = $1 and currency = 'BDT'",
     [customerId],
@@ -131,10 +130,15 @@ export async function newOrder(q: Queryable, customerId: string): Promise<string
     [revenue, "credit", 100],
   ];
   const key = "order-" + uniqueSuffix();
-  const ledgerTransactionId =
-    "totalCount" in q
-      ? await inTransaction(q, (c) => postLedger(c, key, lines))
-      : await postLedger(q, key, lines);
+  return "totalCount" in q
+    ? inTransaction(q, (c) => postLedger(c, key, lines))
+    : postLedger(q, key, lines);
+}
+
+// Inserts a paid order of 100 paisa for the customer, with the balanced ledger transaction it needs.
+// Returns the order id.
+export async function newOrder(q: Queryable, customerId: string): Promise<string> {
+  const ledgerTransactionId = await newLedgerTransaction(q, customerId);
   return insertRow(q, "orders", {
     customer_id: customerId,
     kind: "new",

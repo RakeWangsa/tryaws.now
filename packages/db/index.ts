@@ -26,6 +26,13 @@ export type {
 } from "./repositories/customer/operations";
 export type { CustomerHome, HomesRepo } from "./repositories/customer/homes";
 export type { WaitlistJoin, WaitlistRepo } from "./repositories/customer/waitlist";
+export type {
+  NewPaidOrder,
+  NewResource,
+  NewSubscription,
+  OrderRow,
+  OrdersRepo,
+} from "./repositories/customer/orders";
 export { customerOperationKey } from "./repositories/customer/operations";
 export type {
   ClaimedOtp,

@@ -9,7 +9,11 @@ import { homesRepo, type HomesRepo } from "./homes";
 import { waitlistRepo, type WaitlistRepo } from "./waitlist";
 import { rateLimitsRepo, type RateLimitsRepo } from "./rate-limits";
 import { otpRepo, type OtpRepo } from "./otp";
+<<<<<<< HEAD
 import { paymentsRepo, type PaymentsRepo } from "./payments";
+=======
+import { ordersRepo, type OrdersRepo } from "./orders";
+>>>>>>> 6a60ec4 (WP4-T4: the orders repository of a customer, with its cross-tenant cases)
 
 // The repositories of one customer (R8). Tasks 7 to 9 add sshKeys, resources, operations, audit.
 export interface CustomerRepos {
@@ -22,7 +26,11 @@ export interface CustomerRepos {
   waitlist: WaitlistRepo;
   rateLimits: RateLimitsRepo;
   otp: OtpRepo;
+<<<<<<< HEAD
   payments: PaymentsRepo;
+=======
+  orders: OrdersRepo;
+>>>>>>> 6a60ec4 (WP4-T4: the orders repository of a customer, with its cross-tenant cases)
 }
 
 // Binds the customer once; every repository is built from that scope and no method takes a
@@ -39,7 +47,11 @@ export function customerRepos(tx: Tx, customerId: string): CustomerRepos {
     waitlist: waitlistRepo(scope),
     rateLimits: rateLimitsRepo(scope),
     otp: otpRepo(scope),
+<<<<<<< HEAD
     payments: paymentsRepo(scope),
+=======
+    orders: ordersRepo(scope),
+>>>>>>> 6a60ec4 (WP4-T4: the orders repository of a customer, with its cross-tenant cases)
   };
 }
 

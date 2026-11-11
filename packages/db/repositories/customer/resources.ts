@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, notInArray, sql } from "drizzle-orm";
 import type { RESOURCE_STATES } from "../../schema/provisioning";
 import { resources } from "../../schema/index";
 import { isUuid, type TenantScope } from "../scope";
@@ -18,10 +18,14 @@ export interface ResourceSummary {
   deletedAt: Date | null;
 }
 
-// Reads only. The create of a resource belongs to the order flow (WP4-T4) and follows this pattern.
+// Reads only. The create of a resource is `orders.createResource`, because it belongs to the
+// purchase transaction (WP4-T4).
 export interface ResourcesRepo {
   list(): Promise<ResourceSummary[]>;
   get(id: string): Promise<ResourceSummary | null>;
+  // The customer's resources of one family that count against a tier limit: every state but
+  // destroyed and failed, and not soft-deleted.
+  countLive(family: string): Promise<number>;
 }
 
 // Selected and returned by name: the repository never reads or returns a column it did not list.
@@ -62,6 +66,22 @@ export function resourcesRepo(scope: TenantScope): ResourcesRepo {
         .from(resources)
         .where(and(eq(resources.id, id), eq(resources.customerId, scope.customerId)));
       return row === undefined ? null : toResource(row);
+    },
+
+    // One statement that binds the customer id (R8). The count is a small integer, not money.
+    countLive: async (family) => {
+      const [row] = await scope.tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(resources)
+        .where(
+          and(
+            eq(resources.customerId, scope.customerId),
+            eq(resources.family, family),
+            notInArray(resources.state, ["destroyed", "failed"]),
+            isNull(resources.deletedAt),
+          ),
+        );
+      return row?.n ?? 0;
     },
   };
 }
