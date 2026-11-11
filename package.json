@@ -14,6 +14,7 @@
     "spec:check": "node scripts/split-plan.mjs --check",
     "baseline:build": "node scripts/build-baseline.mjs",
     "baseline:check": "node scripts/build-baseline.mjs --check",
+    "theme:sync": "node scripts/sync-theme.ts",
     "verify": "node scripts/verify.mjs",
     "db:up": "docker compose up -d --wait postgres",
     "db:migrate": "pnpm --filter @tc/db migrate",
