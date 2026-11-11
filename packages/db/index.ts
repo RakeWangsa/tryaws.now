@@ -19,3 +19,6 @@ export type {
 } from "./repositories/customer/operations";
 export { customerOperationKey } from "./repositories/customer/operations";
 export type { RepoErrorCode, Written } from "./repositories/result";
+export { adminRepos } from "./repositories/admin/index";
+export type { AdminRepos, AdminActor, AdminRole, AdminScope } from "./repositories/admin/index";
+export type { FeatureFlagSetting } from "./repositories/admin/feature-flags";
