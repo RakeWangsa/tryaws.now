@@ -248,9 +248,19 @@ it("the role migration grants nothing wholesale", () => {
   expect(sql).not.toMatch(/GRANT[^;]*\sTO\s[^;]*\bPUBLIC\b/i);
 });
 
-it("the five roles exist with no special attribute, no membership and no ownership", async () => {
+// Two migrations that create the roles at the same moment: the loser gets unique_violation (23505)
+// from the catalog index, not duplicate_object (42710). No test can reach that race on a server that
+// already has the roles, so the text of the role block is pinned here.
+it("the role block survives a CREATE ROLE that runs at the same moment", () => {
+  const sql = readFileSync(join(MIGRATIONS_FOLDER, "0006_roles_and_grants.sql"), "utf8");
+  expect(sql).toMatch(/EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;/);
+});
+
+it("the five roles exist with no special attribute, no membership in one another and no ownership", async () => {
+  // Roles are server-wide: WP0-T3 lets them log in or makes login users members of them, so LOGIN
+  // and memberships of users outside the five are not asserted here.
   const { rows } = await t.pool.query(
-    `select rolname, rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls, rolcanlogin
+    `select rolname, rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls
        from pg_roles where rolname = any($1) order by 1`,
     [ALL_FIVE],
   );
@@ -269,12 +279,11 @@ it("the five roles exist with no special attribute, no membership and no ownersh
       rolcreatedb: false,
       rolreplication: false,
       rolbypassrls: false,
-      rolcanlogin: false,
     });
   const members = await t.pool.query(
     `select count(*)::int as n from pg_auth_members m
        join pg_roles a on a.oid = m.member join pg_roles b on b.oid = m.roleid
-      where a.rolname = any($1) or b.rolname = any($1)`,
+      where a.rolname = any($1) and b.rolname = any($1)`,
     [ALL_FIVE],
   );
   expect(members.rows[0].n).toBe(0);
@@ -409,7 +418,7 @@ it("pool_capacity: web_rw reserves with FOR UPDATE and changes only used (ruling
   );
 });
 
-it("two databases on one server migrate at the same moment", async () => {
+it("two databases on one server migrate at the same moment when the roles already exist", async () => {
   const [a, b] = await Promise.all([createTempDatabase(), createTempDatabase()]);
   try {
     for (const d of [a, b]) {
@@ -460,6 +469,87 @@ it("no application role can change or remove a ledger account (ruling S13)", asy
   expect((await allowed("web_rw", insert, [uuidv7(), customer])).rowCount).toBe(1);
   await refused("admin_rw", insert, [uuidv7(), customer]);
   await refused("worker_rw", insert, [uuidv7(), customer]);
+});
+
+// asRole always rolls back, so COMMIT never runs in this file. SET CONSTRAINTS ALL IMMEDIATE fires the
+// deferred balance check at once, with the privileges of the role: it reads ledger_transactions,
+// ledger_entries and ledger_accounts.
+it.each(["web_rw", "admin_rw", "worker_rw"] as const)(
+  "%s posts a ledger transaction, and the balance check runs with its privileges",
+  async (role) => {
+    const clearing = await systemAccount(t.pool, "gateway_clearing");
+    const wallet = await newLedgerAccount(t.pool, "customer_wallet", await newCustomer(t.pool));
+    await asRole(t.pool, role, async (c) => {
+      await postLedger(c, "bal-" + uniqueSuffix(), [
+        [clearing, "debit", 1000],
+        [wallet, "credit", 1000],
+      ]);
+      await c.query("SET CONSTRAINTS ALL IMMEDIATE");
+    });
+    await expectSqlError(
+      asRole(t.pool, role, async (c) => {
+        await postLedger(c, "unbal-" + uniqueSuffix(), [
+          [clearing, "debit", 1000],
+          [wallet, "credit", 999],
+        ]);
+        await c.query("SET CONSTRAINTS ALL IMMEDIATE");
+      }),
+      "23514",
+      { message: /^ledger transaction [0-9a-f-]{36} is not balanced$/ },
+    );
+  },
+);
+
+// Section 3.3 of the specification names five tables that web_rw cannot write. The grant matrix also
+// keeps it out of two tables that only the admin panel writes. The list stands here on purpose and is
+// not read from grants.expected.json: a grant that arrives together with an edit of that file fails here.
+const WEB_CANNOT_WRITE = [
+  "fx_rates",
+  "pricing_rules",
+  "feature_flags",
+  "admin_users",
+  "pool_accounts",
+  "wallet_adjustments",
+  "abuse_cases",
+] as const;
+
+it.each(WEB_CANNOT_WRITE)(
+  "web_rw cannot write the admin-owned table %s (acceptance of WP1-T1)",
+  async (table) => {
+    const { rows } = await t.pool.query(
+      `select has_any_column_privilege('web_rw', 'public.' || quote_ident($1), 'INSERT') as can_insert,
+              has_any_column_privilege('web_rw', 'public.' || quote_ident($1), 'UPDATE') as can_update,
+              has_table_privilege('web_rw', 'public.' || quote_ident($1), 'DELETE') as can_delete,
+              has_table_privilege('web_rw', 'public.' || quote_ident($1), 'TRUNCATE') as can_truncate`,
+      [table],
+    );
+    expect(rows[0]).toEqual({
+      can_insert: false,
+      can_update: false,
+      can_delete: false,
+      can_truncate: false,
+    });
+    // statements that read no column, so that only the missing write privilege can refuse them
+    await refused("web_rw", `insert into ${table} (id) values ($1)`, [uuidv7()]);
+    await refused("web_rw", `update ${table} set id = $1 where false`, [uuidv7()]);
+    await refused("web_rw", `delete from ${table} where false`);
+  },
+);
+
+it("web_rw can report a discrepancy and cannot change or remove one", async () => {
+  const { rows } = await t.pool.query(
+    `select has_any_column_privilege('web_rw', 'public.discrepancies', 'UPDATE') as can_update,
+            has_table_privilege('web_rw', 'public.discrepancies', 'DELETE') as can_delete`,
+  );
+  expect(rows[0]).toEqual({ can_update: false, can_delete: false });
+  await refused("web_rw", "update discrepancies set status = 'resolved' where false");
+  await refused("web_rw", "delete from discrepancies where false");
+  const reported = await allowed(
+    "web_rw",
+    "insert into discrepancies (id, kind, details) values ($1, 'cost', '{}')",
+    [uuidv7()],
+  );
+  expect(reported.rowCount).toBe(1);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -544,7 +634,7 @@ it("web_rw: a compromised customer panel cannot approve, credit or re-point; the
   await refused("web_rw", "update customers set kyc_status = 'verified' where id = $1", [
     s.attacker,
   ]);
-  await refused("web_rw", "update customers set risk_tier = 'low' where id = $1", [s.attacker]);
+  await refused("web_rw", "update customers set risk_tier = 'trusted' where id = $1", [s.attacker]);
   await refused("web_rw", "update customers set status = 'active' where id = $1", [s.attacker]);
   await refused(
     "web_rw",
@@ -691,7 +781,7 @@ it("admin_rw: no delete, no capacity counter, no pool secrets; the admin actions
   await refused("admin_rw", "update operations set payload = '{}' where id = $1", [
     s.waitingDestroy,
   ]);
-  // the trigger of Task 8 still keeps the flag fixed; the column grant refuses first
+  // the trigger of 0005_triggers.sql still keeps the flag fixed; the column grant refuses first
   await refused("admin_rw", "update operations set needs_approval = false where id = $1", [
     s.waitingDestroy,
   ]);
