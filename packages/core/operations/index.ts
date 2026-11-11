@@ -8,3 +8,5 @@ export * from "./manual-clock";
 export * from "./queue";
 export * from "./queue-config";
 export * from "./enqueue";
+export * from "./transition";
+export * from "./sweep";
