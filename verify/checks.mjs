@@ -526,6 +526,67 @@ TASKS["WP7-T2"] = [
   aws,
   repo,
 ];
+// WP6-T2s: the customer screens of the databases (WP6-T2) and of the load balancers (WP6-T3). Each
+// filter names a real test file.
+const dbLbCores = {
+  id: "db-lb-cores",
+  title:
+    "WP6-T2s: stop, start and destroy cores (R9, R13), the database password core (U9) and the load balancer target re-check (R8)",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "family-actions",
+    "databases-actions",
+    "databases-access",
+    "load-balancers-actions",
+    "--no-passWithNoTests",
+  ],
+};
+const dbLbViews = {
+  id: "db-lb-views",
+  title:
+    "WP6-T2s: the views read the customer's own rows and answer a missing one like a stranger's",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "databases-view",
+    "load-balancers-view",
+    "--no-passWithNoTests",
+  ],
+};
+const dbLbScreens = {
+  id: "db-lb-screens",
+  title:
+    "WP6-T2s: the screens in bn and en with the mockup cross-check, the messages and the order links",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "(panel)/databases",
+    "(panel)/load-balancers",
+    "databases-messages",
+    "load-balancers-messages",
+    "family-links",
+    "family-routes",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP6-T2s"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  dbLbCores,
+  dbLbViews,
+  dbLbScreens,
+  repo,
+];
 // WP6-T1: the Windows instance adapter, the access-details function and the Access tab. Each filter
 // names a real test file.
 const windowsAdapter = {
