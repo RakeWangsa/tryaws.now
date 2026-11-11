@@ -6,6 +6,23 @@ export {
   type ResolvedProduct,
 } from "./instance";
 export {
+  parseBucketAccess,
+  parseBucketConfig,
+  type BucketAccess,
+  type BucketConfig,
+} from "./bucket";
+export {
+  CONTAINER_POWERS,
+  MAX_SCALE,
+  containerPlanFrom,
+  parseContainerConfig,
+  parseDeployment,
+  type ContainerConfig,
+  type ContainerPlan,
+  type ContainerPower,
+  type Deployment,
+} from "./container";
+export {
   priceCatalog,
   priceRows,
   type CatalogRowForPricing,
