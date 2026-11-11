@@ -132,7 +132,8 @@ export const serversEn: Same<typeof serversBn> = {
         keyName: "Attached key",
         noKey: "No SSH key was attached to this server.",
         pendingIp: "The command shows here once the IP address is known.",
-        windows: "Windows server passwords are not open here yet.",
+        rdp: "Remote Desktop address",
+        rdpHint: "Open Remote Desktop on your computer and connect to this address.",
       },
       networking: {
         title: "Firewall and static IP",

@@ -66,7 +66,13 @@ export function server(over: Partial<ServerRow> = {}): ServerRow {
 }
 
 export function detail(over: Partial<ServerDetail> = {}): ServerDetail {
-  return { ...server(), keyName: "Laptop", createdAt: new Date("2026-11-10T06:00:00Z"), ...over };
+  return {
+    ...server(),
+    family: "linux_instance",
+    keyName: "Laptop",
+    createdAt: new Date("2026-11-10T06:00:00Z"),
+    ...over,
+  };
 }
 
 export function review(

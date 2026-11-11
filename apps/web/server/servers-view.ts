@@ -17,6 +17,7 @@ import type { ResourceSummary } from "@tc/db";
 
 const FLAG = "linux_instance";
 const FAMILY = "linux_instance";
+const WINDOWS_FAMILY = "windows_instance";
 
 export interface PlanSpecs {
   vcpus?: number;
@@ -155,14 +156,22 @@ export async function loadServers(session: CustomerSession): Promise<ServersScre
     const repos = customerRepos(tx, session.customerId);
     const profile = await repos.profile.get();
     if (profile === null) throw new Error("servers: no customer row");
-    if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return { state: "flag_off" };
-    const [resources, catalog] = await Promise.all([
+    const linuxOn = (await readFeatureFlag(tx, FLAG, profile.market)) === true;
+    const windowsOn = (await readFeatureFlag(tx, WINDOWS_FAMILY, profile.market)) === true;
+    if (!linuxOn && !windowsOn) return { state: "flag_off" };
+    const [resources, linuxCatalog, windowsCatalog] = await Promise.all([
       repos.resources.list(),
       listCatalogProducts(tx, FAMILY),
+      listCatalogProducts(tx, WINDOWS_FAMILY),
     ]);
-    const specsOf = new Map(catalog.map((row) => [row.id, planSpecsOf(row.specs)]));
+    const specsOf = new Map(
+      [...linuxCatalog, ...windowsCatalog].map((row) => [row.id, planSpecsOf(row.specs)]),
+    );
+    // Each family is listed only while its own flag is on (R12).
+    const shown = (family: string): boolean =>
+      (family === FAMILY && linuxOn) || (family === WINDOWS_FAMILY && windowsOn);
     const servers = resources
-      .filter((r) => r.family === FAMILY && r.state !== "destroyed")
+      .filter((r) => shown(r.family) && r.state !== "destroyed")
       .map((r): ServerRow => {
         const config = serverConfigOf(r.config);
         return {
@@ -179,6 +188,7 @@ export async function loadServers(session: CustomerSession): Promise<ServersScre
 }
 
 export interface ServerDetail extends ServerRow {
+  family: "linux_instance" | "windows_instance";
   keyName: string | null;
   createdAt: Date;
 }
@@ -191,7 +201,16 @@ export async function loadServerDetail(
     const repos = customerRepos(tx, session.customerId);
     // null for a missing row and for another customer's row alike (R8).
     const resource = await repos.resources.get(id);
-    if (resource === null || resource.family !== FAMILY) return null;
+    if (resource === null) return null;
+    const family = resource.family;
+    if (family !== FAMILY && family !== WINDOWS_FAMILY) return null;
+    if (family === WINDOWS_FAMILY) {
+      // R12, R16: a Windows server is shown only while its family flag is on; else it answers
+      // like a missing one.
+      const profile = await repos.profile.get();
+      if (profile === null) throw new Error("servers: no customer row");
+      if ((await readFeatureFlag(tx, WINDOWS_FAMILY, profile.market)) !== true) return null;
+    }
     const config = serverConfigOf(resource.config);
     const [product, key] = await Promise.all([
       resource.productId !== null ? readCatalogProduct(tx, resource.productId) : null,
@@ -199,12 +218,13 @@ export async function loadServerDetail(
     ]);
     return {
       id: resource.id,
+      family,
       name: config.displayName,
       region: resource.region,
       state: resource.state,
       publicIp: config.publicIp,
       specs: product === null ? {} : planSpecsOf(product.specs),
-      keyName: key?.name ?? null,
+      keyName: family === WINDOWS_FAMILY ? null : (key?.name ?? null),
       createdAt: resource.createdAt,
     };
   });

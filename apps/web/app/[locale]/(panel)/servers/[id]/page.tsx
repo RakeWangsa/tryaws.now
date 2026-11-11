@@ -7,6 +7,7 @@ import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { loadServerDetail } from "../../../../../server/servers-view.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { ServerDetailContent } from "./ServerDetailContent.tsx";
+import { revealWindowsPasswordAction } from "./windows-actions.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,12 @@ export default async function ServerDetailPage({ params }: Props) {
       currentId="cloudServers"
       panel={panel}
     >
-      <ServerDetailContent locale={locale} numerals={numeralsFor(locale, panel)} server={server} />
+      <ServerDetailContent
+        locale={locale}
+        numerals={numeralsFor(locale, panel)}
+        server={server}
+        windowsAction={revealWindowsPasswordAction}
+      />
     </PanelFrame>
   );
 }
