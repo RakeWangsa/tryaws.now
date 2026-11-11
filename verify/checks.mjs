@@ -254,6 +254,66 @@ const WP3_T3 = [
 ];
 TASKS["WP3-T3"] = WP3_T3;
 
+// WP3-T4: the wallet screens. The sentences of the backlog row (a real top-up credits once and shows the new
+// balance; locally Playwright against fakes shows the balance after a faked EPS success) are proven by the
+// tests of each layer, the build (routes, no fake in the bundle) and the Playwright run. `--no-passWithNoTests`
+// makes a filter that selects no file fail. A check that cannot run (no database, no browser) fails: a
+// skipped proof is a failed proof (R16).
+const walletCore = {
+  id: "wallet-amount",
+  title: "WP3-T4: whole-taka amount to paisa, no floats",
+  command: ["pnpm", "test", "--filter", "@tc/core", "topup-amount", "--no-passWithNoTests"],
+};
+const walletDb = {
+  id: "wallet-db",
+  title: "WP3-T4: wallet repository and its cross-tenant cases",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "wallet-repo",
+    "cross-tenant",
+    "--no-passWithNoTests",
+  ],
+};
+const walletEps = {
+  id: "wallet-eps",
+  title: "WP3-T4: recheck, redirect allow-list",
+  command: ["pnpm", "test", "--filter", "@tc/eps", "recheck", "redirect", "--no-passWithNoTests"],
+};
+const walletWeb = {
+  id: "wallet-web",
+  title: "WP3-T4: screens, actions, return routes, mockup anchors",
+  command: ["pnpm", "test", "--filter", "@tc/web", "--no-passWithNoTests"],
+};
+const walletBuild = {
+  id: "wallet-build",
+  title: "WP3-T4: next build lists every route as dynamic and /pay/eps/* are handlers",
+  command: ["node", "scripts/smoke-apps.mjs", "--app", "web"],
+};
+const walletE2e = {
+  id: "wallet-e2e",
+  title: "WP3-T4: Playwright against fakes shows the balance after a faked EPS success",
+  command: ["node", "scripts/smoke-wallet.mjs"],
+};
+const WP3_T4 = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  ui,
+  walletCore,
+  walletDb,
+  walletEps,
+  walletWeb,
+  repo,
+  walletBuild,
+  walletE2e,
+];
+TASKS["WP3-T4"] = WP3_T4;
+
 // WP3-T5: invoices and receipts. What a machine can prove: the numbering, the invoice lines, the HTML
 // (packages/core/invoices), the tenant-scoped repository with its cross-tenant cases (the db suite) and the
 // invoice-renderer handler behind its PDF port. The PDF layout against the sample and the shaping of Bengali
