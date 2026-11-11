@@ -23,6 +23,9 @@ import {
 import { notifyWaitlist, postTransaction } from "@tc/core";
 import type { OperationQueue } from "@tc/core";
 import type { Tx } from "@tc/db";
+import { unavailableAdminDirectory, type AdminDirectory } from "./admin-directory.ts";
+import type { AdminsFlowDeps } from "./admins-flow.ts";
+import type { AuditExportDeps } from "./audit-export.ts";
 import { adminGate } from "./gate.ts";
 import type { MoneyFlowDeps } from "./money-flow.ts";
 import type { CustomerFlowDeps } from "./customer-flow.ts";
@@ -234,3 +237,34 @@ export function capacityFlowDeps(): CapacityFlowDeps {
 
 // The reads of the customer screens, in one transaction of the admin.
 export const readAsAdmin = runAsAdmin;
+
+// The Cognito admin pool behind /admins. Until the real adapter is wired (a manual VERIFY against the
+// admin pool, WP8-T6) every call refuses and the screen fails closed (R16).
+export const adminDirectory = (): AdminDirectory => unavailableAdminDirectory;
+
+// /admins (WP8-T6): superadmin only, 20 changes for each admin in 10 minutes.
+const ADMINS_ACTION_LIMIT = 20;
+
+export function adminsFlowDeps(): AdminsFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_users_action", ADMINS_ACTION_LIMIT),
+    run: runAsAdmin,
+    directory: adminDirectory(),
+    clock: { now: () => new Date() },
+  };
+}
+
+// The CSV export of /audit: superadmin only, 5 exports for each admin in 10 minutes.
+const AUDIT_EXPORT_LIMIT = 5;
+
+export function auditExportDeps(): AuditExportDeps {
+  ensureAdminAuth();
+  return {
+    authorize: () => requireAdmin(["superadmin"]),
+    limiter: adminLimiter("admin_audit_export", AUDIT_EXPORT_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+  };
+}

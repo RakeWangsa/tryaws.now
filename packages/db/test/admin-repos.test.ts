@@ -70,13 +70,31 @@ async function seedReviewPayment(): Promise<string> {
 
 // The money writes are for finance; the discrepancy queue is for ops too.
 const roleOf = (name: string): AdminActor["role"] =>
-  (name.startsWith("wallets.") || name.startsWith("payments.")) &&
-  name !== "payments.resolveDiscrepancy"
-    ? "finance"
-    : "ops";
+  name.startsWith("adminUsers.")
+    ? "superadmin"
+    : (name.startsWith("wallets.") || name.startsWith("payments.")) &&
+        name !== "payments.resolveDiscrepancy"
+      ? "finance"
+      : "ops";
 
 // Every write of adminRepos has a case here; the completeness test below fails when one is missing (R10).
 const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
+  "adminUsers.create": (r) =>
+    r.adminUsers.create({ cognitoSub: "sub-" + uniqueSuffix(), role: "support" }, "new support"),
+  "adminUsers.setRole": async (r) =>
+    r.adminUsers.setRole({ adminId: await newAdmin(t.pool, "support"), role: "ops" }, "to ops"),
+  "adminUsers.disable": async (r) =>
+    r.adminUsers.disable({ adminId: await newAdmin(t.pool, "support") }, "left"),
+  "adminUsers.enable": async (r) => {
+    const id = await newAdmin(t.pool, "support");
+    await t.pool.query("update admin_users set status = 'disabled' where id = $1", [id]);
+    return r.adminUsers.enable({ adminId: id }, "back");
+  },
+  "adminUsers.recordDirectoryAction": async (r) =>
+    r.adminUsers.recordDirectoryAction(
+      { adminId: await newAdmin(t.pool, "support"), kind: "mfa_reset" },
+      "lost phone",
+    ),
   "customers.approveKyc": async (r) =>
     r.customers.approveKyc({ submissionId: await seedKyc(), at: AT }, "documents match"),
   "customers.rejectKyc": async (r) =>
@@ -232,6 +250,11 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
 };
 // Admin reads ("<repo>.<method>") that write no audit row. Empty until WP8 decides where admin reads live and whether a read is audited (open point 21).
 const ADMIN_READ_METHODS: readonly string[] = [
+  "adminUsers.detail",
+  "adminUsers.list",
+  "audit.detail",
+  "audit.export",
+  "audit.search",
   "capacity.list",
   "capacity.overview",
   "capacity.pending",

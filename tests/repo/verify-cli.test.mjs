@@ -130,6 +130,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP8-T3",
     "WP8-T4",
     "WP8-T5",
+    "WP8-T6",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -537,6 +538,29 @@ it("task WP8-T5 is proven by the db read and decision suites and the admin flow 
     "packages/db/test/admin-ops-reads.test.ts",
     "apps/admin/server/ops-flow.test.ts",
     "apps/admin/ops-pages.test.tsx",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP8-T6 is proven by the db audit and admin-users suites, the completeness test and the admin suite", () => {
+  expect(TASKS["WP8-T6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["every-admin-action-audited", "pnpm test --filter @tc/db admin-repos --no-passWithNoTests"],
+    ["admin-users-rules", "pnpm test --filter @tc/db admin-users --no-passWithNoTests"],
+    ["audit-read-only-masked", "pnpm test --filter @tc/db admin-audit.test --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/db/test/admin-repos.test.ts",
+    "packages/db/test/admin-users.test.ts",
+    "packages/db/test/admin-audit.test.ts",
+    "apps/admin/audit-admins-pages.test.tsx",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

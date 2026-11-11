@@ -3,6 +3,10 @@ import { galleryMessages } from "@tc/ui/gallery";
 import { loadKitMessages } from "@tc/ui/messages";
 import { composeMessages } from "@tc/ui/runtime";
 import type { Locale, Messages } from "@tc/ui/runtime";
+import { adminsBn } from "../messages/admins.ts";
+import { adminsEn } from "../messages/admins.en.ts";
+import { auditBn } from "../messages/audit.ts";
+import { auditEn } from "../messages/audit.en.ts";
 import { bn } from "../messages/bn.ts";
 import { customersBn } from "../messages/customers.ts";
 import { customersEn } from "../messages/customers.en.ts";
@@ -29,6 +33,8 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     money.bn,
     pricingBn,
     ops.bn,
+    auditBn,
+    adminsBn,
     galleryMessages.bn,
   ),
   en: composeMessages(
@@ -39,6 +45,8 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     money.en,
     pricingEn,
     ops.en,
+    auditEn,
+    adminsEn,
     galleryMessages.en,
   ),
 };
