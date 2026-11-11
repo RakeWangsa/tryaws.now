@@ -14,6 +14,7 @@ import { withTx } from "@tc/db";
 import { createAdapterRegistry } from "./adapters";
 import { backupAdapter, diskAdapter } from "./backup";
 import { bucketAdapter } from "./bucket";
+import { cdnAdapter } from "./cdn";
 import { containerServiceAdapter } from "./container";
 import { databaseAdapter } from "./database";
 import { linuxInstanceAdapter } from "./linux";
@@ -128,6 +129,8 @@ function buildDeps(): StepDeps {
       // WP6-T4 and WP7-T1: behind their feature flags (R12), which the order flow checks.
       bucketAdapter(),
       containerServiceAdapter(),
+      // WP7-T2: behind the flag cdn (R12), which the order flow checks.
+      cdnAdapter(),
       // WP6-T2 and WP6-T3.
       databaseAdapter(),
       loadBalancerAdapter(),
