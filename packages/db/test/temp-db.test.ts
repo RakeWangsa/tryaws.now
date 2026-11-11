@@ -15,7 +15,9 @@ import {
 } from "./temp-db";
 
 async function databaseExists(...names: string[]): Promise<number> {
-  const admin = new pg.Client({ connectionString: maintenanceUrl(databaseUrl()) });
+  const url = maintenanceUrl(databaseUrl());
+  assertLocalServer(url); // the very string this client connects with
+  const admin = new pg.Client({ connectionString: url });
   await admin.connect();
   try {
     const { rowCount } = await admin.query("select 1 from pg_database where datname = any($1)", [
@@ -261,7 +263,9 @@ function exitedPid(): number {
 }
 
 async function withMaintenance<T>(fn: (admin: pg.Client) => Promise<T>): Promise<T> {
-  const admin = new pg.Client({ connectionString: maintenanceUrl(databaseUrl()) });
+  const url = maintenanceUrl(databaseUrl());
+  assertLocalServer(url); // the very string this client connects with
+  const admin = new pg.Client({ connectionString: url });
   await admin.connect();
   try {
     return await fn(admin);
