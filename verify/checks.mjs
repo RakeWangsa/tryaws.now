@@ -168,6 +168,56 @@ const WP3_T1 = [
 ];
 TASKS["WP3-T1"] = WP3_T1;
 
+// WP3-T2: the EPS client and the payment state machine. The sentence of the backlog row (replay, forged
+// success URL, amount mismatch, double callback) has its own line; the tenancy tests of the payments
+// repositories have another. `--no-passWithNoTests` makes a filter that selects no file fail.
+const epsAll = {
+  id: "eps",
+  title: "packages/eps: gateway, hash, state machine, startTopUp, verifyPayment, returns, sweeper",
+  command: ["pnpm", "test", "--filter", "@tc/eps", "--no-passWithNoTests"],
+};
+const epsProof = {
+  id: "eps-credits-nothing-extra",
+  title:
+    "WP3-T2: replay, forged success URL, amount mismatch and double callback credit nothing extra",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/eps",
+    "test/proof-credits-nothing-extra",
+    "--no-passWithNoTests",
+  ],
+};
+const epsTenancy = {
+  id: "eps-tenancy",
+  title: "WP3-T2 R8: the payments repositories are tenant-scoped and the system module is closed",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "test/payments-repo",
+    "test/payments-system",
+    "test/cross-tenant",
+    "--no-passWithNoTests",
+  ],
+};
+const WP3_T2 = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  epsAll,
+  epsProof,
+  epsTenancy,
+  repo,
+];
+TASKS["WP3-T2"] = WP3_T2;
+
 // WPU-T2 and WPU-T3 (two backlog rows) share one proof: the component kit, its messages and the guard tests.
 const uiKit = {
   id: "ui-kit",

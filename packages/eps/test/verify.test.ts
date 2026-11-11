@@ -203,7 +203,9 @@ describe("a success that does not match goes to review, never to the wallet", ()
     expect(await verify(s.merchantTransactionId)).toEqual(pending);
     expect((await k.payment(s.paymentId)).status).toBe("review");
     expect(await k.balance(s.customerId)).toBe(0n);
-    expect((await k.discrepancies(s.paymentId)).at(-1)?.details).toMatchObject({ reason: "late_success" });
+    expect((await k.discrepancies(s.paymentId)).at(-1)?.details).toMatchObject({
+      reason: "late_success",
+    });
   });
 
   it("a failed answer for an expired row leaves it expired", async () => {

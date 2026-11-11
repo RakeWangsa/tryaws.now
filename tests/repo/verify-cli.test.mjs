@@ -95,6 +95,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP2-T1",
     "WP2-T3",
     "WP3-T1",
+    "WP3-T2",
     "WP4-T1",
     "WP4-T2",
     "WP4-T3",
@@ -225,6 +226,40 @@ it("task WP3-T1 is proven by the checks of WP1-T1, the files of the ledger by na
     "tests/repo/ledger-writers.test.mjs",
   ]) {
     expect(existsSync(f), f).toBe(true);
+  }
+});
+
+it("task WP3-T2 is proven by the checks of WP1-T1, core, db, the EPS suite, the proof on its own line, the tenancy tests and the repository tests", () => {
+  expect(TASKS["WP3-T2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["eps", "pnpm test --filter @tc/eps --no-passWithNoTests"],
+    [
+      "eps-credits-nothing-extra",
+      "pnpm test --filter @tc/eps test/proof-credits-nothing-extra --no-passWithNoTests",
+    ],
+    [
+      "eps-tenancy",
+      "pnpm test --filter @tc/db test/payments-repo test/payments-system test/cross-tenant --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  expect(TASKS["WP3-T2"].find((c) => c.id === "eps-credits-nothing-extra").title).toBe(
+    "WP3-T2: replay, forged success URL, amount mismatch and double callback credit nothing extra",
+  );
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "packages/eps/test/proof-credits-nothing-extra.test.ts",
+    "packages/db/test/payments-repo.test.ts",
+    "packages/db/test/payments-system.test.ts",
+    "packages/db/test/cross-tenant.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
 });
 
