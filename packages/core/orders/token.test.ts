@@ -26,7 +26,7 @@ function claims(): DraftClaims {
   return {
     v: 1,
     c: CUSTOMER,
-    fam: "instance",
+    fam: "linux_instance",
     pid: "nano_3_0",
     region: "ap-south-1",
     cfg: { blueprint: "ubuntu_22_04" },

@@ -12,7 +12,7 @@ export interface InstanceConfig {
 }
 
 export interface ResolvedProduct {
-  readonly family: "instance";
+  readonly family: "linux_instance";
   readonly productId: string;
   readonly region: string;
   readonly featureFlag: string;
@@ -79,7 +79,7 @@ export function resolveInstance(
 ): Result<ResolvedProduct> {
   if (
     product.id !== config.productId ||
-    product.family !== "instance" ||
+    product.family !== "linux_instance" ||
     !product.active ||
     product.region !== config.region ||
     (product.platform !== "linux" && product.platform !== "windows")
@@ -91,7 +91,7 @@ export function resolveInstance(
   return {
     ok: true,
     value: {
-      family: "instance",
+      family: "linux_instance",
       productId: product.id,
       region: product.region,
       featureFlag: product.featureFlag,
@@ -125,7 +125,7 @@ export async function resolveProduct(
   load: (id: string) => Promise<CatalogProduct | null>,
 ): Promise<Result<ResolvedProduct>> {
   switch (family) {
-    case "instance": {
+    case "linux_instance": {
       const config = parseInstanceConfig(rawConfig);
       if (!config.ok) return config;
       const product = await load(config.value.productId);

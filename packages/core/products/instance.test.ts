@@ -8,7 +8,7 @@ const KEY_ID = "0190bbbb-0000-7000-8000-000000000002";
 function product(over: Partial<CatalogProduct> = {}): CatalogProduct {
   return {
     id: PRODUCT_ID,
-    family: "instance",
+    family: "linux_instance",
     awsId: "small_3_0",
     platform: "linux",
     region: "ap-south-1",
@@ -100,7 +100,7 @@ describe("resolveInstance", () => {
     expect(r).toEqual({
       ok: true,
       value: {
-        family: "instance",
+        family: "linux_instance",
         productId: PRODUCT_ID,
         region: "ap-south-1",
         featureFlag: "linux_instance",
@@ -156,7 +156,7 @@ describe("resolveInstance", () => {
 describe("resolveProduct", () => {
   it("is unsupported for every family but instance, without loading anything", async () => {
     const load = vi.fn();
-    for (const family of ["database", "disk", "static_ip", "linux_instance", ""]) {
+    for (const family of ["database", "disk", "static_ip", "instance", ""]) {
       expect(await resolveProduct(family, GOOD, load)).toEqual({
         ok: false,
         error: "validation",
@@ -168,14 +168,14 @@ describe("resolveProduct", () => {
 
   it("does not load when the config is invalid", async () => {
     const load = vi.fn();
-    const r = await resolveProduct("instance", { productId: "x" }, load);
+    const r = await resolveProduct("linux_instance", { productId: "x" }, load);
     expect(r.ok).toBe(false);
     expect(load).not.toHaveBeenCalled();
   });
 
   it("is unavailable when the product is not in the catalog", async () => {
     const load = vi.fn().mockResolvedValue(null);
-    expect(await resolveProduct("instance", GOOD, load)).toEqual({
+    expect(await resolveProduct("linux_instance", GOOD, load)).toEqual({
       ok: false,
       error: "validation",
       fields: { productId: "unavailable" },
@@ -184,7 +184,7 @@ describe("resolveProduct", () => {
   });
 
   it("resolves a loaded product", async () => {
-    const r = await resolveProduct("instance", GOOD, async () => product());
+    const r = await resolveProduct("linux_instance", GOOD, async () => product());
     expect(r.ok).toBe(true);
   });
 });
