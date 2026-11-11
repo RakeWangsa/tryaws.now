@@ -12,7 +12,14 @@ import {
 } from "drizzle-orm/pg-core";
 import { adminUsers } from "./admins";
 import { markets } from "./catalog";
-import { bytea, createdAt, id } from "./common";
+import { bytea, createdAt, id, inList } from "./common";
+
+export const CUSTOMER_TYPES = ["individual", "business"] as const;
+export const KYC_STATUSES = ["none", "pending", "verified", "rejected"] as const;
+export const RISK_TIERS = ["new", "trusted"] as const;
+// Decided here: the two locales of market BD; another market replaces this CHECK later.
+export const LOCALES = ["bn", "en"] as const;
+export const CUSTOMER_STATUSES = ["active", "suspended"] as const;
 
 export const customers = pgTable(
   "customers",
@@ -38,17 +45,16 @@ export const customers = pgTable(
   },
   (t) => [
     unique("customers_cognito_sub_unique").on(t.cognitoSub),
-    check("customers_type_check", sql`${t.type} in ('individual', 'business')`),
-    check(
-      "customers_kyc_status_check",
-      sql`${t.kycStatus} in ('none', 'pending', 'verified', 'rejected')`,
-    ),
-    check("customers_risk_tier_check", sql`${t.riskTier} in ('new', 'trusted')`),
-    // Decided here: the two locales of market BD; another market replaces this CHECK later.
-    check("customers_locale_check", sql`${t.locale} in ('bn', 'en')`),
-    check("customers_status_check", sql`${t.status} in ('active', 'suspended')`),
+    check("customers_type_check", inList(t.type, CUSTOMER_TYPES)),
+    check("customers_kyc_status_check", inList(t.kycStatus, KYC_STATUSES)),
+    check("customers_risk_tier_check", inList(t.riskTier, RISK_TIERS)),
+    check("customers_locale_check", inList(t.locale, LOCALES)),
+    check("customers_status_check", inList(t.status, CUSTOMER_STATUSES)),
   ],
 );
+
+// Decided here: the values of customers.kyc_status without 'none'.
+export const KYC_SUBMISSION_STATUSES = ["pending", "verified", "rejected"] as const;
 
 export const kycSubmissions = pgTable(
   "kyc_submissions",
@@ -70,8 +76,7 @@ export const kycSubmissions = pgTable(
   (t) => [
     index("kyc_submissions_customer_id_idx").on(t.customerId),
     check("kyc_submissions_s3_keys_check", sql`cardinality(${t.s3Keys}) >= 1`),
-    // Decided here: the values of customers.kyc_status without 'none'.
-    check("kyc_submissions_status_check", sql`${t.status} in ('pending', 'verified', 'rejected')`),
+    check("kyc_submissions_status_check", inList(t.status, KYC_SUBMISSION_STATUSES)),
     check(
       "kyc_submissions_review_check",
       sql`${t.status} = 'pending' OR (${t.reviewerId} IS NOT NULL AND ${t.reviewedAt} IS NOT NULL)`,
@@ -134,6 +139,14 @@ export const rateLimits = pgTable(
   ],
 );
 
+export const LEGAL_DOCUMENTS = [
+  "terms",
+  "acceptable_use",
+  "privacy",
+  "refund",
+  "domain_registration",
+] as const;
+
 // (A) append-only. No unique key on (customer_id, document, version): 12 saves a domain
 // registration consent with every order.
 export const legalAcceptances = pgTable(
@@ -151,9 +164,6 @@ export const legalAcceptances = pgTable(
   },
   (t) => [
     index("legal_acceptances_customer_id_document_idx").on(t.customerId, t.document),
-    check(
-      "legal_acceptances_document_check",
-      sql`${t.document} in ('terms', 'acceptable_use', 'privacy', 'refund', 'domain_registration')`,
-    ),
+    check("legal_acceptances_document_check", inList(t.document, LEGAL_DOCUMENTS)),
   ],
 );

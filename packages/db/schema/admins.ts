@@ -1,6 +1,8 @@
 import { check, pgTable, text, unique } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
-import { createdAt, id } from "./common";
+import { createdAt, id, inList } from "./common";
+
+export const ADMIN_ROLES = ["support", "finance", "ops", "superadmin"] as const;
+export const ADMIN_STATUSES = ["active", "disabled"] as const;
 
 export const adminUsers = pgTable(
   "admin_users",
@@ -13,7 +15,7 @@ export const adminUsers = pgTable(
   },
   (t) => [
     unique("admin_users_cognito_sub_unique").on(t.cognitoSub),
-    check("admin_users_role_check", sql`${t.role} in ('support', 'finance', 'ops', 'superadmin')`),
-    check("admin_users_status_check", sql`${t.status} in ('active', 'disabled')`),
+    check("admin_users_role_check", inList(t.role, ADMIN_ROLES)),
+    check("admin_users_status_check", inList(t.status, ADMIN_STATUSES)),
   ],
 );

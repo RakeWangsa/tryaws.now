@@ -204,7 +204,7 @@ export const discrepancies = pgTable(
   ],
 );
 
-// Append-only (A): the triggers come with Task 8, the grants with Task 9.
+// Append-only (A): the triggers are in 0005_triggers.sql, the grants in 0006_roles_and_grants.sql.
 export const auditLog = pgTable(
   "audit_log",
   {

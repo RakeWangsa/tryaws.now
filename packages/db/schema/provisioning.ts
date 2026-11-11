@@ -204,7 +204,7 @@ export const operations = pgTable(
     payload: jsonb("payload")
       .notNull()
       .default(sql`'{}'::jsonb`),
-    // Ruling 5: set when the row is created; the trigger of Task 8 keeps it fixed (ruling 6).
+    // Ruling 5: set when the row is created; a trigger of 0005_triggers.sql keeps it fixed (ruling 6).
     needsApproval: boolean("needs_approval").notNull().default(false),
     approvedBy: uuid("approved_by").references(() => adminUsers.id),
     createdAt: createdAt(),

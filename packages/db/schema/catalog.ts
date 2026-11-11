@@ -11,7 +11,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { adminUsers } from "./admins";
-import { createdAt, id, money } from "./common";
+import { createdAt, id, inList, money } from "./common";
+
+export const MARKET_NUMERALS = ["beng", "latn"] as const;
 
 export const markets = pgTable(
   "markets",
@@ -33,7 +35,7 @@ export const markets = pgTable(
     check("markets_code_check", sql`${t.code} ~ '^[A-Z]{2}$'`),
     check("markets_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("markets_locales_check", sql`cardinality(${t.locales}) >= 1`),
-    check("markets_numerals_check", sql`${t.numerals} in ('beng', 'latn')`),
+    check("markets_numerals_check", inList(t.numerals, MARKET_NUMERALS)),
     check("markets_topup_min_minor_check", sql`${t.topupMinMinor} > 0`),
     check("markets_topup_range_check", sql`${t.topupMaxMinor} >= ${t.topupMinMinor}`),
     check("markets_quick_amounts_check", sql`jsonb_typeof(${t.quickAmounts}) = 'array'`),
@@ -135,6 +137,8 @@ export const featureFlags = pgTable(
   (t) => [unique("feature_flags_key_market_unique").on(t.key, t.market)],
 );
 
+export const SETTING_SCOPES = ["market", "tier", "customer"] as const;
+
 export const settings = pgTable(
   "settings",
   {
@@ -153,7 +157,7 @@ export const settings = pgTable(
     unique("settings_key_market_scope_scope_id_unique")
       .on(t.key, t.market, t.scope, t.scopeId)
       .nullsNotDistinct(),
-    check("settings_scope_check", sql`${t.scope} in ('market', 'tier', 'customer')`),
+    check("settings_scope_check", inList(t.scope, SETTING_SCOPES)),
     check("settings_scope_id_check", sql`(${t.scope} = 'market') = (${t.scopeId} is null)`),
   ],
 );

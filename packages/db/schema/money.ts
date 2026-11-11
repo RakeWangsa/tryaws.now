@@ -73,7 +73,10 @@ export const ledgerAccounts = pgTable(
   ],
 );
 
-// Append-only (A); the triggers and the balance check are Task 8.
+// Decided here: the three kinds of actor, the same list as audit_log.actor_type.
+export const LEDGER_ACTOR_TYPES = ["customer", "admin", "system"] as const;
+
+// Append-only (A); the triggers and the balance check are in 0005_triggers.sql.
 export const ledgerTransactions = pgTable(
   "ledger_transactions",
   {
@@ -83,7 +86,6 @@ export const ledgerTransactions = pgTable(
     referenceType: text("reference_type").notNull(),
     referenceId: uuid("reference_id").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
-    // Decided here: the three kinds of actor, the same list as audit_log.actor_type.
     actorType: text("actor_type").notNull(),
     // No foreign key: it points at a customer or an admin.
     actorId: uuid("actor_id"),
@@ -93,16 +95,16 @@ export const ledgerTransactions = pgTable(
   (t) => [
     unique("ledger_transactions_idempotency_key_unique").on(t.idempotencyKey),
     index("ledger_transactions_reference_type_reference_id_idx").on(t.referenceType, t.referenceId),
-    check(
-      "ledger_transactions_actor_type_check",
-      sql`${t.actorType} in ('customer', 'admin', 'system')`,
-    ),
+    check("ledger_transactions_actor_type_check", inList(t.actorType, LEDGER_ACTOR_TYPES)),
     check(
       "ledger_transactions_actor_check",
       sql`(${t.actorType} = 'system') = (${t.actorId} IS NULL)`,
     ),
   ],
 );
+
+// Decided here: the two sides of a double-entry line (R5).
+export const LEDGER_DIRECTIONS = ["debit", "credit"] as const;
 
 // Append-only (A).
 export const ledgerEntries = pgTable(
@@ -115,7 +117,6 @@ export const ledgerEntries = pgTable(
     accountId: uuid("account_id")
       .notNull()
       .references(() => ledgerAccounts.id),
-    // Decided here: the two sides of a double-entry line (R5).
     direction: text("direction").notNull(),
     amountMinor: money("amount_minor").notNull(),
     createdAt: createdAt(),
@@ -123,10 +124,15 @@ export const ledgerEntries = pgTable(
   (t) => [
     index("ledger_entries_transaction_id_idx").on(t.transactionId),
     index("ledger_entries_account_id_idx").on(t.accountId),
-    check("ledger_entries_direction_check", sql`${t.direction} in ('debit', 'credit')`),
+    check("ledger_entries_direction_check", inList(t.direction, LEDGER_DIRECTIONS)),
     check("ledger_entries_amount_minor_check", sql`${t.amountMinor} > 0`),
   ],
 );
+
+// 9.1: "Admin credit or debit".
+export const ADJUSTMENT_DIRECTIONS = ["credit", "debit"] as const;
+export const ADJUSTMENT_KINDS = ["goodwill", "deposit", "correction"] as const;
+export const ADJUSTMENT_STATUSES = ["pending", "approved", "rejected"] as const;
 
 export const walletAdjustments = pgTable(
   "wallet_adjustments",
@@ -158,25 +164,31 @@ export const walletAdjustments = pgTable(
     }),
     index("wallet_adjustments_customer_id_idx").on(t.customerId),
     unique("wallet_adjustments_ledger_transaction_id_unique").on(t.ledgerTransactionId),
-    // 9.1: "Admin credit or debit".
-    check("wallet_adjustments_direction_check", sql`${t.direction} in ('credit', 'debit')`),
+    check("wallet_adjustments_direction_check", inList(t.direction, ADJUSTMENT_DIRECTIONS)),
     check("wallet_adjustments_amount_minor_check", sql`${t.amountMinor} > 0`),
-    check("wallet_adjustments_kind_check", sql`${t.kind} in ('goodwill', 'deposit', 'correction')`),
+    check("wallet_adjustments_kind_check", inList(t.kind, ADJUSTMENT_KINDS)),
     check("wallet_adjustments_reason_check", sql`length(btrim(${t.reason})) > 0`),
     check(
       "wallet_adjustments_approver_check",
       sql`${t.approvedBy} IS NULL OR ${t.approvedBy} <> ${t.requestedBy}`,
     ),
-    check(
-      "wallet_adjustments_status_check",
-      sql`${t.status} in ('pending', 'approved', 'rejected')`,
-    ),
+    check("wallet_adjustments_status_check", inList(t.status, ADJUSTMENT_STATUSES)),
     check(
       "wallet_adjustments_posting_check",
       sql`(${t.status} = 'approved') = (${t.ledgerTransactionId} IS NOT NULL)`,
     ),
   ],
 );
+
+export const PAYMENT_STATUSES = [
+  "initiated",
+  "redirected",
+  "credited",
+  "failed",
+  "cancelled",
+  "expired",
+  "review",
+] as const;
 
 export const payments = pgTable(
   "payments",
@@ -207,16 +219,16 @@ export const payments = pgTable(
     check("payments_merchant_transaction_id_check", sql`length(${t.merchantTransactionId}) >= 10`),
     check("payments_amount_minor_check", sql`${t.amountMinor} > 0`),
     check("payments_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check(
-      "payments_status_check",
-      sql`${t.status} in ('initiated', 'redirected', 'credited', 'failed', 'cancelled', 'expired', 'review')`,
-    ),
+    check("payments_status_check", inList(t.status, PAYMENT_STATUSES)),
     check(
       "payments_credit_check",
       sql`(${t.status} = 'credited') = (${t.ledgerTransactionId} IS NOT NULL)`,
     ),
   ],
 );
+
+export const ORDER_KINDS = ["new", "renew", "addon", "restore"] as const;
+export const ORDER_STATUSES = ["paid", "fulfilled", "reversed"] as const;
 
 export const orders = pgTable(
   "orders",
@@ -240,9 +252,9 @@ export const orders = pgTable(
   (t) => [
     unique("orders_ledger_transaction_id_unique").on(t.ledgerTransactionId),
     unique("orders_customer_id_idempotency_key_unique").on(t.customerId, t.idempotencyKey),
-    check("orders_kind_check", sql`${t.kind} in ('new', 'renew', 'addon', 'restore')`),
+    check("orders_kind_check", inList(t.kind, ORDER_KINDS)),
     check("orders_total_minor_check", sql`${t.totalMinor} >= 0`),
-    check("orders_status_check", sql`${t.status} in ('paid', 'fulfilled', 'reversed')`),
+    check("orders_status_check", inList(t.status, ORDER_STATUSES)),
   ],
 );
 
