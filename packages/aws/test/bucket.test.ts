@@ -196,7 +196,9 @@ describe("suspend and resume: access is removed and restored", () => {
     aws.on(
       "lightsail",
       "GetBucketAccessKeys",
-      lightsailOk({ accessKeys: [{ accessKeyId: "AKIAFAKEKEYONE0001" }, { accessKeyId: "AKIAFAKEKEYTWO0002" }] }),
+      lightsailOk({
+        accessKeys: [{ accessKeyId: "AKIAFAKEKEYONE0001" }, { accessKeyId: "AKIAFAKEKEYTWO0002" }],
+      }),
     );
     aws.on("lightsail", "DeleteBucketAccessKey", lightsailOk({}));
     const done = await adapter.aws.suspend(ctx("delete_keys"));
@@ -327,7 +329,10 @@ describe("actions", () => {
       "delete_access_key",
       ctx(null, { payload: { accessKeyId: "AKIAFAKEKEYONE0001" } }),
     );
-    expect(body("DeleteBucketAccessKey")).toEqual({ bucketName: BUCKET, accessKeyId: "AKIAFAKEKEYONE0001" });
+    expect(body("DeleteBucketAccessKey")).toEqual({
+      bucketName: BUCKET,
+      accessKeyId: "AKIAFAKEKEYONE0001",
+    });
     await expect(
       adapter.aws.action(
         "delete_access_key",

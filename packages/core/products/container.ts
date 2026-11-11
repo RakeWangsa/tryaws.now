@@ -93,8 +93,15 @@ const IMAGE = new RegExp(
 );
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 // No control characters.
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
+const CONTROL = {
+  test(text: string): boolean {
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code < 0x20 || code === 0x7f) return true;
+    }
+    return false;
+  },
+};
 const HEALTH_PATH = /^\/[A-Za-z0-9._~\-/]{0,200}$/;
 const PROTOCOLS = new Set(["HTTP", "HTTPS", "TCP", "UDP"]);
 const MAX_CONTAINERS = 10;
