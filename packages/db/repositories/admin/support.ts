@@ -239,13 +239,15 @@ export function supportAdminRepo(scope: AdminScope): SupportAdminRepo {
             // visitor through the address of the request.
             const toEmail = current.customer_id === null ? current.email : null;
             const dedupeKey = `support-reply:${requestId}:${replyId}`;
-            const inserted = await scope.tx.execute<{ id: string }>(
+            // admin_rw may insert notifications but not read them (migration 0006): no RETURNING and no
+            // conflict target (both need SELECT), and the row count says whether the key was new.
+            const inserted = await scope.tx.execute(
               sql`insert into notifications (id, customer_id, email, channel, template, payload, dedupe_key)
                 values (${uuidv7()}, ${current.customer_id}, ${toEmail}, 'email', ${SUPPORT_REPLY_TEMPLATE},
                   ${JSON.stringify({ requestId, body: body.trim() })}::jsonb, ${dedupeKey})
-                on conflict (dedupe_key) do nothing returning id`,
+                on conflict do nothing`,
             );
-            const replayed = inserted.rows.length === 0;
+            const replayed = (inserted.rowCount ?? 0) === 0;
             if (!replayed) {
               await scope.tx.execute(
                 sql`update support_requests set handled_by = ${scope.actor.adminId} where id = ${requestId}`,

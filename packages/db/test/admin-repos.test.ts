@@ -72,31 +72,12 @@ async function seedReviewPayment(): Promise<string> {
 const roleOf = (name: string): AdminActor["role"] =>
   name.startsWith("adminUsers.")
     ? "superadmin"
-  name.startsWith("support.")
-    ? "support"
-    : (name.startsWith("wallets.") || name.startsWith("payments.")) &&
-        name !== "payments.resolveDiscrepancy"
-      ? "finance"
-      : "ops";
-
-// Every write of adminRepos has a case here; the completeness test below fails when one is missing (R10).
-const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
-  "adminUsers.create": (r) =>
-    r.adminUsers.create({ cognitoSub: "sub-" + uniqueSuffix(), role: "support" }, "new support"),
-  "adminUsers.setRole": async (r) =>
-    r.adminUsers.setRole({ adminId: await newAdmin(t.pool, "support"), role: "ops" }, "to ops"),
-  "adminUsers.disable": async (r) =>
-    r.adminUsers.disable({ adminId: await newAdmin(t.pool, "support") }, "left"),
-  "adminUsers.enable": async (r) => {
-    const id = await newAdmin(t.pool, "support");
-    await t.pool.query("update admin_users set status = 'disabled' where id = $1", [id]);
-    return r.adminUsers.enable({ adminId: id }, "back");
-  },
-  "adminUsers.recordDirectoryAction": async (r) =>
-    r.adminUsers.recordDirectoryAction(
-      { adminId: await newAdmin(t.pool, "support"), kind: "mfa_reset" },
-      "lost phone",
-    ),
+    : name.startsWith("support.")
+      ? "support"
+      : (name.startsWith("wallets.") || name.startsWith("payments.")) &&
+          name !== "payments.resolveDiscrepancy"
+        ? "finance"
+        : "ops";
 
 async function seedAbuseCase(): Promise<string> {
   return insertRow(t.pool, "abuse_cases", {
@@ -116,6 +97,22 @@ async function seedSupportRequest(): Promise<string> {
 
 // Every write of adminRepos has a case here; the completeness test below fails when one is missing (R10).
 const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
+  "adminUsers.create": (r) =>
+    r.adminUsers.create({ cognitoSub: "sub-" + uniqueSuffix(), role: "support" }, "new support"),
+  "adminUsers.setRole": async (r) =>
+    r.adminUsers.setRole({ adminId: await newAdmin(t.pool, "support"), role: "ops" }, "to ops"),
+  "adminUsers.disable": async (r) =>
+    r.adminUsers.disable({ adminId: await newAdmin(t.pool, "support") }, "left"),
+  "adminUsers.enable": async (r) => {
+    const id = await newAdmin(t.pool, "support");
+    await t.pool.query("update admin_users set status = 'disabled' where id = $1", [id]);
+    return r.adminUsers.enable({ adminId: id }, "back");
+  },
+  "adminUsers.recordDirectoryAction": async (r) =>
+    r.adminUsers.recordDirectoryAction(
+      { adminId: await newAdmin(t.pool, "support"), kind: "mfa_reset" },
+      "lost phone",
+    ),
   "abuse.open": async (r) =>
     r.abuse.open(
       {
