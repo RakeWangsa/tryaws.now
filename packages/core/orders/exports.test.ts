@@ -206,6 +206,17 @@ const LIFECYCLE = [
   "runLifecycle",
 ];
 
+// Names of the bucket and container tasks, merged without a pin.
+const STORAGE_CONTAINER = [
+  "CONTAINER_POWERS",
+  "MAX_SCALE",
+  "containerPlanFrom",
+  "parseBucketAccess",
+  "parseBucketConfig",
+  "parseContainerConfig",
+  "parseDeployment",
+];
+
 // WP7-T3 and WP7-T5 add the DNS record rules and metering to @tc/core.
 const WP7 = [
   "CATCH_UP_DAYS",
@@ -256,7 +267,16 @@ describe("the public surface of the order flow", () => {
     for (const name of BEFORE) expect(top.has(name), name).toBe(true);
     for (const name of [...ORDERS_VALUES, ...PRODUCTS]) expect(top.has(name), name).toBe(true);
     expect(Object.keys(core).sort()).toEqual(
-      [...new Set([...BEFORE, ...ORDERS_VALUES, ...PRODUCTS, ...LIFECYCLE, ...WP7])].sort(),
+      [
+        ...new Set([
+          ...BEFORE,
+          ...ORDERS_VALUES,
+          ...PRODUCTS,
+          ...LIFECYCLE,
+          ...WP7,
+          ...STORAGE_CONTAINER,
+        ]),
+      ].sort(),
     );
   });
 
