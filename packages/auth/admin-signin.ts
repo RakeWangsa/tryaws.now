@@ -35,7 +35,12 @@ export interface AdminSignInInput {
 // One answer for a wrong password, a wrong code, an unknown user, a disabled admin and a missing
 // second factor: the screen must not tell which part was wrong (R14, no enumeration).
 export type AdminSignInOutcome =
-  | { readonly ok: true; readonly accessToken: string; readonly expiresAt: Date }
+  | {
+      readonly ok: true;
+      readonly adminId: string;
+      readonly accessToken: string;
+      readonly expiresAt: Date;
+    }
   | { readonly ok: false; readonly reason: "invalid" | "denied" | "unavailable" };
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/;
@@ -44,6 +49,26 @@ const MAX_PASSWORD = 256;
 const MAX_EMAIL = 254;
 const ALL_ROLES = ["support", "finance", "ops", "superadmin"] as const;
 
+// The shape check of the form (R9: validate). The repository has no zod and R17 forbids a new
+// dependency without a recorded reason, so the schema is this function; the action calls it first.
+export function isValidSignInShape(input: {
+  email: unknown;
+  password: unknown;
+  code: unknown;
+}): boolean {
+  const { email, password, code } = input;
+  return (
+    typeof email === "string" &&
+    email.length <= MAX_EMAIL &&
+    EMAIL.test(email) &&
+    typeof password === "string" &&
+    password.length > 0 &&
+    password.length <= MAX_PASSWORD &&
+    typeof code === "string" &&
+    CODE.test(code)
+  );
+}
+
 export async function signInAdmin(
   port: AdminSignInPort,
   deps: AdminSessionDeps,
@@ -51,18 +76,7 @@ export async function signInAdmin(
 ): Promise<AdminSignInOutcome> {
   // Read once into locals.
   const { email, password, code, viewerAddress } = input;
-  if (
-    typeof email !== "string" ||
-    email.length > MAX_EMAIL ||
-    !EMAIL.test(email) ||
-    typeof password !== "string" ||
-    password.length === 0 ||
-    password.length > MAX_PASSWORD ||
-    typeof code !== "string" ||
-    !CODE.test(code)
-  ) {
-    return { ok: false, reason: "invalid" };
-  }
+  if (!isValidSignInShape({ email, password, code })) return { ok: false, reason: "invalid" };
 
   try {
     // The address is checked first: from outside the allowlist Cognito is not even asked. The cookie
@@ -96,7 +110,12 @@ export async function signInAdmin(
     }
     const now = (deps.clock ?? { now: () => new Date() }).now().getTime();
     const seconds = Number.isFinite(second.expiresInSeconds) ? second.expiresInSeconds : 0;
-    return { ok: true, accessToken: second.accessToken, expiresAt: new Date(now + seconds * 1000) };
+    return {
+      ok: true,
+      adminId: checked.actor.adminId,
+      accessToken: second.accessToken,
+      expiresAt: new Date(now + seconds * 1000),
+    };
   } catch {
     // The text of a thrown error may hold a password or a token (R14): none is kept.
     return { ok: false, reason: "unavailable" };
