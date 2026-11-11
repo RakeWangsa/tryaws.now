@@ -91,6 +91,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP0-T1",
     "WP1-T1",
     "WP1-T2",
+    "WP1-T4",
     "WP2-T1",
     "WP3-T1",
     "WP4-T1",
@@ -263,6 +264,32 @@ it("task WP4-T2 is proven by the checks of WP1-T1, the tests of core, aws and th
     "functions/provisioner/reject.test.ts",
     "functions/scheduler/handler.test.ts",
     "packages/db/test/operation-insert.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP1-T4 is proven by the checks of WP1-T1, the two halves of the backlog proof and the tests of @tc/core", () => {
+  expect(TASKS["WP1-T4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["stored-order", "pnpm test --filter @tc/core rates/stored-order --no-passWithNoTests"],
+    [
+      "preview",
+      "pnpm test --filter @tc/core pricing/preview rates/preview-equals-engine --no-passWithNoTests",
+    ],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // passWithNoTests is on: the filters must keep matching real files
+  for (const f of [
+    "packages/core/rates/stored-order.test.ts",
+    "packages/core/pricing/preview.test.ts",
+    "packages/core/rates/preview-equals-engine.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

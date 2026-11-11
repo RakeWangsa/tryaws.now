@@ -254,6 +254,40 @@ const auth = {
 };
 TASKS["WP2-T1"] = [specSync, baselineSync, lint, typecheck, format, db, auth, repo];
 
+// WP1-T4: the two halves of the backlog proof ("a new rate never changes a stored order", "preview equals
+// engine output") on their own lines. `--no-passWithNoTests` makes a filter that selects no file fail.
+const storedOrder = {
+  id: "stored-order",
+  title: "A new rate never changes a stored order",
+  command: ["pnpm", "test", "--filter", "@tc/core", "rates/stored-order", "--no-passWithNoTests"],
+};
+const previewEqualsEngine = {
+  id: "preview",
+  title: "Preview equals engine output",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "pricing/preview",
+    "rates/preview-equals-engine",
+    "--no-passWithNoTests",
+  ],
+};
+const WP1_T4 = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  storedOrder,
+  previewEqualsEngine,
+  core,
+  repo,
+];
+TASKS["WP1-T4"] = WP1_T4;
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],
