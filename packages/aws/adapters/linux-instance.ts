@@ -1,0 +1,458 @@
+import {
+  AttachStaticIpCommand,
+  AllocateStaticIpCommand,
+  CreateInstanceSnapshotCommand,
+  CreateInstancesCommand,
+  DeleteInstanceCommand,
+  DeleteInstanceSnapshotCommand,
+  GetInstanceCommand,
+  GetInstancePortStatesCommand,
+  GetInstanceSnapshotCommand,
+  GetKeyPairCommand,
+  GetStaticIpCommand,
+  ImportKeyPairCommand,
+  PutInstancePublicPortsCommand,
+  RebootInstanceCommand,
+  ReleaseStaticIpCommand,
+  StartInstanceCommand,
+  StopInstanceCommand,
+  type LightsailClient,
+  type PortInfo,
+} from "@aws-sdk/client-lightsail";
+import {
+  awsResourceName,
+  parseInstanceConfig,
+  resourceTags,
+  stepDone,
+  stepNext,
+  stepWait,
+  type InstanceConfig,
+  type OperationKind,
+  type StepResult,
+} from "@tc/core";
+import { AwsError } from "../errors";
+import { bootstrapScript } from "./bootstrap";
+import type { LiveState, OpCtx, ProductAdapter } from "./types";
+
+/**
+ * What the adapter needs and OpCtx (contract F) does not carry: the OpCtx has no database. The
+ * function that runs the adapter supplies it, with the customer id taken from the resource row and
+ * never from a payload (R8). `publicKey` is null when the key does not exist or is not the
+ * customer's: the create then fails closed (R16).
+ */
+export interface LinuxLaunchSpec {
+  readonly bundleId: string;
+  readonly blueprintId: string;
+  readonly publicKey: string | null;
+}
+export interface LinuxInstanceDeps {
+  loadLaunch(input: {
+    readonly customerId: string;
+    readonly productId: string;
+    readonly keyPairId: string | null;
+  }): Promise<LinuxLaunchSpec | null>;
+  /**
+   * Has the bootstrap printed its marker (BOOTSTRAP_OK_MARKER)? "pending" while the instance is still
+   * running its user data, "absent" when it finished without the marker. The way to read it is a
+   * VERIFY item (Lightsail has no console-output API; for example a probe from the platform). Without
+   * the marker the instance is never handed over and its static IP is never attached (R16).
+   */
+  /**
+   * The verified VPC CIDR of the pool account and Region, written into the user data as a literal.
+   * null (unknown) makes the script drop every RFC 1918 source. Where it comes from is a VERIFY item
+   * (a pool configuration row checked against the real network in tc-pool-dev).
+   */
+  vpcCidr(input: { readonly region: string }): Promise<string | null>;
+  bootstrapMarker(input: {
+    readonly instanceName: string;
+    readonly region: string;
+  }): Promise<"present" | "pending" | "absent">;
+}
+
+const POLL_SECONDS = 10;
+// An adapter bounds its own waiting (OpCtx.operation.createdAt).
+const MAX_WAIT_MS = 20 * 60 * 1000;
+const NO_RULES: readonly PortInfo[] = Object.freeze([]);
+// The default after create: SSH only. IPv4 only until the IPv6 cases of tests/isolation hold (10.4).
+const DEFAULT_PORTS: readonly PortInfo[] = Object.freeze([
+  { fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["0.0.0.0/0"] },
+]);
+
+function fail(code: "validation" | "conflict" | "upstream_unavailable" | "internal"): AwsError {
+  return new AwsError({ code, retryable: false });
+}
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof AwsError && error.code === "not_found";
+}
+
+/** Runs a read that may find nothing: "not found" is `null`, any other error passes. */
+async function orNull<T>(call: () => Promise<T>): Promise<T | null> {
+  try {
+    return await call();
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+}
+
+function client(ctx: OpCtx<InstanceConfig>): LightsailClient {
+  return ctx.access.lightsail(ctx.account, ctx.region, "TcProvisioner");
+}
+
+function names(resourceId: string) {
+  return {
+    instance: awsResourceName("instance", resourceId),
+    staticIp: awsResourceName("staticip", resourceId),
+    snapshot: awsResourceName("snapshot", resourceId),
+  };
+}
+
+function checkWaitBudget(ctx: OpCtx<InstanceConfig>): void {
+  if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
+    throw fail("upstream_unavailable");
+  }
+}
+
+function pollAt(ctx: OpCtx<InstanceConfig>): Date {
+  return new Date(ctx.clock.now().getTime() + POLL_SECONDS * 1000);
+}
+
+function hasTag(
+  tags: readonly { key?: string; value?: string }[] | undefined,
+  key: string,
+  value: string,
+) {
+  return (tags ?? []).some((t) => t.key === key && t.value === value);
+}
+
+const PROTOCOLS = new Set(["tcp", "udp", "icmp"]);
+const CIDR = /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/;
+
+/** The port rules of a `set_ports` payload or of the rules saved at suspend: hand-validated input. */
+export function parsePortRules(input: unknown): PortInfo[] | null {
+  if (!Array.isArray(input) || input.length > 30) return null;
+  const out: PortInfo[] = [];
+  for (const raw of input as unknown[]) {
+    if (typeof raw !== "object" || raw === null) return null;
+    const r = raw as Record<string, unknown>;
+    const { fromPort, toPort, protocol, cidrs } = r;
+    if (typeof protocol !== "string" || !PROTOCOLS.has(protocol)) return null;
+    if (!Number.isInteger(fromPort) || !Number.isInteger(toPort)) return null;
+    const from = fromPort as number;
+    const to = toPort as number;
+    if (from < 0 || to > 65535 || from > to) return null;
+    if (!Array.isArray(cidrs) || cidrs.length === 0 || cidrs.length > 20) return null;
+    if (!(cidrs as unknown[]).every((c) => typeof c === "string" && CIDR.test(c))) return null;
+    out.push({
+      fromPort: from,
+      toPort: to,
+      protocol: protocol as PortInfo["protocol"],
+      cidrs: [...(cidrs as string[])],
+    });
+  }
+  return out;
+}
+
+function savedRules(ctx: OpCtx<InstanceConfig>): PortInfo[] | null {
+  const config = ctx.resource.config;
+  if (typeof config !== "object" || config === null) return null;
+  return parsePortRules((config as Record<string, unknown>).savedPorts);
+}
+
+export function createLinuxInstanceAdapter(
+  deps: LinuxInstanceDeps,
+): ProductAdapter<InstanceConfig> {
+  async function importKey(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    if (ctx.config.keyPairId === null) throw fail("validation");
+    const spec = await deps.loadLaunch({
+      customerId: ctx.resource.customerId,
+      productId: ctx.config.productId,
+      keyPairId: ctx.config.keyPairId,
+    });
+    if (spec === null || spec.publicKey === null) throw fail("validation");
+    const keyName = awsResourceName("keypair", ctx.config.keyPairId);
+    const lightsail = client(ctx);
+    const existing = await orNull(() =>
+      lightsail.send(new GetKeyPairCommand({ keyPairName: keyName })),
+    );
+    if (existing === null) {
+      await lightsail.send(
+        new ImportKeyPairCommand({
+          keyPairName: keyName,
+          publicKeyBase64: Buffer.from(spec.publicKey, "utf8").toString("base64"),
+        }),
+      );
+    }
+    return stepNext("create_instance");
+  }
+
+  async function createInstance(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    if (ctx.config.keyPairId === null) throw fail("validation");
+    const spec = await deps.loadLaunch({
+      customerId: ctx.resource.customerId,
+      productId: ctx.config.productId,
+      keyPairId: ctx.config.keyPairId,
+    });
+    if (spec === null) throw fail("validation");
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    const found = await orNull(() =>
+      lightsail.send(new GetInstanceCommand({ instanceName: n.instance })),
+    );
+    if (found?.instance !== undefined) {
+      // A retry continues with what an earlier try made, if it is ours.
+      if (!hasTag(found.instance.tags, "tc:resource", ctx.resource.id)) throw fail("conflict");
+      return stepNext("wait_running", { awsName: n.instance });
+    }
+    const orderId = (ctx.operation.payload as { orderId?: unknown } | null)?.orderId;
+    await lightsail.send(
+      new CreateInstancesCommand({
+        instanceNames: [n.instance],
+        availabilityZone: `${ctx.region}a`,
+        blueprintId: spec.blueprintId,
+        bundleId: spec.bundleId,
+        keyPairName: awsResourceName("keypair", ctx.config.keyPairId),
+        userData: bootstrapScript({ vpcCidr: await deps.vpcCidr({ region: ctx.region }) }),
+        ipAddressType: "ipv4",
+        tags: resourceTags({
+          env: ctx.env,
+          customerId: ctx.resource.customerId,
+          resourceId: ctx.resource.id,
+          orderId: orderId as string,
+          os: "linux",
+        }),
+      }),
+    );
+    return stepNext("wait_running", { awsName: n.instance });
+  }
+
+  async function waitRunning(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const got = await client(ctx).send(new GetInstanceCommand({ instanceName: n.instance }));
+    const state = got.instance?.state?.name;
+    if (state === "running") return stepNext("verify_bootstrap");
+    if (state === "pending" || state === undefined) {
+      checkWaitBudget(ctx);
+      return stepWait("wait_running", pollAt(ctx));
+    }
+    throw fail("upstream_unavailable");
+  }
+
+  async function verifyBootstrap(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const seen = await deps.bootstrapMarker({
+      instanceName: names(ctx.resource.id).instance,
+      region: ctx.region,
+    });
+    if (seen === "present") return stepNext("allocate_ip");
+    if (seen === "pending") {
+      checkWaitBudget(ctx);
+      return stepWait("verify_bootstrap", pollAt(ctx));
+    }
+    // No marker: the firewall is not proven, so the instance is not handed over.
+    throw fail("upstream_unavailable");
+  }
+
+  async function allocateIp(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    const found = await orNull(() =>
+      lightsail.send(new GetStaticIpCommand({ staticIpName: n.staticIp })),
+    );
+    if (found === null)
+      await lightsail.send(new AllocateStaticIpCommand({ staticIpName: n.staticIp }));
+    return stepNext("attach_ip");
+  }
+
+  async function attachIp(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    const got = await lightsail.send(new GetStaticIpCommand({ staticIpName: n.staticIp }));
+    const attached = got.staticIp?.attachedTo;
+    if (got.staticIp?.isAttached === true) {
+      // Attached to our own instance: done. To anything else: not ours to touch (R16).
+      if (attached !== n.instance) throw fail("conflict");
+    } else {
+      await lightsail.send(
+        new AttachStaticIpCommand({ staticIpName: n.staticIp, instanceName: n.instance }),
+      );
+    }
+    return stepNext("open_ports");
+  }
+
+  async function openPorts(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    await client(ctx).send(
+      new PutInstancePublicPortsCommand({
+        instanceName: n.instance,
+        portInfos: [...DEFAULT_PORTS],
+      }),
+    );
+    return stepDone({ state: "active", awsName: n.instance });
+  }
+
+  async function create(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    switch (ctx.operation.step) {
+      case null:
+      case "import_key":
+        return importKey(ctx);
+      case "create_instance":
+        return createInstance(ctx);
+      case "wait_running":
+        return waitRunning(ctx);
+      case "verify_bootstrap":
+        return verifyBootstrap(ctx);
+      case "allocate_ip":
+        return allocateIp(ctx);
+      case "attach_ip":
+        return attachIp(ctx);
+      case "open_ports":
+        return openPorts(ctx);
+      default:
+        throw fail("internal");
+    }
+  }
+
+  // Suspend: save the rules, then close every public port (VERIFY: an empty list closes them all).
+  async function suspend(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    if (ctx.operation.step === null || ctx.operation.step === "save_ports") {
+      // A retry after the close must not save the empty list over the real one.
+      if (savedRules(ctx) !== null) return stepNext("close_ports");
+      const states = await lightsail.send(
+        new GetInstancePortStatesCommand({ instanceName: n.instance }),
+      );
+      const rules = (states.portStates ?? [])
+        .filter((p) => p.state === "open")
+        .map((p) => ({
+          fromPort: p.fromPort as number,
+          toPort: p.toPort as number,
+          protocol: p.protocol as string,
+          cidrs: [...(p.cidrs ?? [])],
+        }));
+      const checked = parsePortRules(rules);
+      if (checked === null) throw fail("validation");
+      return stepNext("close_ports", { configMerge: { savedPorts: checked } });
+    }
+    if (ctx.operation.step === "close_ports") {
+      await lightsail.send(
+        new PutInstancePublicPortsCommand({ instanceName: n.instance, portInfos: [...NO_RULES] }),
+      );
+      return stepDone({ state: "suspended" });
+    }
+    throw fail("internal");
+  }
+
+  async function resume(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const rules = savedRules(ctx);
+    if (rules === null) throw fail("validation");
+    await client(ctx).send(
+      new PutInstancePublicPortsCommand({
+        instanceName: names(ctx.resource.id).instance,
+        portInfos: rules,
+      }),
+    );
+    return stepDone({ state: "active" });
+  }
+
+  async function finalSnapshot(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    const found = await orNull(() =>
+      lightsail.send(new GetInstanceSnapshotCommand({ instanceSnapshotName: n.snapshot })),
+    );
+    if (found === null) {
+      await lightsail.send(
+        new CreateInstanceSnapshotCommand({
+          instanceName: n.instance,
+          instanceSnapshotName: n.snapshot,
+        }),
+      );
+      return stepWait("wait_snapshot", pollAt(ctx));
+    }
+    const state = found.instanceSnapshot?.state;
+    if (state === "available") return stepDone();
+    if (state === "error") throw fail("upstream_unavailable");
+    checkWaitBudget(ctx);
+    return stepWait("wait_snapshot", pollAt(ctx));
+  }
+
+  async function destroy(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    if (ctx.operation.step === null || ctx.operation.step === "delete_instance") {
+      try {
+        await lightsail.send(new DeleteInstanceCommand({ instanceName: n.instance }));
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+      return stepNext("release_ip");
+    }
+    if (ctx.operation.step === "release_ip") {
+      try {
+        await lightsail.send(new ReleaseStaticIpCommand({ staticIpName: n.staticIp }));
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+      return stepDone({ state: "destroyed" });
+    }
+    throw fail("internal");
+  }
+
+  async function purgeSnapshots(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    try {
+      await client(ctx).send(
+        new DeleteInstanceSnapshotCommand({
+          instanceSnapshotName: names(ctx.resource.id).snapshot,
+        }),
+      );
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+    return stepDone();
+  }
+
+  async function describe(ctx: OpCtx<InstanceConfig>): Promise<LiveState> {
+    const got = await orNull(() =>
+      client(ctx).send(new GetInstanceCommand({ instanceName: names(ctx.resource.id).instance })),
+    );
+    return { state: got?.instance?.state?.name ?? "missing" };
+  }
+
+  async function action(kind: OperationKind, ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const instanceName = names(ctx.resource.id).instance;
+    const lightsail = client(ctx);
+    switch (kind) {
+      case "reboot":
+        await lightsail.send(new RebootInstanceCommand({ instanceName }));
+        return stepDone();
+      case "stop":
+        await lightsail.send(new StopInstanceCommand({ instanceName }));
+        return stepDone({ state: "stopped" });
+      case "start":
+        await lightsail.send(new StartInstanceCommand({ instanceName }));
+        return stepDone({ state: "active" });
+      case "set_ports": {
+        // The payload is written by the web tier: it is input (R9).
+        const rules = parsePortRules((ctx.operation.payload as { ports?: unknown } | null)?.ports);
+        if (rules === null) throw fail("validation");
+        await lightsail.send(new PutInstancePublicPortsCommand({ instanceName, portInfos: rules }));
+        return stepDone();
+      }
+      default:
+        // Anything else is not built yet: refuse (R16).
+        throw fail("validation");
+    }
+  }
+
+  return {
+    family: "linux_instance",
+    parseConfig(input: unknown): InstanceConfig {
+      const parsed = parseInstanceConfig(input);
+      if (!parsed.ok) throw fail("validation");
+      return parsed.value;
+    },
+    aws: { create, suspend, resume, finalSnapshot, destroy, purgeSnapshots, describe, action },
+  };
+}

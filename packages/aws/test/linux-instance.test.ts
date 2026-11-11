@@ -1,0 +1,413 @@
+import { awsResourceName, type OperationKind } from "@tc/core";
+import { describe, expect, it } from "vitest";
+import { createAwsAccessInternal } from "../access";
+import { bootstrapScript } from "../adapters/bootstrap";
+import { createLinuxInstanceAdapter, type LinuxInstanceDeps } from "../adapters/linux-instance";
+import type { OpCtx } from "../adapters/types";
+import { AwsError } from "../errors";
+import { ASSUMED, assumeRoleOk, fakeAws, lightsailError, lightsailOk } from "./fake-aws";
+
+const RID = "11111111-2222-4333-8444-555555555555";
+const CID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const KID = "99999999-8888-4777-8666-555555555555";
+const OID = "12345678-1234-4234-8234-123456789012";
+const POOL = { awsAccountId: "210987654321", externalId: "tc-ext-7f3a9c" };
+const INSTANCE = awsResourceName("instance", RID);
+const NOW = Date.now();
+const clock = { now: () => new Date(NOW) };
+const PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAKEKEYFORTESTS customer@laptop";
+
+function setup(over: Partial<LinuxInstanceDeps> = {}) {
+  const aws = fakeAws();
+  aws.on(
+    "sts",
+    "AssumeRole",
+    assumeRoleOk({ ...ASSUMED, expiration: new Date(NOW + 3_600_000).toISOString() }),
+  );
+  const access = createAwsAccessInternal({
+    caller: "provisioner",
+    clock,
+    requestHandler: aws.handler,
+  });
+  const launchCalls: unknown[] = [];
+  const deps: LinuxInstanceDeps = {
+    loadLaunch: async (input) => {
+      launchCalls.push(input);
+      return { bundleId: "nano_3_0", blueprintId: "ubuntu_24_04", publicKey: PUBLIC_KEY };
+    },
+    vpcCidr: async () => "172.26.0.0/16",
+    bootstrapMarker: async () => "present",
+    ...over,
+  };
+  const adapter = createLinuxInstanceAdapter(deps);
+  const ctx = (
+    step: string | null,
+    extra: { payload?: unknown; config?: unknown; createdAt?: Date } = {},
+  ): OpCtx<ReturnType<typeof adapter.parseConfig>> => ({
+    operation: {
+      id: "op-1",
+      kind: "create",
+      step,
+      attempt: 1,
+      createdAt: extra.createdAt ?? new Date(NOW),
+      payload: extra.payload ?? { orderId: OID },
+    },
+    stepKey: `op-1:${step ?? "start"}`,
+    resource: {
+      id: RID,
+      customerId: CID,
+      family: "linux_instance",
+      productId: null,
+      parentResourceId: null,
+      awsName: null,
+      state: "creating",
+      config: extra.config ?? {},
+    },
+    config: adapter.parseConfig({
+      productId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      region: "ap-southeast-1",
+      displayName: "My Secret Server",
+      keyPairId: KID,
+    }),
+    account: POOL,
+    region: "ap-southeast-1",
+    access,
+    env: "staging",
+    clock,
+    owned: async () => null,
+  });
+  const calls = () => aws.seen.filter((r) => r.service === "lightsail").map((r) => r.action);
+  return { aws, adapter, ctx, calls, launchCalls };
+}
+
+const notFound = () => lightsailError(400, "NotFoundException", "raw aws text 210987654321");
+
+describe("create: key import, instance, static IP, ports", () => {
+  it("walks the steps and names everything from the resource id (R11)", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "GetKeyPair", notFound());
+    aws.on("lightsail", "ImportKeyPair", lightsailOk({}));
+    aws.on("lightsail", "GetInstance", notFound());
+    aws.on("lightsail", "CreateInstances", lightsailOk({ operations: [] }));
+    const r1 = await adapter.aws.create(ctx(null));
+    expect(r1).toMatchObject({ kind: "next", step: "create_instance" });
+    const imp = aws.seen.find((r) => r.action === "ImportKeyPair")!;
+    expect(JSON.parse(imp.body)).toEqual({
+      keyPairName: awsResourceName("keypair", KID),
+      publicKeyBase64: Buffer.from(PUBLIC_KEY).toString("base64"),
+    });
+    const r2 = await adapter.aws.create(ctx("create_instance"));
+    expect(r2).toMatchObject({ kind: "next", step: "wait_running", patch: { awsName: INSTANCE } });
+    const create = JSON.parse(aws.seen.find((r) => r.action === "CreateInstances")!.body);
+    expect(create.instanceNames).toEqual([INSTANCE]);
+    expect(create.userData).toBe(bootstrapScript({ vpcCidr: "172.26.0.0/16" }));
+    expect(create.userData).not.toContain("My Secret Server");
+    expect(create.keyPairName).toBe(awsResourceName("keypair", KID));
+    expect(create.ipAddressType).toBe("ipv4");
+    expect(create.tags).toEqual(
+      expect.arrayContaining([
+        { key: "tc:resource", value: RID },
+        { key: "tc:customer", value: CID },
+        { key: "tc:order", value: OID },
+        { key: "tc:os", value: "linux" },
+      ]),
+    );
+    // customer text reaches nothing of AWS
+    expect(aws.seen.map((r) => r.body).join("\n")).not.toContain("My Secret Server");
+    expect(calls()).not.toContain("DownloadDefaultKeyPair");
+  });
+
+  it("a retried create_instance finds the instance and creates nothing (R7)", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on(
+      "lightsail",
+      "GetInstance",
+      lightsailOk({ instance: { name: INSTANCE, tags: [{ key: "tc:resource", value: RID }] } }),
+    );
+    const r = await adapter.aws.create(ctx("create_instance"));
+    expect(r).toMatchObject({ kind: "next", step: "wait_running" });
+    expect(calls()).toEqual(["GetInstance"]);
+  });
+
+  it("an instance of that name that is not ours is a conflict, not a continuation", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on(
+      "lightsail",
+      "GetInstance",
+      lightsailOk({ instance: { name: INSTANCE, tags: [{ key: "tc:resource", value: "other" }] } }),
+    );
+    await expect(adapter.aws.create(ctx("create_instance"))).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+
+  it("an existing key pair is not imported again", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "GetKeyPair", lightsailOk({ keyPair: { name: "x" } }));
+    await adapter.aws.create(ctx("import_key"));
+    expect(calls()).toEqual(["GetKeyPair"]);
+  });
+
+  it("fails closed without a key, or when the key is not the customer's (loader says null)", async () => {
+    const none = setup({
+      loadLaunch: async () => ({ bundleId: "b", blueprintId: "p", publicKey: null }),
+    });
+    await expect(none.adapter.aws.create(none.ctx(null))).rejects.toMatchObject({
+      code: "validation",
+    });
+    expect(none.calls()).toEqual([]);
+    const gone = setup({ loadLaunch: async () => null });
+    await expect(gone.adapter.aws.create(gone.ctx("create_instance"))).rejects.toBeInstanceOf(
+      AwsError,
+    );
+    expect(gone.calls()).toEqual([]);
+  });
+
+  it("asks for the key with the customer id of the resource row, never the payload (R8)", async () => {
+    const { aws, adapter, ctx, launchCalls } = setup();
+    aws.on("lightsail", "GetKeyPair", lightsailOk({ keyPair: {} }));
+    await adapter.aws.create(ctx("import_key", { payload: { orderId: OID, customerId: "evil" } }));
+    expect(launchCalls).toEqual([
+      {
+        customerId: CID,
+        productId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        keyPairId: KID,
+      },
+    ]);
+  });
+
+  it("waits while pending, continues when running, bounds its own waiting", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "GetInstance", lightsailOk({ instance: { state: { name: "pending" } } }));
+    const w = await adapter.aws.create(ctx("wait_running"));
+    expect(w).toMatchObject({ kind: "wait", step: "wait_running" });
+    await expect(
+      adapter.aws.create(ctx("wait_running", { createdAt: new Date(NOW - 3_600_000) })),
+    ).rejects.toMatchObject({ code: "upstream_unavailable" });
+    aws.on("lightsail", "GetInstance", lightsailOk({ instance: { state: { name: "running" } } }));
+    expect(await adapter.aws.create(ctx("wait_running"))).toMatchObject({
+      kind: "next",
+      step: "verify_bootstrap",
+    });
+  });
+
+  it("never hands over an instance whose bootstrap has no marker (no static IP is touched)", async () => {
+    const absent = setup({ bootstrapMarker: async () => "absent" });
+    await expect(absent.adapter.aws.create(absent.ctx("verify_bootstrap"))).rejects.toMatchObject({
+      code: "upstream_unavailable",
+    });
+    expect(absent.calls()).toEqual([]);
+    const pending = setup({ bootstrapMarker: async () => "pending" });
+    expect(await pending.adapter.aws.create(pending.ctx("verify_bootstrap"))).toMatchObject({
+      kind: "wait",
+      step: "verify_bootstrap",
+    });
+    const ok = setup();
+    expect(await ok.adapter.aws.create(ok.ctx("verify_bootstrap"))).toMatchObject({
+      kind: "next",
+      step: "allocate_ip",
+    });
+  });
+
+  it("allocates once, attaches to its own instance, refuses an address attached elsewhere", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { name: "n" } }));
+    await adapter.aws.create(ctx("allocate_ip"));
+    expect(calls()).toEqual(["GetStaticIp"]);
+
+    const b = setup();
+    b.aws.on("lightsail", "GetStaticIp", notFound());
+    b.aws.on("lightsail", "AllocateStaticIp", lightsailOk({}));
+    await b.adapter.aws.create(b.ctx("allocate_ip"));
+    expect(b.calls()).toEqual(["GetStaticIp", "AllocateStaticIp"]);
+
+    const c = setup();
+    c.aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { isAttached: false } }));
+    c.aws.on("lightsail", "AttachStaticIp", lightsailOk({}));
+    await c.adapter.aws.create(c.ctx("attach_ip"));
+    expect(c.calls()).toEqual(["GetStaticIp", "AttachStaticIp"]);
+
+    const d = setup();
+    d.aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({ staticIp: { isAttached: true, attachedTo: INSTANCE } }),
+    );
+    await d.adapter.aws.create(d.ctx("attach_ip"));
+    expect(d.calls()).toEqual(["GetStaticIp"]);
+
+    const e = setup();
+    e.aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({ staticIp: { isAttached: true, attachedTo: "tc-instance-other" } }),
+    );
+    await expect(e.adapter.aws.create(e.ctx("attach_ip"))).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+
+  it("opens SSH only (IPv4) and finishes active", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "PutInstancePublicPorts", lightsailOk({}));
+    const r = await adapter.aws.create(ctx("open_ports"));
+    expect(r).toMatchObject({ kind: "done", patch: { state: "active", awsName: INSTANCE } });
+    expect(JSON.parse(aws.seen.find((x) => x.action === "PutInstancePublicPorts")!.body)).toEqual({
+      instanceName: INSTANCE,
+      portInfos: [{ fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["0.0.0.0/0"] }],
+    });
+  });
+
+  it("an unknown VPC CIDR gives user data that drops every private source", async () => {
+    const { aws, adapter, ctx } = setup({ vpcCidr: async () => null });
+    aws.on("lightsail", "GetInstance", notFound());
+    aws.on("lightsail", "CreateInstances", lightsailOk({ operations: [] }));
+    await adapter.aws.create(ctx("create_instance"));
+    const body = JSON.parse(aws.seen.find((r) => r.action === "CreateInstances")!.body);
+    expect(body.userData).toContain("{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } drop");
+  });
+
+  it("an unknown step is refused", async () => {
+    const { adapter, ctx } = setup();
+    await expect(adapter.aws.create(ctx("whatever"))).rejects.toBeInstanceOf(AwsError);
+  });
+});
+
+describe("parseConfig", () => {
+  it("rejects bad input without echoing it", () => {
+    const { adapter } = setup();
+    expect(() => adapter.parseConfig({ productId: "no" })).toThrow(AwsError);
+  });
+});
+
+describe("suspend, resume, snapshot, destroy, actions", () => {
+  it("suspend saves the open rules, then closes with an empty list; resume puts them back", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on(
+      "lightsail",
+      "GetInstancePortStates",
+      lightsailOk({
+        portStates: [
+          { fromPort: 22, toPort: 22, protocol: "tcp", state: "open", cidrs: ["0.0.0.0/0"] },
+          { fromPort: 80, toPort: 80, protocol: "tcp", state: "closed", cidrs: [] },
+        ],
+      }),
+    );
+    const saved = await adapter.aws.suspend(ctx(null));
+    expect(saved).toMatchObject({
+      kind: "next",
+      step: "close_ports",
+      patch: {
+        configMerge: {
+          savedPorts: [{ fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["0.0.0.0/0"] }],
+        },
+      },
+    });
+    aws.on("lightsail", "PutInstancePublicPorts", lightsailOk({}));
+    const closed = await adapter.aws.suspend(ctx("close_ports"));
+    expect(closed).toMatchObject({ kind: "done", patch: { state: "suspended" } });
+    expect(
+      JSON.parse(aws.seen.find((x) => x.action === "PutInstancePublicPorts")!.body).portInfos,
+    ).toEqual([]);
+
+    const savedPorts = [{ fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["0.0.0.0/0"] }];
+    const r = await adapter.aws.resume(ctx(null, { config: { savedPorts } }));
+    expect(r).toMatchObject({ kind: "done", patch: { state: "active" } });
+    expect(
+      JSON.parse(aws.seen.filter((x) => x.action === "PutInstancePublicPorts")[1]!.body).portInfos,
+    ).toEqual(savedPorts);
+  });
+
+  it("a retried suspend never saves the empty list over the saved rules", async () => {
+    const { adapter, ctx, calls } = setup();
+    const savedPorts = [{ fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["0.0.0.0/0"] }];
+    const r = await adapter.aws.suspend(ctx("save_ports", { config: { savedPorts } }));
+    expect(r).toMatchObject({ kind: "next", step: "close_ports" });
+    expect(calls()).toEqual([]);
+  });
+
+  it("resume without saved rules fails closed", async () => {
+    const { adapter, ctx } = setup();
+    await expect(adapter.aws.resume(ctx(null))).rejects.toMatchObject({ code: "validation" });
+  });
+
+  it("final snapshot creates once and waits until available", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "GetInstanceSnapshot", notFound());
+    aws.on("lightsail", "CreateInstanceSnapshot", lightsailOk({}));
+    expect(await adapter.aws.finalSnapshot(ctx(null))).toMatchObject({ kind: "wait" });
+    expect(calls()).toEqual(["GetInstanceSnapshot", "CreateInstanceSnapshot"]);
+    aws.on(
+      "lightsail",
+      "GetInstanceSnapshot",
+      lightsailOk({ instanceSnapshot: { state: "pending" } }),
+    );
+    expect(await adapter.aws.finalSnapshot(ctx("wait_snapshot"))).toMatchObject({ kind: "wait" });
+    aws.on(
+      "lightsail",
+      "GetInstanceSnapshot",
+      lightsailOk({ instanceSnapshot: { state: "available" } }),
+    );
+    expect(await adapter.aws.finalSnapshot(ctx("wait_snapshot"))).toMatchObject({ kind: "done" });
+  });
+
+  it("destroy treats not-found as done and releases the static IP", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "DeleteInstance", notFound());
+    expect(await adapter.aws.destroy(ctx(null))).toMatchObject({
+      kind: "next",
+      step: "release_ip",
+    });
+    aws.on("lightsail", "ReleaseStaticIp", notFound());
+    expect(await adapter.aws.destroy(ctx("release_ip"))).toMatchObject({
+      kind: "done",
+      patch: { state: "destroyed" },
+    });
+  });
+
+  it("purgeSnapshots treats not-found as done", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "DeleteInstanceSnapshot", notFound());
+    expect(await adapter.aws.purgeSnapshots(ctx(null))).toMatchObject({ kind: "done" });
+  });
+
+  it("describe reports the live state, or `missing`", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "GetInstance", lightsailOk({ instance: { state: { name: "running" } } }));
+    expect(await adapter.aws.describe(ctx(null))).toEqual({ state: "running" });
+    aws.on("lightsail", "GetInstance", notFound());
+    expect(await adapter.aws.describe(ctx(null))).toEqual({ state: "missing" });
+  });
+
+  it("reboot, stop, start work; set_ports validates its payload; other kinds are refused", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "RebootInstance", lightsailOk({}));
+    aws.on("lightsail", "StopInstance", lightsailOk({}));
+    aws.on("lightsail", "StartInstance", lightsailOk({}));
+    aws.on("lightsail", "PutInstancePublicPorts", lightsailOk({}));
+    expect(await adapter.aws.action("reboot", ctx(null))).toMatchObject({ kind: "done" });
+    expect(await adapter.aws.action("stop", ctx(null))).toMatchObject({
+      patch: { state: "stopped" },
+    });
+    expect(await adapter.aws.action("start", ctx(null))).toMatchObject({
+      patch: { state: "active" },
+    });
+    const ok = { ports: [{ fromPort: 443, toPort: 443, protocol: "tcp", cidrs: ["10.0.0.0/8"] }] };
+    expect(await adapter.aws.action("set_ports", ctx(null, { payload: ok }))).toMatchObject({
+      kind: "done",
+    });
+    for (const bad of [
+      { ports: [{ fromPort: 70000, toPort: 70000, protocol: "tcp", cidrs: ["0.0.0.0/0"] }] },
+      { ports: [{ fromPort: 22, toPort: 22, protocol: "gre", cidrs: ["0.0.0.0/0"] }] },
+      { ports: [{ fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["$(id)"] }] },
+      { ports: "all" },
+    ]) {
+      await expect(
+        adapter.aws.action("set_ports", ctx(null, { payload: bad })),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+    await expect(adapter.aws.action("rename" as OperationKind, ctx(null))).rejects.toMatchObject({
+      code: "validation",
+    });
+  });
+});

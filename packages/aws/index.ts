@@ -19,3 +19,16 @@ export {
   type RoleName,
   type RoleOf,
 } from "./roles";
+export {
+  BOOTSTRAP_EXPECTED_VPC_CIDR,
+  BOOTSTRAP_MARKER_FILE,
+  BOOTSTRAP_OK_MARKER,
+  bootstrapScript,
+  type BootstrapOptions,
+} from "./adapters/bootstrap";
+export {
+  createLinuxInstanceAdapter,
+  parsePortRules,
+  type LinuxInstanceDeps,
+  type LinuxLaunchSpec,
+} from "./adapters/linux-instance";
