@@ -32,6 +32,8 @@ export async function revealWindowsPasswordAction(form: FormData): Promise<Revea
           );
           return decision.allowed;
         }),
+      // TODO(infra): a `RevealPort` (HTTPS function URL with SigV4, or a Lambda client). Until it
+      // is decided and wired this stays null and every request is refused (R16).
       reveal: null,
     },
     pick(form, ["resourceId"]),

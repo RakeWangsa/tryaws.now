@@ -514,6 +514,39 @@ TASKS["WP6-T1"] = [
   repo,
 ];
 
+// WP6-T1b: the wiring of the Windows product (provisioner registry, resolved family and the shared
+// instance limit, the server detail). Each filter names real test files.
+TASKS["WP6-T1b"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  {
+    id: "windows-provisioner",
+    title: "WP6-T1b: the Windows adapter sits in the provisioner registry and fails closed",
+    command: ["pnpm", "test", "--filter", "@tc/fn-provisioner", "windows", "--no-passWithNoTests"],
+  },
+  {
+    id: "windows-order",
+    title:
+      "WP6-T1b: a Windows plan is sold behind its flag, one transaction, shared instance limit",
+    command: ["pnpm", "test", "--filter", "@tc/core", "windows-purchase", "--no-passWithNoTests"],
+  },
+  {
+    id: "windows-resolve",
+    title: "WP6-T1b: windows_instance resolves under its own family and platform",
+    command: ["pnpm", "test", "--filter", "@tc/core", "products/instance", "--no-passWithNoTests"],
+  },
+  {
+    id: "windows-detail",
+    title:
+      "WP6-T1b: the server detail returns Windows servers behind the flag with the access panel",
+    command: ["pnpm", "test", "--filter", "@tc/web", "windows", "--no-passWithNoTests"],
+  },
+  repo,
+];
+
 // WP7-T3: DNS zones and the record editor. The validation rules are pure and live in packages/core/dns;
 // the zone adapter and the fake Route 53 are in packages/aws (no Route 53 client is built yet).
 TASKS["WP7-T3"] = [specSync, baselineSync, lint, typecheck, format, core, aws, repo];

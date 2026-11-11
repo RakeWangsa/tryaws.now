@@ -50,7 +50,7 @@ describe("loadServerDetail for a Windows server", () => {
 
   it("answers like a missing server when the flag is off, missing or unreadable (R12, R16)", async () => {
     state.resource = row("windows_instance");
-    for (const flags of [{ windows_instance: false }, {}]) {
+    for (const flags of [{ windows_instance: false }, {}] as Record<string, boolean | null>[]) {
       state.flags = flags;
       expect(await loadServerDetail(session, "x")).toBeNull();
     }
