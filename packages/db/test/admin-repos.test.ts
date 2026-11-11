@@ -38,6 +38,24 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       },
       "first rate",
     ),
+  "pricingRules.save": (r) =>
+    r.pricingRules.save(
+      {
+        market: "BD",
+        productFamily: null,
+        effectiveFrom: new Date("2026-11-11T06:00:00.000Z"),
+        at: new Date("2026-11-11T06:00:00.000Z"),
+        steps: [
+          {
+            code: "markup",
+            rate: "0",
+            base: "aws",
+            label: { bn: "সার্ভিস চার্জ", en: "Service charge" },
+          },
+        ],
+      },
+      "first rule",
+    ),
 };
 // Admin reads ("<repo>.<method>") that write no audit row. Empty until WP8 decides where admin reads live and whether a read is audited (open point 21).
 const ADMIN_READ_METHODS: readonly string[] = [];

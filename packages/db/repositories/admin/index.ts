@@ -3,6 +3,7 @@ import type { ADMIN_ROLES } from "../../schema/admins";
 import { isUuid } from "../scope";
 import { featureFlagsAdminRepo, type FeatureFlagsAdminRepo } from "./feature-flags";
 import { fxRatesAdminRepo, type FxRatesAdminRepo } from "./fx-rates";
+import { pricingRulesAdminRepo, type PricingRulesAdminRepo } from "./pricing-rules";
 
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
@@ -26,6 +27,7 @@ export interface AdminScope {
 export interface AdminRepos {
   featureFlags: FeatureFlagsAdminRepo;
   fxRates: FxRatesAdminRepo;
+  pricingRules: PricingRulesAdminRepo;
 }
 
 // Binds the actor once and builds every admin repository from it. Throws a TypeError for an actor
@@ -41,5 +43,9 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     throw new TypeError("adminRepos: the admin actor is incomplete");
   }
   const scope: AdminScope = Object.freeze({ tx, actor: Object.freeze({ ...actor }) });
-  return { featureFlags: featureFlagsAdminRepo(scope), fxRates: fxRatesAdminRepo(scope) };
+  return {
+    featureFlags: featureFlagsAdminRepo(scope),
+    fxRates: fxRatesAdminRepo(scope),
+    pricingRules: pricingRulesAdminRepo(scope),
+  };
 }
