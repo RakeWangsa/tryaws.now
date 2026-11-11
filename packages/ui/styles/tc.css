@@ -406,6 +406,9 @@ div.tc-modal-open {
 }
 .tc-footer-aws {
   margin-top: 16px;
+  font-size: 0.8125rem;
+}
+
 /* ---- 7b. AppShell and AdminShell (WPU-T4) ---- */
 /* The fixed OPS label next to the logo of the admin (16.4): a pill in the accent color. */
 .tc-ops-label {
