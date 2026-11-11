@@ -2,6 +2,8 @@ import type { CatalogProduct } from "@tc/db";
 import type { CapacityNeed } from "../capacity/types";
 import type { ProductFacts } from "../orders/gates";
 import type { Result } from "../types";
+import { parseDatabaseConfig, resolveDatabase } from "./database";
+import { parseLoadBalancerConfig, resolveLoadBalancer } from "./load-balancer";
 
 export interface InstanceConfig {
   readonly productId: string;
@@ -12,7 +14,7 @@ export interface InstanceConfig {
 }
 
 export interface ResolvedProduct {
-  readonly family: "linux_instance";
+  readonly family: "linux_instance" | "database" | "load_balancer";
   readonly productId: string;
   readonly region: string;
   readonly featureFlag: string;
@@ -131,6 +133,20 @@ export async function resolveProduct(
       const product = await load(config.value.productId);
       if (product === null) return unavailable();
       return resolveInstance(config.value, product);
+    }
+    case "database": {
+      const config = parseDatabaseConfig(rawConfig);
+      if (!config.ok) return config;
+      const product = await load(config.value.productId);
+      if (product === null) return unavailable();
+      return resolveDatabase(config.value, product);
+    }
+    case "load_balancer": {
+      const config = parseLoadBalancerConfig(rawConfig);
+      if (!config.ok) return config;
+      const product = await load(config.value.productId);
+      if (product === null) return unavailable();
+      return resolveLoadBalancer(config.value, product);
     }
     default:
       return { ok: false, error: "validation", fields: { family: "unsupported" } };

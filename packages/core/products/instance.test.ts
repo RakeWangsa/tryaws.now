@@ -156,7 +156,7 @@ describe("resolveInstance", () => {
 describe("resolveProduct", () => {
   it("is unsupported for every family but instance, without loading anything", async () => {
     const load = vi.fn();
-    for (const family of ["database", "disk", "static_ip", "instance", ""]) {
+    for (const family of ["disk", "static_ip", "instance", ""]) {
       expect(await resolveProduct(family, GOOD, load)).toEqual({
         ok: false,
         error: "validation",
