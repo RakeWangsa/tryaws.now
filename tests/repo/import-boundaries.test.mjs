@@ -65,6 +65,8 @@ it.each([
   ["packages/core/x.ts", 'await import("@aws-sdk/client-sts");', "Spec section 4:"],
   ["functions/reader/x.ts", 'await import("@aws-sdk/client-sts");', "Spec section 4:"],
   ["apps/web/x.test.ts", 'await import("@aws-sdk/client-sts");', "Spec section 4:"],
+  ["apps/web/x.ts", 'await import("@AWS-SDK/client-sts");', "Spec section 4:"],
+  ["apps/web/x.test.ts", "await import(`@aws-sdk/client-sts`);", "Spec section 4:"],
   ["apps/web/x.test.ts", "await import(`@tc/aws`);", "R1:"],
   ["apps/web/x.ts", 'await import("../../PACKAGES/AWS/index");', "R1:"],
   ["apps/web/fixtures.test.data.ts", 'const n = "x"; await import(n);', "R1:"],
@@ -112,6 +114,7 @@ it.each([
   ],
   ["functions/reader/x.ts", 'const name = "x"; await import(name);'],
   ["packages/aws/x.ts", 'await import("@aws-sdk/client-sts");'],
+  ["apps/web/x.test.ts", "await import(`./chart`);"],
   [
     "packages/aws/x.ts",
     'import { createRequire } from "node:module"; createRequire(import.meta.url)("x");',
@@ -128,6 +131,7 @@ it.each([
 
 it("apps/ and packages/ hold no .jsx file, because the lint config does not cover .jsx yet (R1)", () => {
   // When this fails: first make ESLint lint .jsx files and add R1 rows for them, then remove this test.
+  expect(listTracked(["apps"]).length).toBeGreaterThan(0);
   const tracked = listTracked(["apps", "packages"]).filter((path) => path.endsWith(".jsx"));
   expect(tracked).toEqual([]);
 });

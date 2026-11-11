@@ -71,9 +71,13 @@ const R1_DYNAMIC_TEMPLATE = {
   message: R1.message,
 };
 // Built from the list above, so the two cannot drift.
-const SDK_DYNAMIC_SOURCE = `/^(${awsSdkClients.map((n) => n.replaceAll("/", "\\/")).join("|")})(\\/|$)/`;
+const SDK_DYNAMIC_SOURCE = `/^(${awsSdkClients.map((n) => n.replaceAll("/", "\\/")).join("|")})(\\/|$)/i`;
 const SDK_DYNAMIC = {
   selector: `ImportExpression[source.value=${SDK_DYNAMIC_SOURCE}]`,
+  message: SDK.message,
+};
+const SDK_DYNAMIC_TEMPLATE = {
+  selector: `ImportExpression > TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked=${SDK_DYNAMIC_SOURCE}]`,
   message: SDK.message,
 };
 const NO_HIDDEN_LOADER = {
@@ -163,6 +167,7 @@ export default tseslint.config(
         R1_DYNAMIC,
         R1_DYNAMIC_TEMPLATE,
         SDK_DYNAMIC,
+        SDK_DYNAMIC_TEMPLATE,
         NO_HIDDEN_LOADER,
       ],
     },

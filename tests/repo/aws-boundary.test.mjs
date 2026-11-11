@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { isAbsolute, join, posix, relative } from "node:path";
 import { URL, fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { awsSdkClients } from "../../eslint.config.mjs";
@@ -12,15 +12,22 @@ const dirOf = Object.fromEntries(Object.entries(dirs).map(([dir, name]) => [name
 
 // "aws-alias": "workspace:@tc/aws@*"  ->  @tc/aws
 // "sts": "npm:@aws-sdk/client-sts@3"  ->  @aws-sdk/client-sts
-// "x": "file:../aws" or "link:../aws" ->  the workspace package in that folder
+// "x": "file:../aws" or "link:../aws" or "workspace:../aws" -> the workspace package in that folder
+// A local path that names no workspace package throws: the test fails closed.
 function targetOf(dir, key, spec) {
+  const path = /^(?:(?:file|link|portal):|workspace:(?=[./]))(.+)$/.exec(spec);
+  if (path) {
+    const target = path[1];
+    const folder = posix
+      .normalize(isAbsolute(target) ? relative(ROOT, target) : posix.join(dir, target))
+      .replace(/\/+$/, "");
+    if (dirs[folder] !== undefined) return dirs[folder];
+    throw new Error(
+      `aws-boundary: ${dir} depends on ${key} through the local path "${spec}", which is not a workspace package; add it to this test before it is used`,
+    );
+  }
   const alias = /^(?:workspace|npm):(@[^/@]+\/[^@]+|[a-z][^@]*)(?:@.*)?$/.exec(spec);
   if (alias) return alias[1];
-  const path = /^(?:file|link|portal):(.+)$/.exec(spec);
-  if (path) {
-    const folder = posix.normalize(posix.join(dir, path[1]));
-    if (dirs[folder] !== undefined) return dirs[folder];
-  }
   return key;
 }
 
@@ -64,9 +71,31 @@ it.each([
   ["x", "link:../../packages/aws", "@tc/aws"],
   ["x", "portal:../aws", "@tc/aws"],
   ["left-pad", "1.3.0", "left-pad"],
-  ["x", "file:../not-a-package", "x"],
+  ["x", "link:../aws/", "@tc/aws"],
+  ["x", "file:./../aws/", "@tc/aws"],
+  ["x", "workspace:../aws", "@tc/aws"],
+  ["x", "workspace:../aws/", "@tc/aws"],
+  ["x", "workspace:./../../packages/aws", "@tc/aws"],
+  ["x", "link:../../functions/reader", "@tc/fn-reader"],
+  ["x", "workspace:^", "x"],
+  ["x", "workspace:~1.2.3", "x"],
 ])("the dependency %s: %s points at %s", (key, spec, expected) => {
   expect(targetOf("packages/db", key, spec)).toBe(expected);
+});
+
+it("an absolute local path is followed too", () => {
+  expect(targetOf("packages/db", "x", `file:${join(ROOT, "packages/aws")}`)).toBe("@tc/aws");
+  expect(targetOf("apps/web", "x", `link:${join(ROOT, "packages/aws")}/`)).toBe("@tc/aws");
+});
+
+it.each([
+  "file:../not-a-package",
+  "link:../../somewhere-else",
+  "portal:./vendor/x",
+  "file:../aws.tgz",
+  "workspace:../not-a-package",
+])("a local path that is not a workspace package stops the test: %s", (spec) => {
+  expect(() => targetOf("packages/db", "x", spec)).toThrow(/is not a workspace package/);
 });
 
 it("the banned AWS packages are the six of the lint config", () => {
@@ -89,6 +118,7 @@ it("only functions/ may depend on @tc/aws (R1)", () => {
 });
 
 it("only packages/aws depends on the AWS clients of section 4 or on credential providers", () => {
+  expect(deps["@tc/aws"].some((d) => SDK.includes(d))).toBe(true);
   const offenders = Object.entries(deps)
     .filter(([name, list]) => name !== "@tc/aws" && list.some((d) => SDK.includes(d)))
     .map(([name]) => name);
