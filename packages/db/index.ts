@@ -27,6 +27,13 @@ export type {
 export type { CustomerHome, HomesRepo } from "./repositories/customer/homes";
 export type { WaitlistJoin, WaitlistRepo } from "./repositories/customer/waitlist";
 export { customerOperationKey } from "./repositories/customer/operations";
+export type {
+  ClaimedOtp,
+  NewOtpChallenge,
+  OtpChallenge,
+  OtpClaim,
+  OtpRepo,
+} from "./repositories/customer/otp";
 export type { RepoErrorCode, Written } from "./repositories/result";
 export { adminRepos } from "./repositories/admin/index";
 export type { AdminRepos, AdminActor, AdminRole, AdminScope } from "./repositories/admin/index";

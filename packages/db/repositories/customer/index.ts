@@ -8,6 +8,7 @@ import { operationsRepo, type OperationsRepo } from "./operations";
 import { homesRepo, type HomesRepo } from "./homes";
 import { waitlistRepo, type WaitlistRepo } from "./waitlist";
 import { rateLimitsRepo, type RateLimitsRepo } from "./rate-limits";
+import { otpRepo, type OtpRepo } from "./otp";
 
 // The repositories of one customer (R8). Tasks 7 to 9 add sshKeys, resources, operations, audit.
 export interface CustomerRepos {
@@ -19,6 +20,7 @@ export interface CustomerRepos {
   homes: HomesRepo;
   waitlist: WaitlistRepo;
   rateLimits: RateLimitsRepo;
+  otp: OtpRepo;
 }
 
 // Binds the customer once; every repository is built from that scope and no method takes a
@@ -34,6 +36,7 @@ export function customerRepos(tx: Tx, customerId: string): CustomerRepos {
     homes: homesRepo(scope),
     waitlist: waitlistRepo(scope),
     rateLimits: rateLimitsRepo(scope),
+    otp: otpRepo(scope),
   };
 }
 
