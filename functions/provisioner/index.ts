@@ -15,7 +15,9 @@ import { createAdapterRegistry } from "./adapters";
 import { backupAdapter, diskAdapter } from "./backup";
 import { bucketAdapter } from "./bucket";
 import { containerServiceAdapter } from "./container";
+import { databaseAdapter } from "./database";
 import { linuxInstanceAdapter } from "./linux";
+import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
 import { orderHooks } from "./order-hooks";
 import { runStep } from "./step";
@@ -120,6 +122,9 @@ function buildDeps(): StepDeps {
       // WP6-T4 and WP7-T1: behind their feature flags (R12), which the order flow checks.
       bucketAdapter(),
       containerServiceAdapter(),
+      // WP6-T2 and WP6-T3.
+      databaseAdapter(),
+      loadBalancerAdapter(),
     ]),
     // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
     destructiveGuard,
