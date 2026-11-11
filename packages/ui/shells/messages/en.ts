@@ -1,0 +1,100 @@
+import type { bn } from "./bn.ts";
+
+type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
+
+// The `Aws` strings are the statements of docs/spec/16/16.13 (rule U6), used unchanged.
+export const en: Same<typeof bn> = {
+  Shell: {
+    skip: "Skip to main content",
+    brand: "TiCON Cloud",
+    logoAlt: "TiCON Cloud",
+    homeLabel: "TiCON Cloud home",
+    menu: "Menu",
+    close: "Close",
+    public: {
+      supportPhone: "Support phone",
+      menuLabel: "Main menu",
+      pricing: "Pricing",
+      products: "Products",
+      domains: "Domains",
+      help: "Help",
+      login: "Log in",
+      console: "Console",
+    },
+    footer: {
+      products: "Products",
+      company: "Company",
+      support: "Support",
+      legal: "Legal",
+      pricing: "Pricing",
+      payments: "Payments",
+      help: "Help centre",
+      contact: "Support request",
+      terms: "Terms of use",
+      privacy: "Privacy policy",
+      companyName: "TiCON System Limited",
+      address: "Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230",
+    },
+    auth: {
+      backHome: "Back to home",
+    },
+    nav: {
+      dashboard: "Dashboard",
+      cloudServers: "Cloud Servers",
+      databases: "Databases",
+      objectStorage: "Object Storage",
+      loadBalancers: "Load Balancers",
+      containers: "Containers",
+      cdn: "CDN",
+      domains: "Domains and DNS",
+      wallet: "Wallet",
+      invoices: "Invoices",
+      support: "Support",
+      settings: "Settings",
+    },
+    app: {
+      navLabel: "Panel menu",
+      openNav: "Open navigation",
+      soon: "Soon",
+      notifications: "Notifications",
+      account: "Account",
+      profile: "Profile",
+      security: "Security",
+    },
+    admin: {
+      ops: "OPS",
+      navLabel: "Admin menu",
+      signedInAs: "Signed in as",
+      roles: {
+        superadmin: "Superadmin",
+        ops: "Ops",
+        finance: "Finance",
+        support: "Support",
+      },
+      nav: {
+        today: "Today",
+        customers: "Customers",
+        payments: "Payments",
+        pricing: "Pricing",
+        catalog: "Catalog",
+        capacity: "Capacity",
+        operations: "Operations",
+        support: "Support",
+        abuse: "Abuse",
+        reconciliation: "Reconciliation",
+        audit: "Audit",
+        admins: "Admins",
+      },
+    },
+    notFound: {
+      title: "Page not found",
+      body: "Check the link, or go back to the home page.",
+    },
+  },
+  Aws: {
+    short: "100% AWS infrastructure. Built on Amazon Lightsail.",
+    long: "Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai). TiCON Cloud sells, bills and supports the service. You manage everything from this panel and do not need an AWS account.",
+    trademark:
+      "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.",
+  },
+};
