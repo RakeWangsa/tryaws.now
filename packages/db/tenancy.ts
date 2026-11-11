@@ -85,6 +85,11 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
 //   - audit_log rows ABOUT a customer, written by an admin or the system (the predicate is the actor path only): WP8-T1
 //   - ledger_transactions whose actor or reference is the customer but that have no line on its account: WP3-T4
 //   - discrepancies, whose details can name a customer or a payment, and which customers cannot read: WP7-T6, WP8-T7
+//
+// The system module repositories/system/payments.ts (WP3-T2, open point 4) reads the tenant table
+// `payments` by merchant_transaction_id or by status, with no customer id, and writes `discrepancies`.
+// It is the one exception to customerRepos for payments: it is not reachable from customerRepos, no
+// function of it takes a customer id, and test/payments-system.test.ts pins both.
 export const NON_TENANT_TABLES: readonly string[] = Object.freeze([
   "markets",
   "fx_rates",

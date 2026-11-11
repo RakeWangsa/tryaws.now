@@ -119,3 +119,6 @@ export type { CapacityInventoryRepo } from "./repositories/capacity-inventory";
 export { consumeRateLimits, limitKey, windowStartOf } from "./repositories/rate-limit";
 export type { LimitDecision, LimitRule, LimitSubjectKind } from "./repositories/rate-limit";
 export type { CustomerLimit, RateLimitsRepo } from "./repositories/customer/rate-limits";
+export type { NewPayment, PaymentRow, PaymentsRepo } from "./repositories/customer/payments";
+export { systemPayments, PAYMENT_DISCREPANCY_KEYS } from "./repositories/system/payments";
+export type { OutcomeFields, SystemPayments } from "./repositories/system/payments";
