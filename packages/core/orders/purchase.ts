@@ -1,0 +1,255 @@
+import { customerRepos, findLedgerTransactionByKey, readCatalogProduct, type Tx } from "@tc/db";
+import { reserveCapacity } from "../capacity/reserve";
+import { lockWallet } from "../ledger/balance";
+import { ledgerKey } from "../ledger/keys";
+import { postTransaction } from "../ledger/post";
+import type { Posting } from "../ledger/types";
+import { makeEnqueueOperation } from "../operations/enqueue";
+import { accountFor } from "../pricing/index";
+import { resolveProduct } from "../products/instance";
+import { quoteInForce } from "../rates/in-force";
+import type { Result } from "../types";
+import { gateCustomer, gateProduct } from "./checks";
+import { comparePrice } from "./compare";
+import type { OrdersDeps } from "./draft";
+import { childId, orderIdFor } from "./ids";
+import { DRAFT_TTL_SECONDS, type DraftClaims } from "./types";
+
+export interface PurchaseArgs {
+  readonly claims: DraftClaims;
+  readonly tokenHash: string;
+  readonly clientKey: string;
+  readonly customerId: string;
+}
+
+export type Purchased = {
+  readonly orderId: string;
+  readonly resourceId: string;
+  readonly operationId: string;
+  readonly replayed: boolean;
+};
+
+const TERM_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type Repos = ReturnType<typeof customerRepos>;
+
+function sqlState(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === "string") return code;
+  const cause = (error as { cause?: unknown }).cause;
+  return typeof cause === "object" && cause !== null ? sqlState(cause) : undefined;
+}
+
+/** A unique violation (23505) of any statement of the writes, whatever layer wrapped it. */
+function isUniqueViolation(error: unknown): boolean {
+  return sqlState(error) === "23505";
+}
+
+/** The purchase of this very token, if one is committed: the order and the ids it made. */
+async function findPurchase(
+  tx: Tx,
+  repos: Repos,
+  orderId: string,
+  tokenHash: string,
+): Promise<Purchased | null> {
+  const ledger = await findLedgerTransactionByKey(tx, ledgerKey.purchase(tokenHash));
+  const order =
+    ledger === null
+      ? await repos.orders.get(orderId)
+      : await repos.orders.findByLedgerTransaction(ledger.id);
+  if (order === null) {
+    // Money moved and no order exists: an invariant the nightly check also catches (R16).
+    if (ledger !== null) throw new Error("orders: a purchase has no order");
+    return null;
+  }
+  if (order.id !== orderId) throw new Error("orders: the order of a purchase is another order");
+  const resourceId = childId(orderId, "resource");
+  const operation = (await repos.operations.listForResource(resourceId)).find(
+    (op) => op.kind === "create",
+  );
+  if (operation === undefined) throw new Error("orders: a purchase has no create operation");
+  return { orderId, resourceId, operationId: operation.id, replayed: true };
+}
+
+/** Same client key, another purchase: a conflict. Nothing is written. */
+async function clientKeyIsTaken(repos: Repos, clientKey: string): Promise<boolean> {
+  return (await repos.orders.findByIdempotencyKey(clientKey)) !== null;
+}
+
+/**
+ * The purchase transaction of Section 3.4, run inside the caller's `withTx` as web_rw. The order of
+ * the steps is the design: the wallet row is locked first and the capacity cells last, and every
+ * check that can refuse runs before the first unit is taken. A refusal is returned before the
+ * reservation, when nothing has been written. From the reservation on, a failure only throws, because
+ * `withTx` commits a returned failure.
+ */
+export async function runPurchase(
+  tx: Tx,
+  deps: Pick<OrdersDeps, "clock">,
+  args: PurchaseArgs,
+): Promise<Result<Purchased>> {
+  const { claims, tokenHash, clientKey, customerId } = args;
+  // The token is accepted only from the customer it names (16.11 step 2). placeOrder checks this too.
+  if (claims.c !== customerId) return { ok: false, error: "forbidden" };
+  const now = deps.clock.now();
+  const orderId = orderIdFor(customerId, tokenHash);
+  const repos = customerRepos(tx, customerId);
+
+  // 2. Lock. A customer without a wallet throws and nothing is written (R16).
+  const balance = await lockWallet(tx, customerId);
+
+  // 3. Replay. One draft gives at most one order, whatever the client key is.
+  const earlier = await findPurchase(tx, repos, orderId, tokenHash);
+  if (earlier !== null) return { ok: true, value: earlier };
+  if (await clientKeyIsTaken(repos, clientKey)) return { ok: false, error: "conflict" };
+
+  // 4. Customer, from the row under the lock. The session is not an input.
+  const customer = await gateCustomer(repos);
+  if (!customer.ok) return customer;
+
+  // 5. Family, product, flag and limits, a second time.
+  const resolved = await resolveProduct(claims.fam, claims.cfg, (id) => readCatalogProduct(tx, id));
+  if (!resolved.ok) return resolved;
+  const product = resolved.value;
+  if (product.productId !== claims.pid || product.region !== claims.region) {
+    return { ok: false, error: "validation", fields: { token: "invalid" } };
+  }
+  const gated = await gateProduct(tx, repos, customer.value, product);
+  if (!gated.ok) return gated;
+
+  // 6. Price, again, and compare with the token.
+  const priced = await quoteInForce(
+    tx,
+    {
+      market: customer.value.market,
+      productFamily: product.family,
+      awsPriceUsd: product.awsPriceUsd,
+      ...(product.quantity === undefined ? {} : { quantity: product.quantity }),
+    },
+    { now: () => now },
+  );
+  if (!priced.ok) return priced;
+  const fresh = priced.value.snapshot;
+  if (!comparePrice(claims.snap, fresh).same) {
+    const iat = Math.floor(now.getTime() / 1000);
+    const next: DraftClaims = { ...claims, snap: fresh, iat, exp: iat + DRAFT_TTL_SECONDS };
+    return { ok: false, error: "price_changed", data: { claims: next } };
+  }
+
+  // 7. Balance.
+  const total = BigInt(fresh.totalMinor);
+  if (balance < total) {
+    return {
+      ok: false,
+      error: "insufficient_balance",
+      data: { shortfallMinor: (total - balance).toString() },
+    };
+  }
+
+  // The postings are built before the first unit is taken, so a step with no ledger account stops here.
+  const postings: Posting[] = [
+    { account: { type: "customer_wallet", customerId }, direction: "debit", amountMinor: total },
+    {
+      account: { type: "revenue_aws_base" },
+      direction: "credit",
+      amountMinor: BigInt(fresh.baseMinor),
+    },
+  ];
+  for (const step of fresh.steps) {
+    const amountMinor = BigInt(step.amountMinor);
+    if (amountMinor === 0n) continue; // a step of 0 posts no line
+    const type = accountFor(step.code);
+    if (type === undefined) throw new Error("orders: a price step has no ledger account");
+    postings.push({ account: { type }, direction: "credit", amountMinor });
+  }
+
+  // 8 and 9 are one savepoint. A unique violation inside it rolls the savepoint back, and the replay
+  // lookups run again: it is a replay or a conflict, never a second charge.
+  let result: Result<Purchased>;
+  try {
+    result = await tx.transaction(async (sp) => {
+      const spRepos = customerRepos(sp, customerId);
+
+      // 8. Capacity, last of the checks. No waitlist argument: the page offers it (open point 12).
+      const reserved = await reserveCapacity(sp, {
+        customerId,
+        region: product.region,
+        needs: product.needs,
+      });
+      if (!reserved.ok) return reserved;
+      const reservation = reserved.value;
+
+      // From here on nothing returns a failure: every refusal throws a fixed text.
+      const resourceId = childId(orderId, "resource");
+      await spRepos.orders.createResource({
+        id: resourceId,
+        family: product.family,
+        productId: product.productId,
+        poolAccountId: reservation.poolAccountId,
+        region: product.region,
+        config: { ...product.resourceConfig, capacityReservation: reservation.record },
+      });
+
+      const posted = await postTransaction(sp, {
+        kind: "purchase",
+        reference: { type: "order", id: orderId },
+        idempotencyKey: ledgerKey.purchase(tokenHash),
+        actor: { type: "customer", id: customerId },
+        postings,
+      });
+      if (!posted.ok) throw new Error("orders: the purchase posting was refused");
+
+      const order = await spRepos.orders.createPaid({
+        id: orderId,
+        items: [
+          {
+            resourceId,
+            family: product.family,
+            productId: product.productId,
+            region: product.region,
+          },
+        ],
+        priceSnapshot: fresh,
+        totalMinor: total,
+        ledgerTransactionId: posted.value.transactionId,
+        idempotencyKey: clientKey,
+      });
+      if (!order.ok || order.replayed) throw new Error("orders: the order was not created");
+
+      const subscription = await spRepos.orders.createSubscription({
+        id: childId(orderId, "subscription"),
+        resourceId,
+        termDays: TERM_DAYS,
+        priceSnapshot: fresh,
+        periodStart: now,
+        periodEnd: new Date(now.getTime() + TERM_DAYS * DAY_MS),
+      });
+      if (!subscription.ok) throw new Error("orders: the subscription was not created");
+
+      const { operationId } = await makeEnqueueOperation(deps.clock)(sp, {
+        resourceId,
+        kind: "create",
+        payload: { orderId },
+        idempotencyKey: `order-create:${orderId}`,
+      });
+
+      // Ids and enums only: no token, no key, no configuration text (R14).
+      const audited = await spRepos.audit.record({
+        action: "order.placed",
+        targetType: "order",
+        targetId: orderId,
+        metadata: { totalMinor: total.toString(), family: product.family },
+      });
+      if (!audited.ok) throw new Error("orders: the audit entry was refused");
+
+      return { ok: true, value: { orderId, resourceId, operationId, replayed: false } };
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    const again = await findPurchase(tx, repos, orderId, tokenHash);
+    return again !== null ? { ok: true, value: again } : { ok: false, error: "conflict" };
+  }
+  return result;
+}
