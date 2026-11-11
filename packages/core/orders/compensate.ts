@@ -18,6 +18,10 @@ export interface Compensated {
 // Fixed text: no id, no state, no amount in the message (R14).
 const NOT_REVERSIBLE = "orders: a failed create cannot be reversed in this state";
 const ENGINE_CODE = /^[A-Za-z0-9_.:-]{1,80}$/;
+// An ARN or a run of 12 digits (an AWS account id) is never an engine word, whatever its characters (R3, R11).
+const ACCOUNT_LIKE = /arn:|\d{12}/i;
+const safeCode = (code: string): string =>
+  ENGINE_CODE.test(code) && !ACCOUNT_LIKE.test(code) ? code : "unknown";
 
 /**
  * The automatic reversal of a failed create (10.1): one reversing ledger transaction keyed
@@ -53,7 +57,7 @@ export async function compensateFailedCreate(
   const failed = await repo.failResource(event.resourceId);
   if (!failed && order.status === "paid") throw new Error(NOT_REVERSIBLE);
 
-  const code = ENGINE_CODE.test(event.code) ? event.code : "unknown";
+  const code = safeCode(event.code);
   const reversal = await reverseTransaction(tx, {
     transactionId: order.ledgerTransactionId,
     orderId: order.orderId,
