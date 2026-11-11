@@ -46,7 +46,8 @@ const {
   loadDatabaseList,
 } = await import("./databases-view.ts");
 
-const session = { customerId: "11111111-1111-4111-8111-111111111111" } as never;
+const CUSTOMER = "11111111-1111-4111-8111-111111111111";
+const session = { customerId: CUSTOMER } as never;
 const DB_ID = "22222222-2222-4222-8222-222222222222";
 const PRODUCT = "33333333-3333-4333-8333-333333333333";
 const row = (over: Record<string, unknown> = {}) => ({
@@ -152,7 +153,7 @@ describe("loadDatabaseConfigurator", () => {
         },
       ],
     });
-    expect(seen.customerIds).toEqual([session.customerId]);
+    expect(seen.customerIds).toEqual([CUSTOMER]);
   });
 
   it("refuses to show prices when the catalog cannot be priced (R16)", async () => {

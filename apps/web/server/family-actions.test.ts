@@ -85,7 +85,7 @@ function world(
       },
     } as never,
     operations: {
-      request: async (input) => {
+      request: async (input: { kind: string; idempotencyKey: string; resourceId: string }) => {
         calls.push(`op:${input.kind}:${input.idempotencyKey}:${input.resourceId}`);
         if (over.requestError) return { ok: false, error: over.requestError };
         return { ok: true, replayed: false, value: { needsApproval: false } } as never;

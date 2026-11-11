@@ -38,7 +38,8 @@ const {
   loadLoadBalancerList,
 } = await import("./load-balancers-view.ts");
 
-const session = { customerId: "11111111-1111-4111-8111-111111111111" } as never;
+const CUSTOMER = "11111111-1111-4111-8111-111111111111";
+const session = { customerId: CUSTOMER } as never;
 const LB = "22222222-2222-4222-8222-222222222222";
 const S1 = "0190aaaa-0000-7000-8000-0000000000a1";
 const S2 = "0190aaaa-0000-7000-8000-0000000000a2";
@@ -123,7 +124,7 @@ describe("loadLoadBalancerConfigurator", () => {
         { id: "w", name: "win-1", region: "ap-southeast-1" },
       ],
     });
-    expect(seen.customerIds).toEqual([session.customerId]);
+    expect(seen.customerIds).toEqual([CUSTOMER]);
   });
 
   it("refuses to show prices when the catalog cannot be priced (R16)", async () => {
