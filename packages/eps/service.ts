@@ -1,4 +1,6 @@
 import type { EpsDeps } from "./deps";
+import { recheckPayment } from "./recheck";
+import type { RecheckOutcome } from "./recheck";
 import { handleEpsReturn } from "./returns";
 import type { ReturnInput, ReturnResult } from "./returns";
 import { sweepPayments } from "./sweep";
@@ -22,6 +24,12 @@ export interface Eps {
   ): Promise<TopUpResult>;
   verifyPayment(merchantTransactionId: string, ctx?: { clientIp?: string }): Promise<VerifyOutcome>;
   handleReturn(input: ReturnInput): Promise<ReturnResult>;
+  /** The status page asks whether an open payment of this customer is settled now (WP3-T4). */
+  recheckPayment(
+    s: { readonly customerId: string },
+    paymentId: string,
+    ctx: { clientIp: string },
+  ): Promise<RecheckOutcome>;
   sweep(opts?: { limit?: number }): Promise<SweepCounts>;
 }
 
@@ -30,6 +38,7 @@ export function createEps(deps: EpsDeps): Eps {
     startTopUp: (s, input, ctx) => startTopUp(deps, s, input, ctx),
     verifyPayment: (merchantTransactionId, ctx) => verifyPayment(deps, merchantTransactionId, ctx),
     handleReturn: (input) => handleEpsReturn(deps, input),
+    recheckPayment: (s, paymentId, ctx) => recheckPayment(deps, s, paymentId, ctx),
     sweep: (opts) => sweepPayments(deps, opts),
   };
 }

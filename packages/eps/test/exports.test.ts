@@ -7,18 +7,22 @@ describe("the entry of @tc/eps", () => {
   it("exports exactly these runtime names, and no secret-bearing helper", () => {
     expect(Object.keys(api).sort()).toEqual(
       [
+        "EPS_REDIRECT_HOSTS",
         "EPS_RETURN_PATHS",
         "InMemoryEps",
         "PAYMENT_STATES",
+        "checkGatewayRedirect",
         "createEps",
         "createEpsGateway",
         "decide",
         "epsCredentials",
         "epsReturnUrls",
         "formatEpsAmount",
+        "gatewayFormOrigins",
         "handleEpsReturn",
         "parseEpsAmount",
         "publicState",
+        "recheckPayment",
         "startTopUp",
         "sweepPayments",
         "verifyPayment",
@@ -34,10 +38,11 @@ describe("the entry of @tc/eps", () => {
 describe("createEps binds the services to one set of deps", () => {
   const kit = useEpsKit();
 
-  it("has the four bound functions and nothing else", () => {
+  it("has the five bound functions and nothing else", () => {
     const eps = createEps(kit.deps());
     expect(Object.keys(eps).sort()).toEqual([
       "handleReturn",
+      "recheckPayment",
       "startTopUp",
       "sweep",
       "verifyPayment",

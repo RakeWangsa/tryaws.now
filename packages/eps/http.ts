@@ -9,6 +9,7 @@ import type {
 } from "./gateway";
 import { epsHash } from "./hash";
 import { EPS_BASE_URL, EPS_PATH } from "./protocol";
+import { checkGatewayRedirect } from "./redirect";
 import { readVerifyResponse } from "./status";
 
 export interface HttpDeps {
@@ -21,9 +22,6 @@ export interface HttpDeps {
 const DEFAULT_TIMEOUT_MS = 10_000;
 const TOKEN_MARGIN_MS = 60_000;
 const VERIFY_RETRIES = 2;
-
-/** VERIFY (open point 6): hosts where RedirectURL may land the customer. Anything else is never returned. */
-const REDIRECT_HOSTS: readonly string[] = ["pg.eps.com.bd", "pg.eps.test"];
 
 /**
  * Fixed non-personal customer fields (open point 14). VERIFY (open point 6.9): EPS marks them mandatory;
@@ -70,18 +68,6 @@ function parseExpire(v: unknown): number {
   if (!m) return NaN;
   const ms = (m[2] ?? "").slice(0, 3).padEnd(3, "0");
   return Date.parse(`${m[1]}.${ms}${m[3] ?? "Z"}`);
-}
-
-function allowedRedirect(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  try {
-    const u = new URL(v);
-    if (u.protocol !== "https:" || u.username !== "" || u.password !== "" || u.port !== "")
-      return null;
-    return REDIRECT_HOSTS.includes(u.hostname) ? u.toString() : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -232,7 +218,7 @@ export function createEpsGateway(credentials: EpsCredentials, deps: HttpDeps): E
         return { ok: false, reason: "unavailable" };
       if (hasErrorCode(pick(r.body, "ErrorCode", "errorCode")))
         return { ok: false, reason: "rejected" };
-      const redirectUrl = allowedRedirect(
+      const redirectUrl = checkGatewayRedirect(
         pick(r.body, "RedirectURL", "redirectURL", "redirectUrl"),
       );
       if (redirectUrl === null) return { ok: false, reason: "unavailable" };

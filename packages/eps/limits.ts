@@ -16,6 +16,16 @@ export const RETURN_LIMITS = Object.freeze({
   payment: Object.freeze({ action: "eps.verify", limit: 1, windowSeconds: 5 }),
 });
 
+// The status page asks the server to re-check an open payment (WP3-T4). The per-payment pause and the
+// per-address rule are those of RETURN_LIMITS, applied inside verifyPayment.
+export const RECHECK_LIMITS = Object.freeze({
+  customer: Object.freeze({
+    action: "eps.recheck",
+    limit: 30,
+    windowSeconds: 600,
+  }) as CustomerLimit,
+});
+
 // One group of an IPv6 address as a number, digit by digit (no parseInt: the boundary test bans it
 // for the whole package). Anything that is not a hex digit gives NaN, which the caller refuses.
 const HEX_DIGITS = "0123456789abcdef";
