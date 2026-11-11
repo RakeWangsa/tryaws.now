@@ -167,6 +167,33 @@ div.tc-modal-open {
 }
 
 /* ===== 5.5 DataTable ===== */
+.tc-datatable-paging {
+  gap: 1rem;
+}
+/* Below 768 px each row becomes a card; the label of each cell comes from data-label, so the
+   meaning never depends on color. */
+@media (max-width: 767.98px) {
+  .tc-datatable thead {
+    display: none;
+  }
+  .tc-datatable tr {
+    display: block;
+    margin-bottom: 1rem;
+    border: 1px solid var(--tc-muted);
+    border-radius: var(--tc-radius-card);
+    padding: 0.5rem 1rem;
+  }
+  .tc-datatable td {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border: 0;
+  }
+  .tc-datatable td::before {
+    content: attr(data-label);
+    font-weight: 600;
+  }
+}
 
 /* ===== 6. Kit, part two (WPU-T3) ===== */
 

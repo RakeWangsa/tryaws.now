@@ -1,0 +1,10 @@
+{
+  "kit": {
+    "dataTable": {
+      "paging": "Pages",
+      "previous": "Previous",
+      "next": "Next",
+      "empty": "Nothing to show"
+    }
+  }
+}
