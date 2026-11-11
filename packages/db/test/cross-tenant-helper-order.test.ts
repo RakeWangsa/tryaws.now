@@ -32,7 +32,7 @@ const sequenceOf = async (kind: TenantCase<S>["kind"]): Promise<string[]> => {
       if (prop === "query") {
         return (...args: unknown[]) => {
           const text = args[0];
-          if (typeof text === "string" && text.includes("to_jsonb") && text.includes(FIRST_TABLE)) {
+          if (typeof text === "string" && text.includes(FIRST_TABLE)) {
             sequence.push("snapshot");
           }
           return (value as (...a: unknown[]) => unknown).apply(target, args);

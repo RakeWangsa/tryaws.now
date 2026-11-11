@@ -237,6 +237,15 @@ const differs = (cross: Outcome, crossGhost: Outcome): string =>
  * Runs every case, one after another (never in parallel, so that a statement a case sends can be
  * tied to one customer), with two fresh customers per case, and returns what it found. No finding
  * means the case is tenant-scoped and also touched the data it claims to protect.
+ *
+ * It throws, before it writes anything, when there is no case, when a case has an unknown kind, and
+ * when the pool is not a throwaway test database; and it throws for a case whose ghost still holds
+ * an id of customer A or whose seed or answer it cannot compare (R16).
+ *
+ * The runs of one case, in this order (a snapshot is the rows of A in the tables of TENANT_TABLES):
+ *   read        snapshot, B on the rows of A, snapshot, B on the ghost, A on its rows, A on the ghost
+ *   write       snapshot, B, snapshot, B on the ghost, snapshot, A, snapshot
+ *   self-write  snapshot, B, snapshot, snapshot, A, snapshot (it never runs on the ghost)
  */
 export async function checkTenantIsolation<S>(
   options: TenantIsolationOptions<S>,

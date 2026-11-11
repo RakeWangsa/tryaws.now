@@ -83,6 +83,7 @@ it.each<[string, (missing: boolean) => unknown, "throw" | "return"]>([
   ],
   ["two thrown strings", (m) => (m ? "not_found" : "forbidden"), "throw"],
   ["a thrown string and a thrown number that read alike", (m) => (m ? "1" : 1), "throw"],
+  ["two thrown numbers", (m) => (m ? 404 : 403), "throw"],
   ["two thrown plain objects", (m) => ({ status: m ? 404 : 403 }), "throw"],
   [
     "two Error objects that are returned, not thrown",
@@ -96,6 +97,18 @@ it.each<[string, (missing: boolean) => unknown, "throw" | "return"]>([
   ],
 ])("tells %s apart", async (_, answer, how) => {
   expect(await check(answering(answer, how))).toEqual([
+    { case: "answering", check: "cross-read", detail: expect.stringContaining(another) },
+  ]);
+});
+
+// An error whose code is not an own property but comes from its prototype, as a class getter does.
+const withInheritedCode = (code: string): Error => {
+  const error = new Error("denied");
+  Object.setPrototypeOf(error, Object.create(Error.prototype, { code: { value: code } }));
+  return error;
+};
+it("tells errors apart that differ only in a code they inherit", async () => {
+  expect(await check(answering((m) => withInheritedCode(m ? "E1" : "E2"), "throw"))).toEqual([
     { case: "answering", check: "cross-read", detail: expect.stringContaining(another) },
   ]);
 });
@@ -119,6 +132,18 @@ it.each<[string, (missing: boolean) => unknown, "throw" | "return"]>([
   [
     "the same error with a code and a property",
     () => Object.assign(new Error("denied"), { code: "E1", digest: "d" }),
+    "throw",
+  ],
+  [
+    "errors that differ only in a stack, even where it is enumerable",
+    (m) => {
+      const error = new Error("denied");
+      Object.defineProperty(error, "stack", {
+        value: m ? "at here" : "at there",
+        enumerable: true,
+      });
+      return error;
+    },
     "throw",
   ],
   ["the same thrown string", () => "not_found", "throw"],
@@ -149,6 +174,7 @@ it.each<[string, unknown]>([
   ["a Set", new Set([1])],
   ["a Box", new Box(1)],
   ["a Uint8Array", new Uint8Array(2)],
+  ["a Response", new Response(null, { status: 404 })],
 ])("refuses an answer that holds %s: the helper cannot compare it", async (kind, value) => {
   const name = kind.split(" ")[1] as string;
   const holdsIt: TenantCase<S> = { name: "holdsIt", kind: "read", run: async () => value };
@@ -211,7 +237,7 @@ it("an error is not a proof that customer A finds its rows: a read whose own run
     {
       case: "throwsForOwner",
       check: "own-read",
-      detail: expect.stringContaining("the case proves nothing"),
+      detail: expect.stringMatching(/threw an error.*the case proves nothing/),
     },
   ]);
 });

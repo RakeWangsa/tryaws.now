@@ -126,6 +126,21 @@ it("every run gets its own copy of the target: a run that damages its target cha
   expect(new Set(seen).size).toBe(2);
 });
 
+it("a target that cannot be copied fails the check: it is not an answer of the case", async () => {
+  const withCallback = async (pool: typeof t.pool, c: string) => ({
+    ...(await seed(pool, c)),
+    onDone: () => undefined, // structuredClone cannot copy a function
+  });
+  const case_: TenantCase<Awaited<ReturnType<typeof withCallback>>> = {
+    name: "withCallback",
+    kind: "read",
+    run: async () => null,
+  };
+  await expect(
+    checkTenantIsolation({ pool: t.pool, seed: withCallback, cases: [case_] }),
+  ).rejects.toMatchObject({ name: "DataCloneError" });
+});
+
 it("every case gets two fresh customers, and both are seeded", async () => {
   const seeded: string[] = [];
   const seen: Record<string, Set<string>> = {};

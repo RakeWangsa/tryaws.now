@@ -219,6 +219,29 @@ it("a read of B that writes a row of A is found when every call changes it again
   );
 });
 
+it("a read of B that writes into two tables lists both, sorted, joined by a comma and a space", async () => {
+  const touchesTwo: TenantCase<S> = {
+    name: "touchesTwo",
+    kind: "read",
+    run: async (c, s) => {
+      await q("update ssh_keys set name = name || '+' where id = $1", [s.keyId]);
+      await q(
+        "insert into operations (id, resource_id, kind, idempotency_key) values ($1, $2, 'reboot', $3)",
+        [uuidv7(), s.resourceId, uniqueSuffix()],
+      );
+      return (
+        (await q("select id from ssh_keys where id = $1 and customer_id = $2", [s.keyId, c]))
+          .rows[0] ?? null
+      );
+    },
+  };
+  expect(await check(touchesTwo)).toContainEqual({
+    case: "touchesTwo",
+    check: "cross-read",
+    detail: "a read of customer B changed rows of customer A in: operations, ssh_keys",
+  });
+});
+
 it("a read that writes only the row of its own actor passes", async () => {
   const marksSeen: TenantCase<S> = {
     name: "marksSeen",

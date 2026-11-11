@@ -108,6 +108,17 @@ it("refuses a target whose id sits inside a longer string: its ghost would be th
   expect(runs).toBe(0); // no run happened, so no verdict could be false
 });
 
+it("refuses a target whose id sits inside a longer string in upper case", async () => {
+  type P = { path: string };
+  const pathCase: TenantCase<P> = { name: "shoutedPath", kind: "read", run: async () => null };
+  const pathSeed = async (pool: typeof t.pool, c: string): Promise<P> => ({
+    path: `/servers/${(await seed(pool, c)).keyId.toUpperCase()}`,
+  });
+  await expect(
+    checkTenantIsolation({ pool: t.pool, seed: pathSeed, cases: [pathCase] }),
+  ).rejects.toThrow(/the ghost of case shoutedPath still holds an id of customer A/);
+});
+
 it("the refusal does not print the id", async () => {
   type P = { path: string };
   let keyId = "";
@@ -256,6 +267,28 @@ it("a target with an id inside a string passes when the case builds its ghost it
 });
 
 // ---- the ids that belong to customer A (C7) ----------------------------------------------------
+
+it("knows an id that the seed holds in upper case: PostgreSQL answers it in lower case", async () => {
+  const shoutedSeed = async (pool: typeof t.pool, c: string): Promise<S> => {
+    const s = await seed(pool, c);
+    return { keyId: s.keyId.toUpperCase(), resourceId: s.resourceId };
+  };
+  const leakyGet: TenantCase<S> = {
+    name: "leakyGet",
+    kind: "read",
+    run: async (_c, s) =>
+      (await q("select id, name from ssh_keys where id = $1", [s.keyId])).rows[0] ?? null,
+  };
+  expect(
+    await checkTenantIsolation({ pool: t.pool, seed: shoutedSeed, cases: [leakyGet] }),
+  ).toEqual([
+    {
+      case: "leakyGet",
+      check: "cross-read",
+      detail: "the answer to customer B names a row of customer A",
+    },
+  ]);
+});
 
 it("knows every id of the seed: a write that answers with the SECOND id is found", async () => {
   const echoSecond: TenantCase<S> = {

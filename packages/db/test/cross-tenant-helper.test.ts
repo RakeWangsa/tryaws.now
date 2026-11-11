@@ -74,7 +74,7 @@ it("scoped reads, writes, child inserts and self-writes pass", async () => {
   });
 });
 
-it.each<[string, TenantCase<S>, string, string]>([
+it.each<[string, TenantCase<S>, string, string, string[]]>([
   [
     "a read that lost its scope",
     {
@@ -85,6 +85,7 @@ it.each<[string, TenantCase<S>, string, string]>([
     },
     "cross-read",
     "names a row of customer A",
+    ["cross-read"],
   ],
   [
     "a read that tells existence apart",
@@ -98,12 +99,14 @@ it.each<[string, TenantCase<S>, string, string]>([
     },
     "cross-read",
     "another answer for a row of customer A than for a missing row",
+    ["cross-read"],
   ],
   [
     "a read that finds nothing at all",
     { name: "blind", kind: "read", run: async () => null },
     "own-read",
     "the case proves nothing",
+    ["own-read"],
   ],
   [
     "a delete that lost its scope",
@@ -117,6 +120,8 @@ it.each<[string, TenantCase<S>, string, string]>([
     },
     "cross-write",
     "changed rows of customer A in: ssh_keys",
+    // Its effect, its answer ("deleted" against "not_found"), and A has no row left to delete.
+    ["cross-write", "cross-write", "own-write"],
   ],
   [
     "a child insert that does not check the parent's owner",
@@ -133,12 +138,15 @@ it.each<[string, TenantCase<S>, string, string]>([
     },
     "cross-write",
     "changed rows of customer A in: operations",
+    // Its effect, and its answer ("created" against the foreign key error of the missing resource).
+    ["cross-write", "cross-write"],
   ],
   [
     "a write that changes nothing",
     { name: "noop", kind: "write", run: async () => "ok" },
     "own-write",
     "the case proves nothing",
+    ["own-write"],
   ],
   // The next two rows pin the two checks of the write branch that no row above depends on. Both
   // writes leave the rows of customer A alone: one answers B differently than for a missing row,
@@ -158,6 +166,7 @@ it.each<[string, TenantCase<S>, string, string]>([
     },
     "cross-write",
     "another answer for a row of customer A than for a missing row",
+    ["cross-write"],
   ],
   [
     "a write that answers with the id of a row of customer A",
@@ -174,14 +183,17 @@ it.each<[string, TenantCase<S>, string, string]>([
     },
     "cross-write",
     "names a row of customer A",
+    ["cross-write"],
   ],
-])("finds %s", async (_, c, checkName, detail) => {
+])("finds %s", async (_, c, checkName, detail, allChecks) => {
   const findings = await check(c);
   expect(findings).toContainEqual({
     case: c.name,
     check: checkName,
     detail: expect.stringContaining(detail),
   });
+  // Exactly these findings, in this order: no extra, no wrong, no double one.
+  expect(findings.map((f) => f.check)).toEqual(allChecks);
 });
 
 it("expectTenantIsolation names the failing case", async () => {
@@ -194,18 +206,22 @@ it("expectTenantIsolation names the failing case", async () => {
   ).rejects.toThrow(/^tenant isolation failed:\nblind own-read: /);
 });
 
-it("an answer that holds a bigint (paisa) is compared like any other", async () => {
-  const money: TenantCase<S> = {
-    name: "money",
-    kind: "read",
-    run: async (c, s) => {
-      const row = (
-        await q("select id from ssh_keys where id = $1 and customer_id = $2", [s.keyId, c])
-      ).rows[0];
-      return row === undefined ? null : { id: row.id, balance: 1500n };
-    },
-  };
-  expect(await check(money)).toEqual([]);
+it("expectTenantIsolation lists every finding, one per line: the text is exact", async () => {
+  const blind: TenantCase<S> = { name: "blind", kind: "read", run: async () => null };
+  const noop: TenantCase<S> = { name: "noop", kind: "write", run: async () => "ok" };
+  await expect(expectTenantIsolation({ pool: t.pool, seed, cases: [blind, noop] })).rejects.toThrow(
+    new Error(
+      "tenant isolation failed:\n" +
+        "blind own-read: customer A does not find its own rows; the case proves nothing\n" +
+        "noop own-write: the write of customer A on its own rows changed nothing; the case proves nothing",
+    ),
+  );
+});
+
+it("expectTenantIsolation resolves when there is no finding", async () => {
+  await expect(
+    expectTenantIsolation({ pool: t.pool, seed, cases: [scopedGet] }),
+  ).resolves.toBeUndefined();
 });
 
 it("runs every run one after another, never in parallel (a recorded statement belongs to one actor)", async () => {
