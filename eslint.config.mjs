@@ -1,7 +1,7 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
-const awsSdkClients = [
+export const awsSdkClients = [
   "@aws-sdk/client-lightsail",
   "@aws-sdk/client-route-53",
   "@aws-sdk/client-route-53-domains",
@@ -29,7 +29,7 @@ const R1 = {
   group: ["@tc/aws", "@tc/aws/*", "@tc/fn-*", "@tc/fn-*/*", ...R1_PATH_FORMS],
 };
 const SDK = {
-  message: "Spec section 4: these AWS SDK clients are used only inside packages/aws.",
+  message: "Spec section 4: these AWS SDK packages are used only inside packages/aws.",
   group: withSubpaths(awsSdkClients),
 };
 const PURE_CORE = {
@@ -61,10 +61,26 @@ const R1_PATHS = { ...R1, group: ["@tc/fn-*", "@tc/fn-*/*", ...R1_PATH_FORMS] };
 
 // R1 for dynamic imports: no-restricted-imports does not check import() (ESLint 10.14.0).
 const R1_DYNAMIC_SOURCE =
-  "/^@tc\\/aws(\\/|$)|^@tc\\/fn-|(^|\\/)packages\\/aws(\\/|$)|(^|\\/)functions\\/|^\\.\\.\\/(.*\\/)?aws(\\/|$)/";
+  "/^@tc\\/aws(\\/|$)|^@tc\\/fn-|(^|\\/)packages\\/aws(\\/|$)|(^|\\/)functions\\/|^\\.\\.\\/(.*\\/)?aws(\\/|$)/i";
 const R1_DYNAMIC = {
   selector: `ImportExpression[source.value=${R1_DYNAMIC_SOURCE}]`,
   message: R1.message,
+};
+const R1_DYNAMIC_TEMPLATE = {
+  selector: `ImportExpression > TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked=${R1_DYNAMIC_SOURCE}]`,
+  message: R1.message,
+};
+// Built from the list above, so the two cannot drift.
+const SDK_DYNAMIC_SOURCE = `/^(${awsSdkClients.map((n) => n.replaceAll("/", "\\/")).join("|")})(\\/|$)/`;
+const SDK_DYNAMIC = {
+  selector: `ImportExpression[source.value=${SDK_DYNAMIC_SOURCE}]`,
+  message: SDK.message,
+};
+const NO_HIDDEN_LOADER = {
+  selector:
+    'CallExpression[callee.name="createRequire"], CallExpression[callee.property.name=/^(createRequire|getBuiltinModule)$/]',
+  message:
+    "R1: createRequire and getBuiltinModule load modules that the import rules cannot check.",
 };
 
 const restrict = (...patterns) => ({
@@ -117,15 +133,18 @@ export default tseslint.config(
     rules: restrict(PURE_CORE, R1_PATHS),
   },
   {
-    // Dynamic imports, block A: every file of apps/ and packages/ except tests. The source must
-    // be a string literal, so the boundary can be checked. Flat config keeps only the last
-    // matching block's no-restricted-syntax, so blocks A and B match disjoint files.
+    // Dynamic imports, block A: every file of apps/ and packages/ except tests (and except
+    // packages/aws). The source must be a string literal, so the boundary can be checked.
+    // Flat config keeps only the last matching block's no-restricted-syntax, so blocks A and B
+    // match disjoint files (B matches exactly what A ignores).
     files: ["apps/**", "packages/**"],
     ignores: ["packages/aws/**", "**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs"],
     rules: {
       "no-restricted-syntax": [
         "error",
         R1_DYNAMIC,
+        SDK_DYNAMIC,
+        NO_HIDDEN_LOADER,
         {
           selector: 'ImportExpression:not([source.type="Literal"])',
           message:
@@ -136,14 +155,28 @@ export default tseslint.config(
   },
   {
     // Dynamic imports, block B: test files (not bundled) get only the R1 path selector.
-    files: ["apps/**/*.test.*", "packages/**/*.test.*"],
+    files: ["apps/**/*.test.{ts,tsx,mjs}", "packages/**/*.test.{ts,tsx,mjs}"],
     ignores: ["packages/aws/**"],
-    rules: { "no-restricted-syntax": ["error", R1_DYNAMIC] },
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        R1_DYNAMIC,
+        R1_DYNAMIC_TEMPLATE,
+        SDK_DYNAMIC,
+        NO_HIDDEN_LOADER,
+      ],
+    },
+  },
+  {
+    // Code built from text cannot be checked by any import rule.
+    // no-implied-eval sees a bare setTimeout("...") only once the config declares the globals of the runtime; until then it catches the globalThis. and window. forms.
+    files: ["apps/**", "packages/**"],
+    rules: { "no-eval": "error", "no-implied-eval": "error", "no-new-func": "error" },
   },
   {
     // functions/** and everything else outside apps/ and packages/: the SDK rule and R4.
     files: ["**/*"],
     ignores: ["apps/**", "packages/**"],
-    rules: restrict(SDK, DECIMAL),
+    rules: { ...restrict(SDK, DECIMAL), "no-restricted-syntax": ["error", SDK_DYNAMIC] },
   },
 );
