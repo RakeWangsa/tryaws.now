@@ -106,7 +106,7 @@ describe("createDraft", () => {
   it("refuses a family it cannot sell as validation", async () => {
     const kit = await makeKit(t);
     expect(
-      await createDraft(kit.deps, kit.session, { family: "database", config: {} }),
+      await createDraft(kit.deps, kit.session, { family: "dns_zone", config: {} }),
     ).toMatchObject({ ok: false, error: "validation", fields: { family: "unsupported" } });
   });
 
