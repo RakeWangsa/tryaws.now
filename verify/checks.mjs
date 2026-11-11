@@ -316,6 +316,40 @@ TASKS["WP4-T2"] = [
 // and the purge of rate limits (packages/db) run with the scheduler and db checks of the same list.
 TASKS["WP5-T4"] = TASKS["WP4-T2"];
 
+// WP5-T3: the reader function. The sentence of the backlog row (customer A cannot read customer B's
+// metrics) has its own line, run on PostgreSQL with the real tenant check. The db suite holds the test of
+// loadReadTarget, the aws suite the Lightsail read source on the fake transport.
+const readerAll = {
+  id: "reader",
+  title: "functions/reader: handler, invocation, config, boundaries, tenant check",
+  command: ["pnpm", "test", "--filter", "@tc/fn-reader", "--no-passWithNoTests"],
+};
+const readerProof = {
+  id: "reader-cross-tenant",
+  title: "WP5-T3: customer A cannot read customer B's metrics",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/fn-reader",
+    "test/proof-cross-tenant",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP5-T3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  core,
+  aws,
+  readerAll,
+  readerProof,
+  repo,
+];
+
 // WPU-T4: the two Next.js apps. Their tests run by package; the smoke script builds both apps,
 // scans the output, starts `next start` and reads the headers and the HTML (no database needed).
 const web = {

@@ -104,6 +104,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP4-T3",
     "WP4-T4",
     "WP4-T5",
+    "WP5-T3",
     "WP5-T4",
 
     "WP5-T5",
@@ -337,6 +338,37 @@ it("task WP2-T1 is proven by the checks of WP1-T1, the db suite, the tests of @t
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
   for (const f of ["packages/auth/test/request.test.ts", "tests/repo/auth-boundaries.test.mjs"]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP5-T3 is proven by the db, core and aws suites, the reader suite and the cross-tenant proof on its own line", () => {
+  expect(TASKS["WP5-T3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["reader", "pnpm test --filter @tc/fn-reader --no-passWithNoTests"],
+    [
+      "reader-cross-tenant",
+      "pnpm test --filter @tc/fn-reader test/proof-cross-tenant --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  expect(TASKS["WP5-T3"].find((c) => c.id === "reader-cross-tenant").title).toBe(
+    "WP5-T3: customer A cannot read customer B's metrics",
+  );
+  // passWithNoTests is on: the filter must keep matching a real file
+  for (const f of [
+    "functions/reader/test/proof-cross-tenant.test.ts",
+    "functions/reader/handler.test.ts",
+    "packages/db/test/operation-reader.test.ts",
+    "packages/aws/test/reader-source.test.ts",
+  ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
 });
