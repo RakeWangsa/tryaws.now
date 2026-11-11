@@ -108,16 +108,56 @@ export function ghostOf<S>(target: S): S {
   return copy(target) as S;
 }
 
+const sortedByKey = (item: object): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(item).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
+
+// An Error as plain data, the same for an error that is thrown and for one that is returned: JSON
+// shows nothing of an Error, whose name, message and stack are not own enumerable properties. Every
+// own enumerable property is part of it (a digest, a status, a code): two errors that differ only
+// there are two answers. The stack differs from run to run and says nothing.
+function errorRecord(error: Error): Record<string, unknown> {
+  const record: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(error)) {
+    if (key !== "stack") record[key] = value;
+  }
+  record.name = error.name;
+  record.message = error.message;
+  record.code = (error as { code?: unknown }).code ?? null;
+  if (Object.hasOwn(error, "cause")) record.cause = error.cause;
+  return record;
+}
+
+// What a run threw, as plain data. A thrown object that is no Error keeps its content, so that two
+// thrown objects that differ are two answers.
+function thrownRecord(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) return errorRecord(error);
+  if (typeof error === "object" && error !== null) {
+    return { name: "object", code: null, message: "", value: error };
+  }
+  return { name: typeof error, code: null, message: String(error) };
+}
+
+const constructorOf = (item: object): string => {
+  const name = (Object.getPrototypeOf(item) as { constructor?: { name?: unknown } } | null)
+    ?.constructor?.name;
+  return typeof name === "string" && name !== "" ? name : "object";
+};
+
 // JSON with the keys of every object in code unit order and a bigint as "<n>n", so that two equal
 // answers give equal text. The value is wrapped by the callers, because JSON.stringify gives
-// undefined (not a string) for a bare undefined.
-function canonical(value: unknown): string {
+// undefined (not a string) for a bare undefined. A value that JSON cannot show (a Map, a Set, a
+// Response, an instance of a class) would give {} and make two different answers equal: it is
+// refused (R16). JSON.stringify calls toJSON before the replacer, so a Date has become a string by
+// then and what reaches the test below has no toJSON.
+function canonical(value: unknown, subject = "an answer"): string {
   return JSON.stringify(value, (_key, item: unknown) => {
     if (typeof item === "bigint") return `${item}n`;
+    if (item instanceof Error) return sortedByKey(errorRecord(item));
     if (typeof item === "object" && item !== null && !Array.isArray(item)) {
-      return Object.fromEntries(
-        Object.entries(item).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)),
-      );
+      if (!isPlainObject(item)) {
+        throw new TypeError(`${subject} holds a ${constructorOf(item)}; return plain data`);
+      }
+      return sortedByKey(item);
     }
     return item;
   });
@@ -125,34 +165,27 @@ function canonical(value: unknown): string {
 
 // What a run answered, as canonical text (`raw`), and the same text with every UUID replaced by
 // "<id>" (`norm`), so that two answers about different ids compare equal when they say the same.
+// `threw` tells whether the run ended in an error.
 interface Outcome {
   readonly raw: string;
   readonly norm: string;
+  readonly threw: boolean;
 }
 
 async function outcome(run: () => Promise<unknown>): Promise<Outcome> {
-  let settled: { returned: unknown } | { threw: { name: string; code: unknown; message: string } };
+  let settled: { returned: unknown } | { threw: Record<string, unknown> };
   try {
     settled = { returned: await run() };
   } catch (error) {
-    settled =
-      error instanceof Error
-        ? {
-            threw: {
-              name: error.name,
-              code: (error as { code?: unknown }).code ?? null,
-              message: error.message,
-            },
-          }
-        : { threw: { name: typeof error, code: null, message: String(error) } };
+    settled = { threw: thrownRecord(error) };
   }
   const raw = canonical(settled);
-  return { raw, norm: raw.replace(ANY_UUID, "<id>") };
+  return { raw, norm: raw.replace(ANY_UUID, "<id>"), threw: "threw" in settled };
 }
 
 // The ids that belong to customer A: the customer itself and every UUID inside its seed.
 function idsOwnedBy(customerId: string, seeded: unknown): string[] {
-  const inSeed = canonical({ seeded }).match(ANY_UUID) ?? [];
+  const inSeed = canonical({ seeded }, "the seed").match(ANY_UUID) ?? [];
   return [...new Set([customerId, ...inSeed].map((id) => id.toLowerCase()))];
 }
 
@@ -183,6 +216,9 @@ async function assertThrowawayDatabase(pool: pg.Pool): Promise<void> {
   }
 }
 
+const BLIND_A = "customer A does not find its own rows; the case proves nothing";
+const THREW_A =
+  "the read of customer A on its own rows threw an error, which is no proof that it finds them; the case proves nothing";
 const NAMES_A = "the answer to customer B names a row of customer A";
 const differs = (cross: Outcome, crossGhost: Outcome): string =>
   `customer B gets another answer for a row of customer A than for a missing row: ${cross.norm} | ${crossGhost.norm}`;
@@ -228,7 +264,7 @@ export async function checkTenantIsolation<S>(
     const ghost = c.ghost === undefined ? ghostOf(seededA) : c.ghost(seededA);
     // A ghost that still holds an id of customer A is not a request about a missing row: its runs
     // would be the real request, and an existence leak would compare equal to itself.
-    const ghostText = canonical({ ghost }).toLowerCase();
+    const ghostText = canonical({ ghost }, "the ghost").toLowerCase();
     if (idsA.some((id) => ghostText.includes(id))) {
       throw new Error(
         `tenant isolation: the ghost of case ${c.name} still holds an id of customer A; ghostOf ` +
@@ -246,9 +282,13 @@ export async function checkTenantIsolation<S>(
       const crossGhost = await run(b, ghost);
       const own = await run(a, seededA);
       const ownGhost = await run(a, ghost);
-      if (!(names(own, idsA) || own.norm !== ownGhost.norm)) {
-        found("own-read", "customer A does not find its own rows; the case proves nothing");
-      }
+      // A finds its rows when its answer names an id of its seed or differs from the answer about
+      // a missing row. An error proves nothing. The customer id of A is no proof when the seed holds
+      // other ids: an answer that only echoes the actor would satisfy it.
+      const seedIds = idsA.filter((id) => id !== a.toLowerCase());
+      const ownIds = seedIds.length > 0 ? seedIds : idsA;
+      if (own.threw) found("own-read", THREW_A);
+      else if (!(names(own, ownIds) || own.norm !== ownGhost.norm)) found("own-read", BLIND_A);
       if (readChanged.length > 0) {
         found(
           "cross-read",
