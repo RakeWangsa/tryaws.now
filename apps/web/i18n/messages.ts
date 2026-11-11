@@ -21,6 +21,10 @@ import { extrasBn } from "../messages/extras-bn.ts";
 import { extrasEn } from "../messages/extras-en.ts";
 import { cdnBn } from "../messages/cdn-bn.ts";
 import { cdnEn } from "../messages/cdn-en.ts";
+import { databasesBn } from "../messages/databases-bn.ts";
+import { databasesEn } from "../messages/databases-en.ts";
+import { loadBalancersBn } from "../messages/load-balancers-bn.ts";
+import { loadBalancersEn } from "../messages/load-balancers-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
@@ -42,6 +46,8 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     windowsAccessBn,
     extrasOwn.bn,
     cdnBn,
+    databasesBn,
+    loadBalancersBn,
     authOwn.bn,
     kycOwn.bn,
     settingsOwn.bn,
@@ -56,6 +62,8 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     windowsAccessEn,
     extrasOwn.en,
     cdnEn,
+    databasesEn,
+    loadBalancersEn,
     authOwn.en,
     kycOwn.en,
     settingsOwn.en,
