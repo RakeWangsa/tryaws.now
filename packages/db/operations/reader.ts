@@ -32,7 +32,7 @@ export async function loadReadTarget(
   const hasAdmin = c !== null && typeof c === "object" && c.adminId !== undefined;
   if (hasCustomer === hasAdmin) return null;
 
-  let resource: ResourceRow | null = null;
+  let resource: ResourceRow | null;
   if (hasCustomer) {
     if (typeof c!.customerId !== "string") return null;
     resource = await loadOwnedResource(tx, c!.customerId, resourceId);
