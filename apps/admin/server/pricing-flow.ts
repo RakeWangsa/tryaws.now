@@ -235,7 +235,7 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
         return fail("invalid", bad);
       }
       const actor = auth.actor;
-      return execute(actor, async (tx, at) => {
+      return execute<{ ruleId: string; effectiveFrom: Date }>(actor, async (tx, at) => {
         const once = { now: () => at };
         // The preview of this very draft runs in the same transaction; a draft the preview refuses is
         // not saved (R16). The screen shows the same preview before it offers the save.
@@ -285,7 +285,7 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       const actor = auth.actor;
       const next = rate.trim();
       const effectiveFrom = start === undefined || start === null ? null : start;
-      return execute(actor, async (tx, at) => {
+      return execute<FxResult>(actor, async (tx, at) => {
         const current = await deps.core.fxInForce(tx, market, at);
         if (current !== null && deps.core.needsSecondAdmin(current.rate, next)) {
           // Above the percent: nothing changes now. The change waits for a different admin (R10).
@@ -341,7 +341,7 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       if (bad.length > 0 || typeof market !== "string") return fail("invalid", bad);
       // The approver is the actor of the verified session; the request cannot name anyone.
       const actor = auth.actor;
-      return execute(actor, async (tx, at) => {
+      return execute<FxResult>(actor, async (tx, at) => {
         const decided = await deps.repos(tx, actor).fxChanges.approve({ market, at }, why.text);
         if (!decided.ok) return repoRefusal(decided.error);
         const change = decided.value;
@@ -409,7 +409,7 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
         return fail("invalid", bad);
       }
       const actor = auth.actor;
-      return execute(actor, async (tx) => {
+      return execute<{ key: string; enabled: boolean }>(actor, async (tx) => {
         const saved = await deps.core.setFeatureFlag(tx, actor, {
           key,
           market,
