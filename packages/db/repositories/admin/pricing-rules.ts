@@ -5,7 +5,7 @@ import { isFlagKeyText, isMarketCode } from "../config/args";
 import { lockPricingRuleWrites } from "../config/locks";
 import type { PricingRuleRow } from "../config/pricing-rules";
 import { refused, type Written } from "../result";
-import { audited } from "./audited";
+import { audited, isActiveAdmin } from "./audited";
 import type { AdminScope } from "./index";
 
 // The step codes that have a ledger account. @tc/db cannot import the engine, so this is a copy; a
@@ -74,6 +74,7 @@ export function pricingRulesAdminRepo(scope: AdminScope): PricingRulesAdminRepo 
     async save(input, reason) {
       // Read once into locals, so a getter cannot answer differently on the second read.
       const { market, productFamily, steps, effectiveFrom, at } = input;
+      if (!(await isActiveAdmin(scope))) return refused("forbidden");
       const plain = plainSteps(steps);
       if (
         !isMarketCode(market) ||

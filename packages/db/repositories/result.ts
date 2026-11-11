@@ -5,7 +5,8 @@
 //   not_found   a missing row, a row of another customer and an id that is not a UUID alike (R8)
 //   conflict    the idempotency key or the natural key is taken by a different request (R7)
 //   validation  an input the repository checks itself, before any query
-export type RepoErrorCode = "not_found" | "conflict" | "validation";
+//   forbidden   an admin write by an actor that is not an active admin of that role (H1, R10, R16)
+export type RepoErrorCode = "not_found" | "conflict" | "validation" | "forbidden";
 
 export type Written<T> =
   { ok: true; value: T; replayed: boolean } | { ok: false; error: RepoErrorCode };

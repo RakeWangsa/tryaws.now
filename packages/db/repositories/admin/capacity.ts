@@ -12,7 +12,7 @@ import { RISK_TIERS } from "../../schema/identity";
 import { QUOTA_CODES } from "../../schema/provisioning";
 import { refused, type Written } from "../result";
 import { isUuid } from "../scope";
-import { audited } from "./audited";
+import { audited, isActiveAdmin } from "./audited";
 import type { AdminScope } from "./index";
 
 export interface PoolAccountInput {
@@ -141,6 +141,7 @@ export function capacityAdminRepo(scope: AdminScope): CapacityAdminRepo {
   return {
     async addPoolAccount(input, why) {
       const { awsAccountId, name, tier, roleArn, externalId } = input;
+      if (!(await isActiveAdmin(scope))) return refused("forbidden");
       const status = input.status ?? "active";
       const limits = input.limits ?? [];
       const arn = typeof roleArn === "string" ? ROLE_PATTERN.exec(roleArn) : null;
@@ -233,6 +234,7 @@ export function capacityAdminRepo(scope: AdminScope): CapacityAdminRepo {
 
     async setLimit(input, why) {
       const { poolAccountId, region, quotaCode, limit } = input;
+      if (!(await isActiveAdmin(scope))) return refused("forbidden");
       if (
         typeof poolAccountId !== "string" ||
         !isUuid(poolAccountId) ||
@@ -292,6 +294,7 @@ export function capacityAdminRepo(scope: AdminScope): CapacityAdminRepo {
 
     async setReserve(input, why) {
       const { market, quotaCode, reserve } = input;
+      if (!(await isActiveAdmin(scope))) return refused("forbidden");
       if (
         typeof market !== "string" ||
         !MARKET_PATTERN.test(market) ||

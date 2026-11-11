@@ -3,7 +3,7 @@ import { REGION_PATTERN } from "../../capacity-keys";
 import { WAITLIST_REASONS } from "../../schema/service";
 import { refused, type Written } from "../result";
 import { isUuid } from "../scope";
-import { audited } from "./audited";
+import { audited, isActiveAdmin } from "./audited";
 import type { AdminScope } from "./index";
 
 export type WaitlistReason = (typeof WAITLIST_REASONS)[number];
@@ -123,6 +123,7 @@ export function waitlistAdminRepo(scope: AdminScope): WaitlistAdminRepo {
 
     async notifyNext(input, why) {
       const { productFamily, region, reason, count } = input;
+      if (!(await isActiveAdmin(scope))) return refused("forbidden");
       if (
         typeof productFamily !== "string" ||
         !FAMILY_PATTERN.test(productFamily) ||
