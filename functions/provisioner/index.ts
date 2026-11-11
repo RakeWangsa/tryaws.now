@@ -1,4 +1,15 @@
-import { LEASE_SECONDS, parseMessageBody, type QueueMessage } from "@tc/core";
+import { QUEUE_URL_PATTERN, createAwsAccess, createSqsClient, createSqsSend } from "@tc/aws";
+import {
+  LEASE_SECONDS,
+  TC_ENVS,
+  createFifoQueue,
+  parseMessageBody,
+  type LogEvent,
+  type QueueMessage,
+  type TcEnv,
+} from "@tc/core";
+import { withTx } from "@tc/db";
+import { createAdapterRegistry } from "./adapters";
 import { runStep } from "./step";
 import type { RunOutcome, StepDeps } from "./types";
 
@@ -61,3 +72,52 @@ export function createHandler(
     return { batchItemFailures: [] };
   };
 }
+
+export interface ProvisionerConfig {
+  readonly queueUrl: string;
+  readonly region: string;
+  readonly env: TcEnv;
+}
+
+// Fail closed (R16): the message names the variable and never its value (R3, R14).
+export function readConfig(env: Record<string, string | undefined>): ProvisionerConfig {
+  const bad = (name: string): Error => new Error(`provisioner: ${name} is missing or invalid`);
+  const queueUrl = env.PROVISIONING_QUEUE_URL;
+  if (typeof queueUrl !== "string" || !QUEUE_URL_PATTERN.test(queueUrl)) {
+    throw bad("PROVISIONING_QUEUE_URL");
+  }
+  const region = env.AWS_REGION;
+  if (typeof region !== "string" || region === "") throw bad("AWS_REGION");
+  const tcEnv = env.TC_ENV;
+  if (typeof tcEnv !== "string" || !(TC_ENVS as readonly string[]).includes(tcEnv)) {
+    throw bad("TC_ENV");
+  }
+  return { queueUrl, region, env: tcEnv as TcEnv };
+}
+
+function buildDeps(): StepDeps {
+  const config = readConfig(process.env);
+  return {
+    runTx: withTx,
+    clock: { now: () => new Date() },
+    queue: createFifoQueue(createSqsSend(createSqsClient(config.region), config.queueUrl)),
+    // The registry is empty until WP4-T5, and the guard and the hooks come with WP5-T4, WP5-T5 and
+    // WP4-T4: until then every operation ends in needs_attention (R16).
+    adapters: createAdapterRegistry([]),
+    access: createAwsAccess({ caller: "provisioner" }),
+    env: config.env,
+    log: (e: LogEvent) => console.log(JSON.stringify(e)),
+  };
+}
+
+// Built on the first call, not at import; a failed build keeps nothing, so the next call reads the
+// environment again.
+let inner: ReturnType<typeof createHandler> | undefined;
+
+export const handler = async (
+  event: SqsEvent,
+  context: LambdaContext,
+): Promise<SqsBatchResponse> => {
+  inner ??= createHandler(buildDeps());
+  return inner(event, context);
+};

@@ -1,6 +1,6 @@
 import { toFifoInput, type LogEvent, type QueueMessage } from "@tc/core";
 import { describe, expect, it } from "vitest";
-import { createHandler, type SqsRecord } from "./index";
+import { createHandler, handler as realHandler, readConfig, type SqsRecord } from "./index";
 import type { StepDeps } from "./types";
 
 const A = "01a1c97d-e814-7352-b32c-d3d3ee408ab8";
@@ -96,5 +96,56 @@ describe("the batch handler", () => {
   it("an empty batch is a success and never throws", async () => {
     const { handler } = build(async () => ({ outcome: "advanced" }));
     expect(await handler({ Records: [] })).toEqual({ batchItemFailures: [] });
+  });
+});
+
+const QUEUE_URL = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/provisioning.fifo";
+describe("readConfig", () => {
+  it("reads the three variables", () => {
+    expect(
+      readConfig({
+        PROVISIONING_QUEUE_URL: QUEUE_URL,
+        AWS_REGION: "ap-southeast-1",
+        TC_ENV: "staging",
+      }),
+    ).toEqual({ queueUrl: QUEUE_URL, region: "ap-southeast-1", env: "staging" });
+  });
+  it("fails closed, naming the variable and nothing else", () => {
+    const ok = {
+      PROVISIONING_QUEUE_URL: QUEUE_URL,
+      AWS_REGION: "ap-southeast-1",
+      TC_ENV: "staging",
+    };
+    for (const name of ["PROVISIONING_QUEUE_URL", "AWS_REGION", "TC_ENV"]) {
+      expect(() => readConfig({ ...ok, [name]: undefined })).toThrow(
+        `provisioner: ${name} is missing or invalid`,
+      );
+    }
+    expect(() => readConfig({ ...ok, TC_ENV: "prod" })).toThrow(
+      "provisioner: TC_ENV is missing or invalid",
+    );
+    expect(() => readConfig({ ...ok, PROVISIONING_QUEUE_URL: "http://x" })).toThrow(
+      "provisioner: PROVISIONING_QUEUE_URL is missing or invalid",
+    );
+  });
+});
+
+describe("handler", () => {
+  it("is a function after import, and a call with a missing queue URL rejects with the config error and builds nothing", async () => {
+    expect(typeof realHandler).toBe("function");
+    const saved = { url: process.env.PROVISIONING_QUEUE_URL, env: process.env.TC_ENV };
+    delete process.env.PROVISIONING_QUEUE_URL;
+    try {
+      const context = { getRemainingTimeInMillis: () => 60_000 };
+      await expect(realHandler({ Records: [] }, context)).rejects.toThrow(
+        "provisioner: PROVISIONING_QUEUE_URL is missing or invalid",
+      );
+      await expect(realHandler({ Records: [] }, context)).rejects.toThrow(
+        "provisioner: PROVISIONING_QUEUE_URL is missing or invalid",
+      );
+    } finally {
+      if (saved.url !== undefined) process.env.PROVISIONING_QUEUE_URL = saved.url;
+      if (saved.env !== undefined) process.env.TC_ENV = saved.env;
+    }
   });
 });
