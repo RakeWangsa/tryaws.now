@@ -4,3 +4,4 @@ export * from "./naming/index";
 export * from "./ledger/index";
 export * from "./operations/index";
 export * from "./capacity/index";
+export * from "./rates/index";
