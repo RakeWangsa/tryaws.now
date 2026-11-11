@@ -97,6 +97,77 @@ export const TASKS = {
   "WPU-T1": WPU_T1,
 };
 
+// WP3-T1: the ledger. The ledger tests are run by file name, so that the report shows the proof of the backlog row on its own lines.
+// `--no-passWithNoTests` (as in the checks aws, core and repo above) makes a filter that selects no file fail.
+const ledgerRules = {
+  id: "ledger-rules",
+  title: "WP3-T1: the rules of a posting: shape, kinds, keys",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "ledger/rules",
+    "ledger/kinds",
+    "ledger/keys",
+    "--no-passWithNoTests",
+  ],
+};
+const ledgerEngine = {
+  id: "ledger-engine",
+  title: "WP3-T1: accounts, postTransaction, reverseTransaction and the nightly check",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "ledger/accounts",
+    "ledger/balance",
+    "ledger/post.test",
+    "ledger/reverse",
+    "ledger/check",
+    "ledger/nightly",
+    "--no-passWithNoTests",
+  ],
+};
+const ledgerProof = {
+  id: "ledger-proof",
+  title: "WP3-T1: the balance equals the sum of the entries and a wallet never goes negative",
+  command: ["pnpm", "test", "--filter", "@tc/core", "ledger/proof", "--no-passWithNoTests"],
+};
+const ledgerConcurrency = {
+  id: "ledger-concurrency",
+  title: "WP3-T1: two requests at once and a request interrupted half-way",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "ledger/post-concurrency",
+    "--no-passWithNoTests",
+  ],
+};
+const reconciler = {
+  id: "reconciler",
+  title: "functions/reconciler: the nightly ledger check",
+  command: ["pnpm", "test", "--filter", "@tc/fn-reconciler", "--no-passWithNoTests"],
+};
+const WP3_T1 = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  ledgerRules,
+  ledgerEngine,
+  ledgerProof,
+  ledgerConcurrency,
+  reconciler,
+  repo,
+];
+TASKS["WP3-T1"] = WP3_T1;
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],
