@@ -13,6 +13,8 @@ export { withTx, closeDatabase } from "./tx";
 export type { DatabaseRole } from "./tx";
 export { customerRepos } from "./repositories/customer/index";
 export type { CustomerRepos, MethodsTakingCustomerId } from "./repositories/customer/index";
+export { lookupCustomerBySub } from "./repositories/identity";
+export type { CustomerIdentity } from "./repositories/identity";
 export type { CustomerProfile, ProfileUpdate } from "./repositories/customer/profile";
 export type { AuditRepo, CustomerAuditInput } from "./repositories/customer/audit";
 export type { NewSshKey, SshKey, SshKeysRepo } from "./repositories/customer/ssh-keys";
