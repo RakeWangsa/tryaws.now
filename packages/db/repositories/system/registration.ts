@@ -42,7 +42,9 @@ const MAX_SUB_LENGTH = 128;
 const inRange = (s: unknown, min: number, max: number): s is string =>
   typeof s === "string" && s.length >= min && s.length <= max;
 
-function isValid(input: NewCustomer): boolean {
+// The same check registerCustomer makes first, exported so that packages/auth can refuse a bad input
+// before it creates a user at the identity provider (an orphan otherwise). No query.
+export function isNewCustomerValid(input: NewCustomer): boolean {
   if (typeof input !== "object" || input === null) return false;
   if (!inRange(input.cognitoSub, 1, MAX_SUB_LENGTH)) return false;
   // An address in its normal form: one "@", no space, no control character, at most 254 characters.
@@ -85,7 +87,7 @@ function isValid(input: NewCustomer): boolean {
 // a new customer only. The audit metadata holds the market and the type, never an email, a phone
 // number or a name.
 export async function registerCustomer(tx: Tx, input: NewCustomer): Promise<Registered> {
-  if (!isValid(input)) return { ok: false, error: "validation" };
+  if (!isNewCustomerValid(input)) return { ok: false, error: "validation" };
   const market = await readMarket(tx, input.market);
   if (market === null || !market.active) return { ok: false, error: "market_unavailable" };
 

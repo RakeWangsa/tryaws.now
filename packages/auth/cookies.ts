@@ -69,6 +69,40 @@ export function parseCookieHeader(header: string | null | undefined): ReadonlyMa
   return out;
 }
 
+// True when a value may be a cookie value of the session: the same check as serializeSetCookie.
+export function isCookieValue(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_VALUE_LENGTH &&
+    VALUE.test(value)
+  );
+}
+
+// A cookie as a Server Action sets it with (await cookies()).set(spec) (WP2-T2, open point 9). The
+// attributes are the fixed ones of serializeSetCookie, written as fields; nothing is optional, so a
+// caller cannot weaken them. The app never names the cookie names or the attributes itself.
+export interface CookieSpec {
+  readonly name: typeof ACCESS_COOKIE | typeof REFRESH_COOKIE;
+  readonly value: string;
+  readonly maxAge: number; // seconds, integer >= 0
+  readonly path: "/";
+  readonly httpOnly: true;
+  readonly secure: true;
+  readonly sameSite: "lax";
+}
+
+// The spec is made only after serializeSetCookie has accepted the same name, value and Max-Age, so
+// the checks (value shape, length, Max-Age, total size) are one piece of code and cannot drift.
+function cookieSpec(
+  name: typeof ACCESS_COOKIE | typeof REFRESH_COOKIE,
+  value: string,
+  maxAge: number,
+): CookieSpec {
+  serializeSetCookie(name, value, { maxAgeSeconds: maxAge });
+  return { name, value, maxAge, path: "/", httpOnly: true, secure: true, sameSite: "lax" };
+}
+
 function remainingSeconds(expiresAt: Date, clock: Clock): number {
   const ms = expiresAt.getTime() - clock.now().getTime();
   // floor: the cookie must not outlive the token. NaN (an invalid Date) gives 0.
@@ -91,6 +125,28 @@ export function sessionSetCookies(
     );
   }
   return cookies;
+}
+
+// Same cookies, same names, same order and same Max-Age as sessionSetCookies, as specs.
+export function sessionCookieSpecs(
+  t: SessionTokens,
+  clock: Clock,
+  refreshMaxAgeSeconds = 2_592_000,
+): CookieSpec[] {
+  const specs = [
+    cookieSpec(ACCESS_COOKIE, t.accessToken, remainingSeconds(t.accessExpiresAt, clock)),
+  ];
+  if (t.refreshToken !== undefined) {
+    specs.push(cookieSpec(REFRESH_COOKIE, t.refreshToken, refreshMaxAgeSeconds));
+  }
+  return specs;
+}
+
+export function clearCookieSpecs(): CookieSpec[] {
+  return [
+    cookieSpec(ACCESS_COOKIE, CLEARED_VALUE, 0),
+    cookieSpec(REFRESH_COOKIE, CLEARED_VALUE, 0),
+  ];
 }
 
 export function clearSessionSetCookies(): string[] {

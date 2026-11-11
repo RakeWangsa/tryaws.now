@@ -97,6 +97,51 @@ it("lookupCustomerBySub is named only in packages/auth, packages/db/repositories
   );
 });
 
+// The one function that creates a customers row (WP2-T2). Like the lookup, it is for packages/auth.
+const namesRegister = (text) => /\bregisterCustomer\b/.test(stripComments(text));
+
+it("registerCustomer is named only in packages/auth, packages/db/repositories/system/registration.ts, packages/db/index.ts and test files", () => {
+  const all = sources();
+  const allowed = (f) =>
+    f.startsWith("packages/auth/") ||
+    f === "packages/db/repositories/system/registration.ts" ||
+    f === "packages/db/index.ts" ||
+    TEST_FILE.test(f);
+  const offenders = all.filter((f) => !allowed(f) && namesRegister(read(f)));
+  expect(offenders).toEqual([]);
+  // The scan looks at the right place, and sees the name in each form of use.
+  expect(all.filter((f) => f.startsWith("packages/auth/") && namesRegister(read(f)))).toContain(
+    "packages/auth/register.ts",
+  );
+  for (const text of [
+    'import { registerCustomer } from "@tc/db";',
+    "withTx((tx) => registerCustomer(tx, input))",
+    "export { registerCustomer } from './registration'",
+  ]) {
+    expect(namesRegister(text), text).toBe(true);
+  }
+  for (const text of [
+    "// registerCustomer is called by packages/auth",
+    "/* registerCustomer */ const a = 1;",
+    "const registerCustomerForm = 1;",
+    "registerAccount(deps, input)",
+  ]) {
+    expect(namesRegister(text), text).toBe(false);
+  }
+});
+
+it("the identity port and its Cognito adapter read no environment and use no AWS package", () => {
+  for (const f of ["packages/auth/identity.ts", "packages/auth/cognito-identity.ts"]) {
+    const text = stripComments(read(f));
+    expect(text, f).not.toMatch(/\bprocess\s*\.\s*env\b/);
+    expect(text, f).not.toMatch(/\bprocess\s*\[\s*["']env["']\s*\]/);
+    expect(
+      specifiersOf(read(f)).filter((s) => FORBIDDEN_SPECIFIER.test(s)),
+      f,
+    ).toEqual([]);
+  }
+});
+
 it("@tc/auth/testing is imported only by test files and by packages/auth/testing itself", () => {
   const offenders = sources().filter(
     (f) =>

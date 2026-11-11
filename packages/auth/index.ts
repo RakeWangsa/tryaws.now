@@ -28,6 +28,12 @@ export { createAccessTokenVerifier } from "./tokens";
 export type { AccessTokenVerifier, TokenOutcome, VerifiedToken } from "./tokens";
 export { cognitoRefreshPort, needsRefresh, refreshSession } from "./refresh";
 export type { RefreshPort, RefreshResult, RefreshOutcome } from "./refresh";
+export { sessionCookieSpecs, clearCookieSpecs } from "./cookies";
+export type { CookieSpec } from "./cookies";
+export { completeSignIn } from "./sign-in";
+export type { SignInDeps, SignedIn } from "./sign-in";
+export { registerAccount } from "./register";
+export type { AccountRegistered, RegisterDeps } from "./register";
 export { cognitoIdentityProvider } from "./cognito-identity";
 export type {
   IdentityProvider,

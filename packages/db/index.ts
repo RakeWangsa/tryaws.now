@@ -176,4 +176,5 @@ export type {
   SubscriptionStatus,
 } from "./repositories/system/lifecycle";
 export { registerCustomer } from "./repositories/system/registration";
+export { registerCustomer, isNewCustomerValid } from "./repositories/system/registration";
 export type { LegalDocument, NewCustomer, Registered } from "./repositories/system/registration";
