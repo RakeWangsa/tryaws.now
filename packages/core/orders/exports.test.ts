@@ -174,6 +174,25 @@ const PRODUCTS = [
   "priceRows",
 ];
 
+// WP5-T4 adds the lifecycle engine to @tc/core.
+const LIFECYCLE = [
+  "DEFAULT_LIFECYCLE_CONFIG",
+  "KEPT_CONFIG_FAMILIES",
+  "LIFECYCLE_LIMIT",
+  "LIFECYCLE_SETTING_KEYS",
+  "SNAPSHOT_FAMILIES",
+  "completeRestore",
+  "decideDestructive",
+  "decideSubscription",
+  "destructiveGuard",
+  "lifecycleHooks",
+  "parseLifecycleConfig",
+  "readLifecycleConfig",
+  "renewSubscription",
+  "renewalQuote",
+  "runLifecycle",
+];
+
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
     expect(Object.keys(orders).sort()).toEqual(ORDERS_VALUES);
@@ -195,7 +214,7 @@ describe("the public surface of the order flow", () => {
     for (const name of BEFORE) expect(top.has(name), name).toBe(true);
     for (const name of [...ORDERS_VALUES, ...PRODUCTS]) expect(top.has(name), name).toBe(true);
     expect(Object.keys(core).sort()).toEqual(
-      [...new Set([...BEFORE, ...ORDERS_VALUES, ...PRODUCTS])].sort(),
+      [...new Set([...BEFORE, ...ORDERS_VALUES, ...PRODUCTS, ...LIFECYCLE])].sort(),
     );
   });
 

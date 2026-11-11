@@ -103,6 +103,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP4-T3",
     "WP4-T4",
     "WP4-T5",
+    "WP5-T4",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -335,6 +336,28 @@ it("task WP2-T1 is proven by the checks of WP1-T1, the db suite, the tests of @t
   for (const f of ["packages/auth/test/request.test.ts", "tests/repo/auth-boundaries.test.mjs"]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
+});
+
+it("task WP5-T4 is proven by the same checks as WP4-T2: the lifecycle scenario runs in core, the handler in scheduler, the purge in db", () => {
+  expect(TASKS["WP5-T4"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "db",
+    "core",
+    "aws",
+    "provisioner",
+    "scheduler",
+    "repo",
+  ]);
+  expect(TASKS["WP5-T4"].find((c) => c.id === "core").command.join(" ")).toBe(
+    "pnpm test --filter @tc/core --no-passWithNoTests",
+  );
+  expect(TASKS["WP5-T4"].find((c) => c.id === "scheduler").command.join(" ")).toBe(
+    "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests",
+  );
 });
 
 it("task WP4-T2 is proven by the checks of WP1-T1, the tests of core, aws and the two functions, and the repository tests", () => {

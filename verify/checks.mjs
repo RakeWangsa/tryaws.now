@@ -311,6 +311,11 @@ TASKS["WP4-T2"] = [
   repo,
 ];
 
+// WP5-T4: the lifecycle engine. Its proof (the one-instance scenario on the test clock, the guard, the
+// renewal rules) lives in packages/core/lifecycle and runs with the core check; the scheduler handler test
+// and the purge of rate limits (packages/db) run with the scheduler and db checks of the same list.
+TASKS["WP5-T4"] = TASKS["WP4-T2"];
+
 // WPU-T4: the two Next.js apps. Their tests run by package; the smoke script builds both apps,
 // scans the output, starts `next start` and reads the headers and the HTML (no database needed).
 const web = {
