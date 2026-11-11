@@ -21,6 +21,7 @@
     "theme:scan": "node scripts/scan-theme-output.ts",
     "db:up": "docker compose up -d --wait postgres",
     "db:migrate": "pnpm --filter @tc/db migrate",
+    "seed:kyc-verified": "node scripts/seed-kyc-verified.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

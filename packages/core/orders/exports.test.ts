@@ -151,6 +151,26 @@ const BEFORE = [
 ];
 
 // The products seam that Task 9 adds to @tc/core.
+// WP2-T4: the identity check rules of packages/core/kyc.
+const KYC = [
+  "KYC_CONTENT_TYPES",
+  "KYC_CUSTOMER_TYPES",
+  "KYC_DOCUMENT_TYPES",
+  "KYC_MAX_FILES",
+  "KYC_MAX_FILE_BYTES",
+  "KYC_MIN_FILES",
+  "KYC_UPLOAD_TTL_SECONDS",
+  "canSubmitKyc",
+  "documentTypesFor",
+  "kycObjectKey",
+  "nextKycStatus",
+  "normalizeDocumentNumber",
+  "parseFileMeta",
+  "parseKycStart",
+  "parseKycSubmit",
+  "redactDocumentNumber",
+];
+
 const PRODUCTS = [
   "parseInstanceConfig",
   "resolveInstance",
@@ -290,6 +310,7 @@ describe("the public surface of the order flow", () => {
           ...LIFECYCLE,
           ...WP7,
           ...STORAGE_CONTAINER,
+          ...KYC,
         ]),
       ].sort(),
     );

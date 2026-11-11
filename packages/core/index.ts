@@ -13,3 +13,4 @@ export * from "./products/index";
 export * from "./invoices/index";
 export * from "./dns/index";
 export * from "./metering/index";
+export * from "./kyc/index";

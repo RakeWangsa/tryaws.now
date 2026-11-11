@@ -14,8 +14,10 @@ import type { OtpDeps, SmsProvider } from "@tc/notify";
 import { headers } from "next/headers";
 import { readWebConfig } from "./config.ts";
 import type { WebConfig } from "./config.ts";
+import type { KycPorts } from "./kyc-actions.ts";
 import { writeLog } from "./log.ts";
 import { resourceSecrets } from "./secrets.ts";
+import type { AccountPorts } from "./settings-actions.ts";
 
 // The one composition of apps/web (open point 1): configuration from the environment, secrets
 // through a port, the EPS services built once. The fakes are reached only through the two literal
@@ -32,6 +34,18 @@ export interface WebRuntime {
   otp: (OtpDeps & { sms: SmsProvider; limits: typeof OTP_SEND_RULES }) | null;
   /** The key of the auth rate-limit subjects. null: every public auth action refuses (R16). */
   authLimitKey: string | null;
+  /**
+   * The object store and the crypto of the identity check (WP2-T4). null = not configured, which is
+   * every stage but local and test until the S3 and KMS adapters are verified on staging: /kyc then
+   * shows the "not open" state (R16).
+   */
+  kyc: KycPorts | null;
+  /**
+   * The identity provider's change calls and the phone OTP service of /settings (WP2-T5). null =
+   * not configured: the changes of e-mail, phone and password refuse (R16). Only local and test
+   * have it until the Cognito and SMS adapters are verified on staging.
+   */
+  account: AccountPorts | null;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -172,8 +186,19 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
         }
       : null;
 
+  // The KYC store and the account changes have no real adapter before the staging VERIFY: only the
+  // fakes, only in development and test (the literal condition lets the bundler drop the imports).
+  let kyc: KycPorts | null = null;
+  let account: AccountPorts | null = null;
+  if (process.env.NODE_ENV !== "production" && config.fakes) {
+    const kycFakes = await import("./fakes/kyc-fakes.ts");
+    const accountFakes = await import("./fakes/account-fakes.ts");
+    kyc = kycFakes.getDevKyc();
+    account = accountFakes.getDevAccount();
+  }
+
   return {
-    runtime: { config, eps, identity, otp, authLimitKey },
+    runtime: { config, eps, identity, otp, authLimitKey, kyc, account },
     deps,
     ...(verifier !== undefined ? { verifier } : {}),
   };

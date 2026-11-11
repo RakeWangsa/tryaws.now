@@ -87,9 +87,11 @@ it("runtime.ts imports the fakes only through a literal dynamic import()", () =>
   expect(staticFakes(text)).toEqual([]);
   const dynamic = dynamicFakes(text);
   expect(dynamic.sort()).toEqual([
+    "./fakes/account-fakes.ts",
     "./fakes/dev-auth.ts",
     "./fakes/eps-bridge.ts",
     "./fakes/identity.ts",
+    "./fakes/kyc-fakes.ts",
     "./fakes/outbox.ts",
   ]);
   // Every import( in the file has a string literal: nothing is computed.

@@ -39,10 +39,14 @@ export interface ProfileRepo {
   update(input: ProfileUpdate): Promise<Written<CustomerProfile>>;
   // Called by the OTP service after a code was verified (WP2-T3), never from a form.
   setVerifiedPhone(input: { phone: string; verifiedAt: Date }): Promise<Written<CustomerProfile>>;
+  // Called by the e-mail change action (WP2-T5) after the identity provider confirmed the code that
+  // it sent to the new address, never from a form.
+  setEmail(email: string): Promise<Written<CustomerProfile>>;
 }
 
 // The finer rule is the one of packages/core/validation; @tc/db cannot import @tc/core.
 const BD_PHONE = /^\+880[0-9]{10}$/;
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}$/;
 
 // Selected and returned by name: the repository never reads or returns a column it did not list.
 const PROFILE_COLUMNS = {
@@ -104,6 +108,19 @@ export function profileRepo(scope: TenantScope): ProfileRepo {
       const [row] = await scope.tx
         .update(customers)
         .set({ phone: input.phone, phoneVerifiedAt: input.verifiedAt })
+        .where(eq(customers.id, scope.customerId))
+        .returning(PROFILE_COLUMNS);
+      return row === undefined ? refused("not_found") : created(toProfile(row));
+    },
+
+    // Absolute assignment, like the others. Drizzle names only the one column, which web_rw may update.
+    setEmail: async (email) => {
+      if (typeof email !== "string" || email !== email.toLowerCase() || !EMAIL.test(email)) {
+        return refused("validation");
+      }
+      const [row] = await scope.tx
+        .update(customers)
+        .set({ email })
         .where(eq(customers.id, scope.customerId))
         .returning(PROFILE_COLUMNS);
       return row === undefined ? refused("not_found") : created(toProfile(row));

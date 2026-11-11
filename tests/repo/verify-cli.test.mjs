@@ -96,6 +96,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP2-T1",
     "WP2-T2",
     "WP2-T3",
+    "WP2-T4",
+    "WP2-T5",
     "WP3-T1",
     "WP3-T2",
     "WP3-T3",
@@ -652,6 +654,67 @@ it("task WP2-T3 is proven by the checks of WP1-T1, the tests of core, db and not
     "packages/db/test/rate-limit-tenancy.test.ts",
     "packages/db/test/otp-repo.test.ts",
     "packages/db/test/cross-tenant.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP2-T4 is proven by the checks of WP1-T1, core, db and web, and four lines of the proof", () => {
+  expect(TASKS["WP2-T4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["kyc-rules", "pnpm test --filter @tc/core kyc/rules --no-passWithNoTests"],
+    [
+      "kyc-web-role",
+      "pnpm test --filter @tc/db test/kyc-repo test/cross-tenant --no-passWithNoTests",
+    ],
+    [
+      "kyc-actions",
+      "pnpm test --filter @tc/web server/kyc-actions server/kyc-view kyc/ --no-passWithNoTests",
+    ],
+    ["kyc-seed", "pnpm test scripts/lib/seed-kyc-verified.test.mjs --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/core/kyc/rules.test.ts",
+    "packages/db/test/kyc-repo.test.ts",
+    "packages/db/test/cross-tenant.test.ts",
+    "apps/web/server/kyc-actions.test.ts",
+    "apps/web/server/kyc-view.test.ts",
+    "scripts/lib/seed-kyc-verified.test.mjs",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP2-T5 is proven by the checks of WP1-T1, db and web, and the lines of the proof", () => {
+  expect(TASKS["WP2-T5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["db", "pnpm test --filter @tc/db"],
+    [
+      "settings-profile-repo",
+      "pnpm test --filter @tc/db test/profile-email test/cross-tenant --no-passWithNoTests",
+    ],
+    [
+      "settings-fresh-sign-in",
+      "pnpm test --filter @tc/web server/settings-actions --no-passWithNoTests",
+    ],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/db/test/profile-email.test.ts",
+    "apps/web/server/settings-actions.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

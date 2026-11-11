@@ -16,7 +16,7 @@ export { customerRepos } from "./repositories/customer/index";
 export type { CustomerRepos, MethodsTakingCustomerId } from "./repositories/customer/index";
 export { lookupCustomerBySub } from "./repositories/identity";
 export type { CustomerIdentity } from "./repositories/identity";
-export type { CustomerProfile, ProfileUpdate } from "./repositories/customer/profile";
+export type { CustomerProfile, ProfileRepo, ProfileUpdate } from "./repositories/customer/profile";
 export type { AuditRepo, CustomerAuditInput } from "./repositories/customer/audit";
 export type { NewSshKey, SshKey, SshKeysRepo } from "./repositories/customer/ssh-keys";
 export type { ResourceSummary, ResourcesRepo } from "./repositories/customer/resources";
@@ -48,6 +48,7 @@ export type {
   WalletRepo,
   WalletView,
 } from "./repositories/customer/wallet";
+export type { KycRepo, KycSubmissionView, NewKycSubmission } from "./repositories/customer/kyc";
 export { newUuidV7 } from "./ids";
 export type {
   ClaimedOtp,

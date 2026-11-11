@@ -11,11 +11,17 @@ import { walletBn } from "../messages/wallet-bn.ts";
 import { walletEn } from "../messages/wallet-en.ts";
 import { serversBn } from "../messages/servers-bn.ts";
 import { serversEn } from "../messages/servers-en.ts";
+import { kycBn } from "../messages/kyc-bn.ts";
+import { kycEn } from "../messages/kyc-en.ts";
+import { settingsBn } from "../messages/settings-bn.ts";
+import { settingsEn } from "../messages/settings-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
 const serversOwn: Readonly<Record<Locale, Messages>> = { bn: serversBn, en: serversEn };
 const authOwn: Readonly<Record<Locale, Messages>> = { bn: authBn, en: authEn };
+const kycOwn: Readonly<Record<Locale, Messages>> = { bn: kycBn, en: kycEn };
+const settingsOwn: Readonly<Record<Locale, Messages>> = { bn: settingsBn, en: settingsEn };
 
 // Kit (`kit`), shell (`Shell`, `Aws`) and app (`Web`, `Wallet`, `Auth`) messages: each owns top-level keys,
 // so composing them cannot clash (composeMessages throws on a duplicate namespace).
@@ -27,6 +33,8 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     walletOwn.bn,
     serversOwn.bn,
     authOwn.bn,
+    kycOwn.bn,
+    settingsOwn.bn,
     galleryMessages.bn,
   ),
   en: composeMessages(
@@ -36,6 +44,8 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     walletOwn.en,
     serversOwn.en,
     authOwn.en,
+    kycOwn.en,
+    settingsOwn.en,
     galleryMessages.en,
   ),
 };
