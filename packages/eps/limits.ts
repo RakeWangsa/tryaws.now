@@ -16,7 +16,19 @@ export const RETURN_LIMITS = Object.freeze({
   payment: Object.freeze({ action: "eps.verify", limit: 1, windowSeconds: 5 }),
 });
 
-const hextet = (h: string): number => Number.parseInt(h, 16);
+// One group of an IPv6 address as a number, digit by digit (no parseInt: the boundary test bans it
+// for the whole package). Anything that is not a hex digit gives NaN, which the caller refuses.
+const HEX_DIGITS = "0123456789abcdef";
+const hextet = (h: string): number => {
+  if (h.length < 1 || h.length > 4) return Number.NaN;
+  let n = 0;
+  for (const ch of h.toLowerCase()) {
+    const d = HEX_DIGITS.indexOf(ch);
+    if (d < 0) return Number.NaN;
+    n = n * 16 + d;
+  }
+  return n;
+};
 
 /** The address a limit counts: IPv4 as it is, IPv4-mapped IPv6 as its IPv4, other IPv6 as its first 64 bits; null otherwise (R16). */
 export function limitAddress(ip: unknown): string | null {
