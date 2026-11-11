@@ -17,6 +17,8 @@ export type ReviewScreen =
       name: string;
       region: string;
       productId: string;
+      /** The product family of the draft, so a page can link back to the right form. */
+      family?: string;
       expiresAt: Date;
       baseMinor: bigint;
       steps: { code: string; amountMinor: bigint }[];
@@ -58,6 +60,7 @@ export function reviewFromToken(
     name: typeof cfg["displayName"] === "string" ? cfg["displayName"].slice(0, 60) : "",
     region: claims.region,
     productId: claims.pid,
+    ...(typeof claims.fam === "string" ? { family: claims.fam } : {}),
     expiresAt: new Date(claims.exp * 1000),
     baseMinor: quote.baseMinor,
     steps: quote.steps.map((s) => ({ code: s.code, amountMinor: s.amountMinor })),

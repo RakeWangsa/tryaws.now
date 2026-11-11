@@ -30,7 +30,7 @@ export default async function OrderPage({ params }: Props) {
     <PanelFrame
       locale={locale}
       path={`/orders/${encodeURIComponent(id)}`}
-      currentId="cloudServers"
+      currentId={order?.family === "cdn" ? "cdn" : "cloudServers"}
       panel={panel}
     >
       <h1 className="h3 mergecolor mb-4">{t("Orders.status.heading")}</h1>

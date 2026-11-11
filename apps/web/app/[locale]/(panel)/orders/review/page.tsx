@@ -52,7 +52,12 @@ export default async function ReviewPage({ params, searchParams }: Props) {
         );
 
   return (
-    <PanelFrame locale={locale} path="/orders/review" currentId="cloudServers" panel={panel}>
+    <PanelFrame
+      locale={locale}
+      path="/orders/review"
+      currentId={review.state === "ready" && review.family === "cdn" ? "cdn" : "cloudServers"}
+      panel={panel}
+    >
       <h1 className="h3 mergecolor mb-4">{t("Orders.review.heading")}</h1>
       <ReviewContent
         locale={locale}

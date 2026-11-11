@@ -26,6 +26,7 @@ export function OrderStatusContent({
   order: OrderScreen | null;
 }) {
   const t = useTranslations("Orders.status");
+  const tc = useTranslations("Cdn");
 
   if (order === null) {
     return (
@@ -62,9 +63,15 @@ export function OrderStatusContent({
           {t("ready")}
           {order.resourceId !== null ? (
             <div className="mt-3">
-              <Button variant="primary" href={localePath(locale, `/servers/${order.resourceId}`)}>
-                {t("openServer")}
-              </Button>
+              {order.family === "cdn" ? (
+                <Button variant="primary" href={localePath(locale, `/cdn/${order.resourceId}`)}>
+                  {tc("order.open")}
+                </Button>
+              ) : (
+                <Button variant="primary" href={localePath(locale, `/servers/${order.resourceId}`)}>
+                  {t("openServer")}
+                </Button>
+              )}
             </div>
           ) : null}
         </div>
