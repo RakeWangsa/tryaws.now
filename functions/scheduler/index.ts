@@ -1,20 +1,66 @@
 import { QUEUE_URL_PATTERN, createSqsClient, createSqsSend } from "@tc/aws";
 import {
   createFifoQueue,
+  runLifecycle,
   sweepOperations,
+  type LifecycleReport,
   type LogEvent,
   type Logger,
   type SweepDeps,
   type SweepReport,
 } from "@tc/core";
-import { withTx } from "@tc/db";
+import { purgeRateLimits, withTx } from "@tc/db";
 
-// The lifecycle part of the scheduler (WP5-T4) is added to this handler later.
-export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<SweepReport> {
+// Longest rate-limit window is 86400 s (packages/db rate-limit): a window that started two days ago is over.
+export const RATE_LIMIT_RETENTION_MS = 2 * 86_400_000;
+
+export interface SchedulerReport {
+  readonly sweep: SweepReport | null;
+  readonly lifecycle: LifecycleReport | null;
+  readonly rateLimitsPurged: number | null;
+}
+
+// Every run does the three jobs of 3.2 in order: the operations sweep, the lifecycle pass (section
+// 11) and the purge of old rate-limit windows. One failing job does not stop the others; the run
+// then rejects, so the error metric of the function moves (R16).
+export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<SchedulerReport> {
   return async () => {
-    const report = await sweepOperations(deps);
-    deps.log({ event: "sweep", ...report });
-    return report;
+    let sweep: SweepReport | null = null;
+    let lifecycle: LifecycleReport | null = null;
+    let rateLimitsPurged: number | null = null;
+    const failed: string[] = [];
+    const job = async (name: string, fn: () => Promise<void>): Promise<void> => {
+      try {
+        await fn();
+      } catch (error) {
+        failed.push(name);
+        deps.log({
+          event: "scheduler_job_failed",
+          job: name,
+          error: error instanceof Error ? error.name : "unknown",
+        });
+      }
+    };
+    await job("sweep", async () => {
+      sweep = await sweepOperations(deps);
+      deps.log({ event: "sweep", ...sweep });
+    });
+    await job("lifecycle", async () => {
+      lifecycle = await runLifecycle({
+        runTx: deps.runTx,
+        clock: deps.clock,
+        queue: deps.queue,
+        log: deps.log,
+      });
+      deps.log({ event: "lifecycle_run", ...lifecycle });
+    });
+    await job("rate_limits", async () => {
+      const before = new Date(deps.clock.now().getTime() - RATE_LIMIT_RETENTION_MS);
+      rateLimitsPurged = await deps.runTx((tx) => purgeRateLimits(tx, before));
+      deps.log({ event: "rate_limits_purged", count: rateLimitsPurged });
+    });
+    if (failed.length > 0) throw new Error(`scheduler: ${failed.join(", ")} failed`);
+    return { sweep, lifecycle, rateLimitsPurged };
   };
 }
 
@@ -34,9 +80,9 @@ export function readConfig(env: Record<string, string | undefined>): {
 }
 
 // Built on the first call, not at import; a failed build keeps nothing.
-let inner: (() => Promise<SweepReport>) | undefined;
+let inner: (() => Promise<SchedulerReport>) | undefined;
 
-export const handler = async (): Promise<SweepReport> => {
+export const handler = async (): Promise<SchedulerReport> => {
   if (inner === undefined) {
     const config = readConfig(process.env);
     inner = createHandler({

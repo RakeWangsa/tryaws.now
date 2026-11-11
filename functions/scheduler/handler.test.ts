@@ -5,8 +5,11 @@ import { createHandler, handler as realHandler, readConfig } from "./index";
 
 const t = useTempDatabase();
 
-it("runs one sweep, logs the counts and returns the report", async () => {
-  const clock = createManualClock(new Date("2000-01-01T01:00:00Z"));
+it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the counts", async () => {
+  const clock = createManualClock(new Date("2026-11-11T01:00:00Z"));
+  await t.pool.query(
+    "insert into rate_limits (id, scope_key, window_start, count) values (gen_random_uuid(), 'ip:a', '2026-11-01T00:00:00Z', 1), (gen_random_uuid(), 'ip:b', '2026-11-11T00:30:00Z', 1)",
+  );
   const logged: LogEvent[] = [];
   const handler = createHandler({
     runTx: (fn) => runTransaction(t.db, fn, { role: "worker_rw" }),
@@ -15,7 +18,7 @@ it("runs one sweep, logs the counts and returns the report", async () => {
     log: (e) => logged.push(e),
   });
   const report = await handler();
-  expect(report).toEqual({
+  expect(report.sweep).toEqual({
     released: 0,
     resent: 0,
     recovered: 0,
@@ -23,7 +26,35 @@ it("runs one sweep, logs the counts and returns the report", async () => {
     sent: 0,
     sendFailures: 0,
   });
-  expect(logged).toEqual([{ event: "sweep", ...report }]);
+  expect(report.lifecycle).toMatchObject({ examined: 0, failed: 0 });
+  expect(report.rateLimitsPurged).toBe(1);
+  expect(logged.map((e) => e.event)).toEqual(["sweep", "lifecycle_run", "rate_limits_purged"]);
+  // The second run purges nothing more.
+  expect((await handler()).rateLimitsPurged).toBe(0);
+});
+
+it("a failing job does not stop the others; the run then rejects (R16)", async () => {
+  const clock = createManualClock(new Date("2026-11-11T01:00:00Z"));
+  const logged: LogEvent[] = [];
+  let calls = 0;
+  const handler = createHandler({
+    runTx: (fn) => {
+      calls += 1;
+      // The sweep transaction fails; the lifecycle and the purge go on.
+      if (calls === 1) return Promise.reject(new Error("boom with a secret value"));
+      return runTransaction(t.db, fn, { role: "worker_rw" });
+    },
+    clock,
+    queue: createMemoryQueue({ clock }),
+    log: (e) => logged.push(e),
+  });
+  await expect(handler()).rejects.toThrow("scheduler: sweep failed");
+  expect(logged.map((e) => e.event)).toEqual([
+    "scheduler_job_failed",
+    "lifecycle_run",
+    "rate_limits_purged",
+  ]);
+  expect(JSON.stringify(logged)).not.toContain("secret");
 });
 
 const QUEUE_URL = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/provisioning.fifo";

@@ -136,7 +136,7 @@ describe("one instance on the test clock (backlog row WP5-T4)", () => {
 
   it("0. the clock starts at purchase: active, 30 days, nothing due", async () => {
     end1 = (await sub()).period_end as Date;
-    expect(end1.getTime() - (await sub()).period_start.getTime()).toBe(30 * DAY);
+    expect(end1.getTime() - ((await sub()).period_start as Date).getTime()).toBe(30 * DAY);
     tick(new Date(end1.getTime() - 8 * DAY));
     expect(await run()).toMatchObject({ examined: 0, reminded: 0 });
     expect(await notes()).toEqual([]);
