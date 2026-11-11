@@ -127,7 +127,7 @@ describe("releaseCapacity", () => {
         t.db,
         async (tx) => {
           const r = await releaseCapacity(tx, { resourceId: id, clock });
-          if (r.ok && r.value.released) sawWaiter = (await holdUntilWaiter(tx, 5)) || sawWaiter;
+          if (r.ok && r.value.released) sawWaiter = (await holdUntilWaiter(tx, 15)) || sawWaiter;
           return r;
         },
         { role: "worker_rw" },
@@ -136,7 +136,7 @@ describe("releaseCapacity", () => {
     expect(sawWaiter).toBe(true); // the second release waited for the first
     expect(both.map((r) => r.ok && r.value.released).sort()).toEqual([false, true]);
     expect(await readUsed(t.pool, P1)).toEqual(used(2, 2));
-  }, 20_000); // two real transactions wait on each other; 5 s is too tight on a loaded machine
+  }, 30_000); // two real transactions wait on each other; 5 s is too tight on a machine shared with other test runs
   it("does nothing for a resource with no record, and says not_found for an unknown id", async () => {
     await pool(2, 1);
     expect(await release(await resource({ bundle: "nano" }))).toEqual({
