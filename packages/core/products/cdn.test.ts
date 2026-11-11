@@ -47,7 +47,8 @@ describe("parseCdnConfig", () => {
   });
 
   it("caches by default", () => {
-    const { cacheBehavior: _gone, ...rest } = input;
+    const rest: Record<string, unknown> = { ...input };
+    delete rest.cacheBehavior;
     expect(parseCdnConfig(rest)).toMatchObject({ ok: true, value: { cacheBehavior: "cache" } });
   });
 
