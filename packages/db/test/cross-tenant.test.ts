@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import type { Database, Tx } from "../client";
 import * as schema from "../schema/index";
 import { customerRepos, type CustomerRepos } from "../repositories/customer/index";
-import { checkTenantIsolation, type TenantCase } from "../testing/cross-tenant";
+import type { TenantFinding } from "../testing/cross-tenant";
 import { withCustomerRepos } from "../testing/repos";
 import {
   type RecordedStatement,
@@ -13,6 +13,8 @@ import {
   unscopedStatements,
 } from "../testing/sql-audit";
 import { runTransaction } from "../tx";
+import { defineCaseSet } from "./cross-tenant-cases/define";
+import { CASE_SETS } from "./cross-tenant-cases/index";
 import { newCustomer } from "./fixtures";
 import { useTempDatabase } from "./temp-db";
 
@@ -36,32 +38,45 @@ async function asCustomer<T>(customerId: string, fn: (r: CustomerRepos) => Promi
   }
 }
 
-type Seed = { customerId: string };
-const seed = async (_pool: typeof t.pool, customerId: string): Promise<Seed> => ({ customerId });
-
-const CASES: Record<string, Omit<TenantCase<Seed>, "name">> = {
-  "profile.get": { kind: "read", run: (c) => asCustomer(c, (r) => r.profile.get()) },
-  "profile.update": {
-    kind: "self-write",
-    run: (c) => asCustomer(c, (r) => r.profile.update({ name: "Rahim" })),
-  },
-};
-
+// The cases live in one module per repository (test/cross-tenant-cases/, listed in CASE_SETS). This
+// file owns the recorder and asCustomer, runs every set, and audits the statements they sent.
 it("every method of customerRepos has a cross-tenant case (data.md)", () => {
   const repos = customerRepos({} as Tx, uuidv7());
+  const repoNames = Object.keys(repos).sort();
   const methods = Object.entries(repos).flatMap(([name, repo]) =>
     Object.keys(repo).map((m) => `${name}.${m}`),
   );
-  expect(Object.keys(CASES).sort()).toEqual(methods.sort());
+  expect(CASE_SETS.flatMap((s) => s.methods).sort()).toEqual(methods.sort());
+  // The structure: every case set belongs to a repository of customerRepos, and every repository of
+  // customerRepos has exactly one case set.
+  expect(CASE_SETS.map((s) => s.repo).filter((repo) => !repoNames.includes(repo))).toEqual([]);
+  expect(
+    Object.fromEntries(
+      repoNames.map((name) => [name, CASE_SETS.filter((s) => s.repo === name).length]),
+    ),
+  ).toEqual(Object.fromEntries(repoNames.map((name) => [name, 1])));
+});
+
+it("defineCaseSet refuses a case under the wrong repository", () => {
+  const caseUnder = (key: string) => () =>
+    defineCaseSet({
+      repo: "profile",
+      seed: async () => ({}),
+      cases: () => ({ [key]: { kind: "read", run: async () => null } }),
+    });
+  expect(caseUnder("profile.get")).not.toThrow();
+  expect(caseUnder("sshKeys.list")).toThrow(TypeError);
+  // The prefix is "<repo>.", with the dot.
+  expect(caseUnder("profileX.get")).toThrow(TypeError);
 });
 
 it("customer A cannot read or write the rows of customer B, and every statement about a tenant table binds the customer id (R8)", async () => {
   statements.length = 0;
-  const findings = await checkTenantIsolation({
-    pool: t.pool,
-    seed,
-    cases: Object.entries(CASES).map(([name, c]) => ({ name, ...c })),
-  });
+  // One set after the other, never in parallel: a statement is tied to the customer that is acting.
+  const findings: TenantFinding[] = [];
+  for (const set of CASE_SETS) {
+    findings.push(...(await set.check(t.pool, { asCustomer })));
+  }
   const ran = statements.filter((s) => s.actor !== null);
   expect(ran.length).toBeGreaterThan(0);
   // One list, no duplicates: a statement that is in both audits is named once.

@@ -11,7 +11,9 @@ export interface CustomerRepos {
 // customer id. Throws a TypeError for a customer id that is not a UUID (R16). Sends no query.
 export function customerRepos(tx: Tx, customerId: string): CustomerRepos {
   const scope = tenantScope(tx, customerId);
-  return { profile: profileRepo(scope) };
+  return {
+    profile: profileRepo(scope),
+  };
 }
 
 // The methods of R whose input mentions a customer id (as "customerId" or "customer_id", at any
