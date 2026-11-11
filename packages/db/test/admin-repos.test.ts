@@ -201,12 +201,18 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
 // Admin reads ("<repo>.<method>") that write no audit row. Empty until WP8 decides where admin reads live and whether a read is audited (open point 21).
 const ADMIN_READ_METHODS: readonly string[] = [
   "capacity.list",
+  "capacity.overview",
+  "capacity.pending",
   "customers.detail",
   "customers.kycQueue",
   "customers.search",
+  "operations.counts",
+  "operations.detail",
+  "operations.queue",
   "payments.detail",
   "payments.discrepancies",
   "payments.search",
+  "waitlist.counts",
   "waitlist.list",
   "wallets.detail",
 ];

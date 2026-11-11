@@ -16,6 +16,10 @@ let actor: AdminActor;
 let resourceId = "";
 const asAdmin = <T>(a: AdminActor, fn: (r: AdminRepos) => Promise<T>) =>
   runTransaction(t.db, (tx) => fn(adminRepos(tx, a)), { role: "admin_rw" });
+const val = <T>(w: { ok: boolean; value?: T }): T => {
+  if (!w.ok) throw new Error("refused");
+  return w.value as T;
+};
 const seed = (state: string, over: Record<string, unknown> = {}) =>
   insertRow(t.pool, "operations", {
     resource_id: resourceId,
@@ -39,13 +43,15 @@ describe("operations.queue", () => {
     const a = await seed("needs_attention", { created_at: "2030-01-01T00:00:01Z" });
     const b = await seed("needs_attention", { created_at: "2030-01-01T00:00:02Z" });
     await seed("queued");
-    const first = await asAdmin(actor, (r) =>
-      r.operations.queue({ state: "needs_attention", limit: 1 }),
+    const first = val(
+      await asAdmin(actor, (r) => r.operations.queue({ state: "needs_attention", limit: 1 })),
     );
     expect(first.rows.map((x) => x.id)).toEqual([a]);
     expect(first.nextAfter).toBe(a);
-    const second = await asAdmin(actor, (r) =>
-      r.operations.queue({ state: "needs_attention", limit: 1, after: a }),
+    const second = val(
+      await asAdmin(actor, (r) =>
+        r.operations.queue({ state: "needs_attention", limit: 1, after: a }),
+      ),
     );
     expect(second.rows.map((x) => x.id)).toEqual([b]);
     expect(second.nextAfter).toBeNull();
@@ -61,21 +67,20 @@ describe("operations.queue", () => {
   it("marks a destructive kind and filters by kind", async () => {
     const d = await seed("needs_approval", { kind: "destroy", needs_approval: true });
     await seed("needs_approval", { needs_approval: true });
-    const page = await asAdmin(actor, (r) => r.operations.queue({ kind: "destroy" }));
+    const page = val(await asAdmin(actor, (r) => r.operations.queue({ kind: "destroy" })));
     expect(page.rows.map((x) => x.id)).toEqual([d]);
     expect(page.rows[0]?.destructive).toBe(true);
   });
 
   it("refuses a filter that is not ours before any query", async () => {
-    await expect(
-      asAdmin(actor, (r) => r.operations.queue({ state: "x'; drop table operations" as never })),
-    ).rejects.toThrow(TypeError);
-    await expect(asAdmin(actor, (r) => r.operations.queue({ limit: 0 }))).rejects.toThrow(
-      TypeError,
-    );
-    await expect(asAdmin(actor, (r) => r.operations.queue({ after: "nope" }))).rejects.toThrow(
-      TypeError,
-    );
+    const refusal = { ok: false, error: "validation" };
+    expect(
+      await asAdmin(actor, (r) =>
+        r.operations.queue({ state: "x'; drop table operations" as never }),
+      ),
+    ).toEqual(refusal);
+    expect(await asAdmin(actor, (r) => r.operations.queue({ limit: 0 }))).toEqual(refusal);
+    expect(await asAdmin(actor, (r) => r.operations.queue({ after: "nope" }))).toEqual(refusal);
   });
 });
 
@@ -84,7 +89,7 @@ describe("operations.counts", () => {
     await seed("needs_attention");
     await seed("needs_attention");
     await seed("needs_approval", { needs_approval: true, kind: "destroy" });
-    const counts = await asAdmin(actor, (r) => r.operations.counts());
+    const counts = val(await asAdmin(actor, (r) => r.operations.counts()));
     expect(counts).toMatchObject({
       needs_attention: 2,
       needs_approval: 1,
@@ -146,7 +151,7 @@ describe("waitlist.counts", () => {
     await mk();
     await mk({ notified_at: "2030-01-01T00:00:00Z" });
     await mk({ reason: "flag_off" });
-    const counts = await asAdmin(actor, (r) => r.waitlist.counts());
+    const counts = val(await asAdmin(actor, (r) => r.waitlist.counts()));
     expect(counts).toContainEqual({
       productFamily: "linux_instance",
       region: REGION,
@@ -175,22 +180,75 @@ describe("capacity.pending", () => {
         capacityReservation: { cells: [{ region: REGION, quotaCode: "instance_vcpu", amount: 2 }] },
       },
     });
-    const n = await asAdmin(actor, (r) =>
-      r.capacity.pending({
-        poolAccountId: pool.poolAccountId,
-        region: REGION,
-        quotaCode: "instance_vcpu",
-      }),
-    );
-    expect(n).toBe(2);
-    await expect(
-      asAdmin(actor, (r) =>
+    const n = val(
+      await asAdmin(actor, (r) =>
         r.capacity.pending({
-          poolAccountId: "x",
+          poolAccountId: pool.poolAccountId,
           region: REGION,
           quotaCode: "instance_vcpu",
         }),
       ),
-    ).rejects.toThrow(TypeError);
+    );
+    expect(n).toBe(2);
+    expect(
+      await asAdmin(actor, (r) =>
+        r.capacity.pending({ poolAccountId: "x", region: REGION, quotaCode: "instance_vcpu" }),
+      ),
+    ).toEqual({ ok: false, error: "validation" });
+  });
+});
+
+describe("every read is refused to anyone but an active ops or superadmin admin (R16)", () => {
+  const reads: [string, (r: AdminRepos) => Promise<{ ok: boolean }>][] = [
+    ["operations.queue", (r) => r.operations.queue()],
+    ["operations.counts", (r) => r.operations.counts()],
+    ["operations.detail", (r) => r.operations.detail(uuidv7())],
+    ["waitlist.counts", (r) => r.waitlist.counts()],
+    ["capacity.overview", (r) => r.capacity.overview("BD")],
+    [
+      "capacity.pending",
+      (r) =>
+        r.capacity.pending({ poolAccountId: uuidv7(), region: REGION, quotaCode: "instance_vcpu" }),
+    ],
+  ];
+  const refused = { ok: false, error: "forbidden" };
+
+  it.each(reads)("%s: a role outside ops and superadmin", async (_n, run) => {
+    for (const role of ["support", "finance"] as const) {
+      const other: AdminActor = {
+        adminId: await newAdmin(t.pool, role),
+        role,
+        ip: "203.0.113.9",
+      };
+      expect(await asAdmin(other, run)).toEqual(refused);
+    }
+  });
+
+  it.each(reads)("%s: a disabled admin", async (_n, run) => {
+    const id = await newAdmin(t.pool, "ops");
+    await t.pool.query("update admin_users set status = 'disabled' where id = $1", [id]);
+    expect(await asAdmin({ adminId: id, role: "ops", ip: "203.0.113.9" }, run)).toEqual(refused);
+  });
+
+  it.each(reads)(
+    "%s: an id that is no admin, and a role the admin does not have",
+    async (_n, run) => {
+      expect(await asAdmin({ adminId: uuidv7(), role: "ops", ip: "203.0.113.9" }, run)).toEqual(
+        refused,
+      );
+      const finance = await newAdmin(t.pool, "finance");
+      expect(await asAdmin({ adminId: finance, role: "ops", ip: "203.0.113.9" }, run)).toEqual(
+        refused,
+      );
+    },
+  );
+
+  it.each(reads)("%s: a superadmin may read", async (_n, run) => {
+    const sa: AdminActor = {
+      adminId: await newAdmin(t.pool, "superadmin"),
+      role: "superadmin",
+      ip: "203.0.113.9",
+    };
+    expect(((await asAdmin(sa, run)) as { error?: string }).error).not.toBe("forbidden");
   });
 });

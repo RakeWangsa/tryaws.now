@@ -51,7 +51,7 @@ export interface WaitlistCount {
 }
 
 export interface WaitlistAdminRepo {
-  counts(): Promise<WaitlistCount[]>;
+  counts(): Promise<Written<WaitlistCount[]>>;
   list(filter?: WaitlistListFilter): Promise<WaitlistEntry[]>;
   notifyNext(input: NotifyNextInput, why: string): Promise<Written<NotifiedEntry[]>>;
 }
@@ -90,6 +90,9 @@ export function waitlistAdminRepo(scope: AdminScope): WaitlistAdminRepo {
   const { tx } = scope;
   return {
     async counts() {
+      if (!["ops", "superadmin"].includes(scope.actor.role) || !(await isActiveAdmin(scope))) {
+        return refused("forbidden");
+      }
       const { rows } = await tx.execute<WaitlistCount & Record<string, unknown>>(
         sql`select e.product_family as "productFamily", e.region, e.reason, count(*)::int as open
               from waitlist_entries e
@@ -97,12 +100,16 @@ export function waitlistAdminRepo(scope: AdminScope): WaitlistAdminRepo {
              group by e.product_family, e.region, e.reason
              order by e.product_family, e.region, e.reason`,
       );
-      return rows.map(({ productFamily, region, reason, open }) => ({
-        productFamily,
-        region,
-        reason,
-        open,
-      }));
+      return {
+        ok: true,
+        replayed: false,
+        value: rows.map(({ productFamily, region, reason, open }) => ({
+          productFamily,
+          region,
+          reason,
+          open,
+        })),
+      };
     },
 
     async list(filter = {}) {

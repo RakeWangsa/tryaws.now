@@ -74,8 +74,8 @@ export interface OperationDetail extends OperationQueueRow {
 export type OperationStateCounts = Record<OperationStateName, number>;
 
 export interface OperationsAdminRepo {
-  queue(filter?: OperationQueueFilter): Promise<OperationQueuePage>;
-  counts(): Promise<OperationStateCounts>;
+  queue(filter?: OperationQueueFilter): Promise<Written<OperationQueuePage>>;
+  counts(): Promise<Written<OperationStateCounts>>;
   detail(operationId: string): Promise<Written<OperationDetail>>;
   approve(input: OperationDecisionInput, reason: string): Promise<Written<OperationDecision>>;
   retry(input: OperationDecisionInput, reason: string): Promise<Written<OperationDecision>>;
@@ -95,6 +95,8 @@ const REFUSALS: Record<Extract<AdminOutcome, { ok: false }>["error"], RepoErrorC
   forbidden: "forbidden",
 };
 
+// The reads show every customer's operations: only an active ops or superadmin admin may run them (R16).
+const READ_ROLES: readonly string[] = ["ops", "superadmin"];
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const TRAIL_LIMIT = 50;
@@ -161,8 +163,12 @@ export function operationsAdminRepo(scope: AdminScope): OperationsAdminRepo {
     }
   };
 
+  const mayRead = async (): Promise<boolean> =>
+    READ_ROLES.includes(scope.actor.role) && (await isActiveAdmin(scope));
+
   return {
     async queue(filter = {}) {
+      if (!(await mayRead())) return refused("forbidden");
       const { state, kind, limit = DEFAULT_LIMIT, after } = filter;
       if (
         (state !== undefined && !(OPERATION_STATES as readonly unknown[]).includes(state)) ||
@@ -172,7 +178,7 @@ export function operationsAdminRepo(scope: AdminScope): OperationsAdminRepo {
         limit > MAX_LIMIT ||
         (after !== undefined && (typeof after !== "string" || !isUuid(after)))
       ) {
-        throw new TypeError("operations: the queue filter is not valid");
+        return refused("validation");
       }
       const stateFilter = state ?? null;
       const kindFilter = kind ?? null;
@@ -189,19 +195,28 @@ export function operationsAdminRepo(scope: AdminScope): OperationsAdminRepo {
       );
       const page = rows.slice(0, limit).map(toRow);
       const last = page[page.length - 1];
-      return { rows: page, nextAfter: rows.length > limit && last !== undefined ? last.id : null };
+      return {
+        ok: true,
+        replayed: false,
+        value: {
+          rows: page,
+          nextAfter: rows.length > limit && last !== undefined ? last.id : null,
+        },
+      };
     },
 
     async counts() {
+      if (!(await mayRead())) return refused("forbidden");
       const { rows } = await scope.tx.execute<{ state: OperationStateName; n: number }>(
         sql`select state, count(*)::int as n from operations group by state`,
       );
       const out = Object.fromEntries(OPERATION_STATES.map((s) => [s, 0])) as OperationStateCounts;
       for (const row of rows) if (row.state in out) out[row.state] = row.n;
-      return out;
+      return { ok: true, replayed: false, value: out };
     },
 
     async detail(operationId) {
+      if (!(await mayRead())) return refused("forbidden");
       if (typeof operationId !== "string" || !isUuid(operationId)) return refused("not_found");
       const found = await scope.tx.execute<QueueSqlRow & Record<string, unknown>>(
         sql`select ${QUEUE_COLUMNS}
