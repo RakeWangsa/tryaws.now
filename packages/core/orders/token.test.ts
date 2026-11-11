@@ -95,7 +95,11 @@ describe("signDraft and verifyDraft", () => {
     const token = signDraft([SECRET_1], claims());
     const exp = IAT + DRAFT_TTL_SECONDS;
     expect(verifyDraft([SECRET_1], token, at(exp - 1)).ok).toBe(true);
-    expect(verifyDraft([SECRET_1], token, at(exp))).toEqual({ ok: false, reason: "expired" });
+    expect(verifyDraft([SECRET_1], token, at(exp))).toEqual({
+      ok: false,
+      reason: "expired",
+      claims: claims(),
+    });
   });
 
   it("(d) accepts any listed secret and refuses an unknown one", () => {

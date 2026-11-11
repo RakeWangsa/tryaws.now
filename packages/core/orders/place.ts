@@ -5,7 +5,7 @@ import type { Result } from "../types";
 import { createDraft, type OrdersDeps } from "./draft";
 import { INTERNAL, runGuarded } from "./guard";
 import { draftHash } from "./ids";
-import { runPurchase } from "./purchase";
+import { replayOfExpiredDraft, runPurchase } from "./purchase";
 import { assertSecrets, signDraft, verifyDraft } from "./token";
 import {
   CLIENT_KEY,
@@ -73,11 +73,29 @@ export function makeOrders(deps: OrdersDeps): Orders {
     const now = deps.clock.now();
     const verdict = verifyDraft(deps.secrets, text, now);
     if (!verdict.ok) {
-      return {
-        ok: false,
-        error: "validation",
-        fields: { token: verdict.reason === "expired" ? "expired" : "invalid" },
-      };
+      const expired = { ok: false, error: "validation", fields: { token: "expired" } } as const;
+      if (verdict.reason !== "expired") {
+        return { ok: false, error: "validation", fields: { token: "invalid" } };
+      }
+      // A draft that expired may still have become an order whose answer was lost: say so, and never
+      // "expired", so the customer does not pay twice. Only for the customer the draft names.
+      if (verdict.claims.c !== session.customerId) return expired;
+      const limitedEarly = await runGuarded(deps, (tx) =>
+        customerRepos(tx, session.customerId).rateLimits.consume(ORDER_RATE_LIMITS, now),
+      );
+      if (!limitedEarly.done) return INTERNAL;
+      if (!limitedEarly.value.allowed) {
+        return {
+          ok: false,
+          error: "rate_limited",
+          data: { retryAfterSeconds: limitedEarly.value.retryAfterSeconds },
+        };
+      }
+      const replay = await runGuarded(deps, (tx) =>
+        replayOfExpiredDraft(tx, { tokenHash: draftHash(text), customerId: session.customerId }),
+      );
+      if (!replay.done) return INTERNAL;
+      return replay.value ?? expired;
     }
     const claims = verdict.claims;
     // Accepted only from the customer it names. Nothing else is checked and no query is sent.

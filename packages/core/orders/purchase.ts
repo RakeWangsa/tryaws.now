@@ -70,6 +70,23 @@ async function findPurchase(
   return { orderId, resourceId, operationId: operation.id, replayed: true };
 }
 
+/**
+ * The answer for a signed draft that has expired: the order of that very draft if one was placed
+ * (a retry after a lost answer), `conflict` if it was reversed, else null (it never became an order).
+ * Reads only; no lock, no write, no charge. The caller has checked that the draft names the customer.
+ */
+export async function replayOfExpiredDraft(
+  tx: Tx,
+  args: { readonly tokenHash: string; readonly customerId: string },
+): Promise<Result<{ orderId: string }> | null> {
+  const orderId = orderIdFor(args.customerId, args.tokenHash);
+  const found = await findPurchase(tx, customerRepos(tx, args.customerId), orderId, args.tokenHash);
+  if (found === null) return null;
+  return found === "reversed"
+    ? { ok: false, error: "conflict" }
+    : { ok: true, value: { orderId: found.orderId } };
+}
+
 /** Same client key, another purchase: a conflict. Nothing is written. */
 async function clientKeyIsTaken(repos: Repos, clientKey: string): Promise<boolean> {
   return (await repos.orders.findByIdempotencyKey(clientKey)) !== null;
