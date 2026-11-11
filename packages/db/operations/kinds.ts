@@ -24,6 +24,11 @@ export const OPERATION_KINDS = [
   "set_auto_backup",
   "attach_disk",
   "detach_disk",
+  // WP6-T4 (bucket) and WP7-T1 (container service).
+  "set_bucket_access",
+  "delete_access_key",
+  "deploy_containers",
+  "scale_container",
   "reject_operation",
 ] as const;
 
@@ -72,6 +77,10 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   set_auto_backup: info("action", false, true),
   attach_disk: info("action", false, true),
   detach_disk: info("action", false, true),
+  set_bucket_access: info("action", false, true),
+  delete_access_key: info("action", false, true),
+  deploy_containers: info("action", false, true),
+  scale_container: info("action", false, true),
   reject_operation: info("engine", false, false),
 };
 
