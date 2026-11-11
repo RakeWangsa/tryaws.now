@@ -7,12 +7,14 @@ import {
   ROLE_NAMES,
   assertAccountRef,
   assertRoleAllowed,
+  checkedAccountRef,
   roleArn,
   sessionName,
 } from "../roles";
 import {
   MUTATING_ROLES,
   REFRESH_MARGIN_MS,
+  ROLE_KINDS,
   SESSION_SECONDS,
   STS_REGION,
   TIME_LIMITS,
@@ -172,4 +174,139 @@ it("the exported lists cannot be changed at run time, and each client gets its o
   const b = clientSettings("TcReader");
   expect(a.requestHandler).not.toBe(b.requestHandler);
   expect(a.requestHandler).not.toBe(TIME_LIMITS);
+});
+
+it("every role has a decided kind, and the mutating list is exactly the mutating kinds", () => {
+  expect(Object.keys(ROLE_KINDS).sort()).toEqual([...ROLE_NAMES].sort());
+  expect(Object.isFrozen(ROLE_KINDS)).toBe(true);
+  const mutating = ROLE_NAMES.filter((role) => ROLE_KINDS[role] === "mutating");
+  expect([...mutating].sort()).toEqual([...MUTATING_ROLES].sort());
+  for (const role of ROLE_NAMES) {
+    const s = clientSettings(role);
+    expect("retryStrategy" in s).toBe(ROLE_KINDS[role] === "mutating");
+    expect("retryMode" in s).toBe(ROLE_KINDS[role] === "read");
+  }
+});
+
+it("a target that is not a known role gets no settings at all", () => {
+  for (const target of [
+    "TcAdmin",
+    "tcprovisioner",
+    "__proto__",
+    "constructor",
+    "",
+    "STS",
+    undefined,
+    null,
+  ]) {
+    const thrown = (() => {
+      try {
+        clientSettings(target as never);
+      } catch (error) {
+        return error;
+      }
+    })();
+    expect(thrown).toBeInstanceOf(AwsError);
+    expect(thrown).toMatchObject({
+      code: "forbidden",
+      retryable: true,
+      reason: "role_not_allowed",
+    });
+  }
+});
+
+it("no client setting ever holds a logger", () => {
+  // the SDK's own logger middleware would write the raw AWS error before the mapping of Task 3 runs
+  for (const target of [...ROLE_NAMES, "sts"] as const)
+    expect("logger" in clientSettings(target)).toBe(false);
+});
+
+it("the number of attempts of the throttling-only strategy is a small integer", async () => {
+  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 2.5, 11, "3"]) {
+    expect(() => throttlingOnlyRetryStrategy(bad as never)).toThrow(RangeError);
+  }
+  const once = throttlingOnlyRetryStrategy(1);
+  const t0 = await once.acquireInitialRetryToken("");
+  await expect(once.refreshRetryTokenForRetry(t0, { errorType: "THROTTLING" })).rejects.toThrow();
+});
+
+it("checkedAccountRef reads each field once and returns a frozen copy of what it checked", () => {
+  let reads = 0;
+  const shifting = {
+    get awsAccountId() {
+      reads += 1;
+      return reads === 1 ? "210987654321" : "999999999999";
+    },
+    externalId: "tc-ext-7f3a9c",
+    extra: "ignored",
+  };
+  const checked = checkedAccountRef(shifting);
+  expect(checked).toEqual({ awsAccountId: "210987654321", externalId: "tc-ext-7f3a9c" });
+  expect(reads).toBe(1);
+  expect(Object.isFrozen(checked)).toBe(true);
+  expect(() =>
+    checkedAccountRef({ awsAccountId: "21098765432", externalId: "tc-ext-7f3a9c" }),
+  ).toThrow(/account_ref_invalid/);
+});
+
+it("an ExternalId at the two length limits is accepted", () => {
+  expect(() => assertAccountRef({ awsAccountId: "210987654321", externalId: "ab" })).not.toThrow();
+  expect(() =>
+    assertAccountRef({ awsAccountId: "210987654321", externalId: "x".repeat(1224) }),
+  ).not.toThrow();
+});
+
+it("roleArn and sessionName check their own inputs", () => {
+  for (const bad of [
+    "21098765432",
+    "2109876543210",
+    "21098765432a",
+    "210987654321\n",
+    "",
+    210987654321,
+    null,
+  ]) {
+    expect(() => roleArn(bad as never, "TcReader")).toThrow(/account_ref_invalid/);
+  }
+  for (const bad of ["TcAdmin", "tcreader", "__proto__", "", null]) {
+    expect(() => roleArn("210987654321", bad as never)).toThrow(/role_not_allowed/);
+  }
+  for (const bad of [
+    "0123456789abcde",
+    "0123456789abcdef0",
+    "0123456789ABCDEF",
+    "My Server 123456",
+    "0123456789abcdef\n",
+    "",
+    null,
+  ]) {
+    expect(() => sessionName("reader", bad as never)).toThrow(RangeError);
+  }
+  for (const bad of ["admin", "__proto__", "", null]) {
+    expect(() => sessionName(bad as never, "0123456789abcdef")).toThrow(/role_not_allowed/);
+  }
+});
+
+it("the refusals carry the decided code and stay retryable", () => {
+  const caught = (fn: () => void) => {
+    try {
+      fn();
+    } catch (error) {
+      return error;
+    }
+  };
+  expect(
+    caught(() => assertAccountRef({ awsAccountId: "x", externalId: "tc-ext-7f3a9c" })),
+  ).toMatchObject({
+    name: "AwsError",
+    code: "internal",
+    retryable: true,
+    reason: "account_ref_invalid",
+  });
+  expect(caught(() => assertRoleAllowed("reader", "TcProvisioner"))).toMatchObject({
+    name: "AwsError",
+    code: "forbidden",
+    retryable: true,
+    reason: "role_not_allowed",
+  });
 });

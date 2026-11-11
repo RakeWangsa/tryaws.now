@@ -43,34 +43,70 @@ export interface AccountRef {
 const ACCOUNT_ID = /^[0-9]{12}$/;
 const EXTERNAL_ID = /^[\w+=,.@:/-]{2,1224}$/;
 
-export function assertAccountRef(ref: AccountRef): void {
-  const ok =
-    typeof ref === "object" &&
-    ref !== null &&
-    typeof ref.awsAccountId === "string" &&
-    typeof ref.externalId === "string" &&
-    ACCOUNT_ID.test(ref.awsAccountId) &&
-    EXTERNAL_ID.test(ref.externalId);
-  if (!ok) {
-    throw new AwsError({ code: "internal", retryable: true, reason: "account_ref_invalid" });
+const RANDOM_HEX16 = /^[0-9a-f]{16}$/;
+
+function accountRefInvalid(): AwsError {
+  return new AwsError({ code: "internal", retryable: true, reason: "account_ref_invalid" });
+}
+
+function roleNotAllowed(): AwsError {
+  return new AwsError({ code: "forbidden", retryable: true, reason: "role_not_allowed" });
+}
+
+function isAccountId(value: unknown): value is string {
+  return typeof value === "string" && ACCOUNT_ID.test(value);
+}
+
+function isRoleName(value: unknown): value is RoleName {
+  return typeof value === "string" && (ROLE_NAMES as readonly string[]).includes(value);
+}
+
+function isCaller(value: unknown): value is Caller {
+  return typeof value === "string" && Object.hasOwn(CALLER_ROLES, value);
+}
+
+/**
+ * Reads each field once, checks what it read and returns a frozen copy with exactly these two
+ * fields. A caller works only with the returned object, never with the one it passed in.
+ */
+export function checkedAccountRef(ref: AccountRef): AccountRef {
+  if (typeof ref !== "object" || ref === null) throw accountRefInvalid();
+  const awsAccountId: unknown = ref.awsAccountId;
+  const externalId: unknown = ref.externalId;
+  if (
+    !isAccountId(awsAccountId) ||
+    typeof externalId !== "string" ||
+    !EXTERNAL_ID.test(externalId)
+  ) {
+    throw accountRefInvalid();
   }
+  return Object.freeze({ awsAccountId, externalId });
+}
+
+export function assertAccountRef(ref: AccountRef): void {
+  checkedAccountRef(ref);
 }
 
 export function assertRoleAllowed(caller: Caller, role: RoleName): void {
   // Object.hasOwn: a lookup of "__proto__" or "constructor" must not find anything.
-  const allowed: readonly string[] | undefined =
-    typeof caller === "string" && Object.hasOwn(CALLER_ROLES, caller)
-      ? CALLER_ROLES[caller]
-      : undefined;
+  const allowed: readonly string[] | undefined = isCaller(caller)
+    ? CALLER_ROLES[caller]
+    : undefined;
   if (allowed === undefined || typeof role !== "string" || !allowed.includes(role)) {
-    throw new AwsError({ code: "forbidden", retryable: true, reason: "role_not_allowed" });
+    throw roleNotAllowed();
   }
 }
 
 export function roleArn(awsAccountId: string, role: RoleName): string {
+  if (!isAccountId(awsAccountId)) throw accountRefInvalid();
+  if (!isRoleName(role)) throw roleNotAllowed();
   return `arn:aws:iam::${awsAccountId}:role/${role}`;
 }
 
 export function sessionName(caller: Caller, randomHex16: string): string {
+  if (!isCaller(caller)) throw roleNotAllowed();
+  if (typeof randomHex16 !== "string" || !RANDOM_HEX16.test(randomHex16)) {
+    throw new RangeError("sessionName: the random part must be 16 lower-case hex digits");
+  }
   return `tc-${caller}-${randomHex16}`;
 }
