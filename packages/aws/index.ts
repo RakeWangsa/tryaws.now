@@ -44,6 +44,7 @@ export {
   type BackupConfig,
   type BackupDeps,
 } from "./adapters/backup";
+export { createDiskAdapter, parseDiskConfig, type DiskConfig } from "./adapters/disk";
 export {
   createLinuxInstanceAdapter,
   parsePortRules,
