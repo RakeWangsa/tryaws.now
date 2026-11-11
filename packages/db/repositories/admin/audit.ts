@@ -95,43 +95,63 @@ type AuditDbRow = {
 
 const COLUMNS = sql`id, created_at, actor_type, actor_id, action, target_type, target_id, host(ip) as ip, user_agent, metadata`;
 
-// Keys whose value is never shown, whatever it is.
+// The key is normalised first (camelCase split, lowercase, separators removed), so `customerNid`,
+// `nid_number` and `NidNumber` are all "customernid", "nidnumber". A value under one of these keys is
+// never shown, whatever its type. Over-masking is the safe side (R14, R16).
+const normKey = (key: string): string =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
 const SECRET_KEY =
-  /pass(word|wd)?|token|secret|otp|pin\b|code|authorization|cookie|credential|private|api[_-]?key|access[_-]?key|(^|[_-])key($|[_-])|document|national[_-]?id|passport|licen[cs]e|signature|verify[_-]?payload/i;
-const NID_KEY = /(^|[^a-z])nid([^a-z]|$)/i;
-const PHONE_KEY = /phone|mobile|msisdn/i;
-const EMAIL_KEY = /e[-_]?mail/i;
+  /pass|token|secret|otp|^pin|pin$|code|authorization|cookie|credential|private|key$|^key|document|nid|nationalid|passport|licen[cs]e|signature|verifypayload|cvv|card/;
+const PHONE_KEY = /phone|mobile|msisdn|whatsapp|contactno/;
+const EMAIL_KEY = /email/;
 const EMAIL_IN_TEXT = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-// A run of 10 to 15 digits that is not part of a longer word or of an id with dashes.
-const PHONE_IN_TEXT = /(?<![\w-])\+?\d{10,15}(?![\w-])/g;
+// A UUID and an ISO date are kept whole (not personal data); otherwise any run of 10 or more digits, with single
+// spaces or dashes between them, is a phone or a document number and is masked.
+const UUID_OR_DIGITS =
+  /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{4}-\d{2}-\d{2})|(\+?\d(?:[\s-]?\d){9,})/gi;
 const MASKED = "[masked]";
+
+const maskDigits = (raw: string): string => {
+  const digits = raw.replace(/[^\d]/g, "");
+  return digits.length < 8 ? "***" : maskPhone((raw.trim().startsWith("+") ? "+" : "") + digits);
+};
 
 function maskText(text: string): string {
   const replaced = text
     .replace(EMAIL_IN_TEXT, (m) => maskEmail(m))
-    .replace(PHONE_IN_TEXT, (m) => maskPhone(m.replace(/[\s-]/g, "")));
+    .replace(UUID_OR_DIGITS, (m, kept: string | undefined) => (kept !== undefined ? m : MASKED));
   return replaced.length > MAX_TEXT ? `${replaced.slice(0, MAX_TEXT)}…` : replaced;
 }
 
 function maskValue(key: string, value: unknown, depth: number): unknown {
-  if (SECRET_KEY.test(key) || NID_KEY.test(key)) return MASKED;
-  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
-  if (typeof value === "string") {
-    if (EMAIL_KEY.test(key) && value.includes("@")) return maskEmail(value);
-    if (PHONE_KEY.test(key)) return maskPhone(value.replace(/[\s-]/g, ""));
-    return maskText(value);
+  const k = normKey(key);
+  // The key decides first, for every type (a numeric phone number is a number).
+  if (SECRET_KEY.test(k)) return MASKED;
+  if (PHONE_KEY.test(k)) {
+    return typeof value === "string" || typeof value === "number"
+      ? maskDigits(String(value))
+      : MASKED;
   }
+  if (EMAIL_KEY.test(k)) {
+    return typeof value === "string" && value.includes("@") ? maskEmail(value) : MASKED;
+  }
+  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  if (typeof value === "string") return maskText(value);
   if (depth >= MAX_DEPTH) return MASKED;
   if (Array.isArray(value)) {
     return value.slice(0, MAX_ITEMS).map((item) => maskValue(key, item, depth + 1));
   }
   if (typeof value === "object") {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value).slice(0, MAX_KEYS)) {
-      out[k.slice(0, 60)] = maskValue(k, v, depth + 1);
+    for (const [name, v] of Object.entries(value).slice(0, MAX_KEYS)) {
+      out[name.slice(0, 60)] = maskValue(name, v, depth + 1);
     }
     return out;
   }
+  // Any other shape (bigint, function, symbol, undefined): masked, fail closed.
   return MASKED;
 }
 
@@ -148,7 +168,7 @@ function toRow(r: AuditDbRow): AuditRow {
     actorId: r.actor_id,
     action: r.action,
     targetType: r.target_type,
-    targetId: r.target_id,
+    targetId: r.target_id === null ? null : maskText(r.target_id),
     ip: r.ip,
     userAgent: r.user_agent === null ? null : maskText(r.user_agent),
     reason: typeof reason === "string" ? maskText(reason) : null,

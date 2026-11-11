@@ -258,3 +258,80 @@ it("reading writes no audit row, and the repository has no write method", async 
   const repos = adminRepos({} as never, { adminId: uuidv7(), role: "ops", ip: "203.0.113.9" });
   expect(Object.keys(repos.audit).sort()).toEqual(["detail", "export", "search"]);
 });
+
+it("masks by normalised key for every type, separator-tolerant phones and long digit runs in text, and keeps ids (R14)", async () => {
+  const a = await actorOf("superadmin");
+  const adminId = "0191a000-0000-7000-8000-0000000000ad";
+  const id = await seed({
+    targetType: "customer",
+    targetId: "c9",
+    metadata: {
+      reason: "call +880 1712 345678 or 01712-345678",
+      before: {
+        phone: 8801712345678,
+        mobileNumber: "01712345678",
+        contacts: [{ whatsapp: 1712345678 }, { email: "carol@example.com" }],
+        customerNid: "1990123456789",
+        nidNumber: 123,
+        NidNumber: "5",
+        national_id: "x",
+        passportNo: "A1",
+        documentNumber: 42,
+        cardNumber: "4111111111111111",
+        actedBy: adminId,
+        when: "2026-11-12 06:00:00",
+        amountMinor: 1234567890123,
+      },
+      after: {
+        note: "ref 12345678901234567890 and 4111 1111 1111 1111 done",
+        deep: { a: { b: { c: { d: { phone: "01712345678" } } } } },
+        weird: { email: 5 },
+        list: [{ token: "t" }, "mail me dave@example.org"],
+      },
+    },
+  });
+  const out = await asAdmin(a, (r) => r.audit.detail(id));
+  expect(out.ok).toBe(true);
+  if (!out.ok) return;
+  const text = JSON.stringify(out.value);
+  for (const leak of [
+    "8801712345678",
+    "1712 345678",
+    "01712-345678",
+    "01712345678",
+    "1712345678",
+    "1990123456789",
+    "4111",
+    "12345678901234567890",
+    "carol@example.com",
+    "dave@example.org",
+  ]) {
+    expect(text, leak).not.toContain(leak);
+  }
+  const before = out.value.before as Record<string, unknown>;
+  expect(before).toMatchObject({
+    customerNid: "[masked]",
+    nidNumber: "[masked]",
+    NidNumber: "[masked]",
+    national_id: "[masked]",
+    passportNo: "[masked]",
+    documentNumber: "[masked]",
+    cardNumber: "[masked]",
+    actedBy: adminId,
+    when: "2026-11-12 06:00:00",
+    amountMinor: 1234567890123,
+  });
+  expect(typeof before.phone).toBe("string");
+  expect((before.phone as string).includes("*")).toBe(true);
+  const after = out.value.after as { weird: { email: unknown }; list: unknown[] };
+  expect(after.weird.email).toBe("[masked]");
+  expect(after.list[0]).toEqual({ token: "[masked]" });
+});
+
+it("the export carries the same masked rows", async () => {
+  const s = await actorOf("superadmin");
+  const actor1 = uuidv7();
+  await seed({ actorId: actor1, metadata: { reason: "x", after: { phone: 8801712345678 } } });
+  const out = await asAdmin(s, (r) => r.audit.export({ actorId: actor1 }));
+  expect(JSON.stringify(out)).not.toContain("8801712345678");
+});
