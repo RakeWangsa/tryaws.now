@@ -40,7 +40,11 @@ const tsconfigExtras = {
 };
 
 // @tc/db also publishes its test helpers to the test files of other packages (WP1-T2).
-const EXPORTS = { "packages/db": { ".": "./index.ts", "./testing": "./testing/index.ts" } };
+const EXPORTS = {
+  "packages/db": { ".": "./index.ts", "./testing": "./testing/index.ts" },
+  // @tc/ui also publishes the theme facts for the root layouts of both apps (WPU-T1).
+  "packages/ui": { ".": "./index.ts", "./theme": "./theme/public.ts" },
+};
 
 it.each(Object.entries(packages))("%s is the private workspace package %s", (dir, name) => {
   const pkg = JSON.parse(readFileSync(`${dir}/package.json`, "utf8"));
