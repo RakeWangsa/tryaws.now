@@ -20,10 +20,14 @@ import {
   type AdminActor,
   type AdminRepos,
 } from "@tc/db";
-import { postTransaction } from "@tc/core";
+import { notifyWaitlist, postTransaction } from "@tc/core";
+import type { OperationQueue } from "@tc/core";
+import type { Tx } from "@tc/db";
 import { adminGate } from "./gate.ts";
 import type { MoneyFlowDeps } from "./money-flow.ts";
 import type { CustomerFlowDeps } from "./customer-flow.ts";
+import type { CapacityFlowDeps } from "./capacity-flow.ts";
+import type { OpsFlowDeps } from "./ops-flow.ts";
 import { unavailableKycStore, type KycDocumentDeps } from "./kyc-documents.ts";
 import { makeSignIn, makeSignOut, type SignInDeps } from "./sign-in.ts";
 
@@ -187,6 +191,43 @@ export function kycDocumentDeps(): KycDocumentDeps {
     limiter: adminLimiter("admin_kyc_document", DOCUMENT_VIEW_LIMIT),
     run: runAsAdmin,
     store: unavailableKycStore,
+    clock: { now: () => new Date() },
+  };
+}
+
+// The decisions of /operations and the actions of /capacity (WP8-T5): ops and superadmin, 30 for each
+// admin in 10 minutes. The admin app has no queue client (R1): the send is refused here on purpose,
+// sendAfterCommit answers false and the scheduler sends the message again from the row (3.4).
+const OPS_ACTION_LIMIT = 30;
+const SCHEDULER_ONLY_QUEUE: OperationQueue = {
+  async send() {
+    throw new Error("admin: no queue client in the admin tier");
+  },
+};
+
+export function opsFlowDeps(): OpsFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_ops_action", OPS_ACTION_LIMIT),
+    run: runAsAdmin,
+    queue: SCHEDULER_ONLY_QUEUE,
+    clock: { now: () => new Date() },
+  };
+}
+
+export function capacityFlowDeps(): CapacityFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_capacity_action", OPS_ACTION_LIMIT),
+    run: (actor, fn) => withTx((tx: Tx) => fn(adminRepos(tx, actor), tx)),
+    // Fails closed: the template waitlist_capacity_available is not registered in @tc/notify yet, so the
+    // whole action rolls back and no entry is marked notified without a message (R16).
+    notifyWaitlist: (tx, actor, input) =>
+      notifyWaitlist(tx, actor, input, async () => {
+        throw new Error("waitlist: no notifier template");
+      }),
     clock: { now: () => new Date() },
   };
 }

@@ -159,7 +159,7 @@ export function makeCapacityAction(
         const input = {
           productFamily: s.productFamily,
           region,
-          reason: s.waitlistReason,
+          reason: s.waitlistReason as "capacity" | "flag_off",
           count,
           why,
         };
