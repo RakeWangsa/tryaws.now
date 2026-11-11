@@ -4,7 +4,14 @@ import { expect, it } from "vitest";
 import { AwsError } from "../errors";
 import { createCredentialCache, createStsClient } from "../credentials";
 import type { Caller } from "../roles";
-import { ASSUMED, LEAK, RAW_ACCESS_DENIED, assumeRoleOk, fakeAws, stsError } from "./fake-aws";
+import {
+  ASSUMED,
+  RAW_ACCESS_DENIED,
+  assumeRoleOk,
+  expectNoLeak,
+  fakeAws,
+  stsError,
+} from "./fake-aws";
 import { blockedConnections } from "./network-guard";
 
 const POOL = { awsAccountId: "210987654321", externalId: "tc-ext-7f3a9c" };
@@ -110,7 +117,7 @@ it("a refused AssumeRole fails closed, is not cached, and carries no ARN", async
     operation: "AssumeRole",
     awsErrorName: "AccessDenied",
   });
-  expect(JSON.stringify(error) + String((error as Error).stack)).not.toMatch(LEAK);
+  expectNoLeak(error);
   await expect(cache.get(POOL, "TcProvisioner")).resolves.toMatchObject({
     accessKeyId: "tc-test-assumed-key-1",
   });
@@ -331,6 +338,97 @@ it("the role is refused before the account reference is looked at, and a getter 
   const error = await cache.get(broken, "TcReader").catch((e: unknown) => e);
   expect(error).toBeInstanceOf(AwsError);
   expect(error).toMatchObject({ code: "internal", retryable: true, operation: "AssumeRole" });
-  expect(JSON.stringify(error) + String((error as Error).stack)).not.toMatch(LEAK);
+  expectNoLeak(error);
   expect(aws.seen).toHaveLength(0);
 });
+it("the production STS client, with and without a test handler, has no logger of its own (2.1)", () => {
+  expect(createStsClient().config.logger?.constructor?.name).toBe("NoOpLogger");
+  expect(createStsClient(fakeAws().handler).config.logger?.constructor?.name).toBe("NoOpLogger");
+});
+
+it("invalidate drops the session of one key: the next get assumes the role again (W31)", async () => {
+  const { aws, cache } = setup();
+  aws.on("sts", "AssumeRole", ok());
+  await cache.get(POOL, "TcProvisioner");
+  cache.invalidate(POOL, "TcProvisioner");
+  await cache.get(POOL, "TcProvisioner");
+  expect(aws.seen).toHaveLength(2);
+});
+
+it("invalidate drops only its own key", async () => {
+  const { aws, cache } = setup("reconciler");
+  aws.on("sts", "AssumeRole", ok());
+  await cache.get(POOL, "TcReader");
+  await cache.get(OTHER, "TcReader");
+  cache.invalidate(POOL, "TcReader");
+  await cache.get(OTHER, "TcReader");
+  expect(aws.seen).toHaveLength(2);
+});
+
+it("invalidate refreshes a key at most once in 30 seconds", async () => {
+  const { aws, cache, at } = setup();
+  aws.on("sts", "AssumeRole", ok());
+  await cache.get(POOL, "TcProvisioner");
+  cache.invalidate(POOL, "TcProvisioner");
+  await cache.get(POOL, "TcProvisioner"); // refresh 1
+  at("2026-11-11T12:00:29.000Z");
+  cache.invalidate(POOL, "TcProvisioner"); // inside the floor: ignored
+  await cache.get(POOL, "TcProvisioner");
+  expect(aws.seen).toHaveLength(2);
+  at("2026-11-11T12:00:30.000Z");
+  cache.invalidate(POOL, "TcProvisioner"); // the floor is over
+  await cache.get(POOL, "TcProvisioner");
+  expect(aws.seen).toHaveLength(3);
+});
+
+it("invalidate never throws, whatever it is given", () => {
+  const { cache } = setup();
+  expect(() =>
+    cache.invalidate({ awsAccountId: "12", externalId: "" }, "TcProvisioner"),
+  ).not.toThrow();
+  expect(() => cache.invalidate(null as never, "nope" as never)).not.toThrow();
+});
+
+it("the sweep: the entry of an account that is not asked for again is dropped once it has expired (2.3)", async () => {
+  const { aws, cache, at } = setup("reconciler");
+  aws.on("sts", "AssumeRole", ok());
+  await cache.get(POOL, "TcReader");
+  await cache.get(OTHER, "TcReader");
+  expect(cache.size()).toBe(2);
+  at("2026-11-11T13:00:01.000Z");
+  aws.on("sts", "AssumeRole", ok("2026-11-11T15:00:00Z"));
+  await cache.get(OTHER, "TcReader"); // only OTHER is asked for again
+  expect(cache.size()).toBe(1);
+});
+
+it("the default random part of the session name differs between calls (6.8)", async () => {
+  const aws = fakeAws();
+  aws.on("sts", "AssumeRole", ok());
+  const cache = createCredentialCache({
+    sts: createStsClient(aws.handler),
+    caller: "provisioner",
+    clock: { now: () => new Date(T0) },
+  });
+  await cache.get(POOL, "TcProvisioner");
+  await cache.get(OTHER, "TcProvisioner");
+  const names = aws.seen.map((r) => form(r.body).RoleSessionName!);
+  expect(new Set(names).size).toBe(2);
+  for (const name of names) expect(name).toMatch(/^tc-provisioner-[0-9a-f]{16}$/);
+});
+
+it.each([
+  ["STS ValidationError", stsError(400, "ValidationError", "bad")],
+  ["MalformedPolicyDocument", stsError(400, "MalformedPolicyDocument", "bad")],
+])(
+  "%s from AssumeRole is retryable: a platform fault must not fail orders (W32)",
+  async (_label, reply) => {
+    const { aws, cache } = setup();
+    aws.on("sts", "AssumeRole", reply);
+    await expect(cache.get(POOL, "TcProvisioner")).rejects.toMatchObject({
+      code: "validation",
+      retryable: true,
+      mayHaveActed: false,
+      operation: "AssumeRole",
+    });
+  },
+);

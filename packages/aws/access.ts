@@ -20,7 +20,10 @@ import type { AwsRequestHandler } from "./types";
 export interface CreateAwsAccessOptions<C extends Caller> {
   caller: C;
   clock?: Clock;
-  /** For tests only: used for STS and for every client. */
+}
+
+/** Not exported from the package: the tests pass a fake transport used for STS and every client. */
+export interface InternalAwsAccessOptions<C extends Caller> extends CreateAwsAccessOptions<C> {
   requestHandler?: AwsRequestHandler;
 }
 
@@ -37,8 +40,16 @@ function roleNotAllowed(): AwsError {
   return new AwsError({ code: "forbidden", retryable: true, reason: "role_not_allowed" });
 }
 
+/** The public entry: only `caller` and `clock` are read, whatever else the object holds. */
 export function createAwsAccess<C extends Caller>(
   options: CreateAwsAccessOptions<C>,
+): AwsAccess<C> {
+  return createAwsAccessInternal({ caller: options.caller, clock: options.clock });
+}
+
+/** For tests (and nothing else): the same, with a fake transport. */
+export function createAwsAccessInternal<C extends Caller>(
+  options: InternalAwsAccessOptions<C>,
 ): AwsAccess<C> {
   const { caller, requestHandler } = options;
   // Fail closed before anything is created (Object.hasOwn: no "__proto__").
@@ -70,11 +81,20 @@ export function createAwsAccess<C extends Caller>(
     // No `logger`: the SDK's logger would write the raw AWS error text (R14).
     const client = new LightsailClient({
       region,
-      credentials: () => cache.get(checked, role),
+      // `memoized`: the SDK must not keep a copy of the session, the cache is the only layer.
+      credentials: Object.assign(() => cache.get(checked, role), { memoized: true }),
       ...clientSettings(role),
       ...(requestHandler ? { requestHandler } : {}),
     });
-    mapErrors(client);
+    mapErrors(client, (error) => {
+      // AWS rejected the session: drop it so that the next call assumes the role again.
+      if (
+        (error.code === "unauthenticated" || error.code === "forbidden") &&
+        error.operation !== "AssumeRole"
+      ) {
+        cache.invalidate(checked, role);
+      }
+    });
     clients.set(key, client);
     return client;
   }

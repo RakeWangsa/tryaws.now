@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { randomUUID } from "node:crypto";
 import { inspect } from "node:util";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
@@ -60,7 +61,17 @@ export class SessionCredentials {
 
 export interface CredentialCache {
   get(account: AccountRef, role: RoleName): Promise<SessionCredentials>;
+  /**
+   * Drops the session of one key after AWS rejected it, at most once per key in 30 seconds (a
+   * role that is really denied must not hammer STS). Never throws.
+   */
+  invalidate(account: AccountRef, role: RoleName): void;
+  /** For tests only (not exported from the package): the number of sessions held. */
+  size(): number;
 }
+
+/** The floor between two refreshes forced by `invalidate` for the same key. */
+export const INVALIDATE_FLOOR_MS = 30_000;
 
 export interface CredentialCacheDeps {
   sts: STSClient;
@@ -86,6 +97,11 @@ export function createCredentialCache(deps: CredentialCacheDeps): CredentialCach
   // Private to this closure: nothing of the credentials can be reached from the cache object.
   const entries = new Map<string, SessionCredentials>();
   const inflight = new Map<string, Promise<SessionCredentials>>();
+  const lastInvalidated = new Map<string, number>();
+
+  function keyOf(ref: AccountRef, role: RoleName): string {
+    return `${ref.awsAccountId}:${ref.externalId}:${role}`;
+  }
 
   async function assume(key: string, ref: AccountRef, role: RoleName): Promise<SessionCredentials> {
     try {
@@ -129,7 +145,7 @@ export function createCredentialCache(deps: CredentialCacheDeps): CredentialCach
     try {
       assertRoleAllowed(caller, role);
       ref = checkedAccountRef(account);
-      key = `${ref.awsAccountId}:${ref.externalId}:${role}`;
+      key = keyOf(ref, role);
     } catch (error) {
       throw toAwsError(error, OPERATION);
     }
@@ -156,5 +172,20 @@ export function createCredentialCache(deps: CredentialCacheDeps): CredentialCach
     return promise;
   }
 
-  return { get };
+  function invalidate(account: AccountRef, role: RoleName): void {
+    try {
+      const key = keyOf(checkedAccountRef(account), role);
+      const nowMs = clock.now().getTime();
+      for (const [k, at] of lastInvalidated) {
+        if (nowMs - at >= INVALIDATE_FLOOR_MS) lastInvalidated.delete(k);
+      }
+      if (lastInvalidated.has(key)) return;
+      lastInvalidated.set(key, nowMs);
+      entries.delete(key);
+    } catch {
+      // a reference that cannot be checked has no session to drop
+    }
+  }
+
+  return { get, invalidate, size: () => entries.size };
 }

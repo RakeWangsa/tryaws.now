@@ -408,9 +408,12 @@ export function toLogFields(error: AwsError): AwsLogFields {
   };
 }
 
-export function mapErrors(client: LightsailClient): void;
+export function mapErrors(client: LightsailClient, onError?: (error: AwsError) => void): void;
 export function mapErrors(client: STSClient): void;
-export function mapErrors(client: LightsailClient | STSClient): void {
+export function mapErrors(
+  client: LightsailClient | STSClient,
+  onError?: (error: AwsError) => void,
+): void {
   // The two clients have middleware stacks of different types: one cast, then one `add`.
   (client.middlewareStack as unknown as LightsailClient["middlewareStack"]).add(
     (next, context) => async (args) => {
@@ -418,7 +421,13 @@ export function mapErrors(client: LightsailClient | STSClient): void {
         return await next(args);
       } catch (error) {
         const operation = operationOf(context.commandName);
-        throw toAwsError(error, operation);
+        const mapped = toAwsError(error, operation);
+        try {
+          onError?.(mapped);
+        } catch {
+          // the observer must never change the error the caller gets
+        }
+        throw mapped;
       }
     },
     { step: "initialize", name: "tcErrorMapping", priority: "high" },

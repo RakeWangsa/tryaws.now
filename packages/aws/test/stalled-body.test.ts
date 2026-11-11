@@ -158,7 +158,7 @@ it("a response whose body stalls after the headers ends with an AwsError that ma
 
 it("control: without the socket time-out the same stalled body never ends", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  const { socketTimeout: _removed, ...withoutSocketTimeout } = TIME_LIMITS;
+  const withoutSocketTimeout = { ...TIME_LIMITS, socketTimeout: undefined };
   const { client, agent } = stalledBodyClient(withoutSocketTimeout);
   const pending = client.send(create()).then(
     () => "RESOLVED",

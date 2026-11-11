@@ -1,12 +1,14 @@
 import { inspect } from "node:util";
 import { GetRegionsCommand } from "@aws-sdk/client-lightsail";
 import { expect, it } from "vitest";
-import { createAwsAccess } from "../access";
+import { createAwsAccess, createAwsAccessInternal } from "../access";
+import { createStsClient } from "../credentials";
+import { CALLER_ROLES, LIGHTSAIL_ROLES } from "../roles";
 import { AwsError } from "../errors";
 import { blockedConnections } from "./network-guard";
 import {
   ASSUMED,
-  LEAK,
+  expectNoLeak,
   RAW_ACCESS_DENIED,
   assumeRoleOk,
   fakeAws,
@@ -26,7 +28,7 @@ function setup<C extends "provisioner" | "reader" | "catalog-sync">(caller: C) {
     "AssumeRole",
     assumeRoleOk({ ...ASSUMED, expiration: new Date(NOW + 3_600_000).toISOString() }),
   );
-  return { aws, access: createAwsAccess({ caller, clock, requestHandler: aws.handler }) };
+  return { aws, access: createAwsAccessInternal({ caller, clock, requestHandler: aws.handler }) };
 }
 
 it("signs Lightsail calls with the assumed role, in the asked Region", async () => {
@@ -106,15 +108,13 @@ it.each([
 it("a refused AssumeRole stops the call before Lightsail is reached (R16)", async () => {
   const aws = fakeAws();
   aws.on("sts", "AssumeRole", stsError(403, "AccessDenied", RAW_ACCESS_DENIED));
-  const access = createAwsAccess({ caller: "reader", clock, requestHandler: aws.handler });
+  const access = createAwsAccessInternal({ caller: "reader", clock, requestHandler: aws.handler });
   const error = await access
     .lightsail(POOL, "ap-southeast-1", "TcReader")
     .send(new GetRegionsCommand({}))
     .catch((e: unknown) => e);
   expect(error).toMatchObject({ name: "AwsError", code: "forbidden", operation: "AssumeRole" });
-  expect(
-    String((error as Error).message) + JSON.stringify(error) + String((error as Error).stack),
-  ).not.toMatch(LEAK);
+  expectNoLeak(error);
   expect(aws.seen.filter((r) => r.service === "lightsail")).toHaveLength(0);
 });
 
@@ -231,4 +231,188 @@ it("the access object cannot be changed, and its caller stays the one it was mad
   expect(() => access.lightsail(POOL, "ap-southeast-1", "TcProvisioner" as never)).toThrow(
     /role_not_allowed/,
   );
+});
+it("the public options offer only caller and clock: a handler passed to createAwsAccess is dropped (W34)", async () => {
+  const aws = fakeAws();
+  blockedConnections.length = 0;
+  const access = createAwsAccess({
+    caller: "reader",
+    clock,
+    requestHandler: aws.handler,
+  } as never);
+  await access
+    .lightsail(POOL, "ap-southeast-1", "TcReader")
+    .send(new GetRegionsCommand({}))
+    .catch(() => undefined); // the real transport: blocked by the network guard
+  expect(aws.seen).toHaveLength(0);
+  expect(blockedConnections).toEqual(["sts.ap-southeast-1.amazonaws.com:443"]);
+});
+
+it("an ExpiredTokenException drops the session: the next call assumes the role again (W31)", async () => {
+  const { aws, access } = setup("provisioner");
+  aws.on(
+    "lightsail",
+    "GetRegions",
+    lightsailError(400, "ExpiredTokenException", "The security token included is expired"),
+    lightsailOk({ regions: [] }),
+  );
+  const client = access.lightsail(POOL, "ap-southeast-1", "TcProvisioner");
+  await expect(client.send(new GetRegionsCommand({}))).rejects.toMatchObject({
+    code: "unauthenticated",
+    operation: "GetRegions",
+  });
+  expect(aws.seen.filter((r) => r.service === "sts")).toHaveLength(1);
+  await client.send(new GetRegionsCommand({}));
+  expect(aws.seen.filter((r) => r.service === "sts")).toHaveLength(2);
+});
+
+it("a denied role is not refreshed against STS more than once inside the floor of 30 seconds (W31)", async () => {
+  let offset = 0;
+  const aws = fakeAws();
+  aws.on(
+    "sts",
+    "AssumeRole",
+    assumeRoleOk({
+      ...ASSUMED,
+      expiration: new Date(NOW + 3_600_000).toISOString(),
+    }),
+  );
+  aws.on("lightsail", "GetRegions", lightsailError(403, "AccessDeniedException", "denied"));
+  const access = createAwsAccessInternal({
+    caller: "provisioner",
+    clock: { now: () => new Date(NOW + offset) },
+    requestHandler: aws.handler,
+  });
+  const client = access.lightsail(POOL, "ap-southeast-1", "TcProvisioner");
+  const sts = () => aws.seen.filter((r) => r.service === "sts").length;
+  for (let i = 0; i < 4; i += 1) {
+    await expect(client.send(new GetRegionsCommand({}))).rejects.toMatchObject({
+      code: "forbidden",
+    });
+  }
+  expect(sts()).toBe(2); // the first session, and one refresh; the floor held the rest back
+  offset = 31_000;
+  await expect(client.send(new GetRegionsCommand({}))).rejects.toMatchObject({
+    code: "forbidden",
+  });
+  await expect(client.send(new GetRegionsCommand({}))).rejects.toMatchObject({
+    code: "forbidden",
+  });
+  expect(sts()).toBe(3); // the floor is over: one more refresh
+});
+
+it("a failed AssumeRole does not start the refresh logic: every call asks STS (W31)", async () => {
+  const aws = fakeAws();
+  aws.on("sts", "AssumeRole", stsError(403, "AccessDenied", RAW_ACCESS_DENIED));
+  const access = createAwsAccessInternal({
+    caller: "reader",
+    clock,
+    requestHandler: aws.handler,
+  });
+  const client = access.lightsail(POOL, "ap-southeast-1", "TcReader");
+  for (let i = 0; i < 2; i += 1) {
+    await expect(client.send(new GetRegionsCommand({}))).rejects.toMatchObject({
+      operation: "AssumeRole",
+    });
+  }
+  expect(aws.seen.filter((r) => r.service === "sts")).toHaveLength(2);
+});
+
+it("two accounts with one ExternalId, and one rotated ExternalId, get different clients with their own AssumeRole (6.3)", async () => {
+  const { aws, access } = setup("reader");
+  aws.on("lightsail", "GetRegions", lightsailOk({ regions: [] }));
+  const other = { awsAccountId: "123456789012", externalId: POOL.externalId };
+  const rotated = {
+    awsAccountId: POOL.awsAccountId,
+    externalId: "tc-ext-rotated",
+  };
+  const clients = [POOL, other, rotated].map((ref) =>
+    access.lightsail(ref, "ap-southeast-1", "TcReader"),
+  );
+  expect(new Set(clients).size).toBe(3);
+  for (const client of clients) await client.send(new GetRegionsCommand({}));
+  const bodies = aws.seen
+    .filter((r) => r.service === "sts")
+    .map((r) => Object.fromEntries(new URLSearchParams(r.body)));
+  expect(bodies.map((b) => [b.RoleArn, b.ExternalId])).toEqual([
+    ["arn:aws:iam::210987654321:role/TcReader", "tc-ext-7f3a9c"],
+    ["arn:aws:iam::123456789012:role/TcReader", "tc-ext-7f3a9c"],
+    ["arn:aws:iam::210987654321:role/TcReader", "tc-ext-rotated"],
+  ]);
+});
+
+it("the real clock of the access: an answer that expires in 4 minutes is refused, one hour is accepted (6.1)", async () => {
+  const run = async (aheadMs: number) => {
+    const aws = fakeAws();
+    aws.on(
+      "sts",
+      "AssumeRole",
+      assumeRoleOk({
+        ...ASSUMED,
+        expiration: new Date(Date.now() + aheadMs).toISOString(),
+      }),
+    );
+    aws.on("lightsail", "GetRegions", lightsailOk({ regions: [] }));
+    // no clock option: the default, real clock
+    const access = createAwsAccessInternal({
+      caller: "reader",
+      requestHandler: aws.handler,
+    });
+    return access
+      .lightsail(POOL, "ap-southeast-1", "TcReader")
+      .send(new GetRegionsCommand({}))
+      .then(
+        () => "ok",
+        (e: unknown) => e,
+      );
+  };
+  expect(await run(4 * 60_000)).toMatchObject({
+    code: "upstream_unavailable",
+    reason: "sts_response_invalid",
+  });
+  expect(await run(3_600_000)).toBe("ok");
+});
+
+it("every client the package builds has no logger of its own (the SDK's NoOpLogger) (2.1, 2.2)", () => {
+  expect(createStsClient().config.logger?.constructor?.name).toBe("NoOpLogger");
+  expect(createStsClient(fakeAws().handler).config.logger?.constructor?.name).toBe("NoOpLogger");
+  for (const caller of Object.keys(CALLER_ROLES) as (keyof typeof CALLER_ROLES)[]) {
+    const access = createAwsAccessInternal({
+      caller,
+      clock,
+      requestHandler: fakeAws().handler,
+    });
+    for (const role of CALLER_ROLES[caller]) {
+      if (!(LIGHTSAIL_ROLES as readonly string[]).includes(role)) continue;
+      const client = access.lightsail(POOL, "ap-southeast-1", role as never);
+      expect(client.config.logger?.constructor?.name).toBe("NoOpLogger");
+    }
+  }
+});
+
+it("a refused AssumeRole does not use up the floor of a later real rejection (W31)", async () => {
+  const aws = fakeAws();
+  aws.on(
+    "sts",
+    "AssumeRole",
+    stsError(403, "AccessDenied", RAW_ACCESS_DENIED),
+    assumeRoleOk({ ...ASSUMED, expiration: new Date(NOW + 3_600_000).toISOString() }),
+  );
+  aws.on(
+    "lightsail",
+    "GetRegions",
+    lightsailError(400, "ExpiredTokenException", "expired"),
+    lightsailOk({ regions: [] }),
+  );
+  const access = createAwsAccessInternal({ caller: "reader", clock, requestHandler: aws.handler });
+  const client = access.lightsail(POOL, "ap-southeast-1", "TcReader");
+  await expect(client.send(new GetRegionsCommand({}))).rejects.toMatchObject({
+    operation: "AssumeRole",
+  });
+  await expect(client.send(new GetRegionsCommand({}))).rejects.toMatchObject({
+    code: "unauthenticated",
+    operation: "GetRegions",
+  });
+  await client.send(new GetRegionsCommand({}));
+  expect(aws.seen.filter((r) => r.service === "sts")).toHaveLength(3);
 });
