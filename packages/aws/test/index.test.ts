@@ -14,6 +14,7 @@ it("exports exactly the public API and no credentials function", () => {
     "MASTER_USERNAME",
     "METRIC_RANGES",
     "QUEUE_URL_PATTERN",
+    "WINDOWS_BOOTSTRAP_MARKER_FILE",
     "applyRecordChange",
     "bootstrapScript",
     "createAwsAccess",
@@ -30,11 +31,14 @@ it("exports exactly the public API and no credentials function", () => {
     "createLoadBalancerAdapter",
     "createSqsClient",
     "createSqsSend",
+    "createWindowsInstanceAdapter",
+    "fetchWindowsPassword",
     "listZoneRecords",
     "parseDiskConfig",
     "parsePortRules",
     "toAwsError",
     "toLogFields",
+    "windowsBootstrapScript",
     "withBackups",
   ]);
 });

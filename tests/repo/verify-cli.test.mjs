@@ -114,6 +114,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP5-T3",
     "WP5-T4",
     "WP5-T5",
+    "WP6-T1",
     "WP6-T2",
     "WP6-T3",
     "WP6-T4",
@@ -883,6 +884,35 @@ it("task WP5-T5 is proven by the shared checks, core, db, notify, the two senten
     "packages/notify/test/templates.test.ts",
     "packages/notify/test/notify.test.ts",
     "functions/notifier/handler.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP6-T1 is proven by the Windows adapter, the access-details function and the Access tab tests, each naming real files", () => {
+  expect(TASKS["WP6-T1"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "windows-adapter",
+    "access-details",
+    "windows-access-web",
+    "aws",
+    "repo",
+  ]);
+  const line = (id) => TASKS["WP6-T1"].find((c) => c.id === id).command.join(" ");
+  expect(line("windows-adapter")).toBe("pnpm test --filter @tc/aws windows --no-passWithNoTests");
+  expect(line("access-details")).toBe(
+    "pnpm test --filter @tc/fn-access-details --no-passWithNoTests",
+  );
+  for (const f of [
+    "packages/aws/test/windows-instance.test.ts",
+    "packages/aws/test/windows-access.test.ts",
+    "packages/aws/test/bootstrap-windows.test.ts",
+    "functions/access-details/handler.test.ts",
+    "apps/web/server/windows-access.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
