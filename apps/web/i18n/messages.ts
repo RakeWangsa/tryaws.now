@@ -25,6 +25,8 @@ import { bucketBn } from "../messages/bucket-bn.ts";
 import { bucketEn } from "../messages/bucket-en.ts";
 import { containerBn } from "../messages/container-bn.ts";
 import { containerEn } from "../messages/container-en.ts";
+import { publicBn } from "../messages/public-bn.ts";
+import { publicEn } from "../messages/public-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
@@ -51,6 +53,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     authOwn.bn,
     kycOwn.bn,
     settingsOwn.bn,
+    publicBn,
     galleryMessages.bn,
   ),
   en: composeMessages(
@@ -67,6 +70,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     authOwn.en,
     kycOwn.en,
     settingsOwn.en,
+    publicEn,
     galleryMessages.en,
   ),
 };
