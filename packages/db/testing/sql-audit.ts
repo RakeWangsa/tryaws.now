@@ -12,7 +12,8 @@ const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/
 
 // A table is named when it stands alone as an identifier, quoted or not: `ssh_keys` and "ssh_keys"
 // match, `my_ssh_keys` and `ssh_keys_customer_id_fingerprint_unique` do not. PostgreSQL folds an
-// unquoted identifier to lower case, so the match ignores case; it can only find more statements.
+// unquoted identifier to lower case, so the match ignores case; an upper-case letter next to the
+// name makes it another identifier (`ssh_keysX` is not `ssh_keys`), so the match does not find it.
 const namesTable = (table: string): RegExp =>
   new RegExp(`(^|[^a-z0-9_])"?${escapeRegExp(table)}"?([^a-z0-9_]|$)`, "i");
 
@@ -21,10 +22,29 @@ const namesTable = (table: string): RegExp =>
 // actor whose SQL names one of `tables` and whose params do not hold the actor as a whole value
 // (`"customer:" + actor + ":k"` is not the actor). It reads the statements really sent, so it also
 // catches the forms that no lint rule sees, such as a plain string given to tx.execute("...").
+//
+// It is a dynamic check, not a proof. It answers "does the statement carry the customer id?", not
+// "is every tenant table in it scoped by that id?": an actor that is bound only for a joined table,
+// in an ORDER BY or in a CASE hides an unscoped table; a function that reads a table is not seen;
+// a statement without an actor is not judged. The proof is the cross-tenant check
+// (checkTenantIsolation), which this audit backs up.
+//
+// `tables` are keys of TENANT_TABLES. An empty list or another name (a misspelling, a table that no
+// customer owns) would audit nothing in silence, so it throws (R16).
 export function unscopedStatements(
   statements: readonly RecordedStatement[],
   tables: readonly string[] = Object.keys(TENANT_TABLES),
 ): RecordedStatement[] {
+  if (tables.length === 0) {
+    throw new TypeError("unscopedStatements: no table given; the audit would look at nothing");
+  }
+  for (const table of tables) {
+    if (!Object.hasOwn(TENANT_TABLES, table)) {
+      throw new TypeError(
+        `unscopedStatements: ${JSON.stringify(table)} is not a tenant table (a key of TENANT_TABLES)`,
+      );
+    }
+  }
   const patterns = tables.map(namesTable);
   return statements.filter(
     (s) => s.actor !== null && patterns.some((p) => p.test(s.sql)) && !s.params.includes(s.actor),

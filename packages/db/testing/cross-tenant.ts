@@ -9,6 +9,16 @@ import { tenantSnapshot } from "./snapshot";
 // another customer are answered alike and nothing of A changed, nothing leaks: not the data, not
 // even the fact that the row exists.
 //
+// What it sees, and what it does not:
+//   - The rows of A that it compares are those of the tables of TENANT_TABLES. A write outside them
+//     (rate_limits, discrepancies, a row that only an e-mail address names) is invisible to the
+//     snapshot: a case that touches such a table asserts it in its own test.
+//   - It compares what a run answers, returned or thrown, as plain data. An answer it cannot show as
+//     plain data (a Map, a class instance) is refused.
+//   - The kind of a case is declared by its author and is not checked here: a write labelled
+//     self-write drops the comparison with the answer about a missing row. The kind of every
+//     repository method is pinned in review, in the case modules of test/cross-tenant-cases/.
+//
 // A case has a kind:
 //   read        a get, a list, any answer; it may name a target row
 //   write       changes or deletes a target row, or inserts a row that refers to a target row (an
