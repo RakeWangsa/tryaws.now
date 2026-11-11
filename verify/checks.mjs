@@ -350,6 +350,80 @@ TASKS["WP5-T3"] = [
   repo,
 ];
 
+// WP6-T4 and WP7-T1: the bucket and container service adapters. Each filter names a real test file.
+const kindsRules = {
+  id: "operation-kinds",
+  title: "WP6-T4: the four new action kinds are in the closed list",
+  command: ["pnpm", "test", "--filter", "@tc/db", "operation-kinds", "--no-passWithNoTests"],
+};
+const storageCoreRules = {
+  id: "storage-core-rules",
+  title: "WP6-T4, WP7-T1: bucket and container config, access mode, public-image deployments",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "products/bucket",
+    "products/container",
+    "--no-passWithNoTests",
+  ],
+};
+const bucketCycle = {
+  id: "bucket-adapter",
+  title: "WP6-T4: create, suspend removes access, resume, destroy, actions",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "test/bucket.test", "--no-passWithNoTests"],
+};
+const bucketSecret = {
+  id: "bucket-secret-once",
+  title: "WP6-T4: the secret key is returned once, never logged, never stored",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "bucket-access", "--no-passWithNoTests"],
+};
+const containerCycle = {
+  id: "container-adapter",
+  title: "WP7-T1: the cycle passes and no registry login is ever issued",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "container-service", "--no-passWithNoTests"],
+};
+const storageWiring = {
+  id: "storage-wiring",
+  title: "WP6-T4, WP7-T1: both adapters are registered in the provisioner",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/fn-provisioner",
+    "storage-wiring",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP6-T4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  kindsRules,
+  storageCoreRules,
+  bucketCycle,
+  bucketSecret,
+  storageWiring,
+  aws,
+  repo,
+];
+TASKS["WP7-T1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  kindsRules,
+  storageCoreRules,
+  containerCycle,
+  storageWiring,
+  aws,
+  repo,
+];
+
 // WPU-T4: the two Next.js apps. Their tests run by package; the smoke script builds both apps,
 // scans the output, starts `next start` and reads the headers and the HTML (no database needed).
 const web = {

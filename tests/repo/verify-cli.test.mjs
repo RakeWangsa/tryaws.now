@@ -110,6 +110,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP5-T4",
 
     "WP5-T5",
+    "WP6-T4",
+    "WP7-T1",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -616,6 +618,54 @@ it("task WP5-T5 is proven by the shared checks, core, db, notify, the two senten
     "packages/notify/test/templates.test.ts",
     "packages/notify/test/notify.test.ts",
     "functions/notifier/handler.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("tasks WP6-T4 and WP7-T1 are proven by the adapter tests, each filter naming a real test file", () => {
+  const ids = (t) => TASKS[t].map((c) => c.id);
+  expect(ids("WP6-T4")).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "operation-kinds",
+    "storage-core-rules",
+    "bucket-adapter",
+    "bucket-secret-once",
+    "storage-wiring",
+    "aws",
+    "repo",
+  ]);
+  expect(ids("WP7-T1")).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "operation-kinds",
+    "storage-core-rules",
+    "container-adapter",
+    "storage-wiring",
+    "aws",
+    "repo",
+  ]);
+  const line = (t, id) => TASKS[t].find((c) => c.id === id).command.join(" ");
+  expect(line("WP6-T4", "bucket-secret-once")).toBe(
+    "pnpm test --filter @tc/aws bucket-access --no-passWithNoTests",
+  );
+  expect(line("WP7-T1", "container-adapter")).toBe(
+    "pnpm test --filter @tc/aws container-service --no-passWithNoTests",
+  );
+  for (const f of [
+    "packages/aws/test/bucket.test.ts",
+    "packages/aws/test/bucket-access.test.ts",
+    "packages/aws/test/container-service.test.ts",
+    "packages/core/products/bucket.test.ts",
+    "packages/core/products/container.test.ts",
+    "functions/provisioner/storage-wiring.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
