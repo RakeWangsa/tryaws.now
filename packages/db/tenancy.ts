@@ -90,6 +90,12 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
 // `payments` by merchant_transaction_id or by status, with no customer id, and writes `discrepancies`.
 // It is the one exception to customerRepos for payments: it is not reachable from customerRepos, no
 // function of it takes a customer id, and test/payments-system.test.ts pins both.
+//
+// The system module repositories/system/registration.ts (WP2-T2) creates the customers row, which
+// has no customer id until it exists: it inserts into the tenant tables customers, legal_acceptances,
+// wallets and ledger_accounts and reads customers by cognito_sub (the replay case). It is the second
+// exception to customerRepos, not reachable from it, no function of it takes a customer id, and only
+// packages/auth calls it (tests/repo/auth-boundaries.test.mjs).
 export const NON_TENANT_TABLES: readonly string[] = Object.freeze([
   "markets",
   "fx_rates",
