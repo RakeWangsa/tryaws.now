@@ -86,6 +86,30 @@ const NO_HIDDEN_LOADER = {
   message:
     "R1: createRequire and getBuiltinModule load modules that the import rules cannot check.",
 };
+// The selectors of block A, in one place, so the packages/db/repositories block carries them all.
+const DYNAMIC_IMPORT_SYNTAX = [
+  R1_DYNAMIC,
+  SDK_DYNAMIC,
+  NO_HIDDEN_LOADER,
+  {
+    selector: 'ImportExpression:not([source.type="Literal"])',
+    message:
+      "R1: dynamic imports in apps/ and packages/ take a string literal, so the boundary can be checked.",
+  },
+];
+
+const DB_BELOW_CORE = {
+  message:
+    "packages/db sits below packages/core: @tc/core imports @tc/db (section F, postTransaction(tx: Tx)), so packages/db never imports @tc/core.",
+  group: [
+    "@tc/core",
+    "@tc/core/*",
+    "**/packages/core",
+    "**/packages/core/**",
+    "../**/core",
+    "../**/core/**",
+  ],
+};
 
 const restrict = (...patterns) => ({
   "no-restricted-imports": ["error", { patterns }],
@@ -117,8 +141,13 @@ export default tseslint.config(
   {
     // apps/** and packages/** (except aws and core): R1, the SDK rule and R4.
     files: ["apps/**", "packages/**"],
-    ignores: ["packages/aws/**", "packages/core/**"],
+    ignores: ["packages/aws/**", "packages/core/**", "packages/db/**"],
     rules: restrict(R1, SDK, DECIMAL),
+  },
+  {
+    // packages/db: R1, the SDK rule, R4, and the direction of the dependency on packages/core.
+    files: ["packages/db/**"],
+    rules: restrict(R1, SDK, DECIMAL, DB_BELOW_CORE),
   },
   {
     // packages/aws: R4 only (it is the one place that may import the SDK clients).
@@ -144,17 +173,7 @@ export default tseslint.config(
     files: ["apps/**", "packages/**"],
     ignores: ["packages/aws/**", "**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        R1_DYNAMIC,
-        SDK_DYNAMIC,
-        NO_HIDDEN_LOADER,
-        {
-          selector: 'ImportExpression:not([source.type="Literal"])',
-          message:
-            "R1: dynamic imports in apps/ and packages/ take a string literal, so the boundary can be checked.",
-        },
-      ],
+      "no-restricted-syntax": ["error", ...DYNAMIC_IMPORT_SYNTAX],
     },
   },
   {
@@ -177,6 +196,24 @@ export default tseslint.config(
     // no-implied-eval sees a bare setTimeout("...") only once the config declares the globals of the runtime; until then it catches the globalThis. and window. forms.
     files: ["apps/**", "packages/**"],
     rules: { "no-eval": "error", "no-implied-eval": "error", "no-new-func": "error" },
+  },
+  {
+    // Repositories build SQL only with bound parameters (R8: the scope is a parameter; R11).
+    // Flat config keeps only the no-restricted-syntax of the last matching block, so this block
+    // carries every selector of block A (DYNAMIC_IMPORT_SYNTAX) and adds sql.raw.
+    files: ["packages/db/repositories/**"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...DYNAMIC_IMPORT_SYNTAX,
+        {
+          selector: "CallExpression[callee.object.name='sql'][callee.property.name='raw']",
+          message:
+            "packages/db/repositories: sql.raw puts text into SQL without a parameter; use the sql template.",
+        },
+      ],
+    },
   },
   {
     // functions/** and everything else outside apps/ and packages/: the SDK rule and R4.

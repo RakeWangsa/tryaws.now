@@ -88,6 +88,29 @@ it.each([
   ["packages/ui/x.tsx", 'eval("1");', "`eval` can be harmful"],
   ["apps/web/x.ts", 'new Function("return 1")();', "Function constructor is eval"],
   ["apps/web/x.ts", 'globalThis.setTimeout("x()", 1);', "Implied eval."],
+  ["packages/db/x.ts", 'import "@tc/core";', "packages/db sits below packages/core"],
+  [
+    "packages/db/repositories/customer/x.ts",
+    'import "../../../core/types";',
+    "packages/db sits below packages/core",
+  ],
+  [
+    "packages/db/repositories/x.ts",
+    'import { sql } from "drizzle-orm";\nsql.raw("select 1");',
+    "packages/db/repositories: sql.raw",
+  ],
+  ["packages/db/repositories/customer/x.ts", 'await import("@tc/aws");', "R1:"],
+  [
+    "packages/db/repositories/customer/x.ts",
+    'await import("@aws-sdk/client-sts");',
+    "Spec section 4:",
+  ],
+  [
+    "packages/db/repositories/customer/x.ts",
+    'import { createRequire } from "node:module"; createRequire(import.meta.url)("@tc/aws");',
+    "R1:",
+  ],
+  ["packages/db/repositories/customer/x.ts", 'const name = "x"; await import(name);', "R1:"],
 ])("rejects %s with %s", async (filePath, code, prefix) => {
   const messages = await errors(filePath, code);
   expect(
@@ -125,6 +148,8 @@ it.each([
   ],
   ["apps/web/x.test.ts", 'const n = "x"; await import(n);'],
   ["apps/web/x.ts", 'await import("@aws-sdk-helpers/x");'],
+  ["packages/db/x.ts", 'import "drizzle-orm";'],
+  ["packages/db/tx.ts", 'import { sql } from "drizzle-orm";\nsql.raw("set local role web_rw");'],
 ])("allows %s with %s", async (filePath, code) => {
   expect(await errors(filePath, code)).toEqual([]);
 });

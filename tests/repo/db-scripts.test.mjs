@@ -10,13 +10,13 @@ it("root scripts start and migrate the local database", () => {
   expect(pkg.scripts["db:migrate"]).toBe("pnpm --filter @tc/db migrate");
 });
 
-it("@tc/db has its migration scripts and keeps the one entry of the package layout", () => {
+it("@tc/db has its migration scripts, its entry and its testing entry", () => {
   expect(dbPkg.scripts).toEqual({
     typecheck: "tsc --noEmit",
     migrate: "drizzle-kit migrate",
     generate: "drizzle-kit generate",
   });
-  expect(dbPkg.exports).toEqual({ ".": "./index.ts" });
+  expect(dbPkg.exports).toEqual({ ".": "./index.ts", "./testing": "./testing/index.ts" });
 });
 
 it("docker-compose.yml runs PostgreSQL 16 on the loopback address only", () => {

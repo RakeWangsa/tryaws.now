@@ -29,6 +29,9 @@ const packages = {
 // example "jsx" in a Next.js app, gets its difference here, so that it is reviewed with this file.
 const tsconfigExtras = {};
 
+// @tc/db also publishes its test helpers to the test files of other packages (WP1-T2).
+const EXPORTS = { "packages/db": { ".": "./index.ts", "./testing": "./testing/index.ts" } };
+
 it.each(Object.entries(packages))("%s is the private workspace package %s", (dir, name) => {
   const pkg = JSON.parse(readFileSync(`${dir}/package.json`, "utf8"));
   expect(pkg.name).toBe(name);
@@ -36,7 +39,9 @@ it.each(Object.entries(packages))("%s is the private workspace package %s", (dir
   expect(pkg.scripts.typecheck).toBe("tsc --noEmit");
   expect(existsSync(`${dir}/index.ts`), `${dir}/index.ts`).toBe(true);
   expect(existsSync(`${dir}/src`), `${dir}/src`).toBe(false);
-  expect(pkg.exports).toEqual({ ".": "./index.ts" });
+  expect(pkg.exports).toEqual(EXPORTS[dir] ?? { ".": "./index.ts" });
+  for (const target of Object.values(pkg.exports))
+    expect(existsSync(`${dir}/${target}`), `${dir}/${target}`).toBe(true);
   expect(JSON.parse(readFileSync(`${dir}/tsconfig.json`, "utf8")), `${dir}/tsconfig.json`).toEqual({
     extends: "../../tsconfig.base.json",
     include: ["**/*.ts", "**/*.tsx"],
