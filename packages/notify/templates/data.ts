@@ -14,8 +14,24 @@ export interface Field {
 const bad = (name: string): never => {
   throw new NotifyError("bad_data", name);
 };
-// Control characters, and the bidirectional overrides that make text look like something else.
-const FORBIDDEN_CHARS = /[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/u;
+// Control characters, zero-width characters and the bidirectional overrides that make text look like
+// something else. Checked by code point, so no control character sits in a regular expression.
+function hasForbiddenChar(text: string): boolean {
+  for (const ch of text) {
+    const c = ch.codePointAt(0) as number;
+    if (
+      c <= 0x1f ||
+      (c >= 0x7f && c <= 0x9f) ||
+      (c >= 0x200b && c <= 0x200f) ||
+      (c >= 0x202a && c <= 0x202e) ||
+      (c >= 0x2066 && c <= 0x2069) ||
+      c === 0xfeff
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 const make = (parse: Field["parse"], optional = false): Field => ({ parse, optional });
 const opt = (f: Field): Field => ({ parse: f.parse, optional: true });
@@ -41,7 +57,7 @@ export const f = {
     make((v, n) => {
       if (typeof v !== "string") return bad(n);
       const t = v.trim();
-      return t.length >= 1 && t.length <= max && !FORBIDDEN_CHARS.test(t) ? t : bad(n);
+      return t.length >= 1 && t.length <= max && !hasForbiddenChar(t) ? t : bad(n);
     }),
   // 16.13: 1 to 40 characters, letters, digits, hyphen. Bengali needs the marks (vowel signs).
   label: matching(/^[\p{L}\p{M}\p{N}-]{1,40}$/u, 40),

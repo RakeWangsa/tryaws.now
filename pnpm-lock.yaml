@@ -125,7 +125,14 @@ importers:
 
   functions/migrator: {}
 
-  functions/notifier: {}
+  functions/notifier:
+    dependencies:
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@tc/notify':
+        specifier: workspace:*
+        version: link:../../packages/notify
 
   functions/payments-sweeper:
     dependencies:
