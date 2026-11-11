@@ -38,6 +38,7 @@ export {
   type AdminMessage,
   type AdminOutcome,
 } from "../operations/admin";
+export { waitForLockWait } from "./lock-wait";
 export { withCustomerRepos } from "./repos";
 export { auditRowsOf, type AuditRow } from "./repos";
 export {
