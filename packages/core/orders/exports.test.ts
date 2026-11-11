@@ -206,6 +206,35 @@ const LIFECYCLE = [
   "runLifecycle",
 ];
 
+// WP7-T3 and WP7-T5 add the DNS record rules and metering to @tc/core.
+const WP7 = [
+  "CATCH_UP_DAYS",
+  "DNS_DEFAULT_MAX_RECORD_SETS",
+  "DNS_MAX_LABEL_LENGTH",
+  "DNS_MAX_NAME_LENGTH",
+  "DNS_MAX_TTL",
+  "DNS_MAX_VALUES",
+  "DNS_MIN_TTL",
+  "DNS_RECORD_TYPES",
+  "DNS_TXT_CHUNK",
+  "DNS_TXT_MAX",
+  "METERING_PAGE",
+  "METERING_SETTING_KEYS",
+  "SNAPSHOT_METRIC",
+  "TRANSFER_TEMPLATES",
+  "UNPAID_TEMPLATE",
+  "allowanceLevel",
+  "checkChange",
+  "dailyMeteredChargeMinor",
+  "defaultMeteringOps",
+  "dhakaDay",
+  "dhakaMonth",
+  "isIpv4",
+  "runMetering",
+  "validateRecord",
+  "validateZoneName",
+];
+
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
     expect(Object.keys(orders).sort()).toEqual(ORDERS_VALUES);
@@ -227,7 +256,7 @@ describe("the public surface of the order flow", () => {
     for (const name of BEFORE) expect(top.has(name), name).toBe(true);
     for (const name of [...ORDERS_VALUES, ...PRODUCTS]) expect(top.has(name), name).toBe(true);
     expect(Object.keys(core).sort()).toEqual(
-      [...new Set([...BEFORE, ...ORDERS_VALUES, ...PRODUCTS, ...LIFECYCLE])].sort(),
+      [...new Set([...BEFORE, ...ORDERS_VALUES, ...PRODUCTS, ...LIFECYCLE, ...WP7])].sort(),
     );
   });
 
