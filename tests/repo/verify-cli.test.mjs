@@ -92,6 +92,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP1-T1",
     "WP1-T2",
     "WP1-T4",
+    "WP1-T5",
     "WP2-T1",
     "WP2-T3",
     "WP3-T1",
@@ -382,6 +383,38 @@ it("task WP4-T2 is proven by the checks of WP1-T1, the tests of core, aws and th
     "functions/provisioner/reject.test.ts",
     "functions/scheduler/handler.test.ts",
     "packages/db/test/operation-insert.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP1-T5 is proven by the suites of core, db, aws, the catalog-sync function and its proof on its own line", () => {
+  expect(TASKS["WP1-T5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["catalog-sync", "pnpm test --filter @tc/fn-catalog-sync --no-passWithNoTests"],
+    [
+      "catalog-sync-proof",
+      "pnpm test --filter @tc/fn-catalog-sync test/proof-catalog --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  // The proof covers the instance half only: the title must not claim loaded TLD prices (not proven).
+  expect(TASKS["WP1-T5"].find((c) => c.id === "catalog-sync-proof").title).toBe(
+    "WP1-T5: catalog holds plans with BDT prices; no active instance plan is IPv6-only; TLD prices not proven (skipped)",
+  );
+  // passWithNoTests is on in vitest.config.mjs: the filters must keep matching real files
+  for (const f of [
+    "functions/catalog-sync/test/proof-catalog.test.ts",
+    "packages/core/products/catalog-sync.test.ts",
+    "packages/aws/test/catalog.test.ts",
+    "packages/db/test/catalog-sync.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

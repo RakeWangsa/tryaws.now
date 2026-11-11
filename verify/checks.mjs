@@ -391,6 +391,42 @@ const WP1_T4 = [
 ];
 TASKS["WP1-T4"] = WP1_T4;
 
+// WP1-T5: the catalog-sync function. The proof covers the instance half (plans with BDT prices on read, no
+// active IPv6-only plan, fail closed, idempotent) with a fake AWS client and the real database. The TLD half
+// is NOT proven: the Route 53 Domains client is not installed, so the step is skipped with a log (JOURNEY).
+const catalogSyncAll = {
+  id: "catalog-sync",
+  title: "functions/catalog-sync: handler, config, deps, boundaries",
+  command: ["pnpm", "test", "--filter", "@tc/fn-catalog-sync", "--no-passWithNoTests"],
+};
+const catalogSyncProof = {
+  id: "catalog-sync-proof",
+  title:
+    "WP1-T5: catalog holds plans with BDT prices; no active instance plan is IPv6-only; TLD prices not proven (skipped)",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/fn-catalog-sync",
+    "test/proof-catalog",
+    "--no-passWithNoTests",
+  ],
+};
+const WP1_T5 = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  catalogSyncAll,
+  catalogSyncProof,
+  repo,
+];
+TASKS["WP1-T5"] = WP1_T5;
+
 // WP2-T3: phone OTP. The two lines of the backlog row (limits, tenancy) are their own checks; the
 // filters fail when they select no file (`--no-passWithNoTests`).
 const notifyOtp = {
