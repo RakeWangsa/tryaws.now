@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { authConfigFromEnv, type AuthConfig } from "../config";
 import { ACCESS_COOKIE, REFRESH_COOKIE, parseCookieHeader } from "../cookies";
+import { requireFreshSignIn } from "../fresh";
+import { authenticateCustomer, type SessionDeps } from "../session";
 import {
   cognitoRefreshPort,
   needsRefresh,
@@ -334,8 +336,27 @@ describe("refreshSession", () => {
     const stored = parseCookieHeader(out.cookieHeader).get(ACCESS_COOKIE);
     const verified = await verifier.verify(stored);
     if (!verified.ok) throw new Error("expected a valid token");
-    expect(verified.token.authTime).toEqual(new Date(signedInSec * 1000));
     expect(verified.token.issuedAt).toEqual(new Date(nowSec * 1000));
+
+    // The request after the refresh: the real pipeline reads the stored cookie. The session keeps the
+    // old sign-in time, so requireFreshSignIn (10 minutes) refuses it although the token is new.
+    const lookup = vi.fn<SessionDeps["lookup"]>(() =>
+      Promise.resolve({
+        id: "0191a000-0000-7000-8000-00000000000a",
+        status: "active" as const,
+        sessionsValidAfter: null,
+        kycStatus: "verified" as const,
+        riskTier: "new" as const,
+        locale: "bn" as const,
+      }),
+    );
+    const session = await authenticateCustomer({ verifier, lookup }, out.cookieHeader);
+    if (!session.ok) throw new Error("expected a session");
+    expect(session.session.signedInAt).toEqual(new Date(signedInSec * 1000));
+    expect(requireFreshSignIn(session.session, clock)).toMatchObject({
+      ok: false,
+      error: "unauthenticated",
+    });
   });
 });
 
