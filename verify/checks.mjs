@@ -560,6 +560,57 @@ TASKS["WP4-T5"] = [
   repo,
 ];
 
+// WP5-T1 / WP5-T2: the backup, restore and block storage adapters against a fake Lightsail, the
+// database rows of the final backups and the registration in functions/provisioner. The staging proof
+// (a real snapshot, a real restore, a real disk cycle in tc-pool-dev) is a manual VERIFY step (JOURNEY.md).
+const backupAdapterCheck = {
+  id: "backup-adapter",
+  title:
+    "10.3: backup, restore to a new server, automatic backups, final snapshot as a child backup row",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "backup", "--no-passWithNoTests"],
+};
+const diskAdapterCheck = {
+  id: "disk-adapter",
+  title:
+    "10.3: block storage create, attach, detach, destroy cycle; a retried step makes one resource",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "disk", "--no-passWithNoTests"],
+};
+const backupRows = {
+  id: "backup-rows",
+  title:
+    "R13: the final backup row is made once per operation and counts for the guard only when active",
+  command: ["pnpm", "test", "--filter", "@tc/db", "backups-repo", "--no-passWithNoTests"],
+};
+const backupWiring = {
+  id: "backup-wiring",
+  title: "the provisioner registry holds the instance, backup and disk families",
+  command: ["pnpm", "test", "--filter", "@tc/fn-provisioner", "backup", "--no-passWithNoTests"],
+};
+TASKS["WP5-T1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  backupAdapterCheck,
+  backupRows,
+  backupWiring,
+  aws,
+  repo,
+];
+TASKS["WP5-T2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  diskAdapterCheck,
+  backupRows,
+  backupWiring,
+  aws,
+  repo,
+];
+
 TASKS["WP4-T4"] = [
   specSync,
   baselineSync,

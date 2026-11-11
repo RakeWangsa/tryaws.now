@@ -113,8 +113,8 @@ function setup() {
 
 describe("backup adapter: create_backup", () => {
   it("snapshots the parent instance with a generated name and waits (R11)", async () => {
-    const { aws, deps, ctxFor, calls } = setup();
-    const adapter = createBackupAdapter(deps);
+    const { aws, ctxFor, calls } = setup();
+    const adapter = createBackupAdapter();
     const config = adapter.parseConfig({ displayName: "Before the upgrade" });
     aws.on("lightsail", "GetInstanceSnapshot", notFound());
     aws.on("lightsail", "CreateInstanceSnapshot", lightsailOk({ operations: [] }));
@@ -132,8 +132,8 @@ describe("backup adapter: create_backup", () => {
   });
 
   it("a retry finds the snapshot and creates nothing, then completes when available (R7)", async () => {
-    const { aws, deps, ctxFor, calls } = setup();
-    const adapter = createBackupAdapter(deps);
+    const { aws, ctxFor, calls } = setup();
+    const adapter = createBackupAdapter();
     const config = adapter.parseConfig({});
     aws.on(
       "lightsail",
@@ -171,8 +171,8 @@ describe("backup adapter: create_backup", () => {
   });
 
   it("refuses a parent that ctx.owned does not return (R8) and one that is a stranger's snapshot", async () => {
-    const { aws, deps, ctxFor } = setup();
-    const adapter = createBackupAdapter(deps);
+    const { aws, ctxFor } = setup();
+    const adapter = createBackupAdapter();
     const config = adapter.parseConfig({});
     await expect(
       adapter.aws.action(
@@ -199,8 +199,8 @@ describe("backup adapter: create_backup", () => {
   });
 
   it("an error snapshot fails without raw AWS text", async () => {
-    const { aws, deps, ctxFor } = setup();
-    const adapter = createBackupAdapter(deps);
+    const { aws, ctxFor } = setup();
+    const adapter = createBackupAdapter();
     aws.on(
       "lightsail",
       "GetInstanceSnapshot",
@@ -223,8 +223,8 @@ describe("backup adapter: create_backup", () => {
   });
 
   it("refuses kinds it does not own (R16)", async () => {
-    const { deps, ctxFor } = setup();
-    const adapter = createBackupAdapter(deps);
+    const { ctxFor } = setup();
+    const adapter = createBackupAdapter();
     await expect(
       adapter.aws.action("reboot", ctxFor(backupRow, adapter.parseConfig({}), null, "reboot")),
     ).rejects.toMatchObject({ code: "validation" });
@@ -233,8 +233,8 @@ describe("backup adapter: create_backup", () => {
 
 describe("backup adapter: delete_backup", () => {
   it("deletes the snapshot by its generated name; not found is done", async () => {
-    const { aws, deps, ctxFor } = setup();
-    const adapter = createBackupAdapter(deps);
+    const { aws, ctxFor } = setup();
+    const adapter = createBackupAdapter();
     aws.on("lightsail", "DeleteInstanceSnapshot", notFound());
     const r = await adapter.aws.action(
       "delete_backup",
@@ -246,10 +246,10 @@ describe("backup adapter: delete_backup", () => {
   });
 
   it("uses the disk snapshot call when the parent is a disk", async () => {
-    const { aws, deps, ctxFor, store } = setup();
+    const { aws, ctxFor, store } = setup();
     const diskId = "44444444-5555-4666-8777-888888888888";
     store.set(diskId, view({ id: diskId, family: "disk" }));
-    const adapter = createBackupAdapter(deps);
+    const adapter = createBackupAdapter();
     aws.on("lightsail", "DeleteDiskSnapshot", lightsailOk({ operations: [] }));
     await adapter.aws.action(
       "delete_backup",

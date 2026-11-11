@@ -219,7 +219,7 @@ export async function runPurgeSnapshots(
 const BACKUP_STATES = new Set(["active", "stopped", "suspended"]);
 
 /** Family `backup`: a manual snapshot of an instance or a disk. The web tier writes the row. */
-export function createBackupAdapter(deps: BackupDeps): ProductAdapter<BackupConfig> {
+export function createBackupAdapter(): ProductAdapter<BackupConfig> {
   async function parentOf(ctx: OpCtx<BackupConfig>) {
     const id = ctx.resource.parentResourceId;
     if (id === null) throw fail("validation");

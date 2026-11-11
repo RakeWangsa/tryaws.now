@@ -104,6 +104,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP4-T3",
     "WP4-T4",
     "WP4-T5",
+    "WP5-T1",
+    "WP5-T2",
     "WP5-T3",
     "WP5-T4",
 
@@ -545,6 +547,41 @@ it("task WP4-T5 is proven by the adapter, bootstrap and isolation tests, each fi
     "packages/aws/test/bootstrap.test.ts",
     "tests/isolation/plan.test.ts",
     "tests/isolation/isolation.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("tasks WP5-T1 and WP5-T2 are proven by the adapter, row and wiring tests, each filter naming a real file", () => {
+  expect(TASKS["WP5-T1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["backup-adapter", "pnpm test --filter @tc/aws backup --no-passWithNoTests"],
+    ["backup-rows", "pnpm test --filter @tc/db backups-repo --no-passWithNoTests"],
+    ["backup-wiring", "pnpm test --filter @tc/fn-provisioner backup --no-passWithNoTests"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  expect(TASKS["WP5-T2"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "disk-adapter",
+    "backup-rows",
+    "backup-wiring",
+    "aws",
+    "repo",
+  ]);
+  for (const f of [
+    "packages/aws/test/backup.test.ts",
+    "packages/aws/test/disk.test.ts",
+    "packages/db/test/backups-repo.test.ts",
+    "functions/provisioner/backup.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

@@ -38,8 +38,6 @@ export {
 } from "./adapters/bootstrap";
 export {
   createBackupAdapter,
-  runFinalSnapshot,
-  runPurgeSnapshots,
   withBackups,
   type BackupConfig,
   type BackupDeps,

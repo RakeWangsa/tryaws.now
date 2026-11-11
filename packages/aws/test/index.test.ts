@@ -13,13 +13,17 @@ it("exports exactly the public API and no credentials function", () => {
     "QUEUE_URL_PATTERN",
     "bootstrapScript",
     "createAwsAccess",
+    "createBackupAdapter",
     "createCatalogSource",
+    "createDiskAdapter",
     "createLightsailReadSource",
     "createLinuxInstanceAdapter",
     "createSqsClient",
     "createSqsSend",
+    "parseDiskConfig",
     "parsePortRules",
     "toAwsError",
     "toLogFields",
+    "withBackups",
   ]);
 });

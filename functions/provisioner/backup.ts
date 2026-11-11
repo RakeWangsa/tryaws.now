@@ -22,7 +22,7 @@ export function backupDeps(): BackupDeps {
 }
 
 export function backupAdapter(): ProductAdapter<unknown> {
-  return createBackupAdapter(backupDeps()) as ProductAdapter<unknown>;
+  return createBackupAdapter() as ProductAdapter<unknown>;
 }
 
 export function diskAdapter(): ProductAdapter<unknown> {
