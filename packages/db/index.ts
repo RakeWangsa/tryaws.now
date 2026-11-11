@@ -6,3 +6,7 @@ export { databaseUrl, LOCAL_DATABASE_URL } from "./env";
 export { DbError, isRetryable, RETRYABLE_SQLSTATES } from "./errors";
 export { withTx, closeDatabase } from "./tx";
 export type { DatabaseRole } from "./tx";
+export { customerRepos } from "./repositories/customer/index";
+export type { CustomerRepos, MethodsTakingCustomerId } from "./repositories/customer/index";
+export type { CustomerProfile, ProfileUpdate } from "./repositories/customer/profile";
+export type { RepoErrorCode, Written } from "./repositories/result";

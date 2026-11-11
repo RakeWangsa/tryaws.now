@@ -6,7 +6,7 @@ import {
   ghostOf,
   type TenantCase,
 } from "../testing/cross-tenant";
-import { unscopedStatements } from "../testing/sql-audit";
+import { statementsWithInlinedIds, unscopedStatements } from "../testing/sql-audit";
 import { useTempDatabase } from "./temp-db";
 import { insertRow } from "./sql";
 import { newResource, uniqueSuffix } from "./fixtures";
@@ -304,4 +304,41 @@ it("unscopedStatements looks only at the tables it is given", () => {
   const stmt = { sql: "select * from ssh_keys", params: [], actor: uuidv7() };
   expect(unscopedStatements([stmt], ["operations"])).toEqual([]);
   expect(unscopedStatements([stmt], ["operations", "ssh_keys"])).toEqual([stmt]);
+});
+
+it("statementsWithInlinedIds reports a statement with an actor whose text holds a whole UUID, and nothing else", () => {
+  const a = uuidv7();
+  const other = uuidv7();
+  const s = (sql: string, params: unknown[] = [], actor: string | null = a) => ({
+    sql,
+    params,
+    actor,
+  });
+  expect(
+    statementsWithInlinedIds([
+      s(`select "id" from "ssh_keys" where "customer_id" = '${a}'`), // the id written into the text
+      s(`select "id" from "ssh_keys" where "customer_id" = '${other.toUpperCase()}'`), // upper case
+      s(`select 1 from ssh_keys where customer_id = $1 or id = '${other}'`, [a]), // actor bound too
+      s('select "id" from "ssh_keys" where "customer_id" = $1', [a]), // the same with a parameter
+      s(`select 1 from ssh_keys where customer_id = '${a}'`, [], null), // no actor: not judged
+      s(`select '0${a}'`), // nine digits in the first group: a longer hex string
+      s(`select '${a}a'`), // thirteen digits in the last group: a longer hex string
+      s("select 1 from ssh_keys"), // no id at all
+    ]).map((x) => x.sql),
+  ).toEqual([
+    `select "id" from "ssh_keys" where "customer_id" = '${a}'`,
+    `select "id" from "ssh_keys" where "customer_id" = '${other.toUpperCase()}'`,
+    `select 1 from ssh_keys where customer_id = $1 or id = '${other}'`,
+  ]);
+});
+
+it("statementsWithInlinedIds finds what unscopedStatements cannot: the actor is bound and another id is written into the text", () => {
+  const a = uuidv7();
+  const stmt = {
+    sql: `select 1 from ssh_keys where customer_id = $1 or customer_id = '${uuidv7()}'`,
+    params: [a],
+    actor: a,
+  };
+  expect(unscopedStatements([stmt])).toEqual([]);
+  expect(statementsWithInlinedIds([stmt])).toEqual([stmt]);
 });

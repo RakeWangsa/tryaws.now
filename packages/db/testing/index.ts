@@ -22,3 +22,5 @@ export {
   type TenantIsolationOptions,
 } from "./cross-tenant";
 export { unscopedStatements, type RecordedStatement } from "./sql-audit";
+export { statementsWithInlinedIds } from "./sql-audit";
+export { withCustomerRepos } from "./repos";

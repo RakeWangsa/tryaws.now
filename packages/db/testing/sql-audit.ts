@@ -30,3 +30,18 @@ export function unscopedStatements(
     (s) => s.actor !== null && patterns.some((p) => p.test(s.sql)) && !s.params.includes(s.actor),
   );
 }
+
+// A whole UUID (8-4-4-4-12 hex digits, any case) with no hex digit next to it: a longer hex string
+// is not one.
+const WHOLE_UUID_IN_TEXT =
+  /(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f])/i;
+
+// R8, R11: an id reaches SQL only as a bound parameter. This returns the recorded statements with an
+// actor whose SQL text holds a whole UUID: an id written into the text. The lint rule on sql.raw
+// cannot see it when it arrives as tx.execute("... '<id>'"), and unscopedStatements does not report
+// it when the statement also binds the actor. Judged on the text really sent, whatever the table.
+export function statementsWithInlinedIds(
+  statements: readonly RecordedStatement[],
+): RecordedStatement[] {
+  return statements.filter((s) => s.actor !== null && WHOLE_UUID_IN_TEXT.test(s.sql));
+}
