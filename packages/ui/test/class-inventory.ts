@@ -21,6 +21,7 @@ export const MOCKUP_HOOKS: readonly string[] = [
   "select-filter",
   "price-container",
   "btn-group-toggle",
+  "btn-select-customer",
 ];
 
 /**
