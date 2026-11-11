@@ -49,6 +49,12 @@ export function createFakeRoute53() {
       calls.push({ op: "getHostedZone" });
       return zones.get(id)?.zone ?? null;
     },
+    async findHostedZoneByName(name) {
+      calls.push({ op: "findHostedZoneByName" });
+      const wanted = `${name.toLowerCase().replace(/\.$/, "")}.`;
+      for (const z of zones.values()) if (z.zone.name === wanted) return z.zone;
+      return null;
+    },
     async listRecordSets(id) {
       calls.push({ op: "listRecordSets" });
       return [...find(id).sets.values()];
