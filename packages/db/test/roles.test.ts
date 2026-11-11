@@ -124,6 +124,16 @@ it("the database holds exactly the grants of grants.expected.json", async () => 
     )
   ).rows;
   expect([...tableGrants, ...columnGrants].filter((r) => r.is_grantable === "YES")).toEqual([]);
+  // a column-level privilege of another kind (REFERENCES) is a failure too
+  const otherColumnPrivileges = columnGrants
+    .filter((r) => !["SELECT", "INSERT", "UPDATE"].includes(r.privilege_type))
+    .map(({ table_name, column_name, grantee, privilege_type }) => ({
+      table_name,
+      column_name,
+      grantee,
+      privilege_type,
+    }));
+  expect(otherColumnPrivileges).toEqual([]);
 
   const actual: Matrix = {};
   for (const table of tables) {
