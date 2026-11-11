@@ -103,7 +103,17 @@ importers:
 
   functions/access-details: {}
 
-  functions/catalog-sync: {}
+  functions/catalog-sync:
+    dependencies:
+      '@tc/aws':
+        specifier: workspace:*
+        version: link:../../packages/aws
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@tc/db':
+        specifier: workspace:*
+        version: link:../../packages/db
 
   functions/cognito-messages: {}
 
