@@ -216,3 +216,39 @@ export { registerCustomer, isNewCustomerValid } from "./repositories/system/regi
 export type { LegalDocument, NewCustomer, Registered } from "./repositories/system/registration";
 export { meteringRepo } from "./repositories/system/metering";
 export type { MeteringRepo, TransferRow, UsageRow } from "./repositories/system/metering";
+export type {
+  LedgerPoster,
+  LedgerPostAnswer,
+  LedgerPostLine,
+  LedgerPostRequest,
+} from "./repositories/admin/ledger-port";
+export { ADJUSTMENT_LIMIT_KEY } from "./repositories/admin/wallets";
+export type {
+  AdjustmentChanged,
+  AdjustmentDecisionInput,
+  AdjustmentDirection,
+  AdjustmentInput,
+  AdjustmentKind,
+  AdjustmentRow,
+  WalletAdminDetail,
+  WalletDetailOptions,
+  WalletLedgerLine,
+  WalletsAdminRepo,
+} from "./repositories/admin/wallets";
+export type {
+  DiscrepancyListInput,
+  DiscrepancyResolveInput,
+  DiscrepancyResolved,
+  DiscrepancyRow,
+  PaymentAdminDetail,
+  PaymentFilter,
+  PaymentListRow,
+  PaymentReverified,
+  PaymentSearchInput,
+  PaymentSearchResult,
+  PaymentsAdminRepo,
+  RefundInput,
+  RefundLine,
+  RefundRecorded,
+  ReverifyInput,
+} from "./repositories/admin/payments";

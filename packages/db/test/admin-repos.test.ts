@@ -13,14 +13,15 @@ import {
   newResource,
   uniqueSuffix,
 } from "./fixtures";
+import { fundedWallet, newPayment, testPoster } from "./admin-money-support";
 import { insertRow } from "./sql";
 
 const t = useTempDatabase();
 const asAdmin = <T>(actor: AdminActor, fn: (r: AdminRepos) => Promise<T>) =>
   runTransaction(t.db, (tx) => fn(adminRepos(tx, actor)), { role: "admin_rw" });
-const actor = async (): Promise<AdminActor> => ({
-  adminId: await newAdmin(t.pool, "ops"),
-  role: "ops",
+const actor = async (role: AdminActor["role"] = "ops"): Promise<AdminActor> => ({
+  adminId: await newAdmin(t.pool, role),
+  role,
   ip: "203.0.113.9",
   userAgent: "test",
 });
@@ -50,6 +51,29 @@ async function seedKyc(): Promise<string> {
     s3_keys: ["kyc/x/front.jpg"],
   });
 }
+
+async function seedAdjustment(): Promise<string> {
+  const w = await fundedWallet(t.pool, 0n);
+  return insertRow(t.pool, "wallet_adjustments", {
+    customer_id: w.customerId,
+    direction: "credit",
+    amount_minor: 100n,
+    kind: "deposit",
+    reason: "seed",
+    requested_by: await newAdmin(t.pool, "finance"),
+  });
+}
+
+async function seedReviewPayment(): Promise<string> {
+  return (await newPayment(t.pool, await newCustomer(t.pool), { status: "review" })).id;
+}
+
+// The money writes are for finance; the discrepancy queue is for ops too.
+const roleOf = (name: string): AdminActor["role"] =>
+  (name.startsWith("wallets.") || name.startsWith("payments.")) &&
+  name !== "payments.resolveDiscrepancy"
+    ? "finance"
+    : "ops";
 
 // Every write of adminRepos has a case here; the completeness test below fails when one is missing (R10).
 const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
@@ -136,6 +160,43 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       { productFamily: "linux_instance", region: "ap-southeast-1", reason: "capacity", count: 1 },
       "one unit freed",
     ),
+  "wallets.createAdjustment": async (r) =>
+    r.wallets.createAdjustment(
+      {
+        requestId: uuidv7(),
+        at: AT,
+        customerId: (await fundedWallet(t.pool, 0n)).customerId,
+        direction: "credit",
+        amountMinor: 100n,
+        kind: "deposit",
+      },
+      "bank deposit",
+      testPoster,
+    ),
+  "wallets.approveAdjustment": async (r) =>
+    r.wallets.approveAdjustment({ id: await seedAdjustment() }, "slip checked", testPoster),
+  "wallets.rejectAdjustment": async (r) =>
+    r.wallets.rejectAdjustment({ id: await seedAdjustment() }, "no slip"),
+  "payments.reverify": async (r) =>
+    r.payments.reverify({ paymentId: await seedReviewPayment() }, "customer sent a receipt"),
+  "payments.recordManualRefund": async (r) => {
+    const w = await fundedWallet(t.pool, 5_000n);
+    const p = await newPayment(t.pool, w.customerId, {
+      amount_minor: 5_000n,
+      status: "credited",
+      ledger_transaction_id: w.topupId,
+    });
+    return r.payments.recordManualRefund(
+      { paymentId: p.id, amountMinor: 100n },
+      "refunded in the EPS dashboard",
+      testPoster,
+    );
+  },
+  "payments.resolveDiscrepancy": async (r) =>
+    r.payments.resolveDiscrepancy(
+      { id: await insertRow(t.pool, "discrepancies", { kind: "payment", details: {} }) },
+      "settled",
+    ),
 };
 // Admin reads ("<repo>.<method>") that write no audit row. Empty until WP8 decides where admin reads live and whether a read is audited (open point 21).
 const ADMIN_READ_METHODS: readonly string[] = [
@@ -143,7 +204,11 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "customers.detail",
   "customers.kycQueue",
   "customers.search",
+  "payments.detail",
+  "payments.discrepancies",
+  "payments.search",
   "waitlist.list",
+  "wallets.detail",
 ];
 
 it("every method of adminRepos is a listed read or a write with an audit case", () => {
@@ -156,9 +221,9 @@ it("every method of adminRepos is a listed read or a write with an audit case", 
 
 it.each(Object.entries(ADMIN_WRITE_CASES))(
   "%s writes one audit row with actor, reason, IP and target (R10)",
-  async (_, run) => {
+  async (name, run) => {
     await ensureMarket(t.pool);
-    const a = await actor();
+    const a = await actor(roleOf(name));
     await asAdmin(a, run);
     const rows = await auditRows(a.adminId);
     expect(rows).toHaveLength(1);
