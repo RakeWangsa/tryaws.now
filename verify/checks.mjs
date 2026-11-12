@@ -978,6 +978,24 @@ TASKS["WPU-S4"] = [
   repo,
 ];
 
+// WPU-S6: security hardening after the independent review. (1) The reader takes the tier from the alias
+// of the invoked ARN: customerId only from "web", adminId only from "admin", and each role may invoke its
+// own alias only (reader, repo). (2) A bucket remembers at most 20 instances: the 21st allow is refused
+// before AWS is asked, here and at the console (core, aws, web). (3) The ownership of a row is checked
+// before the rate limit in the console and snapshot cores (web). No AWS call.
+TASKS["WPU-S6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  aws,
+  readerAll,
+  web,
+  repo,
+];
+
 // WPU-M1: an unattached static IP is charged as Amazon Lightsail does (free while attached, an hourly
 // price once unattached for more than one hour). Money path: the config price row and its migration (db),
 // the price through the pricing engine, the existing metered_charge posting once per IP and hour bucket,

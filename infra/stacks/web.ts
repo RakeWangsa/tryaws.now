@@ -79,6 +79,8 @@ export function web(inputs: WebInputs) {
   const stage = config.stage;
   const vpc = { privateSubnets: net.vpc.privateSubnets, securityGroups: [net.appSecurityGroup.id] };
   const invoke = (...dirs: string[]) => dirs.map((dir) => workers.invoked[dir]?.arn);
+  // WPU-S6: each tier may invoke only its own alias of the reader (customerId on "web", adminId on
+  // "admin"); the handler reads the tier from the alias in the invoked ARN.
   const dbEnvironment = (role: "web_rw" | "admin_rw") => ({
     DB_HOST: db.connection.host,
     DB_PORT: db.connection.port,
@@ -117,7 +119,7 @@ export function web(inputs: WebInputs) {
       { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
-        resources: invoke("reader", "access-details", "invoice-renderer"),
+        resources: [workers.readerAliases.web.arn, ...invoke("access-details", "invoice-renderer")],
       },
       {
         actions: ["s3:PutObject"],
@@ -166,7 +168,7 @@ export function web(inputs: WebInputs) {
       { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
-        resources: invoke("reader", "invoice-renderer", "catalog-sync"),
+        resources: [workers.readerAliases.admin.arn, ...invoke("invoice-renderer", "catalog-sync")],
       },
       { actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/*`] },
       { actions: ["kms:Decrypt"], resources: [storage.kycKey.arn] },

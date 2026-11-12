@@ -124,11 +124,23 @@ export const parseOf =
 // The common frame: authenticate, authorize, validate, rate limit inside the transaction, then the
 // body, then the audit. A refusal thrown by the body rolls everything back, the counted rate limit
 // included (the next try is a fresh count).
+//
+// WPU-S6 (R9): with `own` the frame checks, before the rate limit, that the row is the customer's own and
+// of that family; another customer's row and a missing one are one answer (R8) and consume no limit.
+// The row is handed to the body as the third argument.
 export async function frame(
   deps: FamilyActionDeps,
-  spec: { destructive: boolean; limits: readonly CustomerLimit[] },
+  spec: {
+    destructive: boolean;
+    limits: readonly CustomerLimit[];
+    own?: { family: string; id: string };
+  },
   parse: () => { ok: true } | { ok: false; fields: Record<string, string> },
-  body: (repos: FamilyRepos, session: CustomerSession) => Promise<FamilyResult>,
+  body: (
+    repos: FamilyRepos,
+    session: CustomerSession,
+    owned: ResourceSummary | null,
+  ) => Promise<FamilyResult>,
 ): Promise<FamilyResult> {
   const session = await deps.authenticate();
   if (session === null) return fail("unauthenticated");
@@ -140,9 +152,11 @@ export async function frame(
   try {
     return await deps.store(session.customerId, async (repos) => {
       if (!(await repos.flagOn())) throw new Refusal("flag_off");
+      const owned =
+        spec.own === undefined ? null : await ownResource(repos, spec.own.family, spec.own.id);
       const decision = await repos.rateLimits.consume(spec.limits, deps.now());
       if (!decision.allowed) return fail("rate_limited");
-      return body(repos, session);
+      return body(repos, session, owned);
     });
   } catch (error) {
     return error instanceof Refusal ? fail(error.error, error.fields) : fail("unavailable");

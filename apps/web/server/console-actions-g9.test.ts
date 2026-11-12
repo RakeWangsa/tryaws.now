@@ -170,3 +170,40 @@ describe("bucket access for an instance", () => {
     expect(w.requests).toEqual([]);
   });
 });
+
+// WPU-S6: the cap of 20 instances is refused at the console before an operation is queued.
+describe("bucket access cap (WPU-S6)", () => {
+  const run = consoleCore(BUCKET_INSTANCE_ACCESS);
+  const many = Array.from(
+    { length: 20 },
+    (_, i) => `0190aaaa-0000-7000-8000-${String(i + 1).padStart(12, "1")}`,
+  );
+  const withList = (list: string[]) => {
+    const bucket = {
+      ...row(BUCKET, "bucket"),
+      config: { displayName: "mine", accessInstances: list },
+    };
+    return world([bucket, row(INSTANCE, "linux_instance")]);
+  };
+  const form = (access: string) => ({
+    bucketId: BUCKET,
+    requestId: REQ,
+    instanceId: INSTANCE,
+    access,
+  });
+
+  it("refuses the 21st allow with a fixed error and queues nothing", async () => {
+    const w = withList(many);
+    const r = await run(w.deps, form("allow"));
+    expect(r).toMatchObject({ ok: false, error: "not_allowed", fields: { instanceId: "limit" } });
+    expect(w.requests).toEqual([]);
+  });
+
+  it("still queues allow for a listed instance, deny at 20 and allow at 19", async () => {
+    expect((await run(withList([...many.slice(0, 19), INSTANCE]).deps, form("allow"))).ok).toBe(
+      true,
+    );
+    expect((await run(withList(many).deps, form("deny"))).ok).toBe(true);
+    expect((await run(withList(many.slice(0, 19)).deps, form("allow"))).ok).toBe(true);
+  });
+});

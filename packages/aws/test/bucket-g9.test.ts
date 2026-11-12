@@ -151,3 +151,58 @@ describe("set_bucket_resource_access", () => {
     ).rejects.toMatchObject({ code: "conflict" });
   });
 });
+
+// WPU-S6: the remembered list holds 20 instances at most. A 21st allow is refused BEFORE AWS is asked,
+// because an instance that AWS granted but the list dropped would not be revoked at suspend.
+const ids = (n: number) =>
+  Array.from({ length: n }, (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`);
+
+describe("set_bucket_resource_access cap (WPU-S6)", () => {
+  it("refuses the 21st instance with a conflict and no AWS call", async () => {
+    const s = setup();
+    s.aws.on("lightsail", "SetResourceAccessForBucket", lightsailOk({}));
+    await expect(
+      s.adapter.aws.action(
+        "set_bucket_resource_access",
+        s.ctx({ instanceId: INSTANCE, access: "allow" }, { config: { accessInstances: ids(20) } }),
+      ),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(s.calls()).toEqual([]);
+  });
+
+  it("allows the 20th, and a repeat allow of a listed instance is a no-op even at 20", async () => {
+    const nineteen = setup();
+    nineteen.aws.on("lightsail", "SetResourceAccessForBucket", lightsailOk({}));
+    const r = await nineteen.adapter.aws.action(
+      "set_bucket_resource_access",
+      nineteen.ctx(
+        { instanceId: INSTANCE, access: "allow" },
+        { config: { accessInstances: ids(19) } },
+      ),
+    );
+    expect(r).toMatchObject({ kind: "done" });
+    expect(r).toMatchObject({
+      patch: { configMerge: { accessInstances: [...ids(19), INSTANCE] } },
+    });
+
+    const full = [...ids(19), INSTANCE];
+    const again = setup();
+    const noop = await again.adapter.aws.action(
+      "set_bucket_resource_access",
+      again.ctx({ instanceId: INSTANCE, access: "allow" }, { config: { accessInstances: full } }),
+    );
+    expect(noop).toMatchObject({ kind: "done", patch: { configMerge: { accessInstances: full } } });
+    expect(again.calls()).toEqual([]);
+  });
+
+  it("deny still works at 20", async () => {
+    const s = setup();
+    s.aws.on("lightsail", "SetResourceAccessForBucket", lightsailOk({}));
+    const full = [...ids(19), INSTANCE];
+    const r = await s.adapter.aws.action(
+      "set_bucket_resource_access",
+      s.ctx({ instanceId: INSTANCE, access: "deny" }, { config: { accessInstances: full } }),
+    );
+    expect(r).toMatchObject({ patch: { configMerge: { accessInstances: ids(19) } } });
+  });
+});

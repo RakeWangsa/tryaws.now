@@ -57,6 +57,7 @@ export {
 } from "./instance";
 export { checkRestore, type RestoreCandidate, type RestoreCheck } from "./restore";
 export {
+  MAX_ACCESS_INSTANCES,
   parseBucketAccess,
   parseBucketConfig,
   resolveBucket,

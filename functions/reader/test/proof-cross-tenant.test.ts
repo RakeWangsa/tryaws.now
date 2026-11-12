@@ -100,12 +100,15 @@ describe("WP5-T3: customer A cannot read customer B's metrics", () => {
       expect(foreign).toEqual(missing);
     }
     expect(await reader.describe(world.resB, A)).toEqual(await reader.describe(world.ghost, A));
-    const viaEvent = await invoke({
-      action: "metrics",
-      resourceId: world.resB,
-      caller: A,
-      range: "1h",
-    });
+    const viaEvent = await invoke(
+      {
+        action: "metrics",
+        resourceId: world.resB,
+        caller: A,
+        range: "1h",
+      },
+      "web",
+    );
     expect(viaEvent).toEqual({ ok: false, error: "not_found" });
     expect(seen).toEqual([]);
   });

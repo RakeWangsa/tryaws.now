@@ -106,6 +106,7 @@ export const dbg9En = {
       title: "Access for servers",
       intro:
         "Let one of your servers into this bucket so the server can use it without separate keys. When the bucket is suspended all servers lose access; after it resumes you give it again.",
+      limit: "This bucket is already open to 20 servers, the most it can hold. Remove one first.",
       server: "Server",
       none: "You have no running or stopped server to give access to.",
       allowed: "Has access",

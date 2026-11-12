@@ -54,6 +54,7 @@ function world(
   const calls: string[] = [];
   const requests: unknown[] = [];
   const created: unknown[] = [];
+  const rates: number[] = [];
   const repos: FamilyRepos = {
     flagOn: async () => true,
     snapshotPriceOn: async () => over.priceOn !== false,
@@ -79,14 +80,19 @@ function world(
         return { ok: true };
       },
     } as never,
-    rateLimits: { consume: async () => ({ allowed: over.allowed !== false }) } as never,
+    rateLimits: {
+      consume: async () => {
+        rates.push(1);
+        return { allowed: over.allowed !== false };
+      },
+    } as never,
   };
   const deps: FamilyActionDeps = {
     authenticate: async () => session(over.fresh !== false),
     now: () => NOW,
     store: async (_c, fn) => fn(repos),
   };
-  return { deps, calls, requests, created };
+  return { deps, calls, requests, created, rates };
 }
 
 describe("createDbSnapshotCore", () => {
@@ -244,5 +250,40 @@ describe("deleteDbSnapshotCore", () => {
       ok: false,
       error: "not_found",
     });
+  });
+});
+
+describe("ownership is checked before the rate limit (WPU-S6, R8, R9)", () => {
+  it("a foreign or missing id consumes nothing of the limit, in both cores, with one answer", async () => {
+    const make = () => world({ allowed: false });
+    const createForeign = make();
+    const createMissing = make();
+    const a = await createDbSnapshotCore(createForeign.deps, {
+      databaseId: FOREIGN,
+      requestId: REQ,
+      name: "x",
+    });
+    const b = await createDbSnapshotCore(createMissing.deps, {
+      databaseId: "0190aaaa-0000-7000-8000-0000000000ee",
+      requestId: REQ,
+      name: "x",
+    });
+    expect(a).toEqual({ ok: false, error: "not_found" });
+    expect(b).toEqual(a);
+    expect(createForeign.rates).toEqual([]);
+    const del = make();
+    const d = await deleteDbSnapshotCore(del.deps, {
+      backupId: FOREIGN,
+      requestId: REQ,
+      confirmName: "x",
+    });
+    expect(d).toEqual({ ok: false, error: "not_found" });
+    expect(del.rates).toEqual([]);
+  });
+  it("the caller's own row still counts against the limit", async () => {
+    const w = world({ allowed: false });
+    const r = await createDbSnapshotCore(w.deps, { databaseId: DB, requestId: REQ, name: "x" });
+    expect(r).toEqual({ ok: false, error: "rate_limited" });
+    expect(w.rates).toHaveLength(1);
   });
 });

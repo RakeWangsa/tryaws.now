@@ -101,6 +101,8 @@ export function readerPortFromInvoker(invoker: ReaderInvoker): ReaderPort {
 }
 
 const TIMEOUT_MS = 6000;
+/** The alias of the reader that the role of the web tier may invoke (infra/stacks/web.ts). */
+export const READER_WEB_ALIAS = "web";
 
 function lambdaInvoker(region: string, functionName: string): ReaderInvoker {
   const client = new LambdaClient({
@@ -118,6 +120,9 @@ function lambdaInvoker(region: string, functionName: string): ReaderInvoker {
       const out = await client.send(
         new InvokeCommand({
           FunctionName: functionName,
+          // WPU-S6: the web tier invokes the "web" alias only; the reader accepts customerId on it alone
+          // and the role may invoke no other alias.
+          Qualifier: READER_WEB_ALIAS,
           InvocationType: "RequestResponse",
           Payload: new TextEncoder().encode(payload),
         }),

@@ -35,10 +35,14 @@ export async function createDbSnapshotCore(
   if (!LABEL.test(name)) bad["name"] = "invalid";
   return frame(
     deps,
-    { destructive: false, limits: FAMILY_WRITE_LIMIT("db.snapshot") },
+    {
+      destructive: false,
+      limits: FAMILY_WRITE_LIMIT("db.snapshot"),
+      own: { family: "database", id: databaseId },
+    },
     parseOf(bad),
-    async (repos) => {
-      const database = await ownResource(repos, "database", databaseId);
+    async (repos, _session, owned) => {
+      const database = owned ?? (await ownResource(repos, "database", databaseId));
       // A stopped database cannot be snapshotted.
       if (database.state !== "active") throw new Refusal("not_allowed");
       // R16: a market with no usable price sells no snapshot.
@@ -79,10 +83,14 @@ export async function deleteDbSnapshotCore(
   const typed = typeof input["confirmName"] === "string" ? input["confirmName"] : "";
   return frame(
     deps,
-    { destructive: true, limits: FAMILY_DESTROY_LIMIT("db.snapshot") },
+    {
+      destructive: true,
+      limits: FAMILY_DESTROY_LIMIT("db.snapshot"),
+      own: { family: "backup", id: backupId },
+    },
     parseOf(bad),
-    async (repos) => {
-      const backup = await ownResource(repos, "backup", backupId);
+    async (repos, _session, owned) => {
+      const backup = owned ?? (await ownResource(repos, "backup", backupId));
       const parent =
         backup.parentResourceId === null
           ? null

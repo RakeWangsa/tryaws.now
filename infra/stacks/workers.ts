@@ -134,6 +134,14 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
     permissions: permissionsOf(spec, inputs),
     environment: environmentOf(spec, inputs),
     transform: {
+      // Only the reader publishes versions: its tier aliases need a numbered version (WPU-S6).
+      ...(spec.dir === "reader"
+        ? {
+            function: (args: { publish?: boolean }) => {
+              args.publish = true;
+            },
+          }
+        : {}),
       role: (args: { name?: string }) => {
         // VERIFY: the docs do not say that transform.role may set the IAM role name; the Pulumi
         // aws.iam.Role `name` argument is what is set here.
@@ -170,6 +178,26 @@ export function workers(inputs: WorkerInputs) {
     ]),
   );
 
+  // WPU-S6: the reader has one alias per tier. The handler takes the tier from the alias in the invoked
+  // ARN (functions/reader/invoke.ts) and accepts customerId only on "web" and adminId only on "admin";
+  // web.ts grants each role lambda:InvokeFunction on its own alias ARN and on no other.
+  // VERIFY: `transform.function` reaches the aws.lambda.Function of sst.aws.Function (publish makes a
+  // numbered version; an alias cannot point to $LATEST) and `nodes.function.version` is that version.
+  const reader = invoked["reader"] as {
+    nodes: { function: { version: unknown } };
+    name: unknown;
+  };
+  const readerAliases = Object.fromEntries(
+    (["web", "admin"] as const).map((tier) => [
+      tier,
+      new aws.lambda.Alias(`ReaderAlias${tier === "web" ? "Web" : "Admin"}`, {
+        name: tier,
+        functionName: reader.name as string,
+        functionVersion: reader.nodes.function.version as string,
+      }),
+    ]),
+  ) as Record<"web" | "admin", { arn: unknown }>;
+
   // Scheduled: EventBridge Scheduler (sst.aws.CronV2), retry policy 0 (the functions are idempotent
   // and the next run repeats the work). VERIFY: CronV2 args `schedule`, `function`, `retries`.
   const crons = Object.fromEntries(
@@ -196,7 +224,7 @@ export function workers(inputs: WorkerInputs) {
     triggers: { run: String(Date.now()) },
   });
 
-  return { invoked, crons, migrator, migration };
+  return { invoked, readerAliases, crons, migrator, migration };
 }
 
 export type Workers = ReturnType<typeof workers>;
