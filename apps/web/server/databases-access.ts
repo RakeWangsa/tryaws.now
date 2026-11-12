@@ -1,5 +1,7 @@
 import { requireFreshSignIn } from "@tc/auth";
 import type { CustomerSession } from "@tc/auth";
+import { z } from "zod";
+import { formObject, formText } from "./form-schema.ts";
 import type { RevealPort } from "./windows-access.ts";
 
 // The core of the Access tab's "show the database password" action (16.10 `revealDatabasePassword`,
@@ -51,6 +53,8 @@ export type DatabaseAccessResult =
   | { ok: false; error: DatabaseAccessError };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// R9 validate: the shape is a zod schema (only `resourceId` is read, R11).
+const RevealForm = formObject({ resourceId: formText.pipe(z.string().regex(UUID)) });
 
 // What the function answers becomes a public key; its text, if any, is dropped.
 function publicError(code: string): DatabaseAccessError {
@@ -78,11 +82,9 @@ export async function revealDatabasePasswordCore(
     return { ok: false, error: "fresh_sign_in_required" };
   }
 
-  const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  const resourceId = input["resourceId"];
-  if (typeof resourceId !== "string" || !UUID.test(resourceId)) {
-    return { ok: false, error: "validation" };
-  }
+  const parsed = RevealForm.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: "validation" };
+  const { resourceId } = parsed.data;
   if (deps.reveal === null) return { ok: false, error: "unavailable" };
 
   try {

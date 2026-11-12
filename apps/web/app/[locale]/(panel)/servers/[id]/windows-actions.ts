@@ -13,7 +13,10 @@ import type { RevealResult } from "./WindowsAccess.tsx";
 //
 // The transport to the access-details function (a direct Lambda invocation) is not wired yet: until it
 // is, `reveal` is null and the core refuses every request (R16). VERIFY at deploy time.
-const REVEAL_LIMITS = [{ action: "windows_password.reveal", limit: 20, windowSeconds: 3600 }];
+// L4 (WPU-B7): the web tier counts under its own action name. The access-details function counts under
+// "windows_password.reveal" for the same customer, so one reveal is one hit in each, not two in one: the
+// effective limit stays 20 an hour.
+const REVEAL_LIMITS = [{ action: "windows_password.reveal.web", limit: 20, windowSeconds: 3600 }];
 
 export async function revealWindowsPasswordAction(form: FormData): Promise<RevealResult> {
   if (!(await guardAction())) return { ok: false, error: "unauthenticated" };
@@ -31,6 +34,12 @@ export async function revealWindowsPasswordAction(form: FormData): Promise<Revea
             new Date(),
           );
           return decision.allowed;
+        }),
+      // The customer's own Windows server, through the scoped repository (R8).
+      ownedWindows: (customerId, resourceId) =>
+        withTx(async (tx) => {
+          const row = await customerRepos(tx, customerId).resources.get(resourceId);
+          return row !== null && row.family === "windows_instance" ? row.state : null;
         }),
       // TODO(infra): a `RevealPort` (HTTPS function URL with SigV4, or a Lambda client). Until it
       // is decided and wired this stays null and every request is refused (R16).

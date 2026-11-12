@@ -168,8 +168,9 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
     permissions: permissionsOf(spec, inputs),
     environment: environmentOf(spec, inputs),
     transform: {
-      // Only the reader publishes versions: its tier aliases need a numbered version (WPU-S6).
-      ...(spec.dir === "reader"
+      // Only the reader and the invoice renderer publish versions: their aliases need a numbered
+      // version (WPU-S6, WPU-B7 L3).
+      ...(spec.dir === "reader" || spec.dir === "invoice-renderer"
         ? {
             function: (args: { publish?: boolean }) => {
               args.publish = true;
@@ -232,6 +233,19 @@ export function workers(inputs: WorkerInputs) {
     ]),
   ) as Record<"web" | "admin", { arn: unknown }>;
 
+  // WPU-B7 (L3): the invoice renderer has the one alias "web". The handler refuses every invocation
+  // whose invoked ARN does not name that alias (functions/invoice-renderer/invoke.ts), and web.ts
+  // grants lambda:InvokeFunction on the alias ARN only, never on the unqualified function ARN.
+  const renderer = invoked["invoice-renderer"] as {
+    nodes: { function: { version: unknown } };
+    name: unknown;
+  };
+  const rendererAlias = new aws.lambda.Alias("RendererAliasWeb", {
+    name: "web",
+    functionName: renderer.name as string,
+    functionVersion: renderer.nodes.function.version as string,
+  }) as { arn: unknown };
+
   // Scheduled: EventBridge Scheduler (sst.aws.CronV2), retry policy 0 (the functions are idempotent
   // and the next run repeats the work). VERIFY: CronV2 args `schedule`, `function`, `retries`.
   const crons = Object.fromEntries(
@@ -265,7 +279,7 @@ export function workers(inputs: WorkerInputs) {
     triggers: { run: String(Date.now()) },
   });
 
-  return { invoked, readerAliases, crons, migrator, migration };
+  return { invoked, readerAliases, rendererAlias, crons, migrator, migration };
 }
 
 export type Workers = ReturnType<typeof workers>;

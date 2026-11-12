@@ -1,8 +1,11 @@
 import { requireFreshSignIn } from "@tc/auth";
 import type { CustomerSession } from "@tc/auth";
+import { z } from "zod";
+import { formObject, formText } from "./form-schema.ts";
 
 // The core of the Access tab's "show the Windows password" action (16.10, U9). R9 order: authenticate,
-// authorize (a fresh sign-in, 6.1), validate, rate limit, execute. The audit row is written by the
+// authorize (a fresh sign-in, 6.1, and the customer's own Windows server, read through the scoped
+// repository, R8), validate with zod, rate limit, execute. The audit row is written by the
 // access-details function, in the same call, and the secret is not released without it.
 //
 // R1: this tier never imports packages/aws. The password is fetched by the access-details function
@@ -31,6 +34,11 @@ export type RevealPort = (input: {
 export interface WindowsAccessDeps {
   authenticate(): Promise<CustomerSession | null>;
   now(): Date;
+  /**
+   * The state of the Windows server row if it is the customer's own, else null. The answer for another
+   * customer's row, a row of another family and a missing one is the same (R8).
+   */
+  ownedWindows(customerId: string, resourceId: string): Promise<string | null>;
   /** One hit against the customer's limit for this action; false when it is used up. */
   rateLimit(session: CustomerSession): Promise<boolean>;
   /** The invocation of access-details; the customer id is the session's (R8). null: not wired. */
@@ -57,6 +65,8 @@ export type WindowsAccessResult =
   | { ok: false; error: WindowsAccessError };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// R9 validate: the shape is a zod schema (only `resourceId` is read, R11).
+const RevealForm = formObject({ resourceId: formText.pipe(z.string().regex(UUID)) });
 
 // What the function answers becomes a public key; its text, if any, is dropped.
 function publicError(code: string): WindowsAccessError {
@@ -83,14 +93,16 @@ export async function revealWindowsPasswordCore(
   const fresh = requireFreshSignIn(session, { now: deps.now });
   if (!fresh.ok) return { ok: false, error: "fresh_sign_in_required" };
 
-  const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  const resourceId = input["resourceId"];
-  if (typeof resourceId !== "string" || !UUID.test(resourceId)) {
-    return { ok: false, error: "validation" };
-  }
+  const parsed = RevealForm.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: "validation" };
+  const { resourceId } = parsed.data;
   if (deps.reveal === null) return { ok: false, error: "unavailable" };
 
   try {
+    // The tenant check of this tier: another customer's server and a missing one are one answer (R8).
+    const state = await deps.ownedWindows(session.customerId, resourceId);
+    if (state === null) return { ok: false, error: "not_found" };
+    if (state !== "active") return { ok: false, error: "not_ready" };
     if (!(await deps.rateLimit(session))) return { ok: false, error: "rate_limited" };
     const answer = await deps.reveal({ customerId: session.customerId, resourceId });
     if (!answer.ok) return { ok: false, error: publicError(answer.error) };

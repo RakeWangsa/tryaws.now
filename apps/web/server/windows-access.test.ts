@@ -15,6 +15,10 @@ function session(over: Partial<CustomerSession> = {}): CustomerSession {
   } as CustomerSession;
 }
 
+// The tenant-scoped read: only the owner's own Windows server is found, like repos.resources.get.
+const OWNED = new Map([[`${CUSTOMER}:${RES}`, "active"]]);
+const OTHER_CUSTOMER = "22222222-2222-4222-8222-222222222222";
+
 function setup(over: Partial<WindowsAccessDeps> = {}) {
   const order: string[] = [];
   const revealed: { customerId: string; resourceId: string }[] = [];
@@ -24,6 +28,10 @@ function setup(over: Partial<WindowsAccessDeps> = {}) {
       return session();
     },
     now: () => NOW,
+    ownedWindows: async (customerId, resourceId) => {
+      order.push("owned");
+      return OWNED.get(`${customerId}:${resourceId}`) ?? null;
+    },
     rateLimit: async () => {
       order.push("limit");
       return true;
@@ -48,7 +56,7 @@ describe("revealWindowsPasswordCore", () => {
       password: SECRET,
       cacheControl: "no-store",
     });
-    expect(order).toEqual(["authenticate", "limit", "reveal"]);
+    expect(order).toEqual(["authenticate", "owned", "limit", "reveal"]);
   });
 
   it("takes the customer from the session, never from the input (R8)", async () => {
@@ -100,14 +108,71 @@ describe("revealWindowsPasswordCore", () => {
     expect(order).not.toContain("reveal");
   });
 
-  it("another customer's server and a missing one give the same answer (R8)", async () => {
-    const { deps } = setup({ reveal: async () => ({ ok: false, error: "not_found" }) });
-    const a = await revealWindowsPasswordCore(deps, { resourceId: RES });
-    const b = await revealWindowsPasswordCore(deps, {
+  // R8, non-vacuous: the tenant read is the real lookup above (only CUSTOMER's pair is found), the
+  // function is a spy that must never be reached, and the session of customer B asks for A's server.
+  it("customer B asking for customer A's server gets the answer of a missing id, and the tenant read ran (R8)", async () => {
+    const reached: string[] = [];
+    const asB = setup({
+      authenticate: async () => session({ customerId: OTHER_CUSTOMER }),
+      reveal: async () => {
+        reached.push("reveal");
+        return { ok: true, value: { username: "Administrator", password: SECRET } };
+      },
+    });
+    const crossTenant = await revealWindowsPasswordCore(asB.deps, { resourceId: RES });
+    const missing = await revealWindowsPasswordCore(asB.deps, {
       resourceId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     });
-    expect(a).toEqual({ ok: false, error: "not_found" });
-    expect(b).toEqual(a);
+    expect(crossTenant).toEqual({ ok: false, error: "not_found" });
+    expect(missing).toEqual(crossTenant);
+    // The ownership read ran for both, before the limiter and before the function.
+    expect(asB.order).toEqual(["owned", "owned"]);
+    expect(reached).toEqual([]);
+    expect(JSON.stringify(crossTenant)).not.toContain(SECRET);
+    // The owner, same code path, is served: the lookup is what tells the two apart.
+    const asA = setup();
+    expect(await revealWindowsPasswordCore(asA.deps, { resourceId: RES })).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("a server that is not active is not_ready, before the limiter", async () => {
+    const { deps, order } = setup({ ownedWindows: async () => "stopped" });
+    expect(await revealWindowsPasswordCore(deps, { resourceId: RES })).toEqual({
+      ok: false,
+      error: "not_ready",
+    });
+    expect(order).not.toContain("limit");
+  });
+
+  it("maps the answers of the function to public keys (not_found from the function stays not_found)", async () => {
+    const { deps } = setup({ reveal: async () => ({ ok: false, error: "not_found" }) });
+    expect(await revealWindowsPasswordCore(deps, { resourceId: RES })).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+  });
+
+  it("reads only the named field with zod: extra fields and a padded id are handled by the schema", async () => {
+    const { deps, revealed } = setup();
+    await revealWindowsPasswordCore(deps, { resourceId: ` ${RES} `, customerId: "evil", x: 1 });
+    expect(revealed).toEqual([{ customerId: CUSTOMER, resourceId: RES }]);
+    expect(await revealWindowsPasswordCore(deps, { resourceId: [RES] })).toMatchObject({
+      error: "validation",
+    });
+  });
+
+  it("fails closed when the ownership read throws", async () => {
+    const { deps, order } = setup({
+      ownedWindows: async () => {
+        throw new Error("db down");
+      },
+    });
+    expect(await revealWindowsPasswordCore(deps, { resourceId: RES })).toEqual({
+      ok: false,
+      error: "unavailable",
+    });
+    expect(order).not.toContain("reveal");
   });
 
   it("maps every function answer to a public key and never passes raw text", async () => {

@@ -34,7 +34,7 @@ export function familyActionDeps(flag: string): FamilyActionDeps {
   };
 }
 
-const KEY_LIMITS = [{ action: "bucket_key.create", limit: 10, windowSeconds: 3600 }];
+const KEY_LIMITS = [{ action: "bucket_key.create.web", limit: 10, windowSeconds: 3600 }];
 
 /**
  * The ports of createBucketKeyCore. The transport to the access-details function (a direct Lambda

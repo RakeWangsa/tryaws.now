@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { renderInvoiceHtml, type InvoiceDocument } from "@tc/core";
-import { createInvoiceRendererHandler, MAX_HTML_BYTES, type RendererDeps } from "./handler";
+import {
+  createInvoiceRendererHandler,
+  MAX_HTML_BYTES,
+  rendererTierOf,
+  type RendererDeps,
+} from "./handler";
 import { createFakePdfRenderer } from "./fake";
 
 const customerId = "0190a000-0000-7000-8000-000000000001";
@@ -43,7 +48,9 @@ function setup(over: Partial<RendererDeps> = {}) {
     log: (e) => logs.push(e as unknown as Record<string, unknown>),
     ...over,
   };
-  return { handler: createInvoiceRendererHandler(deps), stored, logs };
+  const inner = createInvoiceRendererHandler(deps);
+  // The invocation of the "web" alias; the tests of the tier use `inner` directly.
+  return { handler: (event: unknown) => inner(event, "web"), inner, stored, logs };
 }
 
 describe("invoice-renderer handler", () => {
@@ -218,5 +225,38 @@ describe("invoice-renderer handler", () => {
       expect(text).not.toContain("TC-2026");
       expect(text).not.toContain("Rahim");
     }
+  });
+});
+
+describe("tier of the invocation (WPU-B7 L3)", () => {
+  const FN = "arn:aws:lambda:ap-southeast-1:111122223333:function:tc-invoice-renderer";
+  it("accepts exactly the alias web and nothing else", () => {
+    expect(rendererTierOf(`${FN}:web`)).toBe("web");
+    for (const arn of [
+      FN,
+      `${FN}:$LATEST`,
+      `${FN}:admin`,
+      `${FN}:Web`,
+      `${FN}:web:x`,
+      `${FN}:3`,
+      "web",
+      "",
+      undefined,
+      null,
+      42,
+    ]) {
+      expect(rendererTierOf(arn), String(arn)).toBeNull();
+    }
+  });
+  it("refuses an invocation of no tier before the event is read and renders nothing", async () => {
+    const { inner, stored, logs } = setup();
+    for (const tier of [null, undefined, "admin" as never]) {
+      expect(await inner({ customerId, invoiceId, locale: "bn", html }, tier as never)).toEqual({
+        ok: false,
+        reason: "wrong_tier",
+      });
+    }
+    expect(stored.size).toBe(0);
+    expect(logs.every((l) => l["reason"] === "wrong_tier")).toBe(true);
   });
 });

@@ -127,7 +127,12 @@ export function web(inputs: WebInputs) {
       { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
-        resources: [workers.readerAliases.web.arn, ...invoke("access-details", "invoice-renderer")],
+        // The renderer only by its "web" alias (WPU-B7 L3): the unqualified ARN is granted to no role.
+        resources: [
+          workers.readerAliases.web.arn,
+          workers.rendererAlias.arn,
+          ...invoke("access-details"),
+        ],
       },
       {
         actions: ["s3:PutObject"],
@@ -165,7 +170,6 @@ export function web(inputs: WebInputs) {
       ...dbEnvironment("admin_rw"),
       COGNITO_USER_POOL_ID: auth.admins.id,
       COGNITO_CLIENT_ID: auth.adminClient.id,
-      PROVISIONING_QUEUE_URL: queues.provisioning.url,
       KYC_BUCKET: storage.kyc.name,
       EXPORTS_BUCKET: storage.exports.name,
     },
@@ -173,8 +177,9 @@ export function web(inputs: WebInputs) {
     // API of the admin pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
     // invoice-renderer (WPU-S8): an invoice PDF holds the buyer's BIN or NID and address; the renderer
     // function writes it and the customer's own web path reads it.
+    // WPU-B7 (L1): no sqs:SendMessage and no queue URL: the admin app has no queue client, it writes
+    // operation rows and the scheduler enqueues them (R1).
     permissions: record([
-      { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
         resources: [workers.readerAliases.admin.arn, ...invoke("catalog-sync")],

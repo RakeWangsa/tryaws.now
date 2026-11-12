@@ -14,7 +14,7 @@ import type { DatabaseRevealResult } from "./DatabaseAccess.tsx";
 // The transport to the access-details function (a direct invocation) is not wired yet, as for the
 // Windows password: until it is, `reveal` is null and the core refuses every request (R16). VERIFY at
 // deploy time (JOURNEY.md, Needs decision).
-const REVEAL_LIMITS = [{ action: "database_password.reveal", limit: 20, windowSeconds: 3600 }];
+const REVEAL_LIMITS = [{ action: "database_password.reveal.web", limit: 20, windowSeconds: 3600 }];
 
 export async function revealDatabasePasswordAction(form: FormData): Promise<DatabaseRevealResult> {
   if (!(await guardAction())) return { ok: false, error: "unauthenticated" };

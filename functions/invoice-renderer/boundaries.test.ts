@@ -39,9 +39,12 @@ describe("invoice-renderer boundaries", () => {
     const before = process.env["INVOICES_BUCKET"];
     delete process.env["INVOICES_BUCKET"];
     try {
-      await expect(handler({})).rejects.toThrow(
-        "invoice-renderer: the invoices bucket is not configured",
-      );
+      await expect(
+        handler(
+          {},
+          { invokedFunctionArn: "arn:aws:lambda:ap-southeast-1:111122223333:function:r:web" },
+        ),
+      ).rejects.toThrow("invoice-renderer: the invoices bucket is not configured");
     } finally {
       if (before !== undefined) process.env["INVOICES_BUCKET"] = before;
     }

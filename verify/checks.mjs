@@ -3075,6 +3075,21 @@ TASKS["WPU-F1"] = [
   repo,
 ];
 
+// WPU-B7: the fixes of the security review (zod in the one-time-secret cores, the real tenant read of the
+// Windows password, the alias of the renderer, per-tier rate limit names, the log words). Local proof only.
+TASKS["WPU-B7"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  epsAll,
+  walletWeb,
+  accessDetailsFn,
+  invoiceRenderer,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

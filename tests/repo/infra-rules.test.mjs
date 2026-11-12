@@ -489,7 +489,9 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     // the customer path still reads its own invoices and invokes the renderer
     const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
     expect(customer).toContain("$interpolate`${storage.invoices.arn}/*`");
-    expect(customer).toContain('invoke("access-details", "invoice-renderer")');
+    // WPU-B7 (L3): the renderer by its "web" alias only, never the unqualified ARN
+    expect(customer).toContain("workers.rendererAlias.arn");
+    expect(customer).toContain('...invoke("access-details")');
     expect(customer).not.toMatch(
       /s3:PutObject"\], resources: \[\$interpolate`\$\{storage\.invoices/,
     );

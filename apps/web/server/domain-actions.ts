@@ -1,4 +1,5 @@
 import type { CustomerSession } from "@tc/auth";
+import { z } from "zod";
 import {
   checkSecondConfirmation,
   normalizeDomainName,
@@ -12,6 +13,7 @@ import type {
   RateLimitsRepo,
   SubscriptionsRepo,
 } from "@tc/db";
+import { formObject, formText } from "./form-schema.ts";
 import { publicErrorOf } from "./order-actions.ts";
 import type { DraftActionResult, OrderActionDeps } from "./order-actions.ts";
 
@@ -157,6 +159,13 @@ export type DomainResult =
   { ok: true; done: string } | { ok: false; error: DomainError; fields?: Record<string, string> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// R9 validate: the shape of the renewal switch is a zod schema; only these three fields are read (R11).
+// The name is checked in full by normalizeDomainName below, against the TLD that follows its label.
+const AutoRenewForm = formObject({
+  name: formText.pipe(z.string().max(253)),
+  requestId: formText.pipe(z.string().regex(UUID)),
+  enabled: formText.pipe(z.enum(["on", "off"])),
+});
 export const DOMAIN_WRITE_LIMIT: CustomerLimit[] = [
   Object.freeze({ action: "domain.write", limit: 30, windowSeconds: 3600 }),
 ];
@@ -178,19 +187,20 @@ export async function setDomainAutoRenewCore(
 ): Promise<DomainResult> {
   const session = await deps.authenticate();
   if (session === null) return { ok: false, error: "unauthenticated" };
-  const input = record(raw);
-  const bad: Record<string, string> = {};
-  const requestId = input["requestId"];
-  const enabled = input["enabled"];
-  // Shape only: the owned row is looked up by the exact name, and the TLD is whatever follows the label.
-  const typed = typeof input["name"] === "string" ? input["name"].trim().toLowerCase() : "";
-  const name = normalizeDomainName(typed, [typed.slice(typed.indexOf(".") + 1)]);
-  if (!name.ok) bad["name"] = "invalid";
-  if (typeof requestId !== "string" || !UUID.test(requestId)) bad["requestId"] = "invalid";
-  if (enabled !== "on" && enabled !== "off") bad["enabled"] = "invalid";
-  if (Object.keys(bad).length > 0 || !name.ok) {
+  const parsed = AutoRenewForm.safeParse(raw);
+  if (!parsed.success) {
+    const bad: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path[0];
+      if (typeof key === "string") bad[key] = "invalid";
+    }
     return { ok: false, error: "validation", fields: bad };
   }
+  const { enabled } = parsed.data;
+  // Shape only: the owned row is looked up by the exact name, and the TLD is whatever follows the label.
+  const typed = parsed.data.name.toLowerCase();
+  const name = normalizeDomainName(typed, [typed.slice(typed.indexOf(".") + 1)]);
+  if (!name.ok) return { ok: false, error: "validation", fields: { name: "invalid" } };
   try {
     return await deps.store(session.customerId, async (repos) => {
       if (!(await repos.domainOn())) throw new Refusal("flag_off");
