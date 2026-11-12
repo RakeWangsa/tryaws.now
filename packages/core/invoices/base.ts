@@ -36,6 +36,16 @@ export function formatInvoiceNumber(fiscalYear: number, number: number): string 
   return `TC-${fiscalYear}-${String(number).padStart(6, "0")}`;
 }
 
+// WPU-C1: the number of a credit note (Mushak-6.7): its own sequence for each fiscal year, apart from the
+// invoices. Latin digits always.
+export function formatCreditNoteNumber(fiscalYear: number, number: number): string {
+  if (!Number.isInteger(fiscalYear) || fiscalYear < 2026) throw new InvoiceError("invalid_number");
+  if (!Number.isInteger(number) || number < 1 || number > 999_999) {
+    throw new InvoiceError("invalid_number");
+  }
+  return `TC-CN-${fiscalYear}-${String(number).padStart(6, "0")}`;
+}
+
 export type Numerals = "beng" | "latn";
 const BENGALI_DIGITS = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
 

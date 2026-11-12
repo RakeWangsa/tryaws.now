@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   check,
   foreignKey,
   index,
@@ -286,9 +287,37 @@ export const invoices = pgTable(
     // tax id), or null when the customer had entered none. Parsed by parseBuyerSnapshot of the core.
     buyer: jsonb("buyer"),
     createdAt: createdAt(),
+    // WPU-C1: the instant of the charge (the ledger transaction time), the tax point of the supply. NULL on a
+    // row issued before the column existed.
+    supplyAt: timestamp("supply_at", { withTimezone: true }),
+    // WPU-C1: 'invoice' (Mushak-6.3) or 'credit_note' (Mushak-6.7). Each kind numbers its own gap-free
+    // sequence for each fiscal year.
+    kind: text("kind").notNull().default("invoice"),
+    // A credit note names the invoice it credits and the reversal it answers (both unique: one credit note
+    // for each invoice and for each reversal, R7), and the reason.
+    originalInvoiceId: uuid("original_invoice_id").references((): AnyPgColumn => invoices.id),
+    creditForLedgerTransactionId: uuid("credit_for_ledger_transaction_id"),
+    reason: text("reason"),
   },
   (t) => [
-    unique("invoices_fiscal_year_number_unique").on(t.fiscalYear, t.number),
+    // The generated name of this key is longer than the 63 bytes PostgreSQL keeps.
+    foreignKey({
+      name: "invoices_credit_for_ledger_tx_fk",
+      columns: [t.creditForLedgerTransactionId],
+      foreignColumns: [ledgerTransactions.id],
+    }),
+    unique("invoices_fiscal_year_kind_number_unique").on(t.fiscalYear, t.kind, t.number),
+    unique("invoices_original_invoice_id_unique").on(t.originalInvoiceId),
+    unique("invoices_credit_for_ledger_transaction_id_unique").on(t.creditForLedgerTransactionId),
+    check("invoices_kind_check", sql`${t.kind} in ('invoice', 'credit_note')`),
+    check(
+      "invoices_credit_note_check",
+      sql`(${t.kind} = 'credit_note') = (${t.originalInvoiceId} is not null and ${t.creditForLedgerTransactionId} is not null and ${t.reason} is not null) and (${t.kind} = 'credit_note' or (${t.originalInvoiceId} is null and ${t.creditForLedgerTransactionId} is null and ${t.reason} is null))`,
+    ),
+    check(
+      "invoices_reason_check",
+      sql`${t.reason} is null or ${t.reason} in ('refund', 'plan_change_not_delivered', 'order_failed')`,
+    ),
     unique("invoices_order_id_unique").on(t.orderId),
     unique("invoices_ledger_transaction_id_unique").on(t.ledgerTransactionId),
     check(

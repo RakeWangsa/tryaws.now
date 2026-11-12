@@ -68,12 +68,16 @@ export type {
   InvoiceRow,
   InvoicesRepo,
   NewBacklogEntry,
+  CreditNoteReason,
+  CreditNoteResult,
   NewChargeInvoice,
+  NewCreditNote,
   NewInvoice,
   NewInvoiceBuyer,
 } from "./repositories/customer/invoices";
 export { invoiceBacklogRepo } from "./repositories/system/invoice-backlog";
 export type {
+  CreditNoteToIssue,
   InvoiceBacklogRepo,
   PendingInvoice,
   PendingInvoices,
@@ -250,6 +254,7 @@ export {
   type SellerRow,
 } from "./repositories/config/invoice-seller";
 export type { IssueResult } from "./repositories/customer/invoices";
+export { CREDIT_NOTE_REASONS } from "./repositories/customer/invoices";
 export {
   INVOICE_BACKLOG_SOURCE,
   INVOICE_UNRECORDED_SOURCE,

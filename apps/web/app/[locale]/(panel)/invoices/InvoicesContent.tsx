@@ -65,9 +65,14 @@ export function InvoicesContent({
             key: "number",
             header: t("list.number"),
             cell: (row: InvoiceListItem) => (
-              <a href={localePath(locale, `/invoices/${encodeURIComponent(row.id)}`)}>
-                {row.number}
-              </a>
+              <>
+                <a href={localePath(locale, `/invoices/${encodeURIComponent(row.id)}`)}>
+                  {row.number}
+                </a>
+                {row.kind === "credit_note" ? (
+                  <span className="seccolor small ms-2">{t("list.creditNote")}</span>
+                ) : null}
+              </>
             ),
           },
           {

@@ -14,7 +14,10 @@ import {
   type Numerals,
 } from "./base";
 
-export type DocumentKind = "invoice" | "receipt";
+export type DocumentKind = "invoice" | "receipt" | "credit_note";
+
+/** WPU-C1: why a credit note was issued (the stored codes of invoices.reason). */
+export type CreditReason = "refund" | "plan_change_not_delivered" | "order_failed";
 
 export interface InvoiceDocument {
   kind: DocumentKind;
@@ -32,6 +35,14 @@ export interface InvoiceDocument {
   lines: readonly InvoiceLine[];
   totalMinor: Minor;
   numerals?: Numerals;
+  /**
+   * WPU-C1 (ruling 5): the date of supply of a tax invoice: the charge date (the ledger transaction time).
+   * A normal invoice shows the same date as the date of issue; a backlog invoice shows the original charge
+   * date. null or omitted: not known, printed as "-" (nothing is invented).
+   */
+  supplyAt?: Date | null;
+  /** WPU-C1: a credit note (kind "credit_note") names the invoice it credits and the reason. */
+  credit?: { originalNumber: string; originalIssuedAt: Date; reason: CreditReason };
 }
 
 // 16.13, unchanged.
@@ -148,6 +159,21 @@ const MUSHAK = {
     unit: "1 service",
     fallback: "Cloud service, Amazon Lightsail",
     contact: "Contact",
+    supplyDate: "Date of supply",
+    original: "Original / মূল কপি",
+    creditTitle: "Credit Note",
+    creditForm: "Mushak-6.7",
+    creditNo: "Credit note no.",
+    originalNo: "Original invoice no.",
+    originalDate: "Original invoice date",
+    reason: "Reason",
+    reasonText: {
+      refund: "Refund",
+      plan_change_not_delivered: "Plan change not delivered",
+      order_failed: "Order failed",
+    },
+    reverses: "This credit note reverses the original invoice in full.",
+    creditWords: "Amount credited in words",
   },
   bn: {
     gov: "গণপ্রজাতন্ত্রী বাংলাদেশ সরকার",
@@ -187,6 +213,21 @@ const MUSHAK = {
     unit: "১ সেবা",
     fallback: "ক্লাউড সেবা, Amazon Lightsail",
     contact: "যোগাযোগ",
+    supplyDate: "সরবরাহের তারিখ",
+    original: "Original / মূল কপি",
+    creditTitle: "ক্রেডিট নোট",
+    creditForm: "মূসক-৬.৭ (Mushak-6.7)",
+    creditNo: "ক্রেডিট নোট নম্বর",
+    originalNo: "মূল চালানের নম্বর",
+    originalDate: "মূল চালানের তারিখ",
+    reason: "কারণ",
+    reasonText: {
+      refund: "ফেরত (রিফান্ড)",
+      plan_change_not_delivered: "প্ল্যান পরিবর্তন সম্পন্ন হয়নি",
+      order_failed: "অর্ডার ব্যর্থ হয়েছে",
+    },
+    reverses: "এই ক্রেডিট নোট মূল চালানটি সম্পূর্ণ বাতিল করে।",
+    creditWords: "ক্রেডিট করা পরিমাণ কথায়",
   },
 } as const;
 const VAT_CODE = "bd_vat";
@@ -218,6 +259,7 @@ body{font-family:"Noto Sans Bengali","Noto Sans",sans-serif;color:#1b1f23;font-s
 .head .gov{font-size:13px;font-weight:700}
 .head h1{font-size:18px;margin:6px 0 2px}
 .form{text-align:right;font-weight:700}
+.copy{text-align:right;font-size:11px}
 .grid{display:flex;gap:16px;margin-top:12px}
 .grid>div{flex:1;border:1px solid #1b1f23;padding:8px}
 .grid h2{font-size:12px;margin:0 0 4px}
@@ -361,15 +403,39 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
   const buyerTaxText =
     buyerTax === null || buyerTax === undefined ? dash : num(esc(buyerTax.value));
   const when = `${dateText(doc.issuedAt, locale, doc.numerals)} ${timeText(doc.issuedAt, locale, doc.numerals)}`;
+  const credit = doc.kind === "credit_note";
+  // A credit note names the invoice it credits and the reason (ruling 6); it never prints without them (R16).
+  if (credit && doc.credit === undefined) throw new InvoiceError("invalid_lines");
+  const title = credit ? t.creditTitle : t.title;
+  const form = credit ? t.creditForm : t.form;
+  const supply =
+    doc.supplyAt === undefined || doc.supplyAt === null
+      ? dash
+      : dateText(doc.supplyAt, locale, doc.numerals);
+  const numberBlock = credit
+    ? [
+        `<strong>${t.creditNo}:</strong> ${esc(doc.number)}<br>`,
+        `<strong>${t.originalNo}:</strong> ${esc(doc.credit?.originalNumber ?? "")}<br>`,
+        `<strong>${t.originalDate}:</strong> ${dateText(doc.credit?.originalIssuedAt ?? doc.issuedAt, locale, doc.numerals)}<br>`,
+        `<strong>${t.reason}:</strong> ${esc(t.reasonText[doc.credit?.reason ?? "refund"])}<br>`,
+        `<strong>${t.issued}:</strong> ${when}`,
+      ].join("")
+    : [
+        `<strong>${t.invoiceNo}:</strong> ${esc(doc.number)}<br>`,
+        `<strong>${t.supplyDate}:</strong> ${supply}<br>`,
+        `<strong>${t.issued}:</strong> ${when}`,
+      ].join("");
 
   return [
     "<!doctype html>",
     `<html lang="${locale}">`,
-    `<head><meta charset="utf-8"><title>${esc(t.title)} ${esc(doc.number)}</title><style>${MUSHAK_CSS}</style></head>`,
+    `<head><meta charset="utf-8"><title>${esc(title)} ${esc(doc.number)}</title><style>${MUSHAK_CSS}</style></head>`,
     "<body>",
-    `<div class="form">${esc(t.form)}</div>`,
+    `<div class="form">${esc(form)}</div>`,
+    `<div class="copy">${esc(t.original)}</div>`,
     `<div class="head"><div class="gov">${esc(t.gov)}</div><div class="gov">${esc(t.board)}</div>`,
-    `<h1>${esc(t.title)}</h1><div>${esc(t.rule)}</div></div>`,
+    // The rule citation of the credit note form is not checked against the official text: none is printed.
+    `<h1>${esc(title)}</h1>${credit ? "" : `<div>${esc(t.rule)}</div>`}</div>`,
     `<div class="grid"><div><h2>${t.seller}</h2>`,
     `<div><strong>${t.sellerName}:</strong> ${esc(name)}</div>`,
     `<div><strong>${t.bin}:</strong> ${num(esc(seller.bin))}</div>`,
@@ -385,7 +451,7 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
     `<div><strong>${t.address}:</strong> ${buyerAddress}</div>`,
     `<div><strong>${buyerTax?.kind === "nid" ? t.nid : t.bin}:</strong> ${buyerTaxText}</div>`,
     `</div></div>`,
-    `<div class="grid"><div><strong>${t.invoiceNo}:</strong> ${esc(doc.number)}<br><strong>${t.issued}:</strong> ${when}</div>`,
+    `<div class="grid"><div>${numberBlock}</div>`,
     `<div><strong>${t.destination}:</strong> ${buyerAddress}<br><strong>${t.vehicle}:</strong> ${dash}</div></div>`,
     `<table><thead><tr><th>${t.serial}</th><th>${t.description}</th><th>${t.quantity}</th>`,
     `<th class="num">${t.unitPrice}</th><th class="num">${t.totalExcl}</th><th class="num">${t.sd}</th>`,
@@ -393,7 +459,8 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
     `<tbody>${rows.map((r, i) => mushakRowHtml(r, i, t.unit, money, num)).join("")}</tbody>`,
     `<tfoot><tr><td colspan="4">${t.total}</td><td class="num">${money(rows.reduce((s, r) => s + r.priceExcl, 0n))}</td><td class="num">${money(0n)}</td>`,
     `<td></td><td></td><td class="num">${money(rows.reduce((s, r) => s + r.vat, 0n))}</td><td class="num">${money(doc.totalMinor)}</td></tr></tfoot></table>`,
-    `<p class="words"><strong>${t.words}:</strong> ${amountInWords(doc.totalMinor, locale)}</p>`,
+    `<p class="words"><strong>${credit ? t.creditWords : t.words}:</strong> ${amountInWords(doc.totalMinor, locale)}</p>`,
+    credit ? `<p>${t.reverses}</p>` : "",
     `<table><caption>${t.components}</caption><tbody>${parsed
       .filter((p) => !(p.line.kind === "step" && p.line.code === VAT_CODE))
       .map(
@@ -408,7 +475,7 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
 }
 
 export function renderInvoiceHtml(doc: InvoiceDocument, locale: Locale): string {
-  if (doc.kind === "invoice") return renderMushak(doc, locale);
+  if (doc.kind === "invoice" || doc.kind === "credit_note") return renderMushak(doc, locale);
   const t = TEXT[locale];
   let sum = 0n;
   const rows = doc.lines.map((line) => {

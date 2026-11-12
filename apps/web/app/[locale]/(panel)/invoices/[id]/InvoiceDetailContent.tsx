@@ -69,6 +69,7 @@ export function InvoiceDetailContent({
   }
 
   const { invoice, buyer } = screen;
+  const credit = invoice.credit;
   // The name, address and tax id as stored on the invoice the day it was issued (WPU-I3), shown to
   // the customer who owns the invoice; nothing is shown for what the customer did not enter.
   const billedName = buyer?.name ?? customerName;
@@ -81,7 +82,11 @@ export function InvoiceDetailContent({
           {t("detail.back")}
         </a>
       </p>
-      <h1 className="h3 mergecolor mb-4">{t("detail.title", { number: invoice.number })}</h1>
+      <h1 className="h3 mergecolor mb-4">
+        {t(credit === undefined ? "detail.title" : "detail.creditTitle", {
+          number: invoice.number,
+        })}
+      </h1>
       <Card className="mb-4">
         <div className="row g-3">
           <div className="col-12 col-md-4">
@@ -94,6 +99,32 @@ export function InvoiceDetailContent({
               <DateText value={invoice.issuedAt} numerals={numerals} />
             </b>
           </div>
+          {credit === undefined && invoice.supplyAt !== null ? (
+            <div className="col-12 col-md-4">
+              <p className="seccolor mb-1">{t("detail.supplyDate")}</p>
+              <b className="mergecolor">
+                <DateText value={invoice.supplyAt} numerals={numerals} />
+              </b>
+            </div>
+          ) : null}
+          {credit !== undefined ? (
+            <>
+              <div className="col-12 col-md-4">
+                <p className="seccolor mb-1">{t("detail.originalNumber")}</p>
+                <b className="mergecolor">{credit.originalNumber}</b>
+              </div>
+              <div className="col-12 col-md-4">
+                <p className="seccolor mb-1">{t("detail.originalDate")}</p>
+                <b className="mergecolor">
+                  <DateText value={credit.originalIssuedAt} numerals={numerals} />
+                </b>
+              </div>
+              <div className="col-12 col-md-4">
+                <p className="seccolor mb-1">{t("detail.reason")}</p>
+                <b className="mergecolor">{t(`detail.reasons.${credit.reason}`)}</b>
+              </div>
+            </>
+          ) : null}
           <div className="col-12 col-md-4">
             <p className="seccolor mb-1">{t("detail.billedTo")}</p>
             <b className="mergecolor">{billedName === "" ? t("detail.noName") : billedName}</b>
@@ -143,7 +174,9 @@ export function InvoiceDetailContent({
         </a>
       </p>
       <p className="seccolor small mb-1">{t("detail.printHint")}</p>
-      <p className="seccolor small">{t("detail.mushakHint")}</p>
+      <p className="seccolor small">
+        {t(credit === undefined ? "detail.mushakHint" : "detail.creditHint")}
+      </p>
     </>
   );
 }

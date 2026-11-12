@@ -8,6 +8,7 @@ import type { Logger, RunTx } from "../operations/types";
 import { parseSnapshot } from "../pricing/snapshot";
 import type { Clock } from "../types";
 import { fiscalYearOf } from "./base";
+import { issueCreditNotes } from "./credit-note";
 import { invoiceIdFor, invoiceLinesOf, noteIdFor, queueIdFor, readBuyerSnapshot } from "./charge";
 
 // WPU-I2: the invoices that were owed when the seller details were missing (charge.ts queued them).
@@ -57,6 +58,8 @@ export interface InvoiceBacklogReport {
   readonly noted: number;
   /** Credit-note notices written for reversed charges that had an issued invoice. */
   readonly creditNotes: number;
+  /** WPU-C1: credit notes (Mushak-6.7) issued in this run. */
+  readonly creditNotesIssued: number;
   /** How many were left in the page after the run (not yet issued). */
   readonly remaining: number;
 }
@@ -64,6 +67,9 @@ export interface InvoiceBacklogReport {
 export async function runInvoiceBacklog(deps: InvoiceBacklogDeps): Promise<InvoiceBacklogReport> {
   const page = deps.pageSize ?? INVOICE_BACKLOG_PAGE;
   const recon = await reconcile(deps, page);
+  // WPU-C1: the credit notes of reversed charges. A failing one is logged and left to a person (its notice
+  // stays open); it never stops the invoices below.
+  const credit = await issueCreditNotes(deps, page);
   const pending = await deps.runTx((tx) => invoiceBacklogRepo(tx).pending(page));
   // Unreadable rows are marked and skipped, so valid entries are not stalled behind them.
   for (const id of pending.unreadableIds) {
@@ -133,6 +139,7 @@ export async function runInvoiceBacklog(deps: InvoiceBacklogDeps): Promise<Invoi
     reconciled: recon.reconciled,
     noted: recon.noted,
     creditNotes: recon.creditNotes,
+    creditNotesIssued: credit.issued,
     remaining: Math.max(0, pending.items.length - handled - failed),
   };
   return report;

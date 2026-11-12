@@ -297,7 +297,7 @@ it("invoices: one number per fiscal year, at most one invoice per order, none ne
   await expectSqlError(
     insertRow(t.pool, "invoices", { ...inv, order_id: await newOrder() }),
     "23505",
-    { constraint: "invoices_fiscal_year_number_unique" },
+    { constraint: "invoices_fiscal_year_kind_number_unique" },
   );
   await insertRow(t.pool, "invoices", { ...inv, fiscal_year: 2027, order_id: await newOrder() });
   // two invoices that come from no order: NULL values do not collide on invoices_order_id_unique

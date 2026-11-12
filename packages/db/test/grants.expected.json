@@ -430,7 +430,8 @@
         "issued_at",
         "seller",
         "ledger_transaction_id",
-        "buyer"
+        "buyer",
+        "supply_at"
       ],
       "updateColumns": null,
       "selectColumns": null
@@ -467,7 +468,12 @@
         "issued_at",
         "seller",
         "ledger_transaction_id",
-        "buyer"
+        "buyer",
+        "supply_at",
+        "kind",
+        "original_invoice_id",
+        "credit_for_ledger_transaction_id",
+        "reason"
       ],
       "updateColumns": null,
       "selectColumns": null

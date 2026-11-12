@@ -15,6 +15,7 @@ export const invoicesEn: Same<typeof invoicesBn> = {
       total: "Total",
       view: "View",
       older: "Older invoices",
+      creditNote: "Credit note",
     },
     empty: {
       title: "No invoices yet",
@@ -24,8 +25,18 @@ export const invoicesEn: Same<typeof invoicesBn> = {
     detail: {
       back: "All invoices",
       title: "Invoice {number}",
+      creditTitle: "Credit note {number}",
       number: "Number",
-      date: "Date",
+      date: "Date of issue",
+      supplyDate: "Date of supply",
+      originalNumber: "Original invoice number",
+      originalDate: "Original invoice date",
+      reason: "Reason",
+      reasons: {
+        refund: "Refund",
+        plan_change_not_delivered: "Plan change not delivered",
+        order_failed: "Order failed",
+      },
       billedTo: "Billed to",
       noName: "No name given",
       address: "Address",
@@ -51,6 +62,8 @@ export const invoicesEn: Same<typeof invoicesBn> = {
       },
       mushakHint:
         "The invoice is printed in the Tax Invoice form (Mushak-6.3) of the National Board of Revenue, with the seller's legal name, BIN and address.",
+      creditHint:
+        "The credit note is printed in the Credit Note form (Mushak-6.7) of the National Board of Revenue. It reverses the original invoice in full and keeps the seller and buyer details of that invoice exactly.",
       sellerMissing: {
         title: "Your invoice is being prepared",
         body: "The seller details for the tax invoice are not complete yet, so we do not show the invoice now. Try again in a little while, or write to support.",

@@ -2899,6 +2899,23 @@ TASKS["WPU-I5"] = [
   repo,
 ];
 
+// WPU-C1: the date of supply on the Mushak 6.3 and the Mushak 6.7 credit note (migration 0023, db with the local
+// PostgreSQL): the renderer (core), the credit note issued by the scheduler for a reversed charge with an
+// invoice (core DB tests with the real roles, scheduler), the pages (web). No AWS call.
+TASKS["WPU-C1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  scheduler,
+  web,
+  admin,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

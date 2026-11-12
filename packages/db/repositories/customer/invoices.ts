@@ -30,7 +30,37 @@ export interface InvoiceRow {
   // WPU-I3: the buyer as the billing profile read on the day of issue, or null (none entered). Stored
   // jsonb, parsed by parseBuyerSnapshot of the core; contains personal identifiers: never logged (R14).
   buyer: unknown;
+  // WPU-C1: the instant of the supply (the charge): the stored supply_at, or for a row issued before the
+  // column existed the time of its ledger transaction; null when neither is known (the page prints "-").
+  supplyAt: Date | null;
+  // WPU-C1: 'invoice' (Mushak-6.3) or 'credit_note' (Mushak-6.7).
+  kind: "invoice" | "credit_note";
+  // A credit note: the invoice it credits (a row of the same customer) and the reason; null for an invoice.
+  originalInvoiceId: string | null;
+  reason: CreditNoteReason | null;
 }
+
+export const CREDIT_NOTE_REASONS = ["refund", "plan_change_not_delivered", "order_failed"] as const;
+export type CreditNoteReason = (typeof CREDIT_NOTE_REASONS)[number];
+
+// WPU-C1: a credit note for the reversal of a charge that has an issued invoice. Everything else (the lines,
+// the seller and the buyer snapshots, the total) is copied from the original invoice in the database; the
+// reversal must give back exactly the total of that invoice (a partial credit is not built, R16).
+export interface NewCreditNote {
+  id: string;
+  /** The reversal transaction (kind reversal) of the charge. Unique: one credit note for each reversal (R7). */
+  reversalTransactionId: string;
+  fiscalYear: number;
+  /** The instant of issue; the fiscal year must be the one of this instant. */
+  issuedAt: Date;
+}
+
+export type CreditNoteResult =
+  | Written<InvoiceRow>
+  // The original invoice has no complete seller snapshot: nothing is issued and no number is taken (R16).
+  | { ok: false; error: "seller_details_missing" }
+  // The reversal does not give back the total of the original invoice (partial credit: Needs decision).
+  | { ok: false; error: "amount_mismatch" };
 
 // The buyer snapshot as the caller passes it (the shape of BuyerSnapshot of packages/core/invoices).
 export interface NewInvoiceBuyer {
@@ -100,6 +130,8 @@ export interface NewUnrecordedCharge {
 export interface InvoiceCursor {
   fiscalYear: number;
   number: number;
+  // WPU-C1: each kind numbers its own sequence, so the key is (fiscal year, kind, number). Omitted: invoice.
+  kind?: "invoice" | "credit_note";
 }
 
 export interface InvoicePage {
@@ -119,6 +151,9 @@ export interface InvoicesRepo {
   list(opts?: { limit?: number; after?: InvoiceCursor }): Promise<InvoicePage>;
   issue(input: NewInvoice): Promise<IssueResult>;
   issueForCharge(input: NewChargeInvoice): Promise<IssueResult>;
+  // WPU-C1: the credit note (Mushak-6.7) of a reversed charge, in the credit-note sequence of the fiscal
+  // year. Issued by the scheduler (worker_rw) only.
+  issueCreditNote(input: NewCreditNote): Promise<CreditNoteResult>;
   // Records that the invoice of a charge is owed (the seller details are missing): one row of the admin
   // queue (`discrepancies`, kind `missing`) that holds the lines, so that the scheduler issues the same
   // invoice later. The money is not touched.
@@ -152,6 +187,14 @@ const INVOICE_COLUMNS = {
   seller: invoices.seller,
   ledgerTransactionId: invoices.ledgerTransactionId,
   buyer: invoices.buyer,
+  // WPU-C1: the stored supply instant, else the time of the ledger transaction of the charge.
+  supplyAt:
+    sql<Date | null>`coalesce(${invoices.supplyAt}, (select lt.created_at from ledger_transactions lt where lt.id = ${invoices.ledgerTransactionId}))`.mapWith(
+      (v) => (v === null || v === undefined ? null : v instanceof Date ? v : new Date(String(v))),
+    ),
+  kind: invoices.kind,
+  originalInvoiceId: invoices.originalInvoiceId,
+  reason: invoices.reason,
 };
 
 const toInvoice = (row: Record<keyof InvoiceRow, unknown>): InvoiceRow =>
@@ -208,7 +251,11 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
   const { tx, customerId } = scope;
 
   const byColumn = async (
-    column: typeof invoices.id | typeof invoices.orderId | typeof invoices.ledgerTransactionId,
+    column:
+      | typeof invoices.id
+      | typeof invoices.orderId
+      | typeof invoices.ledgerTransactionId
+      | typeof invoices.creditForLedgerTransactionId,
     value: string,
   ): Promise<InvoiceRow | null> => {
     const [row] = await tx
@@ -231,7 +278,9 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
       const after = opts.after;
       if (
         after !== undefined &&
-        (!Number.isInteger(after.fiscalYear) || !Number.isInteger(after.number))
+        (!Number.isInteger(after.fiscalYear) ||
+          !Number.isInteger(after.number) ||
+          (after.kind !== undefined && after.kind !== "invoice" && after.kind !== "credit_note"))
       ) {
         return { items: [], next: null };
       }
@@ -246,11 +295,20 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
                 own,
                 or(
                   lt(invoices.fiscalYear, after.fiscalYear),
-                  and(eq(invoices.fiscalYear, after.fiscalYear), lt(invoices.number, after.number)),
+                  and(
+                    eq(invoices.fiscalYear, after.fiscalYear),
+                    or(
+                      lt(invoices.kind, after.kind ?? "invoice"),
+                      and(
+                        eq(invoices.kind, after.kind ?? "invoice"),
+                        lt(invoices.number, after.number),
+                      ),
+                    ),
+                  ),
                 ),
               ),
         )
-        .orderBy(desc(invoices.fiscalYear), desc(invoices.number))
+        .orderBy(desc(invoices.fiscalYear), desc(invoices.kind), desc(invoices.number))
         .limit(limit + 1);
       const items = rows.slice(0, limit).map(toInvoice);
       const last = items[items.length - 1];
@@ -258,7 +316,7 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
         items,
         next:
           rows.length > limit && last !== undefined
-            ? { fiscalYear: last.fiscalYear, number: last.number }
+            ? { fiscalYear: last.fiscalYear, number: last.number, kind: last.kind }
             : null,
       };
     },
@@ -327,12 +385,13 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
       // must be the total of the invoice: an order of another customer, a missing one and a wrong
       // total insert nothing (R8, R16).
       const inserted = await tx.execute(sql`
-        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, seller, ledger_transaction_id, buyer, issued_at)
+        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, seller, ledger_transaction_id, buyer, issued_at, supply_at)
         select ${input.id}, ${fiscalYear}::smallint,
-               coalesce((select max(i.number) from invoices i where i.fiscal_year = ${fiscalYear}::smallint), 0) + 1,
+               coalesce((select max(i.number) from invoices i where i.fiscal_year = ${fiscalYear}::smallint and i.kind = 'invoice'), 0) + 1,
                o.customer_id, o.id, ${JSON.stringify(input.lines)}::jsonb, o.total_minor,
                ${sellerSnapshot}::jsonb, o.ledger_transaction_id, ${buyerJson}::jsonb,
-               coalesce(${issuedAtText}::timestamptz, now())
+               coalesce(${issuedAtText}::timestamptz, now()),
+               (select lt.created_at from ledger_transactions lt where lt.id = o.ledger_transaction_id)
         from orders o
         where o.id = ${input.orderId} and o.customer_id = ${customerId}
           and o.total_minor = ${input.totalMinor.toString()}::bigint
@@ -410,16 +469,94 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
       if (sellerNow === null) return { ok: false, error: "seller_details_missing" };
       const sellerSnapshot = JSON.stringify(sellerRowValueOf(sellerNow.seller, sellerNow.version));
       const inserted = await tx.execute(sql`
-        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, seller, ledger_transaction_id, buyer, issued_at)
+        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, seller, ledger_transaction_id, buyer, issued_at, supply_at)
         values (${input.id}, ${fiscalYear}::smallint,
-               coalesce((select max(i.number) from invoices i where i.fiscal_year = ${fiscalYear}::smallint), 0) + 1,
+               coalesce((select max(i.number) from invoices i where i.fiscal_year = ${fiscalYear}::smallint and i.kind = 'invoice'), 0) + 1,
                ${customerId}, null, ${JSON.stringify(input.lines)}::jsonb, ${input.totalMinor.toString()}::bigint,
                ${sellerSnapshot}::jsonb, ${input.ledgerTransactionId}, ${buyerJson}::jsonb,
-               coalesce(${issuedAtText}::timestamptz, now()))
+               coalesce(${issuedAtText}::timestamptz, now()),
+               (select lt.created_at from ledger_transactions lt where lt.id = ${input.ledgerTransactionId}))
         on conflict (ledger_transaction_id) do nothing`);
       if (inserted.rowCount !== 1) return refused("conflict");
       const row = await byColumn(invoices.id, input.id);
       if (row === null) throw new Error("invoices: the inserted invoice cannot be read");
+      return created(row);
+    },
+
+    // WPU-C1. The credit note of a reversed charge (Mushak-6.7). Everything is read in the database from the
+    // customer's own invoice and the reversal of its charge (R8: another customer's reversal answers
+    // not_found); the lines, the seller snapshot and the buyer snapshot are COPIED from the original, never
+    // recomputed or read from the current settings. The reversal must give the customer's wallet back
+    // exactly the total of the original invoice, else nothing is issued (R16, no partial credit note).
+    // Its own number sequence for each fiscal year under its own advisory lock, held to the end of the
+    // transaction (gap-free as for invoices). One credit note for each reversal and for each invoice (R7).
+    issueCreditNote: async (input) => {
+      requireUuid(input.id, "id");
+      requireUuid(input.reversalTransactionId, "reversalTransactionId");
+      if (
+        !Number.isInteger(input.fiscalYear) ||
+        input.fiscalYear < 2026 ||
+        input.fiscalYear > 32000 ||
+        !(input.issuedAt instanceof Date) ||
+        Number.isNaN(input.issuedAt.getTime())
+      ) {
+        return refused("validation");
+      }
+      const fiscalYear = input.fiscalYear;
+      if (!(await fiscalYearMatches(tx, input.issuedAt, fiscalYear))) return refused("validation");
+      const issuedAtText = input.issuedAt.toISOString();
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext('credit-note-number'), ${fiscalYear}::int)`,
+      );
+      const existing = await byColumn(
+        invoices.creditForLedgerTransactionId,
+        input.reversalTransactionId,
+      );
+      if (existing !== null) return replayed(existing);
+
+      const [facts] = await tx
+        .execute<{ original_id: string; total: string; seller: unknown; credited: string }>(
+          sql`select o.id as original_id, o.total_minor::text as total, o.seller,
+                     (select coalesce(sum(e.amount_minor), 0)::text
+                        from ledger_entries e join ledger_accounts a on a.id = e.account_id
+                       where e.transaction_id = rv.id and a.type = 'customer_wallet'
+                         and a.customer_id = ${customerId} and e.direction = 'credit') as credited
+              from ledger_transactions rv
+              join invoices o on o.ledger_transaction_id = rv.reference_id
+                             and o.customer_id = ${customerId} and o.kind = 'invoice'
+              where rv.id = ${input.reversalTransactionId} and rv.kind = 'reversal'
+                and rv.reference_type = 'ledger_transaction'`,
+        )
+        .then((r) => r.rows);
+      if (facts === undefined) return refused("not_found");
+      if (BigInt(facts.credited) !== BigInt(facts.total)) {
+        return { ok: false, error: "amount_mismatch" };
+      }
+      if (parseSellerRowValue(facts.seller) === null) {
+        return { ok: false, error: "seller_details_missing" };
+      }
+      const inserted = await tx.execute(sql`
+        insert into invoices (id, fiscal_year, kind, number, customer_id, order_id, lines, total_minor, seller,
+                              ledger_transaction_id, buyer, issued_at, supply_at, original_invoice_id,
+                              credit_for_ledger_transaction_id, reason)
+        select ${input.id}, ${fiscalYear}::smallint, 'credit_note',
+               coalesce((select max(c.number) from invoices c
+                          where c.fiscal_year = ${fiscalYear}::smallint and c.kind = 'credit_note'), 0) + 1,
+               o.customer_id, null, o.lines, o.total_minor, o.seller, null, o.buyer,
+               ${issuedAtText}::timestamptz, null, o.id, rv.id,
+               case when starts_with(rv.idempotency_key, 'order-reversal:') then 'order_failed'
+                    when starts_with(coalesce(rv.memo, ''), 'plan_change_not_delivered') then 'plan_change_not_delivered'
+                    else 'refund' end
+        from ledger_transactions rv
+        join invoices o on o.ledger_transaction_id = rv.reference_id
+                       and o.customer_id = ${customerId} and o.kind = 'invoice'
+        where rv.id = ${input.reversalTransactionId} and rv.kind = 'reversal'
+          and rv.reference_type = 'ledger_transaction'
+          and o.id = ${facts.original_id}::uuid and o.total_minor = ${facts.total}::bigint
+        on conflict do nothing`);
+      if (inserted.rowCount !== 1) return refused("conflict");
+      const row = await byColumn(invoices.id, input.id);
+      if (row === null) throw new Error("invoices: the inserted credit note cannot be read");
       return created(row);
     },
 

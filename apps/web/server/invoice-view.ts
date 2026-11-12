@@ -1,10 +1,12 @@
 import type { CustomerSession } from "@tc/auth";
 import {
+  formatCreditNoteNumber,
   formatInvoiceNumber,
   parseBuyerSnapshot,
   parseLineAmount,
   parseSellerDetails,
   type BuyerSnapshot,
+  type CreditReason,
   type InvoiceDocument,
   type InvoiceLine,
   type Numerals,
@@ -23,8 +25,10 @@ export const INVOICE_PAGE_SIZE = 20;
 
 export interface InvoiceListItem {
   id: string;
-  /** TC-2026-000012. */
+  /** TC-2026-000012, or TC-CN-2026-000003 for a credit note (WPU-C1). */
   number: string;
+  /** WPU-C1: a credit note (Mushak-6.7) is listed with the invoices under a label of its own. */
+  kind: "invoice" | "credit_note";
   issuedAt: Date;
   totalMinor: bigint;
 }
@@ -44,7 +48,13 @@ export interface InvoiceLineView {
 export interface InvoiceDetailView {
   id: string;
   number: string;
+  /** WPU-C1: 'invoice' (Mushak-6.3) or 'credit_note' (Mushak-6.7). */
+  kind: "invoice" | "credit_note";
   issuedAt: Date;
+  /** WPU-C1: the date of supply (the charge); null when not known. Invoices only. */
+  supplyAt: Date | null;
+  /** WPU-C1: a credit note names the invoice it credits (read for the same customer) and the reason. */
+  credit?: { originalNumber: string; originalIssuedAt: Date; reason: CreditReason };
   totalMinor: bigint;
   lines: InvoiceLineView[];
 }
@@ -64,21 +74,26 @@ export type InvoiceDetailScreen =
   | { state: "unavailable" }
   | { state: "seller_missing" };
 
-const CURSOR = /^([0-9]{4})-([0-9]{1,6})$/;
+const CURSOR = /^([0-9]{4})-(cn-)?([0-9]{1,6})$/;
 
-/** `2026-12` is the invoice number 12 of the fiscal year 2026; anything else is no cursor. */
+/**
+ * `2026-12` is the invoice number 12 of the fiscal year 2026, `2026-cn-3` the credit note 3 of that year
+ * (WPU-C1); anything else is no cursor.
+ */
 export function parseInvoiceCursor(raw: unknown): InvoiceCursor | null {
   if (typeof raw !== "string") return null;
   const match = CURSOR.exec(raw);
   if (match === null) return null;
   const fiscalYear = Number(match[1]);
-  const number = Number(match[2]);
+  const number = Number(match[3]);
   if (fiscalYear < 2026 || number < 1 || number > 999_999) return null;
-  return { fiscalYear, number };
+  return match[2] === undefined
+    ? { fiscalYear, number }
+    : { fiscalYear, number, kind: "credit_note" };
 }
 
 export function formatInvoiceCursor(cursor: InvoiceCursor): string {
-  return `${cursor.fiscalYear}-${cursor.number}`;
+  return `${cursor.fiscalYear}-${cursor.kind === "credit_note" ? "cn-" : ""}${cursor.number}`;
 }
 
 function isText2(value: unknown): value is { bn: string; en: string } {
@@ -123,6 +138,11 @@ export function parseStoredLines(lines: unknown, totalMinor: bigint): InvoiceLin
   return sum === totalMinor ? out : null;
 }
 
+const numberOf = (row: { kind: "invoice" | "credit_note"; fiscalYear: number; number: number }) =>
+  row.kind === "credit_note"
+    ? formatCreditNoteNumber(row.fiscalYear, row.number)
+    : formatInvoiceNumber(row.fiscalYear, row.number);
+
 export async function loadInvoiceList(
   session: CustomerSession,
   rawCursor: string | undefined,
@@ -139,7 +159,8 @@ export async function loadInvoiceList(
     state: "ready",
     items: page.items.map((row) => ({
       id: row.id,
-      number: formatInvoiceNumber(row.fiscalYear, row.number),
+      number: numberOf(row),
+      kind: row.kind,
       issuedAt: row.issuedAt,
       totalMinor: row.totalMinor,
     })),
@@ -152,8 +173,22 @@ export async function loadInvoice(
   session: CustomerSession,
   id: string,
 ): Promise<InvoiceDetailScreen | null> {
-  const row = await withTx((tx) => customerRepos(tx, session.customerId).invoices.get(id));
+  const found = await withTx(async (tx) => {
+    const repo = customerRepos(tx, session.customerId).invoices;
+    const own = await repo.get(id);
+    // WPU-C1: the invoice a credit note credits, read for the same customer (R8).
+    const original =
+      own !== null && own.kind === "credit_note" && own.originalInvoiceId !== null
+        ? await repo.get(own.originalInvoiceId)
+        : null;
+    return { own, original };
+  });
+  const row = found.own;
   if (row === null) return null;
+  // A credit note that cannot name its original invoice and reason is not shown (R16).
+  if (row.kind === "credit_note" && (found.original === null || row.reason === null)) {
+    return { state: "unavailable" };
+  }
   const lines = parseStoredLines(row.lines, row.totalMinor);
   if (lines === null) return { state: "unavailable" };
   // WPU-I2: the seller is the one written on the invoice on the day of issue, never the current setting:
@@ -169,8 +204,20 @@ export async function loadInvoice(
     buyer: parseBuyerSnapshot(row.buyer),
     invoice: {
       id: row.id,
-      number: formatInvoiceNumber(row.fiscalYear, row.number),
+      number: numberOf(row),
+      // Anything but a credit note is a tax invoice (the column defaults to 'invoice').
+      kind: row.kind === "credit_note" ? "credit_note" : "invoice",
       issuedAt: row.issuedAt,
+      supplyAt: row.supplyAt ?? null,
+      ...(row.kind === "credit_note" && found.original !== null && row.reason !== null
+        ? {
+            credit: {
+              originalNumber: numberOf(found.original),
+              originalIssuedAt: found.original.issuedAt,
+              reason: row.reason,
+            },
+          }
+        : {}),
       totalMinor: row.totalMinor,
       lines,
     },
@@ -198,9 +245,11 @@ export function toInvoiceDocument(
     ...(l.rate !== undefined ? { rate: l.rate } : {}),
   }));
   return {
-    kind: "invoice",
+    kind: invoice.kind,
     number: invoice.number,
     issuedAt: invoice.issuedAt,
+    supplyAt: invoice.supplyAt,
+    ...(invoice.credit !== undefined ? { credit: invoice.credit } : {}),
     company: { name: seller.legalNameEn, address: [] },
     seller,
     customer: {

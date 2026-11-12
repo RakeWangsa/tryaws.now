@@ -32,12 +32,14 @@ export const LIST: InvoiceListScreen = {
     {
       id: INVOICE_ID,
       number: "TC-2026-000012",
+      kind: "invoice",
       issuedAt: new Date("2026-11-01T06:00:00Z"),
       totalMinor: 69000n,
     },
     {
       id: "0190aaaa-0000-7000-8000-0000000000e2",
       number: "TC-2026-000011",
+      kind: "invoice",
       issuedAt: new Date("2026-10-01T06:00:00Z"),
       totalMinor: 125050n,
     },
@@ -60,7 +62,9 @@ export const DETAIL: InvoiceDetailScreen = {
   invoice: {
     id: INVOICE_ID,
     number: "TC-2026-000012",
+    kind: "invoice",
     issuedAt: new Date("2026-11-01T06:00:00Z"),
+    supplyAt: new Date("2026-11-01T06:00:00Z"),
     totalMinor: 69000n,
     lines: [
       {
@@ -104,6 +108,42 @@ const detail =
       locale,
     );
 
+// WPU-C1: a credit note is listed with the invoices (a label of its own) and has a page of its own.
+export const LIST_WITH_CREDIT: InvoiceListScreen = {
+  state: "ready",
+  items: [
+    {
+      id: "0190aaaa-0000-7000-8000-0000000000e3",
+      number: "TC-CN-2026-000001",
+      kind: "credit_note",
+      issuedAt: new Date("2026-11-05T06:00:00Z"),
+      totalMinor: 69000n,
+    },
+    ...(LIST.state === "ready" ? LIST.items : []),
+  ],
+  next: null,
+};
+
+export const DETAIL_CREDIT: InvoiceDetailScreen =
+  DETAIL.state === "ready"
+    ? {
+        ...DETAIL,
+        invoice: {
+          ...DETAIL.invoice,
+          id: "0190aaaa-0000-7000-8000-0000000000e3",
+          number: "TC-CN-2026-000001",
+          kind: "credit_note",
+          issuedAt: new Date("2026-11-05T06:00:00Z"),
+          supplyAt: null,
+          credit: {
+            originalNumber: "TC-2026-000012",
+            originalIssuedAt: new Date("2026-11-01T06:00:00Z"),
+            reason: "order_failed",
+          },
+        },
+      }
+    : DETAIL;
+
 export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "invoices.ready": list(LIST),
   "invoices.page2": list({ ...LIST, next: null }, true),
@@ -112,7 +152,9 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "invoices.loading": (locale) => html(<ScreenLoading lines={[2, 6]} />, locale),
   "invoices.error": (locale) =>
     html(<ScreenError error={new Error("raw text must never show")} reset={() => {}} />, locale),
+  "invoices.with_credit_note": list(LIST_WITH_CREDIT),
   "invoice.ready": detail(DETAIL),
+  "invoice.credit_note": detail(DETAIL_CREDIT),
   "invoice.no_name": detail(DETAIL, ""),
   "invoice.not_found": detail(null),
   "invoice.unavailable": detail({ state: "unavailable" }),

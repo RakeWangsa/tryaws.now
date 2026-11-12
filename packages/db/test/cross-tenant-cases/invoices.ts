@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
 import { newOrder, newRenewalCharge, seedSeller } from "../fixtures";
-import { insertRow } from "../sql";
+import { inTransaction, insertRow } from "../sql";
 import { defineCaseSet, type CaseSet } from "./define";
 
 interface Seed {
@@ -13,6 +13,9 @@ interface Seed {
   // transaction of the free order (the target of queueBacklog).
   renewalTx: string;
   freeOrderTx: string;
+  // WPU-C1: the reversal of a renewal of the customer that has an issued invoice (the target of
+  // issueCreditNote).
+  reversalTx: string;
 }
 
 // The number of the seeded invoice is random: the numbers are unique per fiscal year over the whole
@@ -38,12 +41,60 @@ export const invoicesCases: CaseSet = defineCaseSet<Seed>({
         [freeOrderId],
       )
     ).rows[0]!.id;
+    // WPU-C1: a renewal with its invoice (the seller snapshot is the complete one of the market) and the
+    // reversal of that renewal, which gives the wallet back the whole total.
+    const creditedTx = await newRenewalCharge(pool, customerId);
+    const seller = JSON.stringify({
+      v: 1,
+      version: 1,
+      legalNameBn: "বি",
+      legalNameEn: "S",
+      bin: "0000000000000",
+      addressBn: "ঠি",
+      addressEn: "A",
+      signatoryName: "N",
+      signatoryDesignation: "D",
+    });
+    await insertRow(pool, "invoices", {
+      fiscal_year: 2026,
+      number: randomInt(1, 900_000_000),
+      customer_id: customerId,
+      lines: "[]",
+      total_minor: 100,
+      seller,
+      ledger_transaction_id: creditedTx,
+    });
+    const reversalTx = await inTransaction(pool, async (c) => {
+      const id = await insertRow(c, "ledger_transactions", {
+        kind: "reversal",
+        reference_type: "ledger_transaction",
+        reference_id: creditedTx,
+        idempotency_key: "reversal:" + creditedTx,
+        actor_type: "system",
+      });
+      const lines = (
+        await c.query<{ account_id: string; direction: string; amount_minor: string }>(
+          "select account_id, direction, amount_minor::text from ledger_entries where transaction_id = $1",
+          [creditedTx],
+        )
+      ).rows;
+      for (const l of lines) {
+        await insertRow(c, "ledger_entries", {
+          transaction_id: id,
+          account_id: l.account_id,
+          direction: l.direction === "debit" ? "credit" : "debit",
+          amount_minor: l.amount_minor,
+        });
+      }
+      return id;
+    });
     return {
       invoiceId,
       orderId,
       freeOrderId,
       renewalTx: await newRenewalCharge(pool, customerId),
       freeOrderTx,
+      reversalTx,
     };
   },
   cases: ({ asCustomer }) => ({
@@ -85,6 +136,28 @@ export const invoicesCases: CaseSet = defineCaseSet<Seed>({
             totalMinor: 100n,
           }),
         ).then((w) => (w.ok ? { ok: true as const } : w)),
+    },
+    // WPU-C1: the reversal must be the reversal of the customer's own invoice. The insert is made by the
+    // scheduler role only (the panel role has no grant on the credit note columns), so the proof is the
+    // answer: B's attempt on A's reversal is not_found, like an attempt on a missing reversal, and takes
+    // no number. A's own attempt with this role is refused by the grant, which is not the answer for a
+    // missing row.
+    "invoices.issueCreditNote": {
+      kind: "read",
+      run: (c, s) =>
+        asCustomer(c, (r) =>
+          r.invoices.issueCreditNote({
+            id: uuidv7(),
+            reversalTransactionId: s.reversalTx,
+            fiscalYear: 2026,
+            issuedAt: new Date("2026-11-12T06:00:00Z"),
+          }),
+        )
+          .then((w) => (w.ok ? { ok: true as const } : w))
+          .catch((e: unknown) => ({
+            ok: false as const,
+            error: (e as { code?: string }).code === "42501" ? "denied" : "failed",
+          })),
     },
     // WPU-I2: only a charge with a wallet debit of the customer in it is queued. It writes a row of the
     // admin queue (`discrepancies`, no tenant table), so the proof is the answer: A queues its own

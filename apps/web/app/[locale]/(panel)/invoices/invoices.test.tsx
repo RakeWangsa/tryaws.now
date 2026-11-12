@@ -142,3 +142,40 @@ describe("/invoices/[id]", () => {
     }
   });
 });
+
+describe("WPU-C1: the credit note and the date of supply", () => {
+  it("/invoices lists the credit note with a label of its own, in both languages", () => {
+    const en = render("invoices.with_credit_note");
+    expect(en).toContain("TC-CN-2026-000001");
+    expect(en).toContain("Credit note");
+    expect(en).toContain('href="/en/invoices/0190aaaa-0000-7000-8000-0000000000e3"');
+    expect(en).toContain("TC-2026-000012");
+    const bn = render("invoices.with_credit_note", "bn");
+    expect(bn).toContain("ক্রেডিট নোট");
+    // The plain list has no such label.
+    expect(render("invoices.ready")).not.toContain("Credit note");
+  });
+
+  it("the credit note page names the original invoice, its date and the reason, and prints the Mushak-6.7 hint", () => {
+    const en = render("invoice.credit_note");
+    expect(en).toContain("Credit note TC-CN-2026-000001");
+    expect(en).toContain("TC-2026-000012");
+    expect(en).toContain("Order failed");
+    expect(en).toContain("Mushak-6.7");
+    expect(en).not.toContain("Date of supply");
+    expect(en).toContain('href="/en/invoices/0190aaaa-0000-7000-8000-0000000000e3/document"');
+    const bn = render("invoice.credit_note", "bn");
+    expect(bn).toContain("ক্রেডিট নোট TC-CN-2026-000001");
+    expect(bn).toContain("অর্ডার ব্যর্থ হয়েছে");
+    expect(bn).toContain("মূসক-৬.৭");
+  });
+
+  it("the invoice page shows the date of supply next to the date of issue", () => {
+    const en = render("invoice.ready");
+    expect(en).toContain("Date of supply");
+    expect(en).toContain("Date of issue");
+    const bn = render("invoice.ready", "bn");
+    expect(bn).toContain("সরবরাহের তারিখ");
+    expect(bn).toContain("ইস্যুর তারিখ");
+  });
+});

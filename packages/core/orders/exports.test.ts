@@ -282,6 +282,7 @@ const PRODUCTS = [
   "buildInvoiceLines",
   "escapeHtml",
   "fiscalYearOf",
+  "formatCreditNoteNumber",
   "formatInvoiceNumber",
   "formatMinor",
   "invoicePdfKey",
@@ -302,6 +303,8 @@ const PRODUCTS = [
   "invoiceIdFor",
   "invoiceLinesOf",
   "issueChargeInvoice",
+  "issueCreditNotes",
+  "creditNoteIdFor",
   "queueIdFor",
   "runInvoiceBacklog",
   // WPU-I5: the id of the notice for a charge without lines, the reconciliation window

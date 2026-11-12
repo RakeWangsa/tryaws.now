@@ -47,6 +47,7 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
     reconciled: 0,
     noted: 0,
     creditNotes: 0,
+    creditNotesIssued: 0,
     remaining: 0,
   });
   expect(report.rateLimitsPurged).toBe(1);

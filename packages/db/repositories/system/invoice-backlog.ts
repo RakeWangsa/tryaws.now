@@ -64,6 +64,15 @@ export interface UnrecordedCharge {
   readonly priceSnapshot: unknown;
 }
 
+/** WPU-C1: a reversal of a charge with an issued invoice and no credit note yet. */
+export interface CreditNoteToIssue {
+  readonly customerId: string;
+  /** The reversal transaction the credit note answers. */
+  readonly reversalTransactionId: string;
+  /** The ledger transaction of the original charge (names the notice row). */
+  readonly ledgerTransactionId: string;
+}
+
 export interface InvoiceBacklogRepo {
   pending(limit: number): Promise<PendingInvoices>;
   mark(mark: BacklogMark): Promise<void>;
@@ -71,6 +80,10 @@ export interface InvoiceBacklogRepo {
   unrecorded(limit: number, windowDays: number): Promise<UnrecordedCharge[]>;
   /** Ledger transactions with an issued invoice and a reversal but no credit-note notice yet. */
   creditNotesDue(limit: number): Promise<string[]>;
+  /** WPU-C1: reversals with an issued invoice and no credit note, oldest reversal first (the order of issue). */
+  creditNotesToIssue(limit: number): Promise<CreditNoteToIssue[]>;
+  /** WPU-C1: the credit note is issued: the `credit_note_needed` notice of the charge is resolved. */
+  resolveCreditNoteNotice(ledgerTransactionId: string): Promise<void>;
   /**
    * An issued invoice whose charge was reversed needs a credit note (Mushak 6.7). Writes the notice once
    * and returns true; false when the charge has no invoice or the notice exists.
@@ -292,6 +305,34 @@ export function invoiceBacklogRepo(tx: Tx): InvoiceBacklogRepo {
         order by i.issued_at asc, i.id asc
         limit ${Math.min(limit, MAX_PENDING)}`);
       return rows.rows.map((r) => r.id);
+    },
+
+    async creditNotesToIssue(limit) {
+      if (!Number.isInteger(limit) || limit < 1) throw new TypeError("invoiceBacklog: limit");
+      const rows = await tx.execute<{ customer_id: string; reversal_id: string; ltx: string }>(sql`
+        select i.customer_id::text as customer_id, rv.id::text as reversal_id,
+               i.ledger_transaction_id::text as ltx
+        from invoices i
+        join ledger_transactions rv on rv.kind = 'reversal' and rv.reference_type = 'ledger_transaction'
+                                   and rv.reference_id = i.ledger_transaction_id
+        where i.kind = 'invoice' and i.ledger_transaction_id is not null
+          and not exists (select 1 from invoices c where c.credit_for_ledger_transaction_id = rv.id)
+        order by rv.created_at asc, rv.id asc
+        limit ${Math.min(limit, MAX_PENDING)}`);
+      return rows.rows.map((r) => ({
+        customerId: r.customer_id,
+        reversalTransactionId: r.reversal_id,
+        ledgerTransactionId: r.ltx,
+      }));
+    },
+
+    async resolveCreditNoteNotice(ledgerTransactionId) {
+      if (!isUuid(ledgerTransactionId))
+        throw new TypeError("invoiceBacklog: resolveCreditNoteNotice");
+      // Only the status of the notice row of this charge (migration 0018 lets the scheduler set the status).
+      await tx.execute(sql`
+        update discrepancies set status = 'resolved'
+        where id = md5(${`credit-note|${ledgerTransactionId}`})::uuid and status = 'open'`);
     },
 
     async creditNoteNeeded(ledgerTransactionId) {

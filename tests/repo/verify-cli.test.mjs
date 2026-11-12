@@ -155,6 +155,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T2",
     "WPP-T3",
     "WPP-T4",
+    "WPU-C1",
     "WPU-D1",
     "WPU-G1",
     "WPU-G10",
@@ -419,6 +420,62 @@ it("the proof of WPU-I5 exists: the VAT base, reversed charges, the order, no lo
     ["packages/core/invoices/order-guards.db.test.ts", "is marked unreadable and skipped"],
     ["packages/db/test/invoice-order-guards.test.ts", "the boundary of 1 July in Dhaka"],
     ["packages/db/migrations/0018_invoice_order_and_reversal.sql", "invoice_backlog_blocked"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-C1 is proven by lint, types, format, the core, db, scheduler, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-C1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-C1 exists: the supply date, the credit note, its numbers, the refusals and the tenant scope", () => {
+  for (const [file, part] of [
+    [
+      "packages/core/invoices/credit-note-render.test.ts",
+      "a normal invoice shows the same date twice",
+    ],
+    [
+      "packages/core/invoices/credit-note-render.test.ts",
+      "the customer's document is marked Original",
+    ],
+    [
+      "packages/core/invoices/credit-note-render.test.ts",
+      "repeats the rows of the original in full",
+    ],
+    ["packages/core/invoices/credit-note.db.test.ts", "is issued for a reversed order"],
+    ["packages/core/invoices/credit-note.db.test.ts", "is issued for a reversed renewal"],
+    [
+      "packages/core/invoices/credit-note.db.test.ts",
+      "gap-free per fiscal year under a failed issue",
+    ],
+    [
+      "packages/core/invoices/credit-note.db.test.ts",
+      "a repeat of the run makes no second credit note",
+    ],
+    ["packages/core/invoices/credit-note.db.test.ts", "does not equal the invoice total"],
+    ["packages/core/invoices/credit-note.db.test.ts", "a backlog invoice shows the charge date"],
+    [
+      "packages/core/invoices/credit-note.db.test.ts",
+      "another customer's reversal answers not_found",
+    ],
+    [
+      "apps/web/server/credit-note-view.test.ts",
+      "another customer's credit note answers like a missing one",
+    ],
+    ["packages/db/migrations/0023_invoice_supply_date_and_credit_notes.sql", "WPU-C1"],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
   }

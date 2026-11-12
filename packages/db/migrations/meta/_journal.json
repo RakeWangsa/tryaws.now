@@ -127,6 +127,13 @@
       "when": 1794489778288,
       "tag": "0018_invoice_order_and_reversal",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794507778288,
+      "tag": "0023_invoice_supply_date_and_credit_notes",
+      "breakpoints": true
     }
   ]
 }
