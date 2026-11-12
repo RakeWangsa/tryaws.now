@@ -94,6 +94,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP0-T3b",
     "WP0-T4",
     "WP0-T5",
+    "WP0-T6",
     "WP1-T1",
     "WP1-T2",
     "WP1-T4",
@@ -1590,4 +1591,11 @@ it("tasks WP0-T2, WP0-T3 and WP0-T4 are proven by the infra tests, and no check 
   for (const f of ["infra-lib", "infra-rules", "infra-tooling"]) {
     expect(existsSync(resolve(import.meta.dirname, `${f}.test.mjs`)), f).toBe(true);
   }
+});
+
+it("task WP0-T6 is proven by the ci-deploy test and runs no deploy", () => {
+  const commands = TASKS["WP0-T6"].map((c) => c.command.join(" "));
+  expect(commands).toContain("pnpm test --filter repo ci-deploy --no-passWithNoTests");
+  expect(commands.join("\n")).not.toMatch(/\bsst\b|\baws\b/);
+  expect(existsSync(resolve(import.meta.dirname, "ci-deploy.test.mjs"))).toBe(true);
 });

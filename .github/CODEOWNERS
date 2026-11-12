@@ -16,6 +16,9 @@
 /packages/auth/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
 /infra/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
 /sst.config.ts @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+# Runbooks of operations. The file has no DevOps placeholder (WP0-T6 did not invent a handle): the same two
+# placeholders own the workflows, infra and runbooks until a DevOps team handle is chosen (JOURNEY.md, WP0-T6).
+/docs/runbooks/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
 
 # The kit: what decides which checks a gate runs and what they accept
 /.claude/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER

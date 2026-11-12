@@ -349,6 +349,15 @@ const infraOrg = {
   command: ["pnpm", "test", "--filter", "repo", "infra-org", "--no-passWithNoTests"],
 };
 TASKS["WP0-T5"] = [specSync, baselineSync, lint, typecheck, format, infraOrg];
+// WP0-T6: the deploy workflows are authored only. The proof is the static rules over .github and the
+// behaviour of scripts/post-deploy-check.mjs. No check runs sst, a deploy or an AWS command.
+const ciDeploy = {
+  id: "ci-deploy",
+  title:
+    "WP0-T6: deploy workflows (OIDC, pinned actions, tag only, environments, sst diff before deploy) and the post-deploy check",
+  command: ["pnpm", "test", "--filter", "repo", "ci-deploy", "--no-passWithNoTests"],
+};
+TASKS["WP0-T6"] = [specSync, baselineSync, lint, typecheck, format, ciDeploy];
 TASKS["WPU-T2"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, repo];
 TASKS["WPU-T3"] = TASKS["WPU-T2"];
 

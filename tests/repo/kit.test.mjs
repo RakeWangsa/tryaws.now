@@ -162,6 +162,7 @@ it("CODEOWNERS covers the paths of spec E.1, each with the two placeholder owner
     "/packages/auth/",
     "/infra/",
     "/sst.config.ts",
+    "/docs/runbooks/",
     "/.claude/",
     "/CLAUDE.md",
     "/.github/",
