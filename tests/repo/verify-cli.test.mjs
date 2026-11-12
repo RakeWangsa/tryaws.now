@@ -161,6 +161,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T3",
     "WPP-T4",
     "WPU-B1",
+    "WPU-B2",
     "WPU-B3",
     "WPU-B4",
     "WPU-C1",
@@ -581,6 +582,64 @@ it("the proof of WPU-C1 exists: the supply date, the credit note, its numbers, t
   }
 });
 
+it("task WPU-B2 is proven by lint, types, format, the core, db, aws, provisioner, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-B2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-B2 exists: the Route 53 Domains client, the three domain actions, the status sync, the unique name, the web cores and the zone lifecycle", () => {
+  for (const [file, part] of [
+    ["packages/aws/test/domains-client.test.ts", "maps DuplicateRequest to a conflict"],
+    [
+      "packages/aws/test/domain-actions.test.ts",
+      "a repeat of the start after the renewal went through",
+    ],
+    ["packages/aws/test/domain-actions.test.ts", "validates the payload before any call"],
+    [
+      "packages/core/domains/sync.test.ts",
+      "a row that is already past the registration is never downgraded",
+    ],
+    ["packages/core/domains/nameservers.test.ts", "refuses everything else with one code"],
+    ["functions/provisioner/domain-hooks.test.ts", "a create that failed gives the name back"],
+    ["packages/db/test/domain-sync.test.ts", "holds a name once on the platform"],
+    ["packages/db/migrations/0024_domain_name_active_unique.sql", "WPU-B2"],
+    [
+      "apps/web/server/domain-ops.test.ts",
+      "another customer's domain and a missing one are one answer",
+    ],
+    [
+      "packages/core/lifecycle/zone-lifecycle.test.ts",
+      "destroy needs a retained subscription and no snapshot",
+    ],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("the journal ends with 0024 at idx 22, after 0023, and its snapshot is the child of 0023 (WPU-B2)", () => {
+  const dir = "packages/db/migrations";
+  const journal = JSON.parse(readFileSync(`${dir}/meta/_journal.json`, "utf8"));
+  const last = journal.entries.at(-1);
+  expect(last).toMatchObject({ idx: 22, tag: "0024_domain_name_active_unique" });
+  expect(journal.entries.at(-2).tag).toBe("0023_invoice_supply_date_and_credit_notes");
+  const parent = JSON.parse(readFileSync(`${dir}/meta/0023_snapshot.json`, "utf8"));
+  const child = JSON.parse(readFileSync(`${dir}/meta/0024_snapshot.json`, "utf8"));
+  expect(child.prevId).toBe(parent.id);
+  expect(JSON.stringify(child)).toContain("domains_name_active_unique");
+});
+
 it("task WPU-M6 is proven by the checks of both merged sides: lint, types, format, the core, db, scheduler, aws, eps, sweeper, web and admin tests and the repository tests", () => {
   expect(TASKS["WPU-M6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
     ["spec-sync", "pnpm spec:check"],
@@ -604,7 +663,10 @@ it("the proof of WPU-M6 exists: one journal in order and one snapshot chain over
   const dir = "packages/db/migrations";
   const journal = JSON.parse(readFileSync(`${dir}/meta/_journal.json`, "utf8"));
   const tags = journal.entries.map((e) => e.tag);
-  expect(tags.slice(-5)).toEqual([
+  // WPU-B2 appended 0024 after 0023: the window is the five tags of this proof, not the last five.
+  const start = tags.indexOf("0018_invoice_order_and_reversal");
+  const window = tags.slice(start, start + 5);
+  expect(window).toEqual([
     "0018_invoice_order_and_reversal",
     "0019_drop_customer_nid",
     "0020_dns_zone_price_and_kyc_open_index",
@@ -618,9 +680,9 @@ it("the proof of WPU-M6 exists: one journal in order and one snapshot chain over
   });
   const snap = (tag) =>
     JSON.parse(readFileSync(`${dir}/meta/${tag.slice(0, 4)}_snapshot.json`, "utf8"));
-  const chain = tags.slice(-5).map(snap);
+  const chain = window.map(snap);
   chain.forEach((s, i) => {
-    if (i > 0) expect(s.prevId, tags.slice(-5)[i]).toBe(chain[i - 1].id);
+    if (i > 0) expect(s.prevId, window[i]).toBe(chain[i - 1].id);
   });
   const invoices = chain[4].tables["public.invoices"] ?? chain[4].tables.public?.invoices;
   expect(JSON.stringify(chain[4])).not.toContain("customer_nid");

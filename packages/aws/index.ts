@@ -124,3 +124,9 @@ export type {
   DomainOperationStatus,
   DomainsPort,
 } from "./adapters/domains-port";
+export {
+  createRoute53DomainsClient,
+  createRoute53DomainsPort,
+  type DomainsClientOptions,
+  type DomainsSender,
+} from "./domains-client";

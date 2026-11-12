@@ -18,7 +18,7 @@ import { cdnAdapter } from "./cdn";
 import { containerServiceAdapter } from "./container";
 import { databaseAdapter } from "./database";
 import { dnsZoneAdapter, dnsZoneHooks, dnsZonePortsFromEnv } from "./dns-zone";
-import { domainAdapter } from "./domain";
+import { domainAdapter, domainHooks } from "./domain";
 import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
@@ -149,7 +149,12 @@ function buildDeps(): StepDeps {
     ]),
     // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
     destructiveGuard,
-    hooks: composeHooks(orderHooks({ clock, log }), lifecycleHooks({ clock, log }), dnsZoneHooks()),
+    hooks: composeHooks(
+      orderHooks({ clock, log }),
+      lifecycleHooks({ clock, log }),
+      dnsZoneHooks(),
+      domainHooks(),
+    ),
     access,
     env: config.env,
     log,

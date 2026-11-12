@@ -132,7 +132,9 @@ describe("the wiring", () => {
   it("workers.ts keeps the provisioner subscriber and returns it", () => {
     const workers = code("infra/stacks/workers.ts");
     expect(workers).toMatch(/const provisioner = queues\.provisioning\.subscribe\(/);
-    expect(workers).toMatch(/return \{ invoked, readerAliases, crons, provisioner,/);
+    expect(workers).toMatch(
+      /return \{ invoked, readerAliases, accessAliases, rendererAliasWeb, crons, provisioner,/,
+    );
   });
 
   it("sst.config.ts hands the web components to the alarms", () => {

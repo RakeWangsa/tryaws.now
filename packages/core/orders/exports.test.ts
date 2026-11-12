@@ -473,6 +473,11 @@ const DOMAINS = [
   "normalizeDomainName",
   "parseDomainConfig",
   "parseRegistrantContact",
+  "planDomainSync",
+  "NAME_SERVERS_MAX",
+  "NAME_SERVERS_MIN",
+  "parseNameServers",
+  "splitNameServers",
   "redactContact",
   "resolveDomain",
   "tldPolicyOf",
@@ -546,6 +551,13 @@ const BILLING = [
   "parseBuyerSnapshot",
   // WPU-I4: reads the buyer of an invoice about to be issued, in the transaction of the issue.
   "readBuyerSnapshot",
+  // WPU-F1 (the digit one of the Bengali font; its merge did not update this list, WPU-B2 does).
+  "BENGALI_DIGIT_FONT",
+  "BENGALI_DIGIT_ONE",
+  "DIGIT_ONE_CLASS",
+  "splitDigitOne",
+  "unwrapDigitOneHtml",
+  "wrapDigitOneHtml",
 ];
 
 describe("the public surface of the order flow", () => {

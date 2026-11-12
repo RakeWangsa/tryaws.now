@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import type { FormState } from "../../../../../server/action-state.ts";
 import type { DomainDetailView } from "../../../../../server/domain-view.ts";
 import { DomainState } from "../DomainsContent.tsx";
+import { NameServersForm, ResendVerificationForm } from "./DomainOpsForms.tsx";
 import { RenewalForm } from "./RenewalForm.tsx";
 
 // The content of /domains/[name] (16.10): state, expiry, the verification state of the owner's e-mail,
@@ -21,12 +22,16 @@ export function DomainDetailContent({
   domain,
   requestId,
   renewAction = refuse,
+  resendAction = refuse,
+  nameServersAction = refuse,
 }: {
   locale: Locale;
   numerals: "beng" | "latn";
   domain: DomainDetailView | null;
   requestId: string;
   renewAction?: Action;
+  resendAction?: Action;
+  nameServersAction?: Action;
 }) {
   const t = useTranslations("Domains");
   const listHref = localePath(locale, "/domains");
@@ -44,6 +49,8 @@ export function DomainDetailContent({
       />
     );
   }
+  // Only a registered domain (or one that waits for the e-mail check) has a registry record to change.
+  const registered = domain.state === "registered" || domain.state === "awaiting_verification";
   const date = (value: Date): string => formatDate(value, { locale, numerals });
 
   return (
@@ -70,7 +77,10 @@ export function DomainDetailContent({
         <p className="mb-2">
           <DomainState state={domain.state} />
         </p>
-        <p className="mb-0">{t(`detail.verification.${domain.reachability}`)}</p>
+        <p className="mb-3">{t(`detail.verification.${domain.reachability}`)}</p>
+        {registered && domain.reachability !== "done" ? (
+          <ResendVerificationForm name={domain.name} requestId={requestId} action={resendAction} />
+        ) : null}
       </Card>
       <Card className="mb-4">
         <h2 className="h5 mergecolor">{t("detail.nameServers")}</h2>
@@ -84,6 +94,12 @@ export function DomainDetailContent({
           </ul>
         )}
       </Card>
+      {registered ? (
+        <Card className="mb-4">
+          <h2 className="h5 mergecolor">{t("detail.nsChange.title")}</h2>
+          <NameServersForm name={domain.name} requestId={requestId} action={nameServersAction} />
+        </Card>
+      ) : null}
       <Card className="mb-4">
         <h2 className="h5 mergecolor">{t("detail.renewal.title")}</h2>
         <RenewalForm
