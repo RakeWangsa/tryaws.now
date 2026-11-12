@@ -1,3 +1,4 @@
+import { onboardingSteps } from "@tc/core";
 import type {
   DashboardView,
   MetricsScreen,
@@ -186,7 +187,16 @@ export function dashboard(over: Partial<DashboardView> = {}): DashboardView {
         createdAt: new Date("2026-11-12T02:00:00Z"),
       },
     ],
-    checklist: { phone: true, kyc: false, topUp: true, server: true },
+    onboarding: onboardingSteps({
+      phoneVerified: true,
+      kycVerified: false,
+      toppedUp: true,
+      sshKeys: 1,
+      servers: 2,
+      firewallReviewed: false,
+      snapshots: 0,
+    }),
+    guideServerId: SERVER_ID,
     ...over,
   };
 }
@@ -197,7 +207,16 @@ export const emptyDashboard = dashboard({
   renewals: [],
   operations: [],
   alerts: { kycPending: false, lowBalance: false, inGrace: [] },
-  checklist: { phone: false, kyc: false, topUp: false, server: false },
+  onboarding: onboardingSteps({
+    phoneVerified: false,
+    kycVerified: false,
+    toppedUp: false,
+    sshKeys: 0,
+    servers: 0,
+    firewallReviewed: false,
+    snapshots: 0,
+  }),
+  guideServerId: null,
 });
 
 export function notifications(over: Partial<NotificationsScreen> = {}): NotificationsScreen {

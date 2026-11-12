@@ -259,8 +259,9 @@ export function ServerDetailContent({
             ...extraTabs,
           ]}
           {...(defaultTab !== undefined &&
-          ["backups", "storage", "metrics", "billing", "destroy"].includes(defaultTab) &&
-          extraTabs.length > 0
+          (defaultTab === "networking" ||
+            (["backups", "storage", "metrics", "billing", "destroy"].includes(defaultTab) &&
+              extraTabs.length > 0))
             ? { defaultId: defaultTab }
             : {})}
         />

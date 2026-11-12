@@ -1,0 +1,134 @@
+import type { accountBn } from "./account-bn.ts";
+
+type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
+
+export const accountEn: Same<typeof accountBn> = {
+  AccountNav: {
+    label: "Cloud Server pages",
+    servers: "Servers",
+    snapshots: "Snapshots",
+    staticIps: "Static IPs",
+  },
+  Snapshots: {
+    meta: { title: "Snapshots" },
+    heading: "Snapshots",
+    intro:
+      "A snapshot is an Amazon Lightsail snapshot of the disk of your server, kept in the same AWS Region. You can make a new server from it. A manual snapshot stays until you delete it, and its storage is charged to your wallet every day.",
+    flagOff: {
+      title: "Cloud Servers are coming soon",
+      body: "This service is not open in your market yet.",
+    },
+    empty: {
+      title: "No snapshots yet",
+      body: "Take a snapshot of a server before any big change.",
+      noServer: "You need a server before you can take a snapshot.",
+      create: "Create a server",
+    },
+    create: {
+      title: "New snapshot",
+      server: "Server",
+      name: "Snapshot name",
+      hint: "Letters, digits, spaces, dots, hyphens and underscores, up to 60 characters.",
+      submit: "Take a snapshot",
+    },
+    group: {
+      open: "Open server",
+      count: "Manual snapshots: {count} (at most {max})",
+      gone: "This server was deleted. Its final snapshot is kept for the restore period.",
+      unnamed: "Unnamed server",
+    },
+  },
+  StaticIps: {
+    meta: { title: "Static IPs" },
+    heading: "Static IPs",
+    intro:
+      "Every server has a static IP. The address stays the same when the server restarts. If you detach it, the server gets an address of its own that changes when the server is stopped.",
+    flagOff: {
+      title: "Cloud Servers are coming soon",
+      body: "This service is not open in your market yet.",
+    },
+    empty: {
+      title: "No static IPs",
+      body: "When a server is created, its static IP shows here.",
+      create: "Create a server",
+    },
+    server: "Server",
+    region: "Location",
+    address: "Address",
+    state: "State",
+    manage: "Manage",
+    attached: "Attached",
+    detached: "Detached",
+    none: "None",
+    busy: "A change to this server is being applied. The buttons come back when it is done.",
+    unnamed: "Unnamed server",
+  },
+  Billing: {
+    meta: { title: "Billing and usage" },
+    heading: "Billing and usage",
+    intro:
+      "TiCON Cloud is prepaid. Each service is paid from your wallet for one term and renews at the end of it when auto renew is on. This page shows the cost of one term of everything that runs now.",
+    balance: "Wallet balance",
+    topUp: "Top up",
+    running: "Services running",
+    term: "Cost of one term of everything",
+    next: "Next renewal",
+    nextNone: "None",
+    alerts: {
+      low: "Your wallet does not cover the renewals of the next 7 days.",
+      autoOff: "{count} services will not renew by themselves.",
+      unpriced: "The price of {count} services could not be read, so they are not in the total.",
+    },
+    byProduct: {
+      title: "By product",
+      caption: "Cost of one term by product",
+      product: "Product",
+      count: "Count",
+      amount: "Cost of one term",
+      name: {
+        linux_instance: "Cloud Server",
+        windows_instance: "Cloud Server (Windows)",
+        disk: "Block Storage",
+        backup: "Backups",
+        database: "Managed Database",
+        bucket: "Object Storage",
+        load_balancer: "Load Balancer",
+        container_service: "Container Service",
+        cdn: "CDN",
+        dns: "DNS",
+        domain: "Domains",
+        other: "Other",
+      },
+    },
+    byResource: {
+      title: "By service",
+      caption: "Term and cost by service",
+      name: "Service",
+      product: "Product",
+      status: "State",
+      periodEnd: "Term ends",
+      autoRenew: "Auto renew",
+      amount: "Cost (one term)",
+      on: "On",
+      off: "Off",
+      unnamed: "Unnamed",
+      unpriced: "Not available",
+      statuses: {
+        active: "Running",
+        grace: "Term over, suspended",
+        retained: "Kept",
+        ended: "Ended",
+        other: "Other",
+      },
+    },
+    empty: {
+      title: "No running services yet",
+      body: "When you create your first server, its term and cost show here.",
+      create: "Create a server",
+    },
+    links: {
+      wallet: "Wallet and transactions",
+      invoices: "Invoices",
+    },
+  },
+};

@@ -1,5 +1,12 @@
 import type { CustomerSession } from "@tc/auth";
-import { DISK_ANCHOR_AWS_ID, MAX_DISK_GB, MIN_DISK_GB, priceCatalog } from "@tc/core";
+import {
+  DISK_ANCHOR_AWS_ID,
+  MAX_DISK_GB,
+  MIN_DISK_GB,
+  onboardingSteps,
+  priceCatalog,
+} from "@tc/core";
+import type { Onboarding } from "@tc/core";
 import {
   customerRepos,
   listCatalogProducts,
@@ -177,7 +184,7 @@ const toInvoice = (row: InvoiceRow): InvoiceItem => ({
  * that is not smaller (Lightsail refuses a smaller one). Priced with the rate and rule in force; if
  * that is not possible or the disk size of this server's plan is unknown, nothing is offered.
  */
-async function restorePlansFor(
+export async function restorePlansFor(
   tx: Parameters<Parameters<typeof withTx>[0]>[0],
   market: string,
   server: { productId: string | null; region: string | null },
@@ -204,6 +211,15 @@ async function restorePlansFor(
     priceMinor: row.priceBdt.totalMinor,
     specs: planSpecsOf(row.specs),
   }));
+}
+
+/** The customer saved a firewall list of their own on this server (WPU-G2 stores it in the config). */
+function hasSavedFirewall(config: unknown): boolean {
+  return (
+    typeof config === "object" &&
+    config !== null &&
+    Array.isArray((config as Record<string, unknown>)["firewallRules"])
+  );
 }
 
 /** null extras = the server is missing or another customer's (R8). */
@@ -373,20 +389,24 @@ export interface DashboardView {
     inGrace: { resourceId: string; name: string }[];
   };
   operations: { id: string; kind: string; state: string; name: string; createdAt: Date }[];
-  checklist: { phone: boolean; kyc: boolean; topUp: boolean; server: boolean };
+  /** WPU-G5: the first-use guide (phone, KYC, top-up, key, first server, firewall, snapshot). */
+  onboarding: Onboarding;
+  /** The server the follow-up steps (firewall, snapshot) point to: the oldest live server. */
+  guideServerId: string | null;
 }
 export type DashboardScreen = DashboardView;
 
 export async function loadDashboard(session: CustomerSession, now: Date): Promise<DashboardView> {
   return withTx(async (tx) => {
     const repos = customerRepos(tx, session.customerId);
-    const [profile, wallet, resources, subs, ops, payments] = await Promise.all([
+    const [profile, wallet, resources, subs, ops, payments, keys] = await Promise.all([
       repos.profile.get(),
       repos.wallet.view(),
       repos.resources.list(),
       repos.subscriptions.list(),
       repos.operations.listRecent(5),
       repos.payments.list(1),
+      repos.sshKeys.list(),
     ]);
     if (profile === null) throw new Error("dashboard: no customer row");
     const balance = wallet?.balanceMinor ?? 0n;
@@ -412,6 +432,7 @@ export async function loadDashboard(session: CustomerSession, now: Date): Promis
     }));
     const dueTotal = renewals.reduce((sum, r) => sum + (r.amountMinor ?? 0n), 0n);
     const phoneVerified = profile.phoneVerifiedAt !== null;
+    const servers = live.filter((r) => r.family === FAMILY || r.family === "windows_instance");
     return {
       state: "ready",
       balanceMinor: balance,
@@ -431,12 +452,17 @@ export async function loadDashboard(session: CustomerSession, now: Date): Promis
         name: nameOf.get(o.resourceId) ?? "",
         createdAt: o.createdAt,
       })),
-      checklist: {
-        phone: phoneVerified,
-        kyc: profile.kycStatus === "verified",
-        topUp: payments.length > 0 || balance > 0n,
-        server: live.some((r) => r.family === FAMILY),
-      },
+      onboarding: onboardingSteps({
+        phoneVerified,
+        kycVerified: profile.kycStatus === "verified",
+        toppedUp: payments.length > 0 || balance > 0n,
+        sshKeys: keys.length,
+        servers: servers.length,
+        firewallReviewed: servers.some((r) => hasSavedFirewall(r.config)),
+        snapshots: live.filter((r) => r.family === "backup" && !resourceFacts(r).final).length,
+      }),
+      // list() is newest first, so the last live server is the oldest one.
+      guideServerId: servers.length === 0 ? null : (servers[servers.length - 1] as { id: string }).id,
     };
   });
 }

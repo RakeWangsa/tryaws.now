@@ -95,12 +95,15 @@ export function RestoreForm({
   backups,
   plans,
   disabled,
+  idPrefix = "restore",
 }: {
   action: ExtrasAction;
   region: string;
   backups: { id: string; name: string }[];
   plans: PlanOption[];
   disabled: boolean;
+  /** Distinguishes the field ids when a page holds more than one restore form. */
+  idPrefix?: string;
 }) {
   const t = useTranslations("Extras.backups.restore");
   const te = useTranslations("Extras");
@@ -132,12 +135,12 @@ export function RestoreForm({
       )}
       <input type="hidden" name="region" value={region} />
       <div className="mb-3">
-        <label className="form-label" htmlFor="restore-backup">
+        <label className="form-label" htmlFor={`${idPrefix}-backup`}>
           {t("backup")}
         </label>
         <select
           className="form-select"
-          id="restore-backup"
+          id={`${idPrefix}-backup`}
           name="restoreFromBackupId"
           disabled={disabled}
         >
@@ -149,10 +152,10 @@ export function RestoreForm({
         </select>
       </div>
       <div className="mb-3">
-        <label className="form-label" htmlFor="restore-plan">
+        <label className="form-label" htmlFor={`${idPrefix}-plan`}>
           {t("plan")}
         </label>
-        <select className="form-select" id="restore-plan" name="productId" disabled={disabled}>
+        <select className="form-select" id={`${idPrefix}-plan`} name="productId" disabled={disabled}>
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
               {specLine(p.specs)}

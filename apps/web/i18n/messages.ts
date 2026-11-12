@@ -33,6 +33,8 @@ import { publicBn } from "../messages/public-bn.ts";
 import { publicEn } from "../messages/public-en.ts";
 import { domainsBn } from "../messages/domains-bn.ts";
 import { domainsEn } from "../messages/domains-en.ts";
+import { accountBn } from "../messages/account-bn.ts";
+import { accountEn } from "../messages/account-en.ts";
 import { supportBn } from "../messages/support-bn.ts";
 import { supportEn } from "../messages/support-en.ts";
 
@@ -55,6 +57,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     serversOwn.bn,
     windowsAccessBn,
     extrasOwn.bn,
+    accountBn,
     cdnBn,
     databasesBn,
     loadBalancersBn,
@@ -76,6 +79,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     serversOwn.en,
     windowsAccessEn,
     extrasOwn.en,
+    accountEn,
     cdnEn,
     databasesEn,
     loadBalancersEn,

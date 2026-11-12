@@ -7,6 +7,7 @@ import { startPanelPage } from "../../../../server/panel-page.ts";
 import { loadServers } from "../../../../server/servers-view.ts";
 import { PanelFrame } from "../PanelFrame.tsx";
 import { ServersContent } from "./ServersContent.tsx";
+import { ServersSubnav } from "./ServersSubnav.tsx";
 
 // Reads the session and the database: never prerendered, never cached.
 export const dynamic = "force-dynamic";
@@ -29,7 +30,8 @@ export default async function ServersPage({ params }: Props) {
   const screen = await loadServers(panel.session);
   return (
     <PanelFrame locale={locale} path="/servers" currentId="cloudServers" panel={panel}>
-      <h1 className="h3 mergecolor mb-4">{t("Servers.heading")}</h1>
+      <h1 className="h3 mergecolor mb-3">{t("Servers.heading")}</h1>
+      <ServersSubnav locale={locale} current="servers" />
       <ServersContent locale={locale} screen={screen} />
     </PanelFrame>
   );

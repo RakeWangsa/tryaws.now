@@ -431,12 +431,15 @@ export function StaticIpPanel({
   actions,
   ids,
   disabled,
+  idSuffix = "",
 }: {
   attached: boolean;
   address: string | null;
   actions: Pick<ManageActions, "attachIp" | "detachIp">;
   ids: Ids;
   disabled: boolean;
+  /** Distinguishes the field ids when a page holds more than one panel. */
+  idSuffix?: string;
 }) {
   const t = useTranslations("Servers.detail.manage.staticIp");
   const [attach, attachAction] = useActionState(actions.attachIp, INITIAL_FORM_STATE);
@@ -454,12 +457,12 @@ export function StaticIpPanel({
             <input
               className="form-check-input"
               type="checkbox"
-              id="static-ip-ack"
+              id={`static-ip-ack${idSuffix}`}
               name="acknowledge"
               disabled={disabled}
               aria-invalid={detach.fields?.["acknowledge"] !== undefined ? true : undefined}
             />
-            <label className="form-check-label" htmlFor="static-ip-ack">
+            <label className="form-check-label" htmlFor={`static-ip-ack${idSuffix}`}>
               {t("acknowledge")}
             </label>
           </div>

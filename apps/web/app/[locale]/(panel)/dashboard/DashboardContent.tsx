@@ -117,12 +117,20 @@ export function DashboardContent({
     });
   }
 
-  const steps = [
-    { key: "phone", done: view.checklist.phone, href: localePath(locale, "/settings/profile") },
-    { key: "kyc", done: view.checklist.kyc, href: localePath(locale, "/settings/kyc") },
-    { key: "topUp", done: view.checklist.topUp, href: walletHref },
-    { key: "server", done: view.checklist.server, href: localePath(locale, "/servers/new") },
-  ] as const;
+  const guide = view.onboarding;
+  const hrefOf: Record<string, string> = {
+    phone: localePath(locale, "/settings/profile"),
+    kyc: localePath(locale, "/settings/kyc"),
+    topUp: walletHref,
+    sshKey: localePath(locale, "/settings/ssh-keys"),
+    server: localePath(locale, "/servers/new"),
+    firewall:
+      view.guideServerId === null
+        ? localePath(locale, "/servers")
+        : `${localePath(locale, `/servers/${encodeURIComponent(view.guideServerId)}`)}?tab=networking`,
+    snapshot: localePath(locale, "/snapshots"),
+  };
+  const doneCount = guide.steps.filter((step) => step.done).length;
 
   return (
     <>
@@ -138,27 +146,53 @@ export function DashboardContent({
           <Button variant="primary" href={walletHref}>
             {t("topUp")}
           </Button>
+          <Button variant="default" href={localePath(locale, "/billing")} className="ms-2">
+            {t("billing")}
+          </Button>
         </div>
       </div>
 
-      {empty ? (
+      {!guide.complete ? (
         <Card className="mb-4">
-          <h2 className="mergecolor h4">{t("checklist.title")}</h2>
-          <ul className="list-unstyled mb-0">
-            {steps.map((step) => (
-              <li key={step.key} className="mb-2">
+          <h2 className="mergecolor h4">
+            {guide.started ? t("checklist.titleNext") : t("checklist.title")}
+          </h2>
+          <p className="seccolor">
+            {empty ? t("checklist.intro") : t("checklist.introNext")}{" "}
+            {t("checklist.progress", { done: doneCount, total: guide.steps.length })}
+          </p>
+          <ol className="list-unstyled mb-0">
+            {guide.steps.map((step) => (
+              <li key={step.key} className="mb-3">
                 <i
-                  className={step.done ? "fas fa-check-circle me-2" : "far fa-circle me-2"}
+                  className={
+                    step.done
+                      ? "fas fa-check-circle me-2"
+                      : step.locked
+                        ? "fas fa-lock me-2"
+                        : "far fa-circle me-2"
+                  }
                   aria-hidden="true"
                 />
-                <a href={step.href}>{t(`checklist.${step.key}`)}</a>
+                {step.locked ? (
+                  <span className="seccolor">{t(`checklist.${step.key}`)}</span>
+                ) : (
+                  <a href={hrefOf[step.key]}>{t(`checklist.${step.key}`)}</a>
+                )}
                 {" · "}
                 <span className="seccolor">
-                  {step.done ? t("checklist.done") : t("checklist.todo")}
+                  {step.done
+                    ? t("checklist.done")
+                    : step.locked
+                      ? t("checklist.locked")
+                      : step.key === guide.next
+                        ? t("checklist.next")
+                        : t("checklist.todo")}
                 </span>
+                {step.done ? null : <p className="seccolor mb-0 ms-4">{t(`checklist.hint.${step.key}`)}</p>}
               </li>
             ))}
-          </ul>
+          </ol>
         </Card>
       ) : null}
 
