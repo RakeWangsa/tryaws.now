@@ -8,11 +8,11 @@ An alarm to on-call (dead-letter queue, 5xx, reconciliation, ledger), a customer
 
 ## Severity (proposed)
 
-| Level | Meaning                                                                   | Told                                 | Customer notice                             |
-| ----- | ------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------- |
+| Level | Meaning                                                                  | Told                                 | Customer notice                             |
+| ----- | ------------------------------------------------------------------------ | ------------------------------------ | ------------------------------------------- |
 | S1    | Money wrong (ledger mismatch, double credit), data exposure, secret leak | Owner and on-call at once            | Within 24 hours, in the customer's language |
-| S2    | Panel or provisioning down, payments cannot complete                      | On-call at once, owner within 1 hour | Status message when it lasts over 1 hour    |
-| S3    | One customer, one resource, a workaround exists                           | Operations lead in working hours     | Reply in the support thread                 |
+| S2    | Panel or provisioning down, payments cannot complete                     | On-call at once, owner within 1 hour | Status message when it lasts over 1 hour    |
+| S3    | One customer, one resource, a workaround exists                          | Operations lead in working hours     | Reply in the support thread                 |
 
 ## Steps
 
