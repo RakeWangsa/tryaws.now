@@ -13,7 +13,9 @@ import {
   deploymentHistoryEntry,
   parseContainerConfig,
   parseDeployment,
+  planApplyStale,
   planFailedFor,
+  readPlanApplyPayload,
   resourceTags,
   stepDone,
   stepNext,
@@ -47,6 +49,18 @@ export interface ContainerServiceDeps {
     readonly customerId: string;
     readonly productId: string;
   }): Promise<ContainerPlan | null>;
+
+  /**
+   * WPU-S7: the period end the subscription of this resource has NOW (the database, not the payload).
+   * The apply of a pending plan runs only for the period it was queued for; null (no subscription of
+   * this customer and resource) or a failed read refuses the apply (R16). The implementation must
+   * match the subscription id to the resource id and the customer id.
+   */
+  periodEndOf(input: {
+    readonly customerId: string;
+    readonly resourceId: string;
+    readonly subscriptionId: string;
+  }): Promise<Date | null>;
 }
 
 const POLL_SECONDS = 15;
@@ -55,6 +69,26 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function fail(code: "validation" | "conflict" | "upstream_unavailable" | "internal"): AwsError {
   return new AwsError({ code, retryable: false });
+}
+
+/** WPU-S7: true when the period end named by the payload is not the subscription's current one. */
+async function applyIsStale(
+  ctx: OpCtx<ContainerConfig>,
+  deps: ContainerServiceDeps,
+): Promise<boolean> {
+  const named = readPlanApplyPayload(ctx.operation.payload);
+  if (named.subscriptionId === null || named.periodEnd === null) return true;
+  let current: Date | null;
+  try {
+    current = await deps.periodEndOf({
+      customerId: ctx.resource.customerId,
+      resourceId: ctx.resource.id,
+      subscriptionId: named.subscriptionId,
+    });
+  } catch {
+    throw new AwsError({ code: "upstream_unavailable", retryable: true });
+  }
+  return planApplyStale(named.periodEnd, current);
 }
 
 function isNotFound(error: unknown): boolean {
@@ -325,6 +359,16 @@ export function createContainerServiceAdapter(
         const productId = payload?.productId;
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (ctx.resource.state !== "active") throw fail("conflict");
+        // WPU-S7: the apply belongs to the period it was queued for. After a renewal moved the period
+        // the apply is skipped (a done step that changes nothing but a marker): the pending plan stays
+        // for the next period and no needs_attention mark is written.
+        if (await applyIsStale(ctx, deps)) {
+          return stepDone({
+            configMerge: {
+              planApplySkipped: { operationId: ctx.operation.id, reason: "period_moved" },
+            },
+          });
+        }
         const plan = await deps.loadPlan({ customerId: ctx.resource.customerId, productId });
         if (plan === null) throw fail("validation");
         await lightsail.send(

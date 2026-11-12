@@ -1,6 +1,7 @@
 import {
   insertOperation,
   lifecycleRepo,
+  patchResource,
   type LifecycleRow,
   type OperationKind,
   type Tx,
@@ -17,7 +18,7 @@ import type { Clock } from "../types";
 import { readLifecycleConfig, type LifecycleConfig } from "./config";
 import { decideSubscription, type LifecycleAction } from "./decide";
 import { SNAPSHOT_FAMILIES } from "./guard";
-import { queuePlanApply } from "./plan-change";
+import { planApplyWait, queuePlanApply } from "./plan-change";
 import { renewalQuote, renewSubscription } from "./renew";
 
 const HOUR_MS = 3_600_000;
@@ -232,6 +233,36 @@ async function process(
   const plan = await queuePlanApply(tx, row, now);
   if (plan !== null && plan.ready)
     work.messages.push(firstMessage(plan.operationId, row.resourceId));
+
+  // WPU-S7: a renewal that would charge waits for an apply of this period that is still queued or
+  // running (the charge must follow the capacity the customer has). It is neither charged nor failed:
+  // the next sweep asks again, for at most PLAN_APPLY_WAIT_HOURS past the due time. After that the
+  // renewal goes on at the applied plan, ops are told once, and the late apply is skipped by the
+  // adapter because the period has moved. Renewals that cannot be paid enter grace as before.
+  if ((action.type === "period_end" && action.tryRenew) || action.type === "retry_renew") {
+    const gate = await planApplyWait(tx, row, now);
+    if (gate.wait) return { step: "none", messages: work.messages };
+    if (
+      gate.staleOperationId !== null &&
+      (row.resource.config.planApplyLate as { operationId?: unknown } | undefined)?.operationId !==
+        gate.staleOperationId
+    ) {
+      await patchResource(tx, row.resourceId, {
+        configMerge: {
+          planApplyLate: {
+            operationId: gate.staleOperationId,
+            periodEnd: row.periodEnd.toISOString(),
+          },
+        },
+      });
+      deps.log({
+        event: "lifecycle",
+        action: "plan_apply_late",
+        subscriptionId: row.id,
+        operationId: gate.staleOperationId,
+      });
+    }
+  }
 
   let step: Step = "none";
   switch (action.type) {

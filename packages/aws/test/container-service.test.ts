@@ -16,6 +16,8 @@ const OID = "12345678-1234-4234-8234-123456789012";
 const POOL = { awsAccountId: "210987654321", externalId: "tc-ext-7f3a9c" };
 const SERVICE = awsResourceName("container", RID);
 const NOW = Date.now();
+const PERIOD_END = new Date("2026-12-01T00:00:00.000Z");
+const APPLY = { subscriptionId: OID, periodEnd: PERIOD_END.toISOString() };
 const clock = { now: () => new Date(NOW) };
 const notFound = () => lightsailError(400, "NotFoundException", "raw aws text 210987654321");
 const DEPLOYMENT = {
@@ -46,6 +48,7 @@ function setup(over: Partial<ContainerServiceDeps> = {}) {
       planCalls.push(input);
       return { power: "micro", scale: 2 };
     },
+    periodEndOf: async () => PERIOD_END,
     ...over,
   };
   const adapter = createContainerServiceAdapter(deps);
@@ -304,7 +307,7 @@ describe("actions", () => {
     const product = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     const r = await adapter.aws.action(
       "scale_container",
-      ctx(null, { payload: { productId: product } }),
+      ctx(null, { payload: { productId: product, ...APPLY } }),
     );
     expect(r).toMatchObject({ kind: "done", patch: { configMerge: { productId: product } } });
     expect(body("UpdateContainerService")).toEqual({
@@ -320,7 +323,7 @@ describe("actions", () => {
     await expect(
       none.adapter.aws.action(
         "scale_container",
-        none.ctx(null, { payload: { productId: product } }),
+        none.ctx(null, { payload: { productId: product, ...APPLY } }),
       ),
     ).rejects.toMatchObject({ code: "validation" });
     expect(none.calls()).toEqual([]);
@@ -387,7 +390,7 @@ describe("plan change at the next renewal (WPU-G8)", () => {
     aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
     const r = await adapter.aws.action(
       "scale_container",
-      ctx(null, { payload: { productId: NEXT, subscriptionId: OID } }),
+      ctx(null, { payload: { productId: NEXT, ...APPLY } }),
     );
     expect(r).toMatchObject({
       kind: "done",
@@ -400,6 +403,58 @@ describe("plan change at the next renewal (WPU-G8)", () => {
         },
       },
     });
+  });
+
+  // WPU-S7: the apply is bound to the period it was queued for.
+  it("scale_container whose period has moved (the renewal already happened) is skipped: no AWS call, the pending plan stays, no failure", async () => {
+    const moved = new Date(PERIOD_END.getTime() + 30 * 86_400_000);
+    const { aws, adapter, ctx, calls } = setup({ periodEndOf: async () => moved });
+    aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "scale_container",
+      ctx(null, { payload: { productId: NEXT, ...APPLY } }),
+    );
+    expect(r).toEqual({
+      kind: "done",
+      patch: {
+        configMerge: { planApplySkipped: { operationId: "op-1", reason: "period_moved" } },
+      },
+    });
+    expect(JSON.stringify(r)).not.toMatch(/pendingPlan|appliedPlan/);
+    expect(calls()).toEqual([]);
+  });
+
+  it("scale_container is skipped when the payload names no period, and refused (retryable) when the period cannot be read (R16)", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
+    for (const payload of [
+      { productId: NEXT },
+      { productId: NEXT, subscriptionId: OID },
+      { productId: NEXT, subscriptionId: OID, periodEnd: "not a date" },
+    ]) {
+      const r = await adapter.aws.action("scale_container", ctx(null, { payload }));
+      expect(r).toMatchObject({ kind: "done", patch: { configMerge: { planApplySkipped: {} } } });
+    }
+    expect(calls()).toEqual([]);
+    for (const periodEndOf of [
+      async () => null,
+      async () => {
+        throw new Error("db down");
+      },
+    ]) {
+      const bad = setup({ periodEndOf });
+      bad.aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
+      const run = bad.adapter.aws.action(
+        "scale_container",
+        bad.ctx(null, { payload: { productId: NEXT, ...APPLY } }),
+      );
+      if (periodEndOf.toString().includes("null")) {
+        await expect(run).resolves.toMatchObject({ kind: "done" });
+      } else {
+        await expect(run).rejects.toMatchObject({ code: "upstream_unavailable", retryable: true });
+      }
+      expect(bad.calls()).toEqual([]);
+    }
   });
 
   // WPU-S2: core/lifecycle PLAN_APPLY_STATES says container_service applies in `active` only; this
@@ -747,7 +802,9 @@ describe("no registry login is ever issued", () => {
       () =>
         adapter.aws.action(
           "scale_container",
-          ctx(null, { payload: { productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" } }),
+          ctx(null, {
+            payload: { productId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", ...APPLY },
+          }),
         ),
     ]) {
       await call().catch(() => undefined);
