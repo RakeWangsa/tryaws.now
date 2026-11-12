@@ -134,7 +134,42 @@ export async function loadBucketList(session: CustomerSession): Promise<BucketLi
   });
 }
 
+/**
+ * WPU-G9. The customer's own running or stopped servers, and whether the bucket is open to each: the
+ * allowed set is what the adapter stored in `accessInstances`, read id by id (R16).
+ */
+export function bucketInstancesOf(
+  resources: readonly Pick<ResourceSummary, "id" | "family" | "state" | "config">[],
+  bucketConfig: unknown,
+): BucketInstance[] {
+  const stored = (bucketConfig as { accessInstances?: unknown } | null)?.accessInstances;
+  const allowed = new Set(Array.isArray(stored) ? stored.filter((v) => typeof v === "string") : []);
+  return resources
+    .filter(
+      (r) =>
+        (r.family === "linux_instance" || r.family === "windows_instance") &&
+        (r.state === "active" || r.state === "stopped"),
+    )
+    .map((r) => {
+      const cfg = (r.config ?? {}) as { displayName?: unknown };
+      return {
+        id: r.id,
+        name: typeof cfg.displayName === "string" ? cfg.displayName.slice(0, 60) : "",
+        allowed: allowed.has(r.id),
+      };
+    });
+}
+
+/** An instance of the customer that a bucket can be opened to (WPU-G9). */
+export interface BucketInstance {
+  id: string;
+  name: string;
+  allowed: boolean;
+}
+
 export interface BucketDetail extends BucketRow {
+  /** The customer's own running or stopped servers and whether the bucket is open to each. */
+  instances?: BucketInstance[];
   /** Versioning as the adapter last set it; null while unknown (WPU-G7). */
   versioning?: "Enabled" | "Suspended" | null;
   address: string | null;
@@ -187,7 +222,9 @@ export async function loadBucketDetail(
     if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return null;
     const facts = bucketConfigOf(resource.id, resource.region, resource.config);
     const operations = await repos.operations.listForResource(resource.id);
+    const instances = bucketInstancesOf(await repos.resources.list(), resource.config);
     return {
+      instances,
       id: resource.id,
       name: facts.name,
       bucketName: facts.bucketName,

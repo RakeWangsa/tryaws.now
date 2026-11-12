@@ -1,5 +1,5 @@
 import type { CustomerSession } from "@tc/auth";
-import { priceCatalog } from "@tc/core";
+import { DB_BACKUP_RETENTION_DAYS, pointInTimeWindow, priceCatalog, snapshotPrice } from "@tc/core";
 import { customerRepos, listCatalogProducts, readFeatureFlag, withTx } from "@tc/db";
 import type { ResourceSummary } from "@tc/db";
 import { planSpecsOf } from "./servers-view.ts";
@@ -63,6 +63,14 @@ export function databaseConfigOf(config: unknown): DatabaseFacts {
         ? port
         : null,
   };
+}
+
+/** The master user name the adapter stored; a plain identifier or nothing. */
+export function databaseMasterOf(config: unknown): string | null {
+  const raw =
+    typeof config === "object" && config !== null ? (config as Record<string, unknown>) : {};
+  const name = raw["masterUsername"];
+  return typeof name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,62}$/.test(name) ? name : null;
 }
 
 export interface DatabasePlanOption {
@@ -154,15 +162,29 @@ export interface DatabaseBackup {
   id: string;
   name: string;
   sizeGb: number | null;
+  /** WPU-G9: the price of keeping it for a month, from the engine; null when it cannot be priced. */
+  monthlyMinor: bigint | null;
   createdAt: Date;
   state: string;
   /** The final snapshot of a destroy: it belongs to the lifecycle and is never deleted here. */
   final: boolean;
 }
 
+export type SnapshotPriceView =
+  { state: "ready"; perGbMonthMinor: bigint } | { state: "unavailable" };
+
 export interface DatabaseDetail extends DatabaseRow {
   /** Backup window and public mode written by the adapter (WPU-G7). */
   console?: DatabaseConsole;
+  /** WPU-G9. The master user name the adapter stored (the password is never part of a view: U9). */
+  masterUsername: string | null;
+  /** The price of one GB-month of a snapshot, or "unavailable" (R16: nothing is sold then). */
+  snapshotPrice: SnapshotPriceView;
+  /** Plans a restore may use: this Region, a disk not smaller than this database's. */
+  restorePlans: DatabasePlanOption[];
+  /** Days the automatic backups are kept, and the instants a point-in-time restore may name. */
+  retentionDays: number;
+  pitrWindow: { from: Date; to: Date };
   createdAt: Date;
   backups: DatabaseBackup[];
 }
@@ -170,6 +192,7 @@ export interface DatabaseDetail extends DatabaseRow {
 export async function loadDatabaseDetail(
   session: CustomerSession,
   id: string,
+  now: () => Date = () => new Date(),
 ): Promise<DatabaseDetail | null> {
   return withTx(async (tx) => {
     const repos = customerRepos(tx, session.customerId);
@@ -185,22 +208,59 @@ export async function loadDatabaseDetail(
       listCatalogProducts(tx, FAMILY),
     ]);
     const product = catalog.find((row) => row.id === resource.productId);
-    const backups = children.map((b): DatabaseBackup => {
+    const clock = { now };
+    const perGb = await snapshotPrice(tx, profile.market, null, clock);
+    const rows: DatabaseBackup[] = [];
+    for (const b of children) {
       const raw =
         typeof b.config === "object" && b.config !== null
           ? (b.config as Record<string, unknown>)
           : {};
       const size = raw["sizeGb"];
-      return {
+      const sizeGb =
+        typeof size === "number" && Number.isSafeInteger(size) && size >= 0 ? size : null;
+      const priced =
+        sizeGb === null ? null : await snapshotPrice(tx, profile.market, sizeGb, clock);
+      rows.push({
         id: b.id,
         name: typeof raw["displayName"] === "string" ? raw["displayName"].slice(0, 60) : "",
-        sizeGb: typeof size === "number" && Number.isSafeInteger(size) && size >= 0 ? size : null,
+        sizeGb,
+        monthlyMinor: priced !== null && priced.ok ? priced.value.monthlyMinor : null,
         createdAt: b.createdAt,
         state: b.state,
         final: raw["final"] === true,
-      };
-    });
+      });
+    }
+    const backups = rows;
+    // Restore plans: the catalog priced by the engine, this Region, a disk not smaller (R4).
+    let restorePlans: DatabasePlanOption[] = [];
+    const ownDisk = product === undefined ? null : databaseSpecsOf(product.specs).diskGb;
+    if (ownDisk !== undefined && ownDisk !== null) {
+      const priced = await priceCatalog(
+        tx,
+        catalog.filter((row) => row.region === resource.region),
+        { market: profile.market },
+        clock,
+      );
+      if (priced.ok) {
+        restorePlans = priced.value
+          .map((row) => ({
+            id: row.id,
+            region: row.region,
+            priceMinor: row.priceBdt.totalMinor,
+            specs: databaseSpecsOf(row.specs),
+          }))
+          .filter((plan) => plan.specs.diskGb !== undefined && plan.specs.diskGb >= ownDisk);
+      }
+    }
     return {
+      masterUsername: databaseMasterOf(resource.config),
+      snapshotPrice: perGb.ok
+        ? { state: "ready", perGbMonthMinor: perGb.value.perGbMonthMinor }
+        : { state: "unavailable" },
+      restorePlans,
+      retentionDays: DB_BACKUP_RETENTION_DAYS,
+      pitrWindow: pointInTimeWindow(now()),
       console: databaseConsoleOf(resource.config),
       ...rowOf(resource, product === undefined ? {} : databaseSpecsOf(product.specs)),
       createdAt: resource.createdAt,

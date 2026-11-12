@@ -26,6 +26,11 @@ export interface FamilyRepos {
   rateLimits: RateLimitsRepo;
   /** R12, R16: the flag of the family for the customer's market; false when it cannot be read. */
   flagOn(): Promise<boolean>;
+  /**
+   * WPU-G9: whether the market has a usable snapshot price (config_price.snapshot_gb_month). Only the
+   * database snapshot cores ask; absent means no (R16).
+   */
+  snapshotPriceOn?(): Promise<boolean>;
 }
 
 export interface FamilyActionDeps {

@@ -46,6 +46,7 @@ export const setDatabaseOptionsAction = run(consoleCore(DB_OPTIONS), [
   "databaseId",
   "requestId",
   "backupWindow",
+  "maintenanceWindow",
   "publicMode",
   "acknowledge",
 ]);

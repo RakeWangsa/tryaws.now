@@ -270,6 +270,15 @@ export function DatabaseOptionsForm({
         optional
         {...fieldError(state, "backupWindow", invalid)}
       />
+      <Field
+        name="maintenanceWindow"
+        label={t("maintenance")}
+        hint={t("maintenanceHint", { current: facts.maintenanceWindow ?? t("windowNone") })}
+        maxLength={23}
+        autoComplete="off"
+        optional
+        {...fieldError(state, "maintenanceWindow", invalid)}
+      />
       <Choice
         name="publicMode"
         label={t("publicMode")}

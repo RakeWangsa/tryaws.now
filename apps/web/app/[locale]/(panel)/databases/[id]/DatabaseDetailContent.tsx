@@ -20,6 +20,8 @@ import { FamilyState } from "../../_family/FamilyParts.tsx";
 import { useRegionLabel } from "../../servers/ServerParts.tsx";
 import { useEngineLabel } from "../DatabaseParts.tsx";
 import { DatabaseAccess } from "./DatabaseAccess.tsx";
+import { DatabaseBackups } from "./DatabaseBackups.tsx";
+import type { SnapshotAction } from "./DatabaseBackups.tsx";
 import type { DatabaseRevealResult } from "./DatabaseAccess.tsx";
 
 // The content of /databases/[id] (16.10): a header and the tabs Overview, Connect, Backups, Metrics,
@@ -46,6 +48,7 @@ export function DatabaseDetailContent({
   defaultTab,
   initialSecret = null,
   extra = null,
+  snapshots,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -58,10 +61,22 @@ export function DatabaseDetailContent({
   defaultTab?: string;
   /** The console form of the settings tab (WPU-G7), built by the page. */
   extra?: ReactNode;
+  /**
+   * WPU-G9. The actions of the Backups tab; without them (the static mockup states) the tab shows the
+   * read-only table.
+   */
+  snapshots?: {
+    requestIds: { create: string; delete: string };
+    create: SnapshotAction;
+    delete: SnapshotAction;
+    restore: SnapshotAction;
+    pitr: SnapshotAction;
+  };
   /** Tests only: the Connect tab as it is after the button. */
   initialSecret?: { username: string; password: string } | null;
 }) {
   const t = useTranslations("Databases");
+  const tc = useTranslations("DbConnect");
   const regionLabel = useRegionLabel();
   const engineLabel = useEngineLabel();
   const listHref = localePath(locale, "/databases");
@@ -114,6 +129,25 @@ export function DatabaseDetailContent({
         )}
       </div>
       <div className="col-12 col-md-6">
+        {database.masterUsername === null ? (
+          <StatTile value={none} description={tc("username")} />
+        ) : (
+          <CopyField label={tc("username")} value={database.masterUsername} />
+        )}
+      </div>
+      <div className="col-12 col-md-6">
+        <StatTile
+          value={database.console?.maintenanceWindow ?? tc("maintenanceUnknown")}
+          description={tc("maintenance")}
+        />
+      </div>
+      <div className="col-12 col-md-6">
+        <StatTile
+          value={tc("retention", { days: database.retentionDays })}
+          description={tc("retentionNote")}
+        />
+      </div>
+      <div className="col-12 col-md-6">
         <StatTile
           value={t("detail.overview.accessValue")}
           description={t("detail.overview.access")}
@@ -143,49 +177,60 @@ export function DatabaseDetailContent({
       : state === "creating"
         ? t("detail.backups.stateCreating")
         : t("detail.backups.stateOther");
-  const backups = (
-    <>
-      <p className="seccolor">{t("detail.backups.intro")}</p>
-      {database.backups.length === 0 ? (
-        <EmptyState
-          title={t("detail.backups.empty.title")}
-          description={t("detail.backups.empty.body")}
-        />
-      ) : (
-        <DataTable
-          caption={t("detail.backups.caption")}
-          rows={database.backups}
-          rowKey={(row) => row.id}
-          columns={[
-            { key: "name", header: t("detail.backups.name"), cell: (row) => row.name || none },
-            {
-              key: "kind",
-              header: t("detail.backups.kind"),
-              cell: (row) => (row.final ? t("detail.backups.final") : t("detail.backups.manual")),
-            },
-            {
-              key: "size",
-              header: t("detail.backups.size"),
-              cell: (row) =>
-                row.sizeGb === null ? none : t("detail.backups.gb", { size: row.sizeGb }),
-            },
-            {
-              key: "date",
-              header: t("detail.backups.date"),
-              cell: (row) => <DateText value={row.createdAt} numerals={numerals} />,
-            },
-            {
-              key: "state",
-              header: t("detail.backups.state"),
-              cell: (row) => stateWord(row.state),
-            },
-          ]}
-        />
-      )}
-      <p className="seccolor mt-3">{t("detail.backups.createUnavailable")}</p>
-      <p className="seccolor">{t("detail.backups.restoreSoon")}</p>
-    </>
-  );
+  const backups =
+    snapshots !== undefined ? (
+      <DatabaseBackups
+        database={database}
+        numerals={numerals}
+        requestIds={snapshots.requestIds}
+        createAction={snapshots.create}
+        deleteAction={snapshots.delete}
+        restoreAction={snapshots.restore}
+        pitrAction={snapshots.pitr}
+      />
+    ) : (
+      <>
+        <p className="seccolor">{t("detail.backups.intro")}</p>
+        {database.backups.length === 0 ? (
+          <EmptyState
+            title={t("detail.backups.empty.title")}
+            description={t("detail.backups.empty.body")}
+          />
+        ) : (
+          <DataTable
+            caption={t("detail.backups.caption")}
+            rows={database.backups}
+            rowKey={(row) => row.id}
+            columns={[
+              { key: "name", header: t("detail.backups.name"), cell: (row) => row.name || none },
+              {
+                key: "kind",
+                header: t("detail.backups.kind"),
+                cell: (row) => (row.final ? t("detail.backups.final") : t("detail.backups.manual")),
+              },
+              {
+                key: "size",
+                header: t("detail.backups.size"),
+                cell: (row) =>
+                  row.sizeGb === null ? none : t("detail.backups.gb", { size: row.sizeGb }),
+              },
+              {
+                key: "date",
+                header: t("detail.backups.date"),
+                cell: (row) => <DateText value={row.createdAt} numerals={numerals} />,
+              },
+              {
+                key: "state",
+                header: t("detail.backups.state"),
+                cell: (row) => stateWord(row.state),
+              },
+            ]}
+          />
+        )}
+        <p className="seccolor mt-3">{t("detail.backups.createUnavailable")}</p>
+        <p className="seccolor">{t("detail.backups.restoreSoon")}</p>
+      </>
+    );
 
   const metrics = (
     <EmptyState

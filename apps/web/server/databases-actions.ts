@@ -26,20 +26,62 @@ function text(input: Record<string, unknown>, key: string): unknown {
   return typeof value === "string" ? value.trim() : value;
 }
 
-/** /databases/new: the form's three fields, nothing else, become the config of a database (R9, R11). */
+const LOCAL_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+
+/**
+ * WPU-G9. A `datetime-local` value is read as a time in Dhaka (UTC+6, no daylight saving) and becomes
+ * an ISO instant. null for anything else, including a date that does not exist.
+ */
+export function dhakaLocalToIso(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const m = LOCAL_TIME.exec(value.trim());
+  if (m === null) return null;
+  const [y, mo, d, h, mi] = m.slice(1).map(Number) as [number, number, number, number, number];
+  const at = new Date(Date.UTC(y, mo - 1, d, h - 6, mi));
+  // A rolled-over date (month 13, day 40) is not a date.
+  const back = new Date(at.getTime() + 6 * 3600 * 1000);
+  if (
+    back.getUTCFullYear() !== y ||
+    back.getUTCMonth() !== mo - 1 ||
+    back.getUTCDate() !== d ||
+    back.getUTCHours() !== h ||
+    back.getUTCMinutes() !== mi
+  ) {
+    return null;
+  }
+  return at.toISOString();
+}
+
+/**
+ * /databases/new: the form's three fields, nothing else, become the config of a database (R9, R11).
+ * `mode` is an argument of the code (WPU-G9), never a form field: "snapshot" adds the id of a snapshot,
+ * "point_in_time" adds the source database and the instant. The order code checks both against the
+ * customer's own rows (R8) and the retention window.
+ */
 export async function createDatabaseDraftCore(
   deps: OrderActionDeps,
   raw: unknown,
+  mode: "new" | "snapshot" | "point_in_time" = "new",
 ): Promise<DraftActionResult> {
   const session = await deps.authenticate();
   if (session === null) return { ok: false, error: "unauthenticated" };
 
   const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+  const restore: Record<string, unknown> = {};
+  if (mode === "snapshot") restore["restoreFromBackupId"] = text(input, "restoreFromBackupId");
+  if (mode === "point_in_time") {
+    restore["restoreSourceId"] = text(input, "restoreSourceId");
+    restore["restoreTime"] = dhakaLocalToIso(input["restoreTime"]) ?? "invalid";
+  }
   const parsed = parseDatabaseConfig({
     productId: text(input, "productId"),
     region: text(input, "region"),
     displayName: text(input, "displayName"),
+    ...restore,
   });
+  if (mode === "snapshot" && restore["restoreFromBackupId"] === undefined) {
+    return { ok: false, error: "validation", fields: { restoreFromBackupId: "invalid" } };
+  }
   if (!parsed.ok) {
     return { ok: false, error: "validation", ...(parsed.fields ? { fields: parsed.fields } : {}) };
   }

@@ -1,3 +1,4 @@
+import { BucketInstanceAccess } from "./BucketInstanceAccess.tsx";
 import { newUuidV7 } from "@tc/db";
 import { hasLocale } from "next-intl";
 import { getTranslations } from "next-intl/server";
@@ -13,6 +14,7 @@ import {
   deleteAccessKeyAction,
   destroyBucketAction,
   setBucketAccessAction,
+  setBucketInstanceAccessAction,
   setBucketVersioningAction,
 } from "./actions.ts";
 import { createBucketKeyAction } from "./key-actions.ts";
@@ -57,13 +59,26 @@ export default async function StorageDetailPage({ params, searchParams }: Props)
         {...(bucket !== null && bucket.state === "active"
           ? {
               extra: (
-                <BucketVersioningForm
-                  action={setBucketVersioningAction}
-                  bucketId={bucket.id}
-                  requestId={newUuidV7()}
-                  suspendRequestId={newUuidV7()}
-                  versioning={bucket.versioning ?? null}
-                />
+                <>
+                  <BucketVersioningForm
+                    action={setBucketVersioningAction}
+                    bucketId={bucket.id}
+                    requestId={newUuidV7()}
+                    suspendRequestId={newUuidV7()}
+                    versioning={bucket.versioning ?? null}
+                  />
+                  <div className="mt-4">
+                    <BucketInstanceAccess
+                      action={setBucketInstanceAccessAction}
+                      bucketId={bucket.id}
+                      requestIds={Object.fromEntries(
+                        (bucket.instances ?? []).map((i) => [i.id, newUuidV7()]),
+                      )}
+                      instances={bucket.instances ?? []}
+                      mode={bucket.accessMode}
+                    />
+                  </div>
+                </>
               ),
             }
           : {})}

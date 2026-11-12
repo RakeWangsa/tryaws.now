@@ -68,11 +68,17 @@ export function detail(over: Partial<DatabaseDetail> = {}): DatabaseDetail {
         id: "0190aaaa-0000-7000-8000-0000000000e1",
         name: "main-db final",
         sizeGb: 12,
+        monthlyMinor: 8000n,
         createdAt: new Date("2026-11-11T08:00:00Z"),
         state: "active",
         final: true,
       },
     ],
+    masterUsername: "tcadmin",
+    snapshotPrice: { state: "ready", perGbMonthMinor: 700n },
+    restorePlans: [],
+    retentionDays: 7,
+    pitrWindow: { from: new Date("2026-11-04T08:00:00Z"), to: new Date("2026-11-11T07:55:00Z") },
     ...over,
   };
 }

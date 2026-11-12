@@ -286,6 +286,51 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  "app/[locale]/(panel)/storage/[id]/actions.ts#setBucketInstanceAccessAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}console-actions-g9.test.ts`,
+        "another customer's instance answers like a missing one and queues nothing (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/[id]/snapshot-actions.ts#createDbSnapshotAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}db-snapshot-actions.test.ts`,
+        "another customer's database is not found (R8) and a database not active is not allowed",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/[id]/snapshot-actions.ts#deleteDbSnapshotAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}db-snapshot-actions.test.ts`,
+        "another customer's snapshot is not found (R8); a final snapshot or a snapshot of a server is not allowed",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/[id]/snapshot-actions.ts#restoreDatabaseSnapshotAction": {
+    kind: "id",
+    proof: [
+      proof(
+        "packages/core/orders/db-restore-order.test.ts",
+        "another customer's snapshot answers like a missing one (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/[id]/snapshot-actions.ts#restoreDatabasePointInTimeAction": {
+    kind: "id",
+    proof: [
+      proof(
+        "packages/core/orders/db-restore-order.test.ts",
+        "another customer's database answers like a missing one (R8)",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/storage/[id]/actions.ts#setBucketVersioningAction": {
     kind: "id",
     proof: [

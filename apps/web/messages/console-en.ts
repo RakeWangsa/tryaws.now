@@ -82,6 +82,9 @@ export const consoleEn: Same<typeof consoleBn> = {
       window: "Backup window (UTC)",
       windowHint: "hh:mm-hh:mm, at least 30 minutes, for example 16:00-16:30. Now: {current}",
       windowNone: "chosen by AWS",
+      maintenance: "Maintenance window (UTC)",
+      maintenanceHint:
+        "ddd:hh:mm-ddd:hh:mm, at least 30 minutes, for example tue:17:00-tue:17:30. It must not overlap the backup window. Now: {current}",
       publicMode: "Public access",
       keep: "Keep as it is",
       on: "Turn on",

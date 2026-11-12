@@ -72,13 +72,20 @@ export function loadBalancerConsoleOf(config: unknown): LoadBalancerConsole {
 
 export interface DatabaseConsole {
   backupWindow: string | null;
+  /** WPU-G9: `ddd:hh24:mi-ddd:hh24:mi` in UTC, as the adapter stored it. */
+  maintenanceWindow: string | null;
   publiclyAccessible: boolean;
 }
 
 export function databaseConsoleOf(config: unknown): DatabaseConsole {
   const raw = rec(config);
   const window = raw["backupWindow"];
+  const maintenance = raw["maintenanceWindow"];
   return {
+    maintenanceWindow:
+      typeof maintenance === "string" && /^[a-z]{3}:\d\d:\d\d-[a-z]{3}:\d\d:\d\d$/.test(maintenance)
+        ? maintenance
+        : null,
     backupWindow: typeof window === "string" && window !== "" ? window.slice(0, 11) : null,
     // The database is private until the customer opens it (10.4).
     publiclyAccessible: raw["publiclyAccessible"] === true,

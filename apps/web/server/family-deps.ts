@@ -1,4 +1,5 @@
 import { currentCustomer } from "@tc/auth";
+import { snapshotPrice } from "@tc/core";
 import { customerRepos, readFeatureFlag, withTx } from "@tc/db";
 import type { FamilyActionDeps } from "./family-actions.ts";
 
@@ -27,6 +28,13 @@ export function familyActionDeps(flag: string): FamilyActionDeps {
             const profile = await repos.profile.get();
             if (profile === null) return false;
             return (await readFeatureFlag(tx, flag, profile.market)) === true;
+          },
+          // WPU-G9: the price must exist AND be priceable by the engine (rate and rule in force).
+          snapshotPriceOn: async () => {
+            const profile = await repos.profile.get();
+            if (profile === null) return false;
+            const priced = await snapshotPrice(tx, profile.market, null, { now: () => new Date() });
+            return priced.ok;
           },
         });
       }),

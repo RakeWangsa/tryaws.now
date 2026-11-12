@@ -78,6 +78,9 @@ export const consoleBn = {
       window: "ব্যাকআপের সময় (UTC)",
       windowHint: "ঘণ্টা:মিনিট-ঘণ্টা:মিনিট, কমপক্ষে ৩০ মিনিট, যেমন 16:00-16:30। এখন: {current}",
       windowNone: "AWS ঠিক করেছে",
+      maintenance: "রক্ষণাবেক্ষণের সময় (UTC)",
+      maintenanceHint:
+        "ddd:hh:mm-ddd:hh:mm, কমপক্ষে ৩০ মিনিট, যেমন tue:17:00-tue:17:30। ব্যাকআপের সময়ের সঙ্গে মিলতে পারবে না। এখন: {current}",
       publicMode: "সর্বজনীন প্রবেশ",
       keep: "যেমন আছে তেমন থাকুক",
       on: "চালু করুন",

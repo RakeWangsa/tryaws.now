@@ -9,7 +9,7 @@ import {
   setBucketAccessCore,
 } from "../../../../../server/bucket-actions.ts";
 import { familyActionDeps } from "../../../../../server/bucket-deps.ts";
-import { BUCKET_VERSIONING, consoleCore } from "../../../../../server/console-actions.ts";
+import { BUCKET_INSTANCE_ACCESS, BUCKET_VERSIONING, consoleCore } from "../../../../../server/console-actions.ts";
 import { familyActionDeps as consoleDeps } from "../../../../../server/family-deps.ts";
 import type { FamilyResult } from "../../../../../server/bucket-frame.ts";
 
@@ -55,6 +55,20 @@ export async function setBucketVersioningAction(
     await consoleCore(BUCKET_VERSIONING)(
       consoleDeps("bucket"),
       pick(form, ["bucketId", "requestId", "versioning"]),
+    ),
+  );
+}
+
+// WPU-G9: open or close the bucket to one server of the customer.
+export async function setBucketInstanceAccessAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  if (!(await guardAction())) return { error: "unauthenticated" };
+  return stateOf(
+    await consoleCore(BUCKET_INSTANCE_ACCESS)(
+      consoleDeps("bucket"),
+      pick(form, ["bucketId", "requestId", "instanceId", "access"]),
     ),
   );
 }

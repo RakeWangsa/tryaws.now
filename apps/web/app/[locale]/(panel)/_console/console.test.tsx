@@ -96,11 +96,11 @@ describe("database options form", () => {
         action={noop}
         databaseId={ID}
         requestId={REQ}
-        console={{ backupWindow: "16:00-16:30", publiclyAccessible: true }}
+        console={{ backupWindow: "16:00-16:30", maintenanceWindow: "tue:17:00-tue:17:30", publiclyAccessible: true }}
       />,
       "en",
     );
-    for (const name of ["backupWindow", "publicMode", "acknowledge"]) {
+    for (const name of ["backupWindow", "maintenanceWindow", "publicMode", "acknowledge"]) {
       expect(out).toContain(`name="${name}"`);
     }
     expect(out).toContain("16:00-16:30");
@@ -111,7 +111,7 @@ describe("database options form", () => {
         action={noop}
         databaseId={ID}
         requestId={REQ}
-        console={{ backupWindow: null, publiclyAccessible: false }}
+        console={{ backupWindow: null, maintenanceWindow: null, publiclyAccessible: false }}
       />,
       "bn",
     );

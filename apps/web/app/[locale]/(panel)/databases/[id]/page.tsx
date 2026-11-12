@@ -13,6 +13,12 @@ import {
   setDatabaseRunningAction,
 } from "./actions.ts";
 import { revealDatabasePasswordAction } from "./access-actions.ts";
+import {
+  createDbSnapshotAction,
+  deleteDbSnapshotAction,
+  restoreDatabasePointInTimeAction,
+  restoreDatabaseSnapshotAction,
+} from "./snapshot-actions.ts";
 import { DatabaseOptionsForm } from "../../_console/ConsoleForms.tsx";
 import { DatabaseDetailContent } from "./DatabaseDetailContent.tsx";
 
@@ -52,6 +58,13 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
         runningAction={setDatabaseRunningAction}
         destroyAction={destroyDatabaseAction}
         revealAction={revealDatabasePasswordAction}
+        snapshots={{
+          requestIds: { create: newUuidV7(), delete: newUuidV7() },
+          create: createDbSnapshotAction,
+          delete: deleteDbSnapshotAction,
+          restore: restoreDatabaseSnapshotAction,
+          pitr: restoreDatabasePointInTimeAction,
+        }}
         {...(database !== null && database.state === "active"
           ? {
               extra: (
@@ -59,7 +72,13 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
                   action={setDatabaseOptionsAction}
                   databaseId={database.id}
                   requestId={newUuidV7()}
-                  console={database.console ?? { backupWindow: null, publiclyAccessible: false }}
+                  console={
+                    database.console ?? {
+                      backupWindow: null,
+                      maintenanceWindow: null,
+                      publiclyAccessible: false,
+                    }
+                  }
                 />
               ),
             }
