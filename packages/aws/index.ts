@@ -21,6 +21,9 @@ export { AwsError, toAwsError, toLogFields, type AwsLogFields, type LocalReason 
 export { QUEUE_URL_PATTERN, createSqsClient, createSqsSend, type SqsLike } from "./queue";
 export {
   CALLER_ROLES,
+  DNS_ROLES,
+  ROUTE53_REGION,
+  type DnsRole,
   LIGHTSAIL_REGIONS,
   type AccountRef,
   type Caller,
@@ -99,6 +102,7 @@ export {
   type ZoneRecordView,
 } from "./adapters/dns-zone";
 export type { R53Change, R53RecordSet, R53Zone, Route53Port } from "./adapters/route53-port";
+export { createRoute53Port, type Route53Like } from "./adapters/route53-client";
 export {
   createDomainAdapter,
   renewDomainOnce,
