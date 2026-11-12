@@ -1,5 +1,6 @@
 // WPU-M4: the credit of WPU-M3 goes through four eyes (the limit and the split window of the adjustments,
 // 9.1) and closes the failed apply operation in the same transaction. Real database, roles web/worker/admin.
+import { createHash } from "node:crypto";
 import { adminRepos, type AdminActor } from "@tc/db";
 import { auditRowsOf, insertRow, newAdmin, runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -355,5 +356,221 @@ describe("creditWalletForFailedChange: four eyes and the closed operation (WPU-M
       ),
     );
     expect(manual).toEqual({ ok: false, error: "validation" });
+  });
+});
+
+// WPU-M5: the id and the evidence of a plan credit are one reserved namespace. A row that squats on the
+// id of the credit of an operation (made by hand, or by an old build) is never replayed or approved as it.
+describe("plan credit identity: a squatting adjustment is refused (WPU-M5)", () => {
+  // The derivation of packages/db (planCreditId); repeated here so the test does not trust the code it checks.
+  const derived = (operationId: string): string => {
+    const h = createHash("sha256").update(`plan_credit:${operationId}`).digest("hex");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+  };
+  const finance = () => actorOf("finance");
+  const create = (a: AdminActor, operationId: string) =>
+    asAdmin(a, (r) =>
+      r.wallets.creditWalletForFailedChange({ at: AT, operationId }, "ops", reverseTransaction),
+    );
+  const approve = (a: AdminActor, id: string) =>
+    asAdmin(a, (r) =>
+      r.wallets.approveAdjustment({ id, at: AT }, "second", postTransaction, reverseTransaction),
+    );
+  const reject = (a: AdminActor, id: string) =>
+    asAdmin(a, (r) => r.wallets.rejectAdjustment({ id }, "no"));
+  const opState = async (id: string) =>
+    String((await q("select state from operations where id = $1", [id]))[0]!.state);
+  /** The row a squatter leaves: the derived id, anything else about it. */
+  const squat = async (
+    id: string,
+    over: {
+      customerId: string;
+      direction?: string;
+      amountMinor?: bigint;
+      kind?: string;
+      evidenceRef?: string | null;
+      status?: string;
+      ledgerTransactionId?: string | null;
+      requestedBy: string;
+    },
+  ) =>
+    q(
+      `insert into wallet_adjustments (id, customer_id, direction, amount_minor, kind, reason, evidence_ref, requested_by, status, ledger_transaction_id)
+       values ($1, $2, $3, $4::bigint, $5, 'squat', $6, $7, $8, $9)`,
+      [
+        id,
+        over.customerId,
+        over.direction ?? "credit",
+        (over.amountMinor ?? 100n).toString(),
+        over.kind ?? "goodwill",
+        over.evidenceRef ?? null,
+        over.requestedBy,
+        over.status ?? "pending",
+        over.ledgerTransactionId ?? null,
+      ],
+    );
+  const untouched = async (c: Case, wallet: bigint, other?: { id: string; wallet: bigint }) => {
+    expect(await kit.balance(c.customerId)).toBe(wallet);
+    if (other) expect(await kit.balance(other.id)).toBe(other.wallet);
+    expect(await reversalsOf(c.chargeId)).toHaveLength(0);
+    expect(await unbalanced()).toEqual([]);
+    expect(await opState(c.operationId)).toBe("needs_attention");
+  };
+
+  it("the generic form cannot take the id of a plan credit: refused, nothing written, nothing posted", async () => {
+    const c = await charged();
+    const other = await charged();
+    await setLimit(1_000_000_000n);
+    const a = await finance();
+    const wallet = await kit.balance(other.customerId);
+    const made = await asAdmin(a, (r) =>
+      r.wallets.createAdjustment(
+        {
+          requestId: derived(c.operationId),
+          at: AT,
+          customerId: other.customerId,
+          direction: "credit",
+          amountMinor: 100n,
+          kind: "goodwill",
+        },
+        "squat",
+        postTransaction,
+      ),
+    );
+    expect(made).toEqual({ ok: false, error: "validation" });
+    expect(
+      await q("select 1 from wallet_adjustments where id = $1", [derived(c.operationId)]),
+    ).toHaveLength(0);
+    expect(await kit.balance(other.customerId)).toBe(wallet);
+    // an ordinary request id still works
+    const fine = await asAdmin(a, (r) =>
+      r.wallets.createAdjustment(
+        {
+          requestId: crypto.randomUUID(),
+          at: AT,
+          customerId: other.customerId,
+          direction: "credit",
+          amountMinor: 100n,
+          kind: "goodwill",
+        },
+        "fine",
+        postTransaction,
+      ),
+    );
+    expect(fine).toMatchObject({ ok: true, value: { status: "approved" } });
+  });
+
+  it("a row that squats on the id (another customer, no marker) is not replayed: conflict, no ledger rows", async () => {
+    const c = await charged();
+    const other = await charged();
+    await setLimit(c.chargedMinor);
+    const a = await finance();
+    await squat(derived(c.operationId), { customerId: other.customerId, requestedBy: a.adminId });
+    const wallet = await kit.balance(c.customerId);
+    const walletOther = await kit.balance(other.customerId);
+    expect(await create(a, c.operationId)).toEqual({ ok: false, error: "conflict" });
+    expect(await create(await finance(), c.operationId)).toEqual({ ok: false, error: "conflict" });
+    await untouched(c, wallet, { id: other.customerId, wallet: walletOther });
+  });
+
+  it("a row with the marker but the wrong customer, direction, amount or kind is refused, whatever its status", async () => {
+    const wrong: Array<[string, (c: Case, o: Case) => Record<string, unknown>]> = [
+      ["customer", (_c, o) => ({ customerId: o.customerId })],
+      ["direction", () => ({ direction: "debit" })],
+      ["amount", (c) => ({ amountMinor: c.chargedMinor + 1n })],
+      ["kind", () => ({ kind: "goodwill" })],
+    ];
+    for (const status of ["pending", "approved"]) {
+      for (const [name, over] of wrong) {
+        const c = await charged();
+        const o = await charged();
+        await setLimit(c.chargedMinor);
+        const a = await finance();
+        await squat(derived(c.operationId), {
+          customerId: c.customerId,
+          amountMinor: c.chargedMinor,
+          kind: "correction",
+          evidenceRef: `plan_credit:${c.operationId}`,
+          requestedBy: a.adminId,
+          status,
+          ledgerTransactionId: status === "approved" ? c.chargeId : null,
+          ...over(c, o),
+        } as Parameters<typeof squat>[1]);
+        const wallet = await kit.balance(c.customerId);
+        const walletOther = await kit.balance(o.customerId);
+        expect(await create(await finance(), c.operationId), `${status} ${name}`).toEqual({
+          ok: false,
+          error: "conflict",
+        });
+        await untouched(c, wallet, { id: o.customerId, wallet: walletOther });
+      }
+    }
+  });
+
+  it("a row with the marker of ANOTHER operation on this id is refused", async () => {
+    const c = await charged();
+    const d = await charged();
+    await setLimit(c.chargedMinor);
+    const a = await finance();
+    await squat(derived(c.operationId), {
+      customerId: c.customerId,
+      amountMinor: c.chargedMinor,
+      kind: "correction",
+      evidenceRef: `plan_credit:${d.operationId}`,
+      requestedBy: a.adminId,
+    });
+    const wallet = await kit.balance(c.customerId);
+    expect(await create(a, c.operationId)).toEqual({ ok: false, error: "conflict" });
+    await untouched(c, wallet);
+  });
+
+  it("approving or rejecting a squatting row is refused: no posting, no reversal", async () => {
+    const c = await charged();
+    const o = await charged();
+    await setLimit(1n);
+    const a = await finance();
+    const id = derived(c.operationId);
+    // pending, ordinary evidence, on the reserved id
+    await squat(id, {
+      customerId: o.customerId,
+      amountMinor: 5_000n,
+      evidenceRef: "ticket-1",
+      requestedBy: a.adminId,
+    });
+    const wallet = await kit.balance(c.customerId);
+    const walletOther = await kit.balance(o.customerId);
+    const second = await actorOf("superadmin");
+    expect(await approve(second, id)).toEqual({ ok: false, error: "conflict" });
+    expect(await reject(second, id)).toEqual({ ok: false, error: "conflict" });
+    await untouched(c, wallet, { id: o.customerId, wallet: walletOther });
+    expect(
+      await q("select status, ledger_transaction_id from wallet_adjustments where id = $1", [id]),
+    ).toEqual([{ status: "pending", ledger_transaction_id: null }]);
+    // the marker but a kind that is not a correction
+    await q(
+      "update wallet_adjustments set evidence_ref = $2, customer_id = $3, kind = 'goodwill' where id = $1",
+      [id, `plan_credit:${c.operationId}`, c.customerId],
+    );
+    expect(await approve(second, id)).toEqual({ ok: false, error: "conflict" });
+    await untouched(c, wallet, { id: o.customerId, wallet: walletOther });
+  });
+
+  it("the normal path is unchanged: request, approval by a second admin, replay", async () => {
+    const c = await charged();
+    await setLimit(c.chargedMinor - 1n);
+    const requester = await finance();
+    const made = await create(requester, c.operationId);
+    expect(made).toMatchObject({ ok: true, value: { status: "pending" } });
+    const id = (made as unknown as { value: { adjustmentId: string } }).value.adjustmentId;
+    expect(id).toBe(derived(c.operationId));
+    expect(await create(requester, c.operationId)).toMatchObject({ ok: true, replayed: true });
+    const wallet = await kit.balance(c.customerId);
+    expect(await approve(await actorOf("superadmin"), id)).toMatchObject({
+      ok: true,
+      value: { status: "approved" },
+    });
+    expect(await kit.balance(c.customerId)).toBe(wallet + c.chargedMinor);
+    expect(await create(requester, c.operationId)).toMatchObject({ ok: true, replayed: true });
+    expect(await reversalsOf(c.chargeId)).toHaveLength(1);
   });
 });

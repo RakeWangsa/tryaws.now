@@ -172,6 +172,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-M2",
     "WPU-M3",
     "WPU-M4",
+    "WPU-M5",
     "WPU-S1",
     "WPU-S2",
     "WPU-S3",
@@ -481,6 +482,20 @@ it("task WPU-M4 is proven by lint, types, format, the core, db, aws, admin and r
     ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
     ["db", "pnpm test --filter @tc/db"],
     ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-M5 is proven by lint, types, format, the core, db, admin and repository tests", () => {
+  expect(TASKS["WPU-M5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
     ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);

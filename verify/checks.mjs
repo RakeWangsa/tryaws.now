@@ -1099,6 +1099,13 @@ TASKS["WPU-M3"] = [
 // (admin). No AWS call. The core and db suites need the local PostgreSQL (pnpm db:up).
 TASKS["WPU-M4"] = [specSync, baselineSync, lint, typecheck, format, core, db, aws, admin, repo];
 
+// WPU-M5: the plan credit of WPU-M4 is a reserved identity: its id (version 5, variant 8) cannot be asked
+// for through the generic adjustment form, and a row on that id is replayed, approved or rejected only if it
+// is the credit of that operation (marker, credit, correction, customer and amount derived from the
+// operation); anything else is a conflict. No posting rule and no migration. Proven against the real
+// ledger and the temp database (core with the database; db for the gate cases), plus the admin flow.
+TASKS["WPU-M5"] = [specSync, baselineSync, lint, typecheck, format, core, db, admin, repo];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

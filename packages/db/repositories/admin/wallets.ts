@@ -41,6 +41,12 @@ export const planCreditId = (operationId: string): string => {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 };
 
+// WPU-M5. The ids of plan credits are a reserved namespace: version nibble 5 and variant nibble 8, which
+// planCreditId always sets. The generic adjustment form refuses a request id in it, so a row on such an id
+// is a plan credit made by creditWalletForFailedChange or it is not trusted at all.
+const PLAN_CREDIT_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const isPlanCreditNamespaceId = (id: string): boolean => PLAN_CREDIT_ID_SHAPE.test(id);
+
 export const ADJUSTMENT_LIMIT_KEY = "wallet.adjustment_limit_minor";
 const MAX_MINOR = 9223372036854775807n;
 const MAX_EVIDENCE = 200;
@@ -284,6 +290,23 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
     return rows[0] ?? null;
   };
 
+  // WPU-M5. True for an ordinary row; for a row in the plan-credit namespace (by id or by marker) true only if
+  // it is exactly what creditWalletForFailedChange writes: the derived id of the operation named by the
+  // marker, a credit, a correction. The customer and the amount are checked against the operation
+  // (loadPlanCredit) wherever the row is replayed or approved.
+  const planCreditRowOk = (row: AdjustmentDbRow): boolean => {
+    const marked = (row.evidence_ref ?? "").startsWith(PLAN_CREDIT_REF);
+    if (!marked && !isPlanCreditNamespaceId(row.id)) return true;
+    const opId = (row.evidence_ref ?? "").slice(PLAN_CREDIT_REF.length);
+    return (
+      marked &&
+      isUuid(opId) &&
+      planCreditId(opId) === row.id.toLowerCase() &&
+      row.direction === "credit" &&
+      row.kind === "correction"
+    );
+  };
+
   // ---- WPU-M4: the credit for a failed plan change --------------------------------------------------
 
   interface PlanCreditCase {
@@ -441,7 +464,12 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
     at: Date,
   ): Promise<{ ledgerTransactionId: string; message: AdminMessage | null }> => {
     const opId = (row.evidence_ref ?? "").slice(PLAN_CREDIT_REF.length);
-    if (!isUuid(opId) || planCreditId(opId) !== row.id || row.direction !== "credit") {
+    if (
+      !isUuid(opId) ||
+      planCreditId(opId) !== row.id ||
+      row.direction !== "credit" ||
+      row.kind !== "correction"
+    ) {
       throw new Refusal("conflict");
     }
     await tx.execute(
@@ -504,6 +532,8 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
         async () => {
           const row = await readAdjustment(id, true);
           if (row === null) throw new Refusal("not_found");
+          // WPU-M5: a row on the reserved id, or with the marker, is decided only if it is a real plan credit.
+          if (!planCreditRowOk(row)) throw new Refusal("conflict");
           const meta = { customerId: row.customer_id, amountMinor: row.amount_minor };
           const target = approving ? "approved" : "rejected";
           // The same decision again is a replay: by the same approver for an approval (R7).
@@ -673,6 +703,8 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
       if (
         typeof requestId !== "string" ||
         !isUuid(requestId) ||
+        // WPU-M5: the ids of plan credits are reserved for creditWalletForFailedChange.
+        isPlanCreditNamespaceId(requestId) ||
         typeof customerId !== "string" ||
         !isUuid(customerId) ||
         !(ADJUSTMENT_DIRECTIONS as readonly unknown[]).includes(direction) ||
@@ -825,6 +857,22 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
             );
             const existing = await readAdjustment(adjustmentId, false);
             if (existing !== null) {
+              // WPU-M5: only the credit of THIS operation may be replayed: marker, direction, kind, and the
+              // customer and the amount derived from the operation. Anything else on the derived id is a
+              // squatter (R16).
+              if (
+                !planCreditRowOk(existing) ||
+                existing.evidence_ref !== `${PLAN_CREDIT_REF}${opId}`
+              ) {
+                throw new Refusal("conflict");
+              }
+              const owed = await loadPlanCredit(opId);
+              if (
+                existing.customer_id !== owed.customerId ||
+                existing.amount_minor !== owed.amountMinor.toString()
+              ) {
+                throw new Refusal("conflict");
+              }
               // Rejected stays rejected: a new request for the same operation is a conflict.
               if (existing.status === "rejected") throw new Refusal("conflict");
               const done = existing.status === "approved";
