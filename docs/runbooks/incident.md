@@ -4,7 +4,7 @@ Section M: "incident (severity levels, who is told, customer notice)". The plan 
 
 ## Trigger
 
-An alarm to on-call (dead-letter queue, 5xx, reconciliation, ledger), a customer report with real money or data at risk, a leaked secret, or an outage of EPS or AWS.
+An alarm to on-call (`tc-<stage>-provisioning-dlq-not-empty`, `tc-<stage>-scheduler-stopped`, `tc-<stage>-ledger-mismatch`, `tc-<stage>-ledger-check-silent`; 5xx and reconciliation have no alarm yet and are read in the logs), a customer report with real money or data at risk, a leaked secret, or an outage of EPS or AWS.
 
 ## Severity (proposed)
 

@@ -4,7 +4,8 @@ Section M: "reconciliation mismatch". Rules: R5 (append-only; correct with a rev
 
 ## Trigger
 
-- Log message `ledger_mismatch` or `ledger_check_failed` from `functions/reconciler/ledger-check.ts` (nightly job). `ledger_check_ok` is the healthy line; its silence is also an alarm.
+- The CloudWatch alarm `tc-<stage>-ledger-mismatch` (a `ledger_mismatch` or `ledger_check_failed` line), or `tc-<stage>-ledger-check-silent` (no `ledger_check_ok` line for 26 hours, so the check did not run). The check runs every day at 02:00 Asia/Dhaka (the function `LedgerCheck`, 20:00 UTC) and at the end of each hourly reconciler run; both alarms are in `infra/stacks/alarms.ts` and go to the SNS topic `tc-<stage>-alarms`.
+- Log message `ledger_mismatch` or `ledger_check_failed` from `functions/reconciler/ledger-check.ts`. `ledger_check_ok` is the healthy line; its silence is also an alarm.
 - Log events `reconcile_findings`, `reconcile_incomplete`, `reconcile_capacity_over_limit`, `reconcile_stale_operations` from the hourly inventory run (`functions/reconciler/reconcile.ts`).
 - Open rows on the admin `/reconciliation` page (kinds `orphan`, `missing`, `cost`, `payment`).
 

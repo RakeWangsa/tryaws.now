@@ -5,7 +5,7 @@ Section M: "provisioning failed". Rules: R1 (web and admin only write an operati
 ## Trigger
 
 - An operation in `needs_attention` (after 5 failed attempts) on the admin `/operations` queue, or the admin "Today" page shows a dead-letter count above 0.
-- The alarm "dead-letter queue not empty" on the `provisioning` FIFO queue (Section 3.3). The alarm definitions live in `infra/` when that track lands; until then the signals below are the log events.
+- The CloudWatch alarm `tc-<stage>-provisioning-dlq-not-empty` (dead-letter queue not empty, on the `provisioning` FIFO queue, Section 3.3), or `tc-<stage>-scheduler-stopped` (the scheduler ran less than once in 5 minutes, so waiting operations are not re-sent). Both are defined in `infra/stacks/alarms.ts` and go to the SNS topic `tc-<stage>-alarms`, which emails the on-call list. The log events below are the same signals in the logs.
 - Log events: `operation_step`, `batch_failure`, `scheduler_job_failed`, `reconcile_stale_operations`.
 
 ## Who
