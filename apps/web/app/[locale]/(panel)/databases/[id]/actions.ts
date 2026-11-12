@@ -3,6 +3,7 @@
 import { guardAction } from "../../../../../server/action-deps.ts";
 import { pick } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
+import { DB_OPTIONS, consoleCore } from "../../../../../server/console-actions.ts";
 import {
   destroyDatabaseCore,
   setDatabaseRunningCore,
@@ -38,4 +39,13 @@ export const destroyDatabaseAction = run(destroyDatabaseCore, [
   "databaseId",
   "requestId",
   "confirmName",
+]);
+
+// WPU-G7: backup window and public mode. Public mode needs the acknowledged warning (the core checks it).
+export const setDatabaseOptionsAction = run(consoleCore(DB_OPTIONS), [
+  "databaseId",
+  "requestId",
+  "backupWindow",
+  "publicMode",
+  "acknowledge",
 ]);

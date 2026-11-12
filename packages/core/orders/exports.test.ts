@@ -199,6 +199,10 @@ const PRODUCTS = [
   // WP6-T2 and WP6-T3: the database and load balancer seams and the pure target rule
   "MAX_LB_TARGETS",
   "checkLbTargets",
+  // WPU-G7: the input rules of the console actions
+  "checkedBackupWindow",
+  "checkedDomainName",
+  "checkedHealthPath",
   "parseDatabaseConfig",
   "parseLoadBalancerConfig",
   "resolveDatabase",

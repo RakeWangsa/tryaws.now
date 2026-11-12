@@ -3,6 +3,7 @@ import type { ResourceSummary } from "@tc/db";
 import { describe, expect, it } from "vitest";
 import {
   createLoadBalancerDraftCore,
+  queueTargets,
   destroyLoadBalancerCore,
   setLoadBalancerTargetsCore,
   type LoadBalancerTargetsDeps,
@@ -329,5 +330,38 @@ describe("createLoadBalancerDraftCore", () => {
       ok: false,
       error: "unavailable",
     });
+  });
+});
+
+describe("queueTargets (WPU-G7)", () => {
+  const repos = (result: unknown, seen: unknown[]) =>
+    ({
+      operations: {
+        request: async (input: unknown) => {
+          seen.push(input);
+          return result;
+        },
+      },
+    }) as never;
+  const args = { loadBalancerId: LB, targets: [S1, S2] as never, requestId: REQ };
+
+  it("writes one set_targets operation keyed by the request id", async () => {
+    const seen: unknown[] = [];
+    expect(await queueTargets(repos({ ok: true, value: {} }, seen), args)).toBe("queued");
+    expect(seen).toEqual([
+      {
+        resourceId: LB,
+        kind: "set_targets",
+        idempotencyKey: `lb-targets:${REQ}`,
+        payload: { targetIds: [S1, S2] },
+      },
+    ]);
+  });
+
+  it("maps a missing resource and every other refusal", async () => {
+    expect(await queueTargets(repos({ ok: false, error: "not_found" }, []), args)).toBe(
+      "not_found",
+    );
+    expect(await queueTargets(repos({ ok: false, error: "conflict" }, []), args)).toBe("conflict");
   });
 });

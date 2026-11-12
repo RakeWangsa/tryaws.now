@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   Button,
   Card,
@@ -44,6 +45,7 @@ export function DatabaseDetailContent({
   revealAction = refuseReveal,
   defaultTab,
   initialSecret = null,
+  extra = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -54,6 +56,8 @@ export function DatabaseDetailContent({
   destroyAction?: Action;
   revealAction?: RevealAction;
   defaultTab?: string;
+  /** The console form of the settings tab (WPU-G7), built by the page. */
+  extra?: ReactNode;
   /** Tests only: the Connect tab as it is after the button. */
   initialSecret?: { username: string; password: string } | null;
 }) {
@@ -204,6 +208,7 @@ export function DatabaseDetailContent({
         running={database.state !== "stopped"}
         allowed={switchable}
       />
+      {extra === null ? null : <div className="mt-4">{extra}</div>}
     </>
   );
 

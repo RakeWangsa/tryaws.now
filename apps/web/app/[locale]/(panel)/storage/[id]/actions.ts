@@ -9,6 +9,8 @@ import {
   setBucketAccessCore,
 } from "../../../../../server/bucket-actions.ts";
 import { familyActionDeps } from "../../../../../server/bucket-deps.ts";
+import { BUCKET_VERSIONING, consoleCore } from "../../../../../server/console-actions.ts";
+import { familyActionDeps as consoleDeps } from "../../../../../server/family-deps.ts";
 import type { FamilyResult } from "../../../../../server/bucket-frame.ts";
 
 // The thin Server Actions of the bucket page (16.10). Each one checks the origin, calls its core
@@ -42,3 +44,17 @@ export const deleteAccessKeyAction = run(deleteAccessKeyCore, [
   "accessKeyId",
 ]);
 export const destroyBucketAction = run(destroyBucketCore, ["bucketId", "requestId", "confirmName"]);
+
+// WPU-G7: versioning on or suspended. The generic console core uses the flag-reading deps of family-deps.ts.
+export async function setBucketVersioningAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  if (!(await guardAction())) return { error: "unauthenticated" };
+  return stateOf(
+    await consoleCore(BUCKET_VERSIONING)(
+      consoleDeps("bucket"),
+      pick(form, ["bucketId", "requestId", "versioning"]),
+    ),
+  );
+}

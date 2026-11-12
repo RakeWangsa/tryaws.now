@@ -6,7 +6,14 @@ import type { FormState } from "../../../../../server/action-state.ts";
 import type { FamilyResult } from "../../../../../server/family-actions.ts";
 import { familyActionDeps } from "../../../../../server/family-deps.ts";
 import {
+  LB_ATTRIBUTES,
+  LB_REFRESH_CERTIFICATE,
+  LB_REQUEST_CERTIFICATE,
+  consoleCore,
+} from "../../../../../server/console-actions.ts";
+import {
   destroyLoadBalancerCore,
+  queueTargets,
   setLoadBalancerTargetsCore,
 } from "../../../../../server/load-balancers-actions.ts";
 
@@ -33,10 +40,8 @@ export async function destroyLoadBalancerAction(
   );
 }
 
-// `setTargets` (16.10). The core re-checks every target through the scoped repository (R8). The change
-// itself is an operation kind that does not exist yet (the adapter has no action for it), so `changeTargets`
-// is null and the core refuses after the checks (R16). The page does not offer the form until it is
-// wired (JOURNEY.md, Needs decision).
+// `setTargets` (16.10). The core re-checks every target through the scoped repository (R8), then
+// `queueTargets` writes one set_targets operation (WPU-G7).
 export async function setLoadBalancerTargetsAction(
   _previous: FormState,
   form: FormData,
@@ -45,8 +50,32 @@ export async function setLoadBalancerTargetsAction(
   const targetIds = form.getAll("targetIds").filter((v): v is string => typeof v === "string");
   return stateOf(
     await setLoadBalancerTargetsCore(
-      { ...familyActionDeps("load_balancer"), changeTargets: null },
+      { ...familyActionDeps("load_balancer"), changeTargets: queueTargets },
       { ...pick(form, ["loadBalancerId", "requestId"]), targetIds: targetIds.slice(0, 64) },
     ),
   );
 }
+
+// WPU-G7: health check path and HTTPS redirect, certificate request and refresh.
+const consoleAction =
+  (core: ReturnType<typeof consoleCore>, names: readonly string[]) =>
+  async (_previous: FormState, form: FormData): Promise<FormState> => {
+    if (!(await guardAction())) return { error: "unauthenticated" };
+    return stateOf(await core(familyActionDeps("load_balancer"), pick(form, names)));
+  };
+
+export const setLoadBalancerAttributesAction = consoleAction(consoleCore(LB_ATTRIBUTES), [
+  "loadBalancerId",
+  "requestId",
+  "healthCheckPath",
+  "httpsRedirect",
+]);
+export const requestCertificateAction = consoleAction(consoleCore(LB_REQUEST_CERTIFICATE), [
+  "loadBalancerId",
+  "requestId",
+  "domain",
+]);
+export const refreshCertificateAction = consoleAction(consoleCore(LB_REFRESH_CERTIFICATE), [
+  "loadBalancerId",
+  "requestId",
+]);

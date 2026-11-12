@@ -352,3 +352,42 @@ describe("actions", () => {
     });
   });
 });
+describe("set_bucket_versioning (WPU-G7)", () => {
+  it("sets Enabled or Suspended on an active bucket and nothing else", async () => {
+    const { aws, adapter, ctx, body } = setup();
+    aws.on("lightsail", "UpdateBucket", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "set_bucket_versioning",
+      ctx(null, { payload: { versioning: "Enabled" } }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { versioning: "Enabled" } },
+    });
+    expect(body("UpdateBucket")).toEqual({
+      bucketName: BUCKET,
+      versioning: "Enabled",
+    });
+    await adapter.aws.action(
+      "set_bucket_versioning",
+      ctx(null, { payload: { versioning: "Suspended" } }),
+    );
+    for (const payload of [
+      null,
+      {},
+      { versioning: "Off" },
+      { versioning: true },
+      { versioning: "enabled" },
+    ]) {
+      await expect(
+        adapter.aws.action("set_bucket_versioning", ctx(null, { payload })),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+    await expect(
+      adapter.aws.action(
+        "set_bucket_versioning",
+        ctx(null, { payload: { versioning: "Enabled" }, state: "suspended" }),
+      ),
+    ).rejects.toMatchObject({ code: "conflict" });
+  });
+});

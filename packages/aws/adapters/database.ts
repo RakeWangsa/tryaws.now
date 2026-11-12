@@ -7,10 +7,12 @@ import {
   GetRelationalDatabaseSnapshotCommand,
   StartRelationalDatabaseCommand,
   StopRelationalDatabaseCommand,
+  UpdateRelationalDatabaseCommand,
   type LightsailClient,
 } from "@aws-sdk/client-lightsail";
 import {
   awsResourceName,
+  checkedBackupWindow,
   parseDatabaseConfig,
   resourceTags,
   stepDone,
@@ -282,6 +284,31 @@ export function createDatabaseAdapter(deps: DatabaseDeps): ProductAdapter<Databa
         return manualSnapshot(ctx);
       case "delete_backup":
         return deleteSnapshot(ctx, await ownedBackupName(ctx));
+      case "set_db_options": {
+        // Backup window and public mode of the console (WPU-G7). The payload is input (R9, R16).
+        const p = ctx.operation.payload;
+        const payload = typeof p === "object" && p !== null ? (p as Record<string, unknown>) : {};
+        const window = payload.backupWindow;
+        const open = payload.publiclyAccessible;
+        if (window === undefined && open === undefined) throw fail("validation");
+        if (window !== undefined && checkedBackupWindow(window) === null) throw fail("validation");
+        if (open !== undefined && typeof open !== "boolean") throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await client(ctx).send(
+          new UpdateRelationalDatabaseCommand({
+            relationalDatabaseName: names(ctx.resource.id).database,
+            ...(window !== undefined ? { preferredBackupWindow: window as string } : {}),
+            ...(open !== undefined ? { publiclyAccessible: open } : {}),
+            applyImmediately: true,
+          }),
+        );
+        return stepDone({
+          configMerge: {
+            ...(window !== undefined ? { backupWindow: window } : {}),
+            ...(open !== undefined ? { publiclyAccessible: open } : {}),
+          },
+        });
+      }
       default:
         // Anything else is not built for this family: refuse (R16).
         throw fail("validation");

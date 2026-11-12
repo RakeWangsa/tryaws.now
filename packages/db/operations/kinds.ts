@@ -31,6 +31,14 @@ export const OPERATION_KINDS = [
   "scale_container",
   // WPU-G4: one record change of a DNS zone (the record editor).
   "change_dns_record",
+  // WPU-G7: load balancer, database, bucket and CDN actions of the console.
+  "set_targets",
+  "set_lb_attributes",
+  "request_certificate",
+  "refresh_certificate",
+  "set_db_options",
+  "set_bucket_versioning",
+  "reset_cache",
   "reject_operation",
 ] as const;
 
@@ -84,6 +92,13 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   deploy_containers: info("action", false, true),
   scale_container: info("action", false, true),
   change_dns_record: info("action", false, true),
+  set_targets: info("action", false, true),
+  set_lb_attributes: info("action", false, true),
+  request_certificate: info("action", false, true),
+  refresh_certificate: info("action", false, true),
+  set_db_options: info("action", false, true),
+  set_bucket_versioning: info("action", false, true),
+  reset_cache: info("action", false, true),
   reject_operation: info("engine", false, false),
 };
 

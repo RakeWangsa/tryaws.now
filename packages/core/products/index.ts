@@ -113,6 +113,7 @@ export {
   type ResolvedLoadBalancer,
   type TargetCandidate,
 } from "./load-balancer";
+export { checkedBackupWindow, checkedDomainName, checkedHealthPath } from "./console";
 export {
   priceCatalog,
   priceRows,

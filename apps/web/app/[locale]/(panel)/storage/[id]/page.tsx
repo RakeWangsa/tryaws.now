@@ -7,8 +7,14 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadBucketDetail } from "../../../../../server/bucket-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
+import { BucketVersioningForm } from "../../_console/ConsoleForms.tsx";
 import { StorageDetailContent } from "./StorageDetailContent.tsx";
-import { deleteAccessKeyAction, destroyBucketAction, setBucketAccessAction } from "./actions.ts";
+import {
+  deleteAccessKeyAction,
+  destroyBucketAction,
+  setBucketAccessAction,
+  setBucketVersioningAction,
+} from "./actions.ts";
 import { createBucketKeyAction } from "./key-actions.ts";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +54,19 @@ export default async function StorageDetailPage({ params, searchParams }: Props)
         deleteKeyAction={deleteAccessKeyAction}
         destroyAction={destroyBucketAction}
         createKeyAction={createBucketKeyAction}
+        {...(bucket !== null && bucket.state === "active"
+          ? {
+              extra: (
+                <BucketVersioningForm
+                  action={setBucketVersioningAction}
+                  bucketId={bucket.id}
+                  requestId={newUuidV7()}
+                  suspendRequestId={newUuidV7()}
+                  versioning={bucket.versioning ?? null}
+                />
+              ),
+            }
+          : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />
     </PanelFrame>

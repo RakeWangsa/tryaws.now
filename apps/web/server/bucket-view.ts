@@ -9,6 +9,7 @@ import type { CustomerOperation, ResourceSummary } from "@tc/db";
 // name is shown on purpose: the bucket name, because it is part of the bucket address (U6); it is
 // the generated name of R11, a pure function of the resource id, never the text the customer typed.
 
+import { bucketVersioningOf } from "./console-view.ts";
 const FLAG = "bucket";
 const FAMILY = "bucket";
 const REGION = /^[a-z]{2}-[a-z]+-\d$/;
@@ -134,6 +135,8 @@ export async function loadBucketList(session: CustomerSession): Promise<BucketLi
 }
 
 export interface BucketDetail extends BucketRow {
+  /** Versioning as the adapter last set it; null while unknown (WPU-G7). */
+  versioning?: "Enabled" | "Suspended" | null;
   address: string | null;
   accessMode: AccessMode | null;
   createdAt: Date;
@@ -192,6 +195,7 @@ export async function loadBucketDetail(
       state: resource.state,
       address: facts.address,
       accessMode: facts.accessMode,
+      versioning: bucketVersioningOf(resource.config),
       createdAt: resource.createdAt,
       destroyOpen: bucketDestroyOpen(),
       requests: requestsOf(operations),

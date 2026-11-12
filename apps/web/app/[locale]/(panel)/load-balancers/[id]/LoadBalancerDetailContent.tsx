@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Button, Card, DataTable, EmptyState, StatTile, Tabs, formatDate } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
@@ -29,6 +30,7 @@ export function LoadBalancerDetailContent({
   destroyAction = refuse,
   targetsAction,
   defaultTab,
+  extra = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -39,6 +41,8 @@ export function LoadBalancerDetailContent({
   /** The Server Action of setTargets. Without it the tab says that changing targets is not available yet. */
   targetsAction?: Action;
   defaultTab?: string;
+  /** The settings and certificate forms (WPU-G7), built by the page. */
+  extra?: ReactNode;
 }) {
   const t = useTranslations("LoadBalancers");
   const regionLabel = useRegionLabel();
@@ -140,7 +144,11 @@ export function LoadBalancerDetailContent({
         description={t("detail.health.unavailable.body")}
       />
       <h3 className="mergecolor h4 mt-4">{t("detail.health.https.title")}</h3>
-      <p className="seccolor">{t("detail.health.https.body")}</p>
+      {extra === null ? (
+        <p className="seccolor">{t("detail.health.https.body")}</p>
+      ) : (
+        <div className="mt-3">{extra}</div>
+      )}
     </>
   );
 

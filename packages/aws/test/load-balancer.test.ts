@@ -10,7 +10,7 @@ const CID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const OTHER = "ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const OID = "12345678-1234-4234-8234-123456789012";
 const T1 = "99999999-8888-4777-8666-555555555555";
-const T2 = "77777777-8888-4777-8666-555555555555";
+const T2 = "77777777-8888-4777-8666-333333333333";
 const POOL = { awsAccountId: "210987654321", externalId: "tc-ext-7f3a9c" };
 const LB = awsResourceName("lb", RID);
 const I1 = awsResourceName("instance", T1);
@@ -46,7 +46,12 @@ function setup(rows: Record<string, ResourceView> = {}, resourceConfig: unknown 
   const owned = async (id: string) => rows[id] ?? null;
   const ctx = (
     step: string | null,
-    extra: { kind?: OperationKind; targetIds?: string[]; createdAt?: Date } = {},
+    extra: {
+      kind?: OperationKind;
+      targetIds?: string[];
+      createdAt?: Date;
+      payload?: unknown;
+    } = {},
   ): OpCtx<ReturnType<typeof adapter.parseConfig>> => ({
     operation: {
       id: "op-1",
@@ -54,7 +59,7 @@ function setup(rows: Record<string, ResourceView> = {}, resourceConfig: unknown 
       step,
       attempt: 1,
       createdAt: extra.createdAt ?? new Date(NOW),
-      payload: { orderId: OID },
+      payload: extra.payload ?? { orderId: OID },
     },
     stepKey: `op-1:${step ?? "start"}`,
     resource: {
@@ -213,5 +218,181 @@ describe("suspend, resume, destroy", () => {
         code: "validation",
       },
     );
+  });
+});
+
+describe("console actions (WPU-G7)", () => {
+  const act = (
+    h: ReturnType<typeof setup>,
+    kind: OperationKind,
+    payload: unknown,
+    state = "active",
+  ) => {
+    const c = h.ctx(null, { kind, payload });
+    return h.adapter.aws.action(kind, { ...c, resource: { ...c.resource, state } });
+  };
+
+  it("set_targets attaches the new own instance and detaches the one that left, by generated names (R8, R11)", async () => {
+    const T3 = "55555555-8888-4777-8666-444444444444";
+    const h = setup({ ...OWN, [T3]: instance(T3) });
+    h.aws.on(
+      "lightsail",
+      "GetLoadBalancer",
+      lightsailOk({
+        loadBalancer: {
+          name: LB,
+          state: "active",
+          instanceHealthSummary: [{ instanceName: I1 }, { instanceName: I2 }],
+        },
+      }),
+    );
+    h.aws.on("lightsail", "GetInstance", lightsailOk({ instance: { name: "x" } }));
+    h.aws.on("lightsail", "AttachInstancesToLoadBalancer", lightsailOk({ operations: [] }));
+    h.aws.on("lightsail", "DetachInstancesFromLoadBalancer", lightsailOk({ operations: [] }));
+    const r = await act(h, "set_targets", { targetIds: [T1, T3] });
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { targetIds: [T1, T3] } } });
+    expect(h.bodyOf("AttachInstancesToLoadBalancer")).toEqual({
+      loadBalancerName: LB,
+      instanceNames: [awsResourceName("instance", T3)],
+    });
+    expect(h.bodyOf("DetachInstancesFromLoadBalancer")).toEqual({
+      loadBalancerName: LB,
+      instanceNames: [I2],
+    });
+  });
+
+  it("set_targets refuses another customer's instance, an empty or malformed list and a balancer that is not active", async () => {
+    const foreign = setup({ ...OWN, [T2]: instance(T2, { customerId: OTHER }) });
+    await expect(act(foreign, "set_targets", { targetIds: [T1, T2] })).rejects.toMatchObject({
+      code: "validation",
+    });
+    expect(foreign.calls()).not.toContain("AttachInstancesToLoadBalancer");
+    const h = setup(OWN);
+    for (const payload of [null, {}, { targetIds: [] }, { targetIds: ["x"] }, { targetIds: "a" }]) {
+      await expect(act(h, "set_targets", payload)).rejects.toMatchObject({ code: "validation" });
+    }
+    await expect(act(h, "set_targets", { targetIds: [T1] }, "suspended")).rejects.toMatchObject({
+      code: "conflict",
+    });
+    expect(h.calls()).toEqual([]);
+  });
+
+  it("set_lb_attributes sets the health check path and the HTTPS redirect, nothing else", async () => {
+    const h = setup(OWN);
+    h.aws.on("lightsail", "UpdateLoadBalancerAttribute", lightsailOk({ operations: [] }));
+    const r = await act(h, "set_lb_attributes", {
+      healthCheckPath: "/health.html",
+      httpsRedirect: true,
+    });
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { healthCheckPath: "/health.html", httpsRedirect: true } },
+    });
+    const bodies = h.aws.seen
+      .filter((x) => x.action === "UpdateLoadBalancerAttribute")
+      .map((x) => JSON.parse(x.body));
+    expect(bodies).toEqual([
+      { loadBalancerName: LB, attributeName: "HealthCheckPath", attributeValue: "/health.html" },
+      { loadBalancerName: LB, attributeName: "HttpsRedirectionEnabled", attributeValue: "true" },
+    ]);
+    for (const payload of [
+      {},
+      { healthCheckPath: "health?x=1" },
+      { healthCheckPath: "/a b" },
+      { httpsRedirect: "yes" },
+      { healthCheckPath: "/" + "a".repeat(200) },
+    ]) {
+      await expect(act(setup(OWN), "set_lb_attributes", payload)).rejects.toMatchObject({
+        code: "validation",
+      });
+    }
+  });
+
+  it("request_certificate creates one certificate with a generated name and keeps the validation records", async () => {
+    const h = setup(OWN);
+    h.aws.on("lightsail", "GetLoadBalancerTlsCertificates", lightsailOk({ tlsCertificates: [] }));
+    h.aws.on("lightsail", "CreateLoadBalancerTlsCertificate", lightsailOk({ operations: [] }));
+    const r = await act(h, "request_certificate", { domain: "Shop.Example.com" });
+    expect(h.bodyOf("CreateLoadBalancerTlsCertificate")).toMatchObject({
+      loadBalancerName: LB,
+      certificateName: awsResourceName("lbcert", RID),
+      certificateDomainName: "shop.example.com",
+    });
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: { certificate: { domain: "shop.example.com", status: "PENDING_VALIDATION" } },
+      },
+    });
+    for (const domain of [
+      "",
+      "localhost",
+      "*.example.com",
+      "a b.com",
+      "-x.com",
+      "x..com",
+      5,
+      "exa_mple.com",
+    ]) {
+      await expect(act(setup(OWN), "request_certificate", { domain })).rejects.toMatchObject({
+        code: "validation",
+      });
+    }
+  });
+
+  it("refresh_certificate stores the status and records, and attaches the certificate once it is issued", async () => {
+    const name = awsResourceName("lbcert", RID);
+    const cert = (status: string) =>
+      lightsailOk({
+        tlsCertificates: [
+          {
+            name,
+            domainName: "shop.example.com",
+            status,
+            isAttached: false,
+            domainValidationRecords: [
+              { name: "_x.shop.example.com.", type: "CNAME", value: "_y.acm-validations.aws." },
+            ],
+          },
+        ],
+      });
+    const pending = setup(OWN);
+    pending.aws.on("lightsail", "GetLoadBalancerTlsCertificates", cert("PENDING_VALIDATION"));
+    const r1 = await act(pending, "refresh_certificate", {});
+    expect(r1).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: {
+          certificate: {
+            status: "PENDING_VALIDATION",
+            records: [
+              { name: "_x.shop.example.com.", type: "CNAME", value: "_y.acm-validations.aws." },
+            ],
+          },
+        },
+      },
+    });
+    expect(pending.calls()).toEqual(["GetLoadBalancerTlsCertificates"]);
+    const issued = setup(OWN);
+    issued.aws.on("lightsail", "GetLoadBalancerTlsCertificates", cert("ISSUED"));
+    issued.aws.on("lightsail", "AttachLoadBalancerTlsCertificate", lightsailOk({ operations: [] }));
+    const r2 = await act(issued, "refresh_certificate", {});
+    expect(issued.bodyOf("AttachLoadBalancerTlsCertificate")).toEqual({
+      loadBalancerName: LB,
+      certificateName: name,
+    });
+    expect(r2).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { certificate: { status: "ISSUED", attached: true } } },
+    });
+    const none = setup(OWN);
+    none.aws.on(
+      "lightsail",
+      "GetLoadBalancerTlsCertificates",
+      lightsailOk({ tlsCertificates: [] }),
+    );
+    await expect(act(none, "refresh_certificate", {})).rejects.toMatchObject({
+      code: "validation",
+    });
   });
 });

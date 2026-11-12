@@ -222,6 +222,60 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  "app/[locale]/(panel)/load-balancers/[id]/actions.ts#setLoadBalancerAttributesAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}console-actions.test.ts`,
+        "another customer's row and a missing one give one answer, and nothing is queued (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/load-balancers/[id]/actions.ts#requestCertificateAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}console-actions.test.ts`,
+        "another customer's row and a missing one give one answer, and nothing is queued (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/load-balancers/[id]/actions.ts#refreshCertificateAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}console-actions.test.ts`,
+        "another customer's row and a missing one give one answer, and nothing is queued (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/[id]/actions.ts#setDatabaseOptionsAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}console-actions.test.ts`,
+        "another customer's row and a missing one give one answer, and nothing is queued (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/storage/[id]/actions.ts#setBucketVersioningAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}console-actions.test.ts`,
+        "another customer's row and a missing one give one answer, and nothing is queued (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/cdn/[id]/actions.ts#resetCdnCacheAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}console-actions.test.ts`,
+        "another customer's row and a missing one give one answer, and nothing is queued (R8)",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/load-balancers/[id]/actions.ts#setLoadBalancerTargetsAction": {
     kind: "id",
     proof: [

@@ -5,6 +5,7 @@ import {
   GetDistributionsCommand,
   GetInstanceCommand,
   GetLoadBalancerCommand,
+  ResetDistributionCacheCommand,
   UpdateDistributionCommand,
   type LightsailClient,
   type LightsailDistribution,
@@ -280,6 +281,13 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
         if (ctx.resource.state !== "stopped") throw fail("conflict");
         await setEnabled(ctx, true);
         return stepDone({ state: "active" });
+      case "reset_cache":
+        // Flushes the whole cache of this distribution; the name is generated (R11).
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await client(ctx).send(
+          new ResetDistributionCacheCommand({ distributionName: distributionName(ctx) }),
+        );
+        return stepDone();
       default:
         throw fail("validation");
     }
