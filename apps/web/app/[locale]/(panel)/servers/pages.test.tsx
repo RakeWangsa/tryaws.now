@@ -94,6 +94,8 @@ vi.mock("./[id]/actions.ts", () => ({
   detachDiskAction: async () => ({}),
   setAutoBackupAction: async () => ({}),
   setAutoRenewAction: async () => ({}),
+  renewNowAction: async () => ({}),
+  restoreToNewServerAction: async () => ({}),
 }));
 vi.mock("../../../../server/orders-runtime.ts", () => ({
   getOrdersRuntime: async () => state.runtime,

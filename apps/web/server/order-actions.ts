@@ -82,11 +82,15 @@ export async function createOrderDraftCore(
 
   const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
   const key = text(input, "keyPairId");
+  // restoreToNewServer (16.10 Backups): a backup to start from. The order code reads it through the
+  // customer's own repository; here it is only a well-formed id and never goes with a key pair.
+  const restore = text(input, "restoreFromBackupId");
   const config = {
     productId: text(input, "productId"),
     region: text(input, "region"),
     displayName: text(input, "displayName"),
     keyPairId: key === "" || key === undefined ? null : key,
+    ...(restore === "" || restore === undefined ? {} : { restoreFromBackupId: restore }),
   };
   const parsed = parseInstanceConfig(config);
   if (!parsed.ok) {

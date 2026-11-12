@@ -17,6 +17,8 @@ import {
   destroyDiskAction,
   destroyServerAction,
   detachDiskAction,
+  renewNowAction,
+  restoreToNewServerAction,
   setAutoBackupAction,
   setAutoRenewAction,
 } from "./actions.ts";
@@ -44,6 +46,8 @@ const actions = {
   detachDisk: detachDiskAction,
   destroyDisk: destroyDiskAction,
   setAutoRenew: setAutoRenewAction,
+  renewNow: renewNowAction,
+  restoreToNewServer: restoreToNewServerAction,
   destroyServer: destroyServerAction,
 };
 

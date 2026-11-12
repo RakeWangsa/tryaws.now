@@ -12,6 +12,11 @@ export interface InstanceConfig {
   /** Stored and shown only. It never becomes an AWS name, a tag or markup (R11). */
   readonly displayName: string;
   readonly keyPairId: string | null;
+  /**
+   * restoreToNewServer: the id of a backup of the customer's own server. Present only for a
+   * restore; the order code checks it against the customer's rows (checkRestore) before it counts.
+   */
+  readonly restoreFromBackupId?: string;
 }
 
 export interface ResolvedProduct {
@@ -32,6 +37,8 @@ export interface ResolvedProduct {
   readonly facts: ProductFacts;
   readonly needs: readonly CapacityNeed[];
   readonly resourceConfig: Readonly<Record<string, unknown>>;
+  /** Set for a restore from a backup; the `create` operation carries it to the adapter. */
+  readonly restoreFromBackupId?: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -49,7 +56,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseInstanceConfig(raw: unknown): Result<InstanceConfig> {
   const input = isRecord(raw) ? raw : {};
   const fields: Record<string, string> = {};
-  const { productId, region, displayName, keyPairId } = input;
+  const { productId, region, displayName, keyPairId, restoreFromBackupId } = input;
   if (typeof productId !== "string" || !UUID.test(productId)) fields.productId = "invalid";
   if (typeof region !== "string" || !REGION.test(region)) fields.region = "invalid";
   if (typeof displayName !== "string" || !DISPLAY_NAME.test(displayName)) {
@@ -57,6 +64,13 @@ export function parseInstanceConfig(raw: unknown): Result<InstanceConfig> {
   }
   if (keyPairId !== undefined && keyPairId !== null) {
     if (typeof keyPairId !== "string" || !UUID.test(keyPairId)) fields.keyPairId = "invalid";
+  }
+  if (restoreFromBackupId !== undefined && restoreFromBackupId !== null) {
+    if (typeof restoreFromBackupId !== "string" || !UUID.test(restoreFromBackupId)) {
+      fields.restoreFromBackupId = "invalid";
+    }
+    // The restored server keeps the keys of the image: no customer key pair with a restore.
+    if (typeof keyPairId === "string") fields.keyPairId = "invalid";
   }
   if (Object.keys(fields).length > 0) return { ok: false, error: "validation", fields };
   return {
@@ -66,6 +80,7 @@ export function parseInstanceConfig(raw: unknown): Result<InstanceConfig> {
       region: region as string,
       displayName: displayName as string,
       keyPairId: typeof keyPairId === "string" ? keyPairId : null,
+      ...(typeof restoreFromBackupId === "string" ? { restoreFromBackupId } : {}),
     },
   };
 }
@@ -106,6 +121,10 @@ export function resolveInstance(
   }
   const vcpus = positiveVcpus(product.specs);
   if (vcpus === null) return unavailable();
+  // Only a Linux server is restored from a backup (the adapter restores Linux snapshots only).
+  if (config.restoreFromBackupId !== undefined && family !== "linux_instance") {
+    return { ok: false, error: "validation", fields: { restoreFromBackupId: "invalid" } };
+  }
   return {
     ok: true,
     value: {
@@ -129,7 +148,13 @@ export function resolveInstance(
         displayName: config.displayName,
         // Windows uses the pool's default key pair (10.3): no customer key is ever stored for it.
         keyPairId: family === "windows_instance" ? null : config.keyPairId,
+        ...(config.restoreFromBackupId === undefined
+          ? {}
+          : { restoreFromBackupId: config.restoreFromBackupId }),
       },
+      ...(config.restoreFromBackupId === undefined
+        ? {}
+        : { restoreFromBackupId: config.restoreFromBackupId }),
     },
   };
 }

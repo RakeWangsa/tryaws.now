@@ -83,6 +83,8 @@ vi.mock("../servers/[id]/actions.ts", () => ({
   detachDiskAction: async () => ({}),
   setAutoBackupAction: async () => ({}),
   setAutoRenewAction: async () => ({}),
+  renewNowAction: async () => ({}),
+  restoreToNewServerAction: async () => ({}),
 }));
 vi.mock("../notifications/actions.ts", () => ({ markNotificationsReadAction: async () => ({}) }));
 
@@ -129,6 +131,31 @@ describe("/servers/[id] with the tabs of WP5-T6", () => {
     await detailHtml("en", { range: "1w" });
     expect(state.calls).toContainEqual(["extras", ID, expect.any(String)]);
     expect(state.calls).toContainEqual(["metrics", ID, "1w"]);
+  });
+  it("offers the restore form and the renewal button instead of the coming-soon lines (bn and en)", async () => {
+    const en = await detailHtml("en");
+    expect(en).toContain("New server from a backup");
+    expect(en).toContain('name="restoreFromBackupId"');
+    expect(en).toContain('name="region" value="ap-south-1"');
+    expect(en).toContain("Renew from my wallet");
+    expect(en).not.toContain("from a backup is coming soon");
+    expect(en).not.toContain("Renewing right now is coming soon");
+    const bn = await detailHtml("bn");
+    expect(bn).toContain("ব্যাকআপ থেকে নতুন সার্ভার");
+    expect(bn).toContain("ওয়ালেট থেকে নবায়ন করুন");
+  });
+  it("the restore form shows an empty state without a plan, and the renewal is off after a destroy", async () => {
+    state.screen = {
+      state: "ready",
+      extras: extras({
+        restorePlans: [],
+        billing: { ...extras().billing, status: "retained" },
+      }),
+    };
+    const en = await detailHtml("en");
+    expect(en).toContain("There is no active backup or suitable plan to restore from right now.");
+    expect(en).not.toContain('name="restoreFromBackupId"');
+    expect(en).toContain("You cannot renew right now in this state.");
   });
   it("opens the tab named in the query", async () => {
     expect(await detailHtml("en", { tab: "metrics" })).toMatch(

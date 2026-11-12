@@ -25,6 +25,8 @@ export const noopActions: ExtrasActions = {
   detachDisk: noop,
   destroyDisk: noop,
   setAutoRenew: noop,
+  renewNow: noop,
+  restoreToNewServer: noop,
   destroyServer: noop,
 };
 
@@ -32,6 +34,7 @@ export function extras(over: Partial<ServerExtras> = {}): ServerExtras {
   return {
     id: SERVER_ID,
     name: "web-1",
+    region: "ap-south-1",
     state: "active",
     live: true,
     autoBackup: { enabled: true, hour: "03:00" },
@@ -96,6 +99,14 @@ export function extras(over: Partial<ServerExtras> = {}): ServerExtras {
         },
       ],
     },
+    restorePlans: [
+      {
+        id: "0190aaaa-0000-7000-8000-0000000000d1",
+        region: "ap-south-1",
+        priceMinor: 69000n,
+        specs: { vcpus: 1, ramGb: "1", diskGb: 40, transferGb: 2000 },
+      },
+    ],
     destroy: { allowed: true, manualBackups: 1 },
     requestId: REQUEST_ID,
     ...over,

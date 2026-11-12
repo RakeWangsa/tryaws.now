@@ -11,6 +11,7 @@ import {
   detachDiskCore,
   markNotificationsReadCore,
   setAutoBackupCore,
+  renewNowCore,
   setAutoRenewCore,
   type ExtrasDeps,
   type ExtrasRepos,
@@ -59,6 +60,7 @@ function world(
     auditOk?: boolean;
     approval?: boolean;
     destroyError?: "conflict" | "not_found";
+    renew?: Awaited<ReturnType<ExtrasRepos["renewNow"]>>;
   } = {},
 ): World {
   const calls: string[] = [];
@@ -75,6 +77,10 @@ function world(
   let current: CustomerSession | null = session();
   const repos: ExtrasRepos = {
     serversOn: async () => over.flag !== false,
+    renewNow: async (id) => {
+      calls.push(`renew:${id}`);
+      return over.renew ?? { ok: true, value: { periodEnd: NOW } };
+    },
     resources: {
       list: async () => rows,
       get: async (id) => rows.find((r) => r.id === id) ?? null,
@@ -464,6 +470,71 @@ describe("storage and billing", () => {
       done: "autoRenewOn",
     });
     expect(w.calls.at(-1)).toBe("audit:subscription.auto_renew_on");
+  });
+});
+
+describe("renewNow (16.10 Billing)", () => {
+  const input = { serverId: SERVER };
+  it("follows R9: authenticate, rate limit, execute, audit", async () => {
+    const w = world();
+    expect(await renewNowCore(w.deps, input)).toEqual({ ok: true, done: "renewed" });
+    expect(w.calls).toEqual([
+      "authenticate",
+      "store",
+      "rateLimit",
+      `renew:${SERVER}`,
+      "audit:subscription.renew_now",
+    ]);
+  });
+  it("another customer's server, or none, is not_found and nothing is charged or audited (R8)", async () => {
+    const w = world({ rows: [] });
+    expect(await renewNowCore(w.deps, input)).toEqual({ ok: false, error: "not_found" });
+    expect(w.calls.some((c) => c.startsWith("renew:") || c.startsWith("audit"))).toBe(false);
+  });
+  it("a disk id is not a server: not_found", async () => {
+    const w = world();
+    expect(await renewNowCore(w.deps, { serverId: DISK })).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+  });
+  it("a bad id is a validation error before anything is opened", async () => {
+    const w = world();
+    expect(await renewNowCore(w.deps, { serverId: "x" })).toMatchObject({
+      ok: false,
+      error: "validation",
+    });
+    expect(w.calls).toEqual(["authenticate"]);
+  });
+  it("no session, flag off and a full rate limit are refused", async () => {
+    const none = world();
+    none.setSession(null);
+    expect(await renewNowCore(none.deps, input)).toEqual({ ok: false, error: "unauthenticated" });
+    expect(await renewNowCore(world({ flag: false }).deps, input)).toEqual({
+      ok: false,
+      error: "flag_off",
+    });
+    const limited = world({ allowed: false });
+    expect(await renewNowCore(limited.deps, input)).toEqual({ ok: false, error: "rate_limited" });
+    expect(limited.calls.some((c) => c.startsWith("renew:"))).toBe(false);
+  });
+  it("maps the refusals of the renewal to fixed keys", async () => {
+    const short = world({
+      renew: { ok: false, error: "insufficient_balance", data: { shortfallMinor: "5" } },
+    });
+    expect(await renewNowCore(short.deps, input)).toEqual({
+      ok: false,
+      error: "insufficient_balance",
+    });
+    const early = world({ renew: { ok: false, error: "conflict" } });
+    expect(await renewNowCore(early.deps, input)).toEqual({ ok: false, error: "not_due" });
+    const odd = world({ renew: { ok: false, error: "internal" } });
+    expect(await renewNowCore(odd.deps, input)).toEqual({ ok: false, error: "unavailable" });
+    expect(short.calls.some((c) => c.startsWith("audit"))).toBe(false);
+  });
+  it("without the audit entry everything rolls back", async () => {
+    const w = world({ auditOk: false });
+    expect(await renewNowCore(w.deps, input)).toEqual({ ok: false, error: "unavailable" });
   });
 });
 

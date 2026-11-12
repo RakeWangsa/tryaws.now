@@ -1676,6 +1676,55 @@ TASKS["WP5-T6"] = [
   repo,
 ];
 
+// WP5-T6b: renewNow, restoreToNewServer (WP5-T6 left them as "coming soon"). addDisk is not built (open
+// point in JOURNEY.md). Each proof has its own line; `--no-passWithNoTests` makes an empty selection fail.
+const orderKindsRenew = {
+  id: "renew-now",
+  title:
+    "R4, R7, R8: renewNow charges once per period from the wallet, resumes from grace, refuses another customer's server (database)",
+  command: ["pnpm", "test", "--filter", "@tc/core", "lifecycle/renew-now", "--no-passWithNoTests"],
+};
+const orderKindsRestore = {
+  id: "restore-order",
+  title:
+    "R7, R8, R16: a restore is one paid order; own backup, same Region, disk not smaller, create payload names the backup (database)",
+  command: ["pnpm", "test", "--filter", "@tc/core", "restore", "--no-passWithNoTests"],
+};
+const orderKindsCores = {
+  id: "order-kinds-cores",
+  title: "R9: the Server Action cores of renewNow and the restore draft, public errors only",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "server/extras-actions",
+    "server/order-actions",
+    "--no-passWithNoTests",
+  ],
+};
+const orderKindsSweep = {
+  id: "order-kinds-sweep",
+  title: "R8 sweep: every new Server Action is registered with a proof that exists",
+  command: ["pnpm", "test", "--filter", "@tc/web", "server/endpoint-sweep", "--no-passWithNoTests"],
+};
+TASKS["WP5-T6b"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  orderKindsRenew,
+  orderKindsRestore,
+  orderKindsCores,
+  extrasPages,
+  extrasAnchors,
+  extrasMessages,
+  orderKindsSweep,
+  repo,
+];
+
 // WP4-T7: the server screens (list, configurator, review, order status, detail, SSH keys) with fakes,
 // the Server Action cores, and the Playwright smoke that says BLOCKED when it cannot run. The staging
 // proof (a server ordered at 360 px in bn, scripts/playwright-servers.mjs) and the database-backed

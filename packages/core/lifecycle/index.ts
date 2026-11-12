@@ -18,6 +18,7 @@ export {
   destructiveGuard,
 } from "./guard";
 export { renewalQuote, renewSubscription, type Renewed } from "./renew";
+export { RENEW_NOW_WINDOW_DAYS, renewNow, type RenewedNow } from "./renew-now";
 export { completeRestore } from "./restore";
 export { lifecycleHooks, type LifecycleHookEvent } from "./hooks";
 export { LIFECYCLE_LIMIT, runLifecycle, type LifecycleDeps, type LifecycleReport } from "./engine";

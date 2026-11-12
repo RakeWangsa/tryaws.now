@@ -5,6 +5,7 @@ export {
   type InstanceConfig,
   type ResolvedProduct,
 } from "./instance";
+export { checkRestore, type RestoreCandidate, type RestoreCheck } from "./restore";
 export {
   parseBucketAccess,
   parseBucketConfig,

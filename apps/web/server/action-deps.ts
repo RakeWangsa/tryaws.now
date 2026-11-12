@@ -1,4 +1,5 @@
 import { currentCustomer } from "@tc/auth";
+import { renewNow } from "@tc/core";
 import { customerRepos, newUuidV7, readFeatureFlag, withTx } from "@tc/db";
 import { headers } from "next/headers";
 import type { ExtrasDeps } from "./extras-actions.ts";
@@ -96,6 +97,8 @@ export function extrasActionDeps(): ExtrasDeps {
           audit: repos.audit,
           rateLimits: repos.rateLimits,
           notifications: repos.notifications,
+          renewNow: (resourceId) =>
+            renewNow(tx, { customerId, resourceId, clock: { now: () => new Date() } }),
           // R12, R16: a flag that is off or unreadable is off.
           serversOn: async () => {
             const profile = await repos.profile.get();
