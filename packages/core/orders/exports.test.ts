@@ -301,6 +301,28 @@ const WP7 = [
   "validateZoneName",
 ];
 
+// WPU-G2: the firewall rules, the connect help and the server name rule (packages/core/products).
+const SERVER_CONTROLS = [
+  "DEFAULT_BLUEPRINT_ID",
+  "FIREWALL_ANYWHERE",
+  "FIREWALL_MAX_RULES",
+  "FIREWALL_MAX_SOURCES",
+  "FIREWALL_PRESETS",
+  "addFirewallRule",
+  "currentFirewallRules",
+  "defaultFirewallRules",
+  "firewallRuleKey",
+  "keyFileName",
+  "loginUserOf",
+  "parseFirewallRules",
+  "parseFirewallSources",
+  "parseNewFirewallRule",
+  "parseServerDisplayName",
+  "removeFirewallRule",
+  "rulesOpenSshToWorld",
+  "sshCommandOf",
+];
+
 // WP7-T4: the pure domain rules (packages/core/domains).
 const DOMAINS = [
   "CONTACT_TYPES",
@@ -368,6 +390,7 @@ describe("the public surface of the order flow", () => {
           ...KYC,
           ...RECONCILE,
           ...DOMAINS,
+          ...SERVER_CONTROLS,
         ]),
       ].sort(),
     );
