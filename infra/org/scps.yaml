@@ -10,6 +10,9 @@ Description: >-
 # can create an instance and a bucket; the admin role can list and file a quota increase; a denied
 # action (for example ec2:RunInstances) is refused. Record the final policy JSON next to this file.
 # VERIFY: each SCP document is at most 5,120 characters (AWS limit); check the size after Fn::Sub.
+# No exemption exists for the CloudFormation StackSets execution role: nobody protects such a role, so
+# the Tc roles are deployed by the admin role only (see README). Add one only together with a deny on
+# changes to that role.
 # VERIFY: AWS::Organizations::Policy with Type SERVICE_CONTROL_POLICY and TargetIds is deployed from
 # the management account in us-east-1.
 
@@ -30,10 +33,20 @@ Parameters:
       The one named admin role that may change the Tc roles, file quota increases and support cases
       in a member account (IAM Identity Center permission set TcOrgAdmin). VERIFY the exact ARN
       form of the permission set role in a member account.
-  StackSetRoleArnPattern:
+  RootId:
     Type: String
-    Default: "arn:aws:iam::*:role/AWSCloudFormationStackSetExecutionRole"
-    Description: Execution role of CloudFormation StackSets, if DevOps deploys pool-roles.yaml that way.
+    AllowedPattern: "^r-[0-9a-z]{4,32}$"
+    Description: >-
+      Organization root (r-xxxx). Leaving the organization and root user actions are denied at the root
+      too, so an account created in the root before it is moved to an OU is also covered.
+  LogBucketName:
+    Type: String
+    AllowedPattern: "^[a-z0-9][a-z0-9.-]{2,62}$"
+    Description: LogBucketName output of cloudtrail-log-bucket.yaml.
+  TrailKeyId:
+    Type: String
+    AllowedPattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    Description: Key id (not the ARN) of the trail key, from the TrailKeyArn output of cloudtrail-log-bucket.yaml.
 
 Resources:
   GuardrailsPolicy:
@@ -60,6 +73,7 @@ Resources:
               - cloudtrail:UpdateTrail
               - cloudtrail:PutEventSelectors
               - cloudtrail:PutInsightSelectors
+              - cloudtrail:DeleteEventDataStore
               - guardduty:DeleteDetector
               - guardduty:UpdateDetector
               - guardduty:DisassociateFromMasterAccount
@@ -67,10 +81,18 @@ Resources:
               - guardduty:DeleteMembers
               - guardduty:DisassociateMembers
               - guardduty:StopMonitoringMembers
+              - guardduty:CreateFilter
+              - guardduty:UpdateFilter
+              - guardduty:DeleteFilter
+              - guardduty:DeletePublishingDestination
+              - guardduty:UpdateMalwareScanSettings
               - config:DeleteConfigurationRecorder
               - config:StopConfigurationRecorder
               - config:DeleteDeliveryChannel
               - config:PutConfigurationRecorder
+              - config:DeleteConfigRule
+              - config:DeleteRetentionConfiguration
+              - config:DeleteEvaluationResults
             Resource: "*"
           - Sid: DenyRegionsThatAreNotApproved
             Effect: Deny
@@ -130,6 +152,67 @@ Resources:
               - organizations:UpdateOrganizationalUnit
             Resource: "*"
 
+  RootGuardrailsPolicy:
+    Type: AWS::Organizations::Policy
+    Properties:
+      Name: ticon-root-guardrails
+      Description: Attached to the organization root. Leaving the organization and root user actions.
+      Type: SERVICE_CONTROL_POLICY
+      TargetIds:
+        - Ref: RootId
+      Content:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyLeavingTheOrganization
+            Effect: Deny
+            Action:
+              - organizations:LeaveOrganization
+            Resource: "*"
+          - Sid: DenyRootUserActions
+            Effect: Deny
+            Action: "*"
+            Resource: "*"
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: "arn:aws:iam::*:root"
+
+  LogProtectionPolicy:
+    Type: AWS::Organizations::Policy
+    Properties:
+      Name: ticon-log-protection
+      Description: "The audit log bucket, its Object Lock and its key. No exemption; break-glass means detaching this policy in the management account."
+      Type: SERVICE_CONTROL_POLICY
+      TargetIds:
+        Ref: GuardrailTargetIds
+      Content:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ProtectTheLogBucketPolicyAndObjectLock
+            Effect: Deny
+            Action:
+              - s3:PutBucketPolicy
+              - s3:DeleteBucketPolicy
+              - s3:PutBucketObjectLockConfiguration
+              - s3:PutBucketVersioning
+              - s3:PutLifecycleConfiguration
+              - s3:DeleteBucket
+            Resource:
+              - Fn::Sub: "arn:aws:s3:::${LogBucketName}"
+          - Sid: ProtectTheTrailKey
+            Effect: Deny
+            Action:
+              - kms:ScheduleKeyDeletion
+              - kms:DisableKey
+              - kms:PutKeyPolicy
+              - kms:DeleteImportedKeyMaterial
+              - kms:DisableKeyRotation
+            Resource:
+              - Fn::Sub: "arn:aws:kms:*:*:key/${TrailKeyId}"
+            Condition:
+              ArnNotLike:
+                aws:PrincipalArn:
+                  - Ref: AdminRoleArnPattern
+
   PoolAllowListPolicy:
     Type: AWS::Organizations::Policy
     Properties:
@@ -155,6 +238,29 @@ Resources:
               - sts:*
               - account:GetAlternateContact
             Resource: "*"
+          - Sid: DenyAdminActionsExceptForTheAdminRole
+            Effect: Deny
+            NotAction:
+              - lightsail:*
+              - ce:GetCostAndUsage
+              - health:Describe*
+              - cloudtrail:LookupEvents
+              - account:GetAlternateContact
+              - sts:*
+            Resource: "*"
+            Condition:
+              ArnNotLike:
+                aws:PrincipalArn:
+                  - Ref: AdminRoleArnPattern
+          - Sid: DenyRolesWithoutTheBoundary
+            Effect: Deny
+            Action:
+              - iam:CreateRole
+              - iam:PutRolePermissionsBoundary
+            Resource: "*"
+            Condition:
+              StringNotLike:
+                iam:PermissionsBoundary: "arn:aws:iam::*:policy/TcPoolPermissionsBoundary"
           - Sid: ProtectTheTcRoles
             Effect: Deny
             Action:
@@ -175,7 +281,6 @@ Resources:
               ArnNotLike:
                 aws:PrincipalArn:
                   - Ref: AdminRoleArnPattern
-                  - Ref: StackSetRoleArnPattern
           - Sid: ProtectTheTcPermissionsBoundary
             Effect: Deny
             Action:
@@ -188,7 +293,6 @@ Resources:
               ArnNotLike:
                 aws:PrincipalArn:
                   - Ref: AdminRoleArnPattern
-                  - Ref: StackSetRoleArnPattern
 
   DnsAllowListPolicy:
     Type: AWS::Organizations::Policy
@@ -216,6 +320,30 @@ Resources:
               - sts:*
               - account:GetAlternateContact
             Resource: "*"
+          - Sid: DenyAdminActionsExceptForTheAdminRole
+            Effect: Deny
+            NotAction:
+              - route53:*
+              - route53domains:*
+              - ce:GetCostAndUsage
+              - health:Describe*
+              - cloudtrail:LookupEvents
+              - account:GetAlternateContact
+              - sts:*
+            Resource: "*"
+            Condition:
+              ArnNotLike:
+                aws:PrincipalArn:
+                  - Ref: AdminRoleArnPattern
+          - Sid: DenyRolesWithoutTheBoundary
+            Effect: Deny
+            Action:
+              - iam:CreateRole
+              - iam:PutRolePermissionsBoundary
+            Resource: "*"
+            Condition:
+              StringNotLike:
+                iam:PermissionsBoundary: "arn:aws:iam::*:policy/TcDnsPermissionsBoundary"
           - Sid: ProtectTheTcRoles
             Effect: Deny
             Action:
@@ -236,9 +364,14 @@ Resources:
               ArnNotLike:
                 aws:PrincipalArn:
                   - Ref: AdminRoleArnPattern
-                  - Ref: StackSetRoleArnPattern
 
 Outputs:
+  RootGuardrailsPolicyId:
+    Value:
+      Ref: RootGuardrailsPolicy
+  LogProtectionPolicyId:
+    Value:
+      Ref: LogProtectionPolicy
   GuardrailsPolicyId:
     Value:
       Ref: GuardrailsPolicy

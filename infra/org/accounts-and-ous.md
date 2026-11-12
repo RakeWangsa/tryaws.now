@@ -26,7 +26,7 @@ Root (management account: Organizations, SCPs, billing, Lightsail Partner enroll
 3. Deploy `accounts-and-ous.yaml` (stack in `us-east-1`). Note the six OU ids from the outputs.
 4. Create each account with a unique mailbox of TiCON (an alias such as `aws+tc-pool-v1@`, written by DevOps, not in this repository) and the role name `OrganizationAccountAccessRole` removed or restricted after setup. Place the account in its OU.
 5. For every account: set the root user MFA, remove the root access keys if any, and record the account alias (not the id) in the shared notes.
-6. Enable trusted access for the services used in this folder: CloudTrail, GuardDuty, AWS Account Management (alternate contacts), and (optional) CloudFormation StackSets.
+6. Enable trusted access for the services used in this folder: CloudTrail, GuardDuty, AWS Account Management (alternate contacts).
 7. In each pool account, before the pool SCP is attached: create and delete one Lightsail bucket as the DevOps admin role, so Lightsail creates its service-linked role (6.3). `TcProvisioner` cannot create it.
 8. Continue with `scps.yaml`, then the files in the order of `README.md`.
 

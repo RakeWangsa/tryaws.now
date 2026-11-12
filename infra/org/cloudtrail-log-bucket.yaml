@@ -8,8 +8,15 @@ Description: >-
 # trail: the bucket policy and key policy below follow the documented forms (aws:SourceArn of the
 # trail; AWSLogs/<management account>/ and AWSLogs/<organization id>/ prefixes). Check with
 # `aws cloudtrail get-trail-status` after the trail exists, and look for the first log file.
-# VERIFY: Object Lock GOVERNANCE retention cannot be turned off for objects written before the change;
-# pick the retention days with the owner (the audit period is not in the plan).
+# VERIFY: COMPLIANCE retention cannot be shortened or removed by anyone, root included, until it
+# expires, and the bucket cannot be emptied meanwhile. Pick the retention days with the owner (the audit
+# period is not in the plan) before the first deploy.
+# Detective control: alarm on s3:PutBucketPolicy / DeleteBucketPolicy / PutBucketObjectLockConfiguration
+# on this bucket and on kms:ScheduleKeyDeletion / DisableKey / PutKeyPolicy on the trail key (EventBridge
+# rule in this account to the on-call topic; not authored here). Run `aws cloudtrail validate-logs`
+# regularly (digest files prove no log file was changed or removed). scps.yaml denies those calls too.
+# VERIFY: aws:PrincipalServiceName is set for requests made by the CloudTrail service principal; check
+# the first delivered log file after the Deny on PutObject below is in place.
 
 Parameters:
   ManagementAccountId:
@@ -23,6 +30,10 @@ Parameters:
   TrailName:
     Type: String
     Default: ticon-org-trail
+  KeyAdminRoleArnPattern:
+    Type: String
+    Default: "arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_TcOrgAdmin_*"
+    Description: The one named admin role that may administer the trail key. Same role as AdminRoleArnPattern in scps.yaml.
   LogBucketName:
     Type: String
     AllowedPattern: "^[a-z0-9][a-z0-9.-]{2,62}$"
@@ -43,11 +54,15 @@ Resources:
       KeyPolicy:
         Version: "2012-10-17"
         Statement:
-          - Sid: KeyAdministrationByTheLogArchiveAccount
+          - Sid: KeyAdministrationByTheNamedAdminRoleOnly
             Effect: Allow
             Principal:
               AWS:
                 Fn::Sub: "arn:aws:iam::${AWS::AccountId}:root"
+            Condition:
+              ArnLike:
+                aws:PrincipalArn:
+                  Ref: KeyAdminRoleArnPattern
             Action:
               - kms:Describe*
               - kms:Get*
@@ -101,7 +116,7 @@ Resources:
         ObjectLockEnabled: Enabled
         Rule:
           DefaultRetention:
-            Mode: GOVERNANCE
+            Mode: COMPLIANCE
             Days:
               Ref: RetentionDays
       VersioningConfiguration:
@@ -196,6 +211,25 @@ Resources:
             Condition:
               ArnNotLike:
                 aws:PrincipalArn: "arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_TcOrgAdmin_*"
+          - Sid: DenyRetentionTamperingToEveryone
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:BypassGovernanceRetention
+              - s3:PutObjectRetention
+              - s3:PutObjectLegalHold
+            Resource:
+              Fn::Sub: "${LogBucket.Arn}/*"
+          - Sid: DenyWritesExceptByTheCloudTrailService
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:PutObject
+            Resource:
+              Fn::Sub: "${LogBucket.Arn}/AWSLogs/*"
+            Condition:
+              StringNotEquals:
+                aws:PrincipalServiceName: cloudtrail.amazonaws.com
           - Sid: DenyDeleteToEveryoneIncludingAdmins
             Effect: Deny
             Principal: "*"

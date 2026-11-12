@@ -2,8 +2,7 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   TiCON Cloud roles in ONE pool account (Section 6.3): TcProvisioner, TcReader, TcAccessDetails and
   TcBillingReader, with one permissions boundary. Deploy once per pool account (tc-pool-v1, tc-pool-n1,
-  tc-pool-dev, ...) with the DevOps admin role or as a CloudFormation StackSet; never with a platform
-  role. Production pools trust tc-platform; tc-pool-dev trusts tc-platform-stg and nothing else.
+  tc-pool-dev, ...) with the DevOps admin role; never with a platform role or a StackSet execution role. Production pools trust tc-platform; tc-pool-dev trusts tc-platform-stg and nothing else.
   The trust names the control plane ACCOUNT with an aws:PrincipalArn condition on the fixed name of the
   function role (a trust that names a role directly stores its internal id and breaks when a deploy
   recreates the role). The web and admin function roles appear nowhere in this file (R1, 3.2).
@@ -12,6 +11,10 @@ Description: >-
 # If the condition key is not evaluated the allow never matches and the role fails closed (R16): the
 # customer then sees no Windows password. Check in tc-pool-dev with a tagged Windows instance and with a
 # Linux one (JOURNEY VERIFY of WP6-T1, item 2).
+# VERIFY: whether Lightsail supports tag-based authorization (aws:ResourceTag/tc:resource, the tag key of
+# packages/core/naming/tags.ts) for UpdateBucket and UpdateDistribution, and the ARN forms
+# Bucket/<id> and Distribution/<id>. If not, the allow never matches and bucket and CDN changes fail
+# closed (R16): then move both actions back to Resource "*" and keep the code control above.
 # VERIFY: lightsail:TagResource is also checked by AWS when a create call carries tags (6.3).
 
 Parameters:
@@ -128,6 +131,16 @@ Resources:
                   - lightsail:AttachDisk
                   - lightsail:AttachInstancesToLoadBalancer
                   - lightsail:AttachStaticIp
+                  # Residual risk, accepted (JOURNEY, Needs decision): Lightsail has no condition key for the
+                  # public access rules or readonlyAccessAccounts of a bucket, nor for a distribution's origin,
+                  # so CreateBucket, CreateDistribution (and the two Update calls below) cannot be narrowed
+                  # here. The compensating control is in code: packages/aws/adapters/bucket.ts pins
+                  # accessRules to PRIVATE ({ getObject: "private", allowPublicOverrides: false }) and never
+                  # takes readonlyAccessAccounts from customer input; packages/aws/adapters/cdn.ts takes the
+                  # origin only from a resource of the same customer and pool. Proof: packages/aws/test/
+                  # bucket.test.ts ("creates the bucket ... then makes it private") and cdn.test.ts ("looks
+                  # the origin up by family", "fails closed, before any create, without ... an origin of the
+                  # customer").
                   - lightsail:CreateBucket
                   - lightsail:CreateContainerService
                   - lightsail:CreateContainerServiceDeployment
@@ -178,9 +191,7 @@ Resources:
                   - lightsail:StopInstance
                   - lightsail:StopRelationalDatabase
                   - lightsail:TagResource
-                  - lightsail:UpdateBucket
                   - lightsail:UpdateContainerService
-                  - lightsail:UpdateDistribution
                 Resource: "*"
                 Condition:
                   StringEquals:
@@ -188,6 +199,22 @@ Resources:
                       - ap-southeast-1
                       - ap-south-1
                       - us-east-1
+              - Sid: ChangeOnlyResourcesTheDatabasePlatformTagged
+                Effect: Allow
+                Action:
+                  - lightsail:UpdateBucket
+                  - lightsail:UpdateDistribution
+                Resource:
+                  - Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:Bucket/*"
+                  - Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:Distribution/*"
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      - ap-southeast-1
+                      - ap-south-1
+                      - us-east-1
+                  "Null":
+                    aws:ResourceTag/tc:resource: "false"
               - Sid: ExplicitDeny
                 Effect: Deny
                 Action:
