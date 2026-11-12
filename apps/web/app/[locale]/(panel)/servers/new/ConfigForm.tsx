@@ -1,17 +1,14 @@
 "use client";
 
 import {
-  Button,
   EmptyState,
   Field,
   ImageTile,
   MoneyText,
-  OptionGroup,
   PlanPicker,
   SubmitButton,
   SummarySidebar,
 } from "@tc/ui";
-import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { useActionState, useId, useState } from "react";
@@ -19,6 +16,8 @@ import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
 import type { ImageOption, KeyOption, PlanOption } from "../../../../../server/servers-view.ts";
 import { useRegionLabel, useSpecLine } from "../ServerParts.tsx";
+import { KeyStep } from "./KeyStep.tsx";
+import { planFits } from "./plan-fit.ts";
 
 // The form of /servers/new (16.10): option groups on the left, the summary on the right
 // (configurator.html, section.config). Client Component because it holds the choice of Region, image
@@ -54,7 +53,6 @@ export function ConfigForm({
   const [region, setRegion] = useState(regions[0] as string);
   const inRegion = plans.filter((plan) => plan.region === region);
   const [chosenId, setChosenId] = useState<string | undefined>(undefined);
-  const chosen = inRegion.find((plan) => plan.id === chosenId) ?? (inRegion[0] as PlanOption);
   const offered = images[region] ?? [];
   const apps = offered.filter((image) => image.kind === "app");
   const operatingSystems = offered.filter((image) => image.kind === "os");
@@ -67,7 +65,16 @@ export function ConfigForm({
       ? imageChoice.id
       : (operatingSystems[0] ?? apps[0])?.id;
   const image = offered.find((o) => o.id === imageId);
-  const noKeys = keys.length === 0;
+  // WPU-G10. A plan below the minimum power of the image cannot run it: it is shown, disabled, with the
+  // reason. The choice moves to the first plan that fits when the image changes. The server refuses too.
+  const fitting = inRegion.filter((plan) => planFits(image?.minPower, plan.power));
+  const smallest = fitting[0];
+  const chosen =
+    fitting.find((plan) => plan.id === chosenId) ?? smallest ?? (inRegion[0] as PlanOption);
+  const nothingFits = fitting.length === 0;
+  // The key step starts on "use a key I have" when the customer has one, and on "create a new key pair"
+  // (which needs the download first) when not; it tells the form when it is ready (KeyStep).
+  const [keyReady, setKeyReady] = useState(keys.length > 0);
   const imageGroup = (list: ImageOption[], title: string) =>
     list.length === 0 ? null : (
       <div className="mb-3">
@@ -171,56 +178,56 @@ export function ConfigForm({
           <PlanPicker
             name="productId"
             legend={t("planLegend")}
-            plans={inRegion.map((plan) => ({
-              id: plan.id,
-              name: specLine({ vcpus: plan.specs.vcpus }) || specLine(plan.specs),
-              priceMinor: plan.priceMinor,
-              lines: [
-                specLine({
-                  ramGb: plan.specs.ramGb,
-                  diskGb: plan.specs.diskGb,
-                  transferGb: plan.specs.transferGb,
-                }),
-              ].filter((line) => line !== ""),
-            }))}
+            plans={inRegion.map((plan) => {
+              const fits = planFits(image?.minPower, plan.power);
+              return {
+                id: plan.id,
+                name: specLine({ vcpus: plan.specs.vcpus }) || specLine(plan.specs),
+                priceMinor: plan.priceMinor,
+                lines: [
+                  specLine({
+                    ramGb: plan.specs.ramGb,
+                    diskGb: plan.specs.diskGb,
+                    transferGb: plan.specs.transferGb,
+                  }),
+                ].filter((line) => line !== ""),
+                ...(fits ? {} : { disabled: true, note: t("planTooSmallShort") }),
+              };
+            })}
             value={chosen.id}
             onChange={setChosenId}
           />
-          {fieldError("productId") !== undefined ? (
+          {image !== undefined && fitting.length < inRegion.length ? (
+            <p className="form-text seccolor" role="note">
+              <i className="fas fa-info-circle me-1" aria-hidden="true" />
+              {nothingFits
+                ? t("planNoneFit", { image: image.name })
+                : t("planMin", {
+                    image: image.name,
+                    size:
+                      smallest?.specs.ramGb === undefined
+                        ? ""
+                        : specLine({ ramGb: smallest.specs.ramGb }),
+                  })}
+            </p>
+          ) : null}
+          {state.fields?.["productId"] === "plan_too_small" ? (
+            <p className="tc-field-error" role="alert">
+              {t("planTooSmall")}
+            </p>
+          ) : fieldError("productId") !== undefined ? (
             <p className="tc-field-error" role="alert">
               {fieldError("productId")}
             </p>
           ) : null}
 
-          {noKeys ? (
-            <EmptyState
-              title={t("noKeys.title")}
-              description={t("noKeys.body")}
-              action={
-                <Button variant="primary" href={localePath(locale, "/settings/ssh-keys")}>
-                  {t("noKeys.action")}
-                </Button>
-              }
-            />
-          ) : (
-            <>
-              <OptionGroup
-                kind="select"
-                name="keyPairId"
-                legend={t("step.key")}
-                options={keys.map((key) => ({ value: key.id, label: key.name }))}
-                defaultValue={(keys[0] as KeyOption).id}
-                hint={`${t("keyRequired")} ${t("keyHint")}`}
-                required
-                {...(fieldError("keyPairId") !== undefined
-                  ? { error: fieldError("keyPairId") as string }
-                  : {})}
-              />
-              <p className="seccolor mb-4">
-                <a href={localePath(locale, "/settings/ssh-keys")}>{t("keyLink")}</a>
-              </p>
-            </>
-          )}
+          <KeyStep
+            locale={locale}
+            keys={keys}
+            fieldError={fieldError}
+            nameTaken={state.fields?.["newKeyName"] === "taken"}
+            onReady={setKeyReady}
+          />
 
           <Field
             name="displayName"
@@ -257,7 +264,7 @@ export function ConfigForm({
               <SubmitButton
                 variant="primary"
                 className="w-100"
-                disabled={noKeys || image === undefined}
+                disabled={!keyReady || image === undefined || nothingFits}
               >
                 {t("submit")}
               </SubmitButton>

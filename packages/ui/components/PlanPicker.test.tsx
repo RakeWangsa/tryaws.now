@@ -132,6 +132,55 @@ describe("PlanPicker", () => {
     expect(card.textContent).toContain("/ 30 days");
   });
 
+  describe("a plan that cannot be picked (WPU-G10)", () => {
+    const some: PickerPlan[] = [
+      { ...(plans[0] as PickerPlan), disabled: true, note: "Needs 1 GB" },
+      plans[1] as PickerPlan,
+      plans[2] as PickerPlan,
+    ];
+
+    it("disables its radio, shows the note, and starts on the first plan that can be picked", () => {
+      const { container } = renderKit(<PlanPicker name="plan" legend="Plan" plans={some} />, {
+        locale: "en",
+      });
+      const { hidden, radios } = parts(container);
+      expect(radios[0]?.disabled).toBe(true);
+      expect(radios[1]?.disabled).toBe(false);
+      expect(hidden.value).toBe("p2");
+      expect(container.textContent).toContain("Needs 1 GB");
+      expect(unknownClasses(container)).toEqual([]);
+    });
+
+    it("the slider skips a plan that cannot be picked, upward first and then downward", () => {
+      const onChange = vi.fn();
+      const { container } = renderKit(
+        <PlanPicker name="plan" legend="Plan" plans={some} onChange={onChange} />,
+      );
+      const { range } = parts(container);
+      act(() => {
+        fireEvent.change(range, { target: { value: "0" } });
+      });
+      expect(onChange).toHaveBeenLastCalledWith("p2");
+      const last: PickerPlan[] = [
+        plans[0] as PickerPlan,
+        plans[1] as PickerPlan,
+        { ...(plans[2] as PickerPlan), disabled: true },
+      ];
+      const second = renderKit(
+        <PlanPicker name="plan" legend="Plan" plans={last} onChange={onChange} />,
+      );
+      act(() => {
+        fireEvent.change(parts(second.container).range, { target: { value: "2" } });
+      });
+      expect(onChange).toHaveBeenLastCalledWith("p2");
+    });
+
+    it("a plan without the flag behaves as before", () => {
+      const { container } = renderKit(<PlanPicker name="plan" legend="Plan" plans={plans} />);
+      expect(parts(container).radios.every((r) => !r.disabled)).toBe(true);
+    });
+  });
+
   it("shows a message and no input for zero plans", () => {
     const { container } = renderKit(<PlanPicker name="plan" legend="Plan" plans={[]} />, {
       locale: "en",

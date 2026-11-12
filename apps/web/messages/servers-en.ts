@@ -106,6 +106,33 @@ export const serversEn: Same<typeof serversBn> = {
       },
       keyHint: "Only public keys are used. To add a new key,",
       keyLink: "go to the SSH keys page",
+      keyMode: {
+        existing: "Use a key I already have",
+        generate: "Create a new key pair",
+        paste: "Upload my public key",
+      },
+      keyName: "Key name",
+      keyNameHint: "English letters, digits, spaces, dots, dashes and underscores, up to 60.",
+      keyNameTaken: "You already have another key with this name. Use a different name.",
+      keyPublic: "Public key",
+      keyPublicHint:
+        "One line that starts with ssh-ed25519, ssh-rsa or ecdsa. Never paste a private key here.",
+      keyGenerate: "Create key pair",
+      keyGenerateHint:
+        "The key pair is made in your browser. The private key never reaches us; you can download it once.",
+      keyMade:
+        "The key pair is ready. Download the private key now. It is not shown again, and we do not keep it.",
+      keyDownload: "Download private key",
+      keySaved:
+        "The private key was downloaded. Keep it somewhere safe; it cannot be downloaded again. You can create the server now.",
+      keyUnsupported:
+        "This browser cannot create keys. Use a key you already have, or upload your public key.",
+      keyFailed: "The key could not be created. Try again.",
+      planTooSmallShort: "Too small for this image",
+      planMin: "{image} needs a plan with {size} or more. Smaller plans cannot be chosen.",
+      planNoneFit:
+        "No plan in this location is big enough to run {image}. Choose another image or location.",
+      planTooSmall: "This plan is too small for the image. Choose a larger plan.",
       nameHint: "English letters, digits, spaces, dots, dashes and underscores, up to 60.",
       namePlaceholder: "my-server",
       summary: {

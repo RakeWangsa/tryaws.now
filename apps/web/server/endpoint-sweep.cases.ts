@@ -503,7 +503,23 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
   },
   "app/[locale]/(panel)/servers/new/actions.ts#createOrderDraftAction": {
     kind: "session",
-    proof: [ORDER_SESSION],
+    proof: [
+      ORDER_SESSION,
+      // WPU-G10: the wizard can also store a public key (made in the browser or pasted).
+      proof(
+        `${W}wizard-key.test.ts`,
+        "the customer id in the form is ignored: the key store and the order use the session",
+      ),
+      proof(
+        `${W}wizard-key.test.ts`,
+        "stores the public key through the customer's repository, audits it, and drafts with the new key id",
+      ),
+      proof(
+        `${W}wizard-key.test.ts`,
+        "a private key in the public field is refused, never stored, never echoed",
+      ),
+      proof(`${W}wizard-key.test.ts`, "without a session nothing runs (R16)"),
+    ],
   },
   "app/[locale]/(panel)/settings/profile/actions.ts#updateProfileAction": {
     kind: "session",
