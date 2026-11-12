@@ -38,13 +38,14 @@ describe("the price of one unattached hour", () => {
     kit.clock.set(START);
     const r = await worker((tx) => staticIpHourPrice(tx, "BD", kit.clock));
     // 0.005 x 127 x 100 = 63.5 -> 64 (a float or a floor would give 63); 10% = 6, 5% = 3, 2% = 1.
-    expect(r).toEqual({ ok: true, value: { unit: "hour", perHourMinor: 74n } });
+    expect(r).toMatchObject({ ok: true, value: { unit: "hour", perHourMinor: 74n } });
+    if (r.ok) expect(r.value.breakdown).toMatchObject({ totalMinor: 74n, baseMinor: 64n });
   });
 
   it("follows the FX rate in force: at 121.5 the base is 60.75 -> 61 and the hour costs 71", async () => {
     await kit.changeFxRate("121.5");
     const r = await worker((tx) => staticIpHourPrice(tx, "BD", kit.clock));
-    expect(r).toEqual({ ok: true, value: { unit: "hour", perHourMinor: 71n } });
+    expect(r).toMatchObject({ ok: true, value: { unit: "hour", perHourMinor: 71n } });
     await kit.changeFxRate("127");
   });
 
@@ -90,6 +91,24 @@ describe("the hourly charge against the real ledger", () => {
       key,
     ]);
     expect(rows).toEqual([{ kind: "metered_charge", memo: "static_ip_unattached" }]);
+
+    // WPU-M2: the hour is split like a purchase (spec 9.1): the base to revenue_aws_base, each VAT and
+    // the fee to its payable or income account; the lines add up to the wallet debit (the ledger's
+    // trigger refuses an unbalanced transaction).
+    const lines = await q(
+      `select a.type, e.direction, e.amount_minor::text as amount
+         from ledger_entries e join ledger_accounts a on a.id = e.account_id
+         join ledger_transactions x on x.id = e.transaction_id
+        where x.idempotency_key = $1 order by a.type`,
+      [key],
+    );
+    expect(lines).toEqual([
+      { type: "customer_wallet", direction: "debit", amount: "74" },
+      { type: "processing_fee_income", direction: "credit", amount: "1" },
+      { type: "revenue_aws_base", direction: "credit", amount: "64" },
+      { type: "vat_bd_payable", direction: "credit", amount: "3" },
+      { type: "vat_korea_payable", direction: "credit", amount: "6" },
+    ]);
 
     expect(await run(at("07:40"))).toMatchObject({ charged: 0, replayed: 1 });
     expect(before - (await kit.balance(buyer.customerId))).toBe(74n);

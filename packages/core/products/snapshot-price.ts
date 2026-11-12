@@ -1,5 +1,7 @@
 import { readConfigPrices } from "@tc/db";
 import type { Tx } from "@tc/db";
+import { isPositiveDecimal } from "../pricing/decimal";
+import type { MeteredUnitPrice } from "../pricing/metering";
 import { quoteInForce } from "../rates/in-force";
 import type { Clock, Result } from "../types";
 
@@ -15,6 +17,8 @@ export interface SnapshotPrice {
   readonly unit: "gb_month";
   /** The customer price of one GB-month, in paisa. */
   readonly perGbMonthMinor: bigint;
+  /** The same price as the engine quoted it: base and steps, adding up to `perGbMonthMinor` (WPU-M2). */
+  readonly breakdown: MeteredUnitPrice;
   /** The customer price of `sizeGb` stored for a month, or null when the size is not known yet. */
   readonly monthlyMinor: bigint | null;
 }
@@ -28,8 +32,10 @@ export async function snapshotPrice(
   if (sizeGb !== null && (!Number.isSafeInteger(sizeGb) || sizeGb < 0)) {
     return { ok: false, error: "validation", fields: { sizeGb: "invalid" } };
   }
-  const row = (await readConfigPrices(tx, market))["config_price.snapshot_gb_month"];
-  if (row === undefined || row.unit !== "gb_month") {
+  // The row in force at the instant of the clock, like the rate, the rule and the book (WPU-M2). A
+  // zero or unreadable price is no price (R16).
+  const row = (await readConfigPrices(tx, market, clock.now()))["config_price.snapshot_gb_month"];
+  if (row === undefined || row.unit !== "gb_month" || !isPositiveDecimal(row.usd)) {
     return { ok: false, error: "not_found", fields: { price: "unavailable" } };
   }
   const one = await quoteInForce(
@@ -57,8 +63,14 @@ export async function snapshotPrice(
       monthlyMinor = sized.value.quote.totalMinor;
     }
   }
+  const quote = one.value.quote;
   return {
     ok: true,
-    value: { unit: "gb_month", perGbMonthMinor: one.value.quote.totalMinor, monthlyMinor },
+    value: {
+      unit: "gb_month",
+      perGbMonthMinor: quote.totalMinor,
+      breakdown: { totalMinor: quote.totalMinor, baseMinor: quote.baseMinor, steps: quote.steps },
+      monthlyMinor,
+    },
   };
 }

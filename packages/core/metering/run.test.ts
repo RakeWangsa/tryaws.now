@@ -2,6 +2,7 @@ import type { NewLifecycleNotification, Tx } from "@tc/db";
 import { describe, expect, it } from "vitest";
 import { ledgerKey } from "../ledger/keys";
 import type { PostTransactionInput } from "../ledger/types";
+import type { MeteredUnitPrice } from "../pricing/metering";
 import type { Result } from "../types";
 import {
   METERING_SETTING_KEYS,
@@ -23,6 +24,8 @@ interface Usage {
   quantity: string;
   metric: string;
   period: string;
+  /** The market of the customer (the profile); "BD" unless a test says otherwise. */
+  market?: string;
 }
 interface Transfer {
   resourceId: string;
@@ -32,23 +35,53 @@ interface Transfer {
   month: string;
 }
 
+/**
+ * WPU-M2. A unit price of a GB-month as the engine quotes it: VAT of Korea 10%, VAT of Bangladesh 5%,
+ * no fee and no margin, the base takes the rest. `total` is the whole price of one GB-month.
+ */
+function unit(total: bigint): MeteredUnitPrice {
+  const korea = total / 10n;
+  const bd = total / 20n;
+  return {
+    totalMinor: total,
+    baseMinor: total - korea - bd,
+    steps: [
+      { code: "korea_vat", amountMinor: korea },
+      { code: "bd_vat", amountMinor: bd },
+      { code: "processing_fee", amountMinor: 0n },
+      { code: "markup", amountMinor: 0n },
+    ],
+  };
+}
+
 function world(init: {
   price?: unknown;
   usage?: Usage[];
   transfer?: Transfer[];
   balances?: Map<string, bigint>;
   failFor?: string;
-  /** WPA-P2: what the pricing engine answers for `config_price.snapshot_gb_month` (paisa per GB-month), or null. */
-  config?: bigint | null;
+  /** What the pricing engine answers for `config_price.snapshot_gb_month` (the unit price and its steps), or null. */
+  config?: MeteredUnitPrice | null;
+  /** The unit price by market, when markets differ; a market that is not in it has no price. */
+  configByMarket?: Record<string, MeteredUnitPrice | null>;
 }) {
   const posted = new Map<string, PostTransactionInput>();
   const notices = new Map<string, NewLifecycleNotification>();
-  const state = { postCalls: 0 };
+  const state = { postCalls: 0, priced: [] as string[], instants: [] as number[] };
   const settings = new Map<string, unknown>();
   if (init.price !== undefined)
     settings.set(METERING_SETTING_KEYS.snapshotGbMonthMinor, init.price);
   const ops: MeteringOps = {
-    ...(init.config === undefined ? {} : { configPrice: async () => init.config ?? null }),
+    ...(init.config === undefined && init.configByMarket === undefined
+      ? {}
+      : {
+          configPrice: async (_tx, clock, market) => {
+            state.priced.push(market);
+            state.instants.push(clock.now().getTime());
+            if (init.configByMarket !== undefined) return init.configByMarket[market] ?? null;
+            return init.config ?? null;
+          },
+        }),
     repo: () => ({
       readSettings: async (keys: readonly string[]) =>
         new Map([...settings].filter(([k]) => keys.includes(k))),
@@ -59,7 +92,8 @@ function world(init: {
               u.metric === metric && u.period === period && (afterId === null || u.id > afterId),
           )
           .sort((a, b) => a.id.localeCompare(b.id))
-          .slice(0, limit),
+          .slice(0, limit)
+          .map((u) => ({ ...u, market: u.market ?? "BD" })),
       listTransfer: async (month, afterId, limit) =>
         (init.transfer ?? [])
           .filter((t) => t.month === month && (afterId === null || t.resourceId > afterId))
@@ -120,7 +154,7 @@ describe("days in Dhaka time", () => {
 
 describe("snapshot storage: one charge per resource and day", () => {
   it("the daily charge is GB x price / 30 in paisa, as one metered_charge of the wallet against revenue", async () => {
-    const w = world({ price: "300", usage: [snap(1, "10.000000", "2026-11-10")] });
+    const w = world({ config: unit(300n), usage: [snap(1, "10.000000", "2026-11-10")] });
     const report = await w.run();
     expect(report).toMatchObject({ charged: 1, replayed: 0, unpaid: 0, failed: 0 });
     const key = ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10");
@@ -128,18 +162,125 @@ describe("snapshot storage: one charge per resource and day", () => {
     expect(tx.kind).toBe("metered_charge");
     expect(tx.reference).toEqual({ type: "resource", id: RES(1) });
     expect(tx.actor).toEqual({ type: "system" });
+    // WPU-M2: the split of a purchase (spec 9.1). Before, the whole 100 went to revenue_aws_base and
+    // the VAT payable accounts were short. Now 100 = base 85 + korea_vat 10 + bd_vat 5 (a 15% price on
+    // top of the base, as the unit price 300 = 255 + 30 + 15); the fee and the margin are 0: no line.
     expect(tx.postings).toEqual([
       {
         account: { type: "customer_wallet", customerId: CUST(1) },
         direction: "debit",
         amountMinor: 100n,
       },
-      { account: { type: "revenue_aws_base" }, direction: "credit", amountMinor: 100n },
+      { account: { type: "revenue_aws_base" }, direction: "credit", amountMinor: 85n },
+      { account: { type: "vat_korea_payable" }, direction: "credit", amountMinor: 10n },
+      { account: { type: "vat_bd_payable" }, direction: "credit", amountMinor: 5n },
     ]);
   });
 
+  it("a snapshot day: the lines add up to the debit and every account gets its step, the margin goes to markup_income", async () => {
+    // Unit price of a GB-month 800: base 650, korea 80, bd 40, fee 10, margin 20. 10 GB for a day is
+    // 10 x 800 / 30 = 266.67 -> 267 paisa, shared in the proportions of the unit.
+    const priced: MeteredUnitPrice = {
+      totalMinor: 800n,
+      baseMinor: 650n,
+      steps: [
+        { code: "korea_vat", amountMinor: 80n },
+        { code: "bd_vat", amountMinor: 40n },
+        { code: "processing_fee", amountMinor: 10n },
+        { code: "markup", amountMinor: 20n },
+      ],
+    };
+    const w = world({ config: priced, usage: [snap(1, "10", "2026-11-10")] });
+    await w.run();
+    const tx = w.posted.get(ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10"))!;
+    const by = Object.fromEntries(tx.postings.map((p) => [p.account.type, p.amountMinor]));
+    expect(by).toEqual({
+      customer_wallet: 267n,
+      revenue_aws_base: 217n, // 267 - 27 - 13 - 3 - 7
+      vat_korea_payable: 27n, // 267 x 80 / 800 = 26.7
+      vat_bd_payable: 13n, // 13.35
+      processing_fee_income: 3n, // 3.34
+      markup_income: 7n, // 6.68
+    });
+    const credits = tx.postings.filter((p) => p.direction === "credit");
+    expect(credits.reduce((a, p) => a + p.amountMinor, 0n)).toBe(267n);
+    expect(tx.postings.filter((p) => p.direction === "debit")).toHaveLength(1);
+  });
+
+  it("a repeat after the split posts nothing more and the wallet is charged once (R7)", async () => {
+    const balances = new Map([[CUST(1), 1_000n]]);
+    const w = world({ config: unit(300n), balances, usage: [snap(1, "10", "2026-11-10")] });
+    await w.run();
+    await w.run();
+    expect(w.posted.size).toBe(1);
+    expect(balances.get(CUST(1))).toBe(900n);
+  });
+
+  it("a unit price whose lines do not add up posts nothing and is counted failed (R16)", async () => {
+    const broken = { ...unit(300n), baseMinor: 1n };
+    const w = world({ config: broken, usage: [snap(1, "10", "2026-11-10")] });
+    const report = await w.run();
+    expect(report.failed).toBeGreaterThan(0);
+    expect(w.posted.size).toBe(0);
+  });
+
+  // WPU-M2 (2): the market comes from the profile of the customer, the price is read at the instant
+  // of the injected clock.
+  it("prices each customer in the market of the profile, once for each market", async () => {
+    const w = world({
+      configByMarket: { BD: unit(300n), KE: unit(600n) },
+      usage: [
+        snap(1, "10", "2026-11-10", 1),
+        { ...snap(2, "10", "2026-11-10", 2), market: "KE" },
+        { ...snap(3, "10", "2026-11-10", 3), market: "KE" },
+      ],
+    });
+    const report = await w.run();
+    expect(report).toMatchObject({ charged: 3, failed: 0 });
+    expect([...w.state.priced].sort()).toEqual(["BD", "KE"]);
+    expect(
+      w.posted.get(ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10"))!.postings[0]!
+        .amountMinor,
+    ).toBe(100n);
+    expect(
+      w.posted.get(ledgerKey.metered(RES(2), "snapshot_gb", "2026-11-10"))!.postings[0]!
+        .amountMinor,
+    ).toBe(200n);
+  });
+
+  it("a market with no price charges its customers nothing and the report says so; others go on", async () => {
+    const w = world({
+      configByMarket: { BD: unit(300n), KE: null },
+      usage: [snap(1, "10", "2026-11-10", 1), { ...snap(2, "10", "2026-11-10", 2), market: "KE" }],
+    });
+    const report = await w.run();
+    expect(report).toMatchObject({ charged: 1, priceMissing: true, failed: 0 });
+    expect(w.posted.has(ledgerKey.metered(RES(2), "snapshot_gb", "2026-11-10"))).toBe(false);
+  });
+
+  it.each(["", "bd", "BDT", "B", "B1", "../"])(
+    "a market that is not a market code (%j) is failed and priced nowhere (fail closed)",
+    async (market) => {
+      const w = world({
+        config: unit(300n),
+        usage: [{ ...snap(1, "10", "2026-11-10"), market }],
+      });
+      const report = await w.run();
+      expect(report).toMatchObject({ charged: 0, failed: 1 });
+      expect(w.posted.size).toBe(0);
+      expect(w.state.priced).not.toContain(market);
+    },
+  );
+
+  it("the price is read at the instant of the injected clock", async () => {
+    const w = world({ config: unit(300n), usage: [snap(1, "10", "2026-11-10")] });
+    await w.run();
+    expect(w.state.instants.length).toBeGreaterThan(0);
+    expect(new Set(w.state.instants)).toEqual(new Set([NOW.getTime()]));
+  });
+
   it("rounds half-up: 1 GB at 105 paisa a month is 4 paisa a day", async () => {
-    const w = world({ price: 105, usage: [snap(1, "1.000000", "2026-11-10")] });
+    const w = world({ config: unit(105n), usage: [snap(1, "1.000000", "2026-11-10")] });
     await w.run();
     const tx = w.posted.get(ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10"))!;
     expect(tx.postings[0]!.amountMinor).toBe(4n);
@@ -147,7 +288,7 @@ describe("snapshot storage: one charge per resource and day", () => {
 
   it("charges the day that ended in Dhaka: at 00:30 Dhaka on the 12th that is the 11th", async () => {
     const w = world({
-      price: "300",
+      config: unit(300n),
       usage: [snap(1, "10", "2026-11-11"), snap(2, "10", "2026-11-12")],
     });
     await w.run(new Date("2026-11-11T18:30:00Z"));
@@ -155,7 +296,7 @@ describe("snapshot storage: one charge per resource and day", () => {
   });
 
   it("a second run is a replay: no second transaction, no second post call for a charged day", async () => {
-    const w = world({ price: "300", usage: [snap(1, "10", "2026-11-10")] });
+    const w = world({ config: unit(300n), usage: [snap(1, "10", "2026-11-10")] });
     await w.run();
     const calls = w.state.postCalls;
     const again = await w.run();
@@ -166,7 +307,7 @@ describe("snapshot storage: one charge per resource and day", () => {
 
   it("catches up the two days before, and no older one", async () => {
     const w = world({
-      price: "300",
+      config: unit(300n),
       usage: [
         snap(1, "10", "2026-11-10"),
         snap(2, "10", "2026-11-09"),
@@ -180,14 +321,14 @@ describe("snapshot storage: one charge per resource and day", () => {
   });
 
   it("skips a zero amount and writes nothing for it", async () => {
-    const w = world({ price: "300", usage: [snap(1, "0.000000", "2026-11-10")] });
+    const w = world({ config: unit(300n), usage: [snap(1, "0.000000", "2026-11-10")] });
     expect(await w.run()).toMatchObject({ charged: 0, skipped: 1 });
     expect(w.posted.size).toBe(0);
   });
 
   it("goes through every page of rows", async () => {
     const usage = [1, 2, 3, 4, 5].map((n) => snap(n, "30", "2026-11-10", n));
-    const w = world({ price: "100", usage });
+    const w = world({ config: unit(100n), usage });
     const report = await w.run(NOW, { pageSize: 2 });
     expect(report.charged).toBe(5);
   });
@@ -195,7 +336,7 @@ describe("snapshot storage: one charge per resource and day", () => {
   it("a wallet that is short is unpaid: nothing posted, one notice per resource and day, run goes on", async () => {
     const balances = new Map([[CUST(1), 10n]]);
     const w = world({
-      price: "300",
+      config: unit(300n),
       balances,
       usage: [snap(1, "10", "2026-11-10", 1), snap(2, "10", "2026-11-10", 2)],
     });
@@ -222,18 +363,19 @@ describe("snapshot storage: one charge per resource and day", () => {
     },
   );
 
-  // WPA-P2. One price source: `config_price.snapshot_gb_month` through the pricing engine, the old key
-  // `metering.snapshot_gb_month_minor` only while no config price is usable.
-  it("the config price (engine, paisa per GB-month) charges the day; the report says where it came from", async () => {
-    const w = world({ config: 600n, usage: [snap(1, "10.000000", "2026-11-10")] });
+  // WPA-P2 and WPU-M2. The one price source is `config_price.snapshot_gb_month` through the pricing
+  // engine. The old key `metering.snapshot_gb_month_minor` is one number of paisa with no VAT, fee or
+  // margin to split, so it can no longer charge (it would book the VAT as revenue): fail closed.
+  it("the config price (engine) charges the day; the report says where it came from", async () => {
+    const w = world({ config: unit(600n), usage: [snap(1, "10.000000", "2026-11-10")] });
     const report = await w.run();
     expect(report).toMatchObject({ charged: 1, priceMissing: false, priceSource: "config" });
     const tx = w.posted.get(ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10"))!;
     expect(tx.postings[0]!.amountMinor).toBe(200n); // 10 GB x 600 / 30
   });
 
-  it("the config price wins over the old key when both exist", async () => {
-    const w = world({ config: 600n, price: "300", usage: [snap(1, "10", "2026-11-10")] });
+  it("the config price wins and the old key is not read for the amount", async () => {
+    const w = world({ config: unit(600n), price: "300", usage: [snap(1, "10", "2026-11-10")] });
     const report = await w.run();
     expect(report.priceSource).toBe("config");
     expect(
@@ -242,14 +384,11 @@ describe("snapshot storage: one charge per resource and day", () => {
     ).toBe(200n);
   });
 
-  it("no usable config price: the old key still charges (transition) and the report says so", async () => {
+  it("only the old key has a price: it cannot be split, so nothing is charged and the report says so (R16)", async () => {
     const w = world({ config: null, price: "300", usage: [snap(1, "10", "2026-11-10")] });
     const report = await w.run();
-    expect(report).toMatchObject({ charged: 1, priceMissing: false, priceSource: "legacy" });
-    expect(
-      w.posted.get(ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10"))!.postings[0]!
-        .amountMinor,
-    ).toBe(100n);
+    expect(report).toMatchObject({ charged: 0, priceMissing: true, priceSource: "legacy" });
+    expect(w.state.postCalls).toBe(0);
   });
 
   it("neither source has a price: nothing is charged and the price is reported missing (R16)", async () => {
@@ -259,14 +398,17 @@ describe("snapshot storage: one charge per resource and day", () => {
     expect(w.state.postCalls).toBe(0);
   });
 
-  it("a config price of zero is not a price: it falls to the old key like an absent one", async () => {
-    const w = world({ config: 0n, price: "300", usage: [snap(1, "10", "2026-11-10")] });
-    expect((await w.run()).priceSource).toBe("legacy");
+  it("a config price of zero is not a price: nothing is charged and the price is reported missing", async () => {
+    const zero: MeteredUnitPrice = { totalMinor: 0n, baseMinor: 0n, steps: [] };
+    const w = world({ config: zero, usage: [snap(1, "10", "2026-11-10")] });
+    const report = await w.run();
+    expect(report).toMatchObject({ charged: 0, priceMissing: true });
+    expect(w.state.postCalls).toBe(0);
   });
 
   it("a failing row is counted and logged by error name only; the other rows go on", async () => {
     const w = world({
-      price: "300",
+      config: unit(300n),
       failFor: RES(1),
       usage: [snap(1, "10", "2026-11-10"), snap(2, "10", "2026-11-10")],
     });
@@ -277,7 +419,7 @@ describe("snapshot storage: one charge per resource and day", () => {
 
   it("a row whose resource id is not a UUID is failed, not charged", async () => {
     const bad = { ...snap(1, "10", "2026-11-10"), resourceId: "not-a-uuid" };
-    const w = world({ price: "300", usage: [bad] });
+    const w = world({ config: unit(300n), usage: [bad] });
     expect(await w.run()).toMatchObject({ charged: 0, failed: 1 });
   });
 });
@@ -292,13 +434,13 @@ describe("data transfer notices at 80% and 100%", () => {
   });
 
   it("writes nothing below 80%", async () => {
-    const w = world({ price: "300", transfer: [tr(1, "799.99")] });
+    const w = world({ config: unit(300n), transfer: [tr(1, "799.99")] });
     expect(await w.run()).toMatchObject({ notified80: 0, notified100: 0 });
     expect(w.notices.size).toBe(0);
   });
 
   it("writes one 80% notice at 80% and none again on the next run", async () => {
-    const w = world({ price: "300", transfer: [tr(1, "800")] });
+    const w = world({ config: unit(300n), transfer: [tr(1, "800")] });
     expect(await w.run()).toMatchObject({ notified80: 1, notified100: 0 });
     expect(await w.run()).toMatchObject({ notified80: 0, notified100: 0 });
     const [n] = [...w.notices.values()];
@@ -318,7 +460,7 @@ describe("data transfer notices at 80% and 100%", () => {
   });
 
   it("writes the 100% notice when the use reaches the allowance, once (only the highest level reached is written)", async () => {
-    const w = world({ price: "300", transfer: [tr(1, "1000")] });
+    const w = world({ config: unit(300n), transfer: [tr(1, "1000")] });
     expect(await w.run()).toMatchObject({ notified80: 0, notified100: 1 });
     expect(await w.run()).toMatchObject({ notified100: 0 });
     expect([...w.notices.values()].map((n) => n.template)).toEqual(["lifecycle_transfer_100"]);
@@ -326,7 +468,7 @@ describe("data transfer notices at 80% and 100%", () => {
 
   it("a new month starts new notices", async () => {
     const w = world({
-      price: "300",
+      config: unit(300n),
       transfer: [tr(1, "900", "1000", "2026-11"), tr(1, "900", "1000", "2026-12")],
     });
     await w.run();
@@ -335,14 +477,14 @@ describe("data transfer notices at 80% and 100%", () => {
   });
 
   it("holds no email, phone or name in the payload (R14)", async () => {
-    const w = world({ price: "300", transfer: [tr(1, "1200")] });
+    const w = world({ config: unit(300n), transfer: [tr(1, "1200")] });
     await w.run();
     const text = JSON.stringify([...w.notices.values()].map((n) => n.payload));
     expect(text).not.toMatch(/@|\+880|name/i);
   });
 
   it("an allowance that is not above zero is skipped and counted as failed, not as a notice", async () => {
-    const w = world({ price: "300", transfer: [tr(1, "5", "0")] });
+    const w = world({ config: unit(300n), transfer: [tr(1, "5", "0")] });
     expect(await w.run()).toMatchObject({ notified80: 0, notified100: 0, failed: 1 });
   });
 

@@ -5,9 +5,8 @@ import { DOMAIN_TERM_DAYS } from "../domains/resolve";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
-import type { Posting } from "../ledger/types";
 import { makeEnqueueOperation } from "../operations/enqueue";
-import { accountFor } from "../pricing/index";
+import { salePostings } from "../ledger/sale-postings";
 import { quoteInForce } from "../rates/in-force";
 import type { Result } from "../types";
 import { gateCustomer, gateImage, gateKeyPair, gateProduct, resolveOrderProduct } from "./checks";
@@ -174,21 +173,12 @@ export async function runPurchase(
   }
 
   // The postings are built before the first unit is taken, so a step with no ledger account stops here.
-  const postings: Posting[] = [
-    { account: { type: "customer_wallet", customerId }, direction: "debit", amountMinor: total },
-    {
-      account: { type: "revenue_aws_base" },
-      direction: "credit",
-      amountMinor: BigInt(fresh.baseMinor),
-    },
-  ];
-  for (const step of fresh.steps) {
-    const amountMinor = BigInt(step.amountMinor);
-    if (amountMinor === 0n) continue; // a step of 0 posts no line
-    const type = accountFor(step.code);
-    if (type === undefined) throw new Error("orders: a price step has no ledger account");
-    postings.push({ account: { type }, direction: "credit", amountMinor });
-  }
+  // WPU-M2: the split is built by the one builder that the renewal and the metered charge also use.
+  const postings = salePostings(customerId, {
+    totalMinor: total,
+    baseMinor: BigInt(fresh.baseMinor),
+    steps: fresh.steps.map((s) => ({ code: s.code, amountMinor: BigInt(s.amountMinor) })),
+  });
 
   // 8 and 9 are one savepoint. A unique violation inside it rolls the savepoint back, and the replay
   // lookups run again: it is a replay or a conflict, never a second charge.

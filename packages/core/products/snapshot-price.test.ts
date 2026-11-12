@@ -50,3 +50,49 @@ it("an unusable size is refused", async () => {
   const r = await asRole(t, "web_rw", (tx) => snapshotPrice(tx, "BD", -5, clockAt(T0)));
   expect(r).toMatchObject({ ok: false, error: "validation" });
 });
+
+// WPU-M2.
+const setRow = (value: string) =>
+  t.pool.query(
+    `update settings set value = $1::jsonb where key = 'config_price.snapshot_gb_month' and market = 'BD'`,
+    [value],
+  );
+
+it("a zero price is not a price: nothing is sold (R16)", async () => {
+  for (const usd of ["0", "0.00", "0.0000"]) {
+    await setRow(`{"usd":"${usd}","unit":"gb_month"}`);
+    const r = await asRole(t, "web_rw", (tx) => snapshotPrice(tx, "BD", 10, clockAt(T0)));
+    expect(r).toMatchObject({ ok: false, error: "not_found", fields: { price: "unavailable" } });
+  }
+});
+
+it("the price is read at the instant of the clock, like the rate, the rule and the book", async () => {
+  await setRow(
+    JSON.stringify({
+      v: 1,
+      unit: "gb_month",
+      entries: [
+        { from: "1970-01-01T00:00:00.000Z", usd: "0.05", by: null },
+        { from: "2026-11-11T07:00:00.000Z", usd: "0.10", by: null },
+      ],
+    }),
+  );
+  const before = await asRole(t, "web_rw", (tx) => snapshotPrice(tx, "BD", null, clockAt(T0)));
+  const after = await asRole(t, "web_rw", (tx) =>
+    snapshotPrice(tx, "BD", null, clockAt("2026-11-11T08:00:00.000Z")),
+  );
+  expect(before.ok && after.ok).toBe(true);
+  if (!before.ok || !after.ok) return;
+  expect(after.value.perGbMonthMinor).toBeGreaterThan(before.value.perGbMonthMinor);
+});
+
+it("carries the base and the steps of the unit price, adding up to the price", async () => {
+  await setRow('{"usd":"0.05","unit":"gb_month"}');
+  const r = await asRole(t, "web_rw", (tx) => snapshotPrice(tx, "BD", null, clockAt(T0)));
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+  const b = r.value.breakdown;
+  expect(b.totalMinor).toBe(r.value.perGbMonthMinor);
+  expect(b.steps.reduce((a, s) => a + s.amountMinor, b.baseMinor)).toBe(b.totalMinor);
+  expect(b.steps.map((s) => s.code)).toContain("korea_vat");
+});

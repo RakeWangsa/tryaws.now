@@ -1,4 +1,5 @@
 import type { ProductFacts } from "../orders/gates";
+import { isPositiveDecimal } from "../pricing/decimal";
 import type { Result } from "../types";
 import { validateZoneName } from "./records";
 
@@ -73,7 +74,12 @@ export function resolveDnsZone(
   config: DnsZoneConfig,
   price: { readonly usd: string } | undefined,
 ): Result<ResolvedDnsZone> {
-  if (price === undefined || typeof price.usd !== "string" || !PRICE_TEXT.test(price.usd)) {
+  if (
+    price === undefined ||
+    typeof price.usd !== "string" ||
+    !PRICE_TEXT.test(price.usd) ||
+    !isPositiveDecimal(price.usd) // a zero price is no price (R16)
+  ) {
     return { ok: false, error: "validation", fields: { price: "unavailable" } };
   }
   return {

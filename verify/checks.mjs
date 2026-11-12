@@ -1037,6 +1037,16 @@ TASKS["WPU-M1"] = [
   repo,
 ];
 
+// WPU-M2: a metered charge is split like a purchase (spec 9.1): the metered snapshot day and the
+// unattached static IP hour post the base to revenue_aws_base and the VAT, fee and margin steps to their
+// own accounts, from the steps of the engine's quote, through the one posting builder that the purchase
+// and the renewal use. The price is read in the market of the customer's profile at the instant of the
+// clock, and a price of zero is no price anywhere (R16). Money path: the pricing split, the builder,
+// both metering jobs against the real ledger (core, with the database), the config price seed (db), the
+// hourly and daily jobs (scheduler) and the screens that show the prices (web). No AWS call. The core
+// and db suites need the local PostgreSQL (pnpm db:up).
+TASKS["WPU-M2"] = [specSync, baselineSync, lint, typecheck, format, core, db, scheduler, web, repo];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

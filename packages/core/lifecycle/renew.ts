@@ -2,8 +2,7 @@ import { lifecycleRepo, type LifecycleRow, type Tx } from "@tc/db";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
-import type { Posting } from "../ledger/types";
-import { accountFor } from "../pricing/index";
+import { salePostings } from "../ledger/sale-postings";
 import { planPriceFor } from "./plan-change";
 import { parseSnapshot, type PriceSnapshot } from "../pricing/snapshot";
 import { quoteInForce } from "../rates/in-force";
@@ -77,25 +76,12 @@ export async function renewSubscription(
     };
   }
 
-  const postings: Posting[] = [
-    {
-      account: { type: "customer_wallet", customerId: row.customerId },
-      direction: "debit",
-      amountMinor: total,
-    },
-    {
-      account: { type: "revenue_aws_base" },
-      direction: "credit",
-      amountMinor: BigInt(fresh.baseMinor),
-    },
-  ];
-  for (const step of fresh.steps) {
-    const amountMinor = BigInt(step.amountMinor);
-    if (amountMinor === 0n) continue; // a step of 0 posts no line
-    const type = accountFor(step.code);
-    if (type === undefined) throw new Error("lifecycle: a price step has no ledger account");
-    postings.push({ account: { type }, direction: "credit", amountMinor });
-  }
+  // WPU-M2: the split is built by the one builder that the purchase and the metered charge also use.
+  const postings = salePostings(row.customerId, {
+    totalMinor: total,
+    baseMinor: BigInt(fresh.baseMinor),
+    steps: fresh.steps.map((s) => ({ code: s.code, amountMinor: BigInt(s.amountMinor) })),
+  });
 
   const periodStart = row.periodEnd;
   const periodEnd = new Date(periodStart.getTime() + row.termDays * DAY_MS);

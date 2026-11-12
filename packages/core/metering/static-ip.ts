@@ -8,6 +8,8 @@ import {
 } from "@tc/db";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
+import { salePostings } from "../ledger/sale-postings";
+import { splitMeteredChargeMinor } from "../pricing/metering";
 import type { PostTransactionInput } from "../ledger/types";
 import type { Logger, RunTx } from "../operations/types";
 import { staticIpHourPrice, type StaticIpPrice } from "../products/static-ip-price";
@@ -17,7 +19,8 @@ import { UNPAID_TEMPLATE, dhakaDay } from "./run";
 // WPU-M1. A static IP that is not attached to a server is charged as Amazon Lightsail does: free while
 // attached, and USD 0.005 an hour (config price, converted by the pricing engine) once it has been
 // unattached for MORE than one hour. The posting is the existing metered_charge of snapshot storage
-// (wallet debit, revenue_aws_base credit); only the metric and the memo are new. One charge per IP and
+// (WPU-M2: split like a purchase, spec 9.1: the wallet debit, revenue_aws_base for the base and one
+// credit per VAT, fee or margin step above 0); only the metric and the memo are new. One charge per IP and
 // hour bucket under `meter:<resource>:static_ip_hour:<YYYY-MM-DDTHH>` (R7). Hours are Dhaka hours.
 
 export const STATIC_IP_METRIC = "static_ip_hour";
@@ -107,12 +110,12 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
     failed: 0,
   };
   let priceMissing = false;
-  const prices = new Map<string, bigint | null>();
+  const prices = new Map<string, StaticIpPrice | null>();
 
-  const priceOf = async (market: string): Promise<bigint | null> => {
+  const priceOf = async (market: string): Promise<StaticIpPrice | null> => {
     if (prices.has(market)) return prices.get(market) ?? null;
     const found = await deps.runTx((tx) => ops.price(tx, market, deps.clock));
-    const value = found.ok ? found.value.perHourMinor : null;
+    const value = found.ok ? found.value : null;
     prices.set(market, value);
     if (value === null) priceMissing = true;
     return value;
@@ -133,8 +136,10 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
           count.notDue += 1;
           continue;
         }
-        const price = await priceOf(row.market);
-        if (price === null) continue;
+        const quoted = await priceOf(row.market);
+        if (quoted === null) continue;
+        const price = quoted.perHourMinor;
+        const breakdown = quoted.breakdown;
         if (price === 0n) {
           count.skipped += 1;
           continue;
@@ -149,14 +154,11 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
               idempotencyKey: key,
               actor: { type: "system" },
               memo: STATIC_IP_MEMO,
-              postings: [
-                {
-                  account: { type: "customer_wallet", customerId: row.customerId },
-                  direction: "debit",
-                  amountMinor: price,
-                },
-                { account: { type: "revenue_aws_base" }, direction: "credit", amountMinor: price },
-              ],
+              // WPU-M2: the split of a purchase (spec 9.1), from the steps of the engine's quote.
+              postings: salePostings(row.customerId, {
+                totalMinor: price,
+                ...splitMeteredChargeMinor(price, breakdown),
+              }),
             });
             if (posted.ok) return "charged" as const;
             if (posted.error !== "insufficient_balance") return "failed" as const;
