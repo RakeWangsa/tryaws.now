@@ -29,6 +29,10 @@ function setup(role: AdminRole = "finance", over: Partial<PricingFlowDeps> = {})
       ok: true,
       value: { fxRate: "127", fromSamples: false, rows: [] },
     })) as never,
+    previewConfigPrice: vi.fn(async () => ({
+      ok: true,
+      value: { fxRate: "127", current: null, candidate: {}, deltaMinor: null },
+    })) as never,
     savePricingRule: vi.fn(async () => {
       order.push("save");
       return {

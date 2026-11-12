@@ -1,8 +1,5 @@
-import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseSshKeyInput } from "../../../../../server/ssh-key.ts";
 import {
@@ -14,16 +11,65 @@ import {
 
 // WPU-G10. The browser makes a key pair like the Lightsail console does: Ed25519 from Web Crypto, in the
 // OpenSSH formats. The private key is built here, in memory; nothing in this module sends it anywhere.
+// The real OpenSSH tool reading the file is proved in tests/repo/ssh-keygen-openssh.test.mjs (a test of an
+// app may not start a process, R1).
 const SEED = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
 const PUB = Uint8Array.from({ length: 32 }, (_, i) => 200 - i);
 
+/** The fields of an openssh-key-v1 file (no encryption): the public key and the 64 byte private part. */
+function readOpenSshFile(pem: string): { publicKey: Buffer; seed: Buffer; comment: string } {
+  const body = Buffer.from(
+    pem
+      .split("\n")
+      .filter((l) => l !== "" && !l.startsWith("-----"))
+      .join(""),
+    "base64",
+  );
+  let at = 15; // "openssh-key-v1\0"
+  const u32 = (): number => {
+    const n = body.readUInt32BE(at);
+    at += 4;
+    return n;
+  };
+  const str = (): Buffer => {
+    const n = u32();
+    const out = body.subarray(at, at + n);
+    at += n;
+    return out;
+  };
+  expect(str().toString()).toBe("none"); // cipher
+  expect(str().toString()).toBe("none"); // kdf
+  expect(str().length).toBe(0); // kdf options
+  expect(u32()).toBe(1); // one key
+  str(); // the public blob
+  const inner = str();
+  let i = 0;
+  const check1 = inner.readUInt32BE(i);
+  const check2 = inner.readUInt32BE(i + 4);
+  expect(check1).toBe(check2);
+  i += 8;
+  const take = (): Buffer => {
+    const n = inner.readUInt32BE(i);
+    i += 4;
+    const out = inner.subarray(i, i + n);
+    i += n;
+    return out;
+  };
+  expect(take().toString()).toBe("ssh-ed25519");
+  const publicKey = take();
+  const secret = take(); // seed and public key
+  const comment = take().toString();
+  // padding 1, 2, 3 ... to a multiple of 8
+  expect((inner.length - 0) % 8).toBe(0);
+  return { publicKey, seed: secret.subarray(0, 32), comment };
+}
+
 describe("the OpenSSH formats", () => {
   it("writes a public line of the type and the base64 blob that the key page accepts", () => {
-    const line = openSshPublicLineOf(PUB, "web-1");
+    const line = openSshPublicLineOf(PUB);
     expect(line.startsWith("ssh-ed25519 ")).toBe(true);
-    expect(line.endsWith(" web-1")).toBe(false); // the comment is dropped: the name is the customer's
-    const parsed = parseSshKeyInput({ name: "web-1", publicKey: line });
-    expect(parsed.ok).toBe(true);
+    expect(line.split(" ")).toHaveLength(2); // no comment: the name is the customer's, stored beside
+    expect(parseSshKeyInput({ name: "web-1", publicKey: line }).ok).toBe(true);
   });
 
   it("writes the private key as an unencrypted OpenSSH file with 70 column lines", () => {
@@ -33,14 +79,16 @@ describe("the OpenSSH formats", () => {
     expect(lines.at(-1)).toBe("-----END OPENSSH PRIVATE KEY-----");
     expect(lines.slice(1, -1).every((l) => l.length <= 70)).toBe(true);
     expect(pem.endsWith("\n")).toBe(true);
-    const body = Buffer.from(lines.slice(1, -1).join(""), "base64");
-    expect(body.subarray(0, 15).toString("latin1")).toBe("openssh-key-v1\0");
+    const parsed = readOpenSshFile(pem);
+    expect([...parsed.publicKey]).toEqual([...PUB]);
+    expect([...parsed.seed]).toEqual([...SEED]);
+    expect(parsed.comment).toBe("web-1");
   });
 
   it("refuses a seed or a public key of the wrong size", () => {
     expect(() => openSshPrivateKeyOf(new Uint8Array(31), PUB, "x")).toThrow(RangeError);
     expect(() => openSshPrivateKeyOf(SEED, new Uint8Array(33), "x")).toThrow(RangeError);
-    expect(() => openSshPublicLineOf(new Uint8Array(31), "x")).toThrow(RangeError);
+    expect(() => openSshPublicLineOf(new Uint8Array(31))).toThrow(RangeError);
   });
 
   it("names the file after the key and keeps only safe characters", () => {
@@ -61,30 +109,29 @@ describe("generateEd25519KeyPair (Web Crypto)", () => {
     expect(a.privateKey).not.toContain(a.publicKey.split(" ")[1] as string);
   });
 
-  const hasKeygen = spawnSync("ssh-keygen", ["-h"], { stdio: "ignore" }).error === undefined;
-  it.skipIf(!hasKeygen)(
-    "the private key file is read by ssh-keygen and gives the same public key (the real OpenSSH tool agrees)",
-    async () => {
-      const pair = await generateEd25519KeyPair("agree");
-      const dir = mkdtempSync(join(tmpdir(), "tc-keygen-"));
-      try {
-        const file = join(dir, "id");
-        writeFileSync(file, pair.privateKey, { mode: 0o600 });
-        const out = execFileSync("ssh-keygen", ["-y", "-f", file], { encoding: "utf8" }).trim();
-        expect(out.split(" ").slice(0, 2).join(" ")).toBe(
-          pair.publicKey.split(" ").slice(0, 2).join(" "),
-        );
-        // and the fingerprint is the SHA-256 of the blob, as the platform computes it
-        const parsed = parseSshKeyInput({ name: "agree", publicKey: pair.publicKey });
-        if (!parsed.ok) throw new Error("not accepted");
-        const blob = Buffer.from(pair.publicKey.split(" ")[1] as string, "base64");
-        const expected = createHash("sha256").update(blob).digest("base64").replace(/=+$/, "");
-        expect(parsed.value.fingerprint).toContain(expected);
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    },
-  );
+  it("the private part of the file belongs to the public line: the seed signs and the public key verifies", async () => {
+    const pair = await generateEd25519KeyPair("agree");
+    const file = readOpenSshFile(pair.privateKey);
+    const pkcs8 = Buffer.concat([
+      Buffer.from("302e020100300506032b657004220420", "hex"),
+      file.seed,
+    ]);
+    const secret = createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" });
+    // the public key derived from the seed is the one in the file and in the line
+    const jwk = createPublicKey(secret).export({ format: "jwk" });
+    const derived = Buffer.from(jwk.x as string, "base64url");
+    expect([...derived]).toEqual([...file.publicKey]);
+    const blob = Buffer.from(pair.publicKey.split(" ")[1] as string, "base64");
+    expect(blob.subarray(-32).equals(derived)).toBe(true);
+    const message = Buffer.from("proof");
+    const signature = sign(null, message, secret);
+    expect(verify(null, message, createPublicKey(secret), signature)).toBe(true);
+    // and the fingerprint the platform stores is the SHA-256 of that blob
+    const parsed = parseSshKeyInput({ name: "agree", publicKey: pair.publicKey });
+    if (!parsed.ok) throw new Error("not accepted");
+    const expected = createHash("sha256").update(blob).digest("base64").replace(/=+$/, "");
+    expect(parsed.value.fingerprint).toContain(expected);
+  });
 });
 
 describe("the module keeps the private key in the browser", () => {

@@ -78,7 +78,7 @@ function world(
     sshKeys: {
       list: async () => [],
       get: async () => null,
-      add: async (input) => {
+      add: async (input: { name: string; publicKey: string; fingerprint: string }) => {
         calls.push(`key.add:${input.name}:${input.publicKey.slice(0, 11)}`);
         if (over.add === "down") throw new Error("database down");
         if (over.add === "conflict") return { ok: false, error: "conflict" };

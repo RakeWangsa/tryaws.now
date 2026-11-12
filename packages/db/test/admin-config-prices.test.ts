@@ -1,4 +1,5 @@
 import { beforeAll, expect, it } from "vitest";
+import type { ConfigPriceInput } from "../repositories/admin/config-prices";
 import { adminRepos, type AdminActor, type AdminRepos } from "../repositories/admin/index";
 import { entryOfConfigPriceAt, parseConfigPriceValue } from "../repositories/config/config-price";
 import { readConfigPrices } from "../seed/config-prices";
@@ -27,14 +28,16 @@ beforeAll(async () => {
 });
 const as = <T>(fn: (r: AdminRepos) => Promise<T>, a: AdminActor = actor) =>
   runTransaction(t.db, (tx) => fn(adminRepos(tx, a)), { role: "admin_rw" });
-const input = (over: Record<string, unknown> = {}) => ({
-  market: "BD",
-  key: LB,
-  usd: "18",
-  effectiveFrom: T0,
-  at: T0,
-  ...over,
-});
+// `over` may hold values the type forbids on purpose (the refusal test), so the result is cast once here.
+const input = (over: Record<string, unknown> = {}): ConfigPriceInput =>
+  ({
+    market: "BD",
+    key: LB,
+    usd: "18",
+    effectiveFrom: T0,
+    at: T0,
+    ...over,
+  }) as ConfigPriceInput;
 const stored = async (key: string) =>
   (await t.pool.query("select value from settings where key = $1", [key])).rows;
 

@@ -144,6 +144,7 @@ describe("groupBlueprints", () => {
     id,
     kind,
     name,
+    minPower: null,
     version: null,
     loginUser: "x",
   });

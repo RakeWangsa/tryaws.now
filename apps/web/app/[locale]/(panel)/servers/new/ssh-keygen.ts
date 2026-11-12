@@ -59,7 +59,7 @@ function publicBlob(publicKey: Uint8Array): Uint8Array {
  * The public key as one line for authorized_keys: the type and the base64 blob. The comment is left out
  * on purpose: the key's name is the customer's own text and is stored beside the key, not inside it.
  */
-export function openSshPublicLineOf(publicKey: Uint8Array, _comment: string): string {
+export function openSshPublicLineOf(publicKey: Uint8Array): string {
   sized(publicKey, PUBLIC_BYTES, "the public key");
   return `${TYPE} ${base64(publicBlob(publicKey))}`;
 }
@@ -142,5 +142,5 @@ export async function generateEd25519KeyPair(comment: string): Promise<Generated
   // The seed is not kept: the only copy of the private key is the file text above.
   seed.fill(0);
   pkcs8.fill(0);
-  return { publicKey: openSshPublicLineOf(publicKey, comment), privateKey };
+  return { publicKey: openSshPublicLineOf(publicKey), privateKey };
 }

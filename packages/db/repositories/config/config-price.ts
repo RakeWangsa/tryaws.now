@@ -58,7 +58,6 @@ export interface ConfigPriceRow {
 
 export const isConfigPriceKey = (v: unknown): v is ConfigPriceKey =>
   typeof v === "string" && (CONFIG_PRICE_KEYS as readonly string[]).includes(v);
-const isUnit = (v: unknown): v is ConfigPriceUnit => v === "gb_month" || v === "month";
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
