@@ -12,6 +12,7 @@
   "dependencies": {
     "@tc/aws": "workspace:*",
     "@tc/core": "workspace:*",
-    "@tc/db": "workspace:*"
+    "@tc/db": "workspace:*",
+    "@tc/notify": "workspace:*"
   }
 }

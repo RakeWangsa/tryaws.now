@@ -93,6 +93,43 @@ const security: TemplateDef = {
   }),
 };
 
+// The longest reply an admin can send (MAX_REPLY of apps/admin/server/support-flow.ts).
+const SUPPORT_REPLY_MAX = 5000;
+
+// WPU-D4: the family a waitlist entry was made for (resources.family) as a product word, and the page
+// where the customer orders it. An unknown family reads as the generic "Cloud Server" and links to the
+// dashboard (the notice never names a family it cannot spell).
+const FAMILY_PRODUCTS: Readonly<Record<string, ProductKey>> = {
+  linux_instance: "instance",
+  windows_instance: "instance",
+  database: "database",
+  disk: "disk",
+  bucket: "bucket",
+  load_balancer: "load_balancer",
+  container_service: "container_service",
+  cdn: "cdn",
+  static_ip: "static_ip",
+  dns_zone: "dns_zone",
+  domain: "domain",
+};
+const FAMILY_PATHS: Readonly<Record<string, string>> = {
+  linux_instance: "/servers/new",
+  windows_instance: "/servers/new",
+  database: "/databases",
+  disk: "/servers",
+  bucket: "/storage",
+  load_balancer: "/load-balancers",
+  container_service: "/containers",
+  cdn: "/cdn",
+  static_ip: "/servers",
+  dns_zone: "/dns",
+  domain: "/domains",
+};
+
+// Own keys only: "constructor" and "__proto__" are valid keys of the family field.
+const own = <T>(table: Readonly<Record<string, T>>, key: string): T | undefined =>
+  Object.hasOwn(table, key) ? table[key] : undefined;
+
 export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
   welcome: {
     spec: {},
@@ -317,6 +354,37 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
       domain: s(d.domain).toLowerCase(),
       days: h.n(d.days),
       date: h.d(d.expiresAt),
+    }),
+  },
+  // WPU-D4: the text is written by an admin; the request id only keeps the row tied to its request.
+  support_reply: {
+    spec: { requestId: f.uuid, body: f.multiline(SUPPORT_REPLY_MAX) },
+    // A visitor has no bell and no phone: the email is the whole message.
+    channels: () => ["email"],
+    path: fixed("/support"),
+    cta: "open_support",
+    vars: (d) => ({ message: s(d.body) }),
+  },
+  // WPU-D4 (spec 12): told on day 7 and day 12 after the zone was made; removed on day 14.
+  dns_delegation_notice: {
+    spec: { domain: f.domain, day: f.oneOf(7, 12), removeAt: f.instant },
+    channels: () => ek,
+    path: fixed("/dns"),
+    cta: "open_dns",
+    vars: (d, h) => ({
+      domain: s(d.domain).toLowerCase(),
+      days: h.n(d.day),
+      date: h.d(d.removeAt),
+    }),
+  },
+  waitlist_capacity_available: {
+    spec: { productFamily: f.key, region: f.region },
+    channels: () => ek,
+    path: (d) => own(FAMILY_PATHS, s(d.productFamily)) ?? "/dashboard",
+    cta: "order_now",
+    vars: (d, h) => ({
+      product: h.product(own(FAMILY_PRODUCTS, s(d.productFamily)) ?? "instance"),
+      region: h.region(d.region),
     }),
   },
 };

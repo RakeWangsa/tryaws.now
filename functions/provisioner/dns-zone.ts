@@ -1,13 +1,21 @@
-import { AwsError, createDnsZoneAdapter, type ProductAdapter, type Route53Port } from "@tc/aws";
+import {
+  AwsError,
+  createDnsZoneAdapter,
+  createRoute53Port,
+  type AwsAccess,
+  type ProductAdapter,
+  type Route53Port,
+} from "@tc/aws";
 import { markDnsZone, recordDnsZoneCreated } from "@tc/db";
 import type { OperationHooks } from "./types";
 
-// WPU-G6: the DNS zone family in the provisioner. A hosted zone lives in tc-dns and has no pool account
-// (see POOLLESS_FAMILIES of step.ts). The Route 53 client is NOT built yet (`@aws-sdk/client-route-53` is
-// not a dependency and needs a recorded reason; JOURNEY "Needs decision"): until it is, the port refuses
-// with a fixed local error, a create fails closed and its order is reversed. The dns_zone flag is off in
-// production (R12), so no order reaches this. The hooks below are real: they keep the `dns_zones` row in
-// step with the operations of the zone.
+// WPU-G6, WPU-D4: the DNS zone family in the provisioner. A hosted zone lives in tc-dns and has no pool
+// account (see POOLLESS_FAMILIES of step.ts). The Route 53 client (`@aws-sdk/client-route-53`, behind
+// Route53Port) assumes TcDnsProvisioner in the tc-dns account named by TC_DNS_ACCOUNT_ID and
+// TC_DNS_EXTERNAL_ID (plain values, 6.3; infra/stacks/workers.ts). Without a valid environment the port
+// refuses with a fixed local error, a create fails closed and its order is reversed (R16). The dns_zone
+// flag is off in production (R12). The hooks below keep the `dns_zones` row in step with the operations
+// of the zone.
 export interface DnsZonePorts {
   readonly route53: () => Route53Port;
 }
@@ -17,6 +25,35 @@ function notConfigured(): never {
 }
 
 const UNCONFIGURED: DnsZonePorts = { route53: notConfigured };
+
+// A trailing newline must not pass, so the checks are anchored and have no `m` flag.
+const DNS_ACCOUNT_ID = /^[0-9]{12}$/;
+const DNS_EXTERNAL_ID = /^[\w+=,.@:/-]{2,1224}$/;
+
+/**
+ * The port of the Lambda environment. Built per call (a failed build keeps nothing) and without a
+ * network call: the client connects, and assumes the role, on its first request.
+ */
+export function dnsZonePortsFromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+  access: AwsAccess<"provisioner">,
+): DnsZonePorts {
+  return {
+    route53: () => {
+      const awsAccountId = env.TC_DNS_ACCOUNT_ID;
+      const externalId = env.TC_DNS_EXTERNAL_ID;
+      if (
+        awsAccountId === undefined ||
+        !DNS_ACCOUNT_ID.test(awsAccountId) ||
+        externalId === undefined ||
+        !DNS_EXTERNAL_ID.test(externalId)
+      ) {
+        return notConfigured();
+      }
+      return createRoute53Port(access.route53({ awsAccountId, externalId }, "TcDnsProvisioner"));
+    },
+  };
+}
 
 export function dnsZoneAdapter(ports: DnsZonePorts = UNCONFIGURED): ProductAdapter<unknown> {
   return createDnsZoneAdapter(ports) as ProductAdapter<unknown>;

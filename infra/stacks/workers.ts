@@ -88,11 +88,16 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
   if (spec.dir === "provisioner") {
     // C.5: required stack configuration on staging and production (infra/lib/stage.ts).
     Object.assign(env, provisionerNetworkEnvironment(config));
+    // WPU-D4: the tc-dns account of the Route 53 client; plain values (6.3), the same as catalog-sync.
+    env.TC_DNS_ACCOUNT_ID = config.dnsAccountId;
+    env.TC_DNS_EXTERNAL_ID = config.dnsExternalId;
   }
   if (spec.dir === "notifier") {
     // Links in a message go only to the panel's own domain (16.14); the sender is the verified identity.
     env.PANEL_ORIGIN = `https://${config.webDomain}`;
     env.SES_FROM = config.sesFromAddress;
+    // WPU-D4: the same identity ARN that the IAM statement allows; no configuration set is defined yet.
+    env.SES_IDENTITY_ARN = config.sesIdentityArn;
   }
   if (spec.dir === "migrator") {
     // copyFiles (functionArgs) puts packages/db/migrations here, next to the bundle.

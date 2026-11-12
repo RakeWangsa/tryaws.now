@@ -344,6 +344,23 @@ describe("WP0-T3: database, proxy and roles", () => {
     expect(workers).toContain("env.SES_FROM = config.sesFromAddress");
   });
 
+  it("WPU-D4: tells the provisioner the tc-dns account and its ExternalId (plain values), and nothing else of it", () => {
+    expect(workers).toMatch(
+      /if \(spec\.dir === "provisioner"\) \{(?:(?!spec\.dir)[\s\S])*?env\.TC_DNS_ACCOUNT_ID = config\.dnsAccountId;\s*env\.TC_DNS_EXTERNAL_ID = config\.dnsExternalId;\s*\}/,
+    );
+    // the role to assume stays the function table's: the provisioner has the DNS provisioner role
+    expect(workers).toContain("assumableRoleArns(role, config)");
+  });
+
+  it("WPU-D4: allows ses:SendEmail on the one verified identity, to the notifier only, and tells it the ARN", () => {
+    expect(workers).toMatch(
+      /if \(spec\.dir === "notifier"\) \{\s*permissions\.push\(\{\s*actions: \["ses:SendEmail"\],\s*resources: \[config\.sesIdentityArn\],?\s*\}\);/,
+    );
+    expect(workers.match(/"ses:/g)).toHaveLength(1);
+    expect(workers).toContain("env.SES_IDENTITY_ARN = config.sesIdentityArn");
+    expect(workers).not.toMatch(/ses:\*|ses:Send\*/);
+  });
+
   it("runs the migrator at deploy time, in the VPC", () => {
     expect(workers).toContain('new sst.aws.Function("Migrator"');
     expect(workers).toContain('new aws.lambda.Invocation("MigratorRun"');

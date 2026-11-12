@@ -54,6 +54,9 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       top_up: "টপ আপ করুন",
       security: "নিরাপত্তা সেটিং",
       open_domain: "ডোমেইন দেখুন",
+      open_support: "সাপোর্ট পেজ খুলুন",
+      open_dns: "ডিএনএস পেজ খুলুন",
+      order_now: "এখনই অর্ডার করুন",
     },
     products: {
       instance: "ক্লাউড সার্ভার",
@@ -93,6 +96,9 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       top_up: "Top up",
       security: "Security settings",
       open_domain: "View domain",
+      open_support: "Open the support page",
+      open_dns: "Open the DNS page",
+      order_now: "Order now",
     },
     products: {
       instance: "Cloud Server",
@@ -291,6 +297,32 @@ export const BN: Catalog = {
     ],
     sms: "TiCON Cloud: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। রিনিউ করুন।",
   },
+  support_reply: {
+    subject: "আপনার সাপোর্ট অনুরোধের উত্তর",
+    headline: "সাপোর্টের উত্তর",
+    body: [
+      "TiCON Cloud সাপোর্ট আপনার অনুরোধের উত্তর দিয়েছে:",
+      "{message}",
+      "আরও সাহায্য লাগলে প্যানেলের সাপোর্ট পেজে জানান।",
+    ],
+  },
+  dns_delegation_notice: {
+    subject: "ডিএনএস জোন {domain}: নেমসার্ভার এখনো বদলানো হয়নি",
+    headline: "ডিএনএস জোন কাজ করছে না",
+    body: [
+      "{domain} এর ডিএনএস জোন তৈরি হয়েছে {days} দিন হলো, কিন্তু ডোমেইনের নেমসার্ভার এখনো এই জোনে পয়েন্ট করা নেই।",
+      "ডোমেইনের রেজিস্ট্রারের প্যানেলে গিয়ে {domain} এর নেমসার্ভার বদলে ডিএনএস পেজে দেখানো নেমসার্ভারগুলো দিন।",
+      "{date} তারিখের মধ্যে বদলানো না হলে জোনটি মুছে ফেলা হবে।",
+    ],
+  },
+  waitlist_capacity_available: {
+    subject: "{product}: এখন জায়গা আছে",
+    headline: "অপেক্ষার তালিকা: জায়গা খালি হয়েছে",
+    body: [
+      "আপনি {product} এর জন্য অপেক্ষায় ছিলেন। {region} লোকেশনে এখন জায়গা খালি হয়েছে।",
+      "এই জায়গা আপনার জন্য আলাদা করে রাখা হয়নি। অন্য কেউ আগে অর্ডার করলে ভরে যেতে পারে, তাই দেরি না করে অর্ডার করুন।",
+    ],
+  },
 };
 
 const SECURITY_EN = (what: string, subject: string, sms: string): TemplateText => ({
@@ -473,5 +505,31 @@ export const EN: Catalog = {
       "If you do not renew, you can lose the domain.",
     ],
     sms: "TiCON Cloud: {domain} ends in {days} days ({date}). Renew it.",
+  },
+  support_reply: {
+    subject: "Reply to your support request",
+    headline: "Reply from support",
+    body: [
+      "TiCON Cloud support has answered your request:",
+      "{message}",
+      "If you need more help, tell us on the support page of the panel.",
+    ],
+  },
+  dns_delegation_notice: {
+    subject: "DNS zone {domain}: name servers not changed yet",
+    headline: "Your DNS zone is not in use",
+    body: [
+      "The DNS zone for {domain} was created {days} days ago, but the name servers of the domain still do not point to it.",
+      "At the registrar of the domain, change the name servers of {domain} to the name servers shown on the DNS page.",
+      "If this is not done by {date}, the zone will be removed.",
+    ],
+  },
+  waitlist_capacity_available: {
+    subject: "{product}: space is available now",
+    headline: "Waitlist: space is available",
+    body: [
+      "You were waiting for a {product}. There is space in {region} now.",
+      "This space is not held for you. It can fill up if someone else orders first, so order soon.",
+    ],
   },
 };

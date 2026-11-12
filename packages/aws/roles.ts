@@ -17,6 +17,13 @@ export const LIGHTSAIL_ROLES = Object.freeze([
 ] as const);
 export type LightsailRole = (typeof LIGHTSAIL_ROLES)[number];
 
+/** The roles of the tc-dns account that reach Route 53 (WPU-D4). */
+export const DNS_ROLES = Object.freeze(["TcDnsProvisioner", "TcDnsReader"] as const);
+export type DnsRole = (typeof DNS_ROLES)[number];
+
+/** Route 53 has one global endpoint, in us-east-1 (the SCP and the role condition allow only it). */
+export const ROUTE53_REGION = "us-east-1";
+
 export const CALLER_ROLES = Object.freeze({
   provisioner: Object.freeze(["TcProvisioner", "TcDnsProvisioner"] as const),
   reader: Object.freeze(["TcReader", "TcDnsReader"] as const),

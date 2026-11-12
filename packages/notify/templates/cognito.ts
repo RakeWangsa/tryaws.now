@@ -30,7 +30,8 @@ interface Text {
   readonly body: readonly string[];
 }
 
-const TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>> = {
+// Exported for the wording test only (it is not part of the package entry).
+export const COGNITO_TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>> = {
   verify_code: {
     bn: {
       subject: "TiCON Cloud: আপনার ইমেইল যাচাইয়ের কোড",
@@ -115,7 +116,7 @@ export function renderCognitoMessage(
   if (kind === "admin_temp_password" && username === undefined) {
     throw new TypeError("cognito message: bad placeholder");
   }
-  const text = TEXTS[kind][locale];
+  const text = COGNITO_TEXTS[kind][locale];
   // "{username}" stays as it is: Cognito replaces it.
   const fill = (s: string) => s.replace("{code}", placeholders.code);
   const { html } = layoutEmail({
