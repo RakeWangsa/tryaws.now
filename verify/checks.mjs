@@ -1,6 +1,7 @@
 // What `pnpm verify` runs. A gate or task that is not listed here has no proof and fails (R16).
 import { resolve } from "node:path";
 import { readWorkspacePackages } from "../scripts/lib/changed-packages.mjs";
+import { MANUAL_PROOFS } from "./manual-proofs.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -2157,16 +2158,177 @@ TASKS["WP9-T5"] = [
   repo,
 ];
 
-export const GATES = {
-  M0: WP0_T1,
-  M1: [],
-  M2: [],
-  M3: [],
-  M4: [],
-  M5: [],
-  M6: [],
-  M7: [],
+// Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
+// (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
+const manual = (proofId) => {
+  if (!Object.hasOwn(MANUAL_PROOFS, proofId)) throw new Error(`unknown manual proof ${proofId}`);
+  return {
+    id: `manual-${proofId}`,
+    title: `Manual proof ${proofId} (${MANUAL_PROOFS[proofId].who}): ${MANUAL_PROOFS[proofId].description}`,
+    command: ["node", "scripts/manual-proof.mjs", proofId],
+  };
 };
+
+// A gate is the concatenation of the checks of its tasks, once per check id (the first one stays, so the
+// cheap shared checks come first). The same id with another command is a defect and stops the load.
+// A part is a task id (its TASKS block), or { checks } for a row without a TASKS block.
+function gate(...parts) {
+  const checks = parts.flatMap((part) => {
+    if (typeof part !== "string") return part.checks;
+    if (!Object.hasOwn(TASKS, part)) throw new Error(`gate part ${part} has no TASKS block`);
+    return TASKS[part];
+  });
+  const seen = new Map();
+  const out = [];
+  for (const check of checks) {
+    const command = check.command.join(" ");
+    if (seen.has(check.id)) {
+      if (seen.get(check.id) !== command) {
+        throw new Error(`check ${check.id} has two different commands`);
+      }
+      continue;
+    }
+    seen.set(check.id, command);
+    out.push(check);
+  }
+  return out;
+}
+
+// The days of docs/spec/I-timeline.md and the rows of docs/spec/E-backlog-and-prompts.md (E.3) and G.
+// Deviations from the first plan of this table are written in JOURNEY.md.
+// M1 (Wed 11): WP0, WP1, WP2, WPU. WP1-T3 (pricing engine) has no TASKS block: its vectors run in @tc/core.
+const M1 = gate(
+  "WP0-T1",
+  "WP0-T2",
+  { checks: [manual("wp0-t2-staging-deploy")] },
+  "WP0-T3",
+  { checks: [manual("wp0-t3-staging-database")] },
+  "WP0-T3b",
+  "WP0-T4",
+  { checks: [manual("wp0-t4-staging-outputs")] },
+  "WP0-T5",
+  { checks: [manual("wp0-t5-devops-confirmation")] },
+  "WP1-T1",
+  "WP1-T2",
+  { checks: [core] },
+  "WP1-T4",
+  "WP1-T5",
+  "WP2-T1",
+  "WP2-T2",
+  "WP2-T3",
+  "WP2-T4",
+  "WP2-T5",
+  { checks: [manual("m1-staging-signup-catalog")] },
+  "WPU-T1",
+  "WPU-T2",
+  "WPU-T3",
+  "WPU-T4",
+);
+// M2 (Thu 12): the money path and the first server.
+const M2 = gate(
+  "WP3-T1",
+  "WP3-T2",
+  "WP3-T3",
+  "WP3-T4",
+  { checks: [manual("wp3-t4-staging-topup")] },
+  "WP3-T5",
+  "WP4-T1",
+  "WP4-T2",
+  "WP4-T3",
+  "WP4-T4",
+  "WP4-T5",
+  { checks: [manual("wp4-t5-staging-ssh")] },
+  { checks: [manual("m2-ui-review")] },
+);
+// M3 (Fri 13): WP4 end, WP5. WP4-T6 has no TASKS block: its local part is the two checks of WP4-T5 and the
+// isolation test in tc-pool-dev is manual. WP0-T6 ("by Fri 13", E.3) is here, not in M5: the production
+// deploy workflow requires M5, so a proof "a tag deploy succeeded" inside M5 could never be recorded.
+const M3 = gate(
+  { checks: [specSync, baselineSync, lint, typecheck, format, bootstrapFirewall, isolationLocal] },
+  { checks: [manual("wp4-t6-isolation-pool-dev")] },
+  "WP4-T7",
+  { checks: [manual("wp4-t7-staging-playwright")] },
+  "WP5-T1",
+  "WP5-T2",
+  "WP5-T3",
+  "WP5-T4",
+  "WP5-T5",
+  { checks: [manual("m3-staging-notifications")] },
+  "WP5-T6",
+  "WP5-T6b",
+  "WP0-T6",
+  { checks: [manual("wp0-t6-production-tag-deploy")] },
+);
+// M4 (Sat 14): Gate A families (WP6), admin (WP8-T1 to T6), public pages (WPP).
+const M4 = gate(
+  "WP6-T1",
+  "WP6-T1b",
+  "WP6-T2",
+  "WP6-T2s",
+  "WP6-T3",
+  "WP6-T4",
+  "WP6-T4s",
+  { checks: [manual("m4-gate-a-staging-cycles")] },
+  "WP8-T1",
+  "WP8-T2",
+  "WP8-T3",
+  "WP8-T4",
+  "WP8-T5",
+  "WP8-T6",
+  "WPP-T1",
+  "WPP-T2",
+  "WPP-T3",
+  "WPP-T4",
+  { checks: [manual("m4-public-pages-staging")] },
+);
+// M5 (Sun 15): Gate B families, metering, reconciliation, the P1 admin screens. The production deploy
+// workflow runs this gate before it deploys, so M5 holds no proof that a production deploy exists.
+const M5 = gate(
+  "WP7-T1",
+  "WP7-T2",
+  "WP7-T3",
+  "WP7-T4",
+  { checks: [manual("m5-gate-b-staging-cycles")] },
+  "WP7-T5",
+  "WP7-T6",
+  { checks: [manual("m5-reconciler-staging")] },
+  "WP8-T7",
+);
+// M6 (Mon 16): hardening and beta. WP9-T1 (Section 15 evidence) and the K list are people's proofs.
+const M6 = gate(
+  { checks: [manual("wp9-t1-section15-evidence")] },
+  "WP9-T2",
+  "WP9-T3",
+  { checks: [manual("wp9-t3-pitr-restore")] },
+  "WP9-T4",
+  { checks: [manual("wp9-t4-runbooks-walked")] },
+  "WP9-T4b",
+  "WP9-T5",
+  { checks: [manual("wp9-t5-legal-final")] },
+  { checks: [manual("wp9-t6-production-tag-deploy")] },
+  { checks: [manual("wp9-t6-beta-payments")] },
+  { checks: [manual("wp9-go-no-go-list")] },
+);
+// M7 (Tue 17): everything of M0 to M6, then the launch items of WP10 (all people's proofs).
+const M7 = gate(
+  { checks: WP0_T1 },
+  { checks: M1 },
+  { checks: M2 },
+  { checks: M3 },
+  { checks: M4 },
+  { checks: M5 },
+  { checks: M6 },
+  {
+    checks: [
+      manual("wp10-t1-flags-as-decided"),
+      manual("wp10-t1-alarms-deliver"),
+      manual("wp10-t1-on-call-confirmed"),
+      manual("wp10-t2-first-day-report"),
+    ],
+  },
+);
+
+export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".
 export function quickChecks(packages) {

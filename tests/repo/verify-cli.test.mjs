@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
 import { GATES, TASKS, quickChecks } from "../../verify/checks.mjs";
+import { MANUAL_PROOFS } from "../../verify/manual-proofs.mjs";
 
 const verify = (...args) =>
   spawnSync("node", ["scripts/verify.mjs", ...args], { encoding: "utf8" });
@@ -27,7 +29,6 @@ it("gate M0 and task WP0-T1 are the same six checks", () => {
   ]);
 });
 it.each([
-  [["--gate", "M3"], "Gate M3 has no checks yet", "gate-M3"],
   [["--gate", "M9"], "Gate M9 does not exist", "gate-M9"],
   [["--task", "WP10-T2"], "Task WP10-T2 has no proof yet", "task-WP10-T2"],
 ])("fails closed for %j", (args, title, name) => {
@@ -1598,4 +1599,205 @@ it("task WP0-T6 is proven by the ci-deploy test and runs no deploy", () => {
   expect(commands).toContain("pnpm test --filter repo ci-deploy --no-passWithNoTests");
   expect(commands.join("\n")).not.toMatch(/\bsst\b|\baws\b/);
   expect(existsSync(resolve(import.meta.dirname, "ci-deploy.test.mjs"))).toBe(true);
+});
+
+const GATE_NAMES = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7"];
+const manualChecks = (gate) => GATES[gate].filter((c) => c.id.startsWith("manual-"));
+const proofIdOf = (check) => check.command[2];
+const manualRun = (...args) =>
+  spawnSync("node", ["scripts/manual-proof.mjs", ...args], { encoding: "utf8" });
+const recordsFile = (content) => {
+  const dir = mkdtempSync(join(tmpdir(), "tc-manual-proof-"));
+  const file = join(dir, "records.json");
+  writeFileSync(file, content);
+  return { file, remove: () => rmSync(dir, { recursive: true, force: true }) };
+};
+const VALID_RECORD = {
+  evidence: "Seen on staging by two people, written in JOURNEY.md",
+  recordedAt: "2026-11-10T21:05:00+06:00",
+  recordedBy: "Moshiur Rahman",
+};
+
+it("every gate M0 to M7 has checks", () => {
+  expect(Object.keys(GATES).sort()).toEqual(GATE_NAMES);
+  for (const gate of GATE_NAMES) expect(GATES[gate].length, gate).toBeGreaterThan(0);
+});
+it("no gate lists a check id twice, and no check id has two different commands anywhere", () => {
+  const commands = new Map();
+  for (const gate of GATE_NAMES) {
+    const ids = GATES[gate].map((c) => c.id);
+    expect(new Set(ids).size, `${gate} lists an id twice`).toBe(ids.length);
+  }
+  for (const check of [...Object.values(TASKS).flat(), ...Object.values(GATES).flat()]) {
+    const command = check.command.join(" ");
+    expect(commands.get(check.id) ?? command, check.id).toBe(command);
+    commands.set(check.id, command);
+  }
+});
+it("gate M7 holds every check of M0 to M6", () => {
+  const ids = new Set(GATES.M7.map((c) => c.id));
+  for (const gate of GATE_NAMES.slice(0, 7)) {
+    for (const check of GATES[gate]) expect(ids.has(check.id), `${gate}/${check.id}`).toBe(true);
+  }
+});
+it("each gate holds the checks of its tasks (the plan of docs/spec/I-timeline.md)", () => {
+  const holds = (gate, tasks) => {
+    const ids = new Set(GATES[gate].map((c) => c.id));
+    for (const task of tasks) {
+      for (const check of TASKS[task])
+        expect(ids.has(check.id), `${gate}/${task}/${check.id}`).toBe(true);
+    }
+  };
+  holds("M1", [
+    "WP0-T1",
+    "WP0-T2",
+    "WP0-T3",
+    "WP0-T3b",
+    "WP0-T4",
+    "WP0-T5",
+    "WP1-T1",
+    "WP1-T2",
+    "WP1-T4",
+    "WP1-T5",
+    "WP2-T1",
+    "WP2-T2",
+    "WP2-T3",
+    "WP2-T4",
+    "WP2-T5",
+    "WPU-T1",
+    "WPU-T2",
+    "WPU-T3",
+    "WPU-T4",
+  ]);
+  holds("M2", [
+    "WP3-T1",
+    "WP3-T2",
+    "WP3-T3",
+    "WP3-T4",
+    "WP3-T5",
+    "WP4-T1",
+    "WP4-T2",
+    "WP4-T3",
+    "WP4-T4",
+    "WP4-T5",
+  ]);
+  holds("M3", [
+    "WP0-T6",
+    "WP4-T7",
+    "WP5-T1",
+    "WP5-T2",
+    "WP5-T3",
+    "WP5-T4",
+    "WP5-T5",
+    "WP5-T6",
+    "WP5-T6b",
+  ]);
+  holds("M4", [
+    "WP6-T1",
+    "WP6-T1b",
+    "WP6-T2",
+    "WP6-T2s",
+    "WP6-T3",
+    "WP6-T4",
+    "WP6-T4s",
+    "WP8-T1",
+    "WP8-T2",
+    "WP8-T3",
+    "WP8-T4",
+    "WP8-T5",
+    "WP8-T6",
+    "WPP-T1",
+    "WPP-T2",
+    "WPP-T3",
+    "WPP-T4",
+  ]);
+  holds("M5", ["WP7-T1", "WP7-T2", "WP7-T3", "WP7-T4", "WP7-T5", "WP7-T6", "WP8-T7"]);
+  holds("M6", ["WP9-T2", "WP9-T3", "WP9-T4", "WP9-T4b", "WP9-T5"]);
+  expect(GATES.M1.map((c) => c.id)).toContain("core");
+});
+it("the production deploy gate M5 holds no proof that a production deploy exists", () => {
+  const text = JSON.stringify(GATES.M5);
+  expect(text).not.toMatch(/tag-deploy|wp0-t6|wp9-t6|wp10/);
+  expect(manualChecks("M3").map(proofIdOf)).toContain("wp0-t6-production-tag-deploy");
+  expect(manualChecks("M6").map(proofIdOf)).toContain("wp9-t6-production-tag-deploy");
+  expect(readFileSync(".github/workflows/deploy-production.yml", "utf8")).toContain(
+    "pnpm verify --gate M5",
+  );
+});
+it("every manual-proof check runs the script on a catalogue id with no extra argument", () => {
+  const used = new Set();
+  for (const gate of GATE_NAMES) {
+    for (const check of manualChecks(gate)) {
+      expect(check.command.slice(0, 2), check.id).toEqual(["node", "scripts/manual-proof.mjs"]);
+      expect(check.command.length, check.id).toBe(3);
+      expect(check.id).toBe(`manual-${proofIdOf(check)}`);
+      expect(Object.hasOwn(MANUAL_PROOFS, proofIdOf(check)), check.id).toBe(true);
+      used.add(proofIdOf(check));
+    }
+  }
+  // every catalogue entry is used by a gate, and its first gate is the gate that lists it first
+  expect([...used].sort()).toEqual(Object.keys(MANUAL_PROOFS).sort());
+  for (const [id, entry] of Object.entries(MANUAL_PROOFS)) {
+    const first = GATE_NAMES.find((gate) => manualChecks(gate).some((c) => proofIdOf(c) === id));
+    expect(entry.gate, id).toBe(first);
+    expect(entry.description.length, id).toBeGreaterThan(20);
+  }
+});
+it("verify/manual-proofs.json is committed empty: no gate passes on a recorded proof by default", () => {
+  expect(JSON.parse(readFileSync("verify/manual-proofs.json", "utf8"))).toEqual({});
+});
+it.each(Object.keys(MANUAL_PROOFS))(
+  "manual proof %s is BLOCKED (exit 2) with an empty json",
+  (id) => {
+    const empty = recordsFile("{}");
+    try {
+      const result = manualRun(id, "--records", empty.file);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toContain("BLOCKED");
+      expect(result.stdout).toContain(id);
+    } finally {
+      empty.remove();
+    }
+    expect(manualRun(id).status).toBe(2);
+  },
+);
+it.each(Object.keys(MANUAL_PROOFS))("manual proof %s passes only with a valid record", (id) => {
+  const valid = recordsFile(JSON.stringify({ [id]: VALID_RECORD }));
+  const other = recordsFile(JSON.stringify({ "some-other-id": VALID_RECORD }));
+  const broken = recordsFile(JSON.stringify({ [id]: { ...VALID_RECORD, evidence: "ok" } }));
+  try {
+    const passed = manualRun(id, "--records", valid.file);
+    expect(passed.status).toBe(0);
+    expect(passed.stdout).not.toContain("BLOCKED");
+    expect(manualRun(id, "--records", other.file).status).toBe(2);
+    expect(manualRun(id, "--records", broken.file).status).toBe(2);
+  } finally {
+    valid.remove();
+    other.remove();
+    broken.remove();
+  }
+});
+it("manual-proof refuses an unknown id, no id, an unreadable file and a file that is not an object", () => {
+  const list = recordsFile("[]");
+  const bad = recordsFile("{ not json");
+  try {
+    expect(manualRun("no-such-proof").status).toBe(2);
+    expect(manualRun().status).toBe(2);
+    expect(
+      manualRun("wp0-t2-staging-deploy", "--records", "/nonexistent/records.json").status,
+    ).toBe(2);
+    expect(manualRun("wp0-t2-staging-deploy", "--records", list.file).status).toBe(2);
+    expect(manualRun("wp0-t2-staging-deploy", "--records", bad.file).status).toBe(2);
+  } finally {
+    list.remove();
+    bad.remove();
+  }
+});
+it("a gate with a manual proof and no record fails (BLOCKED is a failure, never a pass)", () => {
+  // Run the manual-proof checks of M1 exactly as the gate runs them: each must exit 2.
+  for (const check of manualChecks("M1")) {
+    expect(spawnSync(check.command[0], check.command.slice(1), { encoding: "utf8" }).status).toBe(
+      2,
+    );
+  }
 });
