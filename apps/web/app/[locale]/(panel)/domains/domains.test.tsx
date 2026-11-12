@@ -84,6 +84,20 @@ describe("/domains/[name]", () => {
     expect(html).toContain('value="on"');
     expect(render("domain_detail.verified")).toContain("Auto-renew is on");
   });
+  it("offers the verification e-mail again only while the check is open, and the name servers only for a registered domain (WPU-B2)", () => {
+    const open = render("domain_detail.ready");
+    expect(open).toContain("Send the e-mail again");
+    expect(open).toContain('name="nameServers"');
+    expect(open).toContain('name="confirmName"');
+    // The check is done: no resend button, the name server form stays.
+    const done = render("domain_detail.verified");
+    expect(done).not.toContain("Send the e-mail again");
+    expect(done).toContain('name="nameServers"');
+    // A domain that is not registered yet has neither.
+    expect(render("domain_detail.not_found")).not.toContain('name="nameServers"');
+    expect(render("domain_detail.ready", "bn")).toContain("নেম সার্ভার বদল");
+    expect(open).not.toContain("style=");
+  });
   it("has no delete anywhere: a domain expires (R13)", () => {
     const html = render("domain_detail.ready");
     expect(html).toContain("We never delete a domain");

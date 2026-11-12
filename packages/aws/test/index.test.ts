@@ -33,6 +33,8 @@ it("exports exactly the public API and no credentials function", () => {
     "createLightsailReadSource",
     "createLinuxInstanceAdapter",
     "createLoadBalancerAdapter",
+    "createRoute53DomainsClient",
+    "createRoute53DomainsPort",
     "createSqsClient",
     "createSqsSend",
     "createWindowsInstanceAdapter",

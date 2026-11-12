@@ -18,7 +18,7 @@ import { cdnAdapter } from "./cdn";
 import { containerServiceAdapter } from "./container";
 import { databaseAdapter } from "./database";
 import { dnsZoneAdapter, dnsZoneHooks } from "./dns-zone";
-import { domainAdapter } from "./domain";
+import { domainAdapter, domainHooks } from "./domain";
 import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
@@ -146,7 +146,12 @@ function buildDeps(): StepDeps {
     ]),
     // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
     destructiveGuard,
-    hooks: composeHooks(orderHooks({ clock }), lifecycleHooks({ clock }), dnsZoneHooks()),
+    hooks: composeHooks(
+      orderHooks({ clock }),
+      lifecycleHooks({ clock }),
+      dnsZoneHooks(),
+      domainHooks(),
+    ),
     access: createAwsAccess({ caller: "provisioner" }),
     env: config.env,
     log: (e: LogEvent) => console.log(JSON.stringify(e)),

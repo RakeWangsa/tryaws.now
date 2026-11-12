@@ -11,7 +11,7 @@ import {
 
 it("every kind has one row of info and nothing else has", () => {
   expect(Object.keys(OPERATION_KIND_INFO).sort()).toEqual([...OPERATION_KINDS].sort());
-  expect(OPERATION_KINDS).toHaveLength(41);
+  expect(OPERATION_KINDS).toHaveLength(44);
   expect(OPERATION_KINDS).toContain("rename");
   expect(OPERATION_KINDS).toContain("reject_operation");
 });
@@ -60,6 +60,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
     "rename",
     "replace_certificate",
     "request_certificate",
+    "resend_verification",
     "reset_cache",
     "schedule_plan_change",
     "set_auto_backup",
@@ -71,6 +72,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
     "set_db_options",
     "set_db_parameters",
     "set_lb_attributes",
+    "set_name_servers",
     "set_ports",
     "set_targets",
     "start",
@@ -84,6 +86,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
       "final_snapshot",
       "purge_snapshots",
       "reject_operation",
+      "renew_domain",
       "resume",
       "scale_container",
       "suspend",
@@ -182,5 +185,23 @@ it("removing or replacing a certificate and the database parameters are customer
     expect(
       requiresApproval(kind, new Date("2026-11-15T00:00:00Z"), new Date("2026-12-01T18:00:00Z")),
     ).toBe(false);
+  }
+});
+
+// WPU-B2. Renewal costs money and the renewal price rule is open (JOURNEY), so `renew_domain` is never
+// requested by a customer: only the lifecycle will enqueue it. The two other domain kinds change no money
+// and delete nothing.
+it("the domain kinds: renew_domain is system-only, resend_verification and set_name_servers are customer actions, none destructive (WPU-B2)", () => {
+  expect(OPERATION_KIND_INFO.renew_domain).toEqual({
+    method: "action",
+    destructive: false,
+    customerRequestable: false,
+  });
+  for (const kind of ["resend_verification", "set_name_servers"] as const) {
+    expect(OPERATION_KIND_INFO[kind]).toEqual({
+      method: "action",
+      destructive: false,
+      customerRequestable: true,
+    });
   }
 });

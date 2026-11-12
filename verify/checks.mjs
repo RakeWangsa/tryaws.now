@@ -2899,6 +2899,25 @@ TASKS["WPU-I5"] = [
   repo,
 ];
 
+// WPU-B2: domain registration flow and zone lifecycle (audit 2, items 24 and 25). The Route 53 Domains
+// client and the three domain actions (aws), the status sync and the name server rule (core), the hooks
+// (provisioner), the unique active name (migration 0024, db with the local PostgreSQL), the web cores and
+// the screens (web), the zone lifecycle tests (core). No AWS call is made by any of them.
+TASKS["WPU-B2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  web,
+  admin,
+  repo,
+];
+
 // WPU-C1: the date of supply on the Mushak 6.3 and the Mushak 6.7 credit note (migration 0023, db with the local
 // PostgreSQL): the renderer (core), the credit note issued by the scheduler for a reversed charge with an
 // invoice (core DB tests with the real roles, scheduler), the pages (web). No AWS call.

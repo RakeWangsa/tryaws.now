@@ -269,6 +269,9 @@ importers:
       '@aws-sdk/client-lightsail':
         specifier: 3.1166.0
         version: 3.1166.0
+      '@aws-sdk/client-route-53-domains':
+        specifier: 3.1166.0
+        version: 3.1166.0
       '@aws-sdk/client-sqs':
         specifier: 3.1166.0
         version: 3.1166.0
@@ -415,6 +418,10 @@ packages:
 
   '@aws-sdk/client-lightsail@3.1166.0':
     resolution: {integrity: sha512-mX4agjNN0U3hAOct0piWdiVKJ1cohWtYg3xunHfdU3u8tc4jRukBOKv1rIPFARpBBhO8L2v/T0fmRfQ/HCKjmw==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-route-53-domains@3.1166.0':
+    resolution: {integrity: sha512-DeYk78B4Ny/REMFZpeQI9jzkQF3mTEitthXRY+33p8nDoRUYmVyVqA4oWmlG2aQv449xZ4bG7HbZG8cIbnygRA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-s3@3.1159.0':
@@ -3438,6 +3445,17 @@ snapshots:
       tslib: 2.9.1
 
   '@aws-sdk/client-lightsail@3.1166.0':
+    dependencies:
+      '@aws-sdk/core': 3.981.0
+      '@aws-sdk/credential-provider-node': 3.972.96
+      '@aws-sdk/types': 3.975.1
+      '@smithy/core': 3.40.0
+      '@smithy/fetch-http-handler': 5.8.1
+      '@smithy/node-http-handler': 4.14.2
+      '@smithy/types': 4.20.0
+      tslib: 2.9.1
+
+  '@aws-sdk/client-route-53-domains@3.1166.0':
     dependencies:
       '@aws-sdk/core': 3.981.0
       '@aws-sdk/credential-provider-node': 3.972.96

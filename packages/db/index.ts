@@ -53,6 +53,12 @@ export {
   zoneNameDomainHold,
 } from "./repositories/domain-names";
 export { markDnsZone, recordDnsZoneCreated } from "./repositories/dns-zone-sync";
+export {
+  applyDomainFacts,
+  readDomainSyncView,
+  type DomainFacts,
+  type DomainSyncView,
+} from "./repositories/domain-sync";
 export { customerOperationKey } from "./repositories/customer/operations";
 export { NOTIFICATIONS_SHOWN } from "./repositories/customer/notifications";
 export type { NotificationRow, NotificationsRepo } from "./repositories/customer/notifications";
