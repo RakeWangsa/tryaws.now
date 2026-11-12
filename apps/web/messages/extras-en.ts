@@ -174,6 +174,14 @@ export const extrasEn: Same<typeof extrasBn> = {
       latest: "Latest: {value}",
       chart: "Line chart of {name}, {count} points",
       unit: { percent: "%", bytes: "bytes", count: "times" },
+      bytesUnit: { B: "bytes", KB: "KB", MB: "MB", GB: "GB" },
+      status: {
+        ok: "Passing",
+        recovered: "Failed earlier, passing now",
+        failed: "Failing now",
+        unknown: "Not known",
+      },
+      noPoints: "No usable data in this time range.",
       unavailable: {
         title: "Metrics are not available now",
         body: "Look again in a moment. Your server is not affected.",

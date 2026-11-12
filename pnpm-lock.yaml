@@ -69,6 +69,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@aws-sdk/client-lambda':
+        specifier: 3.1166.0
+        version: 3.1166.0
       '@aws-sdk/client-sqs':
         specifier: 3.1166.0
         version: 3.1166.0
@@ -389,6 +392,10 @@ importers:
         version: 8.5.32
 
 packages:
+
+  '@aws-sdk/client-lambda@3.1166.0':
+    resolution: {integrity: sha512-dJmEol6/0IMZCL7o/BnVK+rRfcMf6xdAvr/WW1a3IqVz5wYc+udMcZ4nTzg+E31Jz9NHXoRkm3nZVLumqwAj/g==}
+    engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-lightsail@3.1166.0':
     resolution: {integrity: sha512-mX4agjNN0U3hAOct0piWdiVKJ1cohWtYg3xunHfdU3u8tc4jRukBOKv1rIPFARpBBhO8L2v/T0fmRfQ/HCKjmw==}
@@ -3119,6 +3126,17 @@ packages:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
+
+  '@aws-sdk/client-lambda@3.1166.0':
+    dependencies:
+      '@aws-sdk/core': 3.981.0
+      '@aws-sdk/credential-provider-node': 3.972.96
+      '@aws-sdk/types': 3.975.1
+      '@smithy/core': 3.40.0
+      '@smithy/fetch-http-handler': 5.8.1
+      '@smithy/node-http-handler': 4.14.2
+      '@smithy/types': 4.20.0
+      tslib: 2.9.1
 
   '@aws-sdk/client-lightsail@3.1166.0':
     dependencies:

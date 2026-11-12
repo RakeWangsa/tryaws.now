@@ -296,6 +296,7 @@ export function makeHarness(): Harness {
     authLimitKey: LIMIT_KEY,
     kyc: null,
     account: null,
+    reader: null,
   };
 
   const otpDeps = {

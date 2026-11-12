@@ -1,10 +1,16 @@
 import type { ReaderPort } from "./extras-view.ts";
+import { getRuntime } from "./runtime.ts";
 
 /**
- * The binding of the `reader` function for the Metrics tab. The web tier has no AWS client and no
- * Lambda client (R1, no new dependency), so until the invoke binding of WP0-T4 exists this answers
- * null and the tab shows its "not available" state (R16). See JOURNEY.md, WP5-T6, Needs decision.
+ * The binding of the `reader` function for the Metrics tab (WPU-G4): the invoke port of
+ * reader-invoke.ts, built once by the runtime. The web tier has no AWS client for provisioning (R1).
+ * null = not configured, and the tab shows its "not available" state (R16); a runtime that cannot be
+ * built is the same.
  */
-export function getReaderPort(): ReaderPort | null {
-  return null;
+export async function getReaderPort(): Promise<ReaderPort | null> {
+  try {
+    return (await getRuntime()).reader;
+  } catch {
+    return null;
+  }
 }

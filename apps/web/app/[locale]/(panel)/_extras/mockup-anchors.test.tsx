@@ -90,8 +90,14 @@ describe("the screens of WP5-T6 follow the shared mockup (U1)", () => {
     const html = (id: string, locale: "bn" | "en") =>
       (STATE_RENDERERS[id] as (l: "bn" | "en") => string)(locale);
     expect(html("tabs.metrics_unavailable", "en")).toContain("Metrics are not available now");
-    expect(html("tabs.ready", "en")).toContain("<polyline");
-    expect(html("tabs.ready", "bn")).toContain("<polyline");
+    // WPU-G4: an SVG with a value axis, a time axis and an area, and no chart library or script.
+    for (const locale of ["en", "bn"] as const) {
+      const chart = html("tabs.ready", locale);
+      expect(chart).toContain('viewBox="0 0 640 220"');
+      expect(chart).toContain("<path");
+      expect(chart).toContain("<title>");
+      expect(chart).not.toContain("<polyline");
+    }
   });
 
   it("the Destroy tab names the keep and delete lists and the Billing tab shows the exact total", () => {

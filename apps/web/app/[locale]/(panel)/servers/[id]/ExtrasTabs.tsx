@@ -2,17 +2,17 @@ import { Button, Card, DataTable, DateText, EmptyState, MoneyText, PriceBreakdow
 import type { ReactNode } from "react";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import type {
   BackupItem,
   DiskItem,
   InvoiceItem,
   MetricRangeKey,
-  MetricSeriesView,
   MetricsScreen,
   ServerExtras,
 } from "../../../../../server/extras-view.ts";
 import { METRIC_RANGE_KEYS } from "../../../../../server/extras-view.ts";
+import { MetricChart } from "./MetricsCharts.tsx";
 import {
   ActionNotice,
   AddDiskForm,
@@ -239,48 +239,16 @@ function StorageTab({ data, actions }: { data: ServerExtras; actions: ExtrasActi
   );
 }
 
-const W = 320;
-const H = 80;
-
-/** One line chart as inline SVG: no script, no inline style (U4). */
-function Sparkline({ series, name }: { series: MetricSeriesView; name: string }) {
-  const t = useTranslations("Extras.metrics");
-  const format = useFormatter();
-  const values = series.points.map((p) => p.value);
-  const max = Math.max(...values, 1e-9);
-  const min = Math.min(...values, 0);
-  const span = max - min || 1;
-  const step = values.length > 1 ? W / (values.length - 1) : 0;
-  const points = values
-    .map((v, i) => `${(i * step).toFixed(1)},${(H - ((v - min) / span) * H).toFixed(1)}`)
-    .join(" ");
-  const last = values[values.length - 1] ?? 0;
-  const text = `${format.number(last, { maximumFractionDigits: 1 })} ${t(`unit.${series.unit}`)}`;
-  return (
-    <Card className="mb-3">
-      <h3 className="mergecolor h5">{name}</h3>
-      <svg
-        className="w-100 mergecolor"
-        viewBox={`0 0 ${W} ${H}`}
-        role="img"
-        aria-label={t("chart", { name, count: values.length })}
-        preserveAspectRatio="none"
-      >
-        <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" />
-      </svg>
-      <p className="seccolor mb-0">{t("latest", { value: text })}</p>
-    </Card>
-  );
-}
-
 function MetricsTab({
   serverId,
   metrics,
   locale,
+  numerals,
 }: {
   serverId: string;
   metrics: MetricsScreen;
   locale: Locale;
+  numerals: Numerals;
 }) {
   const t = useTranslations("Extras.metrics");
   const range: MetricRangeKey = metrics.state === "unavailable" ? "1h" : metrics.range;
@@ -306,7 +274,14 @@ function MetricsTab({
         <EmptyState title={t("empty.title")} description={t("empty.body")} />
       ) : (
         metrics.series.map((series) => (
-          <Sparkline key={series.metric} series={series} name={t(series.metric)} />
+          <MetricChart
+            key={series.metric}
+            series={series}
+            name={t(series.metric)}
+            locale={locale}
+            numerals={numerals}
+            range={metrics.range}
+          />
         ))
       )}
     </>
@@ -454,7 +429,7 @@ export function useExtraTabs(
     {
       id: "metrics",
       title: t("metrics"),
-      content: <MetricsTab serverId={data.id} metrics={metrics} locale={locale} />,
+      content: <MetricsTab serverId={data.id} metrics={metrics} locale={locale} numerals={numerals} />,
     },
     {
       id: "billing",
