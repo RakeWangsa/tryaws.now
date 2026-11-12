@@ -1,5 +1,6 @@
 export {
   BLUEPRINT_FAMILY,
+  DEFAULT_APP_MIN_POWER,
   DEFAULT_ENABLED_BLUEPRINTS,
   EMPTY_ALLOW_LIST,
   groupBlueprints,
@@ -7,8 +8,10 @@ export {
   isBlueprintId,
   isImageOn,
   mapBlueprint,
+  minPowerOf,
   offeredImages,
   optionOf,
+  planFitsImage,
   type BlueprintCatalogRow,
   type BlueprintGroups,
   type BlueprintKind,

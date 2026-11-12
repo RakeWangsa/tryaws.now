@@ -5,6 +5,7 @@ import {
   readConfigPrices,
   readImage,
   readImageSwitches,
+  readTierLimits,
   readTld,
   zoneNameDomainHold,
   type CustomerRepos,
@@ -18,7 +19,14 @@ import { isFeatureFlag } from "../flags/keys";
 import { checkCdnOrigin, parseCdnConfig, resolveCdn } from "../products/cdn";
 import { checkDiskServer, parseDiskConfig, resolveDisk } from "../products/disk";
 import { resolveProduct, type ResolvedProduct } from "../products/instance";
-import { isImageOn, optionOf } from "../products/blueprints";
+import {
+  EMPTY_ALLOW_LIST,
+  isImageOn,
+  minPowerOf,
+  optionOf,
+  planFitsImage,
+  type ImageAllowList,
+} from "../products/blueprints";
 import { checkRestore, type RestoreCandidate } from "../products/restore";
 import {
   checkLbTargets,
@@ -27,7 +35,7 @@ import {
   type TargetCandidate,
 } from "../products/load-balancer";
 import type { Result } from "../types";
-import { checkCustomer, checkLimits, tierLimitsOf, type CustomerFacts } from "./gates";
+import { checkCustomer, checkLimits, tierLimitsFromStored, type CustomerFacts } from "./gates";
 
 const INSTANCE_FAMILIES = ["linux_instance", "windows_instance"] as const;
 
@@ -101,8 +109,20 @@ export async function gateImage(
   if (stored.state === "invalid") return invalid;
   const row = await readImage(tx, product.region, id);
   const option = row === null || !row.active ? null : optionOf(row);
-  const switches = stored.state === "ok" ? stored.switches : { on: [], off: [] };
-  return option !== null && isImageOn(switches, id) ? { ok: true, value: true } : invalid;
+  const switches: ImageAllowList = stored.state === "ok" ? stored.switches : EMPTY_ALLOW_LIST;
+  if (option === null || !isImageOn(switches, id)) return invalid;
+  // WPU-G10. Lightsail refuses an app on a bundle below its minimum power, so the plan must reach the
+  // minimum of the image (the admin's override, else what AWS reported, else the default of the core).
+  // A plan whose power is unknown does not fit an image that has a minimum (R16). Checked again by the
+  // purchase, so a raised minimum between the draft and the purchase stops the sale before any write.
+  const plan = await readCatalogProduct(tx, product.productId);
+  const power = (plan?.specs as { power?: unknown } | null | undefined)?.power;
+  const planPower =
+    typeof power === "number" && Number.isSafeInteger(power) && power >= 0 ? power : null;
+  if (!planFitsImage(minPowerOf(option, switches), planPower)) {
+    return { ok: false, error: "validation", fields: { productId: "plan_too_small" } };
+  }
+  return { ok: true, value: true };
 }
 
 /**
@@ -120,7 +140,11 @@ export async function gateProduct(
   if (!(await isEnabledIn(tx, product.featureFlag, customer.market))) {
     return { ok: false, error: "flag_off" };
   }
-  const limits = tierLimitsOf(customer.riskTier);
+  // WPU-G10: the limits of the tier are the market's settings row, or the defaults when it has none.
+  const limits = tierLimitsFromStored(
+    customer.riskTier,
+    await readTierLimits(tx, customer.market, customer.riskTier),
+  );
   if (!limits.ok) return limits;
   // A domain and a DNS zone are no server: they take no instance of the tier limit (WP7-T4, WPU-G6).
   if (product.family === "domain" || product.family === "dns_zone") {
@@ -209,6 +233,7 @@ export async function resolveOrderProduct(
   customerId: string,
   family: string,
   rawConfig: unknown,
+  at: Date = new Date(),
 ): Promise<Result<ResolvedProduct>> {
   if (family === "domain") {
     const config = parseDomainConfig(rawConfig);
@@ -234,7 +259,8 @@ export async function resolveOrderProduct(
     // The zone is priced from the market's config price: the market is the customer's own row (R16).
     const profile = await repos.profile.get();
     if (profile === null) return { ok: false, error: "forbidden" };
-    const price = (await readConfigPrices(tx, profile.market))["config_price.dns_zone_month"];
+    // The price in force at the instant of the order (WPU-G10: an admin may schedule a change).
+    const price = (await readConfigPrices(tx, profile.market, at))["config_price.dns_zone_month"];
     const resolved = resolveDnsZone(config.value, price);
     if (!resolved.ok) return resolved;
     // WPU-S1. A domain of ANOTHER customer that is the name or a parent of it (checked by whole labels)

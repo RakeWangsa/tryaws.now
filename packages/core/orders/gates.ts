@@ -42,8 +42,10 @@ export interface TierLimits {
  * The limits table, a constant table that is the configuration (WPU-R1). The owner relaxed the
  * count per resource family because the platform is an AWS partner: the mechanism stays, the
  * defaults are generous. `maxInstances` is the count of live resources per family (instance
- * families count together). The price, Windows and static IP limits are unchanged from 10.2;
- * WP8-T3 makes the table admin-editable through the `settings` row of scope `tier`.
+ * families count together). The price, Windows and static IP limits are unchanged from 10.2.
+ * WPU-G10: these are the DEFAULTS. An admin edits the limits of a tier for a market on /catalog/limits;
+ * the order path reads that `settings` row (scope `tier`) through tierLimitsFromStored and falls back to
+ * this table only when the market has no row.
  */
 export const DEFAULT_TIER_LIMITS: Readonly<Record<RiskTier, TierLimits>> = {
   new: { maxInstances: 50, maxBundleUsd: "24", windows: false, containers: false, maxStaticIps: 1 },
@@ -70,6 +72,24 @@ export function tierLimitsOf(
     return { ok: false, error: "forbidden" };
   }
   return { ok: true, value: row };
+}
+
+/** What `readTierLimits` of @tc/db answered for one tier of a market (WPU-G10). */
+export type StoredTierLimits =
+  | { readonly state: "none" }
+  | { readonly state: "invalid" }
+  | { readonly state: "ok"; readonly limits: TierLimits };
+
+/**
+ * The limits of one tier of the customer's market: the row an admin saved (settings, scope `tier`), or
+ * the defaults of the core when the market has no row. A row that is there and cannot be read refuses
+ * (R16): the defaults are not a fallback for a broken row, so an edit gone wrong cannot widen a limit.
+ */
+export function tierLimitsFromStored(tier: string, stored: StoredTierLimits): Result<TierLimits> {
+  if (!Object.hasOwn(DEFAULT_TIER_LIMITS, tier)) return { ok: false, error: "forbidden" };
+  if (stored.state === "none") return tierLimitsOf(tier);
+  if (stored.state === "invalid") return { ok: false, error: "forbidden" };
+  return tierLimitsOf(tier, { [tier]: stored.limits });
 }
 
 export interface ProductFacts {

@@ -175,7 +175,7 @@ export async function makeKit(t: TempDatabaseHandle, options: KitOptions = {}): 
       aws_id: "kit-" + uniqueSuffix(),
       platform: "linux",
       region: REGION,
-      specs: JSON.stringify({ vcpus: 2 }),
+      specs: JSON.stringify({ vcpus: 2, ramGb: "1", power: 1000 }),
       aws_price_usd: options.awsPriceUsd ?? "5",
       billing_unit: "month",
       feature_flag: FAMILY,

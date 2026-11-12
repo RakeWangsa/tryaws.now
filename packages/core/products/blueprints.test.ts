@@ -39,6 +39,7 @@ describe("mapBlueprint", () => {
         group: "ubuntu",
         version: "24.04 LTS",
         loginUser: "ubuntu",
+        minPower: null,
       },
       awsPriceUsd: "0",
       billingUnit: "none",

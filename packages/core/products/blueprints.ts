@@ -23,6 +23,11 @@ export interface RawBlueprint {
   /** `LINUX_UNIX` or `WINDOWS`. */
   readonly platform: string | null;
   readonly isActive: boolean;
+  /**
+   * WPU-G10: `minPower` of GetBlueprints, the least bundle power the image runs on (the unit of
+   * GetBundles `power`; 500 is the 512 MB plan, 0 every plan). Absent or not a whole number: unknown.
+   */
+  readonly minPower?: number | null;
 }
 
 export type BlueprintKind = "app" | "os";
@@ -39,6 +44,8 @@ export interface BlueprintRow {
     readonly group: string | null;
     readonly version: string | null;
     readonly loginUser: string | null;
+    /** What AWS reported as the least bundle power; null when it said nothing usable. */
+    readonly minPower: number | null;
   };
   readonly awsPriceUsd: "0";
   readonly billingUnit: "none";
@@ -109,6 +116,7 @@ export function mapBlueprint(item: unknown, region: string): BlueprintRow | null
       group: cleanText(raw.group),
       version: cleanText(raw.version),
       loginUser: loginUserOf(raw.blueprintId),
+      minPower: powerOrNull(raw.minPower),
     },
     awsPriceUsd: "0",
     billingUnit: "none",
@@ -117,10 +125,32 @@ export function mapBlueprint(item: unknown, region: string): BlueprintRow | null
   };
 }
 
+/**
+ * WPU-G10. The minimum bundle power of an app image whose minimum nobody knows (AWS did not report one
+ * and no admin set one): 1000, the 1 GB plan. Lightsail itself requires about that much for the common
+ * apps (WordPress, LAMP, Node.js), so the default errs on the side of refusing a plan that may not run
+ * the app, which an admin can lower per image. An OS-only image has no default minimum: it runs on every
+ * plan. VERIFY: the value AWS reports for each blueprint (`GetBlueprints.minPower`) on a pool account.
+ */
+export const DEFAULT_APP_MIN_POWER = 1000;
+/** The largest minimum that is believed (matches the admin editor); anything above is "unknown". */
+const MIN_POWER_MAX = 100000;
+
+function powerOrNull(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= MIN_POWER_MAX
+    ? value
+    : null;
+}
+
 /** The explicit switches of an admin. An id in neither list follows DEFAULT_ENABLED_BLUEPRINTS. */
 export interface ImageAllowList {
   readonly on: readonly string[];
   readonly off: readonly string[];
+  /** The admin's own minimum bundle power for an image (WPU-G10); it replaces what AWS reported. */
+  readonly minPower?: Readonly<Record<string, number>>;
 }
 
 export const EMPTY_ALLOW_LIST: ImageAllowList = Object.freeze({ on: [], off: [] });
@@ -138,6 +168,31 @@ export interface BlueprintOption {
   readonly kind: BlueprintKind;
   readonly version: string | null;
   readonly loginUser: string | null;
+  /** What AWS reported as the least bundle power; null when unknown (see minPowerOf). */
+  readonly minPower: number | null;
+}
+
+/**
+ * The least bundle power an image needs: the admin's override, else what AWS reported, else the default
+ * (an app: DEFAULT_APP_MIN_POWER, an OS-only image: 0).
+ */
+export function minPowerOf(
+  option: Pick<BlueprintOption, "id" | "kind" | "minPower">,
+  list: ImageAllowList,
+): number {
+  const override = list.minPower !== undefined ? list.minPower[option.id] : undefined;
+  if (override !== undefined) return powerOrNull(override) ?? DEFAULT_APP_MIN_POWER;
+  if (option.minPower !== null) return option.minPower;
+  return option.kind === "app" ? DEFAULT_APP_MIN_POWER : 0;
+}
+
+/**
+ * True when a plan can run the image. A minimum of 0 fits every plan; a plan whose power is unknown
+ * does not fit an image that has a minimum (R16).
+ */
+export function planFitsImage(minPower: number, planPower: number | null): boolean {
+  if (minPower <= 0) return true;
+  return planPower !== null && planPower >= minPower;
 }
 
 /** A synced row (family `blueprint`) as the repositories hand it over. */
@@ -159,6 +214,7 @@ export function optionOf(row: BlueprintCatalogRow): BlueprintOption | null {
     kind: specs.kind,
     version: typeof specs.version === "string" ? specs.version : null,
     loginUser: typeof specs.loginUser === "string" ? specs.loginUser : loginUserOf(row.awsId),
+    minPower: powerOrNull(specs.minPower),
   };
 }
 
