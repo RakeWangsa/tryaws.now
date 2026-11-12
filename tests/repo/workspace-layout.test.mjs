@@ -53,6 +53,7 @@ const tsconfigExtras = {
 const EXPORTS = {
   "packages/db": {
     ".": "./index.ts",
+    "./buyer-rules": "./repositories/customer/buyer-rules.ts",
     "./migrate": "./migrate.ts",
     "./testing": "./testing/index.ts",
   },

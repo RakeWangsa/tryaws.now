@@ -171,6 +171,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-I2",
     "WPU-I3",
     "WPU-I4",
+    "WPU-I5",
     "WPU-M1",
     "WPU-M2",
     "WPU-M3",
@@ -378,6 +379,44 @@ it("the proof of WPU-I4 exists: both snapshots, the buyer read at issue, the gra
       "packages/db/migrations/0017_customer_billing_profile.sql",
       "REVOKE SELECT ON invoices FROM admin_rw",
     ],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-I5 is proven by lint, types, format, the core, db, scheduler, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-I5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-I5 exists: the VAT base, reversed charges, the order, no lost charge, one buyer rule, one instant", () => {
+  for (const [file, part] of [
+    ["packages/core/pricing/vat-check.test.ts", "rounds a half up"],
+    ["packages/core/invoices/render-vat.test.ts", "vector 44 USD"],
+    ["packages/core/invoices/render-vat.test.ts", "is refused, not printed"],
+    ["packages/core/invoices/buyer-limits.test.ts", "a 150-character profile name"],
+    [
+      "packages/core/invoices/order-guards.db.test.ts",
+      "queued, not issued, while an older charge waits",
+    ],
+    ["packages/core/invoices/order-guards.db.test.ts", "stops at the first refusal"],
+    ["packages/core/invoices/order-guards.db.test.ts", "is never invoiced"],
+    ["packages/core/invoices/order-guards.db.test.ts", "a credit-note notice is written once"],
+    ["packages/core/invoices/order-guards.db.test.ts", "2027-06-30T17:59:59.9Z"],
+    ["packages/core/invoices/order-guards.db.test.ts", "is marked unreadable and skipped"],
+    ["packages/db/test/invoice-order-guards.test.ts", "the boundary of 1 July in Dhaka"],
+    ["packages/db/migrations/0018_invoice_order_and_reversal.sql", "invoice_backlog_blocked"],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
   }

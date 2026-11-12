@@ -304,6 +304,9 @@ const PRODUCTS = [
   "issueChargeInvoice",
   "queueIdFor",
   "runInvoiceBacklog",
+  // WPU-I5: the id of the notice for a charge without lines, the reconciliation window
+  "noteIdFor",
+  "RECONCILE_WINDOW_DAYS",
   // WP1-T5: catalog sync (the mapping, the active rule, the plan, the BDT price on read)
   "decideActive",
   "mapInstanceBundle",

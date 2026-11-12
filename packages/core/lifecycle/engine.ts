@@ -272,7 +272,7 @@ async function process(
       break;
     case "period_end": {
       if (action.tryRenew) {
-        const renewed = await renewSubscription(tx, row, clock);
+        const renewed = await renewSubscription(tx, row, clock, deps.log);
         if (renewed.ok) {
           await afterRenewal(work, renewed.value, false);
           step = "renewed";
@@ -284,7 +284,7 @@ async function process(
       break;
     }
     case "retry_renew": {
-      const renewed = await renewSubscription(tx, row, clock);
+      const renewed = await renewSubscription(tx, row, clock, deps.log);
       if (renewed.ok) {
         await afterRenewal(work, renewed.value, true);
         step = "renewed";

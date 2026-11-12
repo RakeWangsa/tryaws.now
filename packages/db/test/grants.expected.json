@@ -259,7 +259,7 @@
     "worker_rw": {
       "table": ["SELECT"],
       "insertColumns": ["id", "kind", "details"],
-      "updateColumns": null,
+      "updateColumns": ["status"],
       "selectColumns": null
     },
     "report_ro": {
@@ -427,6 +427,7 @@
         "order_id",
         "lines",
         "total_minor",
+        "issued_at",
         "seller",
         "ledger_transaction_id",
         "buyer"
@@ -463,6 +464,7 @@
         "order_id",
         "lines",
         "total_minor",
+        "issued_at",
         "seller",
         "ledger_transaction_id",
         "buyer"

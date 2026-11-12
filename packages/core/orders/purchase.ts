@@ -103,7 +103,7 @@ async function clientKeyIsTaken(repos: Repos, clientKey: string): Promise<boolea
  */
 export async function runPurchase(
   tx: Tx,
-  deps: Pick<OrdersDeps, "clock">,
+  deps: Pick<OrdersDeps, "clock" | "log">,
   args: PurchaseArgs,
 ): Promise<Result<Purchased>> {
   const { claims, tokenHash, clientKey, customerId } = args;
@@ -324,12 +324,15 @@ export async function runPurchase(
 
       // WPU-I2: the tax invoice of this purchase (spec 9.3), in the same transaction so a rollback
       // frees its number. It never fails the purchase: without seller details it is queued.
+      // A charge that ends with no invoice and no queue row ("failed", "noted") is logged with ids by
+      // issueChargeInvoice and found again by the scheduler's reconciliation (WPU-I5).
       await issueChargeInvoice(sp, {
         customerId,
         charge: { kind: "order", orderId },
         ledgerTransactionId: posted.value.transactionId,
         snapshot: fresh,
         now,
+        ...(deps.log === undefined ? {} : { log: deps.log }),
       });
 
       return { ok: true, value: { orderId, resourceId, operationId, replayed: false } };

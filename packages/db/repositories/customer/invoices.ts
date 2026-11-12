@@ -6,6 +6,7 @@ import {
   sellerRowValueOf,
 } from "../config/invoice-seller";
 import { created, refused, replayed, type Written } from "../result";
+import { BUYER_ADDRESS_MAX, BUYER_NAME_MAX, buyerTextLength } from "./buyer-rules";
 import { isUuid, type TenantScope } from "../scope";
 
 // An invoice of the customer, as the list and the invoice page read it. The customer id is not a
@@ -48,6 +49,11 @@ export interface NewInvoice {
   // WPU-I3: optional. The caller reads the customer's billing profile (profile.getBilling) in the same
   // transaction and passes the buyer; it is stored with the invoice. Omitted: the invoice has no buyer.
   buyer?: NewInvoiceBuyer | null;
+  // WPU-I5: the instant of issue. The fiscal year above must be the fiscal year of THIS instant (checked
+  // here, refused as validation otherwise) and it is stored as issued_at, so the printed date and the
+  // number's year never disagree. Every caller of the platform passes it; omitted, the database clock is
+  // used for the date and the year is not cross-checked (test fixtures only).
+  issuedAt?: Date;
 }
 
 // WPU-I2: the invoice of a charge that has no order (a renewal). The ledger transaction is the
@@ -60,6 +66,8 @@ export interface NewChargeInvoice {
   totalMinor: bigint;
   // WPU-I4: the buyer, as for NewInvoice: read from the billing profile in the same transaction.
   buyer?: NewInvoiceBuyer | null;
+  // WPU-I5: as for NewInvoice.
+  issuedAt?: Date;
 }
 
 // WPU-I2: a charge whose invoice waits for the seller details. The lines are those of the charge.
@@ -74,6 +82,18 @@ export interface NewBacklogEntry {
 
 // The `source` of the discrepancy that holds a charge whose invoice is owed (WPU-I2).
 export const INVOICE_BACKLOG_SOURCE = "invoice_seller_missing";
+// WPU-I5: a charge that has no invoice and could not be queued with its lines (ids and the amount only):
+// a person must look at it. Written by the live path or by the scheduler's reconciliation.
+export const INVOICE_UNRECORDED_SOURCE = "invoice_charge_unrecorded";
+
+// WPU-I5: the charge whose invoice is owed but whose lines are not available.
+export interface NewUnrecordedCharge {
+  id: string;
+  kind: "order" | "renewal";
+  orderId?: string;
+  ledgerTransactionId: string;
+  totalMinor: bigint;
+}
 
 // Keyset cursor: (fiscal year, number) is unique, so the order is exact and no row is skipped or
 // repeated, as it could be with a timestamp.
@@ -103,12 +123,22 @@ export interface InvoicesRepo {
   // queue (`discrepancies`, kind `missing`) that holds the lines, so that the scheduler issues the same
   // invoice later. The money is not touched.
   queueBacklog(input: NewBacklogEntry): Promise<Written<{ queued: true }>>;
+  // WPU-I5: true while an older charge of the market of this customer is still owed its invoice. A new
+  // charge is then queued too, so that its number is not taken before the older ones (numbers follow the
+  // order of the charge). Answered by a function that returns one boolean: web_rw cannot read the queue.
+  backlogBlocked(): Promise<boolean>;
+  // WPU-I5: the notice (ids and the amount, no lines) for a charge whose lines cannot be queued.
+  noteUnrecorded(input: NewUnrecordedCharge): Promise<Written<{ noted: true }>>;
 }
 
 // WPU-I1: a tax invoice (Mushak 6.3) names its seller. Without complete seller details (the setting
 // `invoice_seller` of the customer's market) nothing is issued and no number is taken (R16); the admin
 // queue shows the notice.
-export type IssueResult = Written<InvoiceRow> | { ok: false; error: "seller_details_missing" };
+// WPU-I5: a charge that was reversed (the money went back) is owed no invoice: `charge_reversed`.
+export type IssueResult =
+  | Written<InvoiceRow>
+  | { ok: false; error: "seller_details_missing" }
+  | { ok: false; error: "charge_reversed" };
 
 const INVOICE_COLUMNS = {
   id: invoices.id,
@@ -136,11 +166,11 @@ function buyerJsonOf(buyer: NewInvoiceBuyer | null | undefined): string | null {
 
 const DIGITS = /^[0-9]+$/;
 const textOrNull = (v: unknown, max: number): boolean =>
-  v === null || (typeof v === "string" && v !== "" && Array.from(v).length <= max);
+  v === null || (typeof v === "string" && v !== "" && buyerTextLength(v) <= max);
 function buyerValid(b: unknown): boolean {
   if (typeof b !== "object" || b === null || Array.isArray(b)) return false;
   const { name, address, taxId } = b as Record<string, unknown>;
-  if (!textOrNull(name, 120) || !textOrNull(address, 300)) return false;
+  if (!textOrNull(name, BUYER_NAME_MAX) || !textOrNull(address, BUYER_ADDRESS_MAX)) return false;
   if (taxId === null) return true;
   if (typeof taxId !== "object" || Array.isArray(taxId)) return false;
   const { kind, value } = taxId as Record<string, unknown>;
@@ -149,6 +179,23 @@ function buyerValid(b: unknown): boolean {
     ? value.length === 13
     : kind === "nid" && [10, 13, 17].includes(value.length);
 }
+
+// WPU-I5: the fiscal year (July to June, Dhaka UTC+6) of an instant, in the database, so that the year and
+// the stored issued_at are checked against the same value.
+async function fiscalYearMatches(
+  tx: TenantScope["tx"],
+  issuedAt: Date,
+  fiscalYear: number,
+): Promise<boolean> {
+  const [row] = await tx
+    .execute<{ fy: number }>(
+      sql`select extract(year from ((${issuedAt.toISOString()}::timestamptz at time zone 'UTC') + interval '6 hours' - interval '6 months'))::int as fy`,
+    )
+    .then((r) => r.rows);
+  return row !== undefined && Number(row.fy) === fiscalYear;
+}
+const validInstant = (at: unknown): boolean =>
+  at === undefined || (at instanceof Date && !Number.isNaN(at.getTime()));
 
 function requireUuid(value: unknown, what: string): asserts value is string {
   if (typeof value !== "string" || !isUuid(value)) {
@@ -227,12 +274,20 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
         input.fiscalYear > 32000 ||
         !Array.isArray(input.lines) ||
         input.lines.length === 0 ||
+        !validInstant(input.issuedAt) ||
         (input.buyer !== undefined && input.buyer !== null && !buyerValid(input.buyer))
       ) {
         return refused("validation");
       }
       const buyerJson = buyerJsonOf(input.buyer);
       const fiscalYear = input.fiscalYear;
+      if (
+        input.issuedAt !== undefined &&
+        !(await fiscalYearMatches(tx, input.issuedAt, fiscalYear))
+      ) {
+        return refused("validation");
+      }
+      const issuedAtText = input.issuedAt === undefined ? null : input.issuedAt.toISOString();
       // One invoice at a time per fiscal year: the lock is held to the end of the transaction, so the
       // next number is read after the previous one is committed or rolled back (gap-free).
       await tx.execute(
@@ -249,8 +304,11 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
       // The order must be the customer's own (R8), and the seller of the customer's market must be
       // complete (R16). The order is looked at first, so another customer's order answers not_found.
       const [owned] = await tx
-        .execute<{ seller: unknown }>(
-          sql`select s.value as seller
+        .execute<{ seller: unknown; reversed: boolean }>(
+          sql`select s.value as seller,
+                     exists (select 1 from ledger_transactions r
+                              where r.kind = 'reversal' and r.reference_type = 'ledger_transaction'
+                                and r.reference_id = o.ledger_transaction_id) as reversed
               from orders o
               join customers c on c.id = o.customer_id
               left join settings s on s.market = c.market and s.key = ${INVOICE_SELLER_KEY} and s.scope = 'market'
@@ -258,6 +316,8 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
         )
         .then((r) => r.rows);
       if (owned === undefined) return refused("not_found");
+      // WPU-I5: money that went back is owed no invoice (checked before the seller: nothing is queued).
+      if (owned.reversed) return { ok: false, error: "charge_reversed" };
       const sellerNow = parseSellerRowValue(owned.seller);
       if (sellerNow === null) return { ok: false, error: "seller_details_missing" };
       // WPU-I2: the seller as it is now is written on the invoice, in the transaction of the issue.
@@ -267,11 +327,12 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
       // must be the total of the invoice: an order of another customer, a missing one and a wrong
       // total insert nothing (R8, R16).
       const inserted = await tx.execute(sql`
-        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, seller, ledger_transaction_id, buyer)
+        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, seller, ledger_transaction_id, buyer, issued_at)
         select ${input.id}, ${fiscalYear}::smallint,
                coalesce((select max(i.number) from invoices i where i.fiscal_year = ${fiscalYear}::smallint), 0) + 1,
                o.customer_id, o.id, ${JSON.stringify(input.lines)}::jsonb, o.total_minor,
-               ${sellerSnapshot}::jsonb, o.ledger_transaction_id, ${buyerJson}::jsonb
+               ${sellerSnapshot}::jsonb, o.ledger_transaction_id, ${buyerJson}::jsonb,
+               coalesce(${issuedAtText}::timestamptz, now())
         from orders o
         where o.id = ${input.orderId} and o.customer_id = ${customerId}
           and o.total_minor = ${input.totalMinor.toString()}::bigint
@@ -303,12 +364,20 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
         input.fiscalYear > 32000 ||
         !Array.isArray(input.lines) ||
         input.lines.length === 0 ||
+        !validInstant(input.issuedAt) ||
         (input.buyer !== undefined && input.buyer !== null && !buyerValid(input.buyer))
       ) {
         return refused("validation");
       }
       const buyerJson = buyerJsonOf(input.buyer);
       const fiscalYear = input.fiscalYear;
+      if (
+        input.issuedAt !== undefined &&
+        !(await fiscalYearMatches(tx, input.issuedAt, fiscalYear))
+      ) {
+        return refused("validation");
+      }
+      const issuedAtText = input.issuedAt === undefined ? null : input.issuedAt.toISOString();
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext('invoice-number'), ${fiscalYear}::int)`,
       );
@@ -317,8 +386,11 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
         return existing.totalMinor === input.totalMinor ? replayed(existing) : refused("conflict");
       }
       const [owned] = await tx
-        .execute<{ seller: unknown; debit: string }>(
+        .execute<{ seller: unknown; debit: string; reversed: boolean }>(
           sql`select s.value as seller,
+                     exists (select 1 from ledger_transactions r
+                              where r.kind = 'reversal' and r.reference_type = 'ledger_transaction'
+                                and r.reference_id = lt.id) as reversed,
                      (select coalesce(sum(e.amount_minor), 0)::text
                         from ledger_entries e join ledger_accounts a on a.id = e.account_id
                        where e.transaction_id = lt.id and a.type = 'customer_wallet'
@@ -333,15 +405,17 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
         .then((r) => r.rows);
       if (owned === undefined) return refused("not_found");
       if (BigInt(owned.debit) !== input.totalMinor) return refused("conflict");
+      if (owned.reversed) return { ok: false, error: "charge_reversed" };
       const sellerNow = parseSellerRowValue(owned.seller);
       if (sellerNow === null) return { ok: false, error: "seller_details_missing" };
       const sellerSnapshot = JSON.stringify(sellerRowValueOf(sellerNow.seller, sellerNow.version));
       const inserted = await tx.execute(sql`
-        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, seller, ledger_transaction_id, buyer)
+        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, seller, ledger_transaction_id, buyer, issued_at)
         values (${input.id}, ${fiscalYear}::smallint,
                coalesce((select max(i.number) from invoices i where i.fiscal_year = ${fiscalYear}::smallint), 0) + 1,
                ${customerId}, null, ${JSON.stringify(input.lines)}::jsonb, ${input.totalMinor.toString()}::bigint,
-               ${sellerSnapshot}::jsonb, ${input.ledgerTransactionId}, ${buyerJson}::jsonb)
+               ${sellerSnapshot}::jsonb, ${input.ledgerTransactionId}, ${buyerJson}::jsonb,
+               coalesce(${issuedAtText}::timestamptz, now()))
         on conflict (ledger_transaction_id) do nothing`);
       if (inserted.rowCount !== 1) return refused("conflict");
       const row = await byColumn(invoices.id, input.id);
@@ -388,6 +462,50 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
                          and a.customer_id = ${customerId} and e.direction = 'debit'
                          and e.amount_minor = ${input.totalMinor.toString()}::bigint)`);
       return inserted.rowCount === 1 ? created({ queued: true as const }) : refused("not_found");
+    },
+
+    backlogBlocked: async () => {
+      const [row] = await tx
+        .execute<{
+          blocked: boolean;
+        }>(sql`select invoice_backlog_blocked(${customerId}::uuid) as blocked`)
+        .then((r) => r.rows);
+      return row?.blocked === true;
+    },
+
+    noteUnrecorded: async (input) => {
+      requireUuid(input.id, "id");
+      requireUuid(input.ledgerTransactionId, "ledgerTransactionId");
+      if (
+        (input.kind !== "order" && input.kind !== "renewal") ||
+        (input.kind === "order") !== (input.orderId !== undefined) ||
+        (input.orderId !== undefined && !isUuid(input.orderId)) ||
+        typeof input.totalMinor !== "bigint" ||
+        input.totalMinor <= 0n
+      ) {
+        return refused("validation");
+      }
+      // Ids and the amount only (R14). Same ownership check as queueBacklog: the customer's own wallet
+      // debit of that amount is in the ledger transaction.
+      const details = {
+        source: INVOICE_UNRECORDED_SOURCE,
+        v: 1,
+        charge: input.kind,
+        customerId,
+        ...(input.orderId === undefined ? {} : { orderId: input.orderId }),
+        ledgerTransactionId: input.ledgerTransactionId,
+        totalMinor: input.totalMinor.toString(),
+      };
+      const inserted = await tx.execute(sql`
+        insert into discrepancies (id, kind, details)
+        select ${input.id}, 'missing', ${JSON.stringify(details)}::jsonb
+        from ledger_transactions lt
+        where lt.id = ${input.ledgerTransactionId}
+          and exists (select 1 from ledger_entries e join ledger_accounts a on a.id = e.account_id
+                       where e.transaction_id = lt.id and a.type = 'customer_wallet'
+                         and a.customer_id = ${customerId} and e.direction = 'debit'
+                         and e.amount_minor = ${input.totalMinor.toString()}::bigint)`);
+      return inserted.rowCount === 1 ? created({ noted: true as const }) : refused("not_found");
     },
   };
 }

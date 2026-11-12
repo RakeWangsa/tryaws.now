@@ -1,4 +1,5 @@
 import {
+  invoiceBacklogRepo,
   findLedgerTransactionById,
   findReversalOf,
   orderOwnsLedgerTransaction,
@@ -93,5 +94,23 @@ export async function reverseTransaction(
   if (!checked.ok) return { ok: false, error: checked.error, fields: checked.fields };
 
   // step 4: lock, key, the reversal under the other key family, balance, writes
-  return writePosting(tx, checked.value, { findEarlier: (t) => findReversalOf(t, original.id) });
+  const posted = await writePosting(tx, checked.value, {
+    findEarlier: (t) => findReversalOf(t, original.id),
+  });
+
+  // step 5 (WPU-I5): an invoice already issued for this charge cannot be changed (a legal document); the
+  // reversal is not blocked by it, and a notice that a credit note (Mushak 6.7) is needed is written once
+  // for a person. The notice is in a savepoint of its own: if it cannot be written the reversal stands, and
+  // the scheduler's reconciliation of the invoice queue writes the notice later (it finds reversed charges
+  // with an invoice and no notice). Nothing about money changes here.
+  if (posted.ok) {
+    try {
+      await tx.transaction(async (sp) => {
+        await invoiceBacklogRepo(sp).creditNoteNeeded(original.id);
+      });
+    } catch {
+      // see above
+    }
+  }
+  return posted;
 }

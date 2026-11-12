@@ -4,6 +4,13 @@
 // personal or business identifiers: they are never logged (R14); malformed stored data gives null and
 // the invoice then prints "-" (R16), never a guess.
 
+import {
+  BUYER_ADDRESS_MAX,
+  BUYER_NAME_MAX,
+  buyerTextLength,
+  truncateBuyerText,
+} from "@tc/db/buyer-rules";
+
 export interface BuyerSnapshot {
   name: string | null;
   address: string | null;
@@ -19,8 +26,9 @@ export interface BillingFields {
   customerNid: string | null;
 }
 
-const NAME_MAX = 120;
-const ADDRESS_MAX = 300;
+// WPU-I5: the limits and the way a length is counted are one rule, in @tc/db (the db check uses it too).
+const NAME_MAX = BUYER_NAME_MAX;
+const ADDRESS_MAX = BUYER_ADDRESS_MAX;
 const NID_LENGTHS: readonly number[] = [10, 13, 17];
 
 /**
@@ -41,12 +49,17 @@ export function buyerSnapshotFrom(
   if (profile.billingName === null && profile.billingAddress === null && taxId === null) {
     return null;
   }
-  return { name: profile.billingName ?? fallbackName, address: profile.billingAddress, taxId };
+  // The fallback (the sign-up name, up to 200 characters) is cut to the limit of the snapshot; a name the
+  // customer typed in the billing details was validated on input and is never cut.
+  const name =
+    profile.billingName ??
+    (fallbackName === null ? null : truncateBuyerText(fallbackName, NAME_MAX));
+  return { name, address: profile.billingAddress, taxId };
 }
 
 function optionalText(value: unknown, max: number): string | null | undefined {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || value === "" || value.length > max) return undefined;
+  if (typeof value !== "string" || value === "" || buyerTextLength(value) > max) return undefined;
   return value;
 }
 

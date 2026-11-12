@@ -3,6 +3,7 @@
 // network); the fonts are packaged with the function and named in font-family, never fetched (U4
 // exception for the invoice). Pure: the same input gives the same text.
 import type { Locale, Minor } from "../types";
+import { roundedShareMinor } from "../pricing/vat-check";
 import { amountInWords } from "./words";
 import type { SellerDetails } from "./seller";
 import {
@@ -232,35 +233,121 @@ footer{margin-top:20px;border-top:1px solid #d0d4d9;padding-top:8px;font-size:10
 @media print{body{padding:0}th{background:#eee}}
 `.trim();
 
+// One row of the line table of the Mushak 6.3. `value` is the base the VAT of the row is charged on; for
+// a row without VAT it is the row's own price. `rate` is the stored rate of the VAT line, as the text of
+// the percent, null for a dash.
+interface MushakRow {
+  label: string;
+  priceExcl: bigint;
+  value: bigint;
+  rate: string | null;
+  vat: bigint;
+  total: bigint;
+}
+
+interface ParsedLine {
+  line: InvoiceLine;
+  amount: bigint;
+}
+
+// WPU-I5. The rows of the table. The AWS service is the first row; Korea VAT, the processing fee and any
+// markup are rows of their own (no VAT is charged on them); a VAT line sits on the service row when its
+// own base is the AWS base, else on a row of its own with the running subtotal as its value. Before the
+// VAT is printed the page checks it: round_half_up(value x stored rate) must be the VAT of the line,
+// from integers, or nothing is printed (R16). The rows' totals add up to the total of the invoice.
+function mushakRows(parsed: readonly ParsedLine[], locale: Locale): MushakRow[] {
+  const isVat = (p: ParsedLine) => p.line.kind === "step" && p.line.code === VAT_CODE;
+  const rows: MushakRow[] = [];
+  const serviceTotal = parsed
+    .filter((p) => p.line.kind === "service")
+    .reduce((s, p) => s + p.amount, 0n);
+  let serviceRow: MushakRow | undefined;
+  for (const p of parsed) {
+    if (isVat(p)) continue;
+    const row: MushakRow = {
+      label: p.line.label[locale],
+      priceExcl: p.amount,
+      value: p.amount,
+      rate: p.line.kind === "service" ? "0%" : null,
+      vat: 0n,
+      total: p.amount,
+    };
+    rows.push(row);
+    if (serviceRow === undefined && p.line.kind === "service") serviceRow = row;
+  }
+  let running = 0n;
+  for (const p of parsed) {
+    if (isVat(p)) {
+      const rate = p.line.rate;
+      let base: bigint;
+      let rateText: string | null = null;
+      if (rate === undefined) {
+        // No stored rate (an old line): nothing to check against and nothing recomputed; "-" is printed.
+        base = serviceTotal;
+      } else {
+        rateText = percentText(rate);
+        const hit = [serviceTotal, running].find((candidate) => {
+          try {
+            return roundedShareMinor(candidate, rate) === p.amount;
+          } catch {
+            return false;
+          }
+        });
+        if (hit === undefined || rateText === null) throw new InvoiceError("vat_mismatch");
+        base = hit;
+      }
+      const target =
+        serviceRow !== undefined && serviceRow.vat === 0n && base === serviceRow.priceExcl
+          ? serviceRow
+          : undefined;
+      if (target !== undefined) {
+        target.value = base;
+        target.rate = rateText;
+        target.vat = p.amount;
+        target.total = target.priceExcl + p.amount;
+      } else {
+        rows.push({
+          label: p.line.label[locale],
+          priceExcl: 0n,
+          value: base,
+          rate: rateText,
+          vat: p.amount,
+          total: p.amount,
+        });
+      }
+    }
+    running += p.amount;
+  }
+  return rows;
+}
+
+function mushakRowHtml(
+  r: MushakRow,
+  index: number,
+  unit: string,
+  money: (n: bigint) => string,
+  num: (text: string) => string,
+): string {
+  return [
+    `<tr><td>${num(String(index + 1))}</td><td>${escapeHtml(r.label)}</td><td>${unit}</td>`,
+    `<td class="num">${money(r.priceExcl)}</td><td class="num">${money(r.priceExcl)}</td><td class="num">${money(0n)}</td>`,
+    `<td class="num">${money(r.value)}</td><td class="num">${r.rate === null ? "-" : num(r.rate)}</td><td class="num">${money(r.vat)}</td><td class="num">${money(r.total)}</td></tr>`,
+  ].join("");
+}
+
 function renderMushak(doc: InvoiceDocument, locale: Locale): string {
   const seller = doc.seller;
   // A tax invoice never goes out without the seller's legal details (R16).
   if (seller === undefined) throw new InvoiceError("seller_details_missing");
   const t = MUSHAK[locale];
   const bn = locale === "bn";
-  let sum = 0n;
-  let vat = 0n;
-  let rate: string | undefined;
-  let serviceLabel: string | undefined;
-  const parts: { label: string; amount: bigint }[] = [];
-  for (const line of doc.lines) {
-    const amount = parseLineAmount(line.amountMinor);
-    sum += amount;
-    if (line.kind === "step" && line.code === VAT_CODE) {
-      vat += amount;
-      if (line.rate !== undefined) rate = line.rate;
-    } else {
-      parts.push({ label: line.label[locale], amount });
-      if (serviceLabel === undefined && line.kind === "service") serviceLabel = line.label[locale];
-    }
-  }
+  const parsed = doc.lines.map((line) => ({ line, amount: parseLineAmount(line.amountMinor) }));
+  const sum = parsed.reduce((s, p) => s + p.amount, 0n);
   // The page never prints a total that its lines do not add up to (R16).
   if (doc.lines.length === 0 || sum !== doc.totalMinor) throw new InvoiceError("invalid_lines");
 
   const money = (n: bigint) => formatMinor(n, locale, doc.numerals);
-  const value = doc.totalMinor - vat;
-  // No VAT line: the rate is 0. A VAT line with no stored rate: the rate cell is "-" (not recomputed).
-  const percent = vat === 0n ? "0%" : rate === undefined ? null : percentText(rate);
+  const rows = mushakRows(parsed, locale);
   const dash = "-";
   const esc = escapeHtml;
   const num = (text: string) => digitsFor(text, locale, doc.numerals);
@@ -303,13 +390,17 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
     `<table><thead><tr><th>${t.serial}</th><th>${t.description}</th><th>${t.quantity}</th>`,
     `<th class="num">${t.unitPrice}</th><th class="num">${t.totalExcl}</th><th class="num">${t.sd}</th>`,
     `<th class="num">${t.value}</th><th class="num">${t.vatRate}</th><th class="num">${t.vatAmount}</th><th class="num">${t.totalIncl}</th></tr></thead>`,
-    `<tbody><tr><td>${num("1")}</td><td>${esc(serviceLabel ?? t.fallback)}</td><td>${t.unit}</td>`,
-    `<td class="num">${money(value)}</td><td class="num">${money(value)}</td><td class="num">${money(0n)}</td>`,
-    `<td class="num">${money(value)}</td><td class="num">${percent === null ? dash : num(percent)}</td><td class="num">${money(vat)}</td><td class="num">${money(doc.totalMinor)}</td></tr></tbody>`,
-    `<tfoot><tr><td colspan="4">${t.total}</td><td class="num">${money(value)}</td><td class="num">${money(0n)}</td>`,
-    `<td class="num">${money(value)}</td><td></td><td class="num">${money(vat)}</td><td class="num">${money(doc.totalMinor)}</td></tr></tfoot></table>`,
+    `<tbody>${rows.map((r, i) => mushakRowHtml(r, i, t.unit, money, num)).join("")}</tbody>`,
+    `<tfoot><tr><td colspan="4">${t.total}</td><td class="num">${money(rows.reduce((s, r) => s + r.priceExcl, 0n))}</td><td class="num">${money(0n)}</td>`,
+    `<td></td><td></td><td class="num">${money(rows.reduce((s, r) => s + r.vat, 0n))}</td><td class="num">${money(doc.totalMinor)}</td></tr></tfoot></table>`,
     `<p class="words"><strong>${t.words}:</strong> ${amountInWords(doc.totalMinor, locale)}</p>`,
-    `<table><caption>${t.components}</caption><tbody>${parts.map((p) => `<tr><td>${esc(p.label)}</td><td class="num">${money(p.amount)}</td></tr>`).join("")}</tbody></table>`,
+    `<table><caption>${t.components}</caption><tbody>${parsed
+      .filter((p) => !(p.line.kind === "step" && p.line.code === VAT_CODE))
+      .map(
+        (p) =>
+          `<tr><td>${esc(p.line.label[locale])}</td><td class="num">${money(p.amount)}</td></tr>`,
+      )
+      .join("")}</tbody></table>`,
     `<div class="sig"><div><strong>${t.signatory}</strong><br>${t.sigName}: ${esc(seller.signatoryName)}<br>${t.sigDesignation}: ${esc(seller.signatoryDesignation)}<br>${t.sigDate}: ${dateText(doc.issuedAt, locale, doc.numerals)}<br>${t.sigLine}:</div></div>`,
     `<footer><p>${SHORT_STATEMENT[locale]} ${SELLER_LINE[locale]}</p><p>${TRADEMARK_LINE}</p></footer>`,
     "</body></html>",

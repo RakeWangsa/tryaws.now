@@ -3,7 +3,13 @@
 import type { Locale, Minor } from "../types";
 
 export type InvoiceErrorCode =
-  "invalid_number" | "invalid_date" | "invalid_amount" | "invalid_lines" | "seller_details_missing";
+  | "invalid_number"
+  | "invalid_date"
+  | "invalid_amount"
+  | "invalid_lines"
+  | "seller_details_missing"
+  // WPU-I5: a VAT line whose amount is not round_half_up(value x stored rate): never printed.
+  | "vat_mismatch";
 
 // Fixed text: a message never holds the value it refused (R14).
 export class InvoiceError extends Error {

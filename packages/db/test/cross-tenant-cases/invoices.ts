@@ -103,5 +103,29 @@ export const invoicesCases: CaseSet = defineCaseSet<Seed>({
           }),
         ).then((w) => (w.ok ? { ok: true as const } : w)),
     },
+    // WPU-I5: the notice for a charge that has no lines: same ownership rule as queueBacklog.
+    "invoices.noteUnrecorded": {
+      kind: "read",
+      run: (c, s) =>
+        asCustomer(c, (r) =>
+          r.invoices.noteUnrecorded({
+            id: uuidv7(),
+            kind: "order",
+            orderId: s.freeOrderId,
+            ledgerTransactionId: s.freeOrderTx,
+            totalMinor: 100n,
+          }),
+        ).then((w) => (w.ok ? { ok: true as const } : w)),
+    },
+    // WPU-I5: names no row; the customer id comes from the scope and the answer is one boolean about the
+    // market's queue, whoever asks.
+    "invoices.backlogBlocked": {
+      kind: "read",
+      run: (c, s) =>
+        asCustomer(c, async (r) => {
+          await r.invoices.backlogBlocked();
+          return r.invoices.get(s.invoiceId);
+        }),
+    },
   }),
 });

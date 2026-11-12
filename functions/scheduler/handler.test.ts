@@ -40,8 +40,13 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
     issued: 0,
     replayed: 0,
     sellerMissing: false,
+    blocked: false,
     failed: 0,
     unreadable: 0,
+    reversed: 0,
+    reconciled: 0,
+    noted: 0,
+    creditNotes: 0,
     remaining: 0,
   });
   expect(report.rateLimitsPurged).toBe(1);
@@ -175,9 +180,15 @@ it("WPU-I2: an owed invoice that cannot be read fails the invoice job and no oth
     expect(logged.find((e) => e.event === "invoice_backlog_run")).toMatchObject({ unreadable: 1 });
     // the other jobs ran: the purge came after the invoice job
     expect(logged.map((e) => e.event)).toContain("rate_limits_purged");
+    // WPU-I5: the row is marked unreadable (the notice for a person) and skipped: the next run is clean.
+    const marked = await t.pool.query(
+      "select status from discrepancies where details->>'source' = 'invoice_backlog_mark' and details->>'reason' = 'unreadable'",
+    );
+    expect(marked.rows).toEqual([{ status: "open" }]);
+    await expect(handler()).resolves.toMatchObject({ invoices: { unreadable: 0 } });
   } finally {
     await t.pool.query(
-      "delete from discrepancies where details->>'source' = 'invoice_seller_missing'",
+      "delete from discrepancies where details->>'source' in ('invoice_seller_missing', 'invoice_backlog_mark')",
     );
   }
 });
