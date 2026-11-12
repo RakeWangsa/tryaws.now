@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { REGION_PATTERN } from "../../capacity-keys";
 import { WAITLIST_REASONS } from "../../schema/service";
+import { DbError } from "../../errors";
 import { refused, type Written } from "../result";
 import { isUuid } from "../scope";
 import { audited, isActiveAdmin } from "./audited";
@@ -113,6 +114,11 @@ export function waitlistAdminRepo(scope: AdminScope): WaitlistAdminRepo {
     },
 
     async list(filter = {}) {
+      // The list holds customer e-mail addresses: an active ops or superadmin admin only (R10, R16).
+      // A refusal throws, because the list is a plain array (WP9-T2 sweep).
+      if (!["ops", "superadmin"].includes(scope.actor.role) || !(await isActiveAdmin(scope))) {
+        throw new DbError("42501");
+      }
       const { productFamily, region, reason, limit = DEFAULT_LIMIT, after } = filter;
       if (
         (productFamily !== undefined && typeof productFamily !== "string") ||
@@ -155,7 +161,9 @@ export function waitlistAdminRepo(scope: AdminScope): WaitlistAdminRepo {
 
     async notifyNext(input, why) {
       const { productFamily, region, reason, count } = input;
-      if (!(await isActiveAdmin(scope))) return refused("forbidden");
+      if (!["ops", "superadmin"].includes(scope.actor.role) || !(await isActiveAdmin(scope))) {
+        return refused("forbidden");
+      }
       if (
         typeof productFamily !== "string" ||
         !FAMILY_PATTERN.test(productFamily) ||

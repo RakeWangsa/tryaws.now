@@ -118,6 +118,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP6-T1",
     "WP6-T1b",
     "WP6-T2",
+    "WP6-T2s",
     "WP6-T3",
     "WP6-T4",
     "WP6-T4s",
@@ -133,6 +134,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP8-T5",
     "WP8-T6",
     "WP8-T7",
+    "WP9-T2",
+    "WP9-T3",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -1303,6 +1306,45 @@ it("tasks WP6-T2 and WP6-T3 are proven by the adapter, core and ownership tests,
   }
 });
 
+it("task WP6-T2s is proven by the cores, the views and the screens of databases and load balancers, each filter naming a real file", () => {
+  expect(TASKS["WP6-T2s"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "db-lb-cores",
+    "db-lb-views",
+    "db-lb-screens",
+    "repo",
+  ]);
+  const line = (id) => TASKS["WP6-T2s"].find((c) => c.id === id).command.join(" ");
+  expect(line("db-lb-cores")).toBe(
+    "pnpm test --filter @tc/web family-actions databases-actions databases-access load-balancers-actions --no-passWithNoTests",
+  );
+  expect(line("db-lb-views")).toBe(
+    "pnpm test --filter @tc/web databases-view load-balancers-view --no-passWithNoTests",
+  );
+  expect(line("db-lb-screens")).toContain("(panel)/databases (panel)/load-balancers");
+  for (const f of [
+    "apps/web/server/family-actions.test.ts",
+    "apps/web/server/databases-actions.test.ts",
+    "apps/web/server/databases-access.test.ts",
+    "apps/web/server/databases-view.test.ts",
+    "apps/web/server/load-balancers-actions.test.ts",
+    "apps/web/server/load-balancers-view.test.ts",
+    "apps/web/messages/databases-messages.test.ts",
+    "apps/web/messages/load-balancers-messages.test.ts",
+    "apps/web/app/[locale]/(panel)/databases/databases.test.tsx",
+    "apps/web/app/[locale]/(panel)/databases/mockup-anchors.test.tsx",
+    "apps/web/app/[locale]/(panel)/load-balancers/load-balancers.test.tsx",
+    "apps/web/app/[locale]/(panel)/load-balancers/mockup-anchors.test.tsx",
+    "apps/web/app/[locale]/(panel)/orders/family-links.test.tsx",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
 it("task WP4-T4 is proven by the shared checks, the db suite, and the three sentences of the proof", () => {
   expect(TASKS["WP4-T4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
     ["spec-sync", "pnpm spec:check"],
@@ -1328,6 +1370,63 @@ it("task WP4-T4 is proven by the shared checks, the db suite, and the three sent
     "packages/core/orders/double-submit.test.ts",
     "packages/core/orders/failed-create.test.ts",
     "packages/core/orders/kyc-gate.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP9-T2 is proven by the customer and admin repository sweeps, the admin source scan and the web register", () => {
+  expect(TASKS["WP9-T2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["sweep-customer-repos", "pnpm test --filter @tc/db test/cross-tenant --no-passWithNoTests"],
+    ["sweep-admin-repos", "pnpm test --filter @tc/db admin-gates --no-passWithNoTests"],
+    ["sweep-admin-app", "pnpm test --filter @tc/admin admin-sweep --no-passWithNoTests"],
+    [
+      "sweep-web-endpoints",
+      "pnpm test --filter @tc/web endpoint-sweep loaders-tenancy --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/db/test/admin-gates.test.ts",
+    "apps/admin/server/admin-sweep.test.ts",
+    "apps/web/server/endpoint-sweep.test.ts",
+    "apps/web/server/endpoint-sweep.cases.ts",
+    "apps/web/server/loaders-tenancy.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP9-T3 is proven by the order storm, the parallel top-up and the restore drill (BLOCKED is a failure)", () => {
+  expect(TASKS["WP9-T3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    [
+      "purchase-concurrency",
+      "pnpm test --filter @tc/core orders/purchase-concurrency --no-passWithNoTests",
+    ],
+    [
+      "topup-parallel-credit",
+      "pnpm test --filter @tc/eps proof-parallel-credit --no-passWithNoTests",
+    ],
+    ["restore-drill-logic", "pnpm test --filter repo restore-drill --no-passWithNoTests"],
+    ["restore-drill", "node scripts/restore-drill.mjs --allow-empty"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/core/orders/purchase-concurrency.test.ts",
+    "packages/eps/test/proof-parallel-credit.test.ts",
+    "scripts/restore-drill.mjs",
+    "scripts/lib/restore-drill.test.mjs",
+    "docs/runbooks/restore-drill.md",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

@@ -349,6 +349,28 @@ describe("createBucketDraftCore", () => {
     expect(drafted).toEqual([{ family: "bucket", config: form }]);
   });
 
+  it("refuses without a session before the validation, the limit and the order code (R9, WP9-T2 sweep)", async () => {
+    const touched: string[] = [];
+    const deps = {
+      authenticate: async () => null,
+      rateLimit: async () => {
+        touched.push("rateLimit");
+        return { allowed: true };
+      },
+      orders: {
+        createOrderDraft: async () => {
+          touched.push("createOrderDraft");
+          return { ok: true, value: { token: "t" } };
+        },
+      },
+    } as unknown as OrderActionDeps;
+    expect(await createBucketDraftCore(deps, form)).toEqual({
+      ok: false,
+      error: "unauthenticated",
+    });
+    expect(touched).toEqual([]);
+  });
+
   it("refuses a bad name, rate limits, and fails closed without an order port", async () => {
     expect(
       await createBucketDraftCore(orders().deps, { ...form, displayName: "a;b" }),

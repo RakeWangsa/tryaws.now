@@ -309,6 +309,37 @@ describe("R8: another customer's row answers like a missing one", () => {
   });
 });
 
+describe("R8 sweep (WP9-T2): the two switches without an operation answer like the rest", () => {
+  const OTHER = "22222222-2222-4222-8222-222222222222";
+  it("setAutoRenew on an unknown id is not_found, and nothing is written or audited", async () => {
+    const w = world({ rows: [] });
+    expect(await setAutoRenewCore(w.deps, { serverId: SERVER, autoRenew: "on" })).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+    expect(w.calls.some((c) => c.startsWith("autoRenew") || c.startsWith("audit"))).toBe(false);
+  });
+  it("a customerId in the form is ignored: the store is opened for the session's customer only", async () => {
+    // world().deps.store asserts customerId === CUSTOMER on every call.
+    const w = world({ rows: [] });
+    const results = await Promise.all([
+      setAutoRenewCore(w.deps, { serverId: SERVER, autoRenew: "on", customerId: OTHER }),
+      destroyServerCore(w.deps, {
+        serverId: SERVER,
+        requestId: REQ,
+        confirmName: "x",
+        customerId: OTHER,
+      }),
+      markNotificationsReadCore(w.deps, { id: BACKUP, customerId: OTHER }),
+    ]);
+    expect(results[0]).toEqual({ ok: false, error: "not_found" });
+    expect(results[1]).toEqual({ ok: false, error: "not_found" });
+    // The notification id goes to the tenant-scoped repository alone (it matches the customer's own rows).
+    expect(results[2]).toEqual({ ok: true, done: "marked" });
+    expect(w.calls).toContain("markRead:1");
+  });
+});
+
 describe("gates", () => {
   const good = { serverId: SERVER, requestId: REQ, name: "nightly" };
   it("no session", async () => {
