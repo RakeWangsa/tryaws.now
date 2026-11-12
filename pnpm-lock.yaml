@@ -241,6 +241,9 @@ importers:
       '@tc/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@tc/notify':
+        specifier: workspace:*
+        version: link:../../packages/notify
 
   packages/auth:
     dependencies:

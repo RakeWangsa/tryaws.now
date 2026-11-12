@@ -1,7 +1,7 @@
 import type { Locale } from "@tc/core";
 
-// The 25 queued messages of 16.14 (the table has 14 rows; "KYC" has three messages, "Security"
-// five, "Low balance, payment expired" two, "Domain" two) and the two of WPU-D4. Section F leaves
+// The 26 queued messages of 16.14 (the table has 14 rows; "KYC" has three messages, "Security"
+// five, "Low balance, payment expired" two, "Domain" two) and the three of WPU-D4. Section F leaves
 // TemplateId open.
 export const TEMPLATE_IDS = [
   "welcome",
@@ -30,6 +30,8 @@ export const TEMPLATE_IDS = [
   // WPU-D4: the reply of support (written by an admin) and the notice of the capacity waitlist.
   "support_reply",
   "waitlist_capacity_available",
+  // WPU-D4: a hosted zone whose domain does not point to its name servers (day 7 and day 12).
+  "dns_delegation_notice",
 ] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 

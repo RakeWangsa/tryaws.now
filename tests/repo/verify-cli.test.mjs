@@ -155,6 +155,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T2",
     "WPP-T3",
     "WPP-T4",
+    "WPU-D4",
     "WPU-G1",
     "WPU-G10",
     "WPU-G11",
@@ -527,6 +528,25 @@ it("task WPU-G6 is proven by lint, types, format, the core, db, aws, provisioner
     ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
     ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
     ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-D4 is proven by lint, types, format, the core, db, aws, notify, notifier, provisioner, scheduler, admin and repository tests", () => {
+  expect(TASKS["WPU-D4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["notify", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["notifier-fn", "pnpm test --filter @tc/fn-notifier --no-passWithNoTests"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
 });

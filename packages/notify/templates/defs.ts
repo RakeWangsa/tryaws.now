@@ -365,6 +365,18 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
     cta: "open_support",
     vars: (d) => ({ message: s(d.body) }),
   },
+  // WPU-D4 (spec 12): told on day 7 and day 12 after the zone was made; removed on day 14.
+  dns_delegation_notice: {
+    spec: { domain: f.domain, day: f.oneOf(7, 12), removeAt: f.instant },
+    channels: () => ek,
+    path: fixed("/dns"),
+    cta: "open_dns",
+    vars: (d, h) => ({
+      domain: s(d.domain).toLowerCase(),
+      days: h.n(d.day),
+      date: h.d(d.removeAt),
+    }),
+  },
   waitlist_capacity_available: {
     spec: { productFamily: f.key, region: f.region },
     channels: () => ek,

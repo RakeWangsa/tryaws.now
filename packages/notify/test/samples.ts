@@ -130,6 +130,10 @@ export const SAMPLES: Record<TemplateId, { data: Record<string, unknown>; channe
     data: { productFamily: "linux_instance", region: "ap-southeast-1" },
     channels: ["email", "in_app"],
   },
+  dns_delegation_notice: {
+    data: { domain: "shop.example.com", day: 12, removeAt: "2026-11-29T06:00:00.000Z" },
+    channels: ["email", "in_app"],
+  },
 };
 
 // The rows of 16.14 where the SMS depends on the data: the same message without an SMS.

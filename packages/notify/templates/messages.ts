@@ -55,6 +55,7 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       security: "নিরাপত্তা সেটিং",
       open_domain: "ডোমেইন দেখুন",
       open_support: "সাপোর্ট পেজ খুলুন",
+      open_dns: "ডিএনএস পেজ খুলুন",
       order_now: "এখনই অর্ডার করুন",
     },
     products: {
@@ -96,6 +97,7 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       security: "Security settings",
       open_domain: "View domain",
       open_support: "Open the support page",
+      open_dns: "Open the DNS page",
       order_now: "Order now",
     },
     products: {
@@ -304,6 +306,15 @@ export const BN: Catalog = {
       "আরও সাহায্য লাগলে প্যানেলের সাপোর্ট পেজে জানান।",
     ],
   },
+  dns_delegation_notice: {
+    subject: "ডিএনএস জোন {domain}: নেমসার্ভার এখনো বদলানো হয়নি",
+    headline: "ডিএনএস জোন কাজ করছে না",
+    body: [
+      "{domain} এর ডিএনএস জোন তৈরি হয়েছে {days} দিন হলো, কিন্তু ডোমেইনের নেমসার্ভার এখনো এই জোনে পয়েন্ট করা নেই।",
+      "ডোমেইনের রেজিস্ট্রারের প্যানেলে গিয়ে {domain} এর নেমসার্ভার বদলে ডিএনএস পেজে দেখানো নেমসার্ভারগুলো দিন।",
+      "{date} তারিখের মধ্যে বদলানো না হলে জোনটি মুছে ফেলা হবে।",
+    ],
+  },
   waitlist_capacity_available: {
     subject: "{product}: এখন জায়গা আছে",
     headline: "অপেক্ষার তালিকা: জায়গা খালি হয়েছে",
@@ -502,6 +513,15 @@ export const EN: Catalog = {
       "TiCON Cloud support has answered your request:",
       "{message}",
       "If you need more help, tell us on the support page of the panel.",
+    ],
+  },
+  dns_delegation_notice: {
+    subject: "DNS zone {domain}: name servers not changed yet",
+    headline: "Your DNS zone is not in use",
+    body: [
+      "The DNS zone for {domain} was created {days} days ago, but the name servers of the domain still do not point to it.",
+      "At the registrar of the domain, change the name servers of {domain} to the name servers shown on the DNS page.",
+      "If this is not done by {date}, the zone will be removed.",
     ],
   },
   waitlist_capacity_available: {

@@ -123,5 +123,8 @@ export function fakeAccess(): AwsAccess<"provisioner"> {
     lightsail: () => {
       throw new Error("no AWS in tests");
     },
+    route53: () => {
+      throw new Error("no AWS in tests");
+    },
   };
 }

@@ -60,6 +60,11 @@ const TABLE: ReadonlyArray<{
     templates: ["waitlist_capacity_available"],
     sms: "no",
   },
+  {
+    row: "WPU-D4: zone not delegated (day 7 and 12)",
+    templates: ["dns_delegation_notice"],
+    sms: "no",
+  },
   // A reply of support goes to a visitor too, who has no bell: email only.
   { row: "WPU-D4: reply of support", templates: ["support_reply"], sms: "no", bell: false },
 ];
