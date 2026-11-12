@@ -94,7 +94,7 @@ export const configPriceBn = {
       empty: "এই দামের কোনো ইতিহাস নেই।",
       from: "শুরু",
       state: "অবস্থা",
-      usd: "USD",
+      usd: "ডলার (USD)",
       by: "কে",
       when: "কখন",
       reason: "কারণ",
