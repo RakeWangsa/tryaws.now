@@ -73,7 +73,7 @@ function deps(flags: { key: string; enabled: boolean }[], calls: string[] = []):
         new Map(
           ["linux_instance", "windows_instance", "database"].map((family) => [
             family,
-            { fx: { rate: FX }, rule: { value: RULE } } as never,
+            { fx: { rate: FX }, rule: { value: RULE }, book: null } as never,
           ]),
         ),
         {},
@@ -167,6 +167,8 @@ describe("offersOf and cheapestOffer", () => {
         specs: { vcpus: 2, ramGb: "1", diskGb: 40, transferGb: 2000, junk: "<b>" },
         awsPriceUsd: "5.0000",
         priceBdt: { totalMinor: 90000n } as never,
+        marginMinor: 0n,
+        commissionMinor: 0n,
       },
       {
         id: "a",
@@ -176,6 +178,8 @@ describe("offersOf and cheapestOffer", () => {
         specs: { vcpus: 2, ramGb: "1", diskGb: 40, transferGb: 1000 },
         awsPriceUsd: "5.0000",
         priceBdt: { totalMinor: 90000n } as never,
+        marginMinor: 0n,
+        commissionMinor: 0n,
       },
     ]);
     expect(offers.map((o) => o.id)).toEqual(["a", "b"]);

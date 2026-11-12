@@ -77,6 +77,7 @@ export function fixtureDeps(flags: readonly string[]): CatalogDeps {
       const found = {
         fx: { rate: FIXTURE_FX },
         rule: { value: FIXTURE_RULE },
+        book: null,
       } as never;
       const priced = priceRows(
         rows,

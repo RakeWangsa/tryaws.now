@@ -2231,6 +2231,86 @@ TASKS["WP9-T5"] = [
   repo,
 ];
 
+// WPA-P1: pricing, margin and commission are managed by an admin from the price list (/pricing/book).
+// Each proof has its own line; `--no-passWithNoTests` makes an empty selection fail;
+// tests/repo/verify-cli.test.mjs asserts that the files exist.
+const priceBookEngine = {
+  id: "price-book-engine",
+  title:
+    "R4: margin (percent or fixed paisa), commission and half-up rounding are the engine's, with the section 8 vectors unchanged",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "pricing/book",
+    "pricing/quote",
+    "--no-passWithNoTests",
+  ],
+};
+const priceBookRates = {
+  id: "price-book-rates",
+  title:
+    "R16: the margin of the family reaches the price of a new order from its start; an order already priced keeps its snapshot; a stored book that does not parse prices nothing; the live preview",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "rates/price-book-in-force",
+    "rates/preview-book",
+    "--no-passWithNoTests",
+  ],
+};
+const priceBookDb = {
+  id: "price-book-db",
+  title:
+    "R10, R16: the price book and the base cost of the disk anchor are written only by an active finance or superadmin admin, with a reason, audited; the one column grant",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "admin-price-book",
+    "admin-gates",
+    "admin-repos",
+    "--no-passWithNoTests",
+  ],
+};
+const priceBookAdmin = {
+  id: "price-book-admin",
+  title:
+    "R9, R10: the flow authorizes first, the preview comes before the save, the page is bn and en and built from the theme classes, the sweep of the admin app",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/admin",
+    "server/price-book-flow",
+    "server/price-book-draft",
+    "price-book-pages",
+    "price-book-messages",
+    "server/admin-sweep",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WPA-P1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  priceBookEngine,
+  priceBookRates,
+  priceBookDb,
+  priceBookAdmin,
+  db,
+  core,
+  admin,
+  web,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

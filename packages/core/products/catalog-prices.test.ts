@@ -7,7 +7,8 @@ import type { PricingInForce } from "../rates/in-force";
 import { priceRows, type CatalogRowForPricing } from "./catalog-prices";
 
 const rule: PricingRule = { version: "launch", steps: [...LAUNCH_PRICING_STEPS] };
-const inForce = (rate = "127"): PricingInForce => ({
+const inForce = (rate = "127", book: PricingInForce["book"] = null): PricingInForce => ({
+  book,
   pricedAt: new Date("2026-11-11T06:00:00Z"),
   fx: {
     id: "fx1",
@@ -67,6 +68,16 @@ describe("priceRows", () => {
       platform: "linux",
       awsPriceUsd: "5.0000",
     });
+  });
+
+  it("applies the margin and the commission of the family's price book (WPA-P1)", () => {
+    const book = { margin: { kind: "fixed" as const, value: "500" }, commission: null };
+    const plain = priceRows([row()], new Map([["linux_instance", inForce()]]), {})![0]!;
+    const booked = priceRows([row()], new Map([["linux_instance", inForce("127", book)]]), {})![0]!;
+    expect(booked.marginMinor).toBe(500n);
+    expect(booked.priceBdt.totalMinor).toBe(plain.priceBdt.totalMinor + 500n);
+    expect(plain.marginMinor).toBe(0n);
+    expect(plain.commissionMinor).toBe(0n);
   });
 
   it("the source has no float step on a price", () => {

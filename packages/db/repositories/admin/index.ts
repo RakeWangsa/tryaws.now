@@ -10,6 +10,7 @@ import { fxChangesAdminRepo, type FxChangesAdminRepo } from "./fx-changes";
 import { fxRatesAdminRepo, type FxRatesAdminRepo } from "./fx-rates";
 import { operationsAdminRepo, type OperationsAdminRepo } from "./operations";
 import { paymentsAdminRepo, type PaymentsAdminRepo } from "./payments";
+import { priceBookAdminRepo, type PriceBookAdminRepo } from "./price-book";
 import { pricingRulesAdminRepo, type PricingRulesAdminRepo } from "./pricing-rules";
 import { abuseAdminRepo, type AbuseAdminRepo } from "./abuse";
 import { reconciliationAdminRepo, type ReconciliationAdminRepo } from "./reconciliation";
@@ -46,6 +47,7 @@ export interface AdminRepos {
   fxRates: FxRatesAdminRepo;
   operations: OperationsAdminRepo;
   payments: PaymentsAdminRepo;
+  priceBook: PriceBookAdminRepo;
   pricingRules: PricingRulesAdminRepo;
   abuse: AbuseAdminRepo;
   reconciliation: ReconciliationAdminRepo;
@@ -77,6 +79,7 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     fxRates: fxRatesAdminRepo(scope),
     operations: operationsAdminRepo(scope),
     payments: paymentsAdminRepo(scope),
+    priceBook: priceBookAdminRepo(scope),
     pricingRules: pricingRulesAdminRepo(scope),
     abuse: abuseAdminRepo(scope),
     reconciliation: reconciliationAdminRepo(scope),

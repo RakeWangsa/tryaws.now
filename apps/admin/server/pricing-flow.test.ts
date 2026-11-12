@@ -25,6 +25,10 @@ function setup(role: AdminRole = "finance", over: Partial<PricingFlowDeps> = {})
       order.push("preview");
       return { ok: true, value: { rows: [] } };
     }) as never,
+    previewBook: vi.fn(async () => ({
+      ok: true,
+      value: { fxRate: "127", fromSamples: false, rows: [] },
+    })) as never,
     savePricingRule: vi.fn(async () => {
       order.push("save");
       return {

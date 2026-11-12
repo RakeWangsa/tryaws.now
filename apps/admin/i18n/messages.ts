@@ -13,6 +13,8 @@ import { customersEn } from "../messages/customers.en.ts";
 import { en } from "../messages/en.ts";
 import { moneyBn } from "../messages/money.ts";
 import { moneyEn } from "../messages/money.en.ts";
+import { priceBookBn } from "../messages/pricebook.ts";
+import { priceBookEn } from "../messages/pricebook.en.ts";
 import { pricingBn } from "../messages/pricing.ts";
 import { pricingEn } from "../messages/pricing.en.ts";
 import { opsBn } from "../messages/ops.ts";
@@ -35,6 +37,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     customers.bn,
     money.bn,
     pricingBn,
+    priceBookBn,
     ops.bn,
     auditBn,
     adminsBn,
@@ -48,6 +51,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     customers.en,
     money.en,
     pricingEn,
+    priceBookEn,
     ops.en,
     auditEn,
     adminsEn,

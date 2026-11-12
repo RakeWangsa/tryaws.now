@@ -476,6 +476,11 @@ export function PricingView({ locale, admin, screen, result }: PricingViewProps)
   return (
     <>
       <h2 className="h4 mergecolor">{t("title")}</h2>
+      <form method="get" action={localePath(locale, "/pricing/book")} className="mb-3">
+        <Button type="submit" variant="secondary" size="sm">
+          {t("bookLink")}
+        </Button>
+      </form>
       <Banner code={resultOf(result)} />
       {screen.kind !== "ok" ? (
         <EmptyState title={t("unavailable.title")} description={t("unavailable.body")} />

@@ -64,6 +64,13 @@
       "when": 1794420500353,
       "tag": "0008_disk_anchor",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794424100353,
+      "tag": "0009_admin_price_book",
+      "breakpoints": true
     }
   ]
 }

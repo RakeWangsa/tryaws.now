@@ -22,3 +22,14 @@ export {
 export type { PriceQuote, PricingRule, PricingStep, QuoteInput } from "./types";
 export { STEP_ACCOUNTS, accountFor, isPricingRule, validateRule, type StepCode } from "./validate";
 export { allowanceLevel, dailyMeteredChargeMinor, type AllowanceLevel } from "./metering";
+export {
+  BOOK_KINDS,
+  BOOK_MAX_COMMISSION_PERCENT,
+  BOOK_MAX_MARGIN_PERCENT,
+  isBookTerms,
+  quoteWithBook,
+  validateBookTerms,
+  type BookAmount,
+  type BookedQuote,
+  type BookTerms,
+} from "./book";

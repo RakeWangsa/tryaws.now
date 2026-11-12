@@ -5,6 +5,7 @@ type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 export const pricingEn: Same<typeof pricingBn> = {
   AdminPricing: {
     title: "Pricing and exchange rate",
+    bookLink: "Price list: margin, commission and product prices",
     market: { label: "Market", submit: "Show" },
     unavailable: {
       title: "The data could not be loaded",
