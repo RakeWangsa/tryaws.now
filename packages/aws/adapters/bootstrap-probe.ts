@@ -24,14 +24,19 @@ export const connectBeacon: BeaconConnect = (host, port, timeoutMs) =>
     let settled = false;
     const chunks: Buffer[] = [];
     let size = 0;
+    // The idle timeout alone is reset by every byte, so a peer that drips one byte at a time could
+    // hold the probe open. The absolute deadline bounds the whole exchange (R16).
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     const finish = (value: string | null): void => {
       if (settled) return;
       settled = true;
+      if (deadline !== undefined) clearTimeout(deadline);
       socket.destroy();
       resolve(value);
     };
     const socket = net.connect({ host, port });
     socket.setTimeout(timeoutMs);
+    deadline = setTimeout(() => finish(null), timeoutMs);
     socket.on("data", (chunk: Buffer) => {
       chunks.push(chunk);
       size += chunk.length;

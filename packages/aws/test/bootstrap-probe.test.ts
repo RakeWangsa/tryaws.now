@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BOOTSTRAP_BEACON_PORT, BOOTSTRAP_OK_MARKER } from "../adapters/bootstrap";
 import {
   beaconVerdict,
@@ -138,5 +138,32 @@ describe("createBeaconMarker", () => {
   it("the default transport is the guarded one in tests: it cannot leave the process", async () => {
     // network-guard.ts of this package blocks net.connect, so the real probe reports pending, not an error.
     expect(await createBeaconMarker()(input)).toBe("pending");
+  });
+});
+
+describe("connectBeacon absolute deadline (security review)", () => {
+  it("gives up on a peer that drips bytes, which keep resetting the idle timeout", async () => {
+    const { EventEmitter } = await import("node:events");
+    const net = (await import("node:net")).default;
+    const { connectBeacon } = await import("../adapters/bootstrap-probe");
+    vi.useFakeTimers();
+    const socket = Object.assign(new EventEmitter(), {
+      setTimeout: () => undefined,
+      destroy: vi.fn(),
+    });
+    const spy = vi.spyOn(net, "connect").mockReturnValue(socket as never);
+    try {
+      const pending = connectBeacon("52.220.10.20", 52022, 1000);
+      for (let i = 0; i < 5; i += 1) {
+        socket.emit("data", Buffer.from("x"));
+        await vi.advanceTimersByTimeAsync(150);
+      }
+      await vi.advanceTimersByTimeAsync(400);
+      expect(await pending).toBeNull();
+      expect(socket.destroy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });
