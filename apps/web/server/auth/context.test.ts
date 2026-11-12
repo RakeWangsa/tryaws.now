@@ -19,6 +19,7 @@ function runtime(fakes: boolean): WebRuntime {
     account: null,
     reader: null,
     access: null,
+    renderer: null,
   };
 }
 

@@ -96,7 +96,11 @@ const list =
       locale,
     );
 const detail =
-  (screen: InvoiceDetailScreen | null, name = "Rahim"): Renderer =>
+  (
+    screen: InvoiceDetailScreen | null,
+    name = "Rahim",
+    pdfNotice: "unavailable" | "not_ready" | "busy" | null = null,
+  ): Renderer =>
   (locale) =>
     html(
       <InvoiceDetailContent
@@ -104,6 +108,7 @@ const detail =
         numerals={numerals(locale)}
         screen={screen}
         customerName={name}
+        pdfNotice={pdfNotice}
       />,
       locale,
     );
@@ -154,6 +159,9 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
     html(<ScreenError error={new Error("raw text must never show")} reset={() => {}} />, locale),
   "invoices.with_credit_note": list(LIST_WITH_CREDIT),
   "invoice.ready": detail(DETAIL),
+  // WPU-N1: "Download PDF" gave no file; the route redirected here with a notice code.
+  "invoice.pdf_unavailable": detail(DETAIL, "Rahim", "unavailable"),
+  "invoice.pdf_busy": detail(DETAIL, "Rahim", "busy"),
   "invoice.credit_note": detail(DETAIL_CREDIT),
   "invoice.no_name": detail(DETAIL, ""),
   "invoice.not_found": detail(null),

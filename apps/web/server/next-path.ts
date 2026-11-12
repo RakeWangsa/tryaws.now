@@ -10,6 +10,20 @@ export const NEXT_PREFIXES: readonly string[] = Object.freeze([
   "/invoices",
   "/settings",
   "/support",
+  // WPU-N1 (audit C.16): the other routes of the customer panel (apps/web/app/[locale]/(panel)). Relative
+  // paths only; the admin app has its own routes and none of them is here.
+  "/kyc",
+  "/dns",
+  "/domains",
+  "/databases",
+  "/storage",
+  "/load-balancers",
+  "/containers",
+  "/cdn",
+  "/billing",
+  "/snapshots",
+  "/static-ips",
+  "/notifications",
 ]);
 
 const MAX_NEXT_LENGTH = 2048;

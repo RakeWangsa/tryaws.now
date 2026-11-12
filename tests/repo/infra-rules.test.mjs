@@ -489,9 +489,13 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     // the customer path still reads its own invoices and invokes the renderer
     const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
     expect(customer).toContain("$interpolate`${storage.invoices.arn}/*`");
-    expect(customer).toContain('invoke("invoice-renderer")');
-    // WPU-N2: access-details only through its "web" alias
+    expect(customer).toContain("workers.rendererAliasWeb.arn");
+    // WPU-N2: access-details only through its "web" alias, never the bare function
     expect(customer).toContain("workers.accessAliases.web.arn");
+    expect(customer).not.toContain('invoke("access-details"');
+    expect(customer).not.toMatch(/invoke\([^)]*"invoice-renderer"/);
+    expect(customer).toContain("INVOICE_RENDERER_FUNCTION_NAME");
+    expect(web.match(/rendererAliasWeb/g)).toHaveLength(1);
     expect(customer).not.toMatch(
       /s3:PutObject"\], resources: \[\$interpolate`\$\{storage\.invoices/,
     );

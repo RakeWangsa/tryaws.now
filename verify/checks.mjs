@@ -3075,6 +3075,11 @@ TASKS["WPU-F1"] = [
   repo,
 ];
 
+// WPU-N1: the customer-facing gaps of audit 2 section D: CI variables, the invoice PDF download, the
+// next-path allow-list, the signed-in public menu, /faq and Support links, `own` before the rate limit,
+// the History tab and the renewal-waits line. No AWS call.
+TASKS["WPU-N1"] = [specSync, baselineSync, lint, typecheck, format, web, ui, repo];
+
 // WPU-N2: one-time secret transport. The web tier invokes the "web" alias of access-details (no
 // packages/aws import); the function reveals the Windows password, the database password and creates or
 // lists bucket keys. Tests of the aws adapters, the function, the web port, actions and bucket keys, and

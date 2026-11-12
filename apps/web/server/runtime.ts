@@ -19,6 +19,7 @@ import type { KycPorts } from "./kyc-actions.ts";
 import { writeLog } from "./log.ts";
 import { accessPortFromEnv, type AccessPort } from "./access-invoke.ts";
 import { readerPortFromEnv } from "./reader-invoke.ts";
+import { rendererPortFromEnv, type RendererPort } from "./renderer-invoke.ts";
 import { resourceSecrets } from "./secrets.ts";
 import type { AccountPorts } from "./settings-actions.ts";
 
@@ -60,6 +61,11 @@ export interface WebRuntime {
    * and test with fakes use a dev port instead.
    */
   access: AccessPort | null;
+  /**
+   * The invoke port of the `invoice-renderer` function for "Download PDF" (WPU-N1). null = not
+   * configured: the action says "not available" (R16). Local and test with fakes use a dev renderer.
+   */
+  renderer: RendererPort | null;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -228,8 +234,26 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     access = accessFake.devAccess();
   }
 
+  // The same for the invoice renderer (WPU-N1).
+  let renderer: RendererPort | null = rendererPortFromEnv(env);
+  if (process.env.NODE_ENV !== "production" && config.fakes) {
+    const rendererFake = await import("./fakes/renderer-fake.ts");
+    renderer = rendererFake.devRenderer();
+  }
+
   return {
-    runtime: { config, eps, identity, otp, authLimitKey, kyc, account, reader, access },
+    runtime: {
+      config,
+      eps,
+      identity,
+      otp,
+      authLimitKey,
+      kyc,
+      account,
+      reader,
+      access,
+      renderer,
+    },
     deps,
     ...(verifier !== undefined ? { verifier } : {}),
   };

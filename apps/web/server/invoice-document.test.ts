@@ -1,3 +1,4 @@
+import { unwrapDigitOneHtml } from "@tc/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // WPU-G4: the printable invoice. Cross-tenant proof for the route (R8), the headers, the fail-closed
@@ -120,8 +121,7 @@ describe("the printable invoice", () => {
     expect(html).toMatch(/Address:<\/strong> -</);
     const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
     expect(bn).toContain("বিক্রেতা লিমিটেড");
-    // WPU-F1 wraps each digit one in a span: compare the text
-    expect(bn.replace(/<span class="d1">(\u09E7)<\/span>/g, "$1")).toContain("১২৩৪৫৬৭৮৯০১২৩");
+    expect(unwrapDigitOneHtml(bn)).toContain("১২৩৪৫৬৭৮৯০১২৩");
   });
 
   it("WPU-I2: a reprint shows the seller of the day of issue, not the current setting", async () => {
@@ -168,8 +168,7 @@ describe("the printable invoice", () => {
     expect(html).toContain("<strong>Address:</strong> House 5, Road 3, Dhaka");
     expect(html).toContain("<strong>BIN:</strong> 1234567890123");
     const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
-    // WPU-F1 wraps each digit one in a span: compare the text
-    expect(bn.replace(/<span class="d1">(\u09E7)<\/span>/g, "$1")).toContain("১২৩৪৫৬৭৮৯০১২৩");
+    expect(unwrapDigitOneHtml(bn)).toContain("১২৩৪৫৬৭৮৯০১২৩");
     // WPU-D3: a snapshot issued before the NID was removed still prints, without the number
     state.rows[0]!.buyer = {
       name: null,
