@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { Tx } from "../client";
 import { FEATURE_FLAG_KEYS, type FeatureFlagKey } from "../repositories/config/feature-flags";
 import { requireInstant } from "../repositories/config/args";
+import { seedConfigPrices } from "./config-prices";
 import type { MARKET_NUMERALS } from "../schema/index";
 import { featureFlags, fxRates, markets, pricingRules } from "../schema/index";
 
@@ -161,6 +162,14 @@ export async function seedLaunchData(
     });
     result.pricingRule = true;
   }
+
+  // WPU-G9: the default snapshot price, Amazon Lightsail's USD 0.05 per GB-month (owner instruction
+  // 2026-11-12). Inserted only where missing, so an edited value stays.
+  await seedConfigPrices(tx, {
+    market: code,
+    at,
+    prices: [{ key: "config_price.snapshot_gb_month", usd: "0.05", unit: "gb_month" }],
+  });
 
   // R12: in production every flag is off.
   for (const key of FEATURE_FLAG_KEYS) {

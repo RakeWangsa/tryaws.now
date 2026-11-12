@@ -92,6 +92,13 @@
       "when": 1794471778288,
       "tag": "0012_dns_zone_name_delegated_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794475378288,
+      "tag": "0014_snapshot_price_default",
+      "breakpoints": true
     }
   ]
 }
