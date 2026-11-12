@@ -3,6 +3,7 @@ import { releaseCapacity } from "../capacity/release";
 import type { OperationKind } from "../operations/kinds";
 import type { Clock } from "../types";
 import { readLifecycleConfig } from "./config";
+import { markPlanChangeFailed } from "./plan-change";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -18,8 +19,14 @@ export interface LifecycleHookEvent {
 // database. A kind that is not listed here is not a lifecycle kind and changes nothing.
 export function lifecycleHooks(deps: { clock: Clock }): {
   succeeded(tx: Tx, event: LifecycleHookEvent): Promise<void>;
+  needsAttention(tx: Tx, event: { resourceId: string; kind: string; code: string }): Promise<void>;
 } {
   return {
+    // WPU-S2: an apply of a pending plan that ends in needs_attention is marked, so the renewal stops
+    // quoting its price.
+    async needsAttention(tx, event) {
+      await markPlanChangeFailed(tx, event);
+    },
     async succeeded(tx, event) {
       const repo = lifecycleRepo(tx);
       const at = deps.clock.now();

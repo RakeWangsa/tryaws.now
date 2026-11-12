@@ -392,8 +392,44 @@ describe("plan change at the next renewal (WPU-G8)", () => {
     expect(r).toMatchObject({
       kind: "done",
       patch: {
-        configMerge: { productId: NEXT, appliedPlan: { productId: NEXT }, pendingPlan: null },
+        configMerge: {
+          productId: NEXT,
+          appliedPlan: { productId: NEXT },
+          pendingPlan: null,
+          pendingPlanFailed: null,
+        },
       },
+    });
+  });
+
+  // WPU-S2: core/lifecycle PLAN_APPLY_STATES says container_service applies in `active` only; this
+  // pins the adapter side. A schedule or a cancel clears the failed mark of an earlier apply.
+  it("scale_container applies in the active state only (stopped, suspended and the rest are conflicts)", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
+    for (const state of ["stopped", "suspended", "provisioning", "retained"]) {
+      await expect(
+        adapter.aws.action("scale_container", ctx(null, { state, payload: { productId: NEXT } })),
+      ).rejects.toMatchObject({ code: "conflict" });
+    }
+    expect(calls()).toEqual([]);
+  });
+
+  it("scheduling or cancelling a plan clears the failed mark of an earlier apply", async () => {
+    const { adapter, ctx } = setup();
+    const scheduled = await adapter.aws.action(
+      "schedule_plan_change",
+      ctx(null, { payload: { productId: NEXT } }),
+    );
+    expect(scheduled).toMatchObject({
+      patch: { configMerge: { pendingPlan: { productId: NEXT }, pendingPlanFailed: null } },
+    });
+    const cancelled = await adapter.aws.action(
+      "schedule_plan_change",
+      ctx(null, { payload: { productId: null } }),
+    );
+    expect(cancelled).toMatchObject({
+      patch: { configMerge: { pendingPlan: null, pendingPlanFailed: null } },
     });
   });
 });

@@ -276,12 +276,13 @@ export function createContainerServiceAdapter(
         // nothing is called in AWS and nothing is charged now. null cancels a pending change.
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
         const productId = payload?.productId;
-        if (productId === null) return stepDone({ configMerge: { pendingPlan: null } });
+        if (productId === null)
+          return stepDone({ configMerge: { pendingPlan: null, pendingPlanFailed: null } });
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (productId === ctx.config.productId) throw fail("validation");
         const plan = await deps.loadPlan({ customerId: ctx.resource.customerId, productId });
         if (plan === null) throw fail("validation");
-        return stepDone({ configMerge: { pendingPlan: { productId } } });
+        return stepDone({ configMerge: { pendingPlan: { productId }, pendingPlanFailed: null } });
       }
       case "scale_container": {
         // Queued by the renewal, never by a customer: the power and scale come from the catalog
@@ -300,7 +301,12 @@ export function createContainerServiceAdapter(
         );
         // The applied plan keeps pricing the later renewals (core lifecycle/plan-change).
         return stepDone({
-          configMerge: { productId, appliedPlan: { productId }, pendingPlan: null },
+          configMerge: {
+            productId,
+            appliedPlan: { productId },
+            pendingPlan: null,
+            pendingPlanFailed: null,
+          },
         });
       }
       case "request_certificate": {

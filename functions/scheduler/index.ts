@@ -1,6 +1,7 @@
 import { QUEUE_URL_PATTERN, createSqsClient, createSqsSend } from "@tc/aws";
 import {
   createFifoQueue,
+  markPlanChangeFailed,
   runLifecycle,
   runMetering,
   sweepOperations,
@@ -8,6 +9,7 @@ import {
   type MeteringReport,
   type LogEvent,
   type Logger,
+  type AttentionHook,
   type SweepDeps,
   type SweepReport,
 } from "@tc/core";
@@ -15,6 +17,10 @@ import { purgeRateLimits, withTx } from "@tc/db";
 
 // Longest rate-limit window is 86400 s (packages/db rate-limit): a window that started two days ago is over.
 export const RATE_LIMIT_RETENTION_MS = 2 * 86_400_000;
+
+// WPU-S2: an apply of a pending plan whose lease ran out for the last time ends in needs_attention in
+// the sweep; the plan is then marked failed so that the renewal stops quoting its price.
+export const planChangeAttention: AttentionHook = markPlanChangeFailed;
 
 export interface SchedulerReport {
   readonly sweep: SweepReport | null;
@@ -99,6 +105,7 @@ export const handler = async (): Promise<SchedulerReport> => {
       runTx: withTx,
       clock: { now: () => new Date() },
       queue: createFifoQueue(createSqsSend(createSqsClient(config.region), config.queueUrl)),
+      onAttention: planChangeAttention,
       log: (e: LogEvent) => console.log(JSON.stringify(e)),
     });
   }

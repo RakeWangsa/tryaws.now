@@ -490,7 +490,12 @@ describe("plan change at the next renewal (WPU-G8)", () => {
     expect(r).toMatchObject({
       kind: "done",
       patch: {
-        configMerge: { productId: NEXT, appliedPlan: { productId: NEXT }, pendingPlan: null },
+        configMerge: {
+          productId: NEXT,
+          appliedPlan: { productId: NEXT },
+          pendingPlan: null,
+          pendingPlanFailed: null,
+        },
       },
     });
     expect(body("UpdateDistributionBundle")).toEqual({
@@ -503,6 +508,33 @@ describe("plan change at the next renewal (WPU-G8)", () => {
         ctx(null, { state: "active", payload: { productId: "x" } }),
       ),
     ).rejects.toMatchObject({ code: "validation" });
+  });
+
+  // WPU-S2: core/lifecycle PLAN_APPLY_STATES says cdn applies in `active` only; this pins the adapter.
+  it("change_cdn_bundle applies in the active state only, and a schedule or cancel clears the failed mark", async () => {
+    const { adapter, ctx } = setup({ deps: { loadBundle: async () => "large_1_0" } });
+    for (const state of ["stopped", "suspended", "provisioning", "retained"]) {
+      await expect(
+        adapter.aws.action(
+          "change_cdn_bundle",
+          ctx(null, { kind: "change_cdn_bundle", state, payload: { productId: NEXT } }),
+        ),
+      ).rejects.toMatchObject({ code: "conflict" });
+    }
+    const scheduled = await adapter.aws.action(
+      "schedule_plan_change",
+      ctx(null, { state: "active", payload: { productId: NEXT } }),
+    );
+    expect(scheduled).toMatchObject({
+      patch: { configMerge: { pendingPlan: { productId: NEXT }, pendingPlanFailed: null } },
+    });
+    const cancelled = await adapter.aws.action(
+      "schedule_plan_change",
+      ctx(null, { state: "active", payload: { productId: null } }),
+    );
+    expect(cancelled).toMatchObject({
+      patch: { configMerge: { pendingPlan: null, pendingPlanFailed: null } },
+    });
   });
 });
 
