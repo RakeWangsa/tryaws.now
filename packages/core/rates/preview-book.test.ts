@@ -24,7 +24,11 @@ it("prices each product of the family: the seeded disk anchor, USD 0.10 a GB, at
   expect(r.ok).toBe(true);
   if (!r.ok) return;
   expect(r.value.fxRate).toBe("127");
-  expect(r.value.rows.map((x) => x.region).sort()).toEqual(["ap-south-1", "ap-southeast-1"]);
+  expect(r.value.rows.map((x) => x.region).sort()).toEqual([
+    "ap-south-1",
+    "ap-southeast-1",
+    "us-east-1",
+  ]);
   for (const row of r.value.rows) {
     expect(row.candidate.baseMinor).toBe(1270n);
     // nothing changed: the candidate is the current price
