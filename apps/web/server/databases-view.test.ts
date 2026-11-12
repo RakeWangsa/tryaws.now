@@ -29,6 +29,20 @@ vi.mock("@tc/db", () => ({
     state.catalog.find((c) => c["id"] === id) ?? null,
 }));
 vi.mock("@tc/core", () => ({
+  DB_BACKUP_RETENTION_DAYS: 7,
+  pointInTimeWindow: (now: Date) => ({
+    from: new Date(now.getTime() - 7 * 86400000),
+    to: new Date(now.getTime() - 300000),
+  }),
+  // The price of a snapshot comes from the engine (R4): the view only passes it on.
+  snapshotPrice: async (_tx: unknown, _market: string, sizeGb: number | null) => ({
+    ok: true,
+    value: {
+      unit: "gb_month",
+      perGbMonthMinor: 700n,
+      monthlyMinor: sizeGb === null ? null : BigInt(sizeGb) * 700n,
+    },
+  }),
   priceCatalog: async (_tx: unknown, rows: Array<Record<string, unknown>>) =>
     state.priced
       ? {
@@ -213,7 +227,16 @@ describe("loadDatabaseDetail", () => {
       specs: { engine: "mysql", vcpus: 2 },
       backups: [{ id: "b1", name: "final", final: true, sizeGb: 40, state: "active" }],
     });
-    expect(JSON.stringify(detail)).not.toMatch(/arn:aws|tc-database-/);
+    expect(
+      JSON.stringify(detail, (_k, v) => (typeof v === "bigint" ? v.toString() : v)),
+    ).not.toMatch(/arn:aws|tc-database-/);
+    // WPU-G9: the snapshot price, the monthly price of a snapshot and the retention come with it.
+    expect(detail).toMatchObject({
+      snapshotPrice: { state: "ready", perGbMonthMinor: 700n },
+      retentionDays: 7,
+      backups: [{ monthlyMinor: 28000n }],
+      masterUsername: null,
+    });
   });
 
   it("answers null for a missing row, another customer's row, another family and a flag that is off (R8, R12)", async () => {

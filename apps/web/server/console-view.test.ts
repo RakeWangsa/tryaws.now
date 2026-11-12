@@ -53,9 +53,14 @@ describe("loadBalancerConsoleOf", () => {
 
 describe("databaseConsoleOf and bucketVersioningOf", () => {
   it("default to private, no window and unknown versioning", () => {
-    expect(databaseConsoleOf({})).toEqual({ backupWindow: null, publiclyAccessible: false });
+    expect(databaseConsoleOf({})).toEqual({
+      backupWindow: null,
+      maintenanceWindow: null,
+      publiclyAccessible: false,
+    });
     expect(databaseConsoleOf({ backupWindow: "16:00-16:30", publiclyAccessible: true })).toEqual({
       backupWindow: "16:00-16:30",
+      maintenanceWindow: null,
       publiclyAccessible: true,
     });
     expect(databaseConsoleOf({ publiclyAccessible: "true" }).publiclyAccessible).toBe(false);

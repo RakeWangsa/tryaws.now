@@ -85,10 +85,7 @@ describe("access mode read-back", () => {
     for (const mode of ["private", "public"] as const) {
       const { aws, adapter, ctx } = setup();
       aws.on("lightsail", "UpdateBucket", lightsailOk({}));
-      const r = await adapter.aws.action(
-        "set_bucket_access",
-        ctx({ mode }),
-      );
+      const r = await adapter.aws.action("set_bucket_access", ctx({ mode }));
       expect(r).toMatchObject({ kind: "done", patch: { configMerge: { accessMode: mode } } });
     }
   });

@@ -9,7 +9,11 @@ import {
   setBucketAccessCore,
 } from "../../../../../server/bucket-actions.ts";
 import { familyActionDeps } from "../../../../../server/bucket-deps.ts";
-import { BUCKET_INSTANCE_ACCESS, BUCKET_VERSIONING, consoleCore } from "../../../../../server/console-actions.ts";
+import {
+  BUCKET_INSTANCE_ACCESS,
+  BUCKET_VERSIONING,
+  consoleCore,
+} from "../../../../../server/console-actions.ts";
 import { familyActionDeps as consoleDeps } from "../../../../../server/family-deps.ts";
 import type { FamilyResult } from "../../../../../server/bucket-frame.ts";
 

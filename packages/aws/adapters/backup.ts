@@ -111,7 +111,9 @@ function snapshotApi(ctx: OpCtx<unknown>, source: SnapshotSource) {
       }
       if (source === "database") {
         const got = await orNull(() =>
-          lightsail.send(new GetRelationalDatabaseSnapshotCommand({ relationalDatabaseSnapshotName: name })),
+          lightsail.send(
+            new GetRelationalDatabaseSnapshotCommand({ relationalDatabaseSnapshotName: name }),
+          ),
         );
         const s = got?.relationalDatabaseSnapshot;
         if (s === undefined) return null;
@@ -157,7 +159,9 @@ function snapshotApi(ctx: OpCtx<unknown>, source: SnapshotSource) {
           ? lightsail.send(new DeleteInstanceSnapshotCommand({ instanceSnapshotName: name }))
           : source === "database"
             ? lightsail.send(
-                new DeleteRelationalDatabaseSnapshotCommand({ relationalDatabaseSnapshotName: name }),
+                new DeleteRelationalDatabaseSnapshotCommand({
+                  relationalDatabaseSnapshotName: name,
+                }),
               )
             : lightsail.send(new DeleteDiskSnapshotCommand({ diskSnapshotName: name })),
       );

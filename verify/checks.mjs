@@ -847,6 +847,25 @@ TASKS["WPU-G7"] = [
   repo,
 ];
 
+// WPU-G9: database snapshots, restore to a new database (snapshot and point in time), connection facts and
+// maintenance window; bucket access mode read-back and access for a server (with the suspend revoke);
+// the default snapshot price (migration 0014). Rules (core), kinds and migration (db), adapters (aws),
+// cores, views, messages and the cross-tenant sweep (web), operation names (admin). The db suite needs
+// the local PostgreSQL (pnpm db:up).
+TASKS["WPU-G9"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  web,
+  admin,
+  repo,
+];
+
 // WPU-G4: the Metrics tab reads the reader function through an invoke port and draws console-style SVG
 // charts, /invoices and /invoices/[id] with a printable document, /dns and /dns/[id] with the record
 // editor (kind change_dns_record). The record rules (core), the operation kinds (db), the zone adapter
