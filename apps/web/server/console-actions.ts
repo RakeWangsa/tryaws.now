@@ -234,7 +234,6 @@ export const CDN_RESET_CACHE: ConsoleSpec = {
 // ---------------------------------------------------------------------------------------------
 // WPU-G8: container service and CDN distribution.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const LIVE = ["active", "stopped", "suspended"] as const;
 const configOf = (row: ResourceSummary): Record<string, unknown> =>
   typeof row.config === "object" && row.config !== null && !Array.isArray(row.config)

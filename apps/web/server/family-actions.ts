@@ -32,6 +32,7 @@ export interface FamilyRepos {
    * database snapshot cores ask; absent means no (R16).
    */
   snapshotPriceOn?(): Promise<boolean>;
+  /**
    * One catalog row by id (WPU-G8, a plan change). The catalog is not tenant data. Absent in a test
    * world that does not need it; an action that needs it refuses when it is missing (R16).
    */
