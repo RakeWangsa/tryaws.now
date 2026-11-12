@@ -1085,10 +1085,7 @@ it("task WP5-T6b is proven by core, the renewal and restore database tests, the 
       "pnpm test --filter @tc/web _extras/mockup-anchors --no-passWithNoTests",
     ],
     ["extras-messages", "pnpm test --filter @tc/web messages/extras --no-passWithNoTests"],
-    [
-      "order-kinds-sweep",
-      "pnpm test --filter @tc/web server/endpoint-sweep --no-passWithNoTests",
-    ],
+    ["order-kinds-sweep", "pnpm test --filter @tc/web server/endpoint-sweep --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
   for (const f of [
