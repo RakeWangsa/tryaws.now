@@ -47,6 +47,15 @@ export const LIST: InvoiceListScreen = {
 
 export const DETAIL: InvoiceDetailScreen = {
   state: "ready",
+  seller: {
+    legalNameBn: "উদাহরণ বিক্রেতা লিমিটেড",
+    legalNameEn: "Example Seller Limited",
+    bin: "0000000000000",
+    addressBn: "ঢাকা",
+    addressEn: "Dhaka",
+    signatoryName: "Example Signatory",
+    signatoryDesignation: "Director",
+  },
   invoice: {
     id: INVOICE_ID,
     number: "TC-2026-000012",
@@ -106,4 +115,5 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "invoice.no_name": detail(DETAIL, ""),
   "invoice.not_found": detail(null),
   "invoice.unavailable": detail({ state: "unavailable" }),
+  "invoice.seller_missing": detail({ state: "seller_missing" }),
 };

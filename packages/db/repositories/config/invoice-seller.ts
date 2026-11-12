@@ -48,13 +48,16 @@ const OPTIONAL = [
 const BIN = /^[0-9]{13}$/;
 const PHONE = /^[+0-9][0-9 ()-]{5,19}$/;
 const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
+const hasControl = (s: string): boolean =>
+  [...s].some((c) => {
+    const code = c.charCodeAt(0);
+    return code < 0x20 || code === 0x7f;
+  });
 
 function text(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const t = value.trim();
-  return t === "" || t.length > max || CONTROL.test(t) ? null : t;
+  return t === "" || t.length > max || hasControl(t) ? null : t;
 }
 
 /** The seller fields of a value (stored or entered), or null when anything is missing or wrong. */

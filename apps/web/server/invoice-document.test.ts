@@ -1,14 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // WPU-G4: the printable invoice. Cross-tenant proof for the route (R8), the headers, the fail-closed
 // answers (R16).
 
 const state = vi.hoisted(() => ({
   rows: [] as { id: string; customerId: string; lines: unknown; totalMinor: bigint }[],
+  seller: { state: "none" } as unknown,
 }));
 vi.mock("@tc/db", () => ({
   withTx: async (fn: (tx: unknown) => unknown) => fn({}),
+  readInvoiceSeller: async () => state.seller,
   customerRepos: (_tx: unknown, customerId: string) => ({
+    profile: { get: async () => ({ id: customerId, market: "BD", name: "Rahim" }) },
     invoices: {
       get: async (id: string) => {
         const found = state.rows.find((r) => r.id === id && r.customerId === customerId);
@@ -41,6 +44,18 @@ const LINES = [
   },
   { kind: "step", code: "vat", label: { bn: "ভ্যাট", en: "VAT <b>" }, amountMinor: "9000" },
 ];
+const SELLER = {
+  legalNameBn: "বিক্রেতা লিমিটেড",
+  legalNameEn: "Seller <Ltd>",
+  bin: "1234567890123",
+  addressBn: "ঢাকা",
+  addressEn: "Dhaka",
+  signatoryName: "Karim",
+  signatoryDesignation: "Director",
+};
+beforeEach(() => {
+  state.seller = { state: "ok", seller: SELLER, version: 1 };
+});
 const deps = (customerId: string | null, name = "Rahim") => ({
   session: customerId === null ? null : ({ customerId } as never),
   customerName: async () => name,
@@ -70,7 +85,34 @@ describe("the printable invoice", () => {
     state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n }];
     const out = await invoiceDocument(deps(A), "bn", INV);
     expect(out.html).toContain("৬৯০.০০");
-    expect(out.html).toContain("ইনভয়েস");
+    expect(out.html).toContain("কর চালানপত্র");
+  });
+
+  it("is the Mushak 6.3 tax invoice with the seller's legal name, BIN and address (WPU-I1)", async () => {
+    state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n }];
+    const en = await invoiceDocument(deps(A), "en", INV);
+    const html = en.html as string;
+    expect(html).toContain("Mushak-6.3");
+    expect(html).toContain("Seller &lt;Ltd&gt;");
+    expect(html).toContain("1234567890123");
+    expect(html).toContain("Dhaka");
+    expect(html).toContain("Karim");
+    expect(html).toContain("Rahim");
+    // the buyer has no address, BIN or NID on file: a dash, nothing invented
+    expect(html).toMatch(/Address:<\/strong> -</);
+    const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
+    expect(bn).toContain("বিক্রেতা লিমিটেড");
+    expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
+  });
+
+  it("answers 503 and prints nothing when the seller details are missing or unreadable (R16)", async () => {
+    state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n }];
+    for (const stored of [{ state: "none" }, { state: "invalid" }]) {
+      state.seller = stored;
+      expect(await invoiceDocument(deps(A), "en", INV)).toEqual({ status: 503 });
+    }
+    // another customer's invoice is still a 404 (R8), not a hint that a seller is missing
+    expect(await invoiceDocument(deps(B), "en", INV)).toEqual({ status: 404 });
   });
 
   it("answers 404 for another customer's invoice, like for a missing one (R8)", async () => {

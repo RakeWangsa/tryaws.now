@@ -104,7 +104,10 @@ describe("renderInvoiceHtml", () => {
     expect(bn).toContain("জাতীয় রাজস্ব বোর্ড");
   });
   it("shows the seller legal name, BIN and address in the locale, and the buyer", () => {
-    const en = renderInvoiceHtml({ ...doc, customer: { ...doc.customer, taxId: { kind: "nid", value: "1990123456789" } } }, "en");
+    const en = renderInvoiceHtml(
+      { ...doc, customer: { ...doc.customer, taxId: { kind: "nid", value: "1990123456789" } } },
+      "en",
+    );
     expect(en).toContain("Example Services Limited");
     expect(en).toContain("1234567890123");
     expect(en).toContain("Road 1, Dhaka");
@@ -138,7 +141,8 @@ describe("renderInvoiceHtml", () => {
     expect(html).toContain("size:A4");
   });
   it("refuses a tax invoice without seller details (R16) but not a receipt", () => {
-    const { seller: _s, ...noSeller } = doc;
+    const noSeller: InvoiceDocument = { ...doc };
+    delete noSeller.seller;
     expect(() => renderInvoiceHtml(noSeller, "en")).toThrow(/seller_details_missing/);
     expect(() => renderInvoiceHtml({ ...noSeller, kind: "receipt" }, "en")).not.toThrow();
   });

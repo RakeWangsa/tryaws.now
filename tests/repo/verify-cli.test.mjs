@@ -167,6 +167,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-G8",
     "WPU-G9",
     "WPU-H1",
+    "WPU-I1",
     "WPU-M1",
     "WPU-M2",
     "WPU-S1",
@@ -314,6 +315,35 @@ it("the proof test of WPU-H1 exists and covers the three application roles", () 
     "append-only",
   ]) {
     expect(text, part).toContain(part);
+  }
+});
+
+it("task WPU-I1 is proven by lint, types, format, the core, db, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-I1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-I1 exists: the renderer, the seller rules, the refusal to issue and the admin page", () => {
+  for (const [file, part] of [
+    ["packages/core/invoices/render.test.ts", "Mushak-6.3"],
+    ["packages/core/invoices/seller.test.ts", "BIN is exactly 13 Latin digits"],
+    ["packages/core/invoices/words.test.ts", "amountInWords"],
+    ["packages/db/test/invoices-repo.test.ts", "seller_details_missing"],
+    ["packages/db/test/admin-invoice-seller.test.ts", "nothing is seeded"],
+    ["apps/web/server/invoice-document.test.ts", "503"],
+    ["apps/admin/server/invoice-seller-flow.test.ts", "denied"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
   }
 });
 

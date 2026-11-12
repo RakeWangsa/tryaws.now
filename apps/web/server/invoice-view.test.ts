@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // WPU-G4: /invoices and /invoices/[id]. The pure helpers are tested here; the cross-tenant proof of the
 // loaders is the last describe (R8, R16).
@@ -7,11 +7,15 @@ const state = vi.hoisted(() => ({
   rows: [] as unknown[],
   calls: [] as unknown[][],
   throwOnRead: false,
+  // WPU-I1: what readInvoiceSeller answers for the market of the customer.
+  seller: { state: "none" } as unknown,
 }));
 
 vi.mock("@tc/db", () => ({
   withTx: async (fn: (tx: unknown) => unknown) => fn({}),
+  readInvoiceSeller: async () => state.seller,
   customerRepos: (_tx: unknown, customerId: string) => ({
+    profile: { get: async () => ({ id: customerId, market: "BD", name: "Rahim" }) },
     invoices: {
       list: async (opts: unknown) => {
         state.calls.push(["list", customerId, opts]);
@@ -62,6 +66,18 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const session = (customerId: string) => ({ customerId }) as never;
+const SELLER = {
+  legalNameBn: "ক",
+  legalNameEn: "Seller Ltd",
+  bin: "0000000000000",
+  addressBn: "ক",
+  addressEn: "Dhaka",
+  signatoryName: "A",
+  signatoryDesignation: "B",
+};
+beforeEach(() => {
+  state.seller = { state: "ok", seller: SELLER, version: 1 };
+});
 
 describe("the cursor of the list", () => {
   it("round-trips fiscal year and number and refuses everything else", () => {
@@ -152,5 +168,35 @@ describe("loadInvoice", () => {
   it("says 'unavailable' when the stored lines do not add up, and never prints a wrong total (R16)", async () => {
     state.rows = [row({ totalMinor: 70000n })];
     expect(await loadInvoice(session(A), INV)).toEqual({ state: "unavailable" });
+  });
+  it("carries the seller of the customer's market with a ready invoice (WPU-I1)", async () => {
+    state.rows = [row()];
+    const out = await loadInvoice(session(A), INV);
+    expect(out).toMatchObject({ state: "ready", seller: { legalNameEn: "Seller Ltd" } });
+  });
+  it("says 'seller_missing' when the seller details are absent or unreadable, never a half tax invoice (R16)", async () => {
+    state.rows = [row()];
+    for (const stored of [
+      { state: "none" },
+      { state: "invalid" },
+      // a row that the reader accepted but the core refuses: a blank signatory
+      { state: "ok", seller: { ...SELLER, signatoryName: " " }, version: 1 },
+    ]) {
+      state.seller = stored;
+      expect(await loadInvoice(session(A), INV), JSON.stringify(stored)).toEqual({
+        state: "seller_missing",
+      });
+    }
+  });
+  it("another customer's invoice is still null even when the seller is missing (R8)", async () => {
+    state.rows = [row()];
+    state.seller = { state: "none" };
+    expect(await loadInvoice(session(B), INV)).toBeNull();
+  });
+  it("keeps the stored VAT rate of a line and refuses a rate that is not decimal text", async () => {
+    const vat = { ...LINES[1], code: "bd_vat", rate: "0.05" };
+    expect(parseStoredLines([LINES[0], vat], 69000n)?.[1]?.rate).toBe("0.05");
+    expect(parseStoredLines([LINES[0], { ...vat, rate: "5%" }], 69000n)).toBeNull();
+    expect(parseStoredLines([LINES[0], { ...vat, rate: 0.05 }], 69000n)).toBeNull();
   });
 });

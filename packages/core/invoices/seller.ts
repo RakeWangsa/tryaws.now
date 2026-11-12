@@ -36,8 +36,11 @@ const OPTIONAL = [
 const BIN = /^[0-9]{13}$/;
 const PHONE = /^[+0-9][0-9 ()-]{5,19}$/;
 const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
+const hasControl = (s: string): boolean =>
+  [...s].some((c) => {
+    const code = c.charCodeAt(0);
+    return code < 0x20 || code === 0x7f;
+  });
 
 export function isValidBin(value: unknown): value is string {
   return typeof value === "string" && BIN.test(value);
@@ -46,7 +49,7 @@ export function isValidBin(value: unknown): value is string {
 function text(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const t = value.trim();
-  if (t === "" || t.length > max || CONTROL.test(t)) return null;
+  if (t === "" || t.length > max || hasControl(t)) return null;
   return t;
 }
 
