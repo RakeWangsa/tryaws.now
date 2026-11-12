@@ -18,6 +18,7 @@ function runtime(fakes: boolean): WebRuntime {
     kyc: null,
     account: null,
     reader: null,
+    renderer: null,
   };
 }
 

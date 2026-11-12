@@ -52,6 +52,16 @@ The function role names are `tc-<stage>-<function>-role` (`roleName` in `infra/l
 
 `docs/runbooks/pool-account-onboarding.md` lists the steps for one new pool account. In terms of this folder: create the account in `TiCON-Pools` (steps 1 and 2 above), `pool-roles.yaml` (step 7), `alternate-contacts.template.sh`, then `/capacity`. The SCPs, the organization trail and GuardDuty apply by themselves through the OU and the organization settings.
 
+## GitHub environment variables DevOps must set
+
+The deploy workflows read these as `vars.*` of the GitHub environments `staging` and `production` (names only, no value is in the repository; none is a secret). `infra/lib/stage.ts` refuses a staging or production synth when a required one is missing, so a deploy without them is refused (R16).
+
+- `TC_ACCOUNT_ID`, `TC_POOL_ACCOUNT_IDS`, `TC_DNS_ACCOUNT_ID`, `TC_DNS_EXTERNAL_ID`
+- `TC_DOMAIN_WEB`, `TC_DOMAIN_ADMIN`, `TC_ADMIN_ALLOWLIST`
+- `TC_ALARM_EMAILS`, `TC_SES_IDENTITY_ARN`, `TC_SES_FROM_ADDRESS`
+- `TC_PROBE_SOURCES` (NAT gateway /32 addresses) and `TC_VPC_CIDR` (Lightsail VPC of the pool Region); how to read them: `docs/runbooks/pool-account-single.md` step 7
+- Role ARNs: `TC_STAGING_DEPLOY_ROLE_ARN`, `TC_PRODUCTION_PLAN_ROLE_ARN`, `TC_PRODUCTION_DEPLOY_ROLE_ARN`
+
 ## Needs DevOps confirmation
 
 Each line is a statement that only a person with the AWS accounts can confirm. The column stays empty until that person writes in `JOURNEY.md`, in the entry "WP0-T5 DevOps confirmation". Nothing in the repository fills it.

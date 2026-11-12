@@ -894,6 +894,19 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     ],
   },
 
+  // WPU-N1: "Download PDF". The invoice is read for the session's customer; the renderer gets that id.
+  "app/[locale]/(panel)/invoices/[id]/pdf/route.ts": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}invoice-pdf.test.ts`,
+        "cross-tenant: another customer's invoice answers 404 and the renderer is never called (R8)",
+      ),
+      proof(`${W}invoice-pdf.test.ts`, "answers 401 without a session and touches nothing (R9)"),
+      CUSTOMER_REPOS,
+    ],
+  },
+
   // ---- pages with an id in the path
   "app/[locale]/(panel)/invoices/[id]/page.tsx": {
     kind: "id",
