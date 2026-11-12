@@ -156,6 +156,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T4",
     "WPU-G1",
     "WPU-G10",
+    "WPU-G11",
     "WPU-G2",
     "WPU-G3",
     "WPU-G4",
@@ -431,6 +432,67 @@ it("task WPU-G8 is proven by lint, types, format, the core, db, aws, web, admin 
     ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-G11 is proven by lint, types, format, the core, db, aws, web, admin and repository tests", () => {
+  expect(TASKS["WPU-G11"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof tests of WPU-G11 exist: the whitelist, the adapters, the typed domain with a fresh sign-in, the forms and the allow-list", () => {
+  for (const [file, title] of [
+    [
+      "packages/core/products/db-parameters.test.ts",
+      "never lists a parameter that can lock the customer out",
+    ],
+    [
+      "packages/db/test/operation-kinds.test.ts",
+      "customer kinds that are not destructive in the sense of R13",
+    ],
+    [
+      "packages/aws/test/cdn.test.ts",
+      "detaches it from the distribution, deletes it and clears the saved certificate",
+    ],
+    [
+      "packages/aws/test/container-service.test.ts",
+      "takes the domain off the service, deletes the certificate",
+    ],
+    ["packages/aws/test/load-balancer.test.ts", "turns the HTTPS redirect off first"],
+    [
+      "packages/aws/test/database-g11.test.ts",
+      "applies a dynamic parameter at once and a static one at the next reboot",
+    ],
+    [
+      "apps/web/server/console-actions-g11.test.ts",
+      "needs a fresh sign-in before anything else, and the typed domain",
+    ],
+    [
+      "apps/web/server/console-actions-g11.test.ts",
+      "another customer's resource, a missing one and a wrong family give one answer",
+    ],
+    [
+      "apps/web/app/[locale]/(panel)/_console/console-g11.test.tsx",
+      "shows the last known list with its date",
+    ],
+    [
+      "tests/repo/infra-org.test.mjs",
+      "TcProvisioner allows exactly the commands of the provisioning adapters",
+    ],
+  ]) {
+    const text = readFileSync(file, "utf8");
+    expect(text, `${file}: ${title}`).toContain(title);
+  }
 });
 
 it("task WPU-G9 is proven by lint, types, format, the core, db, aws, web, admin and repository tests", () => {

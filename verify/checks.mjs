@@ -2533,6 +2533,25 @@ TASKS["WPU-G10"] = [
   repo,
 ];
 
+// WPU-G11: remove and replace a certificate on a container service, a CDN distribution and a load
+// balancer (detach, delete, request again; typed domain and a fresh sign-in), and the parameters of a
+// database (a whitelist per engine in core, a last-known list kept in the resource config, a reboot).
+// New operation kinds (db), adapter actions (aws) and their roles (a repo test ties the allow-list to
+// the adapters). No migration. The db and core suites need the local PostgreSQL (pnpm db:up).
+TASKS["WPU-G11"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  web,
+  admin,
+  repo,
+];
+
 // WPU-H1: money safety. The proof test of the ledger at the database: as web_rw, worker_rw and admin_rw
 // an unbalanced, single-sided, zero, negative or mixed-currency post is refused by the DATABASE (the
 // application check is skipped on purpose), a reversal balances, and UPDATE, DELETE and TRUNCATE of the

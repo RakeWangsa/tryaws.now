@@ -93,6 +93,7 @@ export const databasesBn = {
         backups: "ব্যাকআপ",
         metrics: "মেট্রিক্স",
         settings: "সেটিংস",
+        parameters: "প্যারামিটার",
         destroy: "মুছে ফেলা",
       },
       overview: {

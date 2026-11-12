@@ -12,6 +12,8 @@ import { CdnDetailContent } from "./CdnDetailContent.tsx";
 import {
   destroyCdnAction,
   refreshCdnCertificateAction,
+  removeCdnCertificateAction,
+  replaceCdnCertificateAction,
   requestCdnCertificateAction,
   resetCdnCacheAction,
   scheduleCdnPlanAction,
@@ -60,6 +62,8 @@ export default async function CdnDetailPage({ params, searchParams }: Props) {
         planAction={scheduleCdnPlanAction}
         certRequestAction={requestCdnCertificateAction}
         certRefreshAction={refreshCdnCertificateAction}
+        certRemoveAction={removeCdnCertificateAction}
+        certReplaceAction={replaceCdnCertificateAction}
         ids={{
           cache: newUuidV7(),
           origin: newUuidV7(),
@@ -67,6 +71,8 @@ export default async function CdnDetailPage({ params, searchParams }: Props) {
           planCancel: newUuidV7(),
           cert: newUuidV7(),
           certRefresh: newUuidV7(),
+          certRemove: newUuidV7(),
+          certReplace: newUuidV7(),
         }}
         {...(cdn !== null && cdn.state === "active"
           ? {

@@ -97,6 +97,7 @@ describe("database options form", () => {
         databaseId={ID}
         requestId={REQ}
         console={{
+          parameters: null,
           backupWindow: "16:00-16:30",
           maintenanceWindow: "tue:17:00-tue:17:30",
           publiclyAccessible: true,
@@ -115,7 +116,12 @@ describe("database options form", () => {
         action={noop}
         databaseId={ID}
         requestId={REQ}
-        console={{ backupWindow: null, maintenanceWindow: null, publiclyAccessible: false }}
+        console={{
+          parameters: null,
+          backupWindow: null,
+          maintenanceWindow: null,
+          publiclyAccessible: false,
+        }}
       />,
       "bn",
     );

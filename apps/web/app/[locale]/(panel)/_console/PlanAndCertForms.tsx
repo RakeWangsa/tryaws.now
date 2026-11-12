@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useActionState } from "react";
 import { INITIAL_FORM_STATE } from "../../../../server/action-state.ts";
 import type { CachePolicyFacts, CertificateFacts } from "../../../../server/console-view.ts";
+import { CertificateChange } from "./CertificateChange.tsx";
 import { Choice, ConsoleNotice, Hidden, fieldError } from "./ConsoleForms.tsx";
 import type { ConsoleAction } from "./ConsoleForms.tsx";
 
@@ -135,15 +136,24 @@ function CertificateRecords({ certificate }: { certificate: CertificateFacts }) 
 export function CertificatePanel({
   requestAction,
   refreshAction,
+  removeAction,
+  replaceAction,
   idField,
   resourceId,
   requestId,
   refreshRequestId,
+  removeRequestId,
+  replaceRequestId,
   certificate,
   allowed,
 }: {
   requestAction: ConsoleAction;
   refreshAction: ConsoleAction;
+  /** WPU-G11: take the certificate off and delete it, or replace it by one for other domains. */
+  removeAction: ConsoleAction;
+  replaceAction: ConsoleAction;
+  removeRequestId: string;
+  replaceRequestId: string;
   idField: "containerId" | "cdnId";
   resourceId: string;
   requestId: string;
@@ -199,6 +209,16 @@ export function CertificatePanel({
               {t("refresh")}
             </SubmitButton>
           </form>
+          <CertificateChange
+            removeAction={removeAction}
+            replaceAction={replaceAction}
+            idField={idField}
+            resourceId={resourceId}
+            removeRequestId={removeRequestId}
+            replaceRequestId={replaceRequestId}
+            domain={certificate.domain}
+            allowed={allowed}
+          />
         </>
       )}
     </>

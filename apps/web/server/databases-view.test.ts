@@ -30,6 +30,9 @@ vi.mock("@tc/db", () => ({
 }));
 vi.mock("@tc/core", () => ({
   DB_BACKUP_RETENTION_DAYS: 7,
+  // The parameter list of the console view (WPU-G11): these tests do not read it.
+  DB_PARAMETER_RULES: { mysql: [], postgres: [] },
+  dbEngineFrom: () => null,
   pointInTimeWindow: (now: Date) => ({
     from: new Date(now.getTime() - 7 * 86400000),
     to: new Date(now.getTime() - 300000),

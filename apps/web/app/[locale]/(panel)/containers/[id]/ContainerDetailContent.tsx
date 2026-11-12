@@ -38,6 +38,8 @@ export interface FormIds {
   planCancel: string;
   cert: string;
   certRefresh: string;
+  certRemove: string;
+  certReplace: string;
   endpoint: string;
   endpointRemove: string;
 }
@@ -55,6 +57,8 @@ export function ContainerDetailContent({
   planAction = refuse,
   certRequestAction = refuse,
   certRefreshAction = refuse,
+  certRemoveAction = refuse,
+  certReplaceAction = refuse,
   endpointAction = refuse,
   ids,
   defaultTab,
@@ -70,6 +74,8 @@ export function ContainerDetailContent({
   planAction?: Action;
   certRequestAction?: Action;
   certRefreshAction?: Action;
+  certRemoveAction?: Action;
+  certReplaceAction?: Action;
   endpointAction?: Action;
   ids?: FormIds;
   defaultTab?: string;
@@ -358,6 +364,10 @@ export function ContainerDetailContent({
     <CertificatePanel
       requestAction={certRequestAction}
       refreshAction={certRefreshAction}
+      removeAction={certRemoveAction}
+      replaceAction={certReplaceAction}
+      removeRequestId={ids?.certRemove ?? requestId}
+      replaceRequestId={ids?.certReplace ?? requestId}
       idField="containerId"
       resourceId={service.id}
       requestId={ids?.cert ?? requestId}

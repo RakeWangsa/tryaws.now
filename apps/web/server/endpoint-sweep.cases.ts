@@ -375,6 +375,47 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       },
     ]),
   ),
+  // WPU-G11: remove or replace a certificate, and the parameters and reboot of a database. The cross-tenant
+  // proof of the table runs every spec with a foreign id and shows the one answer and nothing queued (R8).
+  ...Object.fromEntries(
+    [
+      "load-balancers/[id]/actions.ts#removeCertificateAction",
+      "load-balancers/[id]/actions.ts#replaceCertificateAction",
+      "containers/[id]/actions.ts#removeContainerCertificateAction",
+      "containers/[id]/actions.ts#replaceContainerCertificateAction",
+      "cdn/[id]/actions.ts#removeCdnCertificateAction",
+      "cdn/[id]/actions.ts#replaceCdnCertificateAction",
+    ].map((name): [string, EndpointEntry] => [
+      `app/[locale]/(panel)/${name}`,
+      {
+        kind: "id",
+        proof: [
+          proof(
+            `${W}console-actions-g11.test.ts`,
+            "another customer's resource, a missing one and a wrong family give one answer and queue nothing (R8)",
+          ),
+        ],
+      },
+    ]),
+  ),
+  ...Object.fromEntries(
+    [
+      "databases/[id]/actions.ts#setDatabaseParametersAction",
+      "databases/[id]/actions.ts#readDatabaseParametersAction",
+      "databases/[id]/actions.ts#rebootDatabaseAction",
+    ].map((name): [string, EndpointEntry] => [
+      `app/[locale]/(panel)/${name}`,
+      {
+        kind: "id",
+        proof: [
+          proof(
+            `${W}console-actions-g11.test.ts`,
+            "read and reboot answer a foreign or missing database like not found and queue nothing (R8)",
+          ),
+        ],
+      },
+    ]),
+  ),
   "app/[locale]/(panel)/load-balancers/[id]/actions.ts#setLoadBalancerTargetsAction": {
     kind: "id",
     proof: [

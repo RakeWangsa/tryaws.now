@@ -7,10 +7,13 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadLoadBalancerDetail } from "../../../../../server/load-balancers-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
+import { CertificateChange } from "../../_console/CertificateChange.tsx";
 import { LoadBalancerCertificate, LoadBalancerSettingsForm } from "../../_console/ConsoleForms.tsx";
 import {
   destroyLoadBalancerAction,
   refreshCertificateAction,
+  removeCertificateAction,
+  replaceCertificateAction,
   requestCertificateAction,
   setLoadBalancerAttributesAction,
   setLoadBalancerTargetsAction,
@@ -72,6 +75,19 @@ export default async function LoadBalancerDetailPage({ params, searchParams }: P
                     requestId={newUuidV7()}
                     certificate={balancer.console?.certificate ?? null}
                   />
+                  {balancer.console?.certificate != null ? (
+                    <CertificateChange
+                      removeAction={removeCertificateAction}
+                      replaceAction={replaceCertificateAction}
+                      idField="loadBalancerId"
+                      resourceId={balancer.id}
+                      removeRequestId={newUuidV7()}
+                      replaceRequestId={newUuidV7()}
+                      domain={balancer.console.certificate.domain}
+                      allowed
+                      loadBalancer
+                    />
+                  ) : null}
                 </>
               ),
             }

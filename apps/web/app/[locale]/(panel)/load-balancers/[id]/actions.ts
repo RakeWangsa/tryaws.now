@@ -8,6 +8,8 @@ import { familyActionDeps } from "../../../../../server/family-deps.ts";
 import {
   LB_ATTRIBUTES,
   LB_REFRESH_CERTIFICATE,
+  LB_REMOVE_CERTIFICATE,
+  LB_REPLACE_CERTIFICATE,
   LB_REQUEST_CERTIFICATE,
   consoleCore,
 } from "../../../../../server/console-actions.ts";
@@ -78,4 +80,17 @@ export const requestCertificateAction = consoleAction(consoleCore(LB_REQUEST_CER
 export const refreshCertificateAction = consoleAction(consoleCore(LB_REFRESH_CERTIFICATE), [
   "loadBalancerId",
   "requestId",
+]);
+
+// WPU-G11: remove or replace the certificate (typed domain and a fresh sign-in, U10).
+export const removeCertificateAction = consoleAction(consoleCore(LB_REMOVE_CERTIFICATE), [
+  "loadBalancerId",
+  "requestId",
+  "confirmName",
+]);
+export const replaceCertificateAction = consoleAction(consoleCore(LB_REPLACE_CERTIFICATE), [
+  "loadBalancerId",
+  "requestId",
+  "domain",
+  "confirmName",
 ]);

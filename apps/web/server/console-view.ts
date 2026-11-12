@@ -1,4 +1,11 @@
-import { checkCachePolicy, planFailedFor } from "@tc/core";
+import {
+  DB_PARAMETER_RULES,
+  checkCachePolicy,
+  dbEngineFrom,
+  planFailedFor,
+  type DbEngine,
+  type DbParameterApply,
+} from "@tc/core";
 
 // What the console forms (WPU-G7, WPU-G8) show from the config of a resource, read field by field. The
 // adapter writes these fields through `configMerge`; the web tier shows them and never trusts their
@@ -165,7 +172,67 @@ export function deploymentHistoryOf(config: unknown): DeploymentHistoryFacts[] {
   return out.reverse();
 }
 
+/** WPU-G11. The parameters as the adapter last read them: a list kept in the config, labelled "last known". */
+export interface DbParametersFacts {
+  engine: DbEngine;
+  /** A change waits for a reboot (Lightsail reported it, or a static parameter was changed since). */
+  rebootPending: boolean;
+  /** When the list was read, an ISO instant, or null. */
+  readAt: string | null;
+  items: {
+    name: string;
+    value: string | null;
+    apply: DbParameterApply;
+    changeable: boolean;
+    /** How the form asks for it: a number, a 0 or 1, or one of a closed list (from the whitelist). */
+    input: { kind: "int" } | { kind: "bool" } | { kind: "enum"; values: string[] };
+  }[];
+}
+
+const APPLY: readonly string[] = ["immediate", "pending-reboot", "unknown"];
+
+/**
+ * The saved parameter list, field by field. The names must be on the whitelist of the engine again
+ * (R11, R16); a value is a short text or nothing; anything else is dropped.
+ */
+export function dbParametersOf(config: unknown): DbParametersFacts | null {
+  const raw = rec(rec(config)["parameters"]);
+  const engine = dbEngineFrom(raw["engine"]);
+  if (engine === null || !Array.isArray(raw["items"])) return null;
+  const rules = new Map(DB_PARAMETER_RULES[engine].map((r) => [r.name, r] as const));
+  const items: DbParametersFacts["items"] = [];
+  for (const entry of raw["items"].slice(0, 40)) {
+    const item = rec(entry);
+    const name = item["name"];
+    const rule = typeof name === "string" ? rules.get(name) : undefined;
+    if (typeof name !== "string" || rule === undefined) continue;
+    const value = item["value"];
+    const apply = item["apply"];
+    items.push({
+      name,
+      value: typeof value === "string" && value.length <= 40 ? value : null,
+      apply: (typeof apply === "string" && APPLY.includes(apply)
+        ? apply
+        : "unknown") as DbParameterApply,
+      changeable: item["changeable"] === true,
+      input:
+        rule.kind === "enum" ? { kind: "enum", values: [...rule.values] } : { kind: rule.kind },
+    });
+  }
+  const readAt = raw["readAt"];
+  return {
+    engine,
+    rebootPending: raw["rebootPending"] === true,
+    readAt:
+      typeof readAt === "string" && !Number.isNaN(Date.parse(readAt)) && readAt.length <= 40
+        ? readAt
+        : null,
+    items,
+  };
+}
+
 export interface DatabaseConsole {
+  parameters: DbParametersFacts | null;
   backupWindow: string | null;
   /** WPU-G9: `ddd:hh24:mi-ddd:hh24:mi` in UTC, as the adapter stored it. */
   maintenanceWindow: string | null;
@@ -177,6 +244,7 @@ export function databaseConsoleOf(config: unknown): DatabaseConsole {
   const window = raw["backupWindow"];
   const maintenance = raw["maintenanceWindow"];
   return {
+    parameters: dbParametersOf(raw),
     maintenanceWindow:
       typeof maintenance === "string" && /^[a-z]{3}:\d\d:\d\d-[a-z]{3}:\d\d:\d\d$/.test(maintenance)
         ? maintenance

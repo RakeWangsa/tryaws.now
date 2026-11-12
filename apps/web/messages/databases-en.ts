@@ -92,6 +92,7 @@ export const databasesEn: Same<typeof databasesBn> = {
         backups: "Backups",
         metrics: "Metrics",
         settings: "Settings",
+        parameters: "Parameters",
         destroy: "Delete",
       },
       overview: {

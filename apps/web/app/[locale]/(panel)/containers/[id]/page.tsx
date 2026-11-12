@@ -12,6 +12,8 @@ import {
   deployContainersAction,
   destroyContainerServiceAction,
   refreshContainerCertificateAction,
+  removeContainerCertificateAction,
+  replaceContainerCertificateAction,
   requestContainerCertificateAction,
   scheduleContainerPlanAction,
   setContainerEndpointAction,
@@ -55,12 +57,16 @@ export default async function ContainerDetailPage({ params, searchParams }: Prop
         planAction={scheduleContainerPlanAction}
         certRequestAction={requestContainerCertificateAction}
         certRefreshAction={refreshContainerCertificateAction}
+        certRemoveAction={removeContainerCertificateAction}
+        certReplaceAction={replaceContainerCertificateAction}
         endpointAction={setContainerEndpointAction}
         ids={{
           plan: newUuidV7(),
           planCancel: newUuidV7(),
           cert: newUuidV7(),
           certRefresh: newUuidV7(),
+          certRemove: newUuidV7(),
+          certReplace: newUuidV7(),
           endpoint: newUuidV7(),
           endpointRemove: newUuidV7(),
         }}
