@@ -238,7 +238,7 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     dir: "cognito-messages",
     component: "CognitoMessages",
     handlerExport: "handler",
-    exportExists: false,
+    exportExists: true,
     placement: "none",
     dbRole: "none",
     secrets: [],

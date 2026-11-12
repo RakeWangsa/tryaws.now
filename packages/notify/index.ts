@@ -18,6 +18,12 @@ export {
   channelsOf,
 } from "./templates/render";
 export type { RenderContext, RenderedEmail, RenderedInApp } from "./templates/render";
+export { COGNITO_MESSAGE_KINDS, renderCognitoMessage } from "./templates/cognito";
+export type {
+  CognitoMessageKind,
+  CognitoPlaceholders,
+  RenderedCognitoMessage,
+} from "./templates/cognito";
 export { PRODUCT_KEYS, productPath } from "./templates/defs";
 export type { ProductKey } from "./templates/defs";
 export { formatMoney, formatDhakaDate } from "./text/format";

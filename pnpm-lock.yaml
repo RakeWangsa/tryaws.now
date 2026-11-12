@@ -134,7 +134,14 @@ importers:
         specifier: workspace:*
         version: link:../../packages/db
 
-  functions/cognito-messages: {}
+  functions/cognito-messages:
+    dependencies:
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@tc/notify':
+        specifier: workspace:*
+        version: link:../../packages/notify
 
   functions/invoice-renderer:
     dependencies:
