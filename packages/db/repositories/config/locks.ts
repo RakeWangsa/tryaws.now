@@ -17,3 +17,7 @@ export function lockFxRateWrites(tx: Tx, market: string): Promise<void> {
 export function lockPricingRuleWrites(tx: Tx, market: string): Promise<void> {
   return lock(tx, "pricing_rules", market);
 }
+
+export function lockPriceBookWrites(tx: Tx, market: string): Promise<void> {
+  return lock(tx, "price_book", market);
+}

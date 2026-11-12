@@ -35,7 +35,7 @@
     "admin_rw": {
       "table": ["SELECT"],
       "insertColumns": null,
-      "updateColumns": null,
+      "updateColumns": ["aws_price_usd"],
       "selectColumns": null
     },
     "worker_rw": {

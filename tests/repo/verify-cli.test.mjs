@@ -149,6 +149,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP9-T4",
     "WP9-T4b",
     "WP9-T5",
+    "WPA-P1",
     "WPP-T1",
     "WPP-T2",
     "WPP-T3",
@@ -1182,6 +1183,52 @@ it("task WP5-T6b is proven by core, the renewal and restore database tests, the 
     "apps/web/server/extras-actions.test.ts",
     "apps/web/server/order-actions.test.ts",
     "apps/web/server/endpoint-sweep.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WPA-P1 is proven by the engine, the rates, the db and the admin suites of the price list, and every filter matches a real file", () => {
+  expect(TASKS["WPA-P1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    [
+      "price-book-engine",
+      "pnpm test --filter @tc/core pricing/book pricing/quote --no-passWithNoTests",
+    ],
+    [
+      "price-book-rates",
+      "pnpm test --filter @tc/core rates/price-book-in-force rates/preview-book --no-passWithNoTests",
+    ],
+    [
+      "price-book-db",
+      "pnpm test --filter @tc/db admin-price-book admin-gates admin-repos --no-passWithNoTests",
+    ],
+    [
+      "price-book-admin",
+      "pnpm test --filter @tc/admin server/price-book-flow server/price-book-draft price-book-pages price-book-messages server/admin-sweep --no-passWithNoTests",
+    ],
+    ["db", "pnpm test --filter @tc/db"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/core/pricing/book.test.ts",
+    "packages/core/rates/price-book-in-force.test.ts",
+    "packages/core/rates/preview-book.test.ts",
+    "packages/db/test/admin-price-book.test.ts",
+    "packages/db/test/admin-gates.test.ts",
+    "packages/db/migrations/0010_admin_price_book.sql",
+    "apps/admin/server/price-book-flow.test.ts",
+    "apps/admin/server/price-book-draft.test.ts",
+    "apps/admin/price-book-pages.test.tsx",
+    "apps/admin/price-book-messages.test.ts",
+    "apps/admin/server/admin-sweep.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

@@ -160,6 +160,7 @@ describe("flows: authorize with roles is the first step, before the limiter, the
       "server/customer-flow.ts",
       "server/money-flow.ts",
       "server/ops-flow.ts",
+      "server/price-book-flow.ts",
       "server/pricing-flow.ts",
       "server/reconciliation-flow.ts",
       "server/support-flow.ts",
@@ -175,6 +176,27 @@ describe("flows: authorize with roles is the first step, before the limiter, the
     for (const later of ["deps.limiter(", "deps.run(", "deps.queue", "repos.", "adminRepos("]) {
       const at = code.indexOf(later);
       if (at >= 0) expect(at, `${name}: ${later} before authorize`).toBeGreaterThan(first);
+    }
+  });
+
+  // WPA-P1, the price list: two writes, both for finance and superadmin, and neither reads or writes a
+  // customer's data (market configuration and one catalog column), so there is no tenant to cross.
+  it("the price-book flow authorizes in each of its two writes, with the roles of the pricing area", () => {
+    const code = read(join(ROOT, "server/price-book-flow.ts")).replace(/\/\/.*$/gm, "");
+    expect([...code.matchAll(/await authorize\(PRICING_ROLES\)/g)].length).toBe(2);
+    expect([...code.matchAll(/await authorize\(/g)].length).toBe(2);
+    expect(code).not.toMatch(/customerId|customerRepos|\bsession\b/);
+  });
+
+  it("the price-book actions are Server Actions of pricing-actions.ts that use the flow with the session check", () => {
+    const source = read(join(ROOT, "server/pricing-actions.ts"));
+    for (const name of ["saveBookAction", "setBaseCostAction"]) {
+      const head = source.indexOf(`export async function ${name}(`);
+      expect(head, name).toBeGreaterThanOrEqual(0);
+      const body = source.slice(head, source.indexOf("\n}\n", head));
+      expect(body).toContain("makePriceBookFlow(pricingFlowDeps())");
+      // the form carries no actor, role or approver: only the fields of the flow request
+      expect(body).not.toMatch(/adminId|role|approver|actor/i);
     }
   });
 

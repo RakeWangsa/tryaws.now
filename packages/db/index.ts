@@ -164,6 +164,31 @@ export { recordAdminAccess } from "./repositories/admin/access-audit";
 export type { AdminAccessEntry } from "./repositories/admin/access-audit";
 export { lookupAdminBySub } from "./repositories/admin/identity";
 export type { AdminIdentity } from "./repositories/admin/identity";
+export {
+  ADMIN_PRICED_FAMILIES,
+  PRICE_BOOK_MAX_SCHEDULE_DAYS,
+} from "./repositories/admin/price-book";
+export type {
+  BaseCostInput,
+  BaseCostSaved,
+  PriceBookAdminRepo,
+  PriceBookInput,
+  PriceBookSaved,
+} from "./repositories/admin/price-book";
+export {
+  PRICE_BOOK_MAX_ENTRIES,
+  entryInForce,
+  isPriceBookCommission,
+  isPriceBookMargin,
+  parsePriceBookValue,
+  priceBookKey,
+  readPriceBook,
+  readPriceBooks,
+  type PriceBookAmount,
+  type PriceBookEntry,
+  type PriceBookRead,
+  type PriceBookRow,
+} from "./repositories/config/price-book";
 export { STEP_CODES } from "./repositories/admin/pricing-rules";
 export type {
   PricingRuleInput,

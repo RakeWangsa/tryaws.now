@@ -1,5 +1,5 @@
 import type { Tx } from "@tc/db";
-import { quote, type PriceQuote } from "../pricing/index";
+import { quoteWithBook, type PriceQuote } from "../pricing/index";
 import { pricingInForce, type PricingInForce } from "../rates/in-force";
 import type { Clock, Result } from "../types";
 
@@ -27,6 +27,9 @@ export interface PricedCatalogRow {
   readonly awsPriceUsd: string;
   /** The BDT price of the row at the instant of the call. Computed, never stored (open point 8). */
   readonly priceBdt: PriceQuote;
+  /** The margin inside that price and the reseller's share of it, in paisa (the price book, WPA-P1). */
+  readonly marginMinor: bigint;
+  readonly commissionMinor: bigint;
 }
 
 /**
@@ -44,6 +47,10 @@ export function priceRows(
     if (!row.active && options.includeInactive !== true) continue;
     const found = byFamily.get(row.family);
     if (found === undefined) return null;
+    const booked = quoteWithBook(
+      { awsPriceUsd: row.awsPriceUsd, fxRate: found.fx.rate, rule: found.rule.value },
+      found.book,
+    );
     out.push({
       id: row.id,
       family: row.family,
@@ -51,11 +58,9 @@ export function priceRows(
       platform: row.platform,
       specs: row.specs,
       awsPriceUsd: row.awsPriceUsd,
-      priceBdt: quote({
-        awsPriceUsd: row.awsPriceUsd,
-        fxRate: found.fx.rate,
-        rule: found.rule.value,
-      }),
+      priceBdt: booked.quote,
+      marginMinor: booked.marginMinor,
+      commissionMinor: booked.commissionMinor,
     });
   }
   return out;

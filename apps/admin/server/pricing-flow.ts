@@ -1,4 +1,5 @@
 import type {
+  previewBook as PreviewBook,
   previewChange as PreviewChange,
   savePricingRule as SavePricingRule,
   setFeatureFlag as SetFeatureFlag,
@@ -23,6 +24,8 @@ export const PRODUCTION_REASON_MIN = 10;
 
 export interface CorePorts {
   readonly previewChange: typeof PreviewChange;
+  // The live preview of the price list (WPA-P1).
+  readonly previewBook: typeof PreviewBook;
   readonly savePricingRule: typeof SavePricingRule;
   readonly setFxRate: typeof SetFxRate;
   readonly setFeatureFlag: typeof SetFeatureFlag;
@@ -37,7 +40,7 @@ export const FX_PENDING_HOURS = 24;
 
 export interface PricingFlowDeps {
   // The admin repositories of the actor in this transaction (adminRepos), for the pending FX change.
-  readonly repos: (tx: Tx, actor: AdminActor) => Pick<AdminRepos, "fxChanges">;
+  readonly repos: (tx: Tx, actor: AdminActor) => Pick<AdminRepos, "fxChanges" | "priceBook">;
   // requireAdmin(roles): rejects when there is no admin session or the role is wrong.
   readonly authorize: (roles: readonly AdminRole[]) => Promise<AdminActor>;
   // True when the hit was counted, false over the limit.
@@ -111,25 +114,25 @@ const SECOND_ADMIN_TOKENS: readonly FlowCode[] = [
   "not_an_approver",
 ];
 
-const fail = (code: FlowCode, fields: readonly string[] = []): FlowAnswer<never> => ({
+export const fail = (code: FlowCode, fields: readonly string[] = []): FlowAnswer<never> => ({
   ok: false,
   code,
   fields,
 });
 
-interface Reason {
+export interface Reason {
   readonly ok: boolean;
   readonly text: string;
 }
 
-function readReason(value: unknown): Reason {
+export function readReason(value: unknown): Reason {
   if (typeof value !== "string") return { ok: false, text: "" };
   const text = value.trim();
   return { ok: text !== "" && text.length <= MAX_REASON, text };
 }
 
 // What the core engines answered, as a fixed code and the names of the fields they refused.
-function refusal(result: {
+export function refusal(result: {
   error: string;
   fields?: Record<string, string> | undefined;
 }): FlowAnswer<never> {
@@ -158,7 +161,7 @@ class Rollback extends Error {
 }
 
 // What a repository refused, as a fixed code.
-function repoRefusal(error: string): FlowAnswer<never> {
+export function repoRefusal(error: string): FlowAnswer<never> {
   switch (error) {
     case "forbidden":
       return fail("denied");
@@ -173,7 +176,7 @@ function repoRefusal(error: string): FlowAnswer<never> {
   }
 }
 
-type Authorized = { ok: true; actor: AdminActor } | { ok: false; answer: FlowAnswer<never> };
+export type Authorized = { ok: true; actor: AdminActor } | { ok: false; answer: FlowAnswer<never> };
 
 export interface PricingFlow {
   saveRule(request: SaveRuleRequest): Promise<FlowAnswer<{ ruleId: string; effectiveFrom: Date }>>;

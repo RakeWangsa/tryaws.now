@@ -4,7 +4,7 @@ import {
   decideTld,
   normalizeDomainName,
   pricingInForce,
-  quote,
+  quoteWithBook,
   type TldDecision,
 } from "@tc/core";
 import { customerRepos, listTlds, readFeatureFlag, withTx } from "@tc/db";
@@ -53,12 +53,16 @@ async function priceTlds(tx: Tx, market: string, now: () => Date) {
   for (const row of rows) {
     const decision = decideTld(row);
     if (decision === "unavailable" || row.registrationPriceUsd === null) continue;
-    const priced = quote({
-      awsPriceUsd: row.registrationPriceUsd,
-      quantity: "1",
-      fxRate: found.value.fx.rate,
-      rule: found.value.rule.value,
-    });
+    // The same price as the order: the rule and the margin of the family (WPA-P1).
+    const priced = quoteWithBook(
+      {
+        awsPriceUsd: row.registrationPriceUsd,
+        quantity: "1",
+        fxRate: found.value.fx.rate,
+        rule: found.value.rule.value,
+      },
+      found.value.book,
+    ).quote;
     options.push({ id: row.id, tld: row.tld, decision, priceMinor: priced.totalMinor });
   }
   return options;

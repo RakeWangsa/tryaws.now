@@ -192,6 +192,26 @@ const GATE_CASES: Record<string, GateCase> = {
       ),
     deny: null,
   },
+  "priceBook.read": { call: (r) => r.priceBook.read("BD"), deny: "support" },
+  "priceBook.save": {
+    call: (r) =>
+      r.priceBook.save(
+        {
+          market: "BD",
+          family: "linux_instance",
+          margin: { kind: "percent", value: "0.1" },
+          commission: null,
+          effectiveFrom: AT,
+          at: AT,
+        },
+        "r",
+      ),
+    deny: "support",
+  },
+  "priceBook.setBaseCost": {
+    call: (r) => r.priceBook.setBaseCost({ catalogProductId: ID(), awsPriceUsd: "0.2" }, "r"),
+    deny: "support",
+  },
   "operations.queue": { call: (r) => r.operations.queue(), deny: "finance" },
   "operations.counts": { call: (r) => r.operations.counts(), deny: "finance" },
   "operations.detail": { call: (r) => r.operations.detail(ID()), deny: "finance" },

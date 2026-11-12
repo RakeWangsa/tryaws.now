@@ -74,7 +74,9 @@ const roleOf = (name: string): AdminActor["role"] =>
     ? "superadmin"
     : name.startsWith("support.")
       ? "support"
-      : (name.startsWith("wallets.") || name.startsWith("payments.")) &&
+      : (name.startsWith("wallets.") ||
+            name.startsWith("payments.") ||
+            name.startsWith("priceBook.")) &&
           name !== "payments.resolveDiscrepancy"
         ? "finance"
         : "ops";
@@ -215,6 +217,28 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       },
       "first rule",
     ),
+  "priceBook.save": (r) =>
+    r.priceBook.save(
+      {
+        market: "BD",
+        family: "linux_instance",
+        margin: { kind: "percent", value: "0.1" },
+        commission: null,
+        effectiveFrom: new Date("2026-11-11T06:00:00.000Z"),
+        at: new Date("2026-11-11T06:00:00.000Z"),
+      },
+      "first margin",
+    ),
+  "priceBook.setBaseCost": async (r) =>
+    r.priceBook.setBaseCost(
+      {
+        catalogProductId: (
+          await t.pool.query("select id from catalog_products where family = 'disk' limit 1")
+        ).rows[0].id,
+        awsPriceUsd: "0.2",
+      },
+      "AWS price page",
+    ),
   "capacity.addPoolAccount": (r) =>
     r.capacity.addPoolAccount(
       {
@@ -317,6 +341,7 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "payments.discrepancies",
   "payments.search",
   "fxChanges.read",
+  "priceBook.read",
   "waitlist.counts",
   "waitlist.list",
   "wallets.detail",

@@ -5,6 +5,7 @@
 export const pricingBn = {
   AdminPricing: {
     title: "মূল্য ও বিনিময় হার",
+    bookLink: "মূল্যতালিকা: মার্জিন, কমিশন ও পণ্যের মূল্য",
     market: { label: "বাজার", submit: "দেখুন" },
     unavailable: {
       title: "তথ্য আনা যায়নি",

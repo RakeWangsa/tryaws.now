@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { DEFAULT_LOCALE, isLocale, localePath } from "@tc/ui/runtime";
+import { makePriceBookFlow } from "./price-book-flow.ts";
 import { readDraft } from "./pricing-draft.ts";
 import { makePricingFlow, type FlowAnswer } from "./pricing-flow.ts";
 import { pricingFlowDeps } from "./pricing-runtime.ts";
@@ -12,12 +13,17 @@ import { pricingFlowDeps } from "./pricing-runtime.ts";
 // who presses "approve".
 
 const MARKET = /^[A-Z]{2}$/;
+const FAMILY = /^[a-z][a-z_]{0,39}$/;
 
 function text(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value : "";
 }
 
-function back(form: FormData, path: "/pricing" | "/catalog", answer: FlowAnswer<unknown>): never {
+function back(
+  form: FormData,
+  path: "/pricing" | "/pricing/book" | "/catalog",
+  answer: FlowAnswer<unknown>,
+): never {
   const rawLocale = text(form.get("locale"));
   const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
   const market = MARKET.test(text(form.get("market"))) ? text(form.get("market")) : "";
@@ -28,6 +34,10 @@ function back(form: FormData, path: "/pricing" | "/catalog", answer: FlowAnswer<
     : answer.code;
   const query = new URLSearchParams({ result });
   if (market !== "") query.set("market", market);
+  // The price list opens again on the family that was edited (a name of lower-case letters only).
+  if (path === "/pricing/book" && FAMILY.test(text(form.get("family")))) {
+    query.set("family", text(form.get("family")));
+  }
   redirect(`${localePath(locale, path)}?${query.toString()}`);
 }
 
@@ -84,4 +94,29 @@ export async function setFlagAction(form: FormData): Promise<void> {
     reason: text(form.get("reason")),
   });
   back(form, "/catalog", answer);
+}
+
+export async function saveBookAction(form: FormData): Promise<void> {
+  const answer = await makePriceBookFlow(pricingFlowDeps()).saveBook({
+    market: text(form.get("market")),
+    family: text(form.get("family")),
+    marginKind: text(form.get("marginKind")),
+    margin: text(form.get("margin")),
+    commissionKind: text(form.get("commissionKind")),
+    commission: text(form.get("commission")),
+    from: text(form.get("from")),
+    reason: text(form.get("reason")),
+  });
+  back(form, "/pricing/book", answer);
+}
+
+export async function setBaseCostAction(form: FormData): Promise<void> {
+  const answer = await makePriceBookFlow(pricingFlowDeps()).setBaseCost({
+    market: text(form.get("market")),
+    family: text(form.get("family")),
+    catalogProductId: text(form.get("product")),
+    awsPriceUsd: text(form.get("usd")),
+    reason: text(form.get("reason")),
+  });
+  back(form, "/pricing/book", answer);
 }

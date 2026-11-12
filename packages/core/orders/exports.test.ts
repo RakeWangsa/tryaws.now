@@ -358,6 +358,17 @@ const RECONCILE = [
   "staleOperations",
 ];
 
+// WPA-P1: the price book (margin and commission of a family) and the live preview of the price list.
+const PRICE_BOOK = [
+  "BOOK_KINDS",
+  "BOOK_MAX_COMMISSION_PERCENT",
+  "BOOK_MAX_MARGIN_PERCENT",
+  "isBookTerms",
+  "previewBook",
+  "quoteWithBook",
+  "validateBookTerms",
+];
+
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
     expect(Object.keys(orders).sort()).toEqual(ORDERS_VALUES);
@@ -391,6 +402,7 @@ describe("the public surface of the order flow", () => {
           ...RECONCILE,
           ...DOMAINS,
           ...SERVER_CONTROLS,
+          ...PRICE_BOOK,
         ]),
       ].sort(),
     );
