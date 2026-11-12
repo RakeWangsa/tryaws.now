@@ -5,6 +5,8 @@
 // No account id, domain, address or secret value is written in this repository. Everything that is
 // specific to an account comes from environment variables of the deploy shell or of CI (names below).
 
+import { parseStageSize, STAGE_SIZE_VARIABLE, type StageSize } from "./lean";
+
 export type StageKind = "production" | "staging" | "personal";
 export type TcStage = "staging" | "production";
 
@@ -122,6 +124,8 @@ export interface StageConfig {
   // may leave both out and then every Linux create stops before the static IP (R16).
   readonly probeSources: readonly string[];
   readonly vpcCidr: string | null;
+  // WPU-B8: "lean" (one account, about 50 USD a month) or "full" (default). Read from TC_STAGE_SIZE.
+  readonly size: StageSize;
 }
 
 // ---- TC_PROBE_SOURCES and TC_VPC_CIDR -----------------------------------------------------------------
@@ -269,6 +273,7 @@ export function readStageConfig(stage: string, env: Env): StageConfig {
     dnsExternalId: need(env, "TC_DNS_EXTERNAL_ID"),
     probeSources: probeRaw === undefined ? [] : parseProbeSourcesConfig(probeRaw),
     vpcCidr: vpcRaw === undefined ? null : parseVpcCidrConfig(vpcRaw),
+    size: parseStageSize(env[STAGE_SIZE_VARIABLE]),
   };
 }
 

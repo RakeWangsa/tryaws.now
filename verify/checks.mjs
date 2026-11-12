@@ -3172,6 +3172,9 @@ TASKS["WPU-B7"] = [
   repo,
 ];
 
+// WPU-B8: the lean stage size (TC_STAGE_SIZE, budget alarm). Local proof only, no AWS call.
+TASKS["WPU-B8"] = [specSync, baselineSync, lint, typecheck, format, repo];
+
 // WPU-B1: the brand rename from TiCON Cloud to MeghVPS. Messages, mail and SMS text, invoice text, page titles
 // and the site name (web, admin, ui, notify, core invoices) and the repository test that fails when the old
 // name returns to a customer-facing file. No AWS call.

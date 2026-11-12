@@ -46,10 +46,11 @@ describe("WP0-T2: stages, VPC, CloudFront, WAF", () => {
     expect(config).toContain("providers: { aws: { region: REGION } }");
   });
 
-  it("builds a VPC with two AZs and a managed NAT", () => {
+  it("builds a VPC with two AZs and the NAT of the stage size (managed in full, WPU-B8)", () => {
     expect(network).toMatch(
-      /new sst\.aws\.Vpc\("Vpc",\s*\{[\s\S]*az: AZ_COUNT[\s\S]*nat: "managed"/,
+      /new sst\.aws\.Vpc\("Vpc",\s*\{[\s\S]*az: AZ_COUNT[\s\S]*nat: sizing\(config\.size, config\.kind\)\.network\.nat/,
     );
+    expect(source("infra/lib/lean.ts")).toContain('network: { nat: "managed" }');
   });
 
   it("keeps invoice-renderer isolated: no NAT route, HTTPS to S3 through a gateway endpoint", () => {
@@ -92,12 +93,15 @@ describe("WP0-T2: stages, VPC, CloudFront, WAF", () => {
     expect(waf).toContain('new aws.Provider("EdgeProvider", { region: EDGE_REGION })');
     expect(waf).toContain("EDGE_REGION");
     expect([...waf.matchAll(/scope: "CLOUDFRONT"/g)].length).toBeGreaterThanOrEqual(4);
+    // WPU-B8: the groups are listed in the sizing table (infra/lib/lean.ts); full keeps all three.
+    expect(waf).toContain("sizing(config.size, config.kind).waf.managedGroups");
+    const leanTable = source("infra/lib/lean.ts");
     for (const group of [
       "AWSManagedRulesCommonRuleSet",
       "AWSManagedRulesKnownBadInputsRuleSet",
       "AWSManagedRulesAmazonIpReputationList",
     ]) {
-      expect(waf).toContain(`"${group}"`);
+      expect(leanTable).toContain(`"${group}"`);
     }
     for (const path of [
       '"/login"',
@@ -274,7 +278,9 @@ describe("WP0-T3: database, proxy and roles", () => {
   it("keeps the instance private, protected, backed up 14 days, encrypted, with a final snapshot (R2)", () => {
     expect(instance).toContain("args.publiclyAccessible = false");
     expect(instance).toContain("args.deletionProtection = true");
-    expect(instance).toContain("args.backupRetentionPeriod = 14");
+    // WPU-B8: the days come from the sizing table; full is 14 (lean is 7).
+    expect(instance).toContain("args.backupRetentionPeriod = size.backupRetentionDays");
+    expect(source("infra/lib/lean.ts")).toContain("backupRetentionDays: 14");
     expect(instance).toContain("args.storageEncrypted = true");
     expect(instance).toContain("args.kmsKeyId = key.arn");
     expect(instance).toContain("args.skipFinalSnapshot = false");
@@ -288,7 +294,9 @@ describe("WP0-T3: database, proxy and roles", () => {
     expect(database).toMatch(/name: "rds\.force_ssl", value: "1"/);
     expect(database).toContain("args.requireTls = true");
     expect(database).toContain("args.vpcSecurityGroupIds = [net.proxySecurityGroup.id]");
-    expect(database).toContain("multiAz: production");
+    // WPU-B8: Multi-AZ in production comes from the sizing table (full).
+    expect(database).toContain("multiAz: size.multiAz");
+    expect(source("infra/lib/lean.ts")).toContain("multiAz: production");
   });
 
   it("admits 5432 only from the previous hop", () => {
