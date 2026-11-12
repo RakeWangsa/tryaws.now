@@ -3075,6 +3075,28 @@ TASKS["WPU-F1"] = [
   repo,
 ];
 
+// WPU-B3: money and operations hardening (audit items 12, 14, 15, 20, 21, 36). A failed create queues the
+// removal of what it made in AWS (a destructive kind behind the R13 approval) and tells the customer; the
+// capacity release is worker-only, audited and alerts; a credit note refused for 24 hours is escalated;
+// the reconciler writes snapshot and transfer GB into usage_records; the scheduler polls database
+// parameters and certificates; the alarms for all of these and for function errors. Core, db, reconciler,
+// scheduler and provisioner tests use the local PostgreSQL where they say so; no AWS call is made.
+TASKS["WPU-B3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  reconciler,
+  scheduler,
+  provisioner,
+  web,
+  admin,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

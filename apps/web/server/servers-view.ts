@@ -321,6 +321,8 @@ export interface OrderScreen {
   serverName: string;
   /** The product family of the first item, so a page can link to the right screen (WP7-T2). */
   family?: string;
+  /** WPU-B3: the automatic reversal of a failed create is posted (the order is `reversed`). */
+  refunded?: boolean;
 }
 
 export async function loadOrder(session: CustomerSession, id: string): Promise<OrderScreen | null> {
@@ -351,6 +353,7 @@ export async function loadOrder(session: CustomerSession, id: string): Promise<O
       progress: orderProgress(create?.state ?? null),
       resourceId: resource?.id ?? null,
       serverName: resource === null ? "" : serverConfigOf(resource.config).displayName,
+      refunded: order.status === "reversed",
       ...(family !== undefined ? { family } : {}),
     };
   });

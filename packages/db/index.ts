@@ -192,6 +192,9 @@ export type {
   OperationsAdminRepo,
 } from "./repositories/admin/operations";
 export type { AdminMessage } from "./operations/admin";
+// WPU-B3: for the worker-side jobs of packages/core (the capacity release writes an audit row).
+export { insertAudit } from "./repositories/audit-log";
+export type { AuditEntry } from "./repositories/audit-log";
 export { recordAdminAccess } from "./repositories/admin/access-audit";
 export type { AdminAccessEntry } from "./repositories/admin/access-audit";
 export { lookupAdminBySub } from "./repositories/admin/identity";
@@ -411,6 +414,8 @@ export {
   type ConfigPriceKey,
 } from "./seed/config-prices";
 export { lifecycleRepo } from "./repositories/system/lifecycle";
+export { pollingRepo } from "./repositories/system/polling";
+export type { PollingRepo } from "./repositories/system/polling";
 export type {
   GuardFacts,
   LifecycleRepo,

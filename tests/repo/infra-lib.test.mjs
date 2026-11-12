@@ -342,7 +342,8 @@ describe("ledger check schedule and alarms", () => {
     const alarms = readFileSync(resolve(root, "infra/stacks/alarms.ts"), "utf8");
     expect(alarms).toContain('resourceName(stage, "ledger-mismatch")');
     expect(alarms).toContain('resourceName(stage, "ledger-check-silent")');
-    expect(alarms.match(/alarmActions: \[topic\.arn\]/g)).toHaveLength(4);
+    // WPU-B3 added three more declarations: the shared alertAlarm helper, ReconcileSilentAlarm and the function error alarms.
+    expect(alarms.match(/alarmActions: \[topic\.arn\]/g)).toHaveLength(7);
     expect(alarms).toContain("LEDGER_LOG_MESSAGES.mismatch");
     expect(alarms).toContain("LEDGER_LOG_MESSAGES.failed");
     expect(alarms).toContain('treatMissingData: "breaching"');

@@ -5,11 +5,13 @@ import {
   runInvoiceBacklog,
   runLifecycle,
   runMetering,
+  runPolling,
   runStaticIpMetering,
   sweepOperations,
   type InvoiceBacklogReport,
   type LifecycleReport,
   type MeteringReport,
+  type PollingReport,
   type StaticIpReport,
   type LogEvent,
   type Logger,
@@ -32,6 +34,7 @@ export interface SchedulerReport {
   readonly metering: MeteringReport | null;
   readonly staticIps: StaticIpReport | null;
   readonly invoices: InvoiceBacklogReport | null;
+  readonly polling: PollingReport | null;
   readonly rateLimitsPurged: number | null;
 }
 
@@ -45,6 +48,7 @@ export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<
     let metering: MeteringReport | null = null;
     let staticIps: StaticIpReport | null = null;
     let invoices: InvoiceBacklogReport | null = null;
+    let polling: PollingReport | null = null;
     let rateLimitsPurged: number | null = null;
     const failed: string[] = [];
     const job = async (name: string, fn: () => Promise<void>): Promise<void> => {
@@ -98,13 +102,25 @@ export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<
         throw new Error("scheduler: invoice backlog rows failed");
       }
     });
+    // WPU-B3: the parameter list of each database once a day and the waiting certificates once an hour, as
+    // operation rows (R1). A list that cannot be read, or an operation that cannot be written, fails the job.
+    await job("polling", async () => {
+      polling = await runPolling({
+        runTx: deps.runTx,
+        clock: deps.clock,
+        queue: deps.queue,
+        log: deps.log,
+      });
+      deps.log({ event: "polling_run", ...polling });
+      if (polling.failed > 0) throw new Error("scheduler: polling rows failed");
+    });
     await job("rate_limits", async () => {
       const before = new Date(deps.clock.now().getTime() - RATE_LIMIT_RETENTION_MS);
       rateLimitsPurged = await deps.runTx((tx) => purgeRateLimits(tx, before));
       deps.log({ event: "rate_limits_purged", count: rateLimitsPurged });
     });
     if (failed.length > 0) throw new Error(`scheduler: ${failed.join(", ")} failed`);
-    return { sweep, lifecycle, metering, staticIps, invoices, rateLimitsPurged };
+    return { sweep, lifecycle, metering, staticIps, invoices, polling, rateLimitsPurged };
   };
 }
 

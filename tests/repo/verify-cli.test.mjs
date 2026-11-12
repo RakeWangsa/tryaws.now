@@ -155,6 +155,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T2",
     "WPP-T3",
     "WPP-T4",
+    "WPU-B3",
     "WPU-C1",
     "WPU-D1",
     "WPU-D2",
@@ -882,6 +883,39 @@ it("task WPU-D1 is proven by lint, types, format, the renderer and repository te
     ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-B3 is proven by lint, types, format, core, db, reconciler, scheduler, provisioner, web, admin and the repository tests", () => {
+  expect(TASKS["WPU-B3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["reconciler", "pnpm test --filter @tc/fn-reconciler --no-passWithNoTests"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-B3 exists: the cleanup follow-up, the release alarm, the stuck credit note, the usage writer, the polls and the alerts", () => {
+  for (const [file, part] of [
+    ["packages/core/orders/failed-create-follow-up.test.ts", "cleanupOperationFor"],
+    ["packages/core/lifecycle/guard.test.ts", "cleanup_failed_create"],
+    ["packages/core/capacity/release-alarm.test.ts", "malformed_record"],
+    ["packages/core/invoices/credit-note-stuck.test.ts", "escalates every run"],
+    ["packages/core/metering/usage-writer.test.ts", "refuses two samples for one resource"],
+    ["packages/core/lifecycle/polling.test.ts", "queues read_db_parameters once"],
+    ["functions/reconciler/usage.test.ts", "fails closed"],
+    ["tests/repo/infra-alerts.test.mjs", "exist in the code that writes them"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
 });
 
 it("task WPU-F1 is proven by lint, types, format, the digit helper, mail, renderer and ui tests and the repository tests", () => {

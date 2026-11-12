@@ -26,17 +26,52 @@ export function creditNoteIdFor(reversalTransactionId: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/**
+ * WPU-B3. A credit note that is refused or fails for this long after its reversal is escalated: one
+ * `credit_note_stuck` line with severity "alert" for each such note in each run, which the stage alarm
+ * matches (infra/stacks/alarms.ts). A person must then look at the notice. 24 hours is one day of the
+ * hourly-or-faster scheduler, long enough for a seller detail fixed by a person, short enough for a
+ * tax document that is owed.
+ */
+export const CREDIT_NOTE_STUCK_HOURS = 24;
+export const CREDIT_NOTE_STUCK_EVENT = "credit_note_stuck";
+const HOUR_MS = 3_600_000;
+
+/** Pure. A date that cannot be read counts as stuck (R16). */
+export function creditNoteIsStuck(reversedAt: Date, now: Date): boolean {
+  const age = now.getTime() - reversedAt.getTime();
+  if (Number.isNaN(age)) return true;
+  return age >= CREDIT_NOTE_STUCK_HOURS * HOUR_MS;
+}
+
 export interface CreditNoteRun {
   readonly issued: number;
   readonly replayed: number;
   /** Refused or failed: left as open notices, with a fixed reason in the log. */
   readonly refused: number;
+  /** WPU-B3: of the refused ones, those older than CREDIT_NOTE_STUCK_HOURS (alerted in this run). */
+  readonly stuck: number;
+}
+
+function escalate(deps: InvoiceBacklogDeps, entry: CreditNoteToIssue, reason: string): boolean {
+  const now = deps.clock.now();
+  if (!creditNoteIsStuck(entry.reversedAt, now)) return false;
+  const age = (now.getTime() - entry.reversedAt.getTime()) / HOUR_MS;
+  deps.log({
+    event: CREDIT_NOTE_STUCK_EVENT,
+    severity: "alert",
+    ledgerTransactionId: entry.ledgerTransactionId,
+    reason,
+    // Whole hours; null when the age cannot be computed.
+    ageHours: Number.isFinite(age) ? Math.floor(age) : null,
+  });
+  return true;
 }
 
 async function issueOne(
   deps: InvoiceBacklogDeps,
   entry: CreditNoteToIssue,
-): Promise<"issued" | "replayed" | "refused"> {
+): Promise<{ outcome: "issued" | "replayed" | "refused"; reason?: string }> {
   try {
     return await deps.runTx(async (tx) => {
       // One reading of the clock gives the fiscal year AND the date of issue.
@@ -54,10 +89,10 @@ async function issueOne(
           ledgerTransactionId: entry.ledgerTransactionId,
           reason: written.error,
         });
-        return "refused" as const;
+        return { outcome: "refused" as const, reason: written.error };
       }
       await invoiceBacklogRepo(tx).resolveCreditNoteNotice(entry.ledgerTransactionId);
-      return written.replayed ? ("replayed" as const) : ("issued" as const);
+      return { outcome: written.replayed ? ("replayed" as const) : ("issued" as const) };
     });
   } catch (error) {
     deps.log({
@@ -65,7 +100,7 @@ async function issueOne(
       ledgerTransactionId: entry.ledgerTransactionId,
       error: error instanceof Error ? error.name : "unknown",
     });
-    return "refused";
+    return { outcome: "refused", reason: error instanceof Error ? error.name : "unknown" };
   }
 }
 
@@ -77,13 +112,17 @@ export async function issueCreditNotes(
   let issued = 0;
   let replayed = 0;
   let refused = 0;
+  let stuck = 0;
   try {
     const due = await deps.runTx((tx) => invoiceBacklogRepo(tx).creditNotesToIssue(limit));
     for (const entry of due) {
-      const outcome = await issueOne(deps, entry);
-      if (outcome === "issued") issued += 1;
-      else if (outcome === "replayed") replayed += 1;
-      else refused += 1;
+      const done = await issueOne(deps, entry);
+      if (done.outcome === "issued") issued += 1;
+      else if (done.outcome === "replayed") replayed += 1;
+      else {
+        refused += 1;
+        if (escalate(deps, entry, done.reason ?? "unknown")) stuck += 1;
+      }
     }
   } catch (error) {
     deps.log({
@@ -91,5 +130,5 @@ export async function issueCreditNotes(
       error: error instanceof Error ? error.name : "unknown",
     });
   }
-  return { issued, replayed, refused };
+  return { issued, replayed, refused, stuck };
 }

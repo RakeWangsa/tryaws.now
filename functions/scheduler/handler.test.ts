@@ -48,8 +48,10 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
     noted: 0,
     creditNotes: 0,
     creditNotesIssued: 0,
+    creditNotesStuck: 0,
     remaining: 0,
   });
+  expect(report.polling).toEqual({ databases: 0, certificates: 0, replayed: 0, failed: 0 });
   expect(report.rateLimitsPurged).toBe(1);
   expect(logged.map((e) => e.event)).toEqual([
     "sweep",
@@ -57,6 +59,7 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
     "metering_run",
     "static_ip_metering_run",
     "invoice_backlog_run",
+    "polling_run",
     "rate_limits_purged",
   ]);
   // The second run purges nothing more.
@@ -85,6 +88,7 @@ it("a failing job does not stop the others; the run then rejects (R16)", async (
     "metering_run",
     "static_ip_metering_run",
     "invoice_backlog_run",
+    "polling_run",
     "rate_limits_purged",
   ]);
   expect(JSON.stringify(logged)).not.toContain("secret");

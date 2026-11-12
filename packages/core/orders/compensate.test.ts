@@ -219,4 +219,32 @@ describe("compensateFailedCreate", () => {
     expect(resource).toBeGreaterThanOrEqual(0);
     expect(wallet).toBeLessThan(resource);
   });
+
+  // WPU-B3 (10.1): the removal of what the create made in AWS, and the message to the customer.
+  it("queues one cleanup operation and one refund message (email and in_app) for the order, once", async () => {
+    const kit = await makeKit(t);
+    const { orderId, resourceId } = await placeOne(kit);
+    await compensate(kit, resourceId);
+    await compensate(kit, resourceId);
+    const ops = await rows(
+      "select kind, state, needs_approval, idempotency_key, payload from operations where resource_id = $1 and kind = 'cleanup_failed_create'",
+      [resourceId],
+    );
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      idempotency_key: "create-cleanup:" + resourceId,
+      payload: { reason: "failed_create" },
+    });
+    const notices = await rows(
+      "select channel, payload from notifications where customer_id = $1 and template = 'order_failed_refunded' order by channel",
+      [kit.customerId],
+    );
+    expect(notices.map((n) => n.channel)).toEqual(["email", "in_app"]);
+    expect(notices[0]?.payload).toMatchObject({
+      orderId,
+      product: "instance",
+      failure: "create_failed",
+      refundMinor: "74295",
+    });
+  });
 });

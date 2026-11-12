@@ -1,4 +1,4 @@
-import type { AwsItem, LiveCount } from "@tc/core";
+import type { AwsItem, LiveCount, UsageSample } from "@tc/core";
 import type { PoolAccountRef } from "@tc/db";
 
 // The read-only inventory PORT of the reconciler. The real implementation assumes TcReader (and, for
@@ -17,6 +17,12 @@ export interface InventoryRead {
   readonly items: readonly AwsItem[];
   /** Live counts of the quota cells the port could count (certificate_365d has none). */
   readonly live: readonly LiveCount[];
+  /**
+   * WPU-B3: what AWS reports as used, for the metering run: snapshot GB of a server for today and the
+   * data transfer GB of an hour (see UsageSample). Optional: a port that cannot measure leaves it out and
+   * nothing is written (the metering run then charges nothing for what it cannot read, R16).
+   */
+  readonly usage?: readonly UsageSample[];
 }
 
 export type InventoryResult =

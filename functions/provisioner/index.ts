@@ -112,6 +112,7 @@ export function readConfig(env: Record<string, string | undefined>): Provisioner
 function buildDeps(): StepDeps {
   const config = readConfig(process.env);
   const clock = { now: () => new Date() };
+  const log = (e: LogEvent) => console.log(JSON.stringify(e));
   return {
     runTx: withTx,
     clock,
@@ -146,10 +147,10 @@ function buildDeps(): StepDeps {
     ]),
     // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
     destructiveGuard,
-    hooks: composeHooks(orderHooks({ clock }), lifecycleHooks({ clock }), dnsZoneHooks()),
+    hooks: composeHooks(orderHooks({ clock, log }), lifecycleHooks({ clock, log }), dnsZoneHooks()),
     access: createAwsAccess({ caller: "provisioner" }),
     env: config.env,
-    log: (e: LogEvent) => console.log(JSON.stringify(e)),
+    log,
   };
 }
 

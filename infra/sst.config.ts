@@ -74,7 +74,7 @@ export default $config({
       waf: edge,
       workers: fns,
     });
-    const alarm = alarms(config, queues, fns);
+    const alarm = alarms(config, queues, fns, apps);
 
     // Outputs listed by `sst deploy`; names only, never a secret value.
     return {

@@ -114,7 +114,6 @@ const BEFORE = [
   "parseOtpCode",
   "parseSnapshot",
   "parseTopUpAmount",
-  "planRelease",
   "postTransaction",
   "previewChange",
   "previewPricing",
@@ -126,7 +125,6 @@ const BEFORE = [
   "quoteInForce",
   "readApprovalUntil",
   "recomputeUsed",
-  "releaseCapacity",
   "requiresApproval",
   "reserveCapacity",
   "resolveNeeds",
@@ -149,6 +147,29 @@ const BEFORE = [
   "validateRule",
   "walletBalance",
   "walletEntriesSum",
+];
+
+// WPU-F1: the Bengali digit one helper of packages/core/invoices/digit-one.ts.
+const DIGIT_ONE = [
+  "BENGALI_DIGIT_FONT",
+  "BENGALI_DIGIT_ONE",
+  "DIGIT_ONE_CLASS",
+  "splitDigitOne",
+  "unwrapDigitOneHtml",
+  "wrapDigitOneHtml",
+];
+
+// WPU-B3: the stuck credit note, the usage writer and the scheduled polls.
+const B3 = [
+  "CREDIT_NOTE_STUCK_EVENT",
+  "CREDIT_NOTE_STUCK_HOURS",
+  "DB_PARAMETERS_STALE_HOURS",
+  "POLL_MAX_PAGES",
+  "POLL_PAGE",
+  "USAGE_METRICS",
+  "creditNoteIsStuck",
+  "planUsageWrites",
+  "runPolling",
 ];
 
 // The products seam that Task 9 adds to @tc/core.
@@ -555,6 +576,8 @@ describe("the public surface of the order flow", () => {
           ...PRICE_BOOK,
           ...DNS_ZONE,
           ...BILLING,
+          ...DIGIT_ONE,
+          ...B3,
         ]),
       ].sort(),
     );
@@ -578,5 +601,21 @@ describe("the public surface of the order flow", () => {
     expect(orders.CLIENT_KEY.test("0123456789abcdef")).toBe(true);
     expect(orders.CLIENT_KEY.test("short")).toBe(false);
     expect(typeof orders.makeOrders).toBe("function");
+  });
+});
+
+// WPU-B3: the release of capacity is worker code. It left the barrel (web and admin import it) for the
+// subpath `@tc/core/capacity-worker`; the two names were removed from BEFORE on purpose.
+describe("the worker-only subpath of the capacity release", () => {
+  it("is not in the barrel of @tc/core", () => {
+    expect("releaseCapacity" in core).toBe(false);
+    expect("planRelease" in core).toBe(false);
+  });
+  it("is in the subpath, which package.json exports", async () => {
+    const worker = await import("../capacity/worker");
+    expect(typeof worker.releaseCapacity).toBe("function");
+    expect(typeof worker.planRelease).toBe("function");
+    const pkg = (await import("../package.json", { with: { type: "json" } })).default;
+    expect(pkg.exports["./capacity-worker"]).toBe("./capacity/worker.ts");
   });
 });

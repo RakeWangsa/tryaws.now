@@ -69,6 +69,7 @@ export const opsEn: Same<typeof opsBn> = {
       set_db_parameters: "Change database parameters",
       read_db_parameters: "Read database parameters",
       reject_operation: "Reject a stuck operation",
+      cleanup_failed_create: "Remove leftovers of a failed create",
       other: "Other kind",
     },
     errors: {

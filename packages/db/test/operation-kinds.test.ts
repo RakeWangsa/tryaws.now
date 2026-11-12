@@ -11,13 +11,14 @@ import {
 
 it("every kind has one row of info and nothing else has", () => {
   expect(Object.keys(OPERATION_KIND_INFO).sort()).toEqual([...OPERATION_KINDS].sort());
-  expect(OPERATION_KINDS).toHaveLength(41);
+  expect(OPERATION_KINDS).toHaveLength(42);
   expect(OPERATION_KINDS).toContain("rename");
   expect(OPERATION_KINDS).toContain("reject_operation");
 });
 
-it("the destructive kinds of R13 are destroy, purge_snapshots and delete_backup", () => {
+it("the destructive kinds of R13 are cleanup_failed_create, destroy, purge_snapshots and delete_backup", () => {
   expect(OPERATION_KINDS.filter(isDestructive).sort()).toEqual([
+    "cleanup_failed_create",
     "delete_backup",
     "destroy",
     "purge_snapshots",
@@ -33,6 +34,7 @@ it("a lifecycle kind has its own adapter method, reject_operation is run by the 
     destroy: "destroy",
     purge_snapshots: "purgeSnapshots",
     reject_operation: "engine",
+    cleanup_failed_create: "destroy",
   } as const;
   for (const kind of OPERATION_KINDS) {
     expect(OPERATION_KIND_INFO[kind].method, kind).toBe(
@@ -79,6 +81,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
   expect(OPERATION_KINDS.filter((k) => !OPERATION_KIND_INFO[k].customerRequestable).sort()).toEqual(
     [
       "change_cdn_bundle",
+      "cleanup_failed_create",
       "clear_plan_change_mark",
       "create",
       "final_snapshot",

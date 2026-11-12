@@ -197,7 +197,8 @@ export function workers(inputs: WorkerInputs) {
   // provisioner: SQS FIFO, one message per invocation, partial batch responses (queue-config.ts).
   // VERIFY: queue.subscribe takes function args here and applies `batch` to the event source mapping.
   const provisionerSpec = specOf("provisioner");
-  queues.provisioning.subscribe(functionArgs(provisionerSpec, inputs), {
+  // WPU-B3: kept, so that the alarms can name its log group and its error metric.
+  const provisioner = queues.provisioning.subscribe(functionArgs(provisionerSpec, inputs), {
     batch: {
       size: PROVISIONING_QUEUE.batchSize,
       partialResponses: PROVISIONING_QUEUE.reportBatchItemFailures,
@@ -265,7 +266,7 @@ export function workers(inputs: WorkerInputs) {
     triggers: { run: String(Date.now()) },
   });
 
-  return { invoked, readerAliases, crons, migrator, migration };
+  return { invoked, readerAliases, crons, provisioner, migrator, migration };
 }
 
 export type Workers = ReturnType<typeof workers>;

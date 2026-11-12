@@ -69,6 +69,7 @@ export const opsBn = {
       set_db_parameters: "ডাটাবেস প্যারামিটার বদল",
       read_db_parameters: "ডাটাবেস প্যারামিটার পড়া",
       reject_operation: "অনুরোধ বাতিলের কাজ",
+      cleanup_failed_create: "ব্যর্থ তৈরির অবশিষ্ট মুছে ফেলা",
       other: "অন্য ধরন",
     },
     errors: {
