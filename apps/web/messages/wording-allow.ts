@@ -40,6 +40,10 @@ export const LATIN_ONLY_BN: readonly WordingAllow[] = [
     reason: "16.13 AWS name beside the product: Amazon Lightsail block storage disk",
   },
   {
+    key: "DiskRestore.intro",
+    reason: "16.13 AWS name beside the product: Amazon Lightsail block storage disk",
+  },
+  {
     key: "Storage.awsNote",
     reason: "16.13 AWS name beside the product: Amazon Lightsail object storage bucket",
   },
