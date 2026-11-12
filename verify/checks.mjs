@@ -918,6 +918,25 @@ TASKS["WPU-G6"] = [
 // order path and db). The db suite needs the local PostgreSQL (pnpm db:up). No AWS call.
 TASKS["WPU-S1"] = [specSync, baselineSync, lint, typecheck, format, core, db, repo];
 
+// WPU-S2: the plan change of a renewal after the security review. The pending plan's price is quoted
+// only when the apply operation can run in the resource's state (core, with the database), a failed
+// apply (needs_attention) marks the pending plan failed and stops the discount (core hook, scheduler
+// sweep, provisioner hooks), the adapter actions accept `active` only and clear the mark (aws), and the
+// sweeper sends the queued apply rows that renewNow inserts (core, with the database). No AWS call. The
+// core suite needs the local PostgreSQL (pnpm db:up).
+TASKS["WPU-S2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  aws,
+  provisioner,
+  scheduler,
+  repo,
+];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

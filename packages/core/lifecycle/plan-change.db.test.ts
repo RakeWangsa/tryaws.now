@@ -4,9 +4,12 @@
 // database as web_rw, like renewNow, so a missing grant shows here.
 import { insertRow, runTransaction, uniqueSuffix, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, describe, expect, it } from "vitest";
+import { createMemoryQueue } from "../operations/queue";
+import { sweepOperations } from "../operations/sweep";
 import { quoteInForce } from "../rates/in-force";
 import { makeKit, placeOne, START, type Kit } from "../test/orders-kit";
-import { planPriceFor, readPlanChange } from "./plan-change";
+import { lifecycleHooks } from "./hooks";
+import { PLAN_APPLY_STATES, planPriceFor, readPlanChange } from "./plan-change";
 import { renewalQuote } from "./renew";
 import { renewNow } from "./renew-now";
 
@@ -81,15 +84,15 @@ async function fresh(family: string, config: Record<string, unknown>): Promise<F
   };
 }
 
-const rowOf = (f: Fresh, family: string, config: Record<string, unknown>) =>
+const rowOf = (f: Fresh, family: string, config: Record<string, unknown>, state = "active") =>
   ({
     market: "BD",
     priceSnapshot: f.snapshot,
-    resource: { family, state: "active", config, deletedAt: null },
+    resource: { family, state, config, deletedAt: null },
   }) as never;
 
 beforeAll(async () => {
-  kit = await makeKit(t, { balanceMinor: 50_000_000n });
+  kit = await makeKit(t, { balanceMinor: 50_000_000n, vcpuLimit: 4000, ipLimit: 4000 });
 });
 
 describe("readPlanChange", () => {
@@ -270,5 +273,243 @@ describe("renewNow with a pending plan", () => {
         plain.resourceId,
       ]),
     ).toHaveLength(0);
+  });
+});
+// WPU-S2: the renewal may charge the pending plan only when the apply operation can run for the state
+// the resource is in, and only while the pending plan has not failed.
+const asWorker = <T>(fn: Parameters<typeof runTransaction<T>>[1]) =>
+  runTransaction(t.db, fn, { role: "worker_rw" });
+const total = async (family: string, usd: string): Promise<bigint> => {
+  const r = await asWeb((tx) =>
+    quoteInForce(tx, { market: "BD", productFamily: family, awsPriceUsd: usd }, kit.clock),
+  );
+  if (!r.ok) throw new Error("no quote");
+  return BigInt(r.value.snapshot.totalMinor);
+};
+const renewTwoDaysBefore = async (f: Fresh) => {
+  kit.clock.set(new Date(f.end.getTime() - 2 * DAY));
+  const before = await kit.balance(f.customerId);
+  const r = await asWeb((tx) =>
+    renewNow(tx, {
+      customerId: f.customerId,
+      resourceId: f.resourceId,
+      clock: kit.clock,
+    }),
+  );
+  return { r, charged: before - (await kit.balance(f.customerId)) };
+};
+const applyOps = (resourceId: string) =>
+  q(
+    "select 1 from operations where resource_id = $1 and kind in ('scale_container','change_cdn_bundle')",
+    [resourceId],
+  );
+const configOf = async (resourceId: string) =>
+  (await q("select config from resources where id = $1", [resourceId]))[0]!.config as Record<
+    string,
+    unknown
+  >;
+
+describe("PLAN_APPLY_STATES (the states in which the adapter action accepts the apply)", () => {
+  it("is active only, for both plan families; the adapters refuse every other state", () => {
+    expect(PLAN_APPLY_STATES).toEqual({
+      container_service: ["active"],
+      cdn: ["active"],
+    });
+  });
+});
+
+describe("WPU-S2: the pending price is charged only when the apply can run", () => {
+  it("planPriceFor ignores the pending plan while the resource is stopped, suspended or in another state", async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", {
+      region: reg(big),
+    });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    for (const state of ["stopped", "suspended", "provisioning", "retained"]) {
+      expect(
+        await asWeb((tx) => planPriceFor(tx, rowOf(f, "container_service", config, state))),
+      ).toMatchObject({ state: "applied", productId: big });
+    }
+    expect(
+      await asWeb((tx) => planPriceFor(tx, rowOf(f, "container_service", config, "active"))),
+    ).toMatchObject({ state: "pending", productId: small });
+  });
+
+  it("downgrade while stopped: charged at the CURRENT plan price, the pending plan stays, nothing is queued", async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", {
+      region: reg(big),
+    });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    await q("update resources set state = 'stopped' where id = $1", [f.resourceId]);
+    const { r, charged } = await renewTwoDaysBefore(f);
+    expect(r.ok).toBe(true);
+    expect(charged).toBe(await total("container_service", "40"));
+    expect(await applyOps(f.resourceId)).toHaveLength(0);
+    expect(await configOf(f.resourceId)).toMatchObject({
+      pendingPlan: { productId: small },
+    });
+  });
+
+  it("downgrade active: charged the new price, the apply is queued once per period (R7)", async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", {
+      region: reg(big),
+    });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    const { r, charged } = await renewTwoDaysBefore(f);
+    expect(r.ok).toBe(true);
+    expect(charged).toBe(await total("container_service", "5"));
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+    const again = await asWeb((tx) =>
+      renewNow(tx, {
+        customerId: f.customerId,
+        resourceId: f.resourceId,
+        clock: kit.clock,
+      }),
+    );
+    expect(again.ok).toBe(false);
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+  });
+
+  it("upgrade while stopped: not charged more than the capacity delivered", async () => {
+    const small = await product("cdn", "small_1_0", "5");
+    const big = await product("cdn", "large_1_0", "20", { region: reg(small) });
+    const config = {
+      region: reg(small),
+      appliedPlan: { productId: small },
+      pendingPlan: { productId: big },
+    };
+    const f = await fresh("cdn", config);
+    await q("update resources set state = 'stopped' where id = $1", [f.resourceId]);
+    const { r, charged } = await renewTwoDaysBefore(f);
+    expect(r.ok).toBe(true);
+    expect(charged).toBe(await total("cdn", "5"));
+    expect(await applyOps(f.resourceId)).toHaveLength(0);
+  });
+
+  it("a renewal from grace of a suspended resource charges the current plan too", async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", {
+      region: reg(big),
+    });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    await q("update resources set state = 'suspended' where id = $1", [f.resourceId]);
+    await q("update subscriptions set status = 'grace' where id = $1", [f.subscriptionId]);
+    const { r, charged } = await renewTwoDaysBefore(f);
+    expect(r.ok).toBe(true);
+    expect(charged).toBe(await total("container_service", "40"));
+    expect(await applyOps(f.resourceId)).toHaveLength(0);
+  });
+});
+
+describe("WPU-S2: an apply that ends in needs_attention clears the discount", () => {
+  const failEvent = (f: Fresh, kind: string, code = "conflict") => ({
+    operationId: "0190aaaa-0000-7000-8000-0000000000b1",
+    resourceId: f.resourceId,
+    kind,
+    code,
+  });
+
+  it("marks pendingPlanFailed with the reason code and stops quoting the pending plan", async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", {
+      region: reg(big),
+    });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    await asWorker((tx) =>
+      lifecycleHooks({ clock: kit.clock }).needsAttention(tx, failEvent(f, "scale_container")),
+    );
+    expect(await configOf(f.resourceId)).toMatchObject({
+      pendingPlan: { productId: small },
+      pendingPlanFailed: { code: "conflict" },
+    });
+    const stored = await configOf(f.resourceId);
+    expect(
+      await asWeb((tx) => planPriceFor(tx, rowOf(f, "container_service", stored))),
+    ).toMatchObject({ state: "applied", productId: big });
+    const { r, charged } = await renewTwoDaysBefore(f);
+    expect(r.ok).toBe(true);
+    expect(charged).toBe(await total("container_service", "40"));
+    expect(await applyOps(f.resourceId)).toHaveLength(0);
+  });
+
+  it("a CDN apply failure does the same, and other kinds change nothing", async () => {
+    const small = await product("cdn", "small_1_0", "5");
+    const big = await product("cdn", "large_1_0", "20", { region: reg(small) });
+    const config = {
+      region: reg(small),
+      appliedPlan: { productId: small },
+      pendingPlan: { productId: big },
+    };
+    const f = await fresh("cdn", config);
+    await asWorker((tx) =>
+      lifecycleHooks({ clock: kit.clock }).needsAttention(tx, failEvent(f, "reboot")),
+    );
+    expect(await configOf(f.resourceId)).not.toHaveProperty("pendingPlanFailed");
+    await asWorker((tx) =>
+      lifecycleHooks({ clock: kit.clock }).needsAttention(
+        tx,
+        failEvent(f, "change_cdn_bundle", "lease_expired"),
+      ),
+    );
+    expect(await configOf(f.resourceId)).toMatchObject({
+      pendingPlanFailed: { code: "lease_expired" },
+    });
+    const { charged } = await renewTwoDaysBefore(f);
+    expect(charged).toBe(await total("cdn", "5"));
+  });
+});
+
+describe("WPU-S2: the operations that renewNow inserts reach the queue through the sweeper", () => {
+  it("a queued apply row without a message is sent by the sweep once it is stale (renewNow sends none)", async () => {
+    const big = await product("container_service", "large", "40");
+    const config = { region: reg(big), pendingPlan: { productId: big } };
+    const f = await fresh("container_service", config);
+    const { r } = await renewTwoDaysBefore(f);
+    expect(r.ok).toBe(true);
+    const [op] = await q(
+      "select id, state from operations where resource_id = $1 and kind = 'scale_container'",
+      [f.resourceId],
+    );
+    expect(op!.state).toBe("queued");
+    const clock = { now: () => new Date(Date.now() + 3 * 60_000) };
+    const queue = createMemoryQueue({ clock });
+    const report = await sweepOperations({
+      runTx: asWorker,
+      clock,
+      queue,
+      limit: 1000,
+    });
+    expect(report.resent).toBeGreaterThanOrEqual(1);
+    const ids = queue.messages.map(
+      (m) => (JSON.parse(m.MessageBody) as { operationId: string }).operationId,
+    );
+    expect(ids).toContain(op!.id);
   });
 });

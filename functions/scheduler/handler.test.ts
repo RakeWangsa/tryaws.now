@@ -1,7 +1,14 @@
 import { createManualClock, createMemoryQueue, type LogEvent } from "@tc/core";
-import { runTransaction, useTempDatabase } from "@tc/db/testing";
+import {
+  insertRow,
+  newCustomer,
+  newResource,
+  runTransaction,
+  uniqueSuffix,
+  useTempDatabase,
+} from "@tc/db/testing";
 import { describe, expect, it } from "vitest";
-import { createHandler, handler as realHandler, readConfig } from "./index";
+import { createHandler, handler as realHandler, planChangeAttention, readConfig } from "./index";
 
 const t = useTempDatabase();
 
@@ -100,4 +107,34 @@ describe("handler", () => {
       if (saved !== undefined) process.env.PROVISIONING_QUEUE_URL = saved;
     }
   });
+});
+it("WPU-S2: an apply of a pending plan that the sweep escalates marks the plan as failed", async () => {
+  const resourceId = await newResource(t.pool, await newCustomer(t.pool));
+  await t.pool.query(
+    `update resources set config = '{"pendingPlan":{"productId":"0190aaaa-0000-7000-8000-0000000000a1"}}'::jsonb where id = $1`,
+    [resourceId],
+  );
+  const clock = createManualClock(new Date());
+  // The fifth attempt ran out of lease: the sweep moves the operation to needs_attention.
+  await insertRow(t.pool, "operations", {
+    resource_id: resourceId,
+    kind: "scale_container",
+    state: "running",
+    attempts: 4,
+    next_run_at: new Date(clock.now().getTime() - 60_000),
+    idempotency_key: "s2:" + uniqueSuffix(),
+  });
+  const handler = createHandler({
+    runTx: (fn) => runTransaction(t.db, fn, { role: "worker_rw" }),
+    clock,
+    queue: createMemoryQueue({ clock }),
+    onAttention: planChangeAttention,
+    log: () => undefined,
+  });
+  const report = await handler();
+  expect(report.sweep).toMatchObject({ escalated: 1 });
+  const config = (await t.pool.query("select config from resources where id = $1", [resourceId]))
+    .rows[0].config;
+  expect(config.pendingPlanFailed).toEqual({ code: "lease_expired" });
+  expect(config.pendingPlan).toBeTruthy();
 });

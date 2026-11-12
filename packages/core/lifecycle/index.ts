@@ -18,7 +18,11 @@ export {
   destructiveGuard,
 } from "./guard";
 export {
+  PLAN_APPLY_KINDS,
+  PLAN_APPLY_STATES,
   PLAN_CHANGE_FAMILIES,
+  markPlanChangeFailed,
+  planChangeFailed,
   planPriceFor,
   queuePlanChange,
   readPlanChange,

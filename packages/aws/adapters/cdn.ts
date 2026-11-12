@@ -305,12 +305,13 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
         // nothing is called in AWS. null cancels a pending change.
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
         const productId = payload?.productId;
-        if (productId === null) return stepDone({ configMerge: { pendingPlan: null } });
+        if (productId === null)
+          return stepDone({ configMerge: { pendingPlan: null, pendingPlanFailed: null } });
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (productId === ctx.config.productId) throw fail("validation");
         const bundle = await deps.loadBundle({ customerId: ctx.resource.customerId, productId });
         if (bundle === null) throw fail("validation");
-        return stepDone({ configMerge: { pendingPlan: { productId } } });
+        return stepDone({ configMerge: { pendingPlan: { productId }, pendingPlanFailed: null } });
       }
       case "change_cdn_bundle": {
         // Queued by the renewal, never by a customer. The bundle comes from the catalog product the
@@ -327,7 +328,12 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
           }),
         );
         return stepDone({
-          configMerge: { productId, appliedPlan: { productId }, pendingPlan: null },
+          configMerge: {
+            productId,
+            appliedPlan: { productId },
+            pendingPlan: null,
+            pendingPlanFailed: null,
+          },
         });
       }
       case "set_cache_behaviors": {
