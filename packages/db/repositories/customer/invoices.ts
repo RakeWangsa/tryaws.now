@@ -1,5 +1,6 @@
 import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { invoices } from "../../schema/index";
+import { INVOICE_SELLER_KEY, parseSellerRowValue } from "../config/invoice-seller";
 import { created, refused, replayed, type Written } from "../result";
 import { isUuid, type TenantScope } from "../scope";
 
@@ -48,8 +49,13 @@ export interface InvoicesRepo {
   get(id: string): Promise<InvoiceRow | null>;
   findByOrder(orderId: string): Promise<InvoiceRow | null>;
   list(opts?: { limit?: number; after?: InvoiceCursor }): Promise<InvoicePage>;
-  issue(input: NewInvoice): Promise<Written<InvoiceRow>>;
+  issue(input: NewInvoice): Promise<IssueResult>;
 }
+
+// WPU-I1: a tax invoice (Mushak 6.3) names its seller. Without complete seller details (the setting
+// `invoice_seller` of the customer's market) nothing is issued and no number is taken (R16); the admin
+// queue shows the notice.
+export type IssueResult = Written<InvoiceRow> | { ok: false; error: "seller_details_missing" };
 
 const INVOICE_COLUMNS = {
   id: invoices.id,
@@ -157,6 +163,22 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
       const existing = await byColumn(invoices.orderId, input.orderId);
       if (existing !== null) {
         return existing.totalMinor === input.totalMinor ? replayed(existing) : refused("conflict");
+      }
+
+      // The order must be the customer's own (R8), and the seller of the customer's market must be
+      // complete (R16). The order is looked at first, so another customer's order answers not_found.
+      const [owned] = await tx
+        .execute<{ seller: unknown }>(
+          sql`select s.value as seller
+              from orders o
+              join customers c on c.id = o.customer_id
+              left join settings s on s.market = c.market and s.key = ${INVOICE_SELLER_KEY} and s.scope = 'market'
+              where o.id = ${input.orderId} and o.customer_id = ${customerId}`,
+        )
+        .then((r) => r.rows);
+      if (owned === undefined) return refused("not_found");
+      if (parseSellerRowValue(owned.seller) === null) {
+        return { ok: false, error: "seller_details_missing" };
       }
 
       // The order is selected by id and customer in the same statement as the insert, and its total

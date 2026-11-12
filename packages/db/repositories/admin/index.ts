@@ -7,6 +7,7 @@ import { auditAdminRepo, type AuditAdminRepo } from "./audit";
 import { configPricesAdminRepo, type ConfigPricesAdminRepo } from "./config-prices";
 import { customersAdminRepo, type CustomersAdminRepo } from "./customers";
 import { tierLimitsAdminRepo, type TierLimitsAdminRepo } from "./tier-limits";
+import { invoiceSellerAdminRepo, type InvoiceSellerAdminRepo } from "./invoice-seller";
 import { capacityAdminRepo, type CapacityAdminRepo } from "./capacity";
 import { featureFlagsAdminRepo, type FeatureFlagsAdminRepo } from "./feature-flags";
 import { fxChangesAdminRepo, type FxChangesAdminRepo } from "./fx-changes";
@@ -48,6 +49,7 @@ export interface AdminRepos {
   configPrices: ConfigPricesAdminRepo;
   customers: CustomersAdminRepo;
   tierLimits: TierLimitsAdminRepo;
+  invoiceSeller: InvoiceSellerAdminRepo;
   featureFlags: FeatureFlagsAdminRepo;
   fxChanges: FxChangesAdminRepo;
   fxRates: FxRatesAdminRepo;
@@ -83,6 +85,7 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     configPrices: configPricesAdminRepo(scope),
     customers: customersAdminRepo(scope),
     tierLimits: tierLimitsAdminRepo(scope),
+    invoiceSeller: invoiceSellerAdminRepo(scope),
     featureFlags: featureFlagsAdminRepo(scope),
     fxChanges: fxChangesAdminRepo(scope),
     fxRates: fxRatesAdminRepo(scope),

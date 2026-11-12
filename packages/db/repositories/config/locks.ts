@@ -30,6 +30,10 @@ export function lockConfigPriceWrites(tx: Tx, market: string): Promise<void> {
   return lock(tx, "config_price", market);
 }
 
+export function lockInvoiceSellerWrites(tx: Tx, market: string): Promise<void> {
+  return lock(tx, "invoice_seller", market);
+}
+
 export function lockTierLimitsWrites(tx: Tx, market: string): Promise<void> {
   return lock(tx, "tier_limits", market);
 }
