@@ -1628,6 +1628,100 @@ TASKS["WP4-T7"] = [
   repo,
 ];
 
+// WP9-T2: the cross-tenant and isolation sweep. Four lines: every repository method of the customer
+// (the existing completeness test of the cross-tenant cases), every admin repository method (reads and
+// writes) behind the active-admin and role gate, the admin app source scan (page, route, action, flow)
+// and the web register (every Server Action, route handler and id page with a proof that exists).
+const sweepCustomerRepos = {
+  id: "sweep-customer-repos",
+  title:
+    "WP9-T2: every method of customerRepos has a cross-tenant case and binds the customer id (R8)",
+  command: ["pnpm", "test", "--filter", "@tc/db", "test/cross-tenant", "--no-passWithNoTests"],
+};
+const sweepAdminRepos = {
+  id: "sweep-admin-repos",
+  title:
+    "WP9-T2: every method of adminRepos refuses a disabled, missing or wrong-role admin (R10, R16)",
+  command: ["pnpm", "test", "--filter", "@tc/db", "admin-gates", "--no-passWithNoTests"],
+};
+const sweepAdminApp = {
+  id: "sweep-admin-app",
+  title:
+    "WP9-T2: every admin page, route, Server Action, flow and data module begins with the admin gate",
+  command: ["pnpm", "test", "--filter", "@tc/admin", "admin-sweep", "--no-passWithNoTests"],
+};
+const sweepWebEndpoints = {
+  id: "sweep-web-endpoints",
+  title:
+    "WP9-T2: every web endpoint is registered with a proof that exists, and the id pages answer like a missing row",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "endpoint-sweep",
+    "loaders-tenancy",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP9-T2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  sweepCustomerRepos,
+  sweepAdminRepos,
+  sweepAdminApp,
+  sweepWebEndpoints,
+  repo,
+];
+
+// WP9-T3: 50 parallel orders (no double spend, no over-reservation, clean refusals), 20 parallel
+// verifications that credit once, and the restore drill. The drill needs pg_dump and the local database:
+// without them it prints BLOCKED and exits 2, which fails this line (a skipped drill is not a pass).
+// The point-in-time restore on RDS is a manual VERIFY step (docs/runbooks/restore-drill.md).
+const purchaseStorm = {
+  id: "purchase-concurrency",
+  title: "WP9-T3: 50 parallel orders: no double spend, no over-reservation, losers refused cleanly",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "orders/purchase-concurrency",
+    "--no-passWithNoTests",
+  ],
+};
+const topUpStorm = {
+  id: "topup-parallel-credit",
+  title: "WP9-T3: the same EPS payment verified 20 times in parallel credits exactly once",
+  command: ["pnpm", "test", "--filter", "@tc/eps", "proof-parallel-credit", "--no-passWithNoTests"],
+};
+const restoreDrillUnit = {
+  id: "restore-drill-logic",
+  title:
+    "WP9-T3: the drill refuses staging and remote databases and is BLOCKED, never a pass, without pg_dump",
+  command: ["pnpm", "test", "--filter", "repo", "restore-drill", "--no-passWithNoTests"],
+};
+const restoreDrill = {
+  id: "restore-drill",
+  title: "WP9-T3: a dump of the local database restores and the copy holds the ledger invariants",
+  command: ["node", "scripts/restore-drill.mjs", "--allow-empty"],
+};
+TASKS["WP9-T3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  purchaseStorm,
+  topUpStorm,
+  restoreDrillUnit,
+  restoreDrill,
+  repo,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

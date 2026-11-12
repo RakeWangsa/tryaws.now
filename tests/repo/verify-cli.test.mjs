@@ -133,6 +133,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP8-T5",
     "WP8-T6",
     "WP8-T7",
+    "WP9-T2",
+    "WP9-T3",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -1328,6 +1330,63 @@ it("task WP4-T4 is proven by the shared checks, the db suite, and the three sent
     "packages/core/orders/double-submit.test.ts",
     "packages/core/orders/failed-create.test.ts",
     "packages/core/orders/kyc-gate.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP9-T2 is proven by the customer and admin repository sweeps, the admin source scan and the web register", () => {
+  expect(TASKS["WP9-T2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["sweep-customer-repos", "pnpm test --filter @tc/db test/cross-tenant --no-passWithNoTests"],
+    ["sweep-admin-repos", "pnpm test --filter @tc/db admin-gates --no-passWithNoTests"],
+    ["sweep-admin-app", "pnpm test --filter @tc/admin admin-sweep --no-passWithNoTests"],
+    [
+      "sweep-web-endpoints",
+      "pnpm test --filter @tc/web endpoint-sweep loaders-tenancy --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/db/test/admin-gates.test.ts",
+    "apps/admin/server/admin-sweep.test.ts",
+    "apps/web/server/endpoint-sweep.test.ts",
+    "apps/web/server/endpoint-sweep.cases.ts",
+    "apps/web/server/loaders-tenancy.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP9-T3 is proven by the order storm, the parallel top-up and the restore drill (BLOCKED is a failure)", () => {
+  expect(TASKS["WP9-T3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    [
+      "purchase-concurrency",
+      "pnpm test --filter @tc/core orders/purchase-concurrency --no-passWithNoTests",
+    ],
+    [
+      "topup-parallel-credit",
+      "pnpm test --filter @tc/eps proof-parallel-credit --no-passWithNoTests",
+    ],
+    ["restore-drill-logic", "pnpm test --filter repo restore-drill --no-passWithNoTests"],
+    ["restore-drill", "node scripts/restore-drill.mjs --allow-empty"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/core/orders/purchase-concurrency.test.ts",
+    "packages/eps/test/proof-parallel-credit.test.ts",
+    "scripts/restore-drill.mjs",
+    "scripts/lib/restore-drill.test.mjs",
+    "docs/runbooks/restore-drill.md",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
