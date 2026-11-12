@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud CI role TcCiPlanProduction (R3, B.1 of docs/analysis/pending-audit.md): READ-ONLY. Assumed
+  by the job `plan` of .github/workflows/deploy-production.yml through GitHub OIDC, in the PRODUCTION
+  account only, to run `sst diff` so DevOps reads the plan before approving the deploy job. The trust is
+  the three conditions that workflow documents: aud, sub = the GitHub environment `production-plan`, and
+  job_workflow_ref = that workflow at a `v*` tag. The GitHub side must also set a deployment tag policy
+  (`v*`) on the environment `production-plan`, because it has no reviewers. The permissions are the
+  AWS managed ReadOnlyAccess policy and an explicit deny of every write that matters. Organisation and
+  repository are parameters; no account id or name is written here.
+# VERIFY: IAM evaluates the GitHub claim `job_workflow_ref` as the condition key
+# token.actions.githubusercontent.com:job_workflow_ref (current IAM documentation). Its value has NO
+# "repo:" prefix: <org>/<repo>/.github/workflows/<file>@<ref>. StringLike is needed for the `v*` tag.
+# VERIFY: `sst diff` of SST v4 reads the state in the sst-* S3 bucket and the passphrase in SSM
+# (/sst/passphrase/...), and may take a lock. ReadOnlyAccess reads both; if the diff needs one write
+# (a state lock), allow exactly that object path here and record it in JOURNEY.md, nothing wider.
+# VERIFY: ReadOnlyAccess can read some secret-bearing metadata (for example Lambda environment
+# variables). The stack puts no secret value into an environment variable (secrets are linked,
+# JOURNEY.md WP0-T2); check the first plan output before approving production.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
+    Description: GitHub organisation or user that owns the repository. Entered by DevOps; not in the repository.
+  GitHubRepo:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9._-]{1,100}$"
+    Description: GitHub repository name. Entered by DevOps; not in the repository.
+  MaxSessionSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 3600
+    Description: One hour, as role-duration-seconds in the workflow.
+
+Resources:
+  TcCiPlanProduction:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcCiPlanProduction
+      Description: Read-only plan (sst diff) of the production stage. Assumed by GitHub Actions through OIDC only.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: GitHubProductionPlanEnvironmentAtAVersionTagOnly
+            Effect: Allow
+            Principal:
+              Federated:
+                Fn::Sub: "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  Fn::Sub: "repo:${GitHubOrg}/${GitHubRepo}:environment:production-plan"
+              StringLike:
+                token.actions.githubusercontent.com:job_workflow_ref:
+                  Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-production.yml@refs/tags/v*"
+      Policies:
+        - PolicyName: NoWritesAndNoAssume
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: NoIdentityChanges
+                Effect: Deny
+                Action:
+                  - iam:Create*
+                  - iam:Delete*
+                  - iam:Put*
+                  - iam:Attach*
+                  - iam:Detach*
+                  - iam:Update*
+                  - organizations:*
+                  - account:*
+                Resource: "*"
+              - Sid: NeverAssumeAPoolOrDnsRole
+                Effect: Deny
+                Action: sts:AssumeRole
+                Resource: "arn:aws:iam::*:role/Tc*"

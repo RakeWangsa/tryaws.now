@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud GitHub OIDC identity provider (R3: CI holds no AWS key). Deploy ONCE per account that
+  has a CI role: the staging account (ci-deploy-staging.yaml) and the production account
+  (ci-plan-production.yaml and ci-deploy-production.yaml). An account can hold only one provider for
+  this URL; if DevOps already created it by hand, do not deploy this template there.
+# VERIFY: AWS ignores ThumbprintList for token.actions.githubusercontent.com (it validates the
+# certificate chain with its own trusted CAs), so no thumbprint is written. Check the current IAM
+# documentation for "Create an OpenID Connect (OIDC) identity provider" before the first deploy.
+# VERIFY: the audience (ClientIdList) must equal the `audience` of aws-actions/configure-aws-credentials
+# (default sts.amazonaws.com), which the workflows in .github/workflows use.
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+
+Outputs:
+  OidcProviderName:
+    Description: Host and path of the provider; the three CI role templates build its ARN from it.
+    Value: token.actions.githubusercontent.com

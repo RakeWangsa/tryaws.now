@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud CI role TcCiDeployProduction (R3, B.1 of docs/analysis/pending-audit.md): the ONLY
+  production deploy role. Assumed by the job `deploy` of .github/workflows/deploy-production.yml through
+  GitHub OIDC, in the PRODUCTION account only. The trust is the three conditions that workflow documents:
+  aud, sub = the GitHub environment `production` (required reviewers: DevOps), and job_workflow_ref =
+  that workflow at a `v*` tag. A branch, a pull request or another workflow cannot assume it. Deploy with
+  the DevOps admin role after ci-oidc-provider.yaml. Organisation and repository are parameters; no
+  account id or name is written here. The role cannot assume a pool or DNS role: the control plane
+  function roles do that (R1).
+# VERIFY: IAM evaluates the GitHub claim `job_workflow_ref` as the condition key
+# token.actions.githubusercontent.com:job_workflow_ref (current IAM documentation, "Configure a role for
+# GitHub OIDC identity provider"). Its value has NO "repo:" prefix: <org>/<repo>/.github/workflows/<file>@<ref>
+# (the comment block of deploy-production.yml writes it with "repo:"; the claim itself has none). The
+# condition must be StringLike because of the `v*` tag. If the key is not evaluated it never matches and
+# the role fails closed (R16).
+# VERIFY: the `sub` claim of a job that uses `environment: production` is
+# repo:<org>/<repo>:environment:production (GitHub documentation, "OpenID Connect reference").
+# VERIFY: the permissions below cover what `sst deploy` needs; see ci-deploy-staging.yaml. The first
+# production deploy is a person-approved CI run; add a missing action by pull request, never iam:*.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
+    Description: GitHub organisation or user that owns the repository. Entered by DevOps; not in the repository.
+  GitHubRepo:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9._-]{1,100}$"
+    Description: GitHub repository name. Entered by DevOps; not in the repository.
+  MaxSessionSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 3600
+    Description: One hour, as role-duration-seconds in the workflow.
+
+Resources:
+  TcCiDeployProduction:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcCiDeployProduction
+      Description: Deploys the production stage of the SST app. Assumed by GitHub Actions through OIDC only.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: GitHubProductionEnvironmentAtAVersionTagOnly
+            Effect: Allow
+            Principal:
+              Federated:
+                Fn::Sub: "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  Fn::Sub: "repo:${GitHubOrg}/${GitHubRepo}:environment:production"
+              StringLike:
+                token.actions.githubusercontent.com:job_workflow_ref:
+                  Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-production.yml@refs/tags/v*"
+      Policies:
+        - PolicyName: SstDeployOfTheStack
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ServicesOfTheStack
+                Effect: Allow
+                Action:
+                  - acm:*
+                  - cloudfront:*
+                  - cloudwatch:*
+                  - cognito-idp:*
+                  - ec2:*
+                  - events:*
+                  - kms:*
+                  - lambda:*
+                  - logs:*
+                  - rds:*
+                  - route53:ChangeResourceRecordSets
+                  - route53:Get*
+                  - route53:List*
+                  - s3:*
+                  - scheduler:*
+                  - ses:*
+                  - sns:*
+                  - sqs:*
+                  - ssm:*
+                  - wafv2:*
+                Resource: "*"
+              - Sid: RolesOfTheStack
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:CreateRole
+                  - iam:CreateServiceLinkedRole
+                  - iam:DeleteRole
+                  - iam:DeleteRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListInstanceProfilesForRole
+                  - iam:ListRolePolicies
+                  - iam:PassRole
+                  - iam:PutRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:UpdateRole
+                Resource:
+                  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/*"
+              - Sid: NeverTheCiRolesNorUsersNorKeys
+                Effect: Deny
+                Action: iam:*
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/TcCi*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:oidc-provider/*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:user/*"
+              - Sid: NoLongLivedKeysAndNoOrganisation
+                Effect: Deny
+                Action:
+                  - iam:CreateAccessKey
+                  - iam:CreateUser
+                  - iam:CreateLoginProfile
+                  - organizations:*
+                  - account:*
+                Resource: "*"
+              - Sid: NeverAssumeAPoolOrDnsRole
+                Effect: Deny
+                Action: sts:AssumeRole
+                Resource: "arn:aws:iam::*:role/Tc*"

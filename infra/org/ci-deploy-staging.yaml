@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud CI role TcCiDeployStaging (R3, B.1 of docs/analysis/pending-audit.md): assumed by the job
+  `deploy` of .github/workflows/deploy-staging.yml through GitHub OIDC, in the STAGING account only. The
+  trust is the three conditions that workflow documents: aud, sub = the GitHub environment `staging`,
+  and job_workflow_ref = that workflow on the protected branch. A pull request, a fork or any other
+  workflow cannot assume it. Deploy with the DevOps admin role after ci-oidc-provider.yaml. The staging
+  account id and the organisation and repository names are parameters; none is written here.
+# VERIFY: IAM evaluates the GitHub claim `job_workflow_ref` as the condition key
+# token.actions.githubusercontent.com:job_workflow_ref (current IAM documentation, "Configure a role for
+# GitHub OIDC identity provider"). Its value has NO "repo:" prefix: <org>/<repo>/.github/workflows/<file>@<ref>.
+# If the key is not evaluated the condition never matches and the role fails closed (R16).
+# VERIFY: the `sub` claim of a job that uses `environment: staging` is
+# repo:<org>/<repo>:environment:staging (GitHub documentation, "OpenID Connect reference"). If the
+# repository customizes its subject claim template, the value changes.
+# VERIFY: the permissions below cover what `sst deploy` needs for infra/stacks (SST creates a state bucket
+# and an assets bucket named sst-*, roles for its functions, a VPC, RDS, Lambda, SQS, SNS, Cognito, WAF,
+# CloudFront). Run the first staging deploy and add the missing action, never a wildcard on iam:*.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
+    Description: GitHub organisation or user that owns the repository. Entered by DevOps; not in the repository.
+  GitHubRepo:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9._-]{1,100}$"
+    Description: GitHub repository name. Entered by DevOps; not in the repository.
+  ProtectedBranch:
+    Type: String
+    Default: main
+    AllowedPattern: "^[A-Za-z0-9._-]{1,100}$"
+    Description: >-
+      The protected branch deploy-staging.yml runs from (A.26 of the audit decides the name). The role
+      is assumed only by that workflow at that ref.
+  MaxSessionSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 3600
+    Description: One hour, as role-duration-seconds in the workflow.
+
+Resources:
+  TcCiDeployStaging:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcCiDeployStaging
+      Description: Deploys the staging stage of the SST app. Assumed by GitHub Actions through OIDC only.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: GitHubStagingEnvironmentOnly
+            Effect: Allow
+            Principal:
+              Federated:
+                Fn::Sub: "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  Fn::Sub: "repo:${GitHubOrg}/${GitHubRepo}:environment:staging"
+                token.actions.githubusercontent.com:job_workflow_ref:
+                  Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-staging.yml@refs/heads/${ProtectedBranch}"
+      Policies:
+        - PolicyName: SstDeployOfTheStack
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ServicesOfTheStack
+                Effect: Allow
+                Action:
+                  - acm:*
+                  - cloudfront:*
+                  - cloudwatch:*
+                  - cognito-idp:*
+                  - ec2:*
+                  - events:*
+                  - kms:*
+                  - lambda:*
+                  - logs:*
+                  - rds:*
+                  - route53:ChangeResourceRecordSets
+                  - route53:Get*
+                  - route53:List*
+                  - s3:*
+                  - scheduler:*
+                  - ses:*
+                  - sns:*
+                  - sqs:*
+                  - ssm:*
+                  - wafv2:*
+                Resource: "*"
+              - Sid: RolesOfTheStack
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:CreateRole
+                  - iam:CreateServiceLinkedRole
+                  - iam:DeleteRole
+                  - iam:DeleteRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListInstanceProfilesForRole
+                  - iam:ListRolePolicies
+                  - iam:PassRole
+                  - iam:PutRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:UpdateRole
+                Resource:
+                  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/*"
+              - Sid: NeverTheCiRolesNorUsersNorKeys
+                Effect: Deny
+                Action: iam:*
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/TcCi*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:oidc-provider/*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:user/*"
+              - Sid: NoLongLivedKeysAndNoOrganisation
+                Effect: Deny
+                Action:
+                  - iam:CreateAccessKey
+                  - iam:CreateUser
+                  - iam:CreateLoginProfile
+                  - organizations:*
+                  - account:*
+                Resource: "*"
+              - Sid: NeverAssumeAPoolOrDnsRole
+                Effect: Deny
+                Action: sts:AssumeRole
+                Resource: "arn:aws:iam::*:role/Tc*"
