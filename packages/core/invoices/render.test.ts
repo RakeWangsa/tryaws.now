@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { InvoiceError, renderInvoiceHtml, type InvoiceDocument } from "./index";
 
+const seller = {
+  legalNameBn: "উদাহরণ সার্ভিসেস লিমিটেড",
+  legalNameEn: "Example Services Limited",
+  bin: "1234567890123",
+  addressBn: "১ নম্বর রোড, ঢাকা",
+  addressEn: "Road 1, Dhaka",
+  signatoryName: "Karim Uddin",
+  signatoryDesignation: "Director",
+  vatCircle: "Dhaka South",
+};
+
 const doc: InvoiceDocument = {
+  seller,
   kind: "invoice",
   number: "TC-2026-000042",
   issuedAt: new Date("2026-11-11T05:00:00Z"),
@@ -19,9 +31,10 @@ const doc: InvoiceDocument = {
     },
     {
       kind: "step",
-      code: "vat",
+      code: "bd_vat",
       label: { en: "VAT", bn: "ভ্যাট" },
       amountMinor: "550",
+      rate: "0.055",
     },
   ],
   totalMinor: 10550n,
@@ -40,6 +53,7 @@ describe("renderInvoiceHtml", () => {
     expect(html).toContain("100.00");
     expect(html).toContain("5.50");
     expect(html).toContain("105.50");
+    expect(html).toContain("100.00");
     expect(html).toContain("Cloud Server, Amazon Lightsail instance");
     expect(html).toContain('lang="en"');
   });
@@ -76,6 +90,65 @@ describe("renderInvoiceHtml", () => {
     expect(html).toContain("Payment receipt");
     expect(html).toContain("not a tax invoice");
     expect(renderInvoiceHtml(doc, "en")).not.toContain("not a tax invoice");
+  });
+  it("is the Mushak 6.3 tax invoice with the form marks", () => {
+    const html = renderInvoiceHtml(doc, "en");
+    expect(html).toContain("Mushak-6.3");
+    expect(html).toContain("Rule 40(1)(ka)");
+    expect(html).toContain("Government of the People&#39;s Republic of Bangladesh");
+    expect(html).toContain("National Board of Revenue");
+    expect(html).toContain("Tax Invoice");
+    const bn = renderInvoiceHtml(doc, "bn");
+    expect(bn).toContain("কর চালানপত্র");
+    expect(bn).toContain("গণপ্রজাতন্ত্রী বাংলাদেশ সরকার");
+    expect(bn).toContain("জাতীয় রাজস্ব বোর্ড");
+  });
+  it("shows the seller legal name, BIN and address in the locale, and the buyer", () => {
+    const en = renderInvoiceHtml({ ...doc, customer: { ...doc.customer, taxId: { kind: "nid", value: "1990123456789" } } }, "en");
+    expect(en).toContain("Example Services Limited");
+    expect(en).toContain("1234567890123");
+    expect(en).toContain("Road 1, Dhaka");
+    expect(en).toContain("Dhaka South");
+    expect(en).toContain("NID");
+    expect(en).toContain("1990123456789");
+    const bn = renderInvoiceHtml(doc, "bn");
+    expect(bn).toContain("উদাহরণ সার্ভিসেস লিমিটেড");
+    expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
+    expect(bn).toContain("১ নম্বর রোড, ঢাকা");
+  });
+  it("splits the stored VAT line from the rest, never recomputing it", () => {
+    const en = renderInvoiceHtml(doc, "en");
+    // value 100.00, VAT 5.50 at 5.5%, total 105.50, supplementary duty 0.00
+    expect(en).toMatch(/<td class="num">100\.00<\/td>/);
+    expect(en).toContain("5.5%");
+    expect(en).toMatch(/<td class="num">5\.50<\/td>/);
+    expect(en).toContain("0.00");
+  });
+  it("prints the amount in words and the date and time of issue in Dhaka time", () => {
+    expect(renderInvoiceHtml(doc, "en")).toContain("One Hundred Five Taka and Fifty Paisa only");
+    expect(renderInvoiceHtml(doc, "en")).toContain("11:00");
+    expect(renderInvoiceHtml(doc, "bn")).toContain("একশত পাঁচ টাকা ও পঞ্চাশ পয়সা মাত্র");
+    expect(renderInvoiceHtml(doc, "bn")).toContain("১১:০০");
+  });
+  it("has the signatory block, the print stylesheet and A4", () => {
+    const html = renderInvoiceHtml(doc, "en");
+    expect(html).toContain("Karim Uddin");
+    expect(html).toContain("Director");
+    expect(html).toContain("@media print");
+    expect(html).toContain("size:A4");
+  });
+  it("refuses a tax invoice without seller details (R16) but not a receipt", () => {
+    const { seller: _s, ...noSeller } = doc;
+    expect(() => renderInvoiceHtml(noSeller, "en")).toThrow(/seller_details_missing/);
+    expect(() => renderInvoiceHtml({ ...noSeller, kind: "receipt" }, "en")).not.toThrow();
+  });
+  it("shows a dash for a missing buyer address and BIN, and escapes the seller text", () => {
+    const html = renderInvoiceHtml(
+      { ...doc, seller: { ...seller, legalNameEn: "A <b>&</b> Co" }, customer: { name: "X" } },
+      "en",
+    );
+    expect(html).toContain("A &lt;b&gt;&amp;&lt;/b&gt; Co");
+    expect(html).not.toContain("<b>&</b>");
   });
   it("is the same for the same input (pure)", () => {
     expect(renderInvoiceHtml(doc, "bn")).toBe(renderInvoiceHtml(doc, "bn"));

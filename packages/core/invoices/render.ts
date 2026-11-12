@@ -3,6 +3,8 @@
 // network); the fonts are packaged with the function and named in font-family, never fetched (U4
 // exception for the invoice). Pure: the same input gives the same text.
 import type { Locale, Minor } from "../types";
+import { amountInWords } from "./words";
+import type { SellerDetails } from "./seller";
 import {
   InvoiceError,
   formatMinor,
@@ -18,7 +20,14 @@ export interface InvoiceDocument {
   number: string;
   issuedAt: Date;
   company: { name: string; address: readonly string[] };
-  customer: { name: string | null; address?: string | null };
+  /** The registered person of a tax invoice (Mushak 6.3). Required for kind "invoice". */
+  seller?: SellerDetails;
+  customer: {
+    name: string | null;
+    address?: string | null;
+    /** The buyer's BIN or NID, only when the customer has one. */
+    taxId?: { kind: "bin" | "nid"; value: string } | null;
+  };
   lines: readonly InvoiceLine[];
   totalMinor: Minor;
   numerals?: Numerals;
@@ -98,7 +107,217 @@ tfoot td{font-weight:700;border-top:2px solid #1b1f23;border-bottom:0}
 footer{margin-top:32px;border-top:1px solid #d0d4d9;padding-top:12px;font-size:11px;color:#4a5159}
 `.trim();
 
+// ---- Mushak 6.3 (tax invoice, VAT Rules 2016) ----------------------------------------------------
+const MUSHAK = {
+  en: {
+    gov: "Government of the People's Republic of Bangladesh",
+    board: "National Board of Revenue",
+    title: "Tax Invoice",
+    rule: "[Rule 40(1)(ka)]",
+    form: "Mushak-6.3",
+    seller: "Registered person",
+    sellerName: "Name",
+    bin: "BIN",
+    address: "Address",
+    circle: "VAT circle / commissionerate",
+    buyer: "Buyer",
+    nid: "NID",
+    invoiceNo: "Challan / invoice no.",
+    issued: "Date and time of issue",
+    destination: "Delivery destination",
+    vehicle: "Vehicle",
+    serial: "Sl.",
+    description: "Description of goods or services (type and specification)",
+    quantity: "Quantity / unit",
+    unitPrice: "Unit price excl. taxes",
+    totalExcl: "Total price excl. taxes",
+    sd: "Supplementary duty",
+    value: "Value",
+    vatRate: "VAT rate",
+    vatAmount: "VAT amount",
+    totalIncl: "Total price incl. all taxes",
+    total: "Total",
+    words: "Amount in words",
+    components: "Price components (BDT)",
+    signatory: "Authorised signatory",
+    sigName: "Name",
+    sigDesignation: "Designation",
+    sigDate: "Date",
+    sigLine: "Signature",
+    unit: "1 service",
+    fallback: "Cloud service, Amazon Lightsail",
+    contact: "Contact",
+  },
+  bn: {
+    gov: "গণপ্রজাতন্ত্রী বাংলাদেশ সরকার",
+    board: "জাতীয় রাজস্ব বোর্ড",
+    title: "কর চালানপত্র",
+    rule: "[বিধি ৪০(১)(ক)]",
+    form: "মূসক-৬.৩ (Mushak-6.3)",
+    seller: "নিবন্ধিত ব্যক্তি",
+    sellerName: "নাম",
+    bin: "বিআইএন",
+    address: "ঠিকানা",
+    circle: "ভ্যাট সার্কেল / কমিশনারেট",
+    buyer: "ক্রেতা",
+    nid: "এনআইডি",
+    invoiceNo: "চালান / ইনভয়েস নম্বর",
+    issued: "ইস্যুর তারিখ ও সময়",
+    destination: "সরবরাহের গন্তব্য",
+    vehicle: "যানবাহন",
+    serial: "ক্রম",
+    description: "পণ্য বা সেবার বর্ণনা (প্রকৃতি ও বিনির্দেশ)",
+    quantity: "পরিমাণ / একক",
+    unitPrice: "কর ব্যতীত একক মূল্য",
+    totalExcl: "কর ব্যতীত মোট মূল্য",
+    sd: "সম্পূরক শুল্ক",
+    value: "মূল্য",
+    vatRate: "ভ্যাটের হার",
+    vatAmount: "ভ্যাটের পরিমাণ",
+    totalIncl: "সকল কর সহ মোট মূল্য",
+    total: "মোট",
+    words: "কথায়",
+    components: "মূল্যের উপাদান (টাকা)",
+    signatory: "ক্ষমতাপ্রাপ্ত ব্যক্তির স্বাক্ষর",
+    sigName: "নাম",
+    sigDesignation: "পদবি",
+    sigDate: "তারিখ",
+    sigLine: "স্বাক্ষর",
+    unit: "১ সেবা",
+    fallback: "ক্লাউড সেবা, Amazon Lightsail",
+    contact: "যোগাযোগ",
+  },
+} as const;
+const VAT_CODE = "bd_vat";
+
+// "0.055" -> "5.5%". Decimal text in, text out: no float (R4). null when it is not a decimal.
+export function percentText(rate: string): string | null {
+  const m = /^(\d{1,3})(?:\.(\d{1,6}))?$/.exec(rate);
+  if (m === null) return null;
+  const frac = (m[2] ?? "").padEnd(2, "0");
+  const whole = `${m[1]}${frac.slice(0, 2)}`.replace(/^0+(?=\d)/, "");
+  const rest = frac.slice(2).replace(/0+$/, "");
+  return `${whole}${rest === "" ? "" : `.${rest}`}%`;
+}
+
+function digitsFor(text: string, locale: Locale, numerals: Numerals | undefined): string {
+  const bengali = (numerals ?? (locale === "bn" ? "beng" : "latn")) === "beng";
+  return bengali ? text.replace(/\d/g, (d) => BENGALI_DIGITS[Number(d)] ?? d) : text;
+}
+function timeText(at: Date, locale: Locale, numerals: Numerals | undefined): string {
+  const dhaka = new Date(at.getTime() + 6 * 3_600_000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return digitsFor(`${p(dhaka.getUTCHours())}:${p(dhaka.getUTCMinutes())}`, locale, numerals);
+}
+
+const MUSHAK_CSS = `
+@page{size:A4;margin:12mm}
+body{font-family:"Noto Sans Bengali","Noto Sans",sans-serif;color:#1b1f23;font-size:12px;line-height:1.45;margin:0;padding:16px}
+.head{text-align:center}
+.head .gov{font-size:13px;font-weight:700}
+.head h1{font-size:18px;margin:6px 0 2px}
+.form{text-align:right;font-weight:700}
+.grid{display:flex;gap:16px;margin-top:12px}
+.grid>div{flex:1;border:1px solid #1b1f23;padding:8px}
+.grid h2{font-size:12px;margin:0 0 4px}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+th,td{padding:5px;border:1px solid #1b1f23;text-align:left;vertical-align:top}
+th{font-size:11px;background:#eef0f2}
+th.num,td.num{text-align:right;white-space:nowrap}
+tfoot td{font-weight:700}
+.words{margin-top:10px}
+.sig{margin-top:28px;display:flex;justify-content:flex-end}
+.sig>div{width:45%;border-top:1px solid #1b1f23;padding-top:6px}
+footer{margin-top:20px;border-top:1px solid #d0d4d9;padding-top:8px;font-size:10px;color:#4a5159}
+@media print{body{padding:0}th{background:#eee}}
+`.trim();
+
+function renderMushak(doc: InvoiceDocument, locale: Locale): string {
+  const seller = doc.seller;
+  // A tax invoice never goes out without the seller's legal details (R16).
+  if (seller === undefined) throw new InvoiceError("seller_details_missing");
+  const t = MUSHAK[locale];
+  const bn = locale === "bn";
+  let sum = 0n;
+  let vat = 0n;
+  let rate: string | undefined;
+  let serviceLabel: string | undefined;
+  const parts: { label: string; amount: bigint }[] = [];
+  for (const line of doc.lines) {
+    const amount = parseLineAmount(line.amountMinor);
+    sum += amount;
+    if (line.kind === "step" && line.code === VAT_CODE) {
+      vat += amount;
+      if (line.rate !== undefined) rate = line.rate;
+    } else {
+      parts.push({ label: line.label[locale], amount });
+      if (serviceLabel === undefined && line.kind === "service") serviceLabel = line.label[locale];
+    }
+  }
+  // The page never prints a total that its lines do not add up to (R16).
+  if (doc.lines.length === 0 || sum !== doc.totalMinor) throw new InvoiceError("invalid_lines");
+
+  const money = (n: bigint) => formatMinor(n, locale, doc.numerals);
+  const value = doc.totalMinor - vat;
+  // No VAT line: the rate is 0. A VAT line with no stored rate: the rate cell is "-" (not recomputed).
+  const percent = vat === 0n ? "0%" : rate === undefined ? null : percentText(rate);
+  const dash = "-";
+  const esc = escapeHtml;
+  const num = (text: string) => digitsFor(text, locale, doc.numerals);
+  const name = bn ? seller.legalNameBn : seller.legalNameEn;
+  const address = bn ? seller.addressBn : seller.addressEn;
+  const buyerTax = doc.customer.taxId;
+  const contact = [seller.phone, seller.email].filter((x): x is string => x !== undefined);
+  const buyerAddress = (doc.customer.address ?? "") === "" ? dash : esc(doc.customer.address ?? "");
+  const buyerName =
+    doc.customer.name === null || doc.customer.name === "" ? dash : esc(doc.customer.name);
+  const buyerTaxText =
+    buyerTax === null || buyerTax === undefined ? dash : num(esc(buyerTax.value));
+  const when = `${dateText(doc.issuedAt, locale, doc.numerals)} ${timeText(doc.issuedAt, locale, doc.numerals)}`;
+
+  return [
+    "<!doctype html>",
+    `<html lang="${locale}">`,
+    `<head><meta charset="utf-8"><title>${esc(t.title)} ${esc(doc.number)}</title><style>${MUSHAK_CSS}</style></head>`,
+    "<body>",
+    `<div class="form">${esc(t.form)}</div>`,
+    `<div class="head"><div class="gov">${esc(t.gov)}</div><div class="gov">${esc(t.board)}</div>`,
+    `<h1>${esc(t.title)}</h1><div>${esc(t.rule)}</div></div>`,
+    `<div class="grid"><div><h2>${t.seller}</h2>`,
+    `<div><strong>${t.sellerName}:</strong> ${esc(name)}</div>`,
+    `<div><strong>${t.bin}:</strong> ${num(esc(seller.bin))}</div>`,
+    `<div><strong>${t.address}:</strong> ${esc(address)}</div>`,
+    seller.vatCircle !== undefined
+      ? `<div><strong>${t.circle}:</strong> ${esc(seller.vatCircle)}</div>`
+      : "",
+    contact.length > 0
+      ? `<div><strong>${t.contact}:</strong> ${contact.map(esc).join(", ")}</div>`
+      : "",
+    `</div><div><h2>${t.buyer}</h2>`,
+    `<div><strong>${t.sellerName}:</strong> ${buyerName}</div>`,
+    `<div><strong>${t.address}:</strong> ${buyerAddress}</div>`,
+    `<div><strong>${buyerTax?.kind === "nid" ? t.nid : t.bin}:</strong> ${buyerTaxText}</div>`,
+    `</div></div>`,
+    `<div class="grid"><div><strong>${t.invoiceNo}:</strong> ${esc(doc.number)}<br><strong>${t.issued}:</strong> ${when}</div>`,
+    `<div><strong>${t.destination}:</strong> ${buyerAddress}<br><strong>${t.vehicle}:</strong> ${dash}</div></div>`,
+    `<table><thead><tr><th>${t.serial}</th><th>${t.description}</th><th>${t.quantity}</th>`,
+    `<th class="num">${t.unitPrice}</th><th class="num">${t.totalExcl}</th><th class="num">${t.sd}</th>`,
+    `<th class="num">${t.value}</th><th class="num">${t.vatRate}</th><th class="num">${t.vatAmount}</th><th class="num">${t.totalIncl}</th></tr></thead>`,
+    `<tbody><tr><td>${num("1")}</td><td>${esc(serviceLabel ?? t.fallback)}</td><td>${t.unit}</td>`,
+    `<td class="num">${money(value)}</td><td class="num">${money(value)}</td><td class="num">${money(0n)}</td>`,
+    `<td class="num">${money(value)}</td><td class="num">${percent === null ? dash : num(percent)}</td><td class="num">${money(vat)}</td><td class="num">${money(doc.totalMinor)}</td></tr></tbody>`,
+    `<tfoot><tr><td colspan="4">${t.total}</td><td class="num">${money(value)}</td><td class="num">${money(0n)}</td>`,
+    `<td class="num">${money(value)}</td><td></td><td class="num">${money(vat)}</td><td class="num">${money(doc.totalMinor)}</td></tr></tfoot></table>`,
+    `<p class="words"><strong>${t.words}:</strong> ${amountInWords(doc.totalMinor, locale)}</p>`,
+    `<table><caption>${t.components}</caption><tbody>${parts.map((p) => `<tr><td>${esc(p.label)}</td><td class="num">${money(p.amount)}</td></tr>`).join("")}</tbody></table>`,
+    `<div class="sig"><div><strong>${t.signatory}</strong><br>${t.sigName}: ${esc(seller.signatoryName)}<br>${t.sigDesignation}: ${esc(seller.signatoryDesignation)}<br>${t.sigDate}: ${dateText(doc.issuedAt, locale, doc.numerals)}<br>${t.sigLine}:</div></div>`,
+    `<footer><p>${SHORT_STATEMENT[locale]} ${SELLER_LINE[locale]}</p><p>${TRADEMARK_LINE}</p></footer>`,
+    "</body></html>",
+  ].join("\n");
+}
+
 export function renderInvoiceHtml(doc: InvoiceDocument, locale: Locale): string {
+  if (doc.kind === "invoice") return renderMushak(doc, locale);
   const t = TEXT[locale];
   let sum = 0n;
   const rows = doc.lines.map((line) => {
