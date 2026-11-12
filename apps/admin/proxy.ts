@@ -6,6 +6,11 @@ import { adminGate } from "./server/gate.ts";
 
 const handleI18n = createMiddleware(routing);
 
+// Set on every request the proxy forwards. A request that carries it has been through locale routing
+// already: it is the rewrite target (`/x` to `/bn/x`) coming back to the proxy, which next-intl would
+// redirect to `/x` again, a 307 to the path the visitor asked for (WPU-T4). It is served as it is.
+const PROXIED_HEADER = "x-tc-proxied";
+
 // One proxy per request (U4): a fresh nonce, the policy in report-only mode, and locale routing.
 // The enforced `Content-Security-Policy` name is set on the REQUEST only: Next reads the nonce
 // from it to put on its own scripts, and it is never sent to the browser (open point 12).
@@ -22,10 +27,14 @@ export default function proxy(request: NextRequest): NextResponse {
   const csp = buildCsp({ nonce, dev: process.env.NODE_ENV === "development" });
 
   const requestHeaders = new Headers(request.headers);
+  const again = request.headers.has(PROXIED_HEADER);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
+  requestHeaders.set(PROXIED_HEADER, "1");
 
-  const response = handleI18n(new NextRequest(request, { headers: requestHeaders }));
+  const response = again
+    ? NextResponse.next({ request: { headers: requestHeaders } })
+    : handleI18n(new NextRequest(request, { headers: requestHeaders }));
 
   response.headers.set(CSP_REPORT_ONLY_HEADER, csp);
   response.headers.set("Reporting-Endpoints", `csp="${CSP_REPORT_PATH}"`);

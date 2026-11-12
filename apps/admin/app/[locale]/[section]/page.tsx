@@ -31,12 +31,19 @@ function Section({ locale, admin, id }: { locale: Locale; admin: AdminActor; id:
 }
 
 // The areas of 16.12 whose screens come later: the frame, the role guard and the navigation are
-// already the real ones. An unknown segment is a 404; a known one that the role may not open shows
-// the neutral page (R16).
+// already the real ones. R9 puts authentication first, so an unknown segment asks the guard before
+// it answers: a visitor without a session goes to the sign-in (the same answer as for a known area,
+// so the answer says nothing about which paths exist), a refused session sees the neutral page, and
+// only a signed-in admin gets the 404. A known area that the role may not open shows the neutral
+// page (R16).
 export default async function Page({ params }: PageProps) {
   const { locale, section } = await params;
   if (!isLocale(locale)) notFound();
-  if (!isSectionId(section) || segmentOf(section) !== section) notFound();
+  if (!isSectionId(section) || segmentOf(section) !== section) {
+    const gate = await loadPageAdmin(locale, "today");
+    if (gate.kind === "denied") return <NoAccess locale={locale} path="/" />;
+    notFound();
+  }
   const loaded = await loadPageAdmin(locale, section);
   if (loaded.kind === "denied") return <NoAccess locale={locale} path={`/${section}`} />;
   return <Section locale={locale} admin={loaded.admin} id={section} />;

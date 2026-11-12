@@ -20,13 +20,18 @@ const state = vi.hoisted(() => ({
   page: {
     kind: "ok",
     admin: { adminId: "0191a000-0000-7000-8000-0000000000ad", role: "ops", ip: "203.0.113.5" },
-  } as { kind: "ok"; admin: { adminId: string; role: string; ip: string } } | { kind: "denied" },
+  } as
+    | { kind: "ok"; admin: { adminId: string; role: string; ip: string } }
+    | { kind: "denied" }
+    | { kind: "signin" },
   asked: [] as unknown[],
 }));
 
 vi.mock("./server/page-admin.ts", () => ({
   loadPageAdmin: async (locale: string, id: string) => {
     state.asked.push([locale, id]);
+    // The real loader redirects a visitor without a session to the sign-in.
+    if (state.page.kind === "signin") throw new Error(`NEXT_REDIRECT /${locale}/login`);
     return state.page;
   },
 }));
@@ -205,6 +210,26 @@ describe("admin section placeholder pages", () => {
         "NEXT_NOT_FOUND",
       );
     }
+  });
+
+  it("an unknown segment asks the guard first: no session goes to the sign-in, never to a 404", async () => {
+    state.page = { kind: "signin" };
+    for (const section of ["nonsense", "today", "this-path-does-not-exist"]) {
+      state.asked = [];
+      await expect(SectionPage({ params: params("bn", section) }), section).rejects.toThrow(
+        "NEXT_REDIRECT /bn/login",
+      );
+      expect(state.asked, section).toEqual([["bn", "today"]]);
+    }
+  });
+
+  it("an unknown segment with a refused session shows the neutral page, not a 404", async () => {
+    state.page = { kind: "denied" };
+    const html = inProvider(await SectionPage({ params: params("bn", "nonsense") }), "bn");
+    expect(html).toContain(
+      (adminMessages.bn["Admin"] as { noAccess: { title: string } }).noAccess.title,
+    );
+    expect(html).not.toContain("nonsense");
   });
 
   it("a refusal of the guard shows the neutral page", async () => {

@@ -134,6 +134,63 @@ describe("proxy: locale routing (16.7)", () => {
   });
 });
 
+// The loop of WPU-T4: the proxy rewrites `/x` to `/bn/x`. When the server hands that rewrite to the
+// proxy again (the router takes it for a request of its own), next-intl sees the default locale in
+// the path and redirects `/bn/x` back to `/x`: a 307 to the very path the visitor asked for. The
+// second pass has to be harmless: it serves the request and never redirects.
+describe("proxy: its own rewrite, handed to it again (no self-redirect)", () => {
+  // What the server forwards to the second pass: the rewrite target, the request headers and the
+  // `x-middleware-request-*` overrides of the first pass applied to them.
+  function secondPass(path: string) {
+    const first = run(path);
+    const target = first.headers.get("x-middleware-rewrite");
+    if (target === null) throw new Error(`${path} is not rewritten`);
+    const headers: Record<string, string> = { "cloudfront-viewer-address": ALLOWED };
+    for (const [name, value] of first.headers) {
+      if (name.startsWith("x-middleware-request-")) {
+        headers[name.slice("x-middleware-request-".length)] = value;
+      }
+    }
+    return proxy(new NextRequest(target, { headers }));
+  }
+
+  it("a path of the default locale and an unknown path are served by the second pass", () => {
+    for (const path of ["/", "/customers", "/this-path-does-not-exist", "/login"]) {
+      const response = secondPass(path);
+      expect(response.status, path).toBeLessThan(300);
+      expect(response.headers.has("location"), path).toBe(false);
+    }
+  });
+
+  it("the second pass keeps the security headers and a fresh nonce", () => {
+    const response = secondPass("/this-path-does-not-exist");
+    expect(response.headers.get("content-security-policy-report-only")).toContain(
+      "default-src 'self'",
+    );
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("x-middleware-request-x-nonce")).toBeTruthy();
+  });
+
+  it("the second pass still checks the allowlist", () => {
+    const first = run("/this-path-does-not-exist");
+    const target = first.headers.get("x-middleware-rewrite") ?? "";
+    const response = proxy(
+      new NextRequest(target, {
+        headers: { "x-tc-proxied": "1", "cloudfront-viewer-address": "198.51.100.1:80" },
+      }),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it("a visitor request for /bn/x is still redirected to /x", () => {
+    const response = run("/bn/this-path-does-not-exist");
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get("location") ?? "").pathname).toBe(
+      "/this-path-does-not-exist",
+    );
+  });
+});
+
 describe("proxy: matcher", () => {
   const source = (config.matcher as string).replace(/^\//, "^/").concat("$");
   const matches = (path: string) => new RegExp(source).test(path);

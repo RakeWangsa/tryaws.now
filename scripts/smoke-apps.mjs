@@ -273,6 +273,15 @@ async function liveChecks(app, base) {
   });
   await attempt("missing path", async () => {
     const r = await get(base, "/this-path-does-not-exist");
+    if (app === "admin") {
+      // R9: the admin app authenticates first, so a visitor without a session is sent to the sign-in
+      // for any path, known or not (the themed 404 is for a signed-in admin). Never to itself.
+      const location = r.headers.get("location");
+      const target = location === null ? null : location.replace(/^https?:\/\/[^/]+/, "");
+      return [301, 302, 307, 308].includes(r.status) && target === "/login"
+        ? []
+        : [`status ${r.status}, location ${String(location)}, expected a redirect to /login`];
+    }
     const own = r.status === 404 ? [] : [`status ${r.status}, expected 404`];
     return [...own, ...checkHtml(r.text, r.headers, expectFor("bn"))];
   });
