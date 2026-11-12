@@ -425,7 +425,7 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
     r.wallets.rejectAdjustment({ id: await seedAdjustment() }, "no slip"),
   "wallets.creditWalletForFailedChange": async (r) =>
     r.wallets.creditWalletForFailedChange(
-      { operationId: await seedFailedApply() },
+      { operationId: await seedFailedApply(), at: new Date() },
       "apply rejected, capacity not delivered",
       okReverser,
     ),

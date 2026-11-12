@@ -118,6 +118,19 @@ export function readPlanChange(config: unknown): {
   return { pending: idOf(raw.pendingPlan), applied: idOf(raw.appliedPlan) };
 }
 
+/**
+ * WPU-M4. True when a `clear_plan_change_mark` operation also drops the pending plan: the payload says
+ * so (`clearPendingPlan: true`, written when the wallet was credited for a failed apply) and names the
+ * product of that apply, and the pending plan of the config is still that product. A plan the customer
+ * scheduled since is kept; a flag without a product drops nothing (R16).
+ */
+export function clearsPendingPlan(payload: unknown, config: unknown): boolean {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return false;
+  if ((payload as Record<string, unknown>).clearPendingPlan !== true) return false;
+  const named = idOf(payload);
+  return named !== null && readPlanChange(config).pending === named;
+}
+
 const IN_FLIGHT_STATES: readonly string[] = Object.freeze([
   "queued",
   "running",

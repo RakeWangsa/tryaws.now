@@ -184,6 +184,11 @@ export const opsEn: Same<typeof opsBn> = {
         retryOperation:
           "The stuck operation goes back to the queue. The count of earlier attempts does not change.",
       },
+      creditPlan: {
+        title: "Credit the plan change",
+        hint: "The customer paid for this plan change and did not get it. This credits the whole renewal charge back to the wallet and closes this operation for good: it cannot run again, and the pending plan is cleared. A credit above the limit waits for a second admin to approve it in the wallet of the customer.",
+        button: "Credit the wallet",
+      },
       noActions:
         "An admin has no action in this state. A queued or running operation cannot be cancelled.",
       createNote:

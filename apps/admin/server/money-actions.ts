@@ -38,6 +38,13 @@ export async function moneyAction(form: FormData): Promise<void> {
   if (PAYMENT_KINDS.includes(kind) && UUID.test(shownPayment)) {
     redirect(`${localePath(locale, `/payments/${shownPayment.toLowerCase()}`)}?result=${result}`);
   }
+  // WPU-M4: the credit is asked on the page of the operation; a refusal returns there.
+  const shownOperation = text(form.get("id"));
+  if (kind === "creditWalletForFailedChange" && !answer.ok && UUID.test(shownOperation)) {
+    redirect(
+      `${localePath(locale, `/operations/${shownOperation.toLowerCase()}`)}?result=${result}`,
+    );
+  }
   if (kind === "resolveDiscrepancy") {
     redirect(`${localePath(locale, "/payments")}?result=${result}`);
   }

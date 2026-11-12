@@ -1090,6 +1090,15 @@ TASKS["WPU-M3"] = [
   repo,
 ];
 
+// WPU-M4: the credit of WPU-M3 goes through four eyes (the limit and the split window of the adjustments;
+// a pending credit is a row of wallet_adjustments that a DIFFERENT finance or superadmin approves) and
+// closes the failed apply in the same transaction (final state, the pending plan cleared through the
+// existing clear_plan_change_mark). No posting rule is new. Money path: the audited admin action against
+// the real ledger and the temp database (core with the database; db for the gate case of every admin
+// method), the adapters that clear the pending plan (aws), the admin money flow and the operation page
+// (admin). No AWS call. The core and db suites need the local PostgreSQL (pnpm db:up).
+TASKS["WPU-M4"] = [specSync, baselineSync, lint, typecheck, format, core, db, aws, admin, repo];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

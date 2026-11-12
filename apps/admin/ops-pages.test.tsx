@@ -46,6 +46,7 @@ vi.mock("./server/actions.ts", () => ({
 }));
 vi.mock("./server/ops-actions.ts", () => ({ operationAction: async () => {} }));
 vi.mock("./server/capacity-actions.ts", () => ({ capacityAction: async () => {} }));
+vi.mock("./server/money-actions.ts", () => ({ moneyAction: async () => {} }));
 // The loaders are the real ones; only the transaction is replaced by the fake repositories.
 vi.mock("./server/runtime.ts", () => ({
   readAsAdmin: async (_actor: unknown, fn: (repos: unknown) => Promise<unknown>) =>
@@ -362,6 +363,38 @@ describe("/operations/[id]", () => {
       const html = inProvider(await OperationPage(opParams("en")), "en");
       expect(forms(html)).toEqual([]);
       expect(html).toContain("An admin has no action in this state");
+    }
+  });
+
+  // WPU-M4: the credit of a failed plan change, asked on the page of the operation by a superadmin.
+  it("offers the credit of a failed plan change to a superadmin only, with a reason", async () => {
+    for (const s of ["failed", "needs_attention"]) {
+      state.detail = okW(
+        detail({ state: s as never, kind: "scale_container", destructive: false }),
+      );
+      as("ops");
+      expect(forms(inProvider(await OperationPage(opParams("en")), "en"))).not.toContain(
+        "creditWalletForFailedChange",
+      );
+      as("superadmin");
+      const html = inProvider(await OperationPage(opParams("en")), "en");
+      expect(forms(html)).toContain("creditWalletForFailedChange");
+      expect(html).toContain("Credit the wallet");
+      expect(html).not.toMatch(/name="(?:amount|customerId|chargeId)"/);
+      const bn = inProvider(await OperationPage(opParams("bn")), "bn");
+      expect(bn).toContain("ওয়ালেটে ফেরত দিন");
+    }
+    // not for another kind or a state that is not failed
+    as("superadmin");
+    for (const [kind, st] of [
+      ["reboot", "failed"],
+      ["scale_container", "queued"],
+      ["change_cdn_bundle", "succeeded"],
+    ] as const) {
+      state.detail = okW(detail({ state: st as never, kind, destructive: false }));
+      expect(forms(inProvider(await OperationPage(opParams("en")), "en"))).not.toContain(
+        "creditWalletForFailedChange",
+      );
     }
   });
 

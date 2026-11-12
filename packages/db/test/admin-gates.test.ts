@@ -339,7 +339,12 @@ const GATE_CASES: Record<string, GateCase> = {
     deny: "support",
   },
   "wallets.creditWalletForFailedChange": {
-    call: (r) => r.wallets.creditWalletForFailedChange({ operationId: ID() }, "r", testReverser),
+    call: (r) =>
+      r.wallets.creditWalletForFailedChange(
+        { operationId: ID(), at: new Date() },
+        "r",
+        testReverser,
+      ),
     deny: "support",
   },
   "wallets.rejectAdjustment": {

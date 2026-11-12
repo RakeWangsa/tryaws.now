@@ -23,6 +23,7 @@ export {
   PLAN_APPLY_STATES,
   PLAN_APPLY_WAIT_HOURS,
   PLAN_CHANGE_FAMILIES,
+  clearsPendingPlan,
   markPlanChangeFailed,
   planApplyInFlight,
   planChangeFailed,

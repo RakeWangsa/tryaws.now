@@ -10,7 +10,17 @@ import { renewNow } from "./renew-now";
 
 const t = useTempDatabase();
 const DAY = 24 * 3_600_000;
+const AT = new Date("2026-11-12T00:00:00.000Z");
 let kit: Kit;
+
+// WPU-M4: the limit of the market up to which a credit posts at once (the one of adjustments, 9.1).
+const setLimit = (minor: bigint) =>
+  t.pool.query(
+    `insert into settings (id, key, market, scope, scope_id, value)
+     values (gen_random_uuid(), 'wallet.adjustment_limit_minor', 'BD', 'market', null, $1::jsonb)
+     on conflict (key, market, scope, scope_id) do update set value = excluded.value`,
+    [JSON.stringify(minor.toString())],
+  );
 
 const q = async (sql: string, params: unknown[] = []) =>
   (await t.pool.query(sql, params)).rows as Record<string, unknown>[];
@@ -92,6 +102,8 @@ const unbalanced = async () =>
 
 beforeAll(async () => {
   kit = await makeKit(t, { balanceMinor: 50_000_000n, vcpuLimit: 4000, ipLimit: 4000 });
+  // High enough that the tests of WPU-M3 post at once; the four-eyes tests set their own.
+  await setLimit(1_000_000_000_000n);
 });
 
 describe("creditWalletForFailedChange", () => {
@@ -106,7 +118,7 @@ describe("creditWalletForFailedChange", () => {
 
     const done = await asAdmin(finance, (r) =>
       r.wallets.creditWalletForFailedChange(
-        { operationId: c.operationId },
+        { at: AT, operationId: c.operationId },
         "apply rejected by ops, capacity not delivered",
         reverseTransaction,
       ),
@@ -168,7 +180,11 @@ describe("creditWalletForFailedChange", () => {
     const other = await actorOf("superadmin");
     const run = (a: AdminActor, op: string) =>
       asAdmin(a, (r) =>
-        r.wallets.creditWalletForFailedChange({ operationId: op }, "again", reverseTransaction),
+        r.wallets.creditWalletForFailedChange(
+          { at: AT, operationId: op },
+          "again",
+          reverseTransaction,
+        ),
       );
     expect(await run(first, c.operationId)).toMatchObject({ ok: true, replayed: false });
     const after = await kit.balance(c.customerId);
@@ -196,7 +212,7 @@ describe("creditWalletForFailedChange", () => {
     for (const role of ["support", "ops"] as const) {
       const denied = await asAdmin(await actorOf(role), (r) =>
         r.wallets.creditWalletForFailedChange(
-          { operationId: c.operationId },
+          { at: AT, operationId: c.operationId },
           "x",
           reverseTransaction,
         ),
@@ -208,7 +224,7 @@ describe("creditWalletForFailedChange", () => {
       expect(
         await asAdmin(finance, (r) =>
           r.wallets.creditWalletForFailedChange(
-            { operationId: c.operationId },
+            { at: AT, operationId: c.operationId },
             reason,
             reverseTransaction,
           ),
@@ -221,7 +237,7 @@ describe("creditWalletForFailedChange", () => {
     expect(
       await asAdmin(gone, (r) =>
         r.wallets.creditWalletForFailedChange(
-          { operationId: c.operationId },
+          { at: AT, operationId: c.operationId },
           "r",
           reverseTransaction,
         ),
@@ -240,7 +256,7 @@ describe("creditWalletForFailedChange", () => {
     expect(
       await asAdmin(finance, (r) =>
         r.wallets.creditWalletForFailedChange(
-          { operationId: b.operationId },
+          { at: AT, operationId: b.operationId },
           "b only",
           reverseTransaction,
         ),
@@ -262,7 +278,7 @@ describe("creditWalletForFailedChange", () => {
     expect(
       await asAdmin(finance, (r) =>
         r.wallets.creditWalletForFailedChange(
-          { operationId: c.operationId },
+          { at: AT, operationId: c.operationId },
           "mismatch",
           reverseTransaction,
         ),
@@ -278,7 +294,7 @@ describe("creditWalletForFailedChange", () => {
     const call = (operationId: unknown) =>
       asAdmin(finance, (r) =>
         r.wallets.creditWalletForFailedChange(
-          { operationId: operationId as string },
+          { at: AT, operationId: operationId as string },
           "r",
           reverseTransaction,
         ),
@@ -312,7 +328,7 @@ describe("creditWalletForFailedChange", () => {
     expect(
       await asAdmin(finance, (r) =>
         r.wallets.creditWalletForFailedChange(
-          { operationId: done.operationId },
+          { at: AT, operationId: done.operationId },
           "r",
           undefined as never,
         ),
@@ -337,7 +353,7 @@ describe("creditWalletForFailedChange", () => {
     expect(
       await asAdmin(await actorOf(), (r) =>
         r.wallets.creditWalletForFailedChange(
-          { operationId: c.operationId },
+          { at: AT, operationId: c.operationId },
           "r",
           reverseTransaction,
         ),

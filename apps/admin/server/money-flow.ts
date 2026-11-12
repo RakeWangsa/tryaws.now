@@ -197,7 +197,13 @@ export function makeMoneyAction(
               deps.post,
             );
           case "approveAdjustment":
-            return repos.wallets.approveAdjustment({ id: input.id }, input.reason, deps.post);
+            // WPU-M4: the reverser is for the approval of a credit for a failed plan change.
+            return repos.wallets.approveAdjustment(
+              { id: input.id, at },
+              input.reason,
+              deps.post,
+              deps.reverse,
+            );
           case "rejectAdjustment":
             return repos.wallets.rejectAdjustment({ id: input.id }, input.reason);
           case "reverifyPayment":
@@ -215,7 +221,7 @@ export function makeMoneyAction(
             return deps.reverse === undefined
               ? Promise.resolve<Outcome>({ ok: false, error: "validation" })
               : repos.wallets.creditWalletForFailedChange(
-                  { operationId: input.id },
+                  { operationId: input.id, at },
                   input.reason,
                   deps.reverse,
                 );

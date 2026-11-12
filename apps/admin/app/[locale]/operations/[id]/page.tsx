@@ -42,6 +42,7 @@ export default async function Page({ params, searchParams }: PageProps) {
           locale={locale}
           operation={operation.value}
           result={resultCodeOf(raw["result"])}
+          role={loaded.admin.role}
         />
       ) : (
         <EmptyState title={t("unavailable")} description={t("back")} />

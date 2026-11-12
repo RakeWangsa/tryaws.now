@@ -694,6 +694,30 @@ describe("clear_plan_change_mark (admin, WPA-P2)", () => {
     expect(calls()).toEqual([]);
   });
 
+  // WPU-M4: the credit of a failed apply drops the pending plan with the mark, so it is not re-applied.
+  it("with clearPendingPlan it also drops the pending plan, but only the one the credited apply named", async () => {
+    const named = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const one = setup({ resource: { pendingPlan: { productId: named } } });
+    const r = await one.adapter.aws.action(
+      "clear_plan_change_mark",
+      one.ctx(null, { state: "active", payload: { clearPendingPlan: true, productId: named } }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { pendingPlanFailed: null, pendingPlan: null } },
+    });
+    const other = setup({
+      resource: { pendingPlan: { productId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" } },
+    });
+    const kept = await other.adapter.aws.action(
+      "clear_plan_change_mark",
+      other.ctx(null, { state: "active", payload: { clearPendingPlan: true, productId: named } }),
+    );
+    expect(
+      Object.keys((kept as unknown as { patch: { configMerge: object } }).patch.configMerge),
+    ).toEqual(["pendingPlanFailed"]);
+  });
+
   it("works in a stopped or suspended distribution, and a destroyed one is a conflict", async () => {
     const { adapter, ctx } = setup();
     for (const state of ["stopped", "suspended"]) {

@@ -175,7 +175,7 @@ describe("money actions in the order of R9", () => {
       ["resolveDiscrepancy", false],
     ]);
     expect(r.calls[0]?.[1]).toMatchObject({ evidenceRef: "slip 12" });
-    expect(r.calls[1]?.[1]).toEqual({ id: ID });
+    expect(r.calls[1]?.[1]).toEqual({ id: ID, at: NOW });
     expect(r.calls[4]?.[1]).toEqual({ paymentId: ID, amountMinor: 150050n });
   });
 
@@ -275,7 +275,12 @@ describe("money actions in the order of R9", () => {
     expect(r.asked).toEqual([["finance", "superadmin"]]);
     expect(r.steps).toEqual(["authorize", "limit", "execute"]);
     expect(r.calls).toEqual([
-      ["creditWalletForFailedChange", { operationId: ID }, "ops rejected the apply", REVERSER],
+      [
+        "creditWalletForFailedChange",
+        { operationId: ID, at: NOW },
+        "ops rejected the apply",
+        REVERSER,
+      ],
     ]);
   });
 

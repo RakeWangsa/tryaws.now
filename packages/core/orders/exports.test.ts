@@ -312,6 +312,7 @@ const LIFECYCLE = [
   "LIFECYCLE_SETTING_KEYS",
   "RENEW_NOW_WINDOW_DAYS",
   "SNAPSHOT_FAMILIES",
+  "clearsPendingPlan",
   "completeRestore",
   "decideDestructive",
   "decideSubscription",

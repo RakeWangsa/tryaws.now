@@ -20,6 +20,7 @@ import {
   checkCachePolicy,
   checkCdnOrigin,
   checkedContainerCertificateDomain,
+  clearsPendingPlan,
   parseCdnConfig,
   planApplyStale,
   planFailedFor,
@@ -360,7 +361,16 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
         // WPA-P2: an admin cleared the failure mark of a plan change (audited in the admin app). Only
         // the config changes; nothing is called in AWS and nothing is charged or refunded.
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
-        return stepDone({ configMerge: { pendingPlanFailed: null } });
+        // WPU-M4: the wallet was credited for the failed apply; the pending plan it named goes with
+        // the mark (see clearsPendingPlan), a plan scheduled since stays.
+        return stepDone({
+          configMerge: clearsPendingPlan(
+            ctx.operation.payload as Record<string, unknown> | null,
+            ctx.resource.config,
+          )
+            ? { pendingPlanFailed: null, pendingPlan: null }
+            : { pendingPlanFailed: null },
+        });
       case "schedule_plan_change": {
         // WPU-G8: no proration in a prepaid term. The choice is stored and the scheduler applies it shortly before the renewal;
         // nothing is called in AWS. null cancels a pending change.

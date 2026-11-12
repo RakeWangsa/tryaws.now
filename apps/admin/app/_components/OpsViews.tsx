@@ -24,6 +24,7 @@ import { localePath, type Locale } from "@tc/ui/runtime";
 import { capacityAction } from "../../server/capacity-actions.ts";
 import type { Correction } from "../../server/capacity-flow.ts";
 import type { CapacityView as CapacityData, OpsQueues, OpsQuery } from "../../server/ops-data.ts";
+import { moneyAction } from "../../server/money-actions.ts";
 import { operationAction } from "../../server/ops-actions.ts";
 import { actionsFor, mapLastError, type OpsActionKind } from "../../server/ops-map.ts";
 
@@ -383,11 +384,37 @@ export interface OperationDetailViewProps {
   locale: Locale;
   operation: OperationDetail;
   result: ResultCode | null;
+  // WPU-M4: the role of the signed-in admin. The credit is for finance and superadmin; this page is for
+  // ops and superadmin, so only a superadmin sees the form. The Server Action checks the role again.
+  role?: string;
+}
+
+// WPU-M4. The apply kinds of a plan change and the states in which the customer may have paid for a
+// change that was not delivered (the same lists as the repository).
+const CREDIT_KINDS: readonly string[] = ["scale_container", "change_cdn_bundle"];
+const CREDIT_STATES: readonly string[] = ["failed", "needs_attention"];
+
+function CreditPlanForm({ locale, id }: { locale: Locale; id: string }) {
+  const t = useTranslations("AdminOps.detail.creditPlan");
+  return (
+    <Card title={t("title")}>
+      <p className="form-text seccolor">{t("hint")}</p>
+      <form action={moneyAction} className="mb-0">
+        <Hidden locale={locale} entries={{ kind: "creditWalletForFailedChange", id }} />
+        <FormBlock>
+          <ReasonField ns="AdminOps" suffix={`credit-${id}`} />
+        </FormBlock>
+        <SubmitButton variant="primary" size="sm">
+          {t("button")}
+        </SubmitButton>
+      </form>
+    </Card>
+  );
 }
 
 // 16.12 /operations/[id]: the facts, the decisions so far, and the actions the stored state allows now.
 // There is no approver field: the approver is the signed-in admin.
-export function OperationDetailView({ locale, operation, result }: OperationDetailViewProps) {
+export function OperationDetailView({ locale, operation, result, role }: OperationDetailViewProps) {
   const t = useTranslations("AdminOps.detail");
   const plan = useTranslations("AdminPlanChange");
   const actions = actionsFor(operation);
@@ -487,6 +514,11 @@ export function OperationDetailView({ locale, operation, result }: OperationDeta
           ))}
         </Card>
       )}
+      {role === "superadmin" &&
+      CREDIT_KINDS.includes(operation.kind) &&
+      CREDIT_STATES.includes(operation.state) ? (
+        <CreditPlanForm locale={locale} id={operation.id} />
+      ) : null}
       {operation.kind === "create" && operation.state === "needs_approval" ? (
         <p className="form-text seccolor">{t("createNote")}</p>
       ) : null}

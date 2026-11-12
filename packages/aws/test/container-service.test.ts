@@ -526,6 +526,48 @@ describe("clear_plan_change_mark (admin, WPA-P2)", () => {
     expect(calls()).toEqual([]);
   });
 
+  // WPU-M4: the credit of a failed apply drops the pending plan with the mark, so it is not re-applied.
+  it("with clearPendingPlan it also drops the pending plan, but only the one the credited apply named", async () => {
+    const { adapter, ctx, calls } = setup();
+    const r = await adapter.aws.action(
+      "clear_plan_change_mark",
+      ctx(null, {
+        payload: { requestId: "r", clearPendingPlan: true, productId: NEXT },
+        config: {
+          pendingPlan: { productId: NEXT },
+          pendingPlanFailed: { code: "conflict", productId: NEXT, period: null },
+        },
+      }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { pendingPlanFailed: null, pendingPlan: null } },
+    });
+    expect(calls()).toEqual([]);
+    // the customer scheduled another plan since: it stays
+    const kept = await adapter.aws.action(
+      "clear_plan_change_mark",
+      ctx(null, {
+        payload: { requestId: "r", clearPendingPlan: true, productId: NEXT },
+        config: { pendingPlan: { productId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" } },
+      }),
+    );
+    expect(
+      Object.keys((kept as unknown as { patch: { configMerge: object } }).patch.configMerge),
+    ).toEqual(["pendingPlanFailed"]);
+    // a flag without a product id drops nothing (fail closed)
+    const bare = await adapter.aws.action(
+      "clear_plan_change_mark",
+      ctx(null, {
+        payload: { clearPendingPlan: true },
+        config: { pendingPlan: { productId: NEXT } },
+      }),
+    );
+    expect(
+      Object.keys((bare as unknown as { patch: { configMerge: object } }).patch.configMerge),
+    ).toEqual(["pendingPlanFailed"]);
+  });
+
   it("is a repeat-safe patch when the mark is already gone, and a destroyed resource is a conflict", async () => {
     const { adapter, ctx } = setup();
     await expect(
