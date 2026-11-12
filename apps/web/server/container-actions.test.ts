@@ -308,6 +308,28 @@ describe("createContainerDraftCore", () => {
     expect(drafted).toEqual([{ family: "container_service", config: draft }]);
   });
 
+  it("refuses without a session before the validation, the limit and the order code (R9, WP9-T2 sweep)", async () => {
+    const touched: string[] = [];
+    const deps = {
+      authenticate: async () => null,
+      rateLimit: async () => {
+        touched.push("rateLimit");
+        return { allowed: true };
+      },
+      orders: {
+        createOrderDraft: async () => {
+          touched.push("createOrderDraft");
+          return { ok: true, value: { token: "t" } };
+        },
+      },
+    } as unknown as OrderActionDeps;
+    expect(await createContainerDraftCore(deps, draft)).toEqual({
+      ok: false,
+      error: "unauthenticated",
+    });
+    expect(touched).toEqual([]);
+  });
+
   it("refuses a bad name", async () => {
     expect(
       await createContainerDraftCore(orders().deps, { ...draft, displayName: "a;b" }),
