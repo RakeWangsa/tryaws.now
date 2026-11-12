@@ -5,6 +5,9 @@ import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
+import { getAccessPort } from "../../../../../server/access-port.ts";
+import { bucketKeysDeps } from "../../../../../server/bucket-deps.ts";
+import { listBucketKeysCore } from "../../../../../server/bucket-keys.ts";
 import { loadBucketDetail } from "../../../../../server/bucket-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
@@ -44,6 +47,13 @@ export default async function StorageDetailPage({ params, searchParams }: Props)
   const path = `/storage/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const bucket = await loadBucketDetail(panel.session, id);
+  // WPU-N2: the keys through access-details (ownership checked again by the function). Anything but
+  // a list is "cannot be listed" (R16); the list holds ids and facts, never a secret.
+  const listed =
+    bucket !== null && bucket.state === "active"
+      ? await listBucketKeysCore(bucketKeysDeps(await getAccessPort()), { bucketId: bucket.id })
+      : null;
+  const keys = listed !== null && listed.ok ? listed.keys : null;
   const tab = one(query["tab"]);
   return (
     <PanelFrame locale={locale} path={path} currentId="objectStorage" panel={panel}>
@@ -56,6 +66,7 @@ export default async function StorageDetailPage({ params, searchParams }: Props)
         deleteKeyAction={deleteAccessKeyAction}
         destroyAction={destroyBucketAction}
         createKeyAction={createBucketKeyAction}
+        keys={keys}
         {...(bucket !== null && bucket.state === "active"
           ? {
               extra: (

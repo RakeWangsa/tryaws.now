@@ -48,6 +48,16 @@ function setup(over: Partial<AccessDetailsDeps> = {}) {
       fetched.push(t);
       return { username: "Administrator", password: SECRET };
     },
+    databasePassword: async () => {
+      throw new Error("not used here");
+    },
+    bucketKeyCreate: async () => {
+      throw new Error("not used here");
+    },
+    bucketKeyList: async () => {
+      throw new Error("not used here");
+    },
+    claimRequest: async () => true,
     audit: async (entry) => {
       order.push("audit");
       audits.push(entry);

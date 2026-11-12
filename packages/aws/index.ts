@@ -60,9 +60,16 @@ export {
   type WindowsPassword,
   type WindowsPasswordInput,
 } from "./adapters/windows-access";
+export {
+  fetchDatabasePassword,
+  type DatabasePassword,
+  type DatabasePasswordInput,
+} from "./adapters/database-access";
 export { createBucketAdapter, type BucketDeps } from "./adapters/bucket";
 export {
   createBucketAccessKey,
+  listBucketAccessKeys,
+  type BucketAccessKeyListed,
   type BucketAccessKey,
   type BucketAccessKeyInput,
 } from "./adapters/bucket-access";

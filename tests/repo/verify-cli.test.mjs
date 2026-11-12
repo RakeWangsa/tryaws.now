@@ -187,6 +187,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-M7",
     "WPU-M8",
     "WPU-N1",
+    "WPU-N2",
     "WPU-S1",
     "WPU-S2",
     "WPU-S3",
@@ -969,6 +970,34 @@ it("the proof of WPU-F1 exists: the digit helper, the invoice stack and spans, t
     ["packages/ui/theme/tc-fonts.test.ts", "no third-party font origin anywhere (U3)"],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-N2 is proven by lint, types, format, aws, access-details, web and repository tests", () => {
+  expect(TASKS["WPU-N2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["secrets-aws", "pnpm test --filter @tc/aws access-n2 --no-passWithNoTests"],
+    ["access-details", "pnpm test --filter @tc/fn-access-details --no-passWithNoTests"],
+    [
+      "secrets-web",
+      "pnpm test --filter @tc/web server/bucket-keys server/bucket-actions server/auth/context --no-passWithNoTests",
+    ],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-N2 exists", () => {
+  for (const file of [
+    "packages/aws/test/access-n2.test.ts",
+    "functions/access-details/secrets.test.ts",
+    "apps/web/server/bucket-keys.test.ts",
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain("it(");
   }
 });
 

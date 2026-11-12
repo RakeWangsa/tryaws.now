@@ -237,6 +237,21 @@ export function workers(inputs: WorkerInputs) {
     ]),
   ) as Record<"web" | "admin", { arn: unknown }>;
 
+  // WPU-N2: access-details has one alias, "web". The function accepts customerId only on it
+  // (functions/access-details/invoke.ts) and web.ts grants the web role lambda:InvokeFunction on
+  // this alias ARN and on nothing else, so the unaliased function cannot be invoked by web.
+  // VERIFY: same alias mechanics as the reader above.
+  const accessDetails = invoked["access-details"] as {
+    nodes: { function: { version: unknown } };
+    name: unknown;
+  };
+  const accessAliases = {
+    web: new aws.lambda.Alias("AccessAliasWeb", {
+      name: "web",
+      functionName: accessDetails.name as string,
+      functionVersion: accessDetails.nodes.function.version as string,
+    }),
+  } as Record<"web", { arn: unknown }>;
   // WPU-N1: the invoice renderer has one alias, "web". The customer role may invoke that alias and no
   // other form of the function; the admin role has no grant on the renderer at all (WPU-S8).
   // VERIFY: same as the reader aliases above (the published version, `nodes.function.version`).
@@ -283,7 +298,7 @@ export function workers(inputs: WorkerInputs) {
     triggers: { run: String(Date.now()) },
   });
 
-  return { invoked, readerAliases, rendererAliasWeb, crons, migrator, migration };
+  return { invoked, readerAliases, accessAliases, rendererAliasWeb, crons, migrator, migration };
 }
 
 export type Workers = ReturnType<typeof workers>;
