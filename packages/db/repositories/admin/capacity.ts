@@ -10,6 +10,7 @@ import {
 } from "../../capacity-keys";
 import { RISK_TIERS } from "../../schema/identity";
 import { QUOTA_CODES } from "../../schema/provisioning";
+import { DbError } from "../../errors";
 import { capacityInventoryRepo } from "../capacity-inventory";
 import { refused, type Written } from "../result";
 import { isUuid } from "../scope";
@@ -378,6 +379,10 @@ export function capacityAdminRepo(scope: AdminScope): CapacityAdminRepo {
     },
 
     async list(market) {
+      // A plain array, so a refusal throws (R10, R16; WP9-T2 sweep): ops and superadmin only.
+      if (!["ops", "superadmin"].includes(actor.role) || !(await isActiveAdmin(scope))) {
+        throw new DbError("42501");
+      }
       if (typeof market !== "string" || !MARKET_PATTERN.test(market)) {
         throw new TypeError("capacity: the market is not valid");
       }

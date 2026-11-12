@@ -138,7 +138,10 @@ export function operationsAdminRepo(scope: AdminScope): OperationsAdminRepo {
   ): Promise<Written<OperationDecision>> => {
     // Read once into locals, so a getter cannot answer differently on the second read.
     const { operationId, at } = input;
-    if (!(await isActiveAdmin(scope))) return refused("forbidden");
+    // The decision is for ops and superadmin at this layer too, not only in the admin app (R10, R16).
+    if (!READ_ROLES.includes(scope.actor.role) || !(await isActiveAdmin(scope))) {
+      return refused("forbidden");
+    }
     if (typeof operationId !== "string" || !(at instanceof Date) || Number.isNaN(at.getTime())) {
       return refused("validation");
     }
