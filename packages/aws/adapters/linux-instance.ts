@@ -5,6 +5,7 @@ import {
   CreateInstancesCommand,
   DeleteInstanceCommand,
   DeleteInstanceSnapshotCommand,
+  DetachStaticIpCommand,
   GetInstanceCommand,
   GetInstancePortStatesCommand,
   GetInstanceSnapshotCommand,
@@ -21,7 +22,9 @@ import {
 } from "@aws-sdk/client-lightsail";
 import {
   awsResourceName,
+  parseFirewallRules,
   parseInstanceConfig,
+  parseServerDisplayName,
   resourceTags,
   stepDone,
   stepNext,
@@ -126,32 +129,20 @@ function hasTag(
   return (tags ?? []).some((t) => t.key === key && t.value === value);
 }
 
-const PROTOCOLS = new Set(["tcp", "udp", "icmp"]);
-const CIDR = /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/;
-
-/** The port rules of a `set_ports` payload or of the rules saved at suspend: hand-validated input. */
+/**
+ * The port rules of a `set_ports` payload or of the rules saved at suspend: validated again here
+ * (the payload is input, R9). The one strict check lives in @tc/core, next to the form that builds
+ * the list. IPv4 only (see DEFAULT_PORTS).
+ */
 export function parsePortRules(input: unknown): PortInfo[] | null {
-  if (!Array.isArray(input) || input.length > 30) return null;
-  const out: PortInfo[] = [];
-  for (const raw of input as unknown[]) {
-    if (typeof raw !== "object" || raw === null) return null;
-    const r = raw as Record<string, unknown>;
-    const { fromPort, toPort, protocol, cidrs } = r;
-    if (typeof protocol !== "string" || !PROTOCOLS.has(protocol)) return null;
-    if (!Number.isInteger(fromPort) || !Number.isInteger(toPort)) return null;
-    const from = fromPort as number;
-    const to = toPort as number;
-    if (from < 0 || to > 65535 || from > to) return null;
-    if (!Array.isArray(cidrs) || cidrs.length === 0 || cidrs.length > 20) return null;
-    if (!(cidrs as unknown[]).every((c) => typeof c === "string" && CIDR.test(c))) return null;
-    out.push({
-      fromPort: from,
-      toPort: to,
-      protocol: protocol as PortInfo["protocol"],
-      cidrs: [...(cidrs as string[])],
-    });
-  }
-  return out;
+  const rules = parseFirewallRules(input);
+  if (rules === null) return null;
+  return rules.map((r) => ({
+    fromPort: r.fromPort,
+    toPort: r.toPort,
+    protocol: r.protocol,
+    cidrs: [...r.cidrs],
+  }));
 }
 
 function savedRules(ctx: OpCtx<InstanceConfig>): PortInfo[] | null {
@@ -420,6 +411,67 @@ export function createLinuxInstanceAdapter(
     return { state: got?.instance?.state?.name ?? "missing" };
   }
 
+  const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
+  const ipOf = (value: string | undefined): string | null =>
+    typeof value === "string" && IPV4.test(value) ? value : null;
+
+  /**
+   * WPU-G18: attaches the server's own static IP (the one `create` allocated, named after the
+   * resource). Allocated again if it is gone; never touched if it is attached to anything else (R16).
+   */
+  async function attachOwnStaticIp(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    const found = await orNull(() =>
+      lightsail.send(new GetStaticIpCommand({ staticIpName: n.staticIp })),
+    );
+    if (found?.staticIp?.isAttached === true) {
+      // Attached to our own instance: done. To anything else: not ours to touch (R16).
+      if (found.staticIp.attachedTo !== n.instance) throw fail("conflict");
+      return stepDone({
+        configMerge: {
+          staticIpAttached: true,
+          ...(ipOf(found.staticIp.ipAddress) === null
+            ? {}
+            : { publicIpv4: ipOf(found.staticIp.ipAddress) }),
+        },
+      });
+    }
+    if (found === null) {
+      await lightsail.send(new AllocateStaticIpCommand({ staticIpName: n.staticIp }));
+    }
+    await lightsail.send(
+      new AttachStaticIpCommand({ staticIpName: n.staticIp, instanceName: n.instance }),
+    );
+    const now = await orNull(() =>
+      lightsail.send(new GetStaticIpCommand({ staticIpName: n.staticIp })),
+    );
+    const address = ipOf(now?.staticIp?.ipAddress);
+    return stepDone({
+      configMerge: { staticIpAttached: true, ...(address === null ? {} : { publicIpv4: address }) },
+    });
+  }
+
+  /** WPU-G18: detaches the server's own static IP; the instance then has an address of its own. */
+  async function detachOwnStaticIp(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    const found = await orNull(() =>
+      lightsail.send(new GetStaticIpCommand({ staticIpName: n.staticIp })),
+    );
+    if (found?.staticIp?.isAttached === true) {
+      if (found.staticIp.attachedTo !== n.instance) throw fail("conflict");
+      await lightsail.send(new DetachStaticIpCommand({ staticIpName: n.staticIp }));
+    }
+    // The address the tab shows follows the instance: unknown (null) until AWS has one.
+    const live = await orNull(() =>
+      lightsail.send(new GetInstanceCommand({ instanceName: n.instance })),
+    );
+    return stepDone({
+      configMerge: { staticIpAttached: false, publicIpv4: ipOf(live?.instance?.publicIpAddress) },
+    });
+  }
+
   async function action(kind: OperationKind, ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
     const instanceName = names(ctx.resource.id).instance;
     const lightsail = client(ctx);
@@ -438,8 +490,21 @@ export function createLinuxInstanceAdapter(
         const rules = parsePortRules((ctx.operation.payload as { ports?: unknown } | null)?.ports);
         if (rules === null) throw fail("validation");
         await lightsail.send(new PutInstancePublicPortsCommand({ instanceName, portInfos: rules }));
-        return stepDone();
+        // The list is saved on the resource: the Networking tab reads it (the web tier has no AWS).
+        return stepDone({ configMerge: { firewallRules: rules } });
       }
+      case "rename": {
+        // The display name lives in our database only: AWS names are generated (R11). No AWS call.
+        const name = parseServerDisplayName(
+          (ctx.operation.payload as { displayName?: unknown } | null)?.displayName,
+        );
+        if (name === null) throw fail("validation");
+        return stepDone({ configMerge: { displayName: name } });
+      }
+      case "attach_static_ip":
+        return attachOwnStaticIp(ctx);
+      case "detach_static_ip":
+        return detachOwnStaticIp(ctx);
       default:
         // Anything else is not built yet: refuse (R16).
         throw fail("validation");

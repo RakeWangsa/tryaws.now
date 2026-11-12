@@ -1,4 +1,30 @@
 export {
+  DEFAULT_BLUEPRINT_ID,
+  keyFileName,
+  loginUserOf,
+  parseServerDisplayName,
+  sshCommandOf,
+} from "./connect";
+export {
+  FIREWALL_ANYWHERE,
+  FIREWALL_MAX_RULES,
+  FIREWALL_MAX_SOURCES,
+  FIREWALL_PRESETS,
+  addFirewallRule,
+  firewallRuleKey,
+  parseFirewallRules,
+  parseFirewallSources,
+  parseNewFirewallRule,
+  removeFirewallRule,
+  rulesOpenSshToWorld,
+  type FirewallPresetName,
+  type FirewallProtocol,
+  type FirewallRule,
+  type ListResult as FirewallListResult,
+  type NewRuleResult as NewFirewallRuleResult,
+  type SourcesResult as FirewallSourcesResult,
+} from "./firewall";
+export {
   parseInstanceConfig,
   resolveInstance,
   resolveProduct,
