@@ -301,7 +301,7 @@ export const BN: Catalog = {
     subject: "আপনার সাপোর্ট অনুরোধের উত্তর",
     headline: "সাপোর্টের উত্তর",
     body: [
-      "TiCON Cloud সাপোর্ট আপনার অনুরোধের উত্তর দিয়েছে:",
+      "MeghVPS সাপোর্ট আপনার অনুরোধের উত্তর দিয়েছে:",
       "{message}",
       "আরও সাহায্য লাগলে প্যানেলের সাপোর্ট পেজে জানান।",
     ],
@@ -510,7 +510,7 @@ export const EN: Catalog = {
     subject: "Reply to your support request",
     headline: "Reply from support",
     body: [
-      "TiCON Cloud support has answered your request:",
+      "MeghVPS support has answered your request:",
       "{message}",
       "If you need more help, tell us on the support page of the panel.",
     ],
