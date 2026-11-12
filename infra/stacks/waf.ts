@@ -6,18 +6,59 @@
 import { parseAllowlist } from "../lib/allowlist";
 import { EDGE_REGION, resourceName, type StageConfig } from "../lib/stage";
 
-// Rate-based rules for login, OTP, top-up and order endpoints (3.3). Server Actions POST to the page
-// URL, so each rule matches method POST on those page paths, in both locales, and on /pay/eps/.
-// VERIFY: the real path of each page once the routes are final (apps/web/app/[locale]/...). The
-// match is "contains", so /bn/... and /en/... both match.
-const RATE_RULES = [
+// Rate-based rules (3.3). They are a coarse net per IP; the main control is the per-account and
+// per-IP limit inside the app (R9, step "rate limit"), so these numbers only stop floods.
+//
+// Server Actions are POSTs to the page URL that carry a `Next-Action` header. A path match alone is
+// weak (encoded paths, case), so every uriPath match applies URL_DECODE (priority 0) then LOWERCASE
+// (priority 1), and the rules for pages additionally require the Next-Action header. A catch-all
+// rule limits any POST that carries `Next-Action`, whatever the path.
+// VERIFY: the real path of each page once the routes are final (apps/web/app/[locale]/...); the
+// match is "contains", so /bn/... and /en/... both match. A double-encoded path still escapes one
+// URL_DECODE; the managed Common rule set and the app limits are the answer to that.
+const PAGE_RATE_RULES = [
   { name: "login", contains: "/login", limit: 100 },
   { name: "signup", contains: "/signup", limit: 100 },
   { name: "otp-verify", contains: "/verify", limit: 100 },
   { name: "topup", contains: "/wallet", limit: 100 },
   { name: "orders", contains: "/orders", limit: 200 },
-  { name: "eps-return", contains: "/pay/eps/", limit: 300 },
 ] as const;
+const SERVER_ACTION_LIMIT = 600;
+// The EPS return routes (apps/web/app/pay/eps/{success,fail,cancel}/route.ts) export GET and HEAD
+// only: they are browser redirects (SuccessUrl, FailUrl, CancelUrl). No method condition, so GET,
+// HEAD and anything else are counted.
+const EPS_RETURN = { name: "eps-return", contains: "/pay/eps/", limit: 300 } as const;
+
+const decodeThenLowercase = [
+  { priority: 0, type: "URL_DECODE" },
+  { priority: 1, type: "LOWERCASE" },
+];
+
+const isPost = {
+  byteMatchStatement: {
+    searchString: "POST",
+    fieldToMatch: { method: {} },
+    positionalConstraint: "EXACTLY",
+    textTransformations: [{ priority: 0, type: "NONE" }],
+  },
+};
+// The header is present when its size is above 0.
+const hasNextAction = {
+  sizeConstraintStatement: {
+    fieldToMatch: { singleHeader: { name: "next-action" } },
+    comparisonOperator: "GT",
+    size: 0,
+    textTransformations: [{ priority: 0, type: "NONE" }],
+  },
+};
+const pathContains = (contains: string) => ({
+  byteMatchStatement: {
+    searchString: contains,
+    fieldToMatch: { uriPath: {} },
+    positionalConstraint: "CONTAINS",
+    textTransformations: decodeThenLowercase,
+  },
+});
 
 type VisibilityName = string;
 function visibility(name: VisibilityName) {
@@ -34,42 +75,41 @@ function managedGroup(name: string, priority: number) {
   };
 }
 
-function rateRules(firstPriority: number) {
-  return RATE_RULES.map((rule, index) => ({
-    name: `rate-${rule.name}`,
-    priority: firstPriority + index,
+function rateRule(name: string, priority: number, limit: number, statements: unknown[]) {
+  return {
+    name: `rate-${name}`,
+    priority,
     action: { block: {} },
     statement: {
       rateBasedStatement: {
-        limit: rule.limit,
+        limit,
         aggregateKeyType: "IP",
         evaluationWindowSec: 300,
-        scopeDownStatement: {
-          andStatement: {
-            statements: [
-              {
-                byteMatchStatement: {
-                  searchString: "POST",
-                  fieldToMatch: { method: {} },
-                  positionalConstraint: "EXACTLY",
-                  textTransformations: [{ priority: 0, type: "NONE" }],
-                },
-              },
-              {
-                byteMatchStatement: {
-                  searchString: rule.contains,
-                  fieldToMatch: { uriPath: {} },
-                  positionalConstraint: "CONTAINS",
-                  textTransformations: [{ priority: 0, type: "LOWERCASE" }],
-                },
-              },
-            ],
-          },
-        },
+        scopeDownStatement:
+          statements.length === 1 ? statements[0] : { andStatement: { statements } },
       },
     },
-    visibilityConfig: visibility(`rate-${rule.name}`),
-  }));
+    visibilityConfig: visibility(`rate-${name}`),
+  };
+}
+
+function rateRules(firstPriority: number) {
+  return [
+    ...PAGE_RATE_RULES.map((rule, index) =>
+      rateRule(rule.name, firstPriority + index, rule.limit, [
+        isPost,
+        hasNextAction,
+        pathContains(rule.contains),
+      ]),
+    ),
+    rateRule("server-actions", firstPriority + PAGE_RATE_RULES.length, SERVER_ACTION_LIMIT, [
+      isPost,
+      hasNextAction,
+    ]),
+    rateRule(EPS_RETURN.name, firstPriority + PAGE_RATE_RULES.length + 1, EPS_RETURN.limit, [
+      pathContains(EPS_RETURN.contains),
+    ]),
+  ];
 }
 
 export function waf(config: StageConfig) {

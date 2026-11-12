@@ -49,6 +49,10 @@ export function auth(config: StageConfig) {
         args.name = resourceName(stage, "customers");
         args.passwordPolicy = PASSWORD_POLICY;
         args.autoVerifiedAttributes = ["email"];
+        // A changed e-mail stays unverified, and the old one stays valid, until the new address
+        // proves itself. VERIFY: Pulumi aws.cognito.UserPool property userAttributeUpdateSettings
+        // { attributesRequireVerificationBeforeUpdate: ["email"] }.
+        args.userAttributeUpdateSettings = { attributesRequireVerificationBeforeUpdate: ["email"] };
         args.emailConfiguration = email;
         args.deletionProtection = "ACTIVE";
         args.accountRecoverySetting = {
@@ -65,6 +69,12 @@ export function auth(config: StageConfig) {
         // No client secret: the Next.js server uses the SRP or password flow of the SDK.
         // VERIFY: transform.client key of CognitoUserPool.addClient and the auth flows 6.1 needs.
         args.generateSecret = false;
+        // The platform identifies users by `sub` (customers.cognito_sub), never by e-mail. The app
+        // client may write only harmless profile attributes. E-mail and phone changes go through the
+        // app's fresh sign-in and new verification (AccountPorts, apps/web/server/settings-actions.ts)
+        // with the server's own credentials, so email, phone_number and every custom attribute are
+        // left out. VERIFY: Pulumi aws.cognito.UserPoolClient writeAttributes.
+        args.writeAttributes = ["name"];
         args.explicitAuthFlows = [
           "ALLOW_USER_PASSWORD_AUTH",
           "ALLOW_REFRESH_TOKEN_AUTH",
@@ -86,6 +96,7 @@ export function auth(config: StageConfig) {
         args.name = resourceName(stage, "admins");
         args.passwordPolicy = PASSWORD_POLICY;
         args.autoVerifiedAttributes = ["email"];
+        args.userAttributeUpdateSettings = { attributesRequireVerificationBeforeUpdate: ["email"] };
         args.emailConfiguration = email;
         args.deletionProtection = "ACTIVE";
         // No self sign-up (6.2): only an administrator creates users.
@@ -99,6 +110,9 @@ export function auth(config: StageConfig) {
     transform: {
       client: (args: Record<string, unknown>) => {
         args.generateSecret = false;
+        // No self-service attribute writes for admins: an empty allowlist. Admin users are created
+        // and changed only through the admin API (IAM) of the admin pool.
+        args.writeAttributes = [];
         // Short sessions: 8 hours (6.2). VERIFY: units; Cognito allows refresh 60 minutes to 10 years.
         args.refreshTokenValidity = 8;
         args.accessTokenValidity = 1;

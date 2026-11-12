@@ -166,11 +166,92 @@ describe("R1: the web tier cannot assume pool roles", () => {
     expect(workers).toContain("assumableRoleArns(role, config)");
   });
 
-  it("gives neither app a wildcard permission except the Cognito admin API of the admin pool", () => {
+  it("gives neither app a wildcard permission", () => {
     expect(web).not.toMatch(/resources: \["\*"\]/);
-    expect([...web.matchAll(/"[a-z0-9-]+:[A-Za-z]*\*[A-Za-z*]*"/g)].map((m) => m[0])).toEqual([
-      '"cognito-idp:Admin*"',
+    expect([...web.matchAll(/"[a-z0-9-]+:[A-Za-z]*\*[A-Za-z*]*"/g)].map((m) => m[0])).toEqual([]);
+  });
+
+  it("lists the specific Cognito admin actions of the admin pool, and not the dangerous ones", () => {
+    const admin = between(web, 'new sst.aws.Nextjs("Admin"');
+    const actions = [...admin.matchAll(/"cognito-idp:([A-Za-z]+)"/g)].map((m) => m[1]).sort();
+    expect(actions).toEqual([
+      "AdminCreateUser",
+      "AdminDisableUser",
+      "AdminEnableUser",
+      "AdminGetUser",
+      "AdminSetUserMFAPreference",
+      "ListUsers",
     ]);
+    expect(admin).toContain("resources: [auth.admins.arn]");
+    for (const forbidden of [
+      "AdminSetUserPassword",
+      "AdminResetUserPassword",
+      "AdminUserGlobalSignOut",
+      "AdminUpdateUserAttributes",
+    ]) {
+      expect(admin).not.toContain(forbidden);
+    }
+    // the customer app may only sign out its own pool's users
+    const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
+    expect([...customer.matchAll(/"cognito-idp:([A-Za-z]+)"/g)].map((m) => m[1])).toEqual([
+      "AdminUserGlobalSignOut",
+    ]);
+    expect(customer).toContain("resources: [auth.customers.arn]");
+  });
+});
+
+describe("WAF rate rules and Server Actions", () => {
+  it("scopes the page rules on the Next-Action header and adds a catch-all for it", () => {
+    expect(waf).toContain('fieldToMatch: { singleHeader: { name: "next-action" } }');
+    expect(waf).toMatch(/comparisonOperator: "GT", size: 0/);
+    expect(waf).toContain('rateRule("server-actions"');
+    expect(waf).toMatch(
+      /rateRule\(rule\.name, firstPriority \+ index, rule\.limit, \[ isPost, hasNextAction, pathContains\(rule\.contains\)/,
+    );
+  });
+
+  it("decodes before lowercasing in every uriPath match", () => {
+    expect([...waf.matchAll(/uriPath: \{\}/g)]).toHaveLength(1);
+    expect(waf).toContain(
+      'const decodeThenLowercase = [ { priority: 0, type: "URL_DECODE" }, { priority: 1, type: "LOWERCASE" }];',
+    );
+    expect(waf).toMatch(
+      /fieldToMatch: \{ uriPath: \{\} \}, positionalConstraint: "CONTAINS", textTransformations: decodeThenLowercase/,
+    );
+    expect(waf).not.toMatch(
+      /uriPath: \{\}, positionalConstraint: "CONTAINS", textTransformations: \[ \{ priority: 0, type: "LOWERCASE"/,
+    );
+  });
+
+  it("counts the EPS return routes (GET redirects) without a method condition", () => {
+    expect(waf).toContain(
+      'const EPS_RETURN = { name: "eps-return", contains: "/pay/eps/", limit: 300 }',
+    );
+    expect(waf).toMatch(
+      /rateRule\(EPS_RETURN\.name, [^)]*EPS_RETURN\.limit, \[ pathContains\(EPS_RETURN\.contains\)\]\)/,
+    );
+  });
+});
+
+describe("Cognito attribute writes", () => {
+  it("requires verification before an e-mail update in both pools", () => {
+    expect([
+      ...auth.matchAll(
+        /args\.userAttributeUpdateSettings = \{ attributesRequireVerificationBeforeUpdate: \["email"\] \}/g,
+      ),
+    ]).toHaveLength(2);
+  });
+
+  it("gives the clients an explicit writeAttributes allowlist without e-mail or phone", () => {
+    expect(auth).toContain('args.writeAttributes = ["name"]');
+    expect(auth).toContain("args.writeAttributes = []");
+    const lists = [...auth.matchAll(/args\.writeAttributes = (\[[^\]]*\])/g)].map((m) => m[1]);
+    expect(lists).toHaveLength(2);
+    for (const list of lists) expect(list).not.toMatch(/email|phone|custom:/);
+    // the comment records why: users are identified by sub, not by e-mail
+    expect(readFileSync(resolve(root, "infra/stacks/auth.ts"), "utf8")).toContain(
+      "customers.cognito_sub",
+    );
   });
 });
 

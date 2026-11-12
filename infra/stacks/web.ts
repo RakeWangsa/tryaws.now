@@ -173,7 +173,22 @@ export function web(inputs: WebInputs) {
         ],
       },
       { actions: ["kms:Decrypt", "kms:GenerateDataKey"], resources: [storage.filesKey.arn] },
-      { actions: ["cognito-idp:Admin*"], resources: [auth.admins.arn] },
+      // Exactly what apps/admin/server/admin-directory.ts needs: invite (AdminCreateUser), describe
+      // (ListUsers by sub, AdminGetUser), setEnabled (AdminEnableUser, AdminDisableUser) and resetMfa
+      // (AdminSetUserMFAPreference, named need: the TOTP reset of the /admins screen). Not granted:
+      // AdminSetUserPassword, AdminResetUserPassword, AdminUserGlobalSignOut (AdminDisableUser
+      // revokes the user's tokens) and AdminUpdateUserAttributes. A new need is a reviewed change.
+      {
+        actions: [
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:ListUsers",
+          "cognito-idp:AdminDisableUser",
+          "cognito-idp:AdminEnableUser",
+          "cognito-idp:AdminSetUserMFAPreference",
+        ],
+        resources: [auth.admins.arn],
+      },
     ],
     transform: {
       server: fixedServerRole(roleName(stage, "admin")),
