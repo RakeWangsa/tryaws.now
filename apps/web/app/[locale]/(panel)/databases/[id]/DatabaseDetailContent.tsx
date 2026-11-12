@@ -48,6 +48,7 @@ export function DatabaseDetailContent({
   defaultTab,
   initialSecret = null,
   extra = null,
+  parametersTab = null,
   snapshots,
 }: {
   locale: Locale;
@@ -61,6 +62,8 @@ export function DatabaseDetailContent({
   defaultTab?: string;
   /** The console form of the settings tab (WPU-G7), built by the page. */
   extra?: ReactNode;
+  /** WPU-G11: the Parameters tab, built by the page; without it (the static mockup states) there is no such tab. */
+  parametersTab?: ReactNode;
   /**
    * WPU-G9. The actions of the Backups tab; without them (the static mockup states) the tab shows the
    * read-only table.
@@ -298,10 +301,13 @@ export function DatabaseDetailContent({
             { id: "backups", title: t("detail.tab.backups"), content: backups },
             { id: "metrics", title: t("detail.tab.metrics"), content: metrics },
             { id: "settings", title: t("detail.tab.settings"), content: settings },
+            ...(parametersTab === null
+              ? []
+              : [{ id: "parameters", title: t("detail.tab.parameters"), content: parametersTab }]),
             { id: "destroy", title: t("detail.tab.destroy"), content: destroy },
           ]}
           {...(defaultTab !== undefined &&
-          ["access", "backups", "metrics", "settings", "destroy"].includes(defaultTab)
+          ["access", "backups", "metrics", "settings", "parameters", "destroy"].includes(defaultTab)
             ? { defaultId: defaultTab }
             : {})}
         />

@@ -25,7 +25,13 @@ import {
   type StepResult,
 } from "@tc/core";
 import { AwsError } from "../errors";
-import { certificateTags, ensureCertificate, readCertificate } from "./certificate";
+import {
+  certificateTags,
+  deleteCertificate,
+  ensureCertificate,
+  readCertificate,
+  requireCertificateGone,
+} from "./certificate";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 
 /**
@@ -251,6 +257,27 @@ export function createContainerServiceAdapter(
     return [...before, deploymentHistoryEntry(deployment, ctx.clock.now())];
   }
 
+  /**
+   * Takes the custom domain off the service (Lightsail keeps a certificate in use by a service) and
+   * deletes the certificate. Other domain entries, if any, stay. Safe to repeat (R7); a service that
+   * cannot be read refuses (R16).
+   */
+  async function dropCertificate(ctx: OpCtx<ContainerConfig>): Promise<void> {
+    const lightsail = client(ctx);
+    const name = serviceName(ctx);
+    const certName = awsResourceName("cert", ctx.resource.id);
+    const service = await findService(lightsail, name);
+    if (service === null) throw fail("upstream_unavailable");
+    const domains = service.publicDomainNames ?? {};
+    if (Object.hasOwn(domains, certName)) {
+      const rest = Object.fromEntries(Object.entries(domains).filter(([key]) => key !== certName));
+      await lightsail.send(
+        new UpdateContainerServiceCommand({ serviceName: name, publicDomainNames: rest }),
+      );
+    }
+    await deleteCertificate(lightsail, certName);
+  }
+
   async function action(kind: OperationKind, ctx: OpCtx<ContainerConfig>): Promise<StepResult> {
     const name = serviceName(ctx);
     const certName = awsResourceName("cert", ctx.resource.id);
@@ -363,6 +390,33 @@ export function createContainerServiceAdapter(
               attached,
               records: found.records,
             },
+          },
+        });
+      }
+      case "remove_certificate": {
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await dropCertificate(ctx);
+        return stepDone({ configMerge: { certificate: null } });
+      }
+      case "replace_certificate": {
+        // The new domain is checked before anything is touched (R11, R16).
+        const domain = checkedContainerCertificateDomain(payload?.domain);
+        if (domain === null) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await dropCertificate(ctx);
+        await requireCertificateGone(lightsail, certName);
+        await ensureCertificate(lightsail, {
+          name: certName,
+          domain,
+          tags: certificateTags({
+            env: ctx.env,
+            customerId: ctx.resource.customerId,
+            resourceId: ctx.resource.id,
+          }),
+        });
+        return stepDone({
+          configMerge: {
+            certificate: { domain, status: "PENDING_VALIDATION", attached: false, records: [] },
           },
         });
       }

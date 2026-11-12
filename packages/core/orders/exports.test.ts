@@ -206,6 +206,12 @@ const PRODUCTS = [
   // WPU-G9: the maintenance window, the database restore rules and the snapshot price
   "checkedMaintenanceWindow",
   "windowsOverlap",
+  // WPU-G11: the whitelist of database parameters
+  "DB_PARAMETER_RULES",
+  "MAX_DB_PARAMETER_CHANGES",
+  "checkedDbParameterChanges",
+  "dbEngineFrom",
+  "safeDbParameterList",
   "DB_BACKUP_RETENTION_DAYS",
   "PITR_LAG_MINUTES",
   "checkDbPointInTime",

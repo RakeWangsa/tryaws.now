@@ -11,6 +11,8 @@ import {
   CDN_ORIGIN,
   CDN_PLAN,
   CDN_REFRESH_CERTIFICATE,
+  CDN_REMOVE_CERTIFICATE,
+  CDN_REPLACE_CERTIFICATE,
   CDN_REQUEST_CERTIFICATE,
   CDN_RESET_CACHE,
   consoleCore,
@@ -81,3 +83,11 @@ export const setCdnOriginAction = consoleAction(CDN_ORIGIN, ["originId"]);
 export const scheduleCdnPlanAction = consoleAction(CDN_PLAN, ["productId", "cancel"]);
 export const requestCdnCertificateAction = consoleAction(CDN_REQUEST_CERTIFICATE, ["domain"]);
 export const refreshCdnCertificateAction = consoleAction(CDN_REFRESH_CERTIFICATE, []);
+
+// WPU-G11: remove or replace the certificate. The typed domain is the only extra text field read here;
+// the core compares it with the saved one and asks for a fresh sign-in (U10).
+export const removeCdnCertificateAction = consoleAction(CDN_REMOVE_CERTIFICATE, ["confirmName"]);
+export const replaceCdnCertificateAction = consoleAction(CDN_REPLACE_CERTIFICATE, [
+  "domain",
+  "confirmName",
+]);

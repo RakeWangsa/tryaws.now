@@ -9,7 +9,10 @@ import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import {
   destroyDatabaseAction,
+  readDatabaseParametersAction,
+  rebootDatabaseAction,
   setDatabaseOptionsAction,
+  setDatabaseParametersAction,
   setDatabaseRunningAction,
 } from "./actions.ts";
 import { revealDatabasePasswordAction } from "./access-actions.ts";
@@ -20,6 +23,7 @@ import {
   restoreDatabaseSnapshotAction,
 } from "./snapshot-actions.ts";
 import { DatabaseOptionsForm } from "../../_console/ConsoleForms.tsx";
+import { DatabaseParameters } from "../../_console/DatabaseParameters.tsx";
 import { DatabaseDetailContent } from "./DatabaseDetailContent.tsx";
 
 export const dynamic = "force-dynamic";
@@ -74,11 +78,30 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
                   requestId={newUuidV7()}
                   console={
                     database.console ?? {
+                      parameters: null,
                       backupWindow: null,
                       maintenanceWindow: null,
                       publiclyAccessible: false,
                     }
                   }
+                />
+              ),
+            }
+          : {})}
+        {...(database !== null
+          ? {
+              parametersTab: (
+                <DatabaseParameters
+                  saveAction={setDatabaseParametersAction}
+                  readAction={readDatabaseParametersAction}
+                  rebootAction={rebootDatabaseAction}
+                  databaseId={database.id}
+                  saveRequestId={newUuidV7()}
+                  readRequestId={newUuidV7()}
+                  rebootRequestId={newUuidV7()}
+                  facts={database.console?.parameters ?? null}
+                  numerals={numeralsFor(locale, panel)}
+                  allowed={database.state === "active"}
                 />
               ),
             }

@@ -71,6 +71,11 @@ describe("console form messages (WPU-G7)", () => {
       "endpointQueued",
       "cacheQueued",
       "originQueued",
+      "certificateRemoveQueued",
+      "certificateReplaceQueued",
+      "parametersQueued",
+      "parametersReadQueued",
+      "rebootQueued",
     ]) {
       expect(consoleEn.Console.done).toHaveProperty(key);
     }

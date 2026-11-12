@@ -1,5 +1,6 @@
 import {
   CreateCertificateCommand,
+  DeleteCertificateCommand,
   GetCertificatesCommand,
   type LightsailClient,
 } from "@aws-sdk/client-lightsail";
@@ -104,4 +105,22 @@ export async function ensureCertificate(
       tags: input.tags,
     }),
   );
+}
+
+/** Deletes the certificate; one that is gone already is a clean result (R7). */
+export async function deleteCertificate(lightsail: LightsailClient, name: string): Promise<void> {
+  await orNull(() => lightsail.send(new DeleteCertificateCommand({ certificateName: name })));
+}
+
+/**
+ * After a delete: the certificate must no longer show before a new one is requested under the same
+ * generated name. If it still shows, the operation is retried later (R7, R16).
+ */
+export async function requireCertificateGone(
+  lightsail: LightsailClient,
+  name: string,
+): Promise<void> {
+  if ((await readCertificate(lightsail, name)) !== null) {
+    throw new AwsError({ code: "upstream_unavailable", retryable: true });
+  }
 }

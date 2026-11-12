@@ -3,7 +3,14 @@
 import { guardAction } from "../../../../../server/action-deps.ts";
 import { pick } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
-import { DB_OPTIONS, consoleCore } from "../../../../../server/console-actions.ts";
+import {
+  DB_OPTIONS,
+  DB_PARAMETERS,
+  DB_PARAMETER_FIELDS,
+  DB_READ_PARAMETERS,
+  DB_REBOOT,
+  consoleCore,
+} from "../../../../../server/console-actions.ts";
 import {
   destroyDatabaseCore,
   setDatabaseRunningCore,
@@ -48,5 +55,22 @@ export const setDatabaseOptionsAction = run(consoleCore(DB_OPTIONS), [
   "backupWindow",
   "maintenanceWindow",
   "publicMode",
+  "acknowledge",
+]);
+
+// WPU-G11: the parameters of the database. The form fields that are read for a change are the names of
+// the whitelist and nothing else (R11); the core checks each name and value again.
+export const setDatabaseParametersAction = run(consoleCore(DB_PARAMETERS), [
+  "databaseId",
+  "requestId",
+  ...DB_PARAMETER_FIELDS,
+]);
+export const readDatabaseParametersAction = run(consoleCore(DB_READ_PARAMETERS), [
+  "databaseId",
+  "requestId",
+]);
+export const rebootDatabaseAction = run(consoleCore(DB_REBOOT), [
+  "databaseId",
+  "requestId",
   "acknowledge",
 ]);

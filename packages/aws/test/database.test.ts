@@ -305,11 +305,10 @@ describe("manual snapshots and refusals", () => {
     expect(bodyOf("DeleteRelationalDatabaseSnapshot").relationalDatabaseSnapshotName).toBe(
       awsResourceName("snapshot", BID),
     );
-    await expect(adapter.aws.action("reboot", ctx(null, { kind: "reboot" }))).rejects.toMatchObject(
-      {
-        code: "validation",
-      },
-    );
+    // reboot is supported since WPU-G11; a kind of another family still is not.
+    await expect(
+      adapter.aws.action("set_ports", ctx(null, { kind: "set_ports" })),
+    ).rejects.toMatchObject({ code: "validation" });
   });
 
   it("the password endpoint is never called by the adapter (U9, R14)", async () => {

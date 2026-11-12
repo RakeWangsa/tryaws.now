@@ -785,3 +785,126 @@ describe("custom domain and certificate (WPU-G8)", () => {
     expect(done.calls()).not.toContain("AttachCertificateToDistribution");
   });
 });
+
+describe("remove and replace the certificate (WPU-G11)", () => {
+  const CERT = awsResourceName("cert", RID);
+  const certs = (domain = "cdn.example.com") =>
+    lightsailOk({
+      certificates: [
+        {
+          certificateName: CERT,
+          certificateDetail: { name: CERT, domainName: domain, status: "ISSUED" },
+        },
+      ],
+    });
+
+  it("remove_certificate detaches it from the distribution, deletes it and clears the saved certificate", async () => {
+    const { aws, adapter, ctx, body, calls, distribution } = setup();
+    aws.on("lightsail", "GetDistributions", distribution("Deployed", { certificateName: CERT }));
+    aws.on("lightsail", "DetachCertificateFromDistribution", lightsailOk({}));
+    aws.on("lightsail", "DeleteCertificate", lightsailOk({}));
+    const r = await adapter.aws.action("remove_certificate", ctx(null, { state: "active" }));
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { certificate: null } } });
+    expect(calls()).toEqual([
+      "GetDistributions",
+      "DetachCertificateFromDistribution",
+      "DeleteCertificate",
+    ]);
+    expect(body("DetachCertificateFromDistribution")).toEqual({ distributionName: DIST });
+    expect(body("DeleteCertificate")).toEqual({ certificateName: CERT });
+  });
+
+  it("a certificate that is not attached is only deleted, one that is gone is a clean result (R7)", async () => {
+    const loose = setup();
+    loose.aws.on("lightsail", "GetDistributions", loose.distribution("Deployed"));
+    loose.aws.on("lightsail", "DeleteCertificate", lightsailOk({}));
+    await loose.adapter.aws.action("remove_certificate", loose.ctx(null, { state: "active" }));
+    expect(loose.calls()).not.toContain("DetachCertificateFromDistribution");
+
+    const gone = setup();
+    gone.aws.on("lightsail", "GetDistributions", gone.distribution("Deployed"));
+    gone.aws.on("lightsail", "DeleteCertificate", notFound());
+    const r = await gone.adapter.aws.action(
+      "remove_certificate",
+      gone.ctx(null, { state: "active" }),
+    );
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { certificate: null } } });
+  });
+
+  it("refuses a distribution that is not active, and one it cannot read (R16)", async () => {
+    const busy = setup();
+    await expect(
+      busy.adapter.aws.action("remove_certificate", busy.ctx(null, { state: "creating" })),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(busy.aws.seen.length).toBe(0);
+
+    const unread = setup();
+    unread.aws.on("lightsail", "GetDistributions", lightsailOk({ distributions: [] }));
+    await expect(
+      unread.adapter.aws.action("remove_certificate", unread.ctx(null, { state: "active" })),
+    ).rejects.toMatchObject({ code: "upstream_unavailable" });
+    expect(unread.calls()).not.toContain("DeleteCertificate");
+  });
+
+  it("replace_certificate detaches and deletes the old one and requests a new one for the new domain", async () => {
+    const { aws, adapter, ctx, body, calls, distribution } = setup();
+    aws.on("lightsail", "GetDistributions", distribution("Deployed", { certificateName: CERT }));
+    aws.on("lightsail", "DetachCertificateFromDistribution", lightsailOk({}));
+    aws.on("lightsail", "DeleteCertificate", lightsailOk({}));
+    // After the delete the old certificate is gone, so the new one is created.
+    aws.on("lightsail", "GetCertificates", notFound());
+    aws.on("lightsail", "CreateCertificate", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "replace_certificate",
+      ctx(null, { state: "active", payload: { domain: "New.Example.com" } }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: {
+          certificate: {
+            domain: "new.example.com",
+            status: "PENDING_VALIDATION",
+            attached: false,
+            records: [],
+          },
+        },
+      },
+    });
+    expect(calls().filter((c) => c !== "GetCertificates")).toEqual([
+      "GetDistributions",
+      "DetachCertificateFromDistribution",
+      "DeleteCertificate",
+      "CreateCertificate",
+    ]);
+    expect(body("CreateCertificate")).toMatchObject({
+      certificateName: CERT,
+      domainName: "new.example.com",
+    });
+  });
+
+  it("replace_certificate checks the new domain before any call, and waits when the old one still shows (R11, R16)", async () => {
+    const bad = setup();
+    for (const domain of ["*.x.com", "localhost", "", 5, undefined]) {
+      await expect(
+        bad.adapter.aws.action(
+          "replace_certificate",
+          bad.ctx(null, { state: "active", payload: { domain } }),
+        ),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+    expect(bad.aws.seen.length).toBe(0);
+
+    const slow = setup();
+    slow.aws.on("lightsail", "GetDistributions", slow.distribution("Deployed"));
+    slow.aws.on("lightsail", "DeleteCertificate", lightsailOk({}));
+    slow.aws.on("lightsail", "GetCertificates", certs("old.example.com"));
+    await expect(
+      slow.adapter.aws.action(
+        "replace_certificate",
+        slow.ctx(null, { state: "active", payload: { domain: "new.example.com" } }),
+      ),
+    ).rejects.toMatchObject({ code: "upstream_unavailable", retryable: true });
+    expect(slow.calls()).not.toContain("CreateCertificate");
+  });
+});

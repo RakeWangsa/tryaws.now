@@ -51,6 +51,12 @@ export const OPERATION_KINDS = [
   // WPA-P2: an admin clears the failure mark of a plan change (audited, reason required). No AWS call:
   // the adapter only patches the config. Never requested by a customer.
   "clear_plan_change_mark",
+  // WPU-G11: take a certificate off a resource and delete it, or replace it by one for new domains;
+  // the parameters of a database (set the whitelisted ones, read the list again).
+  "remove_certificate",
+  "replace_certificate",
+  "set_db_parameters",
+  "read_db_parameters",
   "reject_operation",
 ] as const;
 
@@ -118,6 +124,12 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   set_cache_behaviors: info("action", false, true),
   set_cdn_origin: info("action", false, true),
   clear_plan_change_mark: info("action", false, false),
+  // No resource and no data is destroyed (a certificate is free and is requested again at will), so
+  // there is no admin approval; the web tier asks a fresh sign-in and the typed domain (U10).
+  remove_certificate: info("action", false, true),
+  replace_certificate: info("action", false, true),
+  set_db_parameters: info("action", false, true),
+  read_db_parameters: info("action", false, true),
   reject_operation: info("engine", false, false),
 };
 

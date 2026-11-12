@@ -625,6 +625,111 @@ describe("custom domain and certificate (WPU-G8)", () => {
   });
 });
 
+describe("remove and replace the certificate (WPU-G11)", () => {
+  const CERT = awsResourceName("cert", RID);
+  const attached = { publicDomainNames: { [CERT]: ["app.example.com"] } };
+
+  it("remove_certificate takes the domain off the service, deletes the certificate and clears the saved one", async () => {
+    const { aws, adapter, ctx, body, calls, service } = setup();
+    aws.on("lightsail", "GetContainerServices", service("RUNNING", attached));
+    aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
+    aws.on("lightsail", "DeleteCertificate", lightsailOk({}));
+    const r = await adapter.aws.action("remove_certificate", ctx(null));
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { certificate: null } } });
+    expect(calls()).toEqual([
+      "GetContainerServices",
+      "UpdateContainerService",
+      "DeleteCertificate",
+    ]);
+    expect(body("UpdateContainerService")).toEqual({
+      serviceName: awsResourceName("container", RID),
+      publicDomainNames: {},
+    });
+    expect(body("DeleteCertificate")).toEqual({ certificateName: CERT });
+  });
+
+  it("a service without the domain only has the certificate deleted; a gone certificate is clean (R7)", async () => {
+    const loose = setup();
+    loose.aws.on("lightsail", "GetContainerServices", loose.service("RUNNING"));
+    loose.aws.on("lightsail", "DeleteCertificate", notFound());
+    const r = await loose.adapter.aws.action("remove_certificate", loose.ctx(null));
+    expect(loose.calls()).not.toContain("UpdateContainerService");
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { certificate: null } } });
+  });
+
+  it("replace_certificate removes the old one and requests the new domain under the same generated name", async () => {
+    const { aws, adapter, ctx, body, calls, service } = setup();
+    aws.on("lightsail", "GetContainerServices", service("RUNNING", attached));
+    aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
+    aws.on("lightsail", "DeleteCertificate", lightsailOk({}));
+    aws.on("lightsail", "GetCertificates", notFound());
+    aws.on("lightsail", "CreateCertificate", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "replace_certificate",
+      ctx(null, { payload: { domain: "New.Example.com" } }),
+    );
+    expect(r).toMatchObject({
+      patch: {
+        configMerge: {
+          certificate: { domain: "new.example.com", status: "PENDING_VALIDATION", attached: false },
+        },
+      },
+    });
+    expect(calls().filter((c) => c !== "GetCertificates")).toEqual([
+      "GetContainerServices",
+      "UpdateContainerService",
+      "DeleteCertificate",
+      "CreateCertificate",
+    ]);
+    expect(body("CreateCertificate")).toMatchObject({
+      certificateName: CERT,
+      domainName: "new.example.com",
+    });
+  });
+
+  it("refuses a bad new domain before any call, a service it cannot read, and a certificate that still shows", async () => {
+    const bad = setup();
+    for (const domain of ["*.x.com", "localhost", "", null, 7]) {
+      await expect(
+        bad.adapter.aws.action("replace_certificate", bad.ctx(null, { payload: { domain } })),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+    expect(bad.aws.seen.length).toBe(0);
+
+    const unread = setup();
+    unread.aws.on("lightsail", "GetContainerServices", lightsailOk({ containerServices: [] }));
+    await expect(
+      unread.adapter.aws.action("remove_certificate", unread.ctx(null)),
+    ).rejects.toMatchObject({
+      code: "upstream_unavailable",
+    });
+    expect(unread.calls()).not.toContain("DeleteCertificate");
+
+    const slow = setup();
+    slow.aws.on("lightsail", "GetContainerServices", slow.service("RUNNING"));
+    slow.aws.on("lightsail", "DeleteCertificate", lightsailOk({}));
+    slow.aws.on(
+      "lightsail",
+      "GetCertificates",
+      lightsailOk({
+        certificates: [
+          {
+            certificateName: CERT,
+            certificateDetail: { name: CERT, domainName: "old.example.com", status: "ISSUED" },
+          },
+        ],
+      }),
+    );
+    await expect(
+      slow.adapter.aws.action(
+        "replace_certificate",
+        slow.ctx(null, { payload: { domain: "new.example.com" } }),
+      ),
+    ).rejects.toMatchObject({ code: "upstream_unavailable", retryable: true });
+    expect(slow.calls()).not.toContain("CreateCertificate");
+  });
+});
+
 describe("no registry login is ever issued", () => {
   it("no step of any method calls CreateContainerServiceRegistryLogin or sets private registry access", async () => {
     const { aws, adapter, ctx, service } = setup();

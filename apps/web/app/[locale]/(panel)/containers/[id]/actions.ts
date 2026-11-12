@@ -9,6 +9,8 @@ import {
   CONTAINER_ENDPOINT,
   CONTAINER_PLAN,
   CONTAINER_REFRESH_CERTIFICATE,
+  CONTAINER_REMOVE_CERTIFICATE,
+  CONTAINER_REPLACE_CERTIFICATE,
   CONTAINER_REQUEST_CERTIFICATE,
   consoleCore,
   type ConsoleSpec,
@@ -86,4 +88,13 @@ export const setContainerEndpointAction = consoleAction(CONTAINER_ENDPOINT, [
   "port",
   "healthCheckPath",
   "remove",
+]);
+
+// WPU-G11: remove or replace the certificate (typed domain and a fresh sign-in, U10).
+export const removeContainerCertificateAction = consoleAction(CONTAINER_REMOVE_CERTIFICATE, [
+  "confirmName",
+]);
+export const replaceContainerCertificateAction = consoleAction(CONTAINER_REPLACE_CERTIFICATE, [
+  "domain",
+  "confirmName",
 ]);

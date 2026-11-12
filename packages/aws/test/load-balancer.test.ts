@@ -221,6 +221,127 @@ describe("suspend, resume, destroy", () => {
   });
 });
 
+describe("remove and replace the certificate (WPU-G11)", () => {
+  const NAME = awsResourceName("lbcert", RID);
+  const listed = (isAttached = true) =>
+    lightsailOk({
+      tlsCertificates: [
+        { name: NAME, domainName: "shop.example.com", status: "ISSUED", isAttached },
+      ],
+    });
+  const act = (
+    h: ReturnType<typeof setup>,
+    kind: OperationKind,
+    payload: unknown,
+    state = "active",
+    config: unknown = {},
+  ) => {
+    const c = h.ctx(null, { kind, payload });
+    return h.adapter.aws.action(kind, { ...c, resource: { ...c.resource, state, config } });
+  };
+
+  it("remove_certificate deletes the certificate under its generated name and clears the saved one", async () => {
+    const h = setup(OWN);
+    h.aws.on("lightsail", "GetLoadBalancerTlsCertificates", listed());
+    h.aws.on("lightsail", "DeleteLoadBalancerTlsCertificate", lightsailOk({ operations: [] }));
+    const r = await act(h, "remove_certificate", {});
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { certificate: null } } });
+    expect(h.calls()).toEqual([
+      "GetLoadBalancerTlsCertificates",
+      "DeleteLoadBalancerTlsCertificate",
+    ]);
+    expect(h.bodyOf("DeleteLoadBalancerTlsCertificate")).toEqual({
+      loadBalancerName: LB,
+      certificateName: NAME,
+      force: true,
+    });
+  });
+
+  it("turns the HTTPS redirect off first when the saved settings say it is on, so the site stays reachable", async () => {
+    const h = setup(OWN);
+    h.aws.on("lightsail", "GetLoadBalancerTlsCertificates", listed());
+    h.aws.on("lightsail", "UpdateLoadBalancerAttribute", lightsailOk({ operations: [] }));
+    h.aws.on("lightsail", "DeleteLoadBalancerTlsCertificate", lightsailOk({ operations: [] }));
+    const r = await act(h, "remove_certificate", {}, "active", { httpsRedirect: true });
+    expect(h.calls()).toEqual([
+      "GetLoadBalancerTlsCertificates",
+      "UpdateLoadBalancerAttribute",
+      "DeleteLoadBalancerTlsCertificate",
+    ]);
+    expect(h.bodyOf("UpdateLoadBalancerAttribute")).toEqual({
+      loadBalancerName: LB,
+      attributeName: "HttpsRedirectionEnabled",
+      attributeValue: "false",
+    });
+    expect(r).toMatchObject({
+      patch: { configMerge: { certificate: null, httpsRedirect: false } },
+    });
+  });
+
+  it("a certificate that is gone is a clean result and calls no delete (R7)", async () => {
+    const h = setup(OWN);
+    h.aws.on("lightsail", "GetLoadBalancerTlsCertificates", lightsailOk({ tlsCertificates: [] }));
+    const r = await act(h, "remove_certificate", {});
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { certificate: null } } });
+    expect(h.calls()).toEqual(["GetLoadBalancerTlsCertificates"]);
+  });
+
+  it("replace_certificate removes the old certificate, then requests one for the new domain", async () => {
+    const h = setup(OWN);
+    h.aws.on(
+      "lightsail",
+      "GetLoadBalancerTlsCertificates",
+      lightsailOk({ tlsCertificates: [{ name: NAME, domainName: "old.example.com" }] }),
+      lightsailOk({ tlsCertificates: [] }),
+    );
+    h.aws.on("lightsail", "DeleteLoadBalancerTlsCertificate", lightsailOk({ operations: [] }));
+    h.aws.on("lightsail", "CreateLoadBalancerTlsCertificate", lightsailOk({ operations: [] }));
+    const r = await act(h, "replace_certificate", { domain: "New.Example.com" });
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: {
+          certificate: { domain: "new.example.com", status: "PENDING_VALIDATION", attached: false },
+        },
+      },
+    });
+    expect(h.calls()).toEqual([
+      "GetLoadBalancerTlsCertificates",
+      "DeleteLoadBalancerTlsCertificate",
+      "GetLoadBalancerTlsCertificates",
+      "CreateLoadBalancerTlsCertificate",
+    ]);
+    expect(h.bodyOf("CreateLoadBalancerTlsCertificate")).toEqual({
+      loadBalancerName: LB,
+      certificateName: NAME,
+      certificateDomainName: "new.example.com",
+    });
+  });
+
+  it("refuses a bad new domain before any call, an inactive balancer, and an old certificate that still shows (R11, R16)", async () => {
+    for (const domain of ["*.x.com", "localhost", "", 5, undefined]) {
+      const bad = setup(OWN);
+      await expect(act(bad, "replace_certificate", { domain })).rejects.toMatchObject({
+        code: "validation",
+      });
+      expect(bad.aws.seen.length).toBe(0);
+    }
+    const busy = setup(OWN);
+    await expect(act(busy, "remove_certificate", {}, "creating")).rejects.toMatchObject({
+      code: "conflict",
+    });
+    expect(busy.aws.seen.length).toBe(0);
+
+    const slow = setup(OWN);
+    slow.aws.on("lightsail", "GetLoadBalancerTlsCertificates", listed());
+    slow.aws.on("lightsail", "DeleteLoadBalancerTlsCertificate", lightsailOk({ operations: [] }));
+    await expect(
+      act(slow, "replace_certificate", { domain: "new.example.com" }),
+    ).rejects.toMatchObject({ code: "upstream_unavailable", retryable: true });
+    expect(slow.calls()).not.toContain("CreateLoadBalancerTlsCertificate");
+  });
+});
+
 describe("console actions (WPU-G7)", () => {
   const act = (
     h: ReturnType<typeof setup>,

@@ -895,6 +895,7 @@ describe("security review rules (WP0-T5 review)", () => {
     const s = statementsOf(doc).find((x) => actionsOf(x).includes("lightsail:UpdateBucket"));
     expect(actionsOf(s).sort()).toEqual([
       "lightsail:AttachCertificateToDistribution",
+      "lightsail:DetachCertificateFromDistribution",
       "lightsail:UpdateBucket",
       "lightsail:UpdateDistribution",
       "lightsail:UpdateDistributionBundle",

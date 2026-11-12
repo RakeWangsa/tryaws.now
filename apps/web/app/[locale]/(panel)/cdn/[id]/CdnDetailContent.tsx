@@ -39,6 +39,8 @@ export interface CdnFormIds {
   planCancel: string;
   cert: string;
   certRefresh: string;
+  certRemove: string;
+  certReplace: string;
 }
 
 // Used when no Server Action is passed (the static mockup states): the form refuses (R16).
@@ -56,6 +58,8 @@ export function CdnDetailContent({
   planAction = refuse,
   certRequestAction = refuse,
   certRefreshAction = refuse,
+  certRemoveAction = refuse,
+  certReplaceAction = refuse,
   ids,
   defaultTab,
   extra = null,
@@ -73,6 +77,8 @@ export function CdnDetailContent({
   planAction?: Action;
   certRequestAction?: Action;
   certRefreshAction?: Action;
+  certRemoveAction?: Action;
+  certReplaceAction?: Action;
   ids?: CdnFormIds;
   defaultTab?: string;
   /** The cache flush form (WPU-G7), built by the page. */
@@ -227,6 +233,10 @@ export function CdnDetailContent({
     <CertificatePanel
       requestAction={certRequestAction}
       refreshAction={certRefreshAction}
+      removeAction={certRemoveAction}
+      replaceAction={certReplaceAction}
+      removeRequestId={ids?.certRemove ?? requestId}
+      replaceRequestId={ids?.certReplace ?? requestId}
       idField="cdnId"
       resourceId={cdn.id}
       requestId={ids?.cert ?? requestId}

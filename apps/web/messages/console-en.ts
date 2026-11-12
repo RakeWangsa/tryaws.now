@@ -37,6 +37,13 @@ export const consoleEn: Same<typeof consoleBn> = {
         "The request to change the public endpoint was taken. A new deployment starts.",
       cacheQueued: "The request to change the cache behaviour was taken.",
       originQueued: "The request to change the origin was taken.",
+      certificateRemoveQueued:
+        "The request to remove the certificate was taken. Look at this page again in a few minutes.",
+      certificateReplaceQueued:
+        "The request to replace the certificate was taken. The validation records of the new certificate will show here in a few minutes.",
+      parametersQueued: "The request to change the parameters was taken.",
+      parametersReadQueued: "The request to read the parameter list again was taken.",
+      rebootQueued: "The request to reboot the database was taken.",
     },
     tab: {
       endpoint: "Public endpoint",
@@ -89,6 +96,24 @@ export const consoleEn: Same<typeof consoleBn> = {
       recordName: "Name",
       recordType: "Type",
       recordValue: "Value",
+      change: {
+        title: "Replace or remove the certificate",
+        intro:
+          "When you remove or replace the certificate, HTTPS stops working for your domain until a new certificate is validated and attached. You may be asked to sign in again for your security. Certificates are free; you can request one again later.",
+        lbNote:
+          "If the HTTPS redirect of the load balancer is on, it is turned off before the certificate goes, so the site does not become unreachable.",
+        replaceTitle: "Get a certificate for another domain",
+        replaceIntro:
+          "The old certificate is removed and a new one is requested for the new domain. Then add the new validation records to your DNS and press “Check status and attach”.",
+        newDomain: "New domain",
+        newDomainHint: "For example www.example.com. A wildcard (*) is not accepted.",
+        typeLabel: "To confirm, type the current domain: {domain}",
+        replaceSubmit: "Replace certificate",
+        removeTitle: "Remove the certificate",
+        removeIntro:
+          "The certificate is taken off and deleted. The domain will no longer serve HTTPS. You can request a new certificate later.",
+        removeSubmit: "Remove certificate",
+      },
       statusText: {
         PENDING_VALIDATION: "Waiting for validation",
         ISSUED: "Issued",
@@ -227,6 +252,47 @@ export const consoleEn: Same<typeof consoleBn> = {
           FAILED: "Failed",
           UNKNOWN: "Unknown",
         },
+      },
+    },
+    params: {
+      title: "Database parameters",
+      intro:
+        "This shows the safe parameters of the parameter group of the database. Other parameters are not shown and cannot be changed. Some changes work at once, some after the database is rebooted.",
+      inactive: "Parameters can be changed only while the database is running.",
+      lastKnown: "Last known list.",
+      readAt: "Read on:",
+      notRead: "The list has not been read yet.",
+      read: "Read the list again",
+      empty: {
+        title: "The list has not been read yet",
+        body: "Press “Read the list again”. Look at this page again in a few minutes.",
+      },
+      none: {
+        title: "No parameters to show",
+        body: "No parameter of the safe list was found for this database.",
+      },
+      rebootPendingTitle: "Changes are waiting for a reboot.",
+      rebootPending: "Some changes will work after the database is rebooted. You can reboot below.",
+      nothingChanged: "No value was changed.",
+      apply: {
+        immediate: "A change works at once",
+        "pending-reboot": "A change works after a reboot",
+        unknown: "It is not known when a change works",
+      },
+      notChangeable: "cannot be changed",
+      hint: "Now: {current}. {apply}.",
+      valueUnknown: "unknown",
+      on: "On (1)",
+      off: "Off (0)",
+      save: "Save parameters",
+      noneChangeable: "None of the parameters in this list can be changed now.",
+      reboot: {
+        title: "Reboot the database",
+        intro:
+          "During a reboot the database is not reachable for a short time. After the reboot every waiting parameter change works.",
+        acknowledge: "I understand that the database will be unavailable for a short time.",
+        acknowledgeNeeded: "Tick this box to reboot.",
+        submit: "Reboot",
       },
     },
     db: {

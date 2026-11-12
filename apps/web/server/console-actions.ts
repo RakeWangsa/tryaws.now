@@ -6,8 +6,11 @@ import {
   checkedContainerCertificateDomain,
   checkedDomainName,
   checkedHealthPath,
+  checkedDbParameterChanges,
   checkedMaintenanceWindow,
   containerPlanFrom,
+  DB_PARAMETER_RULES,
+  dbEngineFrom,
   parseCachePolicy,
   planApplyInFlight,
   planFailedFor,
@@ -64,6 +67,13 @@ export interface ConsoleSpec {
    */
   alsoOwns?: { field: string; families: readonly string[]; states: readonly string[] };
   payload(input: Record<string, unknown>): ConsolePayload;
+  /**
+   * WPU-G11. The action takes something away that works now (a certificate and with it the HTTPS of a
+   * custom domain): it needs a fresh sign-in (U10) and the customer types the text that `typed` gives
+   * for the row (the domain of the certificate). No text, or another text, is `name_mismatch`. This is
+   * not an admin approval: nothing is destroyed, a certificate is free and is requested again at will.
+   */
+  confirm?: { typed(row: ResourceSummary): string };
   /**
    * After the row of the customer was read and its state checked: the checks that need the row or a
    * second read (the plan is in the catalog, the origin is the customer's own, the saved deployment
@@ -506,6 +516,195 @@ export const CONTAINER_ENDPOINT: ConsoleSpec = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// WPU-G11: remove or replace a certificate, and the parameters of a database.
+
+/** The domain of the certificate that is saved on the resource; "" when there is none. */
+const certificateDomainOf = (row: ResourceSummary): string =>
+  certificateFactsOf(configOf(row)["certificate"])?.domain ?? "";
+
+const confirmDomain = { typed: certificateDomainOf };
+
+const removeSpec = (
+  family: string,
+  idField: string,
+  prefix: string,
+  limitKey: string,
+): ConsoleSpec => ({
+  family,
+  idField,
+  kind: "remove_certificate",
+  keyPrefix: `${prefix}-cert-remove`,
+  audit: `${prefix}.remove_certificate`,
+  done: "certificateRemoveQueued",
+  states: ["active"],
+  limitKey,
+  confirm: confirmDomain,
+  payload: () => ({ ok: true, payload: {} }),
+});
+
+/** Replace: the new domain is checked like a request; the old certificate is named by typing it. */
+const replaceSpec = (
+  family: string,
+  idField: string,
+  prefix: string,
+  limitKey: string,
+  domainCheck: (value: unknown) => string | null,
+): ConsoleSpec => ({
+  family,
+  idField,
+  kind: "replace_certificate",
+  keyPrefix: `${prefix}-cert-replace`,
+  audit: `${prefix}.replace_certificate`,
+  done: "certificateReplaceQueued",
+  states: ["active"],
+  limitKey,
+  confirm: confirmDomain,
+  payload(input) {
+    const domain = domainCheck(input["domain"]);
+    return domain === null
+      ? { ok: false, fields: { domain: "invalid" } }
+      : { ok: true, payload: { domain } };
+  },
+  async finalize({ payload, row }) {
+    // The same domain again is not a replacement.
+    if (payload["domain"] === certificateDomainOf(row)) {
+      throw new Refusal("validation", { domain: "invalid" });
+    }
+    return payload;
+  },
+});
+
+export const LB_REMOVE_CERTIFICATE = removeSpec("load_balancer", "loadBalancerId", "lb", "lb.cert");
+export const LB_REPLACE_CERTIFICATE = replaceSpec(
+  "load_balancer",
+  "loadBalancerId",
+  "lb",
+  "lb.cert",
+  checkedDomainName,
+);
+export const CONTAINER_REMOVE_CERTIFICATE = removeSpec(
+  "container_service",
+  "containerId",
+  "container",
+  "container.cert",
+);
+export const CONTAINER_REPLACE_CERTIFICATE = replaceSpec(
+  "container_service",
+  "containerId",
+  "container",
+  "container.cert",
+  checkedContainerCertificateDomain,
+);
+export const CDN_REMOVE_CERTIFICATE = removeSpec("cdn", "cdnId", "cdn", "cdn.cert");
+export const CDN_REPLACE_CERTIFICATE = replaceSpec(
+  "cdn",
+  "cdnId",
+  "cdn",
+  "cdn.cert",
+  checkedContainerCertificateDomain,
+);
+
+/** Every parameter name of the whitelist of either engine: the only form fields that are read. */
+export const DB_PARAMETER_FIELDS: readonly string[] = [
+  ...new Set([...DB_PARAMETER_RULES.mysql, ...DB_PARAMETER_RULES.postgres].map((r) => r.name)),
+];
+
+const savedParameters = (row: ResourceSummary) => {
+  const saved = configOf(row)["parameters"];
+  const rec =
+    typeof saved === "object" && saved !== null && !Array.isArray(saved)
+      ? (saved as Record<string, unknown>)
+      : {};
+  const items = Array.isArray(rec["items"]) ? rec["items"] : [];
+  return { engine: dbEngineFrom(rec["engine"]), items };
+};
+
+/**
+ * Change database parameters. The form carries a field for each parameter that can change, named by the
+ * whitelist; a field that is empty or equal to the saved value is no change. The engine is the one the
+ * adapter saved from the live database, and the adapter checks it again (R11, R16).
+ */
+export const DB_PARAMETERS: ConsoleSpec = {
+  family: "database",
+  idField: "databaseId",
+  kind: "set_db_parameters",
+  keyPrefix: "db-parameters",
+  audit: "db.set_parameters",
+  done: "parametersQueued",
+  states: ["active"],
+  limitKey: "db.parameters",
+  payload(input) {
+    const wanted: Record<string, unknown> = {};
+    for (const name of DB_PARAMETER_FIELDS) {
+      const value = clean(input[name]);
+      if (value !== undefined) wanted[name] = value;
+    }
+    return Object.keys(wanted).length === 0
+      ? { ok: false, fields: { parameters: "invalid" } }
+      : { ok: true, payload: { parameters: wanted } };
+  },
+  async finalize({ payload, row }) {
+    const saved = savedParameters(row);
+    // Without a saved list there is no engine: the customer reads the list first (R16).
+    if (saved.engine === null) throw new Refusal("not_allowed");
+    const checked = checkedDbParameterChanges(saved.engine, payload["parameters"]);
+    if (!checked.ok) throw new Refusal("validation", checked.fields ?? { parameters: "invalid" });
+    const known = new Map(
+      saved.items
+        .filter((i): i is Record<string, unknown> => typeof i === "object" && i !== null)
+        .map((i) => [i["name"], i["value"]] as const),
+    );
+    // A parameter the saved list does not show as changeable is not changed.
+    const changeable = new Set(
+      saved.items
+        .filter((i): i is Record<string, unknown> => typeof i === "object" && i !== null)
+        .filter((i) => i["changeable"] === true)
+        .map((i) => i["name"]),
+    );
+    const changes: Record<string, string> = {};
+    const bad: Record<string, string> = {};
+    for (const c of checked.value) {
+      if (!changeable.has(c.name)) bad[c.name] = "invalid";
+      else if (known.get(c.name) !== c.value) changes[c.name] = c.value;
+    }
+    if (Object.keys(bad).length > 0) throw new Refusal("validation", bad);
+    if (Object.keys(changes).length === 0) {
+      throw new Refusal("validation", { parameters: "invalid" });
+    }
+    return { parameters: changes };
+  },
+};
+
+/** Read the parameter list again (it is kept as "last known"; there is no live read from the page). */
+export const DB_READ_PARAMETERS: ConsoleSpec = {
+  family: "database",
+  idField: "databaseId",
+  kind: "read_db_parameters",
+  keyPrefix: "db-parameters-read",
+  audit: "db.read_parameters",
+  done: "parametersReadQueued",
+  states: ["active"],
+  limitKey: "db.parameters",
+  payload: () => ({ ok: true, payload: {} }),
+};
+
+/** Reboot the database. It is not reachable for a short time, so the customer ticks the warning. */
+export const DB_REBOOT: ConsoleSpec = {
+  family: "database",
+  idField: "databaseId",
+  kind: "reboot",
+  keyPrefix: "db-reboot",
+  audit: "db.reboot",
+  done: "rebootQueued",
+  states: ["active"],
+  limitKey: "db.reboot",
+  payload: (input) =>
+    input["acknowledge"] === "yes"
+      ? { ok: true, payload: {} }
+      : { ok: false, fields: { acknowledge: "invalid" } },
+};
+
 /** The core of one console action. */
 export function consoleCore(
   spec: ConsoleSpec,
@@ -519,11 +718,18 @@ export function consoleCore(
     if (!built.ok) Object.assign(bad, built.fields);
     return frame(
       deps,
-      { destructive: false, limits: FAMILY_WRITE_LIMIT(spec.limitKey) },
+      { destructive: spec.confirm !== undefined, limits: FAMILY_WRITE_LIMIT(spec.limitKey) },
       parseOf(bad),
       async (repos, session) => {
         const row = await ownResource(repos, spec.family, id);
         if (!spec.states.includes(row.state)) throw new Refusal("not_allowed");
+        if (spec.confirm !== undefined) {
+          const expected = spec.confirm.typed(row);
+          // No saved certificate means there is nothing to take away.
+          if (expected === "") throw new Refusal("not_allowed");
+          const typed = typeof input["confirmName"] === "string" ? input["confirmName"].trim() : "";
+          if (typed.toLowerCase() !== expected) throw new Refusal("name_mismatch");
+        }
         if (spec.alsoOwns !== undefined) {
           // The second row is the customer's own or it is nothing (R8); a family or state that the
           // action does not serve answers the same way.
