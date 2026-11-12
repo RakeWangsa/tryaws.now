@@ -1,0 +1,146 @@
+import type { domainsBn } from "./domains-bn.ts";
+
+type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
+
+export const domainsEn: Same<typeof domainsBn> = {
+  Domains: {
+    meta: { title: "Domains" },
+    heading: "Domains",
+    awsNote:
+      "Every domain is registered through Amazon Route 53. A registered domain is not refundable.",
+    flagOff: {
+      title: "Domains are coming soon",
+      body: "This service is not open in your market yet. You will be able to buy it here once it opens.",
+    },
+    kycRequired: {
+      title: "Verify your identity first",
+      body: "Identity verification must be complete before you can buy a domain. Come back here when it is done.",
+      action: "Write to support",
+    },
+    state: {
+      pending: "Registering",
+      review: "In review",
+      awaiting_verification: "Waiting for e-mail check",
+      registered: "Registered",
+      failed: "Problem",
+      expired: "Expired",
+    },
+    search: {
+      label: "Domain name",
+      placeholder: "your-name.com",
+      submit: "Search",
+      hint: "Type the name with letters, digits and hyphens, ending with the extension.",
+      invalid: "This name is not valid, or we do not sell that extension.",
+      unavailableService: "Searching for names does not work right now. Try again in a moment.",
+      result: {
+        available: "{name} is available",
+        unavailable: "{name} is already taken",
+        premium: "{name} is a premium name, which we do not sell",
+        unknown: "{name} could not be checked now. Try again later.",
+        price: "per year",
+        reviewNote:
+          "This extension needs extra information. Your order is registered after our team has reviewed and approved it.",
+        register: "Register",
+      },
+    },
+    tlds: {
+      caption: "Domain extensions and yearly prices",
+      tld: "Extension",
+      price: "Per year",
+      note: "Note",
+      review: "Needs review",
+    },
+    list: {
+      heading: "Your domains",
+      caption: "Your domains",
+      name: "Name",
+      state: "State",
+      expires: "Expires",
+      none: "—",
+      empty: {
+        title: "No domains yet",
+        body: "Search for a name above to register your first domain.",
+      },
+    },
+    new: {
+      meta: { title: "Register a domain" },
+      heading: "Register a domain",
+      intro:
+        "You will be the registered owner of this domain. The details below go to the registry, so enter them correctly.",
+      noRefund: "A registered domain is not refundable.",
+      invalid: {
+        title: "Domain name not found",
+        body: "The name is not valid or the extension is not for sale. Search again.",
+        action: "Search for a domain",
+      },
+      step: { contact: "Registered owner", confirm: "Type the name again to confirm" },
+      field: {
+        contactType: "Type",
+        person: "Person",
+        company: "Company",
+        firstName: "First name",
+        lastName: "Last name",
+        organizationName: "Company name",
+        email: "E-mail",
+        emailHint:
+          "The verification e-mail goes to this address. If you do not follow its link, the registry may suspend the domain.",
+        phoneNumber: "Phone",
+        phoneHint: "Use this form: +880.1712345678",
+        addressLine1: "Address",
+        addressLine2: "Address (2)",
+        city: "City",
+        state: "State or division",
+        countryCode: "Country code",
+        countryHint: "Two letters, for example BD",
+        zipCode: "Postal code",
+        confirmName: "Type the domain name again",
+        confirmHint: "Type exactly: {name}. If the name does not match, no order is made.",
+      },
+      mismatch: "The name you typed does not match the domain name.",
+      taken: "This name is already in another order.",
+      submit: "Go to review",
+      summary: {
+        title: "Summary",
+        name: "Domain",
+        term: "Term",
+        termValue: "1 year",
+        price: "Price",
+        review: "Approval needed",
+        reviewYes: "Yes, our team checks before it is registered",
+      },
+    },
+    order: { open: "Open the domain" },
+    detail: {
+      meta: { title: "Domain details" },
+      back: "Back to domains",
+      notFound: {
+        title: "Domain not found",
+        body: "You have no domain with this name.",
+      },
+      expires: "Expires",
+      period: "Current term ends",
+      state: "State",
+      nameServers: "Name servers",
+      noNameServers: "They show here once the registration is done.",
+      verification: {
+        title: "E-mail check of the owner",
+        pending:
+          "Waiting. A link was sent to your e-mail, follow it. If you do not, the domain may be suspended.",
+        done: "Done",
+        expired: "Expired. Write to support for a new e-mail.",
+        unknown: "Not known yet",
+      },
+      renewal: {
+        title: "Renewal",
+        note: "Renewal is paid in advance. We remind you 60, 30 and 7 days before it expires.",
+        on: "Auto-renew is on",
+        off: "Auto-renew is off",
+        turnOn: "Turn on",
+        turnOff: "Turn off",
+        autoRenewOn: "Auto-renew is on.",
+        autoRenewOff: "Auto-renew is off.",
+      },
+      noDelete: "We never delete a domain. When it expires, it simply lapses.",
+    },
+  },
+};
