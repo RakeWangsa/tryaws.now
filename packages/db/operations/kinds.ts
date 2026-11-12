@@ -38,6 +38,8 @@ export const OPERATION_KINDS = [
   "refresh_certificate",
   "set_db_options",
   "set_bucket_versioning",
+  // WPU-G9: open or close a bucket to one instance of the customer.
+  "set_bucket_resource_access",
   "reset_cache",
   "reject_operation",
 ] as const;
@@ -98,6 +100,7 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   refresh_certificate: info("action", false, true),
   set_db_options: info("action", false, true),
   set_bucket_versioning: info("action", false, true),
+  set_bucket_resource_access: info("action", false, true),
   reset_cache: info("action", false, true),
   reject_operation: info("engine", false, false),
 };

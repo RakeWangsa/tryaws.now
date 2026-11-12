@@ -1,5 +1,6 @@
 import {
   CreateRelationalDatabaseCommand,
+  CreateRelationalDatabaseFromSnapshotCommand,
   CreateRelationalDatabaseSnapshotCommand,
   DeleteRelationalDatabaseCommand,
   DeleteRelationalDatabaseSnapshotCommand,
@@ -13,7 +14,10 @@ import {
 import {
   awsResourceName,
   checkedBackupWindow,
+  checkedMaintenanceWindow,
   parseDatabaseConfig,
+  pointInTimeWindow,
+  windowsOverlap,
   resourceTags,
   stepDone,
   stepNext,
@@ -23,6 +27,7 @@ import {
   type StepResult,
 } from "@tc/core";
 import { AwsError } from "../errors";
+import { isUuid } from "./shared";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 
 /**
@@ -49,6 +54,86 @@ const POLL_SECONDS = 15;
 const MAX_WAIT_MS = 40 * 60 * 1000;
 
 type Ctx = OpCtx<DatabaseConfig>;
+
+const HOST_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const HOST = new RegExp(`^${HOST_LABEL}(?:\\.${HOST_LABEL}){1,7}$`);
+const USERNAME = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
+
+/**
+ * The connection facts the customer needs (U6): the endpoint, the port and the master user name. Each
+ * is stored only if it has the plain shape, else it is left out (R16). The password is never read here.
+ */
+function connectionFacts(found: {
+  masterEndpoint?: { address?: string; port?: number };
+  masterUsername?: string;
+}): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const address = found.masterEndpoint?.address;
+  const port = found.masterEndpoint?.port;
+  if (typeof address === "string" && address.length <= 253 && HOST.test(address)) {
+    out.endpointAddress = address;
+  }
+  if (typeof port === "number" && Number.isSafeInteger(port) && port >= 1 && port <= 65535) {
+    out.endpointPort = port;
+  }
+  if (typeof found.masterUsername === "string" && USERNAME.test(found.masterUsername)) {
+    out.masterUsername = found.masterUsername;
+  }
+  return out;
+}
+
+type Restore =
+  | { readonly kind: "snapshot"; readonly snapshotName: string }
+  | { readonly kind: "point_in_time"; readonly sourceName: string; readonly at: Date };
+
+/**
+ * WPU-G9. The payload of a restore names rows, never AWS names. A snapshot must be the customer's
+ * own active backup of a database of the customer; a point in time must name the customer's own
+ * database and an instant inside the retention window (R8, R11, R16). null = a plain create.
+ */
+async function restoreOf(ctx: Ctx): Promise<Restore | null> {
+  const p = ctx.operation.payload;
+  const payload = typeof p === "object" && p !== null ? (p as Record<string, unknown>) : {};
+  const backupId = payload.restoreFromBackupId;
+  const sourceId = payload.restoreSourceId;
+  if (backupId === undefined && sourceId === undefined) return null;
+  if (backupId !== undefined && sourceId !== undefined) throw fail("validation");
+  const mine = (row: { customerId: string } | null): boolean =>
+    row !== null && row.customerId === ctx.resource.customerId;
+  if (backupId !== undefined) {
+    if (!isUuid(backupId)) throw fail("validation");
+    const backup = await ctx.owned(backupId);
+    if (
+      backup === null ||
+      !mine(backup) ||
+      backup.family !== "backup" ||
+      backup.state !== "active" ||
+      backup.parentResourceId === null
+    ) {
+      throw fail("validation");
+    }
+    const parent = await ctx.owned(backup.parentResourceId);
+    if (parent === null || !mine(parent) || parent.family !== "database") throw fail("validation");
+    return { kind: "snapshot", snapshotName: awsResourceName("snapshot", backup.id) };
+  }
+  if (!isUuid(sourceId) || typeof payload.restoreTime !== "string") throw fail("validation");
+  const source = await ctx.owned(sourceId);
+  if (
+    source === null ||
+    !mine(source) ||
+    source.family !== "database" ||
+    source.state === "destroyed"
+  ) {
+    throw fail("validation");
+  }
+  const at = new Date(payload.restoreTime);
+  if (Number.isNaN(at.getTime())) throw fail("validation");
+  const window = pointInTimeWindow(ctx.clock.now());
+  if (at.getTime() < window.from.getTime() || at.getTime() > window.to.getTime()) {
+    throw fail("validation");
+  }
+  return { kind: "point_in_time", sourceName: awsResourceName("database", source.id), at };
+}
 
 function fail(code: "validation" | "conflict" | "upstream_unavailable" | "internal"): AwsError {
   return new AwsError({ code, retryable: false });
@@ -125,6 +210,29 @@ export function createDatabaseAdapter(deps: DatabaseDeps): ProductAdapter<Databa
         const spec = await deps.loadLaunch({ productId: ctx.config.productId });
         if (spec === null) throw fail("validation");
         const orderId = (ctx.operation.payload as { orderId?: unknown } | null)?.orderId;
+        const restore = await restoreOf(ctx);
+        if (restore !== null) {
+          // A NEW database from a snapshot or a point in time. It keeps the master user of the source;
+          // the password is read on demand by access-details (U9).
+          await client(ctx).send(
+            new CreateRelationalDatabaseFromSnapshotCommand({
+              relationalDatabaseName: n.database,
+              availabilityZone: `${ctx.region}a`,
+              relationalDatabaseBundleId: spec.bundleId,
+              publiclyAccessible: false,
+              ...(restore.kind === "snapshot"
+                ? { relationalDatabaseSnapshotName: restore.snapshotName }
+                : { sourceRelationalDatabaseName: restore.sourceName, restoreTime: restore.at }),
+              tags: resourceTags({
+                env: ctx.env,
+                customerId: ctx.resource.customerId,
+                resourceId: ctx.resource.id,
+                orderId: orderId as string,
+              }),
+            }),
+          );
+          return stepNext("wait_available", { awsName: n.database });
+        }
         await client(ctx).send(
           new CreateRelationalDatabaseCommand({
             relationalDatabaseName: n.database,
@@ -147,7 +255,14 @@ export function createDatabaseAdapter(deps: DatabaseDeps): ProductAdapter<Databa
       case "wait_available": {
         const found = await readDatabase(ctx);
         const state = found?.state;
-        if (state === "available") return stepDone({ state: "active", awsName: n.database });
+        if (state === "available") {
+          const facts = connectionFacts(found ?? {});
+          return stepDone({
+            state: "active",
+            awsName: n.database,
+            ...(Object.keys(facts).length > 0 ? { configMerge: facts } : {}),
+          });
+        }
         if (found === null || state === "creating" || state === undefined) {
           budget(ctx);
           return stepWait("wait_available", pollAt(ctx));
@@ -290,15 +405,40 @@ export function createDatabaseAdapter(deps: DatabaseDeps): ProductAdapter<Databa
         const payload = typeof p === "object" && p !== null ? (p as Record<string, unknown>) : {};
         const window = payload.backupWindow;
         const open = payload.publiclyAccessible;
-        if (window === undefined && open === undefined) throw fail("validation");
+        const maintenance = payload.maintenanceWindow;
+        if (window === undefined && open === undefined && maintenance === undefined) {
+          throw fail("validation");
+        }
         if (window !== undefined && checkedBackupWindow(window) === null) throw fail("validation");
         if (open !== undefined && typeof open !== "boolean") throw fail("validation");
+        if (maintenance !== undefined && checkedMaintenanceWindow(maintenance) === null) {
+          throw fail("validation");
+        }
+        // Lightsail refuses a backup window and a maintenance window that overlap: the new value is
+        // compared with the one that is stored for the other.
+        const stored =
+          typeof ctx.resource.config === "object" && ctx.resource.config !== null
+            ? (ctx.resource.config as Record<string, unknown>)
+            : {};
+        const backupNow = (window ?? stored.backupWindow) as unknown;
+        const maintNow = (maintenance ?? stored.maintenanceWindow) as unknown;
+        if (
+          typeof backupNow === "string" &&
+          typeof maintNow === "string" &&
+          (window !== undefined || maintenance !== undefined) &&
+          windowsOverlap(backupNow, maintNow)
+        ) {
+          throw fail("validation");
+        }
         if (ctx.resource.state !== "active") throw fail("conflict");
         await client(ctx).send(
           new UpdateRelationalDatabaseCommand({
             relationalDatabaseName: names(ctx.resource.id).database,
             ...(window !== undefined ? { preferredBackupWindow: window as string } : {}),
             ...(open !== undefined ? { publiclyAccessible: open } : {}),
+            ...(maintenance !== undefined
+              ? { preferredMaintenanceWindow: maintenance as string }
+              : {}),
             applyImmediately: true,
           }),
         );
@@ -306,6 +446,7 @@ export function createDatabaseAdapter(deps: DatabaseDeps): ProductAdapter<Databa
           configMerge: {
             ...(window !== undefined ? { backupWindow: window } : {}),
             ...(open !== undefined ? { publiclyAccessible: open } : {}),
+            ...(maintenance !== undefined ? { maintenanceWindow: maintenance } : {}),
           },
         });
       }

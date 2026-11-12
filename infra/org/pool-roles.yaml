@@ -154,6 +154,7 @@ Resources:
                   - lightsail:CreateLoadBalancer
                   - lightsail:CreateLoadBalancerTlsCertificate
                   - lightsail:CreateRelationalDatabase
+                  - lightsail:CreateRelationalDatabaseFromSnapshot
                   - lightsail:CreateRelationalDatabaseSnapshot
                   - lightsail:DeleteBucket
                   - lightsail:DeleteBucketAccessKey
@@ -191,6 +192,7 @@ Resources:
                   - lightsail:RebootInstance
                   - lightsail:ReleaseStaticIp
                   - lightsail:ResetDistributionCache
+                  - lightsail:SetResourceAccessForBucket
                   - lightsail:StartInstance
                   - lightsail:StartRelationalDatabase
                   - lightsail:StopInstance

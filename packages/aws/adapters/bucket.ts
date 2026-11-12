@@ -4,6 +4,7 @@ import {
   CreateBucketCommand,
   GetBucketAccessKeysCommand,
   GetBucketsCommand,
+  SetResourceAccessForBucketCommand,
   UpdateBucketCommand,
   type Bucket,
   type LightsailClient,
@@ -20,6 +21,7 @@ import {
   type StepResult,
 } from "@tc/core";
 import { AwsError } from "../errors";
+import { isUuid } from "./shared";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 
 /**
@@ -248,7 +250,40 @@ export function createBucketAdapter(deps: BucketDeps): ProductAdapter<BucketConf
         await lightsail.send(
           new UpdateBucketCommand({ bucketName: name, accessRules: { ...rules } }),
         );
-        return stepDone();
+        // The web tier reads the mode from the config (B2 of WP6-T4).
+        return stepDone({ configMerge: { accessMode: rules.getObject } });
+      }
+      case "set_bucket_resource_access": {
+        // WPU-G9. Opens or closes the bucket to ONE instance of the same customer (the console's
+        // "Resource access"). The instance is a row (R8), its AWS name is generated (R11).
+        const instanceId = payload?.instanceId;
+        const access = payload?.access;
+        if (!isUuid(instanceId) || (access !== "allow" && access !== "deny"))
+          throw fail("validation");
+        const row = await ctx.owned(instanceId);
+        if (
+          row === null ||
+          row.customerId !== ctx.resource.customerId ||
+          (row.family !== "linux_instance" && row.family !== "windows_instance") ||
+          (row.state !== "active" && row.state !== "stopped")
+        ) {
+          throw fail("validation");
+        }
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await lightsail.send(
+          new SetResourceAccessForBucketCommand({
+            resourceName: awsResourceName("instance", instanceId),
+            bucketName: name,
+            access,
+          }),
+        );
+        const raw = (ctx.resource.config as Record<string, unknown> | null)?.accessInstances;
+        const current = Array.isArray(raw) ? raw.filter(isUuid) : [];
+        const next =
+          access === "allow"
+            ? [...new Set([...current, instanceId])].slice(0, 20)
+            : current.filter((id) => id !== instanceId);
+        return stepDone({ configMerge: { accessInstances: next } });
       }
       case "set_bucket_versioning": {
         const versioning = payload?.versioning;

@@ -57,6 +57,7 @@ export const opsBn = {
       refresh_certificate: "সার্টিফিকেট যাচাই ও যুক্ত করা",
       set_db_options: "ডেটাবেসের সেটিং বদল",
       set_bucket_versioning: "বাকেটের ভার্সনিং",
+      set_bucket_resource_access: "বাকেটে সার্ভারের প্রবেশাধিকার",
       reset_cache: "ক্যাশ পরিষ্কার",
       reject_operation: "অনুরোধ বাতিলের কাজ",
       other: "অন্য ধরন",

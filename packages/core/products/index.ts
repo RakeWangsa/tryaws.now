@@ -123,7 +123,13 @@ export {
   type DbSnapshotRestoreCheck,
 } from "./db-restore";
 export { SNAPSHOT_PRICE_FAMILY, snapshotPrice, type SnapshotPrice } from "./snapshot-price";
-export { checkedBackupWindow, checkedDomainName, checkedHealthPath } from "./console";
+export {
+  checkedBackupWindow,
+  checkedDomainName,
+  checkedHealthPath,
+  checkedMaintenanceWindow,
+  windowsOverlap,
+} from "./console";
 export {
   priceCatalog,
   priceRows,

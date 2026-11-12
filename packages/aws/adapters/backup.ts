@@ -1,5 +1,8 @@
 import {
   CreateDiskSnapshotCommand,
+  CreateRelationalDatabaseSnapshotCommand,
+  DeleteRelationalDatabaseSnapshotCommand,
+  GetRelationalDatabaseSnapshotCommand,
   CreateInstanceSnapshotCommand,
   CreateInstancesFromSnapshotCommand,
   DeleteDiskSnapshotCommand,
@@ -70,7 +73,7 @@ export interface BackupConfig {
   readonly displayName: string | null;
 }
 
-export type SnapshotSource = "instance" | "disk";
+export type SnapshotSource = "instance" | "disk" | "database";
 
 const DISPLAY_NAME = /^[A-Za-z0-9 ._-]{1,60}$/;
 const HOUR = /^([01]\d|2[0-3]):00$/;
@@ -78,11 +81,13 @@ const HOUR = /^([01]\d|2[0-3]):00$/;
 export function sourceOfFamily(family: string): SnapshotSource | null {
   if (family === "linux_instance" || family === "windows_instance") return "instance";
   if (family === "disk") return "disk";
+  // WPU-G9: a manual snapshot of a database. Its final snapshot is made by the database adapter.
+  if (family === "database") return "database";
   return null;
 }
 
 function parentName(source: SnapshotSource, parentId: string): string {
-  return awsResourceName(source === "instance" ? "instance" : "disk", parentId);
+  return awsResourceName(source, parentId);
 }
 
 interface SnapshotView {
@@ -101,6 +106,14 @@ function snapshotApi(ctx: OpCtx<unknown>, source: SnapshotSource) {
           lightsail.send(new GetInstanceSnapshotCommand({ instanceSnapshotName: name })),
         );
         const s = got?.instanceSnapshot;
+        if (s === undefined) return null;
+        return { state: s.state, sizeGb: s.sizeInGb ?? null, tags: s.tags };
+      }
+      if (source === "database") {
+        const got = await orNull(() =>
+          lightsail.send(new GetRelationalDatabaseSnapshotCommand({ relationalDatabaseSnapshotName: name })),
+        );
+        const s = got?.relationalDatabaseSnapshot;
         if (s === undefined) return null;
         return { state: s.state, sizeGb: s.sizeInGb ?? null, tags: s.tags };
       }
@@ -124,6 +137,14 @@ function snapshotApi(ctx: OpCtx<unknown>, source: SnapshotSource) {
             tags,
           }),
         );
+      } else if (source === "database") {
+        await lightsail.send(
+          new CreateRelationalDatabaseSnapshotCommand({
+            relationalDatabaseName: parent,
+            relationalDatabaseSnapshotName: name,
+            tags,
+          }),
+        );
       } else {
         await lightsail.send(
           new CreateDiskSnapshotCommand({ diskName: parent, diskSnapshotName: name, tags }),
@@ -134,7 +155,11 @@ function snapshotApi(ctx: OpCtx<unknown>, source: SnapshotSource) {
       await ignoreNotFound(() =>
         source === "instance"
           ? lightsail.send(new DeleteInstanceSnapshotCommand({ instanceSnapshotName: name }))
-          : lightsail.send(new DeleteDiskSnapshotCommand({ diskSnapshotName: name })),
+          : source === "database"
+            ? lightsail.send(
+                new DeleteRelationalDatabaseSnapshotCommand({ relationalDatabaseSnapshotName: name }),
+              )
+            : lightsail.send(new DeleteDiskSnapshotCommand({ diskSnapshotName: name })),
       );
     },
   };
@@ -163,7 +188,7 @@ async function ensureSnapshot(
     return { kind: "created" };
   }
   if (!hasTag(found.tags, "tc:resource", backupId)) throw fail("conflict");
-  // An instance snapshot is `available`, a disk snapshot `completed`.
+  // An instance and a database snapshot are `available`, a disk snapshot `completed`.
   if (found.state === "available" || found.state === "completed") {
     return { kind: "ready", sizeGb: found.sizeGb };
   }
@@ -217,6 +242,7 @@ export async function runPurgeSnapshots(
 }
 
 const BACKUP_STATES = new Set(["active", "stopped", "suspended"]);
+const DATABASE_BACKUP_STATES = new Set(["active"]);
 
 /** Family `backup`: a manual snapshot of an instance or a disk. The web tier writes the row. */
 export function createBackupAdapter(): ProductAdapter<BackupConfig> {
@@ -233,7 +259,9 @@ export function createBackupAdapter(): ProductAdapter<BackupConfig> {
 
   async function createBackup(ctx: OpCtx<BackupConfig>): Promise<StepResult> {
     const { parent, source } = await parentOf(ctx);
-    if (!BACKUP_STATES.has(parent.state)) throw fail("validation");
+    // A stopped database cannot be snapshotted (VERIFY in tc-pool-dev); a stopped server can.
+    const states = source === "database" ? DATABASE_BACKUP_STATES : BACKUP_STATES;
+    if (!states.has(parent.state)) throw fail("validation");
     const snapshotName = awsResourceName("snapshot", ctx.resource.id);
     const r = await ensureSnapshot(
       ctx,
