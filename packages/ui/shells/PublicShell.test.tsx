@@ -165,7 +165,7 @@ describe.each(LOCALES)("PublicShell (%s)", (locale) => {
     }
   });
 
-  it("puts the TiCON name before any AWS text", () => {
+  it("puts the MeghVPS name before any AWS text", () => {
     const { container } = shell(locale);
     const body = container.textContent as string;
     const brand = body.indexOf(t.footer["companyName"] as string);

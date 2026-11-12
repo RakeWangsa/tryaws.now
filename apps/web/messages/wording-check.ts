@@ -28,7 +28,7 @@ export function flatLeaves(tree: Messages): Map<string, string> {
 const BENGALI = /[ঀ-৿]/;
 // Brand and product marks that stay in Latin script inside Bengali text (16.13).
 const TOKENS =
-  /TiCON(?: Cloud)?|Amazon Lightsail|Amazon Route 53|Amazon Web Services|Amazon\.com, Inc\.|AWS|KYC|EPS|SSH|TOTP|DNS|CDN|HTTPS?|IPv[46]|IP|SMS|OTP|PDF|CSV|API|URL|TLS|SSL|MX|TXT|CNAME|NS|SOA|CAA|SRV|ICMP|TCP|UDP|BDT|GB|MB|TB|vCPU|RAM|SSD|bKash|Nagad|Rocket|Windows|Linux|Ubuntu|Debian|MySQL|PostgreSQL|WordPress|Docker|Node\.js|Cognito|Singapore|Mumbai|Virginia|ap-[a-z]+-\d|us-east-1/g;
+  /MeghVPS|TiCON|Amazon Lightsail|Amazon Route 53|Amazon Web Services|Amazon\.com, Inc\.|AWS|KYC|EPS|SSH|TOTP|DNS|CDN|HTTPS?|IPv[46]|IP|SMS|OTP|PDF|CSV|API|URL|TLS|SSL|MX|TXT|CNAME|NS|SOA|CAA|SRV|ICMP|TCP|UDP|BDT|GB|MB|TB|vCPU|RAM|SSD|bKash|Nagad|Rocket|Windows|Linux|Ubuntu|Debian|MySQL|PostgreSQL|WordPress|Docker|Node\.js|Cognito|Singapore|Mumbai|Virginia|ap-[a-z]+-\d|us-east-1/g;
 
 /** True when the text holds no word that a translator would change. */
 export function isLanguageNeutral(text: string): boolean {
@@ -74,7 +74,7 @@ const FORBIDDEN: readonly { rule: string; test: RegExp }[] = [
   { rule: "aws-endorses", test: /(?:official|authorized|authorised)\s+(?:AWS|Amazon)\b/i },
   {
     rule: "ticon-aws-product",
-    test: /TiCON(?: Cloud)?\s+(?:AWS|Lightsail)|TiCON(?: Cloud)?'s\s+AWS/i,
+    test: /(?:MeghVPS|TiCON)\s+(?:AWS|Lightsail)|(?:MeghVPS|TiCON)'s\s+AWS/i,
   },
   {
     rule: "aws-sku-name",
