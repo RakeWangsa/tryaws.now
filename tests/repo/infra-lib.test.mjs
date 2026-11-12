@@ -241,7 +241,7 @@ describe("probe sources and VPC CIDR of the provisioner", () => {
     ];
     for (const sample of samples) {
       const runtime = parseProbeSources(sample);
-      let config = null;
+      let config;
       try {
         config = parseProbeSourcesConfig(sample);
       } catch {

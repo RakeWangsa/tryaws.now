@@ -156,10 +156,6 @@ const inlineStatements = (file) =>
   rolesOf(file).flatMap((r) =>
     list(r.Properties.Policies).flatMap((p) => expand(p.PolicyDocument.Statement)),
   );
-const managedStatements = (file) =>
-  resources(tpl[file], "AWS::IAM::ManagedPolicy").flatMap((p) =>
-    expand(p.Properties.PolicyDocument.Statement),
-  );
 const actionsOf = (statements, effect) =>
   statements.filter((s) => s.Effect === effect).flatMap((s) => list(s.Action));
 const resourceText = (s) => JSON.stringify(s.Resource ?? s.NotResource ?? "");

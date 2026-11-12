@@ -272,10 +272,14 @@ describe("scripts/post-deploy-check.mjs", () => {
   });
   it("fails when a flag default is on, missing, or not a boolean false", () => {
     const allOff = Object.fromEntries(FEATURE_FLAG_KEYS.map((k) => [k, false]));
-    expect(check(outputs({ featureFlagDefaults: { ...allOff, linux_instance: true } })).code).toBe(EXIT_FAILED);
+    expect(check(outputs({ featureFlagDefaults: { ...allOff, linux_instance: true } })).code).toBe(
+      EXIT_FAILED,
+    );
     expect(check(outputs({ featureFlagDefaults: { a: false, b: true } })).code).toBe(EXIT_FAILED);
-    expect(check(outputs({ featureFlagDefaults: { a: false } })).lines.join()).toContain("is missing");
-    const { domain: _omitted, ...eleven } = allOff;
+    expect(check(outputs({ featureFlagDefaults: { a: false } })).lines.join()).toContain(
+      "is missing",
+    );
+    const eleven = Object.fromEntries(Object.entries(allOff).filter(([k]) => k !== "domain"));
     expect(check(outputs({ featureFlagDefaults: eleven })).code).toBe(EXIT_FAILED);
     expect(check(outputs({ featureFlagDefaults: { a: "false" } })).code).toBe(EXIT_FAILED);
     expect(check(outputs({ featureFlagDefaults: {} })).code).toBe(EXIT_FAILED);

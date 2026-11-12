@@ -155,6 +155,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T2",
     "WPP-T3",
     "WPP-T4",
+    "WPU-D2",
     "WPU-G1",
     "WPU-G10",
     "WPU-G11",
@@ -380,6 +381,44 @@ it("the proof of WPU-I4 exists: both snapshots, the buyer read at issue, the gra
       "packages/db/migrations/0017_customer_billing_profile.sql",
       "REVOKE SELECT ON invoices FROM admin_rw",
     ],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-D2 is proven by lint, types, format, the migrator and hash tests and the infra and runbook tests", () => {
+  expect(TASKS["WPU-D2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["migrator", "pnpm test --filter @tc/fn-migrator --no-passWithNoTests"],
+    ["migration-hashes", "pnpm test --filter @tc/db test/migration-hashes --no-passWithNoTests"],
+    ["infra-lib", "pnpm test --filter repo infra-lib --no-passWithNoTests"],
+    ["infra-org", "pnpm test --filter repo infra-org --no-passWithNoTests"],
+    ["infra-ci-oidc", "pnpm test --filter repo infra-ci-oidc --no-passWithNoTests"],
+    ["infra-rules", "pnpm test --filter repo infra-rules --no-passWithNoTests"],
+    ["ci-deploy", "pnpm test --filter repo ci-deploy --no-passWithNoTests"],
+    ["runbooks", "pnpm test --filter repo runbooks --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-D2 exists: sst pinned, outputs, role names, OIDC bounds, probe sources, ledger alarms, hashes", () => {
+  expect(JSON.parse(readFileSync("package.json", "utf8")).devDependencies.sst).toBe("4.17.2");
+  for (const [file, part] of [
+    ["infra/sst.config.ts", "featureFlagDefaults: featureFlagDefaults(),"],
+    ["infra/sst.config.ts", "webRolePolicies: apps.webRolePolicies,"],
+    ["infra/org/pool-roles.yaml", "tc-${ControlPlaneStage}-provisioner-role"],
+    ["infra/org/ci-deploy-production.yaml", "TcCiRoleBoundary"],
+    ["infra/org/ci-plan-production.yaml", "NoLogsMessagesItemsOrDatabaseData"],
+    ["infra/lib/stage.ts", "TC_PROBE_SOURCES entry"],
+    ["infra/lib/functions.ts", 'LEDGER_CHECK_SCHEDULE = "cron(0 20 * * ? *)"'],
+    ["infra/stacks/alarms.ts", 'resourceName(stage, "ledger-mismatch")'],
+    ["functions/migrator/run.ts", "an applied migration changed"],
+    ["functions/migrator/index.ts", "ensureSystemAccounts"],
+    ["docs/runbooks/ledger-check-failed.md", "tc-<stage>-ledger-mismatch"],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
   }
