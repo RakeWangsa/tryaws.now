@@ -26,6 +26,13 @@ const APPS = [
   { name: "web", filter: "@tc/web", origin: "http://localhost:3000" },
   { name: "admin", filter: "@tc/admin", origin: "http://localhost:3001" },
 ];
+// Admin only (same placeholders as scripts/smoke-apps.mjs): the sign-in guard reads the admin pool
+// settings first and refuses to start without them (R16); the allowlist is the documentation range.
+const ADMIN_FAKE_ENV = {
+  COGNITO_ADMIN_POOL_ID: "ap-southeast-1_SMOKEPOOL1",
+  COGNITO_ADMIN_CLIENT_ID: "smokeclient1234567890",
+  ADMIN_IP_ALLOWLIST: "203.0.113.0/24",
+};
 const START_LIMIT_MS = 60_000;
 const PLAYWRIGHT_LIMIT_MS = 1_500_000;
 const results = [];
@@ -176,7 +183,11 @@ async function main() {
       if (app.name === "admin" && skipAdmin) continue;
 
       // 4. The server of this app.
-      const env = { ...child.env, APP_ORIGIN: app.origin };
+      const env = {
+        ...child.env,
+        APP_ORIGIN: app.origin,
+        ...(app.name === "admin" ? ADMIN_FAKE_ENV : {}),
+      };
       const server = start("pnpm", ["--filter", app.filter, "dev"], env);
       const up = await waitForServer(server, app.origin);
       if (!up) {

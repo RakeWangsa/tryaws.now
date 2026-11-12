@@ -22,6 +22,12 @@ export default defineConfig({
     trace: "off",
     screenshot: "off",
     video: "off",
+    // The admin app answers 403 to an address outside its allowlist (R10). The runner starts it with the
+    // documentation range 203.0.113.0/24 as the list and the browser sends a viewer address inside it.
+    extraHTTPHeaders:
+      process.env["A11Y_APP"] === "admin"
+        ? { "CloudFront-Viewer-Address": "203.0.113.5:44321" }
+        : {},
   },
   projects: [
     { name: "bn-360", use: { viewport: { width: 360, height: 740 }, locale: "bn-BD" } },
