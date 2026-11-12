@@ -7,10 +7,19 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadLoadBalancerDetail } from "../../../../../server/load-balancers-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
-import { destroyLoadBalancerAction } from "./actions.ts";
+import { LoadBalancerCertificate, LoadBalancerSettingsForm } from "../../_console/ConsoleForms.tsx";
+import {
+  destroyLoadBalancerAction,
+  refreshCertificateAction,
+  requestCertificateAction,
+  setLoadBalancerAttributesAction,
+  setLoadBalancerTargetsAction,
+} from "./actions.ts";
 import { LoadBalancerDetailContent } from "./LoadBalancerDetailContent.tsx";
 
 export const dynamic = "force-dynamic";
+
+const EMPTY_CONSOLE = { healthCheckPath: null, httpsRedirect: null, certificate: null };
 
 type Props = {
   params: Promise<{ locale: string; id: string }>;
@@ -44,6 +53,29 @@ export default async function LoadBalancerDetailPage({ params, searchParams }: P
         balancer={balancer}
         requestId={newUuidV7()}
         destroyAction={destroyLoadBalancerAction}
+        targetsAction={setLoadBalancerTargetsAction}
+        {...(balancer !== null && balancer.state === "active"
+          ? {
+              extra: (
+                <>
+                  <LoadBalancerSettingsForm
+                    action={setLoadBalancerAttributesAction}
+                    loadBalancerId={balancer.id}
+                    requestId={newUuidV7()}
+                    console={balancer.console ?? EMPTY_CONSOLE}
+                  />
+                  <hr />
+                  <LoadBalancerCertificate
+                    requestAction={requestCertificateAction}
+                    refreshAction={refreshCertificateAction}
+                    loadBalancerId={balancer.id}
+                    requestId={newUuidV7()}
+                    certificate={balancer.console?.certificate ?? null}
+                  />
+                </>
+              ),
+            }
+          : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />
     </PanelFrame>

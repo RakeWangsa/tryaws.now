@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Button, Card, CopyField, EmptyState, StatTile, Tabs, formatDate } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
@@ -26,6 +27,7 @@ export function CdnDetailContent({
   enabledAction = refuse,
   destroyAction = refuse,
   defaultTab,
+  extra = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -35,6 +37,8 @@ export function CdnDetailContent({
   enabledAction?: Action;
   destroyAction?: Action;
   defaultTab?: string;
+  /** The cache flush form (WPU-G7), built by the page. */
+  extra?: ReactNode;
 }) {
   const t = useTranslations("Cdn");
   const originLabel = useOriginLabel();
@@ -106,6 +110,7 @@ export function CdnDetailContent({
         enabled={cdn.state !== "stopped"}
         allowed={switchable}
       />
+      {extra === null ? null : <div className="mt-4">{extra}</div>}
     </>
   );
 

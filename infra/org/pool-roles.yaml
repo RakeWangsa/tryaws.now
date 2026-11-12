@@ -130,6 +130,7 @@ Resources:
                   - lightsail:AllocateStaticIp
                   - lightsail:AttachDisk
                   - lightsail:AttachInstancesToLoadBalancer
+                  - lightsail:AttachLoadBalancerTlsCertificate
                   - lightsail:AttachStaticIp
                   # Residual risk, accepted (JOURNEY, Needs decision): Lightsail has no condition key for the
                   # public access rules or readonlyAccessAccounts of a bucket, nor for a distribution's origin,
@@ -151,6 +152,7 @@ Resources:
                   - lightsail:CreateInstances
                   - lightsail:CreateInstancesFromSnapshot
                   - lightsail:CreateLoadBalancer
+                  - lightsail:CreateLoadBalancerTlsCertificate
                   - lightsail:CreateRelationalDatabase
                   - lightsail:CreateRelationalDatabaseSnapshot
                   - lightsail:DeleteBucket
@@ -180,6 +182,7 @@ Resources:
                   - lightsail:GetInstanceSnapshot
                   - lightsail:GetKeyPair
                   - lightsail:GetLoadBalancer
+                  - lightsail:GetLoadBalancerTlsCertificates
                   - lightsail:GetRelationalDatabase
                   - lightsail:GetRelationalDatabaseSnapshot
                   - lightsail:GetStaticIp
@@ -187,12 +190,15 @@ Resources:
                   - lightsail:PutInstancePublicPorts
                   - lightsail:RebootInstance
                   - lightsail:ReleaseStaticIp
+                  - lightsail:ResetDistributionCache
                   - lightsail:StartInstance
                   - lightsail:StartRelationalDatabase
                   - lightsail:StopInstance
                   - lightsail:StopRelationalDatabase
                   - lightsail:TagResource
                   - lightsail:UpdateContainerService
+                  - lightsail:UpdateLoadBalancerAttribute
+                  - lightsail:UpdateRelationalDatabase
                 Resource: "*"
                 Condition:
                   StringEquals:

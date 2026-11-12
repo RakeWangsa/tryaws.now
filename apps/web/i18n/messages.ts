@@ -35,6 +35,8 @@ import { domainsBn } from "../messages/domains-bn.ts";
 import { domainsEn } from "../messages/domains-en.ts";
 import { accountBn } from "../messages/account-bn.ts";
 import { accountEn } from "../messages/account-en.ts";
+import { consoleBn } from "../messages/console-bn.ts";
+import { consoleEn } from "../messages/console-en.ts";
 import { dnsBn } from "../messages/dns-bn.ts";
 import { dnsEn } from "../messages/dns-en.ts";
 import { invoicesBn } from "../messages/invoices-bn.ts";
@@ -69,6 +71,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     containerBn,
     domainsBn,
     dnsBn,
+    consoleBn,
     invoicesBn,
     authOwn.bn,
     kycOwn.bn,
@@ -93,6 +96,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     containerEn,
     domainsEn,
     dnsEn,
+    consoleEn,
     invoicesEn,
     authOwn.en,
     kycOwn.en,

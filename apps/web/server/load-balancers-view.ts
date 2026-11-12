@@ -9,6 +9,8 @@ import type { ResourceSummary } from "@tc/db";
 // read field by field. A target is a server of the customer: it is read through the same scoped
 // repository, so a target id that is not the customer's shows as a removed one, never as a stranger's.
 
+import { loadBalancerConsoleOf } from "./console-view.ts";
+import type { LoadBalancerConsole } from "./console-view.ts";
 const FLAG = "load_balancer";
 const FAMILY = "load_balancer";
 const INSTANCE_FAMILIES: readonly string[] = ["linux_instance", "windows_instance"];
@@ -133,6 +135,8 @@ export interface LoadBalancerTarget {
 }
 
 export interface LoadBalancerDetail extends LoadBalancerRow {
+  /** Health check path, HTTPS redirect and certificate written by the adapter (WPU-G7). */
+  console?: LoadBalancerConsole;
   createdAt: Date;
   targets: LoadBalancerTarget[];
   /** Servers of the customer in the same Region that are not a target yet. */
@@ -173,6 +177,7 @@ export async function loadLoadBalancerDetail(
       state: resource.state,
       targetCount: facts.targetIds.length,
       createdAt: resource.createdAt,
+      console: loadBalancerConsoleOf(resource.config),
       targets,
       candidates,
     };

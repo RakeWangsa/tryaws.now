@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Button, Card, CopyField, EmptyState, StatTile, Tabs, formatDate } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
@@ -32,6 +33,7 @@ export function StorageDetailContent({
   destroyAction = refuse,
   createKeyAction = refuseKey,
   defaultTab,
+  extra = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -43,6 +45,8 @@ export function StorageDetailContent({
   destroyAction?: Action;
   createKeyAction?: (form: FormData) => Promise<KeyResult>;
   defaultTab?: string;
+  /** The versioning form (WPU-G7), built by the page. */
+  extra?: ReactNode;
 }) {
   const t = useTranslations("Storage");
   const regionLabel = useRegionLabel();
@@ -137,6 +141,7 @@ export function StorageDetailContent({
         requestId={requestId}
         allowed={active}
       />
+      {extra === null ? null : <div className="mt-4">{extra}</div>}
     </>
   );
 

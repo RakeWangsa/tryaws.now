@@ -12,6 +12,8 @@ import type { PlanSpecs } from "./servers-view.ts";
 // the database (U6 exception), and only after they passed the checks below. The master password is
 // never part of a view (U9): it comes through the reveal action only.
 
+import { databaseConsoleOf } from "./console-view.ts";
+import type { DatabaseConsole } from "./console-view.ts";
 const FLAG = "database";
 const FAMILY = "database";
 
@@ -159,6 +161,8 @@ export interface DatabaseBackup {
 }
 
 export interface DatabaseDetail extends DatabaseRow {
+  /** Backup window and public mode written by the adapter (WPU-G7). */
+  console?: DatabaseConsole;
   createdAt: Date;
   backups: DatabaseBackup[];
 }
@@ -197,6 +201,7 @@ export async function loadDatabaseDetail(
       };
     });
     return {
+      console: databaseConsoleOf(resource.config),
       ...rowOf(resource, product === undefined ? {} : databaseSpecsOf(product.specs)),
       createdAt: resource.createdAt,
       backups,

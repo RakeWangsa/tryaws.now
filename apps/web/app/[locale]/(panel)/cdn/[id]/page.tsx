@@ -7,8 +7,9 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadCdnDetail } from "../../../../../server/cdn-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
+import { CdnResetForm } from "../../_console/ConsoleForms.tsx";
 import { CdnDetailContent } from "./CdnDetailContent.tsx";
-import { destroyCdnAction, setCdnEnabledAction } from "./actions.ts";
+import { destroyCdnAction, resetCdnCacheAction, setCdnEnabledAction } from "./actions.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,18 @@ export default async function CdnDetailPage({ params, searchParams }: Props) {
         requestId={newUuidV7()}
         enabledAction={setCdnEnabledAction}
         destroyAction={destroyCdnAction}
+        {...(cdn !== null && cdn.state === "active"
+          ? {
+              extra: (
+                <CdnResetForm
+                  action={resetCdnCacheAction}
+                  cdnId={cdn.id}
+                  requestId={newUuidV7()}
+                  allowed
+                />
+              ),
+            }
+          : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />
     </PanelFrame>

@@ -829,6 +829,24 @@ TASKS["WPU-G2"] = [specSync, baselineSync, lint, typecheck, format, core, aws, w
 // cross-tenant sweep in web. No migration, no new operation kind, no AWS call.
 TASKS["WPU-G5"] = [specSync, baselineSync, lint, typecheck, format, core, web, repo];
 
+// WPU-G7: the console actions of the load balancer, database, bucket and CDN screens: eight operation
+// kinds (db), their adapter actions (aws), the input rules (core), the console cores with the
+// cross-tenant sweep, the view models, messages and render states (web), the operation names (admin).
+// No migration. The db suite needs the local PostgreSQL (pnpm db:up).
+TASKS["WPU-G7"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  web,
+  admin,
+  repo,
+];
+
 // WPU-G4: the Metrics tab reads the reader function through an invoke port and draws console-style SVG
 // charts, /invoices and /invoices/[id] with a printable document, /dns and /dns/[id] with the record
 // editor (kind change_dns_record). The record rules (core), the operation kinds (db), the zone adapter

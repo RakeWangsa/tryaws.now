@@ -7,8 +7,13 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadDatabaseDetail } from "../../../../../server/databases-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
-import { destroyDatabaseAction, setDatabaseRunningAction } from "./actions.ts";
+import {
+  destroyDatabaseAction,
+  setDatabaseOptionsAction,
+  setDatabaseRunningAction,
+} from "./actions.ts";
 import { revealDatabasePasswordAction } from "./access-actions.ts";
+import { DatabaseOptionsForm } from "../../_console/ConsoleForms.tsx";
 import { DatabaseDetailContent } from "./DatabaseDetailContent.tsx";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +52,18 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
         runningAction={setDatabaseRunningAction}
         destroyAction={destroyDatabaseAction}
         revealAction={revealDatabasePasswordAction}
+        {...(database !== null && database.state === "active"
+          ? {
+              extra: (
+                <DatabaseOptionsForm
+                  action={setDatabaseOptionsAction}
+                  databaseId={database.id}
+                  requestId={newUuidV7()}
+                  console={database.console ?? { backupWindow: null, publiclyAccessible: false }}
+                />
+              ),
+            }
+          : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />
     </PanelFrame>
