@@ -156,6 +156,33 @@ function BackupsTab({
   );
 }
 
+// WPU-G19: the commands that make an attached disk usable. They are shell text, not words, so they
+// are not translated; the steps around them are.
+const MOUNT_STEPS = [
+  { key: "find", command: "lsblk" },
+  { key: "format", command: "sudo mkfs.ext4 /dev/xvdf" },
+  { key: "mount", command: "sudo mkdir -p /data && sudo mount /dev/xvdf /data" },
+  { key: "persist", command: "sudo blkid /dev/xvdf" },
+] as const;
+
+function MountHelp() {
+  const t = useTranslations("Extras.storage.mount");
+  return (
+    <div className="mt-4">
+      <h3 className="mergecolor h4">{t("title")}</h3>
+      <p className="seccolor">{t("intro")}</p>
+      <ol className="seccolor">
+        {MOUNT_STEPS.map((step) => (
+          <li key={step.key} className="mb-2">
+            {t(step.key)} <code>{step.command}</code>
+          </li>
+        ))}
+      </ol>
+      <p className="seccolor">{t("note")}</p>
+    </div>
+  );
+}
+
 function StorageTab({ data, actions }: { data: ServerExtras; actions: ExtrasActions }) {
   const t = useTranslations("Extras.storage");
   const te = useTranslations("Extras");
@@ -190,6 +217,7 @@ function StorageTab({ data, actions }: { data: ServerExtras; actions: ExtrasActi
           ]}
         />
       )}
+      {data.disks.length === 0 ? null : <MountHelp />}
       {data.freeDisks.length === 0 ? null : (
         <>
           <h3 className="mergecolor h4 mt-4">{t("freeCaption")}</h3>

@@ -127,6 +127,17 @@ export const extrasEn: Same<typeof extrasBn> = {
       state: "State",
       detach: "Detach",
       attachedHere: "Attached",
+      mount: {
+        title: "Use the disk on the server",
+        intro:
+          "A new disk is empty. Sign in to the server over SSH and do these steps once. The device name /dev/xvdf is the first extra disk; use the path you chose when you attached the disk.",
+        find: "Find the disk and check its size:",
+        format: "Format it. This erases everything on the disk, so do it only on a new disk:",
+        mount: "Create a folder and mount the disk:",
+        persist:
+          "Read the UUID of the disk, then add a line for it to /etc/fstab so it is mounted after a reboot:",
+        note: "Detach the disk from the server in this tab before you destroy it, and take a snapshot of the server first if the data matters.",
+      },
       empty: {
         title: "No disk is attached",
         body: "You can attach a free disk of this location below.",

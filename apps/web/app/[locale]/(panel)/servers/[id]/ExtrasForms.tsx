@@ -155,7 +155,12 @@ export function RestoreForm({
         <label className="form-label" htmlFor={`${idPrefix}-plan`}>
           {t("plan")}
         </label>
-        <select className="form-select" id={`${idPrefix}-plan`} name="productId" disabled={disabled}>
+        <select
+          className="form-select"
+          id={`${idPrefix}-plan`}
+          name="productId"
+          disabled={disabled}
+        >
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
               {specLine(p.specs)}

@@ -823,6 +823,12 @@ TASKS["WPU-G1"] = [
 // Server Actions, the cross-tenant sweep, the messages and the render states in web.
 TASKS["WPU-G2"] = [specSync, baselineSync, lint, typecheck, format, core, aws, web, repo];
 
+// WPU-G5: the account overview pages of the customer panel: Snapshots (list, create, restore to a new
+// server, delete), Static IPs, Billing and usage, the first-use guide of the dashboard and the disk
+// mount help. The pure rules are proven in core, the loaders, the render states, the messages and the
+// cross-tenant sweep in web. No migration, no new operation kind, no AWS call.
+TASKS["WPU-G5"] = [specSync, baselineSync, lint, typecheck, format, core, web, repo];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

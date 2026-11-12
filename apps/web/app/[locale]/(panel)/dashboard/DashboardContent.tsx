@@ -189,7 +189,9 @@ export function DashboardContent({
                         ? t("checklist.next")
                         : t("checklist.todo")}
                 </span>
-                {step.done ? null : <p className="seccolor mb-0 ms-4">{t(`checklist.hint.${step.key}`)}</p>}
+                {step.done ? null : (
+                  <p className="seccolor mb-0 ms-4">{t(`checklist.hint.${step.key}`)}</p>
+                )}
               </li>
             ))}
           </ol>

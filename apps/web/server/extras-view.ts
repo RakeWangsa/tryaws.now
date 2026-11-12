@@ -462,7 +462,8 @@ export async function loadDashboard(session: CustomerSession, now: Date): Promis
         snapshots: live.filter((r) => r.family === "backup" && !resourceFacts(r).final).length,
       }),
       // list() is newest first, so the last live server is the oldest one.
-      guideServerId: servers.length === 0 ? null : (servers[servers.length - 1] as { id: string }).id,
+      guideServerId:
+        servers.length === 0 ? null : (servers[servers.length - 1] as { id: string }).id,
     };
   });
 }
