@@ -20,6 +20,7 @@ Commands cited in these pages: `pnpm verify --task <id>`, `pnpm db:up`, `pnpm db
 | [lifecycle-approval.md](lifecycle-approval.md)                                   | lifecycle approval                            |
 | [pool-account-onboarding.md](pool-account-onboarding.md)                         | adding a pool account                         |
 | [pool-account-single.md](pool-account-single.md)                                 | launch on one pool account                    |
+| [single-account-lean.md](single-account-lean.md)                                 | one account, lean stage under 50 USD a month  |
 | [domain-registration-problem.md](domain-registration-problem.md)                 | domain registration problem                   |
 | [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 | abuse notice                                  |
 | [kyc-review.md](kyc-review.md)                                                   | KYC review                                    |
@@ -45,6 +46,7 @@ Filled in by the owner when a person has read the page against the admin app and
 | [lifecycle-approval.md](lifecycle-approval.md)                                   |                                |
 | [pool-account-onboarding.md](pool-account-onboarding.md)                         |                                |
 | [pool-account-single.md](pool-account-single.md)                                 |                                |
+| [single-account-lean.md](single-account-lean.md)                                 |                                |
 | [domain-registration-problem.md](domain-registration-problem.md)                 |                                |
 | [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 |                                |
 | [kyc-review.md](kyc-review.md)                                                   |                                |
