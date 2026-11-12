@@ -76,7 +76,8 @@ const roleOf = (name: string): AdminActor["role"] =>
       ? "support"
       : (name.startsWith("wallets.") ||
             name.startsWith("payments.") ||
-            name.startsWith("priceBook.")) &&
+            name.startsWith("priceBook.") ||
+            name.startsWith("configPrices.")) &&
           name !== "payments.resolveDiscrepancy"
         ? "finance"
         : "ops";
@@ -247,6 +248,43 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
     );
     return r.blueprints.setEnabled({ market: "BD", blueprintId: id, enabled: true }, "allow-list");
   },
+  "blueprints.setMinPower": async (r) => {
+    const id = "repos_min_" + uniqueSuffix().toLowerCase();
+    await t.pool.query(
+      "insert into catalog_products (id, family, aws_id, platform, region, specs, aws_price_usd, billing_unit, feature_flag, active, synced_at) values ($1, 'blueprint', $2, 'linux', 'ap-southeast-1', '{}', 0, 'none', 'linux_instance', true, now())",
+      [uuidv7(), id],
+    );
+    return r.blueprints.setMinPower(
+      { market: "BD", blueprintId: id, minPower: 1000 },
+      "needs 1 GB",
+    );
+  },
+  "configPrices.save": (r) =>
+    r.configPrices.save(
+      {
+        market: "BD",
+        key: "config_price.snapshot_gb_month",
+        usd: "0.05",
+        effectiveFrom: new Date("2026-11-11T06:00:00.000Z"),
+        at: new Date("2026-11-11T06:00:00.000Z"),
+      },
+      "AWS price page",
+    ),
+  "tierLimits.save": (r) =>
+    r.tierLimits.save(
+      {
+        market: "BD",
+        tier: "trusted",
+        limits: {
+          maxInstances: 300,
+          maxBundleUsd: "9999",
+          windows: true,
+          containers: false,
+          maxStaticIps: 1,
+        },
+      },
+      "raise",
+    ),
   "capacity.addPoolAccount": (r) =>
     r.capacity.addPoolAccount(
       {
@@ -351,6 +389,8 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "payments.search",
   "fxChanges.read",
   "priceBook.read",
+  "configPrices.read",
+  "tierLimits.read",
   "waitlist.counts",
   "waitlist.list",
   "wallets.detail",

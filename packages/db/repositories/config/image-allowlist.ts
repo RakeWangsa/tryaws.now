@@ -6,9 +6,12 @@ import { isMarketCode } from "./args";
 // The image allow-list (WPU-G3): the explicit switches an admin set for the Lightsail blueprints of a
 // market. One row of `settings`, key `image_allowlist`, scope 'market', value
 //
-//   { "v": 1, "on": ["<blueprint id>", ...], "off": ["<blueprint id>", ...] }
+//   { "v": 1, "on": ["<blueprint id>", ...], "off": ["<blueprint id>", ...],
+//     "minPower": { "<blueprint id>": <whole number> } }          (minPower is optional, WPU-G10)
 //
-// The two lists are disjoint. An id in neither follows the default list of @tc/core. Written only by
+// `minPower` is the admin's own minimum bundle power for an image (the unit of GetBundles `power`, 500 is
+// the 512 MB plan); it replaces the value AWS reported for the blueprint. 0 means every plan. The two
+// lists are disjoint. An id in neither follows the default list of @tc/core. Written only by
 // adminRepos.blueprints.setEnabled (audited); read by the panel (web_rw) and the functions (worker_rw),
 // which already have SELECT on these columns of `settings`.
 
@@ -19,9 +22,14 @@ export const IMAGE_ALLOWLIST_MAX = 200;
 
 const BLUEPRINT_ID = /^[a-z0-9_]{1,64}$/;
 
+/** The largest minimum an admin can set; the biggest Lightsail bundle is far below it. */
+export const IMAGE_MIN_POWER_MAX = 100000;
+
 export interface ImageSwitches {
   readonly on: readonly string[];
   readonly off: readonly string[];
+  /** The admin's minimum bundle power for an image; absent when none was set. */
+  readonly minPower?: Readonly<Record<string, number>>;
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -37,17 +45,46 @@ function idList(value: unknown): string[] | null {
   return out;
 }
 
+function minPowerMap(value: unknown): Record<string, number> | null {
+  if (!isObject(value)) return null;
+  const entries = Object.entries(value);
+  if (entries.length > IMAGE_ALLOWLIST_MAX) return null;
+  const out: Record<string, number> = {};
+  for (const [id, power] of entries) {
+    if (!BLUEPRINT_ID.test(id)) return null;
+    if (
+      typeof power !== "number" ||
+      !Number.isSafeInteger(power) ||
+      power < 0 ||
+      power > IMAGE_MIN_POWER_MAX
+    ) {
+      return null;
+    }
+    out[id] = power;
+  }
+  return out;
+}
+
 /** The switches of a stored value, or null when anything in it is wrong: a bad row is not a list (R16). */
 export function parseImageSwitches(value: unknown): ImageSwitches | null {
   if (!isObject(value) || value.v !== IMAGE_ALLOWLIST_VERSION) return null;
   const on = idList(value.on);
   const off = idList(value.off);
   if (on === null || off === null || on.some((id) => off.includes(id))) return null;
-  return { on, off };
+  if (value.minPower === undefined) return { on, off };
+  const minPower = minPowerMap(value.minPower);
+  if (minPower === null) return null;
+  return Object.keys(minPower).length === 0 ? { on, off } : { on, off, minPower };
 }
 
 export function imageSwitchesValueOf(switches: ImageSwitches): unknown {
-  return { v: IMAGE_ALLOWLIST_VERSION, on: [...switches.on], off: [...switches.off] };
+  const minPower = switches.minPower ?? {};
+  return {
+    v: IMAGE_ALLOWLIST_VERSION,
+    on: [...switches.on],
+    off: [...switches.off],
+    ...(Object.keys(minPower).length === 0 ? {} : { minPower: { ...minPower } }),
+  };
 }
 
 export type ImageSwitchesRead =

@@ -4,7 +4,9 @@ import { isUuid } from "../scope";
 import { adminUsersAdminRepo, type AdminUsersAdminRepo } from "./admin-users";
 import { blueprintsAdminRepo, type BlueprintsAdminRepo } from "./blueprints";
 import { auditAdminRepo, type AuditAdminRepo } from "./audit";
+import { configPricesAdminRepo, type ConfigPricesAdminRepo } from "./config-prices";
 import { customersAdminRepo, type CustomersAdminRepo } from "./customers";
+import { tierLimitsAdminRepo, type TierLimitsAdminRepo } from "./tier-limits";
 import { capacityAdminRepo, type CapacityAdminRepo } from "./capacity";
 import { featureFlagsAdminRepo, type FeatureFlagsAdminRepo } from "./feature-flags";
 import { fxChangesAdminRepo, type FxChangesAdminRepo } from "./fx-changes";
@@ -43,7 +45,9 @@ export interface AdminRepos {
   audit: AuditAdminRepo;
   blueprints: BlueprintsAdminRepo;
   capacity: CapacityAdminRepo;
+  configPrices: ConfigPricesAdminRepo;
   customers: CustomersAdminRepo;
+  tierLimits: TierLimitsAdminRepo;
   featureFlags: FeatureFlagsAdminRepo;
   fxChanges: FxChangesAdminRepo;
   fxRates: FxRatesAdminRepo;
@@ -76,7 +80,9 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     audit: auditAdminRepo(scope),
     blueprints: blueprintsAdminRepo(scope),
     capacity: capacityAdminRepo(scope),
+    configPrices: configPricesAdminRepo(scope),
     customers: customersAdminRepo(scope),
+    tierLimits: tierLimitsAdminRepo(scope),
     featureFlags: featureFlagsAdminRepo(scope),
     fxChanges: fxChangesAdminRepo(scope),
     fxRates: fxRatesAdminRepo(scope),

@@ -1,7 +1,12 @@
-import { and, eq, inArray } from "drizzle-orm";
 import type { Tx } from "../client";
 import { isMarketCode, requireInstant } from "../repositories/config/args";
 import { settings } from "../schema/index";
+import {
+  CONFIG_PRICE_KEYS,
+  CONFIG_PRICE_UNIT_OF,
+  readConfigPrices,
+  type ConfigPriceKey,
+} from "../repositories/config/config-price";
 
 // Prices that have no API (spec 08 "Catalog sync sources"): block storage per GB, snapshot per GB,
 // load balancer, hosted zone. They live in `settings` as rows `config_price.<name>` with
@@ -9,20 +14,8 @@ import { settings } from "../schema/index";
 // (no application role but admin_rw may write `settings`); later edits are the admin editor's.
 // The launch values are the owner's, from the AWS pricing pages: the seed takes them as input.
 
-export const CONFIG_PRICE_KEYS = [
-  "config_price.block_storage_gb_month",
-  "config_price.snapshot_gb_month",
-  "config_price.load_balancer_month",
-  "config_price.dns_zone_month",
-] as const;
-export type ConfigPriceKey = (typeof CONFIG_PRICE_KEYS)[number];
-
-const UNIT_OF: Readonly<Record<ConfigPriceKey, "gb_month" | "month">> = Object.freeze({
-  "config_price.block_storage_gb_month": "gb_month",
-  "config_price.snapshot_gb_month": "gb_month",
-  "config_price.load_balancer_month": "month",
-  "config_price.dns_zone_month": "month",
-});
+export { CONFIG_PRICE_KEYS, readConfigPrices, type ConfigPriceKey };
+const UNIT_OF = CONFIG_PRICE_UNIT_OF;
 
 export interface ConfigPriceInput {
   key: ConfigPriceKey;
@@ -82,42 +75,4 @@ export async function seedConfigPrices(
     if (done.length > 0) added.push(price.key);
   }
   return { added };
-}
-
-/**
- * The config prices of a market. A value that is not { usd: plain decimal, unit: known } is
- * undefined: a bad row is not a price (R16). Only scope 'market' rows are read, so no customer
- * setting is reachable from here.
- */
-export async function readConfigPrices(
-  tx: Tx,
-  market: string,
-): Promise<Record<ConfigPriceKey, { usd: string; unit: string } | undefined>> {
-  if (!isMarketCode(market)) throw new TypeError("readConfigPrices: market is invalid");
-  const rows = await tx
-    .select({ key: settings.key, value: settings.value })
-    .from(settings)
-    .where(
-      and(
-        eq(settings.market, market),
-        eq(settings.scope, "market"),
-        inArray(settings.key, [...CONFIG_PRICE_KEYS]),
-      ),
-    );
-  const out: Record<ConfigPriceKey, { usd: string; unit: string } | undefined> = {
-    "config_price.block_storage_gb_month": undefined,
-    "config_price.snapshot_gb_month": undefined,
-    "config_price.load_balancer_month": undefined,
-    "config_price.dns_zone_month": undefined,
-  };
-  for (const row of rows) {
-    if (!isKey(row.key)) continue;
-    const v = row.value;
-    if (typeof v !== "object" || v === null || Array.isArray(v)) continue;
-    const { usd, unit } = v as Record<string, unknown>;
-    if (typeof usd === "string" && PRICE_TEXT.test(usd) && isUnit(unit)) {
-      out[row.key] = { usd, unit };
-    }
-  }
-  return out;
 }
