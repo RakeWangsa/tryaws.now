@@ -127,6 +127,69 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     kind: "session",
     proof: [DRAFT_ORDER_R9],
   },
+  "app/[locale]/(panel)/databases/[id]/access-actions.ts#revealDatabasePasswordAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}databases-access.test.ts`,
+        "another customer's database and a missing one give one answer and never reach the port (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/[id]/actions.ts#destroyDatabaseAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}family-actions.test.ts`,
+        "refuses a resource that is not live, not the customer's, an empty name, a flag that is off and a conflict",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/[id]/actions.ts#setDatabaseRunningAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}family-actions.test.ts`,
+        "a flag that is off writes nothing (R12); another customer's row, a missing one and another family are one answer (R8)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/new/actions.ts#createDatabaseDraftAction": {
+    kind: "session",
+    proof: [
+      proof(
+        `${W}databases-actions.test.ts`,
+        "refuses an unauthenticated request, a bad form and a rate limit, in that order (R9)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/load-balancers/[id]/actions.ts#destroyLoadBalancerAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}family-actions.test.ts`,
+        "refuses a resource that is not live, not the customer's, an empty name, a flag that is off and a conflict",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/load-balancers/[id]/actions.ts#setLoadBalancerTargetsAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}load-balancers-actions.test.ts`,
+        "another customer's server and a missing one give the same answer, and the port is never called",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/load-balancers/new/actions.ts#createLoadBalancerDraftAction": {
+    kind: "session",
+    proof: [
+      proof(
+        `${W}load-balancers-actions.test.ts`,
+        "asks for at least one target, refuses a bad id, an unauthenticated request and a rate limit (R9)",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/containers/[id]/actions.ts#deployContainersAction": {
     kind: "id",
     proof: [
@@ -437,6 +500,24 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       proof(
         `${W}loaders-tenancy.test.ts`,
         "the loaders of the pages with an id answer another customer's id like a missing row",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/databases/[id]/page.tsx": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}databases-view.test.ts`,
+        "answers null for a missing row, another customer's row, another family and a flag that is off (R8, R12)",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/load-balancers/[id]/page.tsx": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}load-balancers-view.test.ts`,
+        "answers null for a missing row, another customer's, another family and a flag that is off (R8, R12)",
       ),
     ],
   },
