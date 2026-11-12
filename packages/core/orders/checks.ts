@@ -4,6 +4,7 @@ import { isEnabledIn } from "../flags/is-enabled";
 import { isFeatureFlag } from "../flags/keys";
 import { checkCdnOrigin, parseCdnConfig, resolveCdn } from "../products/cdn";
 import { resolveProduct, type ResolvedProduct } from "../products/instance";
+import { checkRestore, type RestoreCandidate } from "../products/restore";
 import {
   checkLbTargets,
   parseLoadBalancerConfig,
@@ -85,6 +86,60 @@ export async function gateProduct(
   return checkLimits(DEFAULT_TIER_LIMITS[customer.riskTier], { instances }, product.facts);
 }
 
+function candidateOf(
+  row: {
+    id: string;
+    family: string;
+    state: string;
+    parentResourceId: string | null;
+    region: string | null;
+  } | null,
+): RestoreCandidate | null {
+  return row === null
+    ? null
+    : {
+        id: row.id,
+        family: row.family,
+        state: row.state,
+        parentResourceId: row.parentResourceId,
+        region: row.region,
+      };
+}
+
+function diskGbOf(specs: unknown): number {
+  const value = (specs as { diskGb?: unknown } | null | undefined)?.diskGb;
+  return typeof value === "number" ? value : Number.NaN;
+}
+
+/**
+ * restoreToNewServer: the backup and the server it belongs to are read through the tenant-scoped
+ * repository (another customer's row is `null`, like a missing one, R8), the disk sizes come from the
+ * catalog rows of the two plans, and checkRestore decides. Used by the draft and again by the
+ * purchase, inside the transaction; a read that fails throws and the action is refused (R16).
+ */
+async function checkRestoreSource(
+  tx: Tx,
+  repos: CustomerRepos,
+  product: ResolvedProduct,
+): Promise<Result<true>> {
+  const requested = product.restoreFromBackupId ?? "";
+  const backup = candidateOf(await repos.resources.get(requested));
+  const sourceRow =
+    backup?.parentResourceId == null ? null : await repos.resources.get(backup.parentResourceId);
+  const sourceProduct =
+    sourceRow?.productId == null ? null : await readCatalogProduct(tx, sourceRow.productId);
+  const plan = await readCatalogProduct(tx, product.productId);
+  const checked = checkRestore({
+    requested,
+    backup,
+    source: candidateOf(sourceRow),
+    sourceDiskGb: diskGbOf(sourceProduct?.specs),
+    planDiskGb: diskGbOf(plan?.specs),
+    planRegion: product.region,
+  });
+  return checked.ok ? { ok: true, value: true } : checked;
+}
+
 /**
  * The product of an order. Every family but the load balancer and the CDN is resolved by
  * `resolveProduct`. A distribution names an origin: the customer's own active server, load balancer
@@ -121,7 +176,10 @@ export async function resolveOrderProduct(
     return resolveCdn(config.value, product, checked.value);
   }
   if (family !== "load_balancer") {
-    return resolveProduct(family, rawConfig, (id) => readCatalogProduct(tx, id));
+    const resolved = await resolveProduct(family, rawConfig, (id) => readCatalogProduct(tx, id));
+    if (!resolved.ok || resolved.value.restoreFromBackupId === undefined) return resolved;
+    const restored = await checkRestoreSource(tx, repos, resolved.value);
+    return restored.ok ? resolved : restored;
   }
   const config = parseLoadBalancerConfig(rawConfig);
   if (!config.ok) return config;

@@ -193,6 +193,7 @@ const PRODUCTS = [
   "cdnBundleFrom",
   "cdnDefaultDomain",
   "checkCdnOrigin",
+  "checkRestore",
   "parseCdnConfig",
   "resolveCdn",
   // WP6-T2 and WP6-T3: the database and load balancer seams and the pure target rule

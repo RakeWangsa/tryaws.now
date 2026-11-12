@@ -251,7 +251,13 @@ export async function runPurchase(
       const { operationId } = await makeEnqueueOperation(deps.clock)(sp, {
         resourceId,
         kind: "create",
-        payload: { orderId },
+        // A restore names its backup; the adapter reads it from the payload (WP5-T1).
+        payload: {
+          orderId,
+          ...(product.restoreFromBackupId === undefined
+            ? {}
+            : { restoreFromBackupId: product.restoreFromBackupId }),
+        },
         idempotencyKey: `order-create:${orderId}`,
       });
 
