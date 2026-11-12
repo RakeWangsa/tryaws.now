@@ -3,7 +3,7 @@ import type { PlanSpec } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import type { PublicOffer } from "../../../../server/public/catalog.ts";
-import type { PlanSpecs } from "../../../../server/servers-view.ts";
+type PlanSpecs = PublicOffer["specs"];
 
 // The pieces that show offers of the live catalog. Nothing here computes money: the price of an
 // offer is the engine's `totalMinor`, formatted by MoneyText (whole taka, rounded up, 16.8, R4).

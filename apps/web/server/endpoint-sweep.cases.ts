@@ -409,6 +409,35 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       proof(`${W}topup-core.test.ts`, "not_found (another customer's id) is 'unknown'"),
     ],
   },
+  // ---- (public): before sign-in (WPP)
+  "app/[locale]/(public)/products/[family]/actions.ts#notifyMeAction": {
+    kind: "public",
+    proof: [
+      proof(`${W}public/notify-me.test.ts`, "is the same answer for a replay (R7)"),
+      proof(
+        `${W}public/notify-me.test.ts`,
+        "answers 'unavailable' when the write fails, and the log line holds no address",
+      ),
+    ],
+  },
+  "app/[locale]/(public)/products/[family]/page.tsx": {
+    kind: "public",
+    proof: [
+      proof(
+        "apps/web/app/[locale]/(public)/public-pages.test.tsx",
+        "shows the coming soon page with a notify-me form",
+      ),
+    ],
+  },
+  "app/[locale]/(public)/legal/[doc]/page.tsx": {
+    kind: "public",
+    proof: [
+      proof(
+        "apps/web/app/[locale]/(public)/public-pages.test.tsx",
+        "every legal document is marked as a draft placeholder",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/wallet/topup/actions.ts#startTopUpAction": {
     kind: "session",
     proof: [

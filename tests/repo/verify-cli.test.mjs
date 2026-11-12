@@ -136,6 +136,10 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP8-T7",
     "WP9-T2",
     "WP9-T3",
+    "WPP-T1",
+    "WPP-T2",
+    "WPP-T3",
+    "WPP-T4",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -1023,6 +1027,45 @@ it("tasks WP5-T1 and WP5-T2 are proven by the adapter, row and wiring tests, eac
     "packages/aws/test/disk.test.ts",
     "packages/db/test/backups-repo.test.ts",
     "functions/provisioner/backup.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("tasks WPP-T1 to WPP-T4 are proven by the shared checks and the public-site tests, and the filters match real files", () => {
+  const ids = (task) => TASKS[task].map((c) => c.id);
+  expect(ids("WPP-T1")).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "wpp-catalog",
+    "wpp-pages",
+    "wpp-mockup-anchors",
+    "wpp-messages",
+    "repo",
+  ]);
+  expect(ids("WPP-T2")).toContain("wpp-pages");
+  expect(ids("WPP-T3")).toContain("wpp-seo");
+  expect(ids("WPP-T4")).toEqual(
+    expect.arrayContaining(["wpp-notify-me", "wpp-visitor-waitlist", "wpp-pages"]),
+  );
+  expect(TASKS["WPP-T3"].find((c) => c.id === "wpp-seo").command.join(" ")).toBe(
+    "pnpm test --filter @tc/web server/public/seo server/public/sitemap proxy-indexing pages.test --no-passWithNoTests",
+  );
+  for (const f of [
+    "apps/web/server/public/catalog.test.ts",
+    "apps/web/server/public/seo.test.ts",
+    "apps/web/server/public/sitemap.test.ts",
+    "apps/web/server/public/notify-me.test.ts",
+    "apps/web/proxy-indexing.test.ts",
+    "apps/web/pages.test.tsx",
+    "apps/web/server/endpoint-sweep.test.ts",
+    "apps/web/messages/public-messages.test.ts",
+    "apps/web/app/[locale]/(public)/public-pages.test.tsx",
+    "apps/web/app/[locale]/(public)/public-anchors.test.tsx",
+    "packages/db/test/visitor-waitlist.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

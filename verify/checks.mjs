@@ -1782,6 +1782,57 @@ TASKS["WP9-T3"] = [
   repo,
 ];
 
+// WPP-T1 to WPP-T4: the public site. Each filter names files; `--no-passWithNoTests` makes an empty
+// selection fail, and tests/repo/verify-cli.test.mjs asserts that the files exist.
+const wppWeb = (id, title, ...filters) => ({
+  id,
+  title,
+  command: ["pnpm", "test", "--filter", "@tc/web", ...filters, "--no-passWithNoTests"],
+});
+const wppCatalog = wppWeb(
+  "wpp-catalog",
+  "R4, R12, R16: every offer is the pricing engine's output; a flag off or an unreadable catalog shows nothing",
+  "server/public/catalog",
+);
+const wppPages = wppWeb(
+  "wpp-pages",
+  "16.8, 16.13, U6: the pages in bn and en, one h1, landmarks, AWS statements and trademark line, FAQ answers, placeholders",
+  "(public)/public-pages",
+);
+const wppAnchors = wppWeb(
+  "wpp-mockup-anchors",
+  "U1, U11: every page carries the classes of its shared mockup page, bn and en",
+  "(public)/public-anchors",
+);
+const wppMessages = wppWeb(
+  "wpp-messages",
+  "U5: bn and en have the same keys and no forbidden wording",
+  "messages/public",
+);
+const wppSeo = wppWeb(
+  "wpp-seo",
+  "16.8: canonical, hreflang, escaped JSON-LD, sitemap, robots, noindex on every non-public path",
+  "server/public/seo",
+  "server/public/sitemap",
+  "proxy-indexing",
+  "pages.test",
+);
+const wppNotify = wppWeb(
+  "wpp-notify-me",
+  "R9, R7, R14: notify me in the R9 order, idempotent, rate limited, no address in a log",
+  "server/public/notify-me",
+  "endpoint-sweep",
+);
+const wppRepo = {
+  id: "wpp-visitor-waitlist",
+  title: "R7, R8: the flag-off interest row by e-mail is idempotent and validated (database)",
+  command: ["pnpm", "test", "--filter", "@tc/db", "test/visitor-waitlist", "--no-passWithNoTests"],
+};
+const wppBase = [specSync, baselineSync, lint, typecheck, format];
+TASKS["WPP-T1"] = [...wppBase, wppCatalog, wppPages, wppAnchors, wppMessages, repo];
+TASKS["WPP-T2"] = [...wppBase, wppPages, wppAnchors, wppMessages, repo];
+TASKS["WPP-T3"] = [...wppBase, wppSeo, wppPages, repo];
+TASKS["WPP-T4"] = [...wppBase, wppNotify, wppRepo, wppPages, repo];
 export const GATES = {
   M0: WP0_T1,
   M1: [],
