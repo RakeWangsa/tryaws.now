@@ -71,8 +71,10 @@ const KEYS = [
   "config_price.snapshot_gb_month",
   "config_price.load_balancer_month",
   "config_price.dns_zone_month",
+  "config_price.static_ip_unattached_hour",
 ] as const;
 const UNIT = {
+  "config_price.static_ip_unattached_hour": "hour",
   "config_price.block_storage_gb_month": "gb_month",
   "config_price.snapshot_gb_month": "gb_month",
 } as Record<string, string>;
@@ -159,7 +161,7 @@ beforeEach(() => {
 
 describe("/pricing/config", () => {
   it.each(LOCALES)(
-    "lists the four prices with the price in force and the next change in %s",
+    "lists the five prices with the price in force and the next change in %s",
     async (locale) => {
       const html = inProvider(await ConfigPage(params(locale)), locale);
       const m = msgs(locale).AdminConfigPrices;
@@ -173,8 +175,8 @@ describe("/pricing/config", () => {
       expect(html).toContain(m.state.notReadYet);
       expect(html).toContain(m.state.none);
       expect(state.asked).toEqual([[locale, "pricing"]]);
-      // one edit button for each of the four prices
-      expect([...html.matchAll(/name="key" value="config_price\.[a-z_]+"/g)].length).toBe(4);
+      // one edit button for each of the five prices
+      expect([...html.matchAll(/name="key" value="config_price\.[a-z_]+"/g)].length).toBe(5);
     },
   );
 

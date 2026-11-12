@@ -4,9 +4,11 @@ import {
   markPlanChangeFailed,
   runLifecycle,
   runMetering,
+  runStaticIpMetering,
   sweepOperations,
   type LifecycleReport,
   type MeteringReport,
+  type StaticIpReport,
   type LogEvent,
   type Logger,
   type AttentionHook,
@@ -26,17 +28,19 @@ export interface SchedulerReport {
   readonly sweep: SweepReport | null;
   readonly lifecycle: LifecycleReport | null;
   readonly metering: MeteringReport | null;
+  readonly staticIps: StaticIpReport | null;
   readonly rateLimitsPurged: number | null;
 }
 
 // Every run does the jobs of 3.2 in order: the operations sweep, the lifecycle pass (section
-// 11), the metering pass (WP7-T5) and the purge of old rate-limit windows. One failing job does not stop the others; the run
+// 11), the metering pass (WP7-T5), the unattached static IP pass (WPU-M1) and the purge of old rate-limit windows. One failing job does not stop the others; the run
 // then rejects, so the error metric of the function moves (R16).
 export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<SchedulerReport> {
   return async () => {
     let sweep: SweepReport | null = null;
     let lifecycle: LifecycleReport | null = null;
     let metering: MeteringReport | null = null;
+    let staticIps: StaticIpReport | null = null;
     let rateLimitsPurged: number | null = null;
     const failed: string[] = [];
     const job = async (name: string, fn: () => Promise<void>): Promise<void> => {
@@ -70,13 +74,23 @@ export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<
       // A row that failed makes the run reject (R16); a missing price is only reported in the log line.
       if (metering.failed > 0) throw new Error("scheduler: metering rows failed");
     });
+    // WPU-M1: the hourly charge of a static IP that is not attached (one ledger charge for each IP and hour).
+    await job("static_ip_metering", async () => {
+      staticIps = await runStaticIpMetering({
+        runTx: deps.runTx,
+        clock: deps.clock,
+        log: deps.log,
+      });
+      deps.log({ event: "static_ip_metering_run", ...staticIps });
+      if (staticIps.failed > 0) throw new Error("scheduler: static ip rows failed");
+    });
     await job("rate_limits", async () => {
       const before = new Date(deps.clock.now().getTime() - RATE_LIMIT_RETENTION_MS);
       rateLimitsPurged = await deps.runTx((tx) => purgeRateLimits(tx, before));
       deps.log({ event: "rate_limits_purged", count: rateLimitsPurged });
     });
     if (failed.length > 0) throw new Error(`scheduler: ${failed.join(", ")} failed`);
-    return { sweep, lifecycle, metering, rateLimitsPurged };
+    return { sweep, lifecycle, metering, staticIps, rateLimitsPurged };
   };
 }
 

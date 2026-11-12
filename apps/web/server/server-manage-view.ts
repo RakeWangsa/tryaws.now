@@ -9,6 +9,8 @@ import {
 } from "@tc/core";
 import type { FirewallRule } from "@tc/core";
 import { customerRepos, readFeatureFlag, readImage, withTx } from "@tc/db";
+import { loadStaticIpHourMinor, staticIpFeeOf } from "./static-ip-fee.ts";
+import type { StaticIpFee } from "./static-ip-fee.ts";
 
 // What the header buttons and the Networking tab of /servers/[id] need (WPU-G2), read through the
 // repositories of the session's customer only (R8). A database error is thrown, never answered with
@@ -37,6 +39,8 @@ export interface ServerManage {
   rules: FirewallRule[] | null;
   sshOpenToWorld: boolean;
   staticIpAttached: boolean;
+  /** WPU-M1: the hourly price of an unattached IP (paisa as text) and whether the charge is running. */
+  staticIpFee: StaticIpFee;
   /** The default user of the image, null when the image is not known (always null for Windows). */
   loginUser: string | null;
   /** A power, firewall or static IP operation is on its way: the forms wait for it. */
@@ -85,6 +89,7 @@ export async function loadServerManage(
       rules,
       sshOpenToWorld: rules !== null && rulesOpenSshToWorld(rules),
       staticIpAttached: config["staticIpAttached"] !== false,
+      staticIpFee: staticIpFeeOf(resource.config, await loadStaticIpHourMinor(tx, profile.market)),
       loginUser,
       busy: operations.some((o) => IN_FLIGHT.includes(o.state) && CONFLICTING.includes(o.kind)),
     };

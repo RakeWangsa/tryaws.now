@@ -1,4 +1,5 @@
-import { Button, Card, EmptyState } from "@tc/ui";
+import { Button, Card, EmptyState, formatMoney } from "@tc/ui";
+import type { Numerals } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
@@ -14,10 +15,12 @@ import { ServersSubnav } from "../servers/ServersSubnav.tsx";
 
 export function StaticIpsContent({
   locale,
+  numerals,
   screen,
   actions,
 }: {
   locale: Locale;
+  numerals: Numerals;
   screen: StaticIpsScreen;
   actions: Pick<ManageActions, "attachIp" | "detachIp">;
 }) {
@@ -61,6 +64,12 @@ export function StaticIpsContent({
             <StaticIpPanel
               attached={item.attached}
               address={item.address}
+              fee={item.fee}
+              hourText={
+                item.fee.hourMinor === null
+                  ? null
+                  : formatMoney(BigInt(item.fee.hourMinor), { locale, numerals })
+              }
               actions={actions}
               ids={{ serverId: item.serverId, requestId: screen.requestId }}
               disabled={item.busy || item.serverState === "suspended"}

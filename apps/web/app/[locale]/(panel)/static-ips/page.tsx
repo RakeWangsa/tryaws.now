@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import { routing } from "../../../../i18n/routing.ts";
 import { loadStaticIps } from "../../../../server/account-view.ts";
 import { startPanelPage } from "../../../../server/panel-page.ts";
-import { PanelFrame } from "../PanelFrame.tsx";
+import { PanelFrame, numeralsFor } from "../PanelFrame.tsx";
 import { attachStaticIpAction, detachStaticIpAction } from "../servers/[id]/manage-actions.ts";
 import { StaticIpsContent } from "./StaticIpsContent.tsx";
 
@@ -35,6 +35,7 @@ export default async function StaticIpsPage({ params }: Props) {
     <PanelFrame locale={locale} path="/static-ips" currentId="cloudServers" panel={panel}>
       <StaticIpsContent
         locale={locale}
+        numerals={numeralsFor(locale, panel)}
         screen={screen}
         actions={{ attachIp: attachStaticIpAction, detachIp: detachStaticIpAction }}
       />

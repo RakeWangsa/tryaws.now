@@ -646,6 +646,59 @@ describe("suspend, resume, snapshot, destroy, actions", () => {
     expect(calls()).toEqual(["GetStaticIp", "AllocateStaticIp", "AttachStaticIp", "GetStaticIp"]);
   });
 
+  it("WPU-M1: a detach stamps detachedAt with the clock; an attach clears it", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({ staticIp: { isAttached: true, attachedTo: INSTANCE } }),
+    );
+    aws.on("lightsail", "DetachStaticIp", lightsailOk({}));
+    aws.on("lightsail", "GetInstance", lightsailOk({ instance: {} }));
+    expect(await adapter.aws.action("detach_static_ip", ctx(null))).toMatchObject({
+      patch: { configMerge: { staticIpAttached: false, detachedAt: new Date(NOW).toISOString() } },
+    });
+
+    const att = setup();
+    att.aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { isAttached: false } }));
+    att.aws.on("lightsail", "AttachStaticIp", lightsailOk({}));
+    expect(await att.adapter.aws.action("attach_static_ip", att.ctx(null))).toMatchObject({
+      patch: { configMerge: { staticIpAttached: true, detachedAt: null } },
+    });
+    const already = setup();
+    already.aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({ staticIp: { isAttached: true, attachedTo: INSTANCE } }),
+    );
+    expect(await already.adapter.aws.action("attach_static_ip", already.ctx(null))).toMatchObject({
+      patch: { configMerge: { staticIpAttached: true, detachedAt: null } },
+    });
+  });
+
+  it("WPU-M1: a repeated detach keeps the first detachedAt, so the free hour is not restarted", async () => {
+    const first = "2026-11-12T08:00:00.000Z";
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { isAttached: false } }));
+    aws.on("lightsail", "GetInstance", lightsailOk({ instance: {} }));
+    expect(
+      await adapter.aws.action(
+        "detach_static_ip",
+        ctx(null, { config: { staticIpAttached: false, detachedAt: first } }),
+      ),
+    ).toMatchObject({ patch: { configMerge: { detachedAt: first } } });
+    // A value that is not an exact instant is replaced by the clock.
+    const bad = setup();
+    bad.aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { isAttached: false } }));
+    bad.aws.on("lightsail", "GetInstance", lightsailOk({ instance: {} }));
+    expect(
+      await bad.adapter.aws.action(
+        "detach_static_ip",
+        bad.ctx(null, { config: { detachedAt: "yesterday" } }),
+      ),
+    ).toMatchObject({ patch: { configMerge: { detachedAt: new Date(NOW).toISOString() } } });
+  });
+
   it("detach_static_ip detaches only an IP attached to this instance; not-found is done", async () => {
     const { aws, adapter, ctx, calls } = setup();
     aws.on(

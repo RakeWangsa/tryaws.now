@@ -53,6 +53,7 @@ const ADMIN = {
 const NOW = new Date("2026-11-12T06:00:00Z");
 const clock = { now: () => NOW };
 const BY = "0191a000-0000-7000-8000-0000000000ae";
+const STATIC_IP = "config_price.static_ip_unattached_hour";
 const DNS = "config_price.dns_zone_month";
 
 beforeEach(() => {
@@ -93,13 +94,15 @@ describe("loadConfigPrices", () => {
       "config_price.snapshot_gb_month",
       "config_price.load_balancer_month",
       DNS,
+      STATIC_IP,
     ]);
     const dns = r.value.lines.find((l) => l.key === DNS);
     expect(dns?.inForce?.usd).toBe("0.50");
     expect(dns?.scheduled?.usd).toBe("0.60");
     expect(dns?.readByOrders).toBe(true);
-    expect(r.value.lines.filter((l) => l.readByOrders)).toHaveLength(1);
-    expect([...READ_BY_ORDERS]).toEqual([DNS]);
+    // WPU-M1: the static IP hour price is read by the hourly metering charge.
+    expect(r.value.lines.filter((l) => l.readByOrders).map((l) => l.key)).toEqual([DNS, STATIC_IP]);
+    expect([...READ_BY_ORDERS]).toEqual([DNS, STATIC_IP]);
     expect(r.value.lines.find((l) => l.key === "config_price.snapshot_gb_month")?.invalid).toBe(
       true,
     );

@@ -170,6 +170,13 @@ export async function seedLaunchData(
     at,
     prices: [{ key: "config_price.snapshot_gb_month", usd: "0.05", unit: "gb_month" }],
   });
+  // WPU-M1: Amazon Lightsail charges USD 0.005 per hour for a static IP that is not attached for more
+  // than one hour (owner decision 2026-11-12). Same rule: only where missing.
+  await seedConfigPrices(tx, {
+    market: code,
+    at,
+    prices: [{ key: "config_price.static_ip_unattached_hour", usd: "0.005", unit: "hour" }],
+  });
 
   // R12: in production every flag is off.
   for (const key of FEATURE_FLAG_KEYS) {

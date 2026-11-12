@@ -22,9 +22,10 @@ export const CONFIG_PRICE_KEYS = [
   "config_price.snapshot_gb_month",
   "config_price.load_balancer_month",
   "config_price.dns_zone_month",
+  "config_price.static_ip_unattached_hour",
 ] as const;
 export type ConfigPriceKey = (typeof CONFIG_PRICE_KEYS)[number];
-export type ConfigPriceUnit = "gb_month" | "month";
+export type ConfigPriceUnit = "gb_month" | "month" | "hour";
 
 export const CONFIG_PRICE_UNIT_OF: Readonly<Record<ConfigPriceKey, ConfigPriceUnit>> =
   Object.freeze({
@@ -32,6 +33,7 @@ export const CONFIG_PRICE_UNIT_OF: Readonly<Record<ConfigPriceKey, ConfigPriceUn
     "config_price.snapshot_gb_month": "gb_month",
     "config_price.load_balancer_month": "month",
     "config_price.dns_zone_month": "month",
+    "config_price.static_ip_unattached_hour": "hour",
   });
 
 export const CONFIG_PRICE_VERSION = 1;
@@ -141,6 +143,7 @@ export async function readConfigPrices(
     "config_price.snapshot_gb_month": undefined,
     "config_price.load_balancer_month": undefined,
     "config_price.dns_zone_month": undefined,
+    "config_price.static_ip_unattached_hour": undefined,
   };
   for (const row of rows) {
     if (!isConfigPriceKey(row.key)) continue;

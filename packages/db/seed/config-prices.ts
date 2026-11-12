@@ -20,7 +20,7 @@ const UNIT_OF = CONFIG_PRICE_UNIT_OF;
 export interface ConfigPriceInput {
   key: ConfigPriceKey;
   usd: string;
-  unit: "gb_month" | "month";
+  unit: "gb_month" | "month" | "hour";
 }
 
 /**
@@ -37,7 +37,8 @@ export const STAGING_CONFIG_PRICES: readonly ConfigPriceInput[] = Object.freeze(
 const PRICE_TEXT = /^\d+(\.\d{1,4})?$/;
 const isKey = (v: unknown): v is ConfigPriceKey =>
   typeof v === "string" && (CONFIG_PRICE_KEYS as readonly string[]).includes(v);
-const isUnit = (v: unknown): v is "gb_month" | "month" => v === "gb_month" || v === "month";
+const isUnit = (v: unknown): v is "gb_month" | "month" | "hour" =>
+  v === "gb_month" || v === "month" || v === "hour";
 const bad = (field: string): never => {
   throw new TypeError(`seedConfigPrices: ${field} is invalid`);
 };

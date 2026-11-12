@@ -42,7 +42,7 @@ export const accountEn: Same<typeof accountBn> = {
     meta: { title: "Static IPs" },
     heading: "Static IPs",
     intro:
-      "Every server has a static IP. The address stays the same when the server restarts. If you detach it, the server gets an address of its own that changes when the server is stopped.",
+      "Every server has a static IP. The address stays the same when the server restarts. If you detach it, the server gets an address of its own that changes when the server is stopped. A static IP is free while it is attached; one that is not attached is charged by the hour after the first hour, as Amazon Lightsail does.",
     flagOff: {
       title: "Cloud Servers are coming soon",
       body: "This service is not open in your market yet.",

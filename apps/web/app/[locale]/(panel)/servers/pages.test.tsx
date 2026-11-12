@@ -378,6 +378,38 @@ describe("/servers/[id] management (WPU-G2)", () => {
     expect(en).toContain("Attach static IP");
     expect(en).not.toContain("I understand that the address will change");
   });
+  it("WPU-M1: the Networking tab says an attached IP is free and what an unattached one costs per hour", async () => {
+    const attached = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(attached).toContain("Free while attached");
+    expect(attached).toMatch(/after the first hour/);
+    expect(attached).toMatch(/0\.74/);
+    expect(attached).not.toContain("Charging now");
+
+    state.manage = manage({
+      staticIpAttached: false,
+      staticIpFee: { hourMinor: "74", charging: false },
+    });
+    const waiting = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(waiting).toMatch(/Not attached: charged [^<]*0\.74[^<]* per hour after the first hour/);
+    expect(waiting).not.toContain("Charging now");
+
+    state.manage = manage({
+      staticIpAttached: false,
+      staticIpFee: { hourMinor: "74", charging: true },
+    });
+    const running = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(running).toContain("Charging now");
+    const bn = await renderPage(ServerDetailPage as never, "bn", { id: SERVER_ID });
+    expect(bn).toMatch(/০\.৭৪/);
+    expect(bn).toContain("চার্জ চলছে");
+
+    state.manage = manage({
+      staticIpAttached: false,
+      staticIpFee: { hourMinor: null, charging: false },
+    });
+    const none = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(none).toContain("price is not available");
+  });
   it("with the flag off nothing can be changed and the page says so", async () => {
     state.manage = manage({ flagOn: false });
     const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });

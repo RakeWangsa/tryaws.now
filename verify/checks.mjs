@@ -978,6 +978,28 @@ TASKS["WPU-S4"] = [
   repo,
 ];
 
+// WPU-M1: an unattached static IP is charged as Amazon Lightsail does (free while attached, an hourly
+// price once unattached for more than one hour). Money path: the config price row and its migration (db),
+// the price through the pricing engine, the existing metered_charge posting once per IP and hour bucket,
+// the empty wallet and the missing price (core, with the database), the detachedAt stamp of the detach
+// and attach (aws), the hourly scheduler job (scheduler), the Static IPs page and the Networking tab in
+// bn and en (web) and the config price in /pricing/config (admin). No AWS call. The core and db suites
+// need the local PostgreSQL (pnpm db:up).
+TASKS["WPU-M1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  scheduler,
+  web,
+  admin,
+  repo,
+];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

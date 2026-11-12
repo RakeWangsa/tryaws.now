@@ -17,6 +17,11 @@ vi.mock("@tc/db", () => ({
   readImage: async () => state.image,
 }));
 
+vi.mock("@tc/core", async (original) => ({
+  ...(await original<typeof import("@tc/core")>()),
+  staticIpHourPrice: async () => ({ ok: true, value: { unit: "hour", perHourMinor: 74n } }),
+}));
+
 const { loadServerManage } = await import("./server-manage-view.ts");
 
 const session = { customerId: "11111111-1111-4111-8111-111111111111" } as never;
@@ -45,6 +50,7 @@ describe("loadServerManage", () => {
       rules: [{ protocol: "tcp", fromPort: 22, toPort: 22, cidrs: ["0.0.0.0/0"] }],
       sshOpenToWorld: true,
       staticIpAttached: true,
+      staticIpFee: { hourMinor: "74", charging: false },
       loginUser: "ubuntu",
       busy: false,
     });
@@ -111,5 +117,23 @@ describe("loadServerManage", () => {
     expect(await loadServerManage(session, "x", REQ)).toMatchObject({ busy: false });
     state.operations = [{ kind: "set_ports", state: "queued" }];
     expect(await loadServerManage(session, "x", REQ)).toMatchObject({ busy: true });
+  });
+});
+
+describe("WPU-M1: the charge of an unattached static IP", () => {
+  it("is running once the IP has been unattached for more than an hour", async () => {
+    state.resource = resource({
+      config: { staticIpAttached: false, detachedAt: "2026-11-01T00:00:00.000Z" },
+    });
+    expect(await loadServerManage(session, "x", REQ)).toMatchObject({
+      staticIpAttached: false,
+      staticIpFee: { hourMinor: "74", charging: true },
+    });
+    state.resource = resource({
+      config: { staticIpAttached: false, detachedAt: new Date().toISOString() },
+    });
+    expect(await loadServerManage(session, "x", REQ)).toMatchObject({
+      staticIpFee: { hourMinor: "74", charging: false },
+    });
   });
 });

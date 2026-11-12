@@ -25,11 +25,15 @@ import { readTx } from "./pricing-runtime.ts";
 // the role again.
 
 /**
- * The config prices that a customer order reads today. Verified by search of the code (WPU-G10): only the
- * hosted zone is read when an order is priced; the other three are stored and edited here, and the screen
- * says that no order reads them yet. Adding a reader means adding the key here.
+ * The config prices that the platform reads today. Verified by search of the code (WPU-G10): the hosted zone
+ * is read when an order is priced, and (WPU-M1) the unattached static IP hour price is read by the hourly
+ * metering charge; the others are stored and edited here, and the screen says that nothing reads them yet.
+ * Adding a reader means adding the key here.
  */
-export const READ_BY_ORDERS: ReadonlySet<ConfigPriceKey> = new Set(["config_price.dns_zone_month"]);
+export const READ_BY_ORDERS: ReadonlySet<ConfigPriceKey> = new Set([
+  "config_price.dns_zone_month",
+  "config_price.static_ip_unattached_hour",
+]);
 
 export interface ConfigPriceLine {
   readonly key: ConfigPriceKey;

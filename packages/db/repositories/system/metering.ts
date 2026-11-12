@@ -25,6 +25,15 @@ export interface TransferRow {
   readonly allowanceGb: string;
 }
 
+/** WPU-M1: a server whose own static IP is not attached (config.staticIpAttached is false). */
+export interface DetachedIpRow {
+  readonly resourceId: string;
+  readonly customerId: string;
+  readonly market: string;
+  /** When the detach operation finished (config.detachedAt); null when the row has none or an unreadable one. */
+  readonly detachedAt: Date | null;
+}
+
 const METRIC = /^[a-z][a-z0-9_]{0,39}$/;
 const PERIOD = /^\d{4}-\d{2}(-\d{2}(T\d{2})?)?$/;
 const PLAIN = /^\d+(\.\d+)?$/;
@@ -103,6 +112,40 @@ export function meteringRepo(tx: Tx) {
           usedGb: r.used,
           allowanceGb: r.allowance,
         }));
+    },
+
+    // WPU-M1: the servers whose static IP is not attached, in id order after `afterId`. Only a server
+    // that still exists on AWS (active, stopped or suspended) holds an IP; a destroyed one released it.
+    // `detachedAt` is written by the detach operation and cleared by the attach; a value that is not an
+    // exact ISO instant is null (and the caller does not charge it, R16).
+    async listDetachedStaticIps(afterId: string | null, limit: number): Promise<DetachedIpRow[]> {
+      if (afterId !== null && !isUuid(afterId))
+        throw new TypeError("metering: afterId is not a UUID");
+      checkLimit(limit);
+      const { rows } = await tx.execute<{
+        id: string;
+        customer_id: string;
+        market: string;
+        detached_at: string | null;
+      }>(sql`
+        select r.id, r.customer_id, c.market, r.config ->> 'detachedAt' as detached_at
+        from resources r join customers c on c.id = r.customer_id
+        where r.family in ('linux_instance', 'windows_instance')
+          and r.state in ('active', 'stopped', 'suspended')
+          and r.config ->> 'staticIpAttached' = 'false'
+          and (${afterId}::uuid is null or r.id > ${afterId}::uuid)
+        order by r.id limit ${limit}`);
+      return rows.map((r) => {
+        const at = r.detached_at === null ? null : new Date(r.detached_at);
+        const exact =
+          at !== null && !Number.isNaN(at.getTime()) && at.toISOString() === r.detached_at;
+        return {
+          resourceId: r.id,
+          customerId: r.customer_id,
+          market: r.market,
+          detachedAt: exact ? at : null,
+        };
+      });
     },
 
     // The one writer of usage_records (the reconciler and the reader call it): one row per resource,

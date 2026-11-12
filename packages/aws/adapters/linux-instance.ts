@@ -481,6 +481,8 @@ export function createLinuxInstanceAdapter(
       return stepDone({
         configMerge: {
           staticIpAttached: true,
+          // WPU-M1: attached again, the charge for an unattached IP stops.
+          detachedAt: null,
           ...(ipOf(found.staticIp.ipAddress) === null
             ? {}
             : { publicIpv4: ipOf(found.staticIp.ipAddress) }),
@@ -498,7 +500,11 @@ export function createLinuxInstanceAdapter(
     );
     const address = ipOf(now?.staticIp?.ipAddress);
     return stepDone({
-      configMerge: { staticIpAttached: true, ...(address === null ? {} : { publicIpv4: address }) },
+      configMerge: {
+        staticIpAttached: true,
+        detachedAt: null,
+        ...(address === null ? {} : { publicIpv4: address }),
+      },
     });
   }
 
@@ -517,8 +523,20 @@ export function createLinuxInstanceAdapter(
     const live = await orNull(() =>
       lightsail.send(new GetInstanceCommand({ instanceName: n.instance })),
     );
+    // WPU-M1: the time the IP stopped being attached, from which Amazon Lightsail's free hour counts.
+    // A repeat of the operation keeps the first time; anything that is not an exact instant is replaced.
+    const earlier = (ctx.resource.config as { detachedAt?: unknown } | null)?.detachedAt;
+    const keep =
+      found?.staticIp?.isAttached !== true &&
+      typeof earlier === "string" &&
+      !Number.isNaN(new Date(earlier).getTime()) &&
+      new Date(earlier).toISOString() === earlier;
     return stepDone({
-      configMerge: { staticIpAttached: false, publicIpv4: ipOf(live?.instance?.publicIpAddress) },
+      configMerge: {
+        staticIpAttached: false,
+        detachedAt: keep ? earlier : ctx.clock.now().toISOString(),
+        publicIpv4: ipOf(live?.instance?.publicIpAddress),
+      },
     });
   }
 

@@ -262,6 +262,17 @@ export const serversEn: Same<typeof serversBn> = {
           address: "Current address",
           detachWarn:
             "After you detach it, the server gets a new address. Anything that uses the current address, such as DNS records, stops working.",
+          free: "Free while attached.",
+          detachFee:
+            "Amazon Lightsail charges a static IP that is not attached {price} per hour after the first hour. The charge is taken from your wallet and stops when you attach it again.",
+          feeWaiting:
+            "Not attached: charged {price} per hour after the first hour. Attach it again to avoid the charge.",
+          feeNoPrice:
+            "Not attached: charged by the hour after the first hour. The price is not available right now.",
+          charging: "Charging now",
+          chargingNote: "{price} per hour is being taken from your wallet.",
+          chargingNoPrice: "An hourly charge is being taken from your wallet.",
+          attachNote: "Attaching it stops the hourly charge.",
           acknowledge: "I understand that the address will change",
           detach: "Detach static IP",
           attach: "Attach static IP",

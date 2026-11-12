@@ -373,7 +373,12 @@ export type {
   ResourceRowView,
 } from "./repositories/system/reconcile";
 export { meteringRepo } from "./repositories/system/metering";
-export type { MeteringRepo, TransferRow, UsageRow } from "./repositories/system/metering";
+export type {
+  DetachedIpRow,
+  MeteringRepo,
+  TransferRow,
+  UsageRow,
+} from "./repositories/system/metering";
 export type {
   LedgerPoster,
   LedgerPostAnswer,

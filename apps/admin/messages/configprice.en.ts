@@ -34,8 +34,9 @@ export const configPriceEn: Same<typeof configPriceBn> = {
       snapshot_gb_month: "Snapshot (per GB, per month)",
       load_balancer_month: "Load balancer (per month)",
       dns_zone_month: "DNS zone (per month)",
+      static_ip_unattached_hour: "Unattached static IP (per hour)",
     },
-    unit: { gb_month: "GB-month", month: "month" },
+    unit: { gb_month: "GB-month", month: "month", hour: "hour" },
     list: {
       title: "Price list",
       intro:

@@ -115,6 +115,7 @@ export function manage(over: Partial<ServerManage> = {}): ServerManage {
     rules: [{ protocol: "tcp", fromPort: 22, toPort: 22, cidrs: ["0.0.0.0/0"] }],
     sshOpenToWorld: true,
     staticIpAttached: true,
+    staticIpFee: { hourMinor: "74", charging: false },
     loginUser: "ubuntu",
     busy: false,
     ...over,

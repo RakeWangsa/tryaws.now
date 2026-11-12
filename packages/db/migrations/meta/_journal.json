@@ -99,6 +99,13 @@
       "when": 1794475378288,
       "tag": "0014_snapshot_price_default",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794478978288,
+      "tag": "0015_static_ip_unattached_price",
+      "breakpoints": true
     }
   ]
 }

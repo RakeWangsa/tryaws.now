@@ -35,8 +35,9 @@ export const configPriceBn = {
       snapshot_gb_month: "স্ন্যাপশট (প্রতি GB, প্রতি মাস)",
       load_balancer_month: "লোড ব্যালান্সার (প্রতি মাস)",
       dns_zone_month: "ডিএনএস জোন (প্রতি মাস)",
+      static_ip_unattached_hour: "আনঅ্যাটাচড স্ট্যাটিক আইপি (প্রতি ঘণ্টা)",
     },
-    unit: { gb_month: "GB-মাস", month: "মাস" },
+    unit: { gb_month: "GB-মাস", month: "মাস", hour: "ঘণ্টা" },
     list: {
       title: "দামের তালিকা",
       intro:

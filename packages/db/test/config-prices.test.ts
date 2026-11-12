@@ -22,9 +22,10 @@ const FOUR = [
   { key: "config_price.snapshot_gb_month", usd: "0.05", unit: "gb_month" },
   { key: "config_price.load_balancer_month", usd: "18", unit: "month" },
   { key: "config_price.dns_zone_month", usd: "0.50", unit: "month" },
+  { key: "config_price.static_ip_unattached_hour", usd: "0.005", unit: "hour" },
 ] as const;
 
-it("adds the four keys, a second run adds none", async () => {
+it("adds the five keys, a second run adds none", async () => {
   await ensureMarket(t.pool);
   const first = await as(undefined, (tx) =>
     seedConfigPrices(tx, { market: "BD", at: AT, prices: FOUR }),

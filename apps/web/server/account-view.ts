@@ -7,6 +7,8 @@ import { MAX_MANUAL_BACKUPS, resourceFacts } from "./extras-actions.ts";
 import { DAY_MS, RENEWAL_WINDOW_DAYS, parsePriceLines, restorePlansFor } from "./extras-view.ts";
 import type { BackupItem } from "./extras-view.ts";
 import { serverConfigOf } from "./servers-view.ts";
+import { loadStaticIpHourMinor, staticIpFeeOf } from "./static-ip-fee.ts";
+import type { StaticIpFee } from "./static-ip-fee.ts";
 import type { PlanOption } from "./servers-view.ts";
 
 // What the pages /snapshots, /static-ips and /billing show (WPU-G5), read through the repositories of
@@ -155,6 +157,8 @@ export interface StaticIpItem {
   family: string;
   /** A power, firewall or static IP operation is on its way: the forms wait for it. */
   busy: boolean;
+  /** WPU-M1: the hourly price of an unattached IP and whether the charge is running. */
+  fee: StaticIpFee;
 }
 
 export type StaticIpsScreen =
@@ -179,6 +183,8 @@ export async function loadStaticIps(
         .filter((o) => IN_FLIGHT.includes(o.state) && CONFLICTING.includes(o.kind))
         .map((o) => o.resourceId),
     );
+    // WPU-M1: one price for the page, through the pricing engine.
+    const hourMinor = await loadStaticIpHourMinor(tx, profile.market);
     const items = rows
       .filter(
         (r) =>
@@ -201,6 +207,7 @@ export async function loadStaticIps(
           serverState: r.state,
           family: r.family,
           busy: busyIds.has(r.id),
+          fee: staticIpFeeOf(r.config, hourMinor),
         };
       });
     return { state: "ready", requestId, items };

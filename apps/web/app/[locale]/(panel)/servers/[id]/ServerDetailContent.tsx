@@ -1,5 +1,14 @@
 import { keyFileName, sshCommandOf } from "@tc/core";
-import { Button, Card, CopyField, EmptyState, StatTile, Tabs, formatDate } from "@tc/ui";
+import {
+  Button,
+  Card,
+  CopyField,
+  EmptyState,
+  StatTile,
+  Tabs,
+  formatDate,
+  formatMoney,
+} from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
@@ -201,6 +210,12 @@ export function ServerDetailContent({
           <StaticIpPanel
             attached={manage.data.staticIpAttached}
             address={server.publicIp}
+            fee={manage.data.staticIpFee}
+            hourText={
+              manage.data.staticIpFee.hourMinor === null
+                ? null
+                : formatMoney(BigInt(manage.data.staticIpFee.hourMinor), { locale, numerals })
+            }
             actions={manage.actions}
             ids={ids}
             disabled={locked || !["active", "stopped"].includes(server.state)}

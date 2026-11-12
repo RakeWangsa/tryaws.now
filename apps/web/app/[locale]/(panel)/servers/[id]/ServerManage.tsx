@@ -1,11 +1,12 @@
 "use client";
 
-import { CopyField, DataTable, EmptyState, Field, SubmitButton } from "@tc/ui";
+import { Badge, CopyField, DataTable, EmptyState, Field, SubmitButton } from "@tc/ui";
 import { useTranslations } from "next-intl";
 import { useActionState, useState } from "react";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import { ActionNotice } from "./ExtrasForms.tsx";
 import type { ExtrasAction } from "./ExtrasForms.tsx";
+import type { StaticIpFee } from "../../../../../server/static-ip-fee.ts";
 
 // The header buttons and the Networking tab forms of /servers/[id] (WPU-G2). U8: every form posts to
 // a Server Action that follows R9, shows its field errors from the server's own check and is inert
@@ -432,9 +433,15 @@ export function StaticIpPanel({
   ids,
   disabled,
   idSuffix = "",
+  fee = null,
+  hourText = null,
 }: {
   attached: boolean;
   address: string | null;
+  /** WPU-M1: the charge of an unattached IP. Null where the caller has none to show. */
+  fee?: StaticIpFee | null;
+  /** The hourly price in BDT as the caller formatted it (locale and numerals), null when no price is in force. */
+  hourText?: string | null;
   actions: Pick<ManageActions, "attachIp" | "detachIp">;
   ids: Ids;
   disabled: boolean;
@@ -447,12 +454,30 @@ export function StaticIpPanel({
   return (
     <>
       <p className="seccolor">{attached ? t("attached") : t("detached")}</p>
+      {fee === null ? null : attached ? (
+        <p className="seccolor">{t("free")}</p>
+      ) : (
+        <>
+          <p className="seccolor">
+            {hourText === null ? t("feeNoPrice") : t("feeWaiting", { price: hourText })}
+          </p>
+          {fee.charging ? (
+            <p role="status">
+              <Badge tone="pink">{t("charging")}</Badge>{" "}
+              {hourText === null ? t("chargingNoPrice") : t("chargingNote", { price: hourText })}
+            </p>
+          ) : null}
+        </>
+      )}
       {address === null ? null : <CopyField label={t("address")} value={address} />}
       {attached ? (
         <form action={detachAction} noValidate className="mt-3">
           <Hidden {...ids} />
           <ActionNotice state={detach} />
           <p className="seccolor">{t("detachWarn")}</p>
+          {fee === null || hourText === null ? null : (
+            <p className="seccolor">{t("detachFee", { price: hourText })}</p>
+          )}
           <div className="form-check mb-3">
             <input
               className="form-check-input"
@@ -474,6 +499,7 @@ export function StaticIpPanel({
         <form action={attachAction} className="mt-3">
           <Hidden {...ids} />
           <ActionNotice state={attach} />
+          {fee === null ? null : <p className="seccolor">{t("attachNote")}</p>}
           <SubmitButton variant="primary" size="sm" disabled={disabled}>
             {t("attach")}
           </SubmitButton>

@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   operations: [] as unknown[],
   keys: [] as unknown[],
   balance: 250_000n,
+  hourPrice: 74n as bigint | null,
   payments: [] as unknown[],
   profile: { market: "BD", phoneVerifiedAt: null as Date | null, kycStatus: "none" },
   catalog: new Map<string, unknown>(),
@@ -54,6 +55,11 @@ vi.mock("@tc/core", async (original) => {
       ok: true,
       value: rows.map((r) => ({ ...r, priceBdt: { totalMinor: 99_000n } })),
     }),
+    // WPU-M1: the hourly price of an unattached static IP, in paisa.
+    staticIpHourPrice: async () =>
+      state.hourPrice === null
+        ? { ok: false, error: "not_found", fields: {} }
+        : { ok: true, value: { unit: "hour", perHourMinor: state.hourPrice } },
   };
 });
 
@@ -224,6 +230,34 @@ describe("loadStaticIps", () => {
       }),
       expect.objectContaining({ serverId: S2, name: "db-host", address: null, attached: false }),
     ]);
+  });
+
+  it("WPU-M1: says what an unattached IP costs and whether the charge is running", async () => {
+    state.resources = [
+      server(S1),
+      server(S2, {
+        config: {
+          displayName: "db-host",
+          staticIpAttached: false,
+          detachedAt: "2026-11-01T00:00:00.000Z",
+        },
+      }),
+      server("0190aaaa-0000-7000-8000-000000000003", {
+        config: { displayName: "x", staticIpAttached: false, detachedAt: new Date().toISOString() },
+      }),
+    ];
+    const view = await loadStaticIps(session, REQ);
+    if (view.state !== "ready") throw new Error("not ready");
+    expect(view.items.map((i) => i.fee)).toEqual([
+      { hourMinor: "74", charging: false },
+      { hourMinor: "74", charging: true },
+      { hourMinor: "74", charging: false },
+    ]);
+    state.hourPrice = null;
+    const noPrice = await loadStaticIps(session, REQ);
+    if (noPrice.state !== "ready") throw new Error("not ready");
+    expect(noPrice.items.every((i) => i.fee.hourMinor === null)).toBe(true);
+    state.hourPrice = 74n;
   });
 
   it("leaves out destroyed and failed servers and servers that are still being created", async () => {

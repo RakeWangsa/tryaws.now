@@ -28,6 +28,7 @@ it("names the product family each config price belongs to, for the rule and the 
     "config_price.snapshot_gb_month": "backup",
     "config_price.load_balancer_month": "load_balancer",
     "config_price.dns_zone_month": "dns_zone",
+    "config_price.static_ip_unattached_hour": "static_ip",
   });
 });
 

@@ -109,12 +109,13 @@ it("seedConfigPrices refuses a bad price, key, unit or market before any stateme
   ).rejects.toThrow(/market/);
 });
 
-it("the four keys follow the spec list", () => {
+it("the keys follow the spec list and the WPU-M1 static IP hour price", () => {
   expect([...CONFIG_PRICE_KEYS]).toEqual([
     "config_price.block_storage_gb_month",
     "config_price.snapshot_gb_month",
     "config_price.load_balancer_month",
     "config_price.dns_zone_month",
+    "config_price.static_ip_unattached_hour",
   ]);
 });
 

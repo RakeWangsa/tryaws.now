@@ -139,6 +139,7 @@ const staticReady: StaticIpsScreen = {
       serverState: "active",
       family: "linux_instance",
       busy: false,
+      fee: { hourMinor: "74", charging: false },
     },
     {
       serverId: "0190aaaa-0000-7000-8000-000000000002",
@@ -149,6 +150,7 @@ const staticReady: StaticIpsScreen = {
       serverState: "stopped",
       family: "linux_instance",
       busy: true,
+      fee: { hourMinor: "74", charging: true },
     },
   ],
 };
@@ -282,6 +284,19 @@ describe("/static-ips", () => {
     const html = intl(await StaticIpsPage(params("en")), "en");
     expect(html).toContain("A change to this server is being applied");
     expect(html).toMatch(/<button[^>]*disabled[^>]*>[^<]*Attach static IP/);
+  });
+
+  it("WPU-M1: says free while attached, the BDT price per hour after the first hour, and a badge once charging", async () => {
+    const en = intl(await StaticIpsPage(params("en")), "en");
+    expect(en).toContain("Free while attached");
+    expect(en).toMatch(/Not attached: charged [^<]*0\.74[^<]* per hour after the first hour/);
+    expect(en).toContain("Charging now");
+    expect(en.match(/Charging now/g)).toHaveLength(1); // only the server whose free hour is over
+    const bn = intl(await StaticIpsPage(params("bn")), "bn");
+    // The numerals come from the market of the panel (the test panel has latn digits).
+    expect(bn).toMatch(/0\.74|০\.৭৪/);
+    expect(bn).toContain("চার্জ চলছে");
+    expect(en).not.toMatch(/arn:aws|tc-staticip/);
   });
 
   it("flag off and empty states", async () => {

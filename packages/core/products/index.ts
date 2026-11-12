@@ -127,6 +127,12 @@ export {
 } from "./db-restore";
 export { SNAPSHOT_PRICE_FAMILY, snapshotPrice, type SnapshotPrice } from "./snapshot-price";
 export {
+  STATIC_IP_PRICE_FAMILY,
+  STATIC_IP_PRICE_KEY,
+  staticIpHourPrice,
+  type StaticIpPrice,
+} from "./static-ip-price";
+export {
   checkedBackupWindow,
   checkedDomainName,
   checkedHealthPath,

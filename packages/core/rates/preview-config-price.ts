@@ -14,6 +14,7 @@ export const CONFIG_PRICE_FAMILY: Readonly<Record<ConfigPriceKey, string>> = Obj
   "config_price.snapshot_gb_month": "backup",
   "config_price.load_balancer_month": "load_balancer",
   "config_price.dns_zone_month": "dns_zone",
+  "config_price.static_ip_unattached_hour": "static_ip",
 });
 
 export interface ConfigPricePreview {
