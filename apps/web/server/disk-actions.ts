@@ -1,4 +1,5 @@
 import { parseDiskConfig } from "@tc/core";
+import { formDigits, formObject, formText, readForm } from "./form-schema.ts";
 import { publicErrorOf } from "./order-actions.ts";
 import type { DraftActionResult, OrderActionDeps } from "./order-actions.ts";
 
@@ -10,17 +11,16 @@ import type { DraftActionResult, OrderActionDeps } from "./order-actions.ts";
 // runs in a test without a database. What leaves it is a fixed public key (U6).
 
 const FAMILY = "disk";
-const SIZE_TEXT = /^\d{1,5}$/;
-
-function text(input: Record<string, unknown>, key: string): unknown {
-  const value = input[key];
-  return typeof value === "string" ? value.trim() : value;
-}
-
-/** The form sends the size as text. Only plain digits become a number; anything else stays invalid. */
-function sizeOf(value: unknown): number {
-  return typeof value === "string" && SIZE_TEXT.test(value) ? Number(value) : Number.NaN;
-}
+// R9 validate: the shape of the form is a zod schema (trimmed text, digit-only size); the rules
+// of a disk (range, Region, product) stay in parseDiskConfig of packages/core. Only these five
+// fields are read (R11).
+const DiskForm = formObject({
+  productId: formText,
+  region: formText,
+  displayName: formText,
+  sizeGb: formDigits(5),
+  serverId: formText,
+});
 
 /**
  * /servers/[id] Storage: the form's fields, and nothing else, become the config of a disk (R11). A
@@ -33,14 +33,7 @@ export async function addDiskDraftCore(
   const session = await deps.authenticate();
   if (session === null) return { ok: false, error: "unauthenticated" };
 
-  const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  const parsed = parseDiskConfig({
-    productId: text(input, "productId"),
-    region: text(input, "region"),
-    displayName: text(input, "displayName"),
-    sizeGb: sizeOf(text(input, "sizeGb")),
-    serverId: text(input, "serverId"),
-  });
+  const parsed = parseDiskConfig(readForm(DiskForm, raw));
   if (!parsed.ok) {
     return { ok: false, error: "validation", ...(parsed.fields ? { fields: parsed.fields } : {}) };
   }

@@ -14,7 +14,7 @@ import {
   type TargetCandidate,
 } from "../products/load-balancer";
 import type { Result } from "../types";
-import { checkCustomer, checkLimits, DEFAULT_TIER_LIMITS, type CustomerFacts } from "./gates";
+import { checkCustomer, checkLimits, tierLimitsOf, type CustomerFacts } from "./gates";
 
 const INSTANCE_FAMILIES = ["linux_instance", "windows_instance"] as const;
 
@@ -77,9 +77,11 @@ export async function gateProduct(
   if (!(await isEnabledIn(tx, product.featureFlag, customer.market))) {
     return { ok: false, error: "flag_off" };
   }
+  const limits = tierLimitsOf(customer.riskTier);
+  if (!limits.ok) return limits;
   // A domain is no server: it takes no instance of the tier limit (WP7-T4).
   if (product.family === "domain") {
-    return checkLimits(DEFAULT_TIER_LIMITS[customer.riskTier], { instances: 0 }, product.facts);
+    return checkLimits(limits.value, { instances: 0 }, product.facts);
   }
   // Every instance family counts together toward the instance limit, so a customer at the Linux
   // limit cannot order Windows, nor the other way round. Same customer-scoped repository (R8).
@@ -89,7 +91,7 @@ export async function gateProduct(
       : [product.family];
   let instances = 0;
   for (const family of families) instances += await repos.resources.countLive(family);
-  return checkLimits(DEFAULT_TIER_LIMITS[customer.riskTier], { instances }, product.facts);
+  return checkLimits(limits.value, { instances }, product.facts);
 }
 
 function candidateOf(

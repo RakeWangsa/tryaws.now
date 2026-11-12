@@ -20,6 +20,44 @@ export const FAMILY_SCREENS: Readonly<Record<string, FamilyScreen | undefined>> 
   container_service: { base: "/containers", nav: "containers", ns: "Containers" },
 };
 
+/** The key of the noun of a product family in `Orders.status.noun` and `.title` (WPU-R1). */
+export type OrderNoun =
+  | "server"
+  | "disk"
+  | "bucket"
+  | "database"
+  | "loadBalancer"
+  | "containerService"
+  | "cdn"
+  | "dnsZone"
+  | "domain"
+  | "staticIp"
+  | "backup";
+
+const NOUN_OF_FAMILY: Readonly<Record<string, OrderNoun | undefined>> = {
+  linux_instance: "server",
+  windows_instance: "server",
+  disk: "disk",
+  bucket: "bucket",
+  database: "database",
+  load_balancer: "loadBalancer",
+  container_service: "containerService",
+  cdn: "cdn",
+  dns_zone: "dnsZone",
+  domain: "domain",
+  static_ip: "staticIp",
+  backup: "backup",
+};
+
+/** What the customer bought, by its own noun. No family or an unknown one is a server (the default of the flow). */
+export function orderNoun(family: string | undefined): OrderNoun {
+  return (
+    (family !== undefined && Object.hasOwn(NOUN_OF_FAMILY, family)
+      ? NOUN_OF_FAMILY[family]
+      : undefined) ?? "server"
+  );
+}
+
 export function familyScreen(family: string | undefined): FamilyScreen | undefined {
   return family !== undefined && Object.hasOwn(FAMILY_SCREENS, family)
     ? FAMILY_SCREENS[family]

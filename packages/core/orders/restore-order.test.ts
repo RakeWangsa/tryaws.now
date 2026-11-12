@@ -5,6 +5,7 @@ import { insertRow, uniqueSuffix, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, describe, expect, it } from "vitest";
 import { makeKit, placeOne, REGION, type Buyer, type Kit } from "../test/orders-kit";
 import { createDraft } from "./draft";
+import { DEFAULT_TIER_LIMITS } from "./gates";
 import { childId } from "./ids";
 import { makeOrders } from "./place";
 
@@ -213,7 +214,13 @@ describe("restoreToNewServer", () => {
   it("counts toward the instance limit: the limit is checked before the restore is drafted", async () => {
     const s = await source();
     await placeOne(kit, s.buyer);
-    // Two live instances; the tier "new" allows two.
+    // Live instances up to the limit of the tier "new".
+    const limit = DEFAULT_TIER_LIMITS.new.maxInstances;
+    await t.pool.query(
+      `insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)
+       select gen_random_uuid(), $1, 'linux_instance', $2, $3, $4, '{}'::jsonb from generate_series(1, $5::int)`,
+      [s.buyer.customerId, kit.productId, kit.poolAccountId, REGION, limit],
+    );
     await kit.setCustomer(s.buyer.customerId, { risk_tier: "new" });
     const r = await createDraft(kit.deps, s.buyer.session, await restoreInput(s.backupId));
     expect(r).toMatchObject({ ok: false, error: "limit_reached" });
