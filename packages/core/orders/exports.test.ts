@@ -490,6 +490,15 @@ const PRICE_BOOK = [
 // WPU-G6: the DNS zone family (packages/core/dns/zone.ts) and the list of poolless families that the claim
 // and the step both read (operations/claim-rules.ts).
 const DNS_ZONE = [
+  // WPU-D4: the delegation rules and the job (packages/core/dns/delegation*.ts).
+  "DELEGATION_GRACE_AFTER_NOTICE_MS",
+  "DELEGATION_NOTICE_DAYS",
+  "DELEGATION_REMOVE_DAY",
+  "DNS_DELEGATION_LIMIT",
+  "delegationRemovalAt",
+  "delegationStep",
+  "nameServersMatch",
+  "runDnsDelegation",
   "DNS_ZONE_FLAG",
   "DNS_ZONE_PRODUCT",
   "DNS_ZONE_REGION",
