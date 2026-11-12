@@ -1,5 +1,6 @@
 import { customerRepos, findLedgerTransactionByKey, type Tx } from "@tc/db";
-import { reserveCapacity } from "../capacity/reserve";
+import { reserveCapacity, type Reservation } from "../capacity/reserve";
+import { DOMAIN_TERM_DAYS } from "../domains/resolve";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
@@ -191,25 +192,34 @@ export async function runPurchase(
   try {
     result = await tx.transaction(async (sp) => {
       const spRepos = customerRepos(sp, customerId);
+      const termDays = product.family === "domain" ? DOMAIN_TERM_DAYS : TERM_DAYS;
 
       // 8. Capacity, last of the checks. No waitlist argument: the page offers it (open point 12).
-      const reserved = await reserveCapacity(sp, {
-        customerId,
-        region: product.region,
-        needs: product.needs,
-      });
-      if (!reserved.ok) return reserved;
-      const reservation = reserved.value;
+      // A domain lives in tc-dns: no pool account, no capacity cell, no catalog product (WP7-T4).
+      const isDomain = product.family === "domain";
+      let reservation: Reservation | null = null;
+      if (!isDomain) {
+        const reserved = await reserveCapacity(sp, {
+          customerId,
+          region: product.region,
+          needs: product.needs,
+        });
+        if (!reserved.ok) return reserved;
+        reservation = reserved.value;
+      }
 
       // From here on nothing returns a failure: every refusal throws a fixed text.
       const resourceId = childId(orderId, "resource");
       await spRepos.orders.createResource({
         id: resourceId,
         family: product.family,
-        productId: product.productId,
-        poolAccountId: reservation.poolAccountId,
+        productId: isDomain ? null : product.productId,
+        poolAccountId: reservation === null ? null : reservation.poolAccountId,
         region: product.region,
-        config: { ...product.resourceConfig, capacityReservation: reservation.record },
+        config:
+          reservation === null
+            ? { ...product.resourceConfig }
+            : { ...product.resourceConfig, capacityReservation: reservation.record },
       });
 
       const posted = await postTransaction(sp, {
@@ -241,18 +251,41 @@ export async function runPurchase(
       const subscription = await spRepos.orders.createSubscription({
         id: childId(orderId, "subscription"),
         resourceId,
-        termDays: TERM_DAYS,
+        termDays: termDays,
         priceSnapshot: fresh,
         periodStart: now,
-        periodEnd: new Date(now.getTime() + TERM_DAYS * DAY_MS),
+        periodEnd: new Date(now.getTime() + termDays * DAY_MS),
       });
       if (!subscription.ok) throw new Error("orders: the subscription was not created");
 
+      // The registrant contact stays sealed: the row holds the envelope the action made (R14).
+      const review = product.resourceConfig["review"] === true;
+      if (isDomain) {
+        const name = product.resourceConfig["name"];
+        const tld = product.resourceConfig["tld"];
+        const sealed = product.resourceConfig["contactSealed"];
+        if (typeof name !== "string" || typeof tld !== "string" || typeof sealed !== "string") {
+          throw new Error("orders: the domain configuration is incomplete");
+        }
+        const row = await spRepos.domains.create({
+          id: childId(orderId, "domain"),
+          resourceId,
+          name,
+          tld,
+          status: review ? "review" : "pending",
+          contactEncrypted: new Uint8Array(Buffer.from(sealed, "base64")),
+        });
+        if (!row.ok) throw new Error("orders: the domain row was not created");
+      }
+
+      // A TLD with extra parameters waits for an admin before RegisterDomain (spec 12): the operation
+      // row is `needs_approval` and shows in the admin operations screen.
       const { operationId } = await makeEnqueueOperation(deps.clock)(sp, {
         resourceId,
         kind: "create",
         payload: { orderId },
         idempotencyKey: `order-create:${orderId}`,
+        ...(review ? { needsApproval: true } : {}),
       });
 
       // Ids and enums only: no token, no key, no configuration text (R14).

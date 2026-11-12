@@ -23,6 +23,7 @@ interface FakeDomain {
   name: string;
   expiresAt: Date;
   reachability: ContactReachability;
+  nameServers: string[];
 }
 
 export interface FakeDomainsOptions {
@@ -55,12 +56,20 @@ export function createFakeDomains(options: FakeDomainsOptions = {}) {
     if (op.kind === "register") {
       const expiresAt = new Date(now().getTime());
       expiresAt.setUTCFullYear(expiresAt.getUTCFullYear() + op.years);
-      domains.set(op.name, { name: op.name, expiresAt, reachability: "pending" });
-      // RegisterDomain makes the hosted zone with the domain's name (spec 12).
-      await options.route53?.createHostedZone({
+      // RegisterDomain makes the hosted zone with the domain's name (spec 12) and points the name
+      // servers of the domain to it.
+      const made = await options.route53?.createHostedZone({
         name: op.name,
         callerReference: `fake-register:${op.id}`,
         comment: "fake registration zone",
+      });
+      domains.set(op.name, {
+        name: op.name,
+        expiresAt,
+        reachability: "pending",
+        nameServers: made?.zone.nameServers.map((n) => n.replace(/\.$/, "")) ?? [
+          "ns-1.fake-dns.example",
+        ],
       });
     } else if (current !== undefined) {
       const expiresAt = new Date(current.expiresAt.getTime());
@@ -147,7 +156,7 @@ export function createFakeDomains(options: FakeDomainsOptions = {}) {
       return {
         name: found.name,
         expiresAt: found.expiresAt,
-        nameServers: ["ns-1.fake-dns.example", "ns-2.fake-dns.example"],
+        nameServers: found.nameServers,
         reachability: found.reachability,
       };
     },

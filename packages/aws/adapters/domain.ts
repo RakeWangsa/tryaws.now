@@ -18,8 +18,12 @@ import type { LiveState, OpCtx, ProductAdapter } from "./types";
 // has no pool account). A domain is created and renewed, never deleted by us (R13): `destroy` refuses.
 //
 // Steps of `create` (one per invocation):
-//   start  CheckDomainAvailability, then RegisterDomain once; wait. A retry after a lost answer finds the
-//          name taken and the domain in this account: it goes on to `adopt` (RegisterDomain has no token).
+//   start  The database must name this resource as the first holder of the name; CheckDomainAvailability;
+//          a name that is taken (or premium) fails the create and the money is reversed, it is never
+//          adopted. An available name is marked in the resource config (`registrationMarker`).
+//   register  Only with the marker. RegisterDomain once; wait. A retry after a lost answer finds the
+//          name taken and the domain in this account: with the marker it goes on to `adopt`
+//          (RegisterDomain has no token).
 //   poll   GetOperationDetail until it is successful (wait), failed (the create fails, the money is
 //          reversed by the hook) or too old.
 //   adopt  Read the domain and the hosted zone that RegisterDomain made; never CreateHostedZone (spec 12).
@@ -31,6 +35,14 @@ export interface DomainDeps {
   readonly route53: () => Route53Port;
   /** Opens the sealed contact of the resource (KMS in production). The result is checked again. */
   readonly unsealContact: (sealed: Uint8Array) => Promise<unknown>;
+  /**
+   * True when this resource is the earliest live (not failed) holder of the name in the database. The
+   * database is the platform's record of who bought a name; a name that AWS lists is not ours because
+   * of that.
+   */
+  readonly holdsName: (name: string, resourceId: string) => Promise<boolean>;
+  /** True when another resource already records this hosted zone id. */
+  readonly zoneHeldByOther: (hostedZoneId: string, resourceId: string) => Promise<boolean>;
 }
 
 export interface DomainAdapterConfig {
@@ -40,7 +52,6 @@ export interface DomainAdapterConfig {
 }
 
 const POLL_SECONDS = 60;
-const ADOPT_RETRY_SECONDS = 30;
 // VERIFY: Route 53 documents that most registrations finish within minutes, some TLDs take up to
 // three days. A registration older than this fails closed and the order is reversed.
 const MAX_WAIT_MS = 3 * 24 * 60 * 60 * 1000;
@@ -86,15 +97,34 @@ async function contactOf(
 }
 
 export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdapterConfig> {
+  // The marker proves that THIS resource reached the register step: only the start step writes it, and
+  // only after the name was available and this resource is the first holder of the name in the database.
+  const marked = (ctx: Ctx): boolean =>
+    recordOf(ctx.resource.config)["registrationMarker"] === ctx.resource.id;
+
   async function start(ctx: Ctx): Promise<StepResult> {
+    const { name } = ctx.config;
+    if (marked(ctx)) return stepNext("register");
+    // Another live order for the name, earlier than this one, wins; this one fails and is refunded.
+    if (!(await deps.holdsName(name, ctx.resource.id))) throw fail("conflict");
+    const availability = await deps.domains().checkAvailability(name);
+    if (availability === "unknown") throw fail("upstream_unavailable", true);
+    // Taken or premium: a failure, never an adoption. Without the marker nothing here is ours.
+    if (availability !== "available") throw fail("conflict");
+    return stepNext("register", { configMerge: { registrationMarker: ctx.resource.id } });
+  }
+
+  async function register(ctx: Ctx): Promise<StepResult> {
     const port = deps.domains();
     const { name } = ctx.config;
+    if (!marked(ctx)) throw fail("conflict");
     if (savedOperationId(ctx.resource.config) !== null) return stepNext("poll");
+    if (!(await deps.holdsName(name, ctx.resource.id))) throw fail("conflict");
     const availability = await port.checkAvailability(name);
     if (availability === "unknown") throw fail("upstream_unavailable", true);
     if (availability !== "available") {
-      // Taken, or premium (refused, open item). If it is taken because an earlier try of this step
-      // registered it in this account, go on; otherwise the create fails and the order is reversed.
+      // A retry after a lost answer of RegisterDomain: the name is taken and the marker is ours, so
+      // the registration may be ours. `adopt` checks the rest (the zone and its name servers).
       if (availability === "unavailable" && (await port.getDomainDetail(name)) !== null) {
         return stepNext("adopt");
       }
@@ -125,9 +155,22 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
 
   async function adopt(ctx: Ctx): Promise<StepResult> {
     const { name } = ctx.config;
+    // Only a resource that went through `register` adopts anything, and only as the first holder.
+    if (!marked(ctx) || !(await deps.holdsName(name, ctx.resource.id))) throw fail("conflict");
     const detail = await deps.domains().getDomainDetail(name);
     if (detail === null) throw fail("upstream_unavailable", true);
-    const zone = await deps.route53().findHostedZoneByName(name);
+    // The zone must be the one of this registration: exactly one zone has the name, its name servers
+    // are the ones the domain points to, and no other resource holds it (R16).
+    const zones = await deps.route53().findHostedZonesByName(name);
+    if (zones.length === 0) throw fail("upstream_unavailable", true);
+    const zone = zones.length === 1 ? zones[0] : undefined;
+    if (zone === undefined || !HOSTED_ZONE_ID.test(zone.id)) throw fail("conflict");
+    const hosts = (list: readonly string[]): string =>
+      [...new Set(list.map((n) => n.toLowerCase().replace(/\.$/, "")))].sort().join(",");
+    if (zone.nameServers.length === 0 || hosts(zone.nameServers) !== hosts(detail.nameServers)) {
+      throw fail("conflict");
+    }
+    if (await deps.zoneHeldByOther(zone.id, ctx.resource.id)) throw fail("conflict");
     const verified = detail.reachability === "done";
     return stepDone({
       state: "active",
@@ -136,7 +179,7 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
         reachability: detail.reachability,
         expiresAt: detail.expiresAt === null ? null : detail.expiresAt.toISOString(),
         nameServers: [...detail.nameServers],
-        ...(zone !== null && HOSTED_ZONE_ID.test(zone.id) ? { hostedZoneId: zone.id } : {}),
+        hostedZoneId: zone.id,
       },
     });
   }
@@ -164,6 +207,8 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
           case null:
           case "start":
             return start(ctx);
+          case "register":
+            return register(ctx);
           case "poll":
             return poll(ctx);
           case "adopt":

@@ -41,13 +41,20 @@ function setup(opts: { finishAfterPolls?: number } = {}) {
       throw new Error("the domain adapter must not call CreateHostedZone");
     },
   };
+  // What the database says (provisioner/domain.ts reads it): who holds the name, who holds the zone.
+  const db = { holdsName: true, zoneHeld: false };
   const adapter = createDomainAdapter({
     domains: () => fake.port,
     route53: () => guarded,
     unsealContact: async (sealed) => JSON.parse(Buffer.from(sealed).toString("utf8")) as unknown,
+    holdsName: async () => db.holdsName,
+    zoneHeldByOther: async () => db.zoneHeld,
   });
-  return { r53, fake, adapter };
+  return { r53, fake, adapter, db };
 }
+
+const RID = "0190a000-0000-7000-8000-0000000000aa";
+const MARK = { registrationMarker: RID };
 
 function ctxFor(
   config: DomainAdapterConfig,
@@ -121,12 +128,41 @@ async function step(
   return adapter.aws.create(ctxFor(config, { step: name, resourceConfig, now }));
 }
 
+/** start (writes the marker) then register: what the runner does in two invocations. */
+async function begin(
+  adapter: ReturnType<typeof setup>["adapter"],
+  config: DomainAdapterConfig,
+): Promise<StepResult> {
+  const first = await step(adapter, config, null);
+  expect(first).toMatchObject({ kind: "next", step: "register" });
+  return step(adapter, config, "register", MARK);
+}
+
 describe("create", () => {
+  it("writes the marker before it registers, and registers only with it", async () => {
+    const { adapter, fake } = setup();
+    const config = adapter.parseConfig(RAW);
+    const first = await step(adapter, config, null);
+    expect(first).toMatchObject({
+      kind: "next",
+      step: "register",
+      patch: { configMerge: MARK },
+    });
+    expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
+    // The register step without the marker (or with another resource's) fails closed.
+    for (const rc of [{}, { registrationMarker: "someone-else" }]) {
+      await expect(step(adapter, config, "register", rc)).rejects.toMatchObject({
+        code: "conflict",
+      });
+    }
+    expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
+  });
+
   it("registers once, waits, and adopts the zone that the registration made", async () => {
     const { adapter, fake, r53 } = setup();
     const config = adapter.parseConfig(RAW);
 
-    const started = await step(adapter, config, null);
+    const started = await begin(adapter, config);
     expect(started.kind).toBe("wait");
     if (started.kind !== "wait") return;
     expect(started.step).toBe("poll");
@@ -139,7 +175,7 @@ describe("create", () => {
     );
     expect(JSON.stringify(started)).not.toContain("Rahim");
 
-    const saved = { route53OperationId: operationId };
+    const saved = { ...MARK, route53OperationId: operationId };
     const waiting = await step(adapter, config, "poll", saved);
     expect(waiting).toMatchObject({ kind: "wait", step: "poll" });
 
@@ -157,9 +193,9 @@ describe("create", () => {
     expect(merge["domainStatus"]).toBe("awaiting_verification");
     expect(merge["reachability"]).toBe("pending");
     expect(merge["expiresAt"]).toBe("2031-01-01T00:00:00.000Z");
-    const zone = await r53.port.findHostedZoneByName("example.com");
-    expect(zone).not.toBeNull();
-    expect(merge["hostedZoneId"]).toBe(zone?.id);
+    const zones = await r53.port.findHostedZonesByName("example.com");
+    expect(zones).toHaveLength(1);
+    expect(merge["hostedZoneId"]).toBe(zones[0]?.id);
     // One zone only: the registration made it and the adapter never made a second one.
     expect(r53.calls.filter((c) => c.op === "createHostedZone")).toHaveLength(1);
   });
@@ -167,8 +203,9 @@ describe("create", () => {
   it("calls the domain registered once its contact is verified", async () => {
     const { adapter, fake } = setup({ finishAfterPolls: 1 });
     const config = adapter.parseConfig(RAW);
-    const started = await step(adapter, config, null);
+    const started = await begin(adapter, config);
     const saved = {
+      ...MARK,
       route53OperationId: (started as { patch: { configMerge: Record<string, string> } }).patch
         .configMerge["route53OperationId"],
     };
@@ -181,22 +218,111 @@ describe("create", () => {
   it("does not register again when an earlier try saved the operation", async () => {
     const { adapter, fake } = setup();
     const config = adapter.parseConfig(RAW);
-    const again = await step(adapter, config, null, { route53OperationId: "fake-op-0001" });
+    const again = await step(adapter, config, "register", {
+      ...MARK,
+      route53OperationId: "fake-op-0001",
+    });
     expect(again).toMatchObject({ kind: "next", step: "poll" });
     expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
   });
 
-  it("goes on to adopt when a lost answer left the name registered in this account", async () => {
+  it("adopts a registered name only when this resource wrote the marker", async () => {
     const { adapter, fake } = setup();
     const config = adapter.parseConfig(RAW);
-    const first = await fake.port.registerDomain({
+    // A name that is registered in the account (by anyone) and was never marked by this resource.
+    const foreign = await fake.port.registerDomain({
       name: "example.com",
       years: 1,
       contact: CONTACT as never,
     });
-    await fake.finish(first.operationId, "successful");
-    expect(await step(adapter, config, null)).toMatchObject({ kind: "next", step: "adopt" });
+    await fake.finish(foreign.operationId, "successful");
+    await expect(step(adapter, config, null)).rejects.toMatchObject({
+      code: "conflict",
+      retryable: false,
+    });
+    // Skipping straight to register or adopt without the marker is refused too.
+    await expect(step(adapter, config, "register")).rejects.toMatchObject({ code: "conflict" });
+    await expect(step(adapter, config, "adopt")).rejects.toMatchObject({ code: "conflict" });
     expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(1);
+
+    // With the marker (the register step of this resource ran before the lost answer): adopted.
+    expect(await step(adapter, config, "register", MARK)).toMatchObject({
+      kind: "next",
+      step: "adopt",
+    });
+    const done = await step(adapter, config, "adopt", MARK);
+    expect(done.kind).toBe("done");
+  });
+
+  it("does not adopt when the database names another order as the holder of the name", async () => {
+    const { adapter, fake, db } = setup();
+    const config = adapter.parseConfig(RAW);
+    db.holdsName = false;
+    await expect(step(adapter, config, null)).rejects.toMatchObject({ code: "conflict" });
+    await expect(step(adapter, config, "register", MARK)).rejects.toMatchObject({
+      code: "conflict",
+    });
+    await expect(step(adapter, config, "adopt", MARK)).rejects.toMatchObject({ code: "conflict" });
+    expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
+  });
+
+  async function registered(
+    ctx: ReturnType<typeof setup>,
+  ): Promise<{ config: DomainAdapterConfig }> {
+    const config = ctx.adapter.parseConfig(RAW);
+    const started = await begin(ctx.adapter, config);
+    const id = (started as { patch: { configMerge: Record<string, string> } }).patch.configMerge[
+      "route53OperationId"
+    ] as string;
+    await ctx.fake.finish(id, "successful");
+    return { config };
+  }
+
+  it("fails closed when two zones carry the name", async () => {
+    const ctx = setup();
+    const { config } = await registered(ctx);
+    await ctx.r53.port.createHostedZone({
+      name: "example.com",
+      callerReference: "other-customer-zone",
+      comment: "x",
+    });
+    await expect(step(ctx.adapter, config, "adopt", MARK)).rejects.toMatchObject({
+      code: "conflict",
+      retryable: false,
+    });
+  });
+
+  it("fails closed when the zone has other name servers than the registration", async () => {
+    const ctx = setup();
+    const { config } = await registered(ctx);
+    const zone = (await ctx.r53.port.findHostedZonesByName("example.com"))[0];
+    ctx.r53.zones.set(zone?.id ?? "", {
+      zone: { id: zone?.id ?? "", name: "example.com.", nameServers: ["ns-9.elsewhere.example."] },
+      ref: "x",
+      sets: new Map(),
+    });
+    await expect(step(ctx.adapter, config, "adopt", MARK)).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+
+  it("fails closed when another resource already holds the zone", async () => {
+    const ctx = setup();
+    const { config } = await registered(ctx);
+    ctx.db.zoneHeld = true;
+    await expect(step(ctx.adapter, config, "adopt", MARK)).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+
+  it("waits for a zone that is not visible yet", async () => {
+    const ctx = setup();
+    const { config } = await registered(ctx);
+    ctx.r53.zones.clear();
+    await expect(step(ctx.adapter, config, "adopt", MARK)).rejects.toMatchObject({
+      code: "upstream_unavailable",
+      retryable: true,
+    });
   });
 
   it("fails closed for a taken name, a premium name and an unknown answer", async () => {
@@ -219,8 +345,10 @@ describe("create", () => {
       domains: () => ({ ...fake.port, checkAvailability: async () => "unknown" }),
       route53: () => setup().r53.port,
       unsealContact: async () => CONTACT,
+      holdsName: async () => true,
+      zoneHeldByOther: async () => false,
     });
-    await expect(step(unknown, config, null)).rejects.toMatchObject({
+    await expect(step(unknown, config, "register", MARK)).rejects.toMatchObject({
       code: "upstream_unavailable",
       retryable: true,
     });
@@ -229,12 +357,12 @@ describe("create", () => {
   it("fails the create when the registration fails, so the hook reverses the money", async () => {
     const { adapter, fake } = setup();
     const config = adapter.parseConfig(RAW);
-    const started = await step(adapter, config, null);
+    const started = await begin(adapter, config);
     const operationId = (started as { patch: { configMerge: Record<string, string> } }).patch
       .configMerge["route53OperationId"] as string;
     await fake.finish(operationId, "failed");
     await expect(
-      step(adapter, config, "poll", { route53OperationId: operationId }),
+      step(adapter, config, "poll", { ...MARK, route53OperationId: operationId }),
     ).rejects.toMatchObject({ code: "conflict", retryable: false });
   });
 
@@ -262,16 +390,22 @@ describe("create", () => {
       unsealContact: async () => {
         throw new Error("kms: Rahim rahim@example.com");
       },
+      holdsName: async () => true,
+      zoneHeldByOther: async () => false,
     });
-    const error = await step(broken, config, null).catch((e: unknown) => e);
+    const error = await step(broken, config, "register", MARK).catch((e: unknown) => e);
     expect(error).toMatchObject({ code: "internal", retryable: false });
     expect(JSON.stringify(error)).not.toContain("Rahim");
     const invalid = createDomainAdapter({
       domains: () => fake.port,
       route53: () => createFakeRoute53().port,
       unsealContact: async () => ({ ...CONTACT, email: "nope" }),
+      holdsName: async () => true,
+      zoneHeldByOther: async () => false,
     });
-    await expect(step(invalid, config, null)).rejects.toMatchObject({ code: "validation" });
+    await expect(step(invalid, config, "register", MARK)).rejects.toMatchObject({
+      code: "validation",
+    });
     expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
   });
 

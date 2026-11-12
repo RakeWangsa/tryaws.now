@@ -31,8 +31,9 @@ export interface NewPaidOrder {
 export interface NewResource {
   id: string;
   family: string;
-  productId: string;
-  poolAccountId: string;
+  // null for a domain, which lives in tc-dns and has no catalog product (WP7-T4).
+  productId: string | null;
+  poolAccountId: string | null;
   region: string;
   config: Record<string, unknown>;
 }
@@ -147,8 +148,14 @@ export function ordersRepo(scope: TenantScope): OrdersRepo {
 
     createResource: async (input) => {
       requireUuid(input.id, "id");
-      requireUuid(input.productId, "productId");
-      requireUuid(input.poolAccountId, "poolAccountId");
+      if (input.productId !== null) requireUuid(input.productId, "productId");
+      if (input.poolAccountId !== null) requireUuid(input.poolAccountId, "poolAccountId");
+      // Only a domain has neither (it lives in tc-dns); every other family has both (R16).
+      const neither = input.productId === null && input.poolAccountId === null;
+      const both = input.productId !== null && input.poolAccountId !== null;
+      if (input.family === "domain" ? !neither : !both) {
+        throw new TypeError("orders: the placement of the resource does not fit its family");
+      }
       // The state is not inserted: the column default is creating, and the grant forbids it.
       await tx.execute(sql`
         insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)

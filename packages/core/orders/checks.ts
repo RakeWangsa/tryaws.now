@@ -1,4 +1,5 @@
-import { readCatalogProduct, type CustomerRepos, type Tx } from "@tc/db";
+import { domainNameHolder, readCatalogProduct, readTld, type CustomerRepos, type Tx } from "@tc/db";
+import { parseDomainConfig, resolveDomain } from "../domains/resolve";
 import type { RiskTier } from "../capacity/types";
 import { isEnabledIn } from "../flags/is-enabled";
 import { isFeatureFlag } from "../flags/keys";
@@ -74,6 +75,10 @@ export async function gateProduct(
   if (!(await isEnabledIn(tx, product.featureFlag, customer.market))) {
     return { ok: false, error: "flag_off" };
   }
+  // A domain is no server: it takes no instance of the tier limit (WP7-T4).
+  if (product.family === "domain") {
+    return checkLimits(DEFAULT_TIER_LIMITS[customer.riskTier], { instances: 0 }, product.facts);
+  }
   // Every instance family counts together toward the instance limit, so a customer at the Linux
   // limit cannot order Windows, nor the other way round. Same customer-scoped repository (R8).
   const families =
@@ -103,6 +108,24 @@ export async function resolveOrderProduct(
   family: string,
   rawConfig: unknown,
 ): Promise<Result<ResolvedProduct>> {
+  if (family === "domain") {
+    const config = parseDomainConfig(rawConfig);
+    if (!config.ok) return config;
+    // A TLD row, not a catalog product: web_rw reads `tlds` (WP7-T4).
+    const tld = await readTld(tx, config.value.productId);
+    if (tld === null) {
+      return { ok: false, error: "validation", fields: { productId: "unavailable" } };
+    }
+    const resolved = resolveDomain(config.value, tld);
+    if (!resolved.ok) return resolved;
+    // One name is held once on the platform. A second order for a held name is a conflict, here for
+    // the draft and again inside the purchase transaction; the provisioner re-checks it before
+    // RegisterDomain (R16).
+    if ((await domainNameHolder(tx, config.value.name)) !== null) {
+      return { ok: false, error: "conflict", fields: { name: "taken" } };
+    }
+    return resolved;
+  }
   if (family === "cdn") {
     const config = parseCdnConfig(rawConfig);
     if (!config.ok) return config;

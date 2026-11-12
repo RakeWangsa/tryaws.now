@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { Tx } from "../client";
-import { catalogProducts } from "../schema/index";
+import { catalogProducts, tlds } from "../schema/index";
 
 export interface CatalogProduct {
   readonly id: string;
@@ -99,4 +99,38 @@ export async function listCatalogProductsForAdmin(
       asc(catalogProducts.id),
     );
   return rows as CatalogAdminRow[];
+}
+
+/** A row of `tlds` as the domain screens and the order path read it (WP7-T4). Prices are numeric text (R4). */
+export interface TldRecord {
+  readonly id: string;
+  readonly tld: string;
+  readonly registrationPriceUsd: string | null;
+  readonly renewalPriceUsd: string | null;
+  readonly needsExtraParams: boolean;
+}
+
+const TLD_COLUMNS = {
+  id: tlds.id,
+  tld: tlds.tld,
+  registrationPriceUsd: tlds.registrationPriceUsd,
+  renewalPriceUsd: tlds.renewalPriceUsd,
+  needsExtraParams: tlds.needsExtraParams,
+};
+
+/**
+ * One TLD row by id; `null` when there is none. Like the catalog it is not tenant data (web_rw has
+ * SELECT on `tlds`). The message holds no input (R14).
+ */
+export async function readTld(tx: Tx, id: string): Promise<TldRecord | null> {
+  if (typeof id !== "string" || !UUID.test(id)) {
+    throw new TypeError("readTld: id is not a UUID");
+  }
+  const rows = await tx.select(TLD_COLUMNS).from(tlds).where(eq(tlds.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+/** Every TLD row, by name. The caller decides what is sold (`decideTld` of packages/core/domains). */
+export async function listTlds(tx: Tx): Promise<TldRecord[]> {
+  return tx.select(TLD_COLUMNS).from(tlds).orderBy(asc(tlds.tld));
 }
