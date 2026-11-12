@@ -1,4 +1,5 @@
 import { customerRepos, insertOperation, lifecycleRepo, type Tx } from "@tc/db";
+import type { Logger } from "../operations/types";
 import type { Clock, Result } from "../types";
 import { DEFAULT_LIFECYCLE_CONFIG } from "./config";
 import { planApplyWait } from "./plan-change";
@@ -16,6 +17,8 @@ export interface RenewNowInput {
   /** The resource whose subscription is renewed. */
   readonly resourceId: string;
   readonly clock: Clock;
+  /** Fixed-text structured events only (R14); an invoice that could not be recorded is reported here. */
+  readonly log?: Logger;
 }
 
 export type RenewedNow = Renewed & { readonly resumeQueued: boolean };
@@ -58,7 +61,7 @@ export async function renewNow(tx: Tx, input: RenewNowInput): Promise<Result<Ren
     return { ok: false, error: "conflict", fields: { subscription: "busy" } };
   }
 
-  const renewed = await renewSubscription(tx, row, input.clock);
+  const renewed = await renewSubscription(tx, row, input.clock, input.log);
   if (!renewed.ok) return renewed;
 
   let resumeQueued = false;

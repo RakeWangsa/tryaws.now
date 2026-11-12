@@ -2874,6 +2874,25 @@ TASKS["WPU-I4"] = [
   repo,
 ];
 
+// WPU-I5: the money review of the invoice work. The VAT line of the Mushak 6.3 prints its own base and is
+// checked from integers (core with the pricing helper), reversed charges are never invoiced, the numbers
+// follow the order of the charge, a charge never ends with no invoice and no record, one length rule for
+// the buyer, one instant for the fiscal year and the date (migration 0018, db with the local PostgreSQL),
+// the job (scheduler), and the pages that show the invoice (web, admin). No AWS call.
+TASKS["WPU-I5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  scheduler,
+  web,
+  admin,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

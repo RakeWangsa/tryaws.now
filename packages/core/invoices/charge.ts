@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { customerRepos, type Tx } from "@tc/db";
+import type { Logger } from "../operations/types";
 import type { PriceSnapshot } from "../pricing/snapshot";
 import { buyerSnapshotFrom, type BuyerSnapshot } from "./buyer";
 import { buildInvoiceLines, fiscalYearOf, type InvoiceLine, type Text2 } from "./base";
@@ -60,6 +61,11 @@ export function queueIdFor(ledgerTransactionId: string): string {
   return invoiceIdFor(`queue|${ledgerTransactionId}`);
 }
 
+/** The id of the notice for a charge that could not be queued with its lines (WPU-I5). */
+export function noteIdFor(ledgerTransactionId: string): string {
+  return invoiceIdFor(`note|${ledgerTransactionId}`);
+}
+
 export interface ChargeInvoiceInput {
   readonly customerId: string;
   /** The charge: a purchase names its order, a renewal has none. */
@@ -69,7 +75,10 @@ export interface ChargeInvoiceInput {
   readonly ledgerTransactionId: string;
   /** The snapshot that priced the charge (its total is the wallet debit). */
   readonly snapshot: PriceSnapshot;
+  /** The instant of the charge. The fiscal year and the date of issue of the invoice both come from it. */
   readonly now: Date;
+  /** WPU-I5: where a charge that ends without an invoice and without a queue row is reported (ids only). */
+  readonly log?: Logger;
 }
 
 /**
@@ -82,7 +91,15 @@ export async function readBuyerSnapshot(tx: Tx, customerId: string): Promise<Buy
   return source === null ? null : buyerSnapshotFrom(source.billing, source.name);
 }
 
-export type ChargeInvoiceOutcome = "issued" | "replayed" | "queued" | "failed";
+/**
+ * issued, replayed: the invoice exists. queued: owed, stored with its lines. noted: owed, stored as a
+ * notice with ids only (the lines could not be built or queued); a person looks at it and the scheduler's
+ * reconciliation may still queue an order. reversed: the charge was reversed, nothing is owed. failed:
+ * nothing could be written either; a structured error is logged and the scheduler's reconciliation finds
+ * the charge (WPU-I5). The caller counts "noted" and "failed" in its metrics.
+ */
+export type ChargeInvoiceOutcome =
+  "issued" | "replayed" | "queued" | "noted" | "reversed" | "failed";
 
 /**
  * Issues the invoice of a charge inside the caller's transaction, or queues it. Never throws and never
@@ -92,22 +109,55 @@ export async function issueChargeInvoice(
   tx: Tx,
   input: ChargeInvoiceInput,
 ): Promise<ChargeInvoiceOutcome> {
+  const unrecorded = async (outcome: "noted" | "failed"): Promise<ChargeInvoiceOutcome> => {
+    // Ids and fixed words only (R14).
+    input.log?.({
+      event: "invoice_charge_unrecorded",
+      outcome,
+      charge: input.charge.kind,
+      ledgerTransactionId: input.ledgerTransactionId,
+    });
+    return outcome;
+  };
+  // The notice without lines: the charge is not lost even when the lines cannot be built or stored.
+  const note = async (): Promise<ChargeInvoiceOutcome> => {
+    try {
+      const noted = await tx.transaction(async (sp) =>
+        customerRepos(sp, input.customerId).invoices.noteUnrecorded({
+          id: noteIdFor(input.ledgerTransactionId),
+          kind: input.charge.kind,
+          ...(input.charge.kind === "order" ? { orderId: input.charge.orderId } : {}),
+          ledgerTransactionId: input.ledgerTransactionId,
+          totalMinor: BigInt(input.snapshot.totalMinor),
+        }),
+      );
+      return unrecorded(noted.ok ? "noted" : "failed");
+    } catch {
+      return unrecorded("failed");
+    }
+  };
+
   let lines: InvoiceLine[];
   let totalMinor: bigint;
+  let fiscalYear: number;
   try {
     lines = invoiceLinesOf(input.snapshot);
     totalMinor = BigInt(input.snapshot.totalMinor);
+    // One instant: the same `now` gives the fiscal year here and the date of issue below.
+    fiscalYear = fiscalYearOf(input.now);
   } catch {
-    return "failed";
+    return note();
   }
   const id = invoiceIdFor(input.ledgerTransactionId);
-  const fiscalYear = fiscalYearOf(input.now);
 
-  type Attempt = "issued" | "replayed" | "missing" | "refused";
+  type Attempt = "issued" | "replayed" | "missing" | "refused" | "reversed" | "blocked";
   let attempt: Attempt;
   try {
     attempt = await tx.transaction(async (sp): Promise<Attempt> => {
       const invoices = customerRepos(sp, input.customerId).invoices;
+      // An older charge of this market still waits for its invoice: this one waits behind it, so the
+      // numbers follow the order of the charge (WPU-I5). If that cannot be known, it waits too (R16).
+      if (await invoices.backlogBlocked()) return "blocked";
       // The billing profile as it is now, in this transaction: it is frozen on the invoice (WPU-I3).
       const buyer = await readBuyerSnapshot(sp, input.customerId);
       const written =
@@ -116,6 +166,7 @@ export async function issueChargeInvoice(
               id,
               orderId: input.charge.orderId,
               fiscalYear,
+              issuedAt: input.now,
               lines,
               totalMinor,
               buyer,
@@ -124,11 +175,13 @@ export async function issueChargeInvoice(
               id,
               ledgerTransactionId: input.ledgerTransactionId,
               fiscalYear,
+              issuedAt: input.now,
               lines,
               totalMinor,
               buyer,
             });
       if (written.ok) return written.replayed ? "replayed" : "issued";
+      if (written.error === "charge_reversed") return "reversed";
       return written.error === "seller_details_missing" ? "missing" : "refused";
     });
   } catch {
@@ -136,6 +189,7 @@ export async function issueChargeInvoice(
     attempt = "refused";
   }
   if (attempt === "issued" || attempt === "replayed") return attempt;
+  if (attempt === "reversed") return "reversed";
 
   // Owed: store the charge with its lines. A refusal for another reason than the missing seller is
   // queued too; the scheduler tries again and a person sees the notice.
@@ -150,8 +204,9 @@ export async function issueChargeInvoice(
         totalMinor,
       }),
     );
-    return queued.ok ? "queued" : "failed";
+    if (queued.ok) return "queued";
   } catch {
-    return "failed";
+    // fall through to the notice
   }
+  return note();
 }

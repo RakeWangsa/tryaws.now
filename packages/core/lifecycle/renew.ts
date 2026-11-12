@@ -4,6 +4,7 @@ import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
 import { salePostings } from "../ledger/sale-postings";
+import type { Logger } from "../operations/types";
 import { planPriceFor } from "./plan-change";
 import { parseSnapshot, type PriceSnapshot } from "../pricing/snapshot";
 import { quoteInForce } from "../rates/in-force";
@@ -63,6 +64,7 @@ export async function renewSubscription(
   tx: Tx,
   row: LifecycleRow,
   clock: Clock,
+  log?: Logger,
 ): Promise<Result<Renewed>> {
   const balance = await lockWallet(tx, row.customerId);
   const priced = await renewalQuote(tx, row, clock);
@@ -104,6 +106,7 @@ export async function renewSubscription(
     ledgerTransactionId: posted.value.transactionId,
     snapshot: fresh,
     now: clock.now(),
+    ...(log === undefined ? {} : { log }),
   });
   return { ok: true, value: { periodStart, periodEnd, totalMinor: total } };
 }

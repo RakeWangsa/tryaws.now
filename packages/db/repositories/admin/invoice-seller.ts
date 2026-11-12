@@ -62,6 +62,14 @@ export function invoiceSellerAdminRepo(scope: AdminScope): InvoiceSellerAdminRep
               where d.kind = 'missing' and d.details->>'source' = ${INVOICE_BACKLOG_SOURCE}
                 and not exists (select 1 from invoices i
                                 where i.ledger_transaction_id::text = d.details->>'ledgerTransactionId')
+                -- WPU-I5: a charge that was reversed or whose row is closed by the scheduler is not owed
+                and not exists (select 1 from discrepancies k
+                                where k.details->>'source' = 'invoice_backlog_mark'
+                                  and k.details->>'for' = d.id::text
+                                  and k.details->>'state' in ('resolved', 'skipped'))
+                and not exists (select 1 from ledger_transactions r
+                                where r.kind = 'reversal' and r.reference_type = 'ledger_transaction'
+                                  and r.reference_id::text = d.details->>'ledgerTransactionId')
               order by d.details->>'ledgerTransactionId', d.created_at) q
             join customers c on c.id::text = q.details->>'customerId'
             where c.market = ${market}`,

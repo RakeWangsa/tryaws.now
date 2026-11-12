@@ -250,7 +250,23 @@ export {
   type SellerRow,
 } from "./repositories/config/invoice-seller";
 export type { IssueResult } from "./repositories/customer/invoices";
-export { INVOICE_BACKLOG_SOURCE } from "./repositories/customer/invoices";
+export {
+  INVOICE_BACKLOG_SOURCE,
+  INVOICE_UNRECORDED_SOURCE,
+} from "./repositories/customer/invoices";
+export type { NewUnrecordedCharge } from "./repositories/customer/invoices";
+export { CREDIT_NOTE_SOURCE, INVOICE_MARK_SOURCE } from "./repositories/system/invoice-backlog";
+export type {
+  BacklogMark,
+  BacklogMarkState,
+  UnrecordedCharge,
+} from "./repositories/system/invoice-backlog";
+export {
+  BUYER_ADDRESS_MAX,
+  BUYER_NAME_MAX,
+  buyerTextLength,
+  truncateBuyerText,
+} from "./repositories/customer/buyer-rules";
 export type {
   StoredTierLimits,
   TierLimitsAdminRepo,
