@@ -275,6 +275,39 @@ describe("probe sources and VPC CIDR of the provisioner", () => {
   });
 });
 
+// C.2: the outputs that scripts/post-deploy-check.mjs reads.
+describe("stack outputs featureFlagDefaults and webRolePolicies", () => {
+  it("lists the twelve flags of @tc/db, all false, in infra and in the check script", async () => {
+    const { FEATURE_FLAG_KEYS_OF_INFRA, featureFlagDefaults } =
+      await import("../../infra/lib/functions.ts");
+    const { FEATURE_FLAG_KEYS } = await import("../../scripts/post-deploy-check.mjs");
+    const source = readFileSync(
+      resolve(root, "packages/db/repositories/config/feature-flags.ts"),
+      "utf8",
+    );
+    const keys = [
+      ...source.slice(source.indexOf("FEATURE_FLAG_KEYS = [")).matchAll(/"([a-z_]+)",/g),
+    ]
+      .map((m) => m[1])
+      .slice(0, 12);
+    expect(keys).toHaveLength(12);
+    expect([...FEATURE_FLAG_KEYS_OF_INFRA]).toEqual(keys);
+    expect(FEATURE_FLAG_KEYS).toEqual(keys);
+    expect(Object.values(featureFlagDefaults()).every((v) => v === false)).toBe(true);
+    expect(Object.keys(featureFlagDefaults())).toEqual(keys);
+  });
+
+  it("are returned by the SST app, from the permission lists the web and admin functions receive", () => {
+    const config = readFileSync(resolve(root, "infra/sst.config.ts"), "utf8");
+    expect(config).toContain("featureFlagDefaults: featureFlagDefaults(),");
+    expect(config).toContain("webRolePolicies: apps.webRolePolicies,");
+    const web = readFileSync(resolve(root, "infra/stacks/web.ts"), "utf8");
+    expect(web.match(/permissions: record\(\[/g)).toHaveLength(2);
+    expect(web).toContain("webRolePolicies,");
+    expect(web).toContain("$jsonStringify");
+  });
+});
+
 describe("admin allowlist", () => {
   it("parses and normalises IPv4 and IPv6 entries", () => {
     expect(parseAllowlist("203.0.113.7, 198.51.100.0/24,203.0.113.7")).toEqual({

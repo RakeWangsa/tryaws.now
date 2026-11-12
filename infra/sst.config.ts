@@ -10,6 +10,7 @@
 // NOT TYPE-CHECKED: `sst` is not installed in this repository yet (JOURNEY.md, first manual step).
 // The pure parts are in infra/lib/ and are type-checked and tested; the resource declarations are in
 // infra/stacks/, linted and formatted only, with a repo test that reads their text.
+import { featureFlagDefaults } from "./lib/functions";
 import {
   assertDeployAllowed,
   readStageConfig,
@@ -88,6 +89,10 @@ export default $config({
       customerPoolId: identity.customers.id,
       adminPoolId: identity.admins.id,
       alarmTopic: alarm.topic.arn,
+      // C.2: read by scripts/post-deploy-check.mjs after a production deploy. R12: every default is
+      // false; R1: no policy of the web and admin roles allows sts:AssumeRole.
+      featureFlagDefaults: featureFlagDefaults(),
+      webRolePolicies: apps.webRolePolicies,
     };
   },
 });

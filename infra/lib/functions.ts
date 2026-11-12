@@ -249,6 +249,28 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
   },
 ];
 
+// C.2 and R12: the twelve product-family flags of FEATURE_FLAG_KEYS (packages/db), all off by default.
+// A copy, because infra must not import @tc/db at synth time; a repo test compares the two lists. The
+// stack output `featureFlagDefaults` is read by scripts/post-deploy-check.mjs after a production deploy.
+export const FEATURE_FLAG_KEYS_OF_INFRA = [
+  "linux_instance",
+  "static_ip",
+  "backup",
+  "disk",
+  "windows_instance",
+  "database",
+  "load_balancer",
+  "bucket",
+  "container_service",
+  "cdn",
+  "dns_zone",
+  "domain",
+] as const;
+
+export function featureFlagDefaults(): Record<string, boolean> {
+  return Object.fromEntries(FEATURE_FLAG_KEYS_OF_INFRA.map((key) => [key, false]));
+}
+
 // C.5: the environment of the provisioner that opens the bootstrap beacon port of a new Linux server to
 // the NAT addresses only (functions/provisioner/index.ts reads both). The values are required stack
 // configuration on staging and production (readStageConfig refuses a deploy without them); a personal
