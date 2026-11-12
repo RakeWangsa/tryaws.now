@@ -25,6 +25,7 @@ it("exports exactly the public API of the pricing engine", () => {
     "parseSnapshot",
     "previewPricing",
     "problemFields",
+    "prorateMinor",
     "quote",
     "quoteWithBook",
     "snapshotToQuote",

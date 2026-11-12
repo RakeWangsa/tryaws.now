@@ -176,6 +176,14 @@ export const BN: Catalog = {
       capacity_full: "এই লোকেশনে এখন ক্ষমতা নেই।",
     },
   },
+  wallet_credited_plan_change: {
+    subject: "আপনার ওয়ালেটে {credit} জমা হয়েছে",
+    headline: "ওয়ালেটে টাকা জমা",
+    body: [
+      "প্ল্যান পরিবর্তন সম্পন্ন করা যায়নি, তাই আমরা আপনার ওয়ালেটে {credit} জমা করেছি।",
+      "বর্তমান ব্যালেন্স: {balance}।",
+    ],
+  },
   resource_ready: {
     subject: "আপনার {product} প্রস্তুত",
     headline: "রিসোর্স প্রস্তুত",
@@ -345,6 +353,14 @@ export const EN: Catalog = {
       create_failed: "the resource could not be created.",
       capacity_full: "there is no capacity in this location right now.",
     },
+  },
+  wallet_credited_plan_change: {
+    subject: "{credit} credited to your wallet",
+    headline: "Wallet credited",
+    body: [
+      "We credited {credit} to your wallet because the plan change could not be completed.",
+      "Current balance: {balance}.",
+    ],
   },
   resource_ready: {
     subject: "Your {product} is ready",

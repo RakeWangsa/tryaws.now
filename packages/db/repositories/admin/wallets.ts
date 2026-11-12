@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { v7 as uuidv7 } from "uuid";
 import { sumWalletEntries } from "../../ledger/accounts";
 import { asText, toMinor } from "../../ledger/values";
 import { ADJUSTMENT_DIRECTIONS, ADJUSTMENT_KINDS } from "../../schema/money";
@@ -6,7 +7,7 @@ import { refused, type RepoErrorCode, type Written } from "../result";
 import { isUuid } from "../scope";
 import { audited, isActiveAdmin } from "./audited";
 import type { AdminRole, AdminScope } from "./index";
-import type { LedgerPoster, LedgerPostRequest } from "./ledger-port";
+import type { LedgerPoster, LedgerPostRequest, LedgerReverser } from "./ledger-port";
 
 // 16.12 /wallets/[customerId]. `finance` creates an adjustment; a second `finance` or `superadmin`
 // approves or rejects it; the requester never does (also the check wallet_adjustments_approver_check).
@@ -17,6 +18,14 @@ import type { LedgerPoster, LedgerPostRequest } from "./ledger-port";
 const READ_ROLES: readonly AdminRole[] = ["finance", "superadmin"];
 const CREATE_ROLES: readonly AdminRole[] = ["finance"];
 const DECIDE_ROLES: readonly AdminRole[] = ["finance", "superadmin"];
+// WPU-M3: ops must be able to correct a wrong or missing credit, so finance and superadmin both may.
+const CREDIT_ROLES: readonly AdminRole[] = ["finance", "superadmin"];
+// The operation kinds that apply a pending plan (PLAN_APPLY_KINDS of @tc/core, which this package
+// cannot import) and the states in which one counts as failed.
+const PLAN_APPLY_KINDS: readonly string[] = ["scale_container", "change_cdn_bundle"];
+const FAILED_APPLY_STATES: readonly string[] = ["failed", "needs_attention"];
+// The template of 16.14 that tells the customer about the credit (packages/notify).
+export const PLAN_CREDIT_TEMPLATE = "wallet_credited_plan_change";
 
 export const ADJUSTMENT_LIMIT_KEY = "wallet.adjustment_limit_minor";
 const MAX_MINOR = 9223372036854775807n;
@@ -105,6 +114,22 @@ export interface AdjustmentChanged {
   ledgerTransactionId: string | null;
 }
 
+export interface FailedChangeCreditInput {
+  /** The apply operation (scale_container, change_cdn_bundle) that ended failed or needs_attention. */
+  operationId: string;
+}
+
+export interface FailedChangeCredit {
+  operationId: string;
+  customerId: string;
+  /** The renewal charge that was reversed. */
+  chargeTransactionId: string;
+  /** The reversing transaction (the one that exists, posted now or earlier). */
+  transactionId: string;
+  amountMinor: bigint;
+  balanceMinor: bigint;
+}
+
 export interface WalletsAdminRepo {
   detail(customerId: string, options?: WalletDetailOptions): Promise<Written<WalletAdminDetail>>;
   createAdjustment(
@@ -121,6 +146,11 @@ export interface WalletsAdminRepo {
     input: AdjustmentDecisionInput,
     reason: string,
   ): Promise<Written<AdjustmentChanged>>;
+  creditWalletForFailedChange(
+    input: FailedChangeCreditInput,
+    reason: string,
+    reverse: LedgerReverser,
+  ): Promise<Written<FailedChangeCredit>>;
 }
 
 // Thrown inside the audited write, so that a refusal writes no audit row.
@@ -494,6 +524,176 @@ export function walletsAdminRepo(scope: AdminScope): WalletsAdminRepo {
               replayed: false,
               before: null,
               after: { ...meta, status, ledgerTransactionId },
+            };
+          },
+        );
+      } catch (error) {
+        if (error instanceof Refusal) return refused(error.code);
+        throw error;
+      }
+    },
+
+    // WPU-M3. A plan change was paid and not delivered: the renewal charge that the failed apply belongs
+    // to is reversed into the wallet, whole, by the existing reversal (R5: the same lines, VAT, fee and
+    // margin included). The charge is DERIVED from the operation (the renewal of the period the apply was
+    // queued for), never typed in, and must have been paid by the wallet of the customer who owns the
+    // resource (R8). A transaction takes one reversal, so a repeat is a replay: nothing is posted twice.
+    async creditWalletForFailedChange(input, reason, reverse) {
+      // Read once into locals, so a getter cannot answer differently on the second read.
+      const operationId = input?.operationId;
+      if (!CREDIT_ROLES.includes(role)) return refused("forbidden");
+      if (
+        typeof operationId !== "string" ||
+        !isUuid(operationId) ||
+        typeof reverse !== "function"
+      ) {
+        return refused("validation");
+      }
+      const opId = operationId.toLowerCase();
+      const note = typeof reason === "string" ? reason.trim() : "";
+      try {
+        return await audited(
+          scope,
+          {
+            action: "wallet.credit_failed_change",
+            targetType: "operation",
+            targetId: opId,
+            reason: note,
+          },
+          async () => {
+            const op = (
+              await tx.execute<{
+                kind: string;
+                state: string;
+                payload: unknown;
+                customer_id: string;
+                subscription_id: string | null;
+                subscription_customer: string | null;
+              }>(
+                sql`select o.kind, o.state, o.payload, r.customer_id, s.id as subscription_id, s.customer_id as subscription_customer
+                      from operations o
+                      join resources r on r.id = o.resource_id
+                      left join subscriptions s on s.resource_id = r.id
+                     where o.id = ${opId}`,
+              )
+            ).rows[0];
+            if (op === undefined) throw new Refusal("not_found");
+            // Only an apply that failed, and only an apply that names the period it was queued for.
+            if (!PLAN_APPLY_KINDS.includes(op.kind) || !FAILED_APPLY_STATES.includes(op.state)) {
+              throw new Refusal("conflict");
+            }
+            const payload =
+              typeof op.payload === "object" && op.payload !== null && !Array.isArray(op.payload)
+                ? (op.payload as Record<string, unknown>)
+                : {};
+            const periodEnd =
+              typeof payload.periodEnd === "string" ? new Date(payload.periodEnd) : null;
+            if (
+              periodEnd === null ||
+              Number.isNaN(periodEnd.getTime()) ||
+              op.subscription_id === null ||
+              op.subscription_customer !== op.customer_id ||
+              (payload.subscriptionId !== undefined &&
+                payload.subscriptionId !== op.subscription_id)
+            ) {
+              throw new Refusal("conflict");
+            }
+            // The renewal charged at the period end the apply was queued for: key of ledgerKey.renewal.
+            const chargeKey = `renew:${op.subscription_id}:${periodEnd.toISOString()}`;
+            const charge = (
+              await tx.execute<{
+                id: string;
+                kind: string;
+                wallet_customer: string | null;
+                amount: string | null;
+              }>(
+                sql`select t.id, t.kind, a.customer_id as wallet_customer, e.amount_minor::text as amount
+                      from ledger_transactions t
+                      left join ledger_entries e on e.transaction_id = t.id and e.direction = 'debit'
+                      left join ledger_accounts a on a.id = e.account_id and a.type = 'customer_wallet'
+                     where t.idempotency_key = ${chargeKey}`,
+              )
+            ).rows.filter((row) => row.wallet_customer !== null);
+            const paid = charge[0];
+            if (paid === undefined || paid.kind !== "renewal" || paid.amount === null) {
+              throw new Refusal("not_found");
+            }
+            if (charge.length !== 1 || paid.wallet_customer !== op.customer_id) {
+              throw new Refusal("conflict");
+            }
+            const amountMinor = BigInt(paid.amount);
+            // Everything that credits this charge meets here, whatever the operation or the admin.
+            await tx.execute(
+              sql`select pg_advisory_xact_lock(hashtextextended(${"plan_credit:" + paid.id}, 0))`,
+            );
+            const meta = {
+              customerId: op.customer_id,
+              chargeTransactionId: paid.id,
+              amountMinor: amountMinor.toString(),
+            };
+            const walletBalance = async (): Promise<bigint> =>
+              BigInt(
+                (
+                  await tx.execute<{ b: string }>(
+                    sql`select balance_minor::text as b from wallets where customer_id = ${op.customer_id}`,
+                  )
+                ).rows[0]?.b ?? "0",
+              );
+            const earlier = (
+              await tx.execute<{ id: string }>(
+                sql`select id from ledger_transactions
+                     where kind = 'reversal' and reference_type = 'ledger_transaction' and reference_id = ${paid.id}`,
+              )
+            ).rows[0];
+            if (earlier !== undefined) {
+              return {
+                value: {
+                  operationId: opId,
+                  customerId: op.customer_id,
+                  chargeTransactionId: paid.id,
+                  transactionId: earlier.id,
+                  amountMinor,
+                  balanceMinor: await walletBalance(),
+                },
+                replayed: true,
+                before: meta,
+                after: { ...meta, transactionId: earlier.id },
+              };
+            }
+            // The memo names the operation (an id, never customer text, R14).
+            const reversed = await reverse(tx, {
+              transactionId: paid.id,
+              actor: { type: "admin", id: actor.adminId },
+              memo: `credit for a failed plan change, operation ${opId}: ${note}`.slice(0, 500),
+            });
+            // A refused reversal wrote nothing; no audit row is left behind.
+            if (!reversed.ok) throw new Refusal("conflict");
+            const balanceMinor = await walletBalance();
+            const payloadOut = JSON.stringify({
+              transactionId: reversed.value.transactionId,
+              creditMinor: amountMinor.toString(),
+              balanceMinor: balanceMinor.toString(),
+            });
+            for (const channel of ["email", "in_app"] as const) {
+              await tx.execute(
+                sql`insert into notifications (id, customer_id, email, channel, template, payload, dedupe_key)
+                    values (${uuidv7()}, ${op.customer_id}, null, ${channel}, ${PLAN_CREDIT_TEMPLATE}, ${payloadOut}::jsonb,
+                            ${`${PLAN_CREDIT_TEMPLATE}:plan-credit:${reversed.value.transactionId}:${channel}`})
+                    on conflict do nothing`,
+              );
+            }
+            return {
+              value: {
+                operationId: opId,
+                customerId: op.customer_id,
+                chargeTransactionId: paid.id,
+                transactionId: reversed.value.transactionId,
+                amountMinor,
+                balanceMinor,
+              },
+              replayed: false,
+              before: meta,
+              after: { ...meta, transactionId: reversed.value.transactionId },
             };
           },
         );

@@ -4,7 +4,7 @@ import type { Tx } from "../client";
 import { DbError } from "../errors";
 import { adminRepos, type AdminActor, type AdminRepos } from "../repositories/admin/index";
 import { runTransaction } from "../tx";
-import { testPoster } from "./admin-money-support";
+import { testPoster, testReverser } from "./admin-money-support";
 import { ensureMarket, newAdmin } from "./fixtures";
 import { useTempDatabase } from "./temp-db";
 
@@ -316,6 +316,10 @@ const GATE_CASES: Record<string, GateCase> = {
   },
   "wallets.approveAdjustment": {
     call: (r) => r.wallets.approveAdjustment({ id: ID() }, "r", testPoster),
+    deny: "support",
+  },
+  "wallets.creditWalletForFailedChange": {
+    call: (r) => r.wallets.creditWalletForFailedChange({ operationId: ID() }, "r", testReverser),
     deny: "support",
   },
   "wallets.rejectAdjustment": {

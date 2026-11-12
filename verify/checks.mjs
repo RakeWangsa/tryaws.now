@@ -1066,6 +1066,30 @@ TASKS["WPU-M1"] = [
 // and db suites need the local PostgreSQL (pnpm db:up).
 TASKS["WPU-M2"] = [specSync, baselineSync, lint, typecheck, format, core, db, scheduler, web, repo];
 
+// WPU-M3: a customer who was charged for a plan change that was not delivered is credited in the wallet
+// by the EXISTING reversal of the renewal charge (no posting rule is new; a partial credit is a Needs
+// decision and is not posted). Money path: the pro-rata piece of the pricing engine and the credit
+// amount rule (core), the audited admin action against the real ledger and the temp database (core
+// with the database; db for the gate case of every admin method), the admin money flow (admin) and the
+// bn and en message (notify). No AWS call. The core and db suites need the local PostgreSQL (pnpm db:up).
+const notifyM3 = {
+  id: "notify",
+  title: "packages/notify: templates, providers, queue, delivery loop, OTP",
+  command: ["pnpm", "test", "--filter", "@tc/notify", "--no-passWithNoTests"],
+};
+TASKS["WPU-M3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  admin,
+  notifyM3,
+  repo,
+];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

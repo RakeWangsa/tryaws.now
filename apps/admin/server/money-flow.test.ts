@@ -1,4 +1,4 @@
-import type { AdminActor, AdminRepos, LedgerPoster } from "@tc/db";
+import type { AdminActor, AdminRepos, LedgerPoster, LedgerReverser } from "@tc/db";
 import { describe, expect, it } from "vitest";
 import { makeMoneyAction, parseTaka, type MoneyActionRequest } from "./money-flow.ts";
 
@@ -11,9 +11,18 @@ const ACTOR: AdminActor = {
 };
 const NOW = new Date("2026-11-12T08:00:00.000Z");
 const POSTER: LedgerPoster = async () => ({ ok: true, value: { transactionId: ID } });
+const REVERSER: LedgerReverser = async () => ({ ok: true, value: { transactionId: ID } });
 
 // A recorder of the order of the steps and of the calls that reached the repository.
-function rig(over: { allow?: boolean; limit?: boolean; repo?: unknown; boom?: boolean } = {}) {
+function rig(
+  over: {
+    allow?: boolean;
+    limit?: boolean;
+    repo?: unknown;
+    boom?: boolean;
+    noReverse?: boolean;
+  } = {},
+) {
   const steps: string[] = [];
   const calls: [string, unknown, string, unknown?][] = [];
   const asked: (readonly string[])[] = [];
@@ -32,6 +41,7 @@ function rig(over: { allow?: boolean; limit?: boolean; repo?: unknown; boom?: bo
       createAdjustment: record("createAdjustment"),
       approveAdjustment: record("approveAdjustment"),
       rejectAdjustment: record("rejectAdjustment"),
+      creditWalletForFailedChange: record("creditWalletForFailedChange"),
     },
     payments: {
       reverify: record("reverify"),
@@ -55,6 +65,7 @@ function rig(over: { allow?: boolean; limit?: boolean; repo?: unknown; boom?: bo
       return fn(repos);
     },
     post: POSTER,
+    ...(over.noReverse === true ? {} : { reverse: REVERSER }),
     clock: { now: () => NOW },
   });
   return { act, steps, calls, asked };
@@ -250,5 +261,40 @@ describe("money actions in the order of R9", () => {
     } as MoneyActionRequest;
     expect((await r.act(hostile)).ok).toBe(true);
     expect(r.calls[0]?.[2]).toBe("first read");
+  });
+
+  // WPU-M3
+  it("creditWalletForFailedChange: finance or superadmin, the id is the operation, the reverser is passed", async () => {
+    const r = rig();
+    const out = await r.act({
+      kind: "creditWalletForFailedChange",
+      id: ID,
+      reason: "ops rejected the apply",
+    });
+    expect(out).toMatchObject({ ok: true, customerId: CUSTOMER });
+    expect(r.asked).toEqual([["finance", "superadmin"]]);
+    expect(r.steps).toEqual(["authorize", "limit", "execute"]);
+    expect(r.calls).toEqual([
+      ["creditWalletForFailedChange", { operationId: ID }, "ops rejected the apply", REVERSER],
+    ]);
+  });
+
+  it("creditWalletForFailedChange needs a reason and an operation id, and fails closed without a reverser", async () => {
+    const r = rig();
+    expect(await r.act({ kind: "creditWalletForFailedChange", id: ID, reason: " " })).toEqual({
+      ok: false,
+      code: "invalid",
+    });
+    expect(await r.act({ kind: "creditWalletForFailedChange", id: "x", reason: "r" })).toEqual({
+      ok: false,
+      code: "invalid",
+    });
+    expect(r.calls).toEqual([]);
+    const none = rig({ noReverse: true });
+    expect(await none.act({ kind: "creditWalletForFailedChange", id: ID, reason: "r" })).toEqual({
+      ok: false,
+      code: "invalid",
+    });
+    expect(none.calls).toEqual([]);
   });
 });

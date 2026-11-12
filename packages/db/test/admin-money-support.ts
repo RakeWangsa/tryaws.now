@@ -9,7 +9,7 @@ import {
   lockWalletRow,
   type NewLedgerEntry,
 } from "../ledger/index";
-import type { LedgerPoster } from "../repositories/admin/ledger-port";
+import type { LedgerPoster, LedgerReverser } from "../repositories/admin/ledger-port";
 import { newCustomer, systemAccount } from "./fixtures";
 import type pg from "pg";
 import { inTransaction, insertRow, type Queryable } from "./sql";
@@ -18,6 +18,10 @@ import { inTransaction, insertRow, type Queryable } from "./sql";
 // that follows the same steps as postTransaction (wallet lock, key replay, balance, header, lines,
 // cache) with the statements of packages/db/ledger. The real postTransaction is exercised against the
 // same repositories in packages/core/test/admin-money.db.test.ts.
+// WPU-M3: a reverser that posts nothing; the gate cases never reach it. The real reverseTransaction runs
+// in packages/core/lifecycle/plan-credit.db.test.ts.
+export const testReverser: LedgerReverser = async () => ({ ok: false, error: "internal" });
+
 export const testPoster: LedgerPoster = async (tx, request) => {
   const wallet = request.postings.find((p) => p.account.type === "customer_wallet");
   const customerId = wallet?.account.type === "customer_wallet" ? wallet.account.customerId : null;

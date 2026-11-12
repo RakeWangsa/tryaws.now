@@ -10,6 +10,7 @@ export {
   type PricingBasis,
   type PricingPreview,
 } from "./preview";
+export { prorateMinor } from "./prorata";
 export { quote } from "./quote";
 export {
   SNAPSHOT_VERSION,

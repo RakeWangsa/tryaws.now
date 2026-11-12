@@ -20,7 +20,7 @@ import {
   type AdminActor,
   type AdminRepos,
 } from "@tc/db";
-import { notifyWaitlist, postTransaction } from "@tc/core";
+import { notifyWaitlist, postTransaction, reverseTransaction } from "@tc/core";
 import type { OperationQueue } from "@tc/core";
 import type { Tx } from "@tc/db";
 import { unavailableAdminDirectory, type AdminDirectory } from "./admin-directory.ts";
@@ -186,6 +186,7 @@ export function moneyFlowDeps(): MoneyFlowDeps {
     limiter: adminLimiter("admin_money_action", MONEY_ACTION_LIMIT),
     run: runAsAdmin,
     post: postTransaction,
+    reverse: reverseTransaction,
     clock: { now: () => new Date() },
   };
 }

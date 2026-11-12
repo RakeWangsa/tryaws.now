@@ -391,11 +391,15 @@ export type {
   LedgerPostAnswer,
   LedgerPostLine,
   LedgerPostRequest,
+  LedgerReverser,
+  LedgerReverseRequest,
 } from "./repositories/admin/ledger-port";
 export { ADJUSTMENT_LIMIT_KEY } from "./repositories/admin/wallets";
 export type {
   AdjustmentChanged,
   AdjustmentDecisionInput,
+  FailedChangeCredit,
+  FailedChangeCreditInput,
   AdjustmentDirection,
   AdjustmentInput,
   AdjustmentKind,

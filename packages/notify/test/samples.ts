@@ -48,6 +48,10 @@ export const SAMPLES: Record<TemplateId, { data: Record<string, unknown>; channe
     },
     channels: ["email", "in_app"],
   },
+  wallet_credited_plan_change: {
+    data: { transactionId: IDS.order, creditMinor: "3000", balanceMinor: "300000" },
+    channels: ["email", "in_app"],
+  },
   resource_ready: {
     data: { ...res, regionCode: "ap-southeast-1", address: "203.0.113.10" },
     channels: ["email", "sms", "in_app"],

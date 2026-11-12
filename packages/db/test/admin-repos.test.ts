@@ -2,6 +2,7 @@ import { v7 as uuidv7 } from "uuid";
 import { expect, it } from "vitest";
 import type { Tx } from "../client";
 import { adminRepos, type AdminActor, type AdminRepos } from "../repositories/admin/index";
+import type { LedgerReverser } from "../repositories/admin/ledger-port";
 import { auditRowsOf } from "../testing/repos";
 import { runTransaction } from "../tx";
 import { useTempDatabase } from "./temp-db";
@@ -14,7 +15,7 @@ import {
   uniqueSuffix,
 } from "./fixtures";
 import { fundedWallet, newPayment, testPoster } from "./admin-money-support";
-import { insertRow } from "./sql";
+import { inTransaction, insertRow } from "./sql";
 
 const t = useTempDatabase();
 const asAdmin = <T>(actor: AdminActor, fn: (r: AdminRepos) => Promise<T>) =>
@@ -42,6 +43,63 @@ async function seedOperation(state: string): Promise<string> {
     ...(state === "needs_approval" ? { needs_approval: true } : {}),
   });
 }
+
+// WPU-M3: a failed apply of a resource whose renewal charge (100 paisa from the wallet) is in the ledger.
+async function seedFailedApply(): Promise<string> {
+  const w = await fundedWallet(t.pool, 1_000n);
+  const resourceId = await newResource(t.pool, w.customerId, { family: "container_service" });
+  const end = new Date("2030-02-01T00:00:00.000Z");
+  const sub = await insertRow(t.pool, "subscriptions", {
+    resource_id: resourceId,
+    customer_id: w.customerId,
+    term_days: 30,
+    price_snapshot: JSON.stringify({}),
+    period_start: new Date("2030-01-01T00:00:00.000Z"),
+    period_end: new Date("2030-03-03T00:00:00.000Z"),
+  });
+  const wallet = (
+    await t.pool.query(
+      "select id from ledger_accounts where type = 'customer_wallet' and customer_id = $1",
+      [w.customerId],
+    )
+  ).rows[0].id as string;
+  const revenue = (
+    await t.pool.query(
+      "select id from ledger_accounts where type = 'gateway_clearing' and customer_id is null",
+    )
+  ).rows[0].id as string;
+  await inTransaction(t.pool, async (c) => {
+    const txId = await insertRow(c, "ledger_transactions", {
+      kind: "renewal",
+      reference_type: "subscription",
+      reference_id: sub,
+      idempotency_key: `renew:${sub}:${end.toISOString()}`,
+      actor_type: "system",
+    });
+    await insertRow(c, "ledger_entries", {
+      transaction_id: txId,
+      account_id: wallet,
+      direction: "debit",
+      amount_minor: 100n,
+    });
+    await insertRow(c, "ledger_entries", {
+      transaction_id: txId,
+      account_id: revenue,
+      direction: "credit",
+      amount_minor: 100n,
+    });
+  });
+  return insertRow(t.pool, "operations", {
+    resource_id: resourceId,
+    kind: "scale_container",
+    state: "needs_attention",
+    idempotency_key: "a:" + uniqueSuffix(),
+    payload: JSON.stringify({ subscriptionId: sub, periodEnd: end.toISOString() }),
+  });
+}
+
+// A reverser that says ok (the real one is exercised in packages/core).
+const okReverser: LedgerReverser = async () => ({ ok: true, value: { transactionId: uuidv7() } });
 
 async function seedKyc(): Promise<string> {
   return insertRow(t.pool, "kyc_submissions", {
@@ -348,6 +406,12 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
     r.wallets.approveAdjustment({ id: await seedAdjustment() }, "slip checked", testPoster),
   "wallets.rejectAdjustment": async (r) =>
     r.wallets.rejectAdjustment({ id: await seedAdjustment() }, "no slip"),
+  "wallets.creditWalletForFailedChange": async (r) =>
+    r.wallets.creditWalletForFailedChange(
+      { operationId: await seedFailedApply() },
+      "apply rejected, capacity not delivered",
+      okReverser,
+    ),
   "payments.reverify": async (r) =>
     r.payments.reverify({ paymentId: await seedReviewPayment() }, "customer sent a receipt"),
   "payments.recordManualRefund": async (r) => {

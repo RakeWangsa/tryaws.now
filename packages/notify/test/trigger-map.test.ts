@@ -17,6 +17,11 @@ const TABLE: ReadonlyArray<{ row: string; templates: readonly TemplateId[]; sms:
   { row: "Top-up verified: receipt", templates: ["topup_receipt"], sms: "no" },
   { row: "Order paid: invoice", templates: ["order_paid"], sms: "no" },
   { row: "Order failed and refunded", templates: ["order_failed_refunded"], sms: "no" },
+  {
+    row: "WPU-M3: wallet credited when a plan change could not be completed",
+    templates: ["wallet_credited_plan_change"],
+    sms: "no",
+  },
   { row: "Resource ready", templates: ["resource_ready"], sms: "yes" },
   {
     row: "Renewal reminders at 7, 3 and 1 day (SMS at 1 day)",

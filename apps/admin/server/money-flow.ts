@@ -1,4 +1,4 @@
-import type { AdminActor, AdminRepos, AdminRole, LedgerPoster } from "@tc/db";
+import type { AdminActor, AdminRepos, AdminRole, LedgerPoster, LedgerReverser } from "@tc/db";
 
 // The money actions of /wallets/[customerId] and /payments in the order of R9: authenticate and
 // authorize (the roles of each kind), validate, rate limit, execute (one transaction, every write
@@ -14,6 +14,7 @@ export type MoneyActionKind =
   | "rejectAdjustment"
   | "reverifyPayment"
   | "recordManualRefund"
+  | "creditWalletForFailedChange"
   | "resolveDiscrepancy";
 
 export interface MoneyActionRequest {
@@ -52,6 +53,8 @@ export interface MoneyFlowDeps {
   readonly run: <T>(actor: AdminActor, fn: (repos: AdminRepos) => Promise<T>) => Promise<T>;
   // postTransaction of @tc/core (R5): the repositories post through it.
   readonly post: LedgerPoster;
+  // WPU-M3: reverseTransaction of @tc/core (R5). Missing means the action is unavailable (R16).
+  readonly reverse?: LedgerReverser;
   readonly clock: { now(): Date };
 }
 
@@ -67,6 +70,8 @@ export const KIND_ROLES: Readonly<Record<MoneyActionKind, readonly AdminRole[]>>
   rejectAdjustment: ["finance", "superadmin"],
   reverifyPayment: ["finance"],
   recordManualRefund: ["finance"],
+  // WPU-M3: ops must be able to correct a missing or wrong credit; superadmin owns every area.
+  creditWalletForFailedChange: ["finance", "superadmin"],
   resolveDiscrepancy: ["ops", "finance", "superadmin"],
 };
 const KINDS = Object.keys(KIND_ROLES) as MoneyActionKind[];
@@ -205,6 +210,15 @@ export function makeMoneyAction(
             );
           case "resolveDiscrepancy":
             return repos.payments.resolveDiscrepancy({ id: input.id }, input.reason);
+          case "creditWalletForFailedChange":
+            // The id is the apply operation; the charge is derived from it, never typed in.
+            return deps.reverse === undefined
+              ? Promise.resolve<Outcome>({ ok: false, error: "validation" })
+              : repos.wallets.creditWalletForFailedChange(
+                  { operationId: input.id },
+                  input.reason,
+                  deps.reverse,
+                );
         }
       });
       if (!outcome.ok) {

@@ -1,6 +1,6 @@
 import type { Locale } from "@tc/core";
 
-// The 22 queued messages of 16.14 (the table has 14 rows; "KYC" has three messages, "Security"
+// The 23 queued messages of 16.14 (the table has 14 rows; "KYC" has three messages, "Security"
 // five, "Low balance, payment expired" two, "Domain" two). Section F leaves TemplateId open.
 export const TEMPLATE_IDS = [
   "welcome",
@@ -10,6 +10,7 @@ export const TEMPLATE_IDS = [
   "topup_receipt",
   "order_paid",
   "order_failed_refunded",
+  "wallet_credited_plan_change",
   "resource_ready",
   "renewal_reminder",
   "renewed",

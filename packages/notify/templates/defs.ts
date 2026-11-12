@@ -1,7 +1,7 @@
 import type { Channel, TemplateId } from "../queue/types";
 import { f, type Parsed, type Spec } from "./data";
 
-// The 22 definitions: the closed list of fields each message accepts, the channels it uses (16.14),
+// The 23 definitions: the closed list of fields each message accepts, the channels it uses (16.14),
 // the panel path of its button and the variables its texts use. A definition holds no text: the
 // texts are in messages.ts, so the data and the words can change apart.
 
@@ -170,6 +170,14 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
       refund: h.m(d.refundMinor),
       balance: h.m(d.balanceMinor),
     }),
+  },
+  // WPU-M3: a paid plan change could not be completed and the charge went back to the wallet.
+  wallet_credited_plan_change: {
+    spec: { transactionId: f.uuid, creditMinor: f.minor, balanceMinor: f.minor },
+    channels: () => ek,
+    path: fixed("/wallet"),
+    cta: "view_wallet",
+    vars: (d, h) => ({ credit: h.m(d.creditMinor), balance: h.m(d.balanceMinor) }),
   },
   resource_ready: {
     spec: { ...resource, regionCode: f.region, address: f.address },

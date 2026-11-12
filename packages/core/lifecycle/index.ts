@@ -40,6 +40,12 @@ export {
   type PlanFailure,
   type PlanPrice,
 } from "./plan-change";
+export {
+  planCreditMinor,
+  type PlanCredit,
+  type PlanCreditInput,
+  type PlanCreditRule,
+} from "./plan-credit";
 export { renewalQuote, renewSubscription, type Renewed } from "./renew";
 export { RENEW_NOW_WINDOW_DAYS, renewNow, type RenewedNow } from "./renew-now";
 export { completeRestore } from "./restore";

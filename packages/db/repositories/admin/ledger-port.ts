@@ -29,3 +29,14 @@ export type LedgerPostAnswer =
   | { readonly ok: false; readonly error: string };
 
 export type LedgerPoster = (tx: Tx, request: LedgerPostRequest) => Promise<LedgerPostAnswer>;
+
+// WPU-M3: the reversal of a ledger transaction (`reverseTransaction` of @tc/core): the same lines
+// reversed, once per original (R5). The admin repository passes the actor and the memo; core checks
+// the request again and posts it under the wallet lock.
+export interface LedgerReverseRequest {
+  readonly transactionId: string;
+  readonly actor: { readonly type: "admin"; readonly id: string };
+  readonly memo: string;
+}
+
+export type LedgerReverser = (tx: Tx, request: LedgerReverseRequest) => Promise<LedgerPostAnswer>;
