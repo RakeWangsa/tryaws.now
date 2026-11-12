@@ -28,6 +28,7 @@ export interface ResolvedProduct {
     | "cdn"
     | "bucket"
     | "container_service"
+    | "disk"
     | "domain";
   readonly productId: string;
   readonly region: string;

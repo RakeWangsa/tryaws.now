@@ -123,6 +123,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP5-T5",
     "WP5-T6",
     "WP5-T6b",
+    "WP5-T6c",
     "WP6-T1",
     "WP6-T1b",
     "WP6-T2",
@@ -1154,6 +1155,45 @@ it("task WP5-T6b is proven by core, the renewal and restore database tests, the 
   }
 });
 
+it("task WP5-T6c is proven by core, the disk order and the catalog guard in core and db, the action core, the offer, the order links and the sweep", () => {
+  expect(TASKS["WP5-T6c"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["disk-products", "pnpm test --filter @tc/core products/disk --no-passWithNoTests"],
+    ["disk-order", "pnpm test --filter @tc/core orders/disk-order --no-passWithNoTests"],
+    [
+      "disk-catalog-guard",
+      "pnpm test --filter @tc/core products/catalog-sync --no-passWithNoTests",
+    ],
+    ["disk-catalog-write", "pnpm test --filter @tc/db test/catalog-sync --no-passWithNoTests"],
+    ["disk-cores", "pnpm test --filter @tc/web server/disk-actions --no-passWithNoTests"],
+    ["disk-views", "pnpm test --filter @tc/web server/extras-view --no-passWithNoTests"],
+    ["disk-order-links", "pnpm test --filter @tc/web orders/family-links --no-passWithNoTests"],
+    ["extras-pages", "pnpm test --filter @tc/web _extras/pages --no-passWithNoTests"],
+    ["extras-messages", "pnpm test --filter @tc/web messages/extras --no-passWithNoTests"],
+    ["order-kinds-sweep", "pnpm test --filter @tc/web server/endpoint-sweep --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/core/products/disk.test.ts",
+    "packages/core/orders/disk-order.test.ts",
+    "packages/core/products/catalog-sync.test.ts",
+    "packages/db/test/catalog-sync.test.ts",
+    "packages/db/migrations/0008_disk_anchor.sql",
+    "apps/web/server/disk-actions.test.ts",
+    "apps/web/server/extras-view.test.ts",
+    "apps/web/server/endpoint-sweep.test.ts",
+    "apps/web/app/[locale]/(panel)/orders/family-links.test.tsx",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
 it("task WP5-T5 is proven by the shared checks, core, db, notify, the two sentences of the proof and the notifier handler", () => {
   expect(TASKS["WP5-T5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
     ["spec-sync", "pnpm spec:check"],
@@ -1691,6 +1731,7 @@ it("each gate holds the checks of its tasks (the plan of docs/spec/I-timeline.md
     "WP5-T5",
     "WP5-T6",
     "WP5-T6b",
+    "WP5-T6c",
   ]);
   holds("M4", [
     "WP6-T1",

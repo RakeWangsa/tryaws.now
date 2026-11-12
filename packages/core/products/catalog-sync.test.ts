@@ -193,6 +193,17 @@ describe("planScopeSync", () => {
     expect(plan.deactivate).toEqual([]);
   });
 
+  it("never deactivates the seeded disk anchor, even when a caller names the family in its scope", () => {
+    const plan = planScopeSync({
+      region,
+      families: ["linux_instance", "disk"],
+      bundles: three,
+      existing: [{ family: "disk", awsId: "block-storage-gb", active: true }],
+    });
+    expect(plan.deactivate).toEqual([]);
+    expect(plan.upserts.map((r) => r.family)).not.toContain("disk");
+  });
+
   it("drops rows of a family that is not in the scope", () => {
     const plan = planScopeSync({
       region,

@@ -57,6 +57,13 @@
       "when": 1794416900353,
       "tag": "0007_worker_purge_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794420500353,
+      "tag": "0008_disk_anchor",
+      "breakpoints": true
     }
   ]
 }

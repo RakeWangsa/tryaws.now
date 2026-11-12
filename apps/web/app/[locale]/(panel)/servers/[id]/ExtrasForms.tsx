@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { startTransition, useActionState, useEffect, useState } from "react";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
+import type { DiskOffer } from "../../../../../server/extras-view.ts";
 import type { PlanOption } from "../../../../../server/servers-view.ts";
 import { useSpecLine } from "../ServerParts.tsx";
 
@@ -327,6 +328,83 @@ export function PostButton({
       <ActionNotice state={state} />
       <SubmitButton size="sm" variant="default" icon={icon}>
         {label}
+      </SubmitButton>
+    </form>
+  );
+}
+
+/**
+ * 16.10 Storage: `addDisk`. The action makes the signed draft of a `disk` order and sends the customer
+ * to the review page (16.11), where the price per GB-month is shown before anything is charged. The
+ * Region and the product are those of this server and its anchor row; the server checks them again
+ * against the customer's own rows (R8). With no offer (flag off, server not live, no row for the
+ * Region) the form is shown switched off.
+ */
+export function AddDiskForm({
+  action,
+  serverId,
+  region,
+  offer,
+}: {
+  action: ExtrasAction;
+  serverId: string;
+  region: string | null;
+  offer: DiskOffer | null;
+}) {
+  const t = useTranslations("Extras.storage.add");
+  const te = useTranslations("Extras");
+  const tf = useTranslations("Flow");
+  const [state, formAction] = useActionState(action, INITIAL_FORM_STATE);
+  const error = state.error;
+  const limits = { min: offer?.minGb ?? 0, max: offer?.maxGb ?? 0 };
+  const disabled = offer === null || region === null;
+  return (
+    <form action={formAction} noValidate>
+      <h3 className="mergecolor h4">{t("title")}</h3>
+      <p className="seccolor">{t("body")}</p>
+      {disabled ? <p className="seccolor">{t("unavailable")}</p> : null}
+      {error === undefined ? null : (
+        <div className="alert alert-danger text-start" role="alert">
+          <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
+          {t.has(`error.${error}`)
+            ? t(`error.${error}`)
+            : te.has(`error.${error}`)
+              ? te(`error.${error}`)
+              : te("error.unavailable")}
+        </div>
+      )}
+      <input type="hidden" name="serverId" value={serverId} />
+      <input type="hidden" name="region" value={region ?? ""} />
+      <input type="hidden" name="productId" value={offer?.productId ?? ""} />
+      <Field
+        name="displayName"
+        label={t("name")}
+        hint={t("hint")}
+        maxLength={60}
+        required
+        autoComplete="off"
+        disabled={disabled}
+        {...(state.fields?.["displayName"] !== undefined ? { error: tf("field.invalid") } : {})}
+      />
+      <Field
+        name="sizeGb"
+        label={t("size")}
+        hint={t("sizeHint", limits)}
+        inputMode="numeric"
+        maxLength={5}
+        required
+        autoComplete="off"
+        disabled={disabled}
+        {...(state.fields?.["sizeGb"] !== undefined ? { error: t("sizeInvalid", limits) } : {})}
+      />
+      {state.fields?.["serverId"] !== undefined || state.fields?.["region"] !== undefined ? (
+        <div className="invalid-feedback d-block mb-3">{t("serverInvalid")}</div>
+      ) : null}
+      {state.fields?.["productId"] !== undefined ? (
+        <div className="invalid-feedback d-block mb-3">{t("unavailable")}</div>
+      ) : null}
+      <SubmitButton variant="primary" disabled={disabled}>
+        {t("submit")}
       </SubmitButton>
     </form>
   );

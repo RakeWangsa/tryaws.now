@@ -11,6 +11,7 @@ import { loadServerDetail } from "../../../../../server/servers-view.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { ServerDetailContent } from "./ServerDetailContent.tsx";
 import {
+  addDiskAction,
   attachDiskAction,
   createBackupAction,
   deleteBackupAction,
@@ -42,6 +43,7 @@ const actions = {
   createBackup: createBackupAction,
   deleteBackup: deleteBackupAction,
   setAutoBackup: setAutoBackupAction,
+  addDisk: addDiskAction,
   attachDisk: attachDiskAction,
   detachDisk: detachDiskAction,
   destroyDisk: destroyDiskAction,

@@ -132,7 +132,25 @@ export const extrasEn: Same<typeof extrasBn> = {
       destroyTitle: "Destroy this disk?",
       destroyDescription:
         "A final backup of the disk is kept and the disk is destroyed. Type the name of the disk to continue.",
-      addSoon: "Buying a new disk is coming soon.",
+      add: {
+        title: "Add a new disk",
+        body: "A new block storage disk is created in the location of this server. The monthly price per GB is shown on the next step, and you confirm before any money is taken. When it is ready the disk appears in the list of free disks, and you attach it to the server from there.",
+        name: "Name of the disk",
+        hint: "Letters, digits, spaces, dots, hyphens and underscores, up to 60 characters.",
+        size: "Size (GB)",
+        sizeHint: "A whole number from {min} to {max} GB.",
+        sizeInvalid: "The size must be a whole number from {min} to {max} GB.",
+        serverInvalid: "A disk cannot be added to this server right now.",
+        unavailable:
+          "New disks are not on sale in this location right now, or the server is not running or stopped.",
+        submit: "Go to the next step",
+        error: {
+          limit_reached: "You have reached your limit.",
+          capacity_full: "There is no room in this location right now. Please try again later.",
+          kyc_required: "Complete the identity check first.",
+          forbidden: "This is not open for you.",
+        },
+      },
     },
     metrics: {
       title: "Metrics",

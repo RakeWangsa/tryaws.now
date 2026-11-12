@@ -30,6 +30,14 @@ describe("/orders/[id] opens the new resource on its own page", () => {
     expect(out).toContain(label);
   });
 
+  it("a disk has no page of its own: the customer is sent to the servers, where the Storage tab attaches it", () => {
+    const out = html(<OrderStatusContent locale="en" order={order("disk")} />, "en");
+    expect(out).toContain('href="/en/servers"');
+    expect(out).toContain("My servers");
+    expect(out).toContain("Storage tab");
+    expect(out).not.toContain(`href="/en/servers/${RESOURCE}"`);
+  });
+
   it("a server keeps the link to the server page", () => {
     const out = html(<OrderStatusContent locale="en" order={order("linux_instance")} />, "en");
     expect(out).toContain(`href="/en/servers/${RESOURCE}"`);
@@ -59,6 +67,7 @@ describe("/orders/review goes back to the form the draft came from", () => {
     ["load_balancer", "/en/load-balancers/new"],
     ["cdn", "/en/cdn/new"],
     ["linux_instance", "/en/servers/new"],
+    ["disk", "/en/servers"],
     [undefined, "/en/servers/new"],
   ])("%s", (family, href) => {
     const out = html(

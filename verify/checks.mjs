@@ -1859,6 +1859,79 @@ TASKS["WP5-T6b"] = [
   repo,
 ];
 
+// WP5-T6c: addDisk for a Linux server (16.10 Storage). A disk is one paid order: the anchor row of the
+// Region priced per GB-month by the pricing engine, the size as the quantity, the customer's own
+// server only, behind the flag `disk`. Each proof has its own line; `--no-passWithNoTests` makes an
+// empty selection fail; tests/repo/verify-cli.test.mjs asserts that the files exist.
+const diskProducts = {
+  id: "disk-products",
+  title:
+    "R4, R11, R16: the disk config is parsed field by field; only the active per-GB anchor of the Region resolves; the server rule",
+  command: ["pnpm", "test", "--filter", "@tc/core", "products/disk", "--no-passWithNoTests"],
+};
+const diskOrder = {
+  id: "disk-order",
+  title:
+    "R4, R7, R8, R12: addDisk is one paid order priced per GB; a second placement charges nothing; another customer's server answers like a missing one (database)",
+  command: ["pnpm", "test", "--filter", "@tc/core", "orders/disk-order", "--no-passWithNoTests"],
+};
+const diskCatalogGuard = {
+  id: "disk-catalog-guard",
+  title:
+    "The seeded disk anchor is never written or deactivated by the catalog sync (plan in core, write in db)",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "products/catalog-sync",
+    "--no-passWithNoTests",
+  ],
+};
+const diskCatalogWrite = {
+  id: "disk-catalog-write",
+  title:
+    "The seeded disk anchor: two rows from migration 0008, and applyCatalogScope refuses family disk (database)",
+  command: ["pnpm", "test", "--filter", "@tc/db", "test/catalog-sync", "--no-passWithNoTests"],
+};
+const diskCores = {
+  id: "disk-cores",
+  title:
+    "R9, R11: the addDisk core authenticates, validates, rate limits, then executes; public errors only",
+  command: ["pnpm", "test", "--filter", "@tc/web", "server/disk-actions", "--no-passWithNoTests"],
+};
+const diskViews = {
+  id: "disk-views",
+  title:
+    "R12: the add-disk offer exists only behind the flag, for a live server, from the anchor of its Region",
+  command: ["pnpm", "test", "--filter", "@tc/web", "server/extras-view", "--no-passWithNoTests"],
+};
+const diskLinks = {
+  id: "disk-order-links",
+  title: "16.11: a disk order goes back to the servers and opens the servers, not a server page",
+  command: ["pnpm", "test", "--filter", "@tc/web", "orders/family-links", "--no-passWithNoTests"],
+};
+TASKS["WP5-T6c"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  diskProducts,
+  diskOrder,
+  diskCatalogGuard,
+  diskCatalogWrite,
+  diskCores,
+  diskViews,
+  diskLinks,
+  extrasPages,
+  extrasMessages,
+  orderKindsSweep,
+  repo,
+];
+
 // WP4-T7: the server screens (list, configurator, review, order status, detail, SSH keys) with fakes,
 // the Server Action cores, and the Playwright smoke that says BLOCKED when it cannot run. The staging
 // proof (a server ordered at 360 px in bn, scripts/playwright-servers.mjs) and the database-backed
@@ -2256,6 +2329,7 @@ const M3 = gate(
   { checks: [manual("m3-staging-notifications")] },
   "WP5-T6",
   "WP5-T6b",
+  "WP5-T6c",
   "WP0-T6",
   { checks: [manual("wp0-t6-production-tag-deploy")] },
 );

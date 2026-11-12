@@ -44,6 +44,13 @@ export {
   type ResolvedCdn,
 } from "./cdn";
 export {
+  DISK_ANCHOR_AWS_ID,
+  MAX_DISK_GB,
+  MIN_DISK_GB,
+  parseDiskConfig,
+  type DiskOrderConfig,
+} from "./disk";
+export {
   parseDatabaseConfig,
   resolveDatabase,
   type DatabaseConfig,

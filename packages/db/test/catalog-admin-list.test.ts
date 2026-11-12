@@ -31,7 +31,13 @@ it("lists active and inactive rows with the price as text and the time of the sy
   const a = await seed({ aws_id: "nano_3_0" });
   const b = await seed({ aws_id: "old_3_0", active: false, synced_at: "2026-11-10T00:00:00Z" });
   const rows = await as("admin_rw", (tx) => listCatalogProductsForAdmin(tx, {}));
-  expect(rows.map((r) => r.id).sort()).toEqual([a, b].sort());
+  // the `disk` anchor rows of migration 0008 are in every database; the rows this test made are the others
+  expect(
+    rows
+      .filter((r) => r.family !== "disk")
+      .map((r) => r.id)
+      .sort(),
+  ).toEqual([a, b].sort());
   const old = rows.find((r) => r.id === b);
   expect(old).toMatchObject({
     active: false,

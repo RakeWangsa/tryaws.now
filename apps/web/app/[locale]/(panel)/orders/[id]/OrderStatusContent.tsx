@@ -62,10 +62,15 @@ export function OrderStatusContent({
       {order.progress === "ready" ? (
         <div className="alert alert-info text-start" role="status">
           <i className="fas fa-check-circle me-2" aria-hidden="true" />
-          {t("ready")}
+          {order.family === "disk" ? t("readyDisk") : t("ready")}
           {order.resourceId !== null ? (
             <div className="mt-3">
-              {own !== undefined ? (
+              {order.family === "disk" ? (
+                // A disk has no page of its own: it is attached from the Storage tab of a server.
+                <Button variant="primary" href={localePath(locale, "/servers")}>
+                  {t("openDisk")}
+                </Button>
+              ) : own !== undefined ? (
                 <Button
                   variant="primary"
                   href={localePath(locale, `${own.base}/${order.resourceId}`)}

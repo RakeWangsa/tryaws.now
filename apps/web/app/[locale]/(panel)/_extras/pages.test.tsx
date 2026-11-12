@@ -85,6 +85,7 @@ vi.mock("../servers/[id]/actions.ts", () => ({
   setAutoRenewAction: async () => ({}),
   renewNowAction: async () => ({}),
   restoreToNewServerAction: async () => ({}),
+  addDiskAction: async () => ({}),
 }));
 vi.mock("../notifications/actions.ts", () => ({ markNotificationsReadAction: async () => ({}) }));
 
@@ -156,6 +157,26 @@ describe("/servers/[id] with the tabs of WP5-T6", () => {
     expect(en).toContain("There is no active backup or suitable plan to restore from right now.");
     expect(en).not.toContain('name="restoreFromBackupId"');
     expect(en).toContain("You cannot renew right now in this state.");
+  });
+  it("offers the add-disk form in the Storage tab, in bn and en, and not the coming-soon line (WP5-T6c)", async () => {
+    const en = await detailHtml("en");
+    expect(en).toContain("Add a new disk");
+    expect(en).toContain('name="sizeGb"');
+    expect(en).toContain('name="productId" value="0190aaaa-0000-7000-8000-0000000000d9"');
+    expect(en).toContain('name="region" value="ap-south-1"');
+    expect(en).toContain('name="serverId" value="0190aaaa-0000-7000-8000-0000000000a1"');
+    expect(en).toContain("A whole number from 8 to 16384 GB.");
+    expect(en).not.toContain("Buying a new disk is coming soon");
+    const bn = await detailHtml("bn");
+    expect(bn).toContain("নতুন ডিস্ক যোগ করুন");
+    expect(bn).not.toContain("শীঘ্রই আসছে");
+  });
+  it("switches the add-disk form off when there is no offer (flag off, server not live, no row)", async () => {
+    state.screen = { state: "ready", extras: extras({ diskOffer: null }) };
+    const en = await detailHtml("en");
+    expect(en).toContain("New disks are not on sale in this location right now");
+    expect(en).toContain('name="productId" value=""');
+    expect(en).toMatch(/<button[^>]*disabled[^>]*>[^<]*(<[^>]+>)*[^<]*Go to the next step/);
   });
   it("opens the tab named in the query", async () => {
     expect(await detailHtml("en", { tab: "metrics" })).toMatch(

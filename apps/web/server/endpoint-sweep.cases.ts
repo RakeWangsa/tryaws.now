@@ -293,6 +293,19 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     kind: "id",
     proof: [EXTRAS],
   },
+  "app/[locale]/(panel)/servers/[id]/actions.ts#addDiskAction": {
+    kind: "id",
+    proof: [
+      proof(
+        "packages/core/orders/disk-order.test.ts",
+        "another customer's server answers like a missing one (R8)",
+      ),
+      proof(
+        `${W}disk-actions.test.ts`,
+        "another customer's server answers like a missing one: the same public answer",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/servers/[id]/actions.ts#attachDiskAction": { kind: "id", proof: [EXTRAS] },
   "app/[locale]/(panel)/servers/[id]/actions.ts#detachDiskAction": { kind: "id", proof: [EXTRAS] },
   "app/[locale]/(panel)/servers/[id]/actions.ts#destroyDiskAction": { kind: "id", proof: [EXTRAS] },

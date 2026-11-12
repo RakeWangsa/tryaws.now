@@ -47,8 +47,12 @@ const stored = async (awsId: string) =>
       [awsId, REGION],
     )
   ).rows[0];
+// The `disk` anchor rows of migration 0008 are in every database and are not the sync's (below).
 const count = async () =>
-  Number((await t.pool.query("select count(*) c from catalog_products")).rows[0].c);
+  Number(
+    (await t.pool.query("select count(*) c from catalog_products where family <> 'disk'")).rows[0]
+      .c,
+  );
 
 it("inserts 3 rows, then updates 3 and inserts 0: same ids, same created_at, new synced_at (R7)", async () => {
   const first = await as("worker_rw", (tx) =>
@@ -205,4 +209,36 @@ it("readPoolAccountRef gives the pair of an active account and null for suspende
   expect(await as("worker_rw", (tx) => readPoolAccountRef(tx, account.aws_account_id))).toBeNull();
   expect(await as("worker_rw", (tx) => readPoolAccountRef(tx, "000000000000"))).toBeNull();
   expect(await as("worker_rw", (tx) => readPoolAccountRef(tx, "not an id"))).toBeNull();
+});
+
+it("the seeded disk anchor is not the sync's: a write or a deactivation of family disk is refused before any statement", async () => {
+  const anchor = async () =>
+    (
+      await t.pool.query(
+        `select id, aws_price_usd::text as price, active, synced_at from catalog_products
+          where family = 'disk' and region = $1`,
+        [REGION],
+      )
+    ).rows[0];
+  const before = await anchor();
+  expect(before).toMatchObject({ price: "0.1000", active: true });
+  const disk = row("block-storage-gb", {
+    family: "disk",
+    billingUnit: "gb_month",
+    featureFlag: "disk",
+    awsPriceUsd: "9",
+  });
+  await expect(
+    as("worker_rw", (tx) => applyCatalogScope(tx, { rows: [disk], deactivate: [], at: T2 })),
+  ).rejects.toThrow("applyCatalogScope: family is protected");
+  await expect(
+    as("worker_rw", (tx) =>
+      applyCatalogScope(tx, {
+        rows: [],
+        deactivate: [{ family: "disk", awsId: "block-storage-gb", region: REGION }],
+        at: T2,
+      }),
+    ),
+  ).rejects.toThrow("applyCatalogScope: family is protected");
+  expect(await anchor()).toEqual(before);
 });

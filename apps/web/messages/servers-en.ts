@@ -217,6 +217,9 @@ export const serversEn: Same<typeof serversBn> = {
       },
       ready: "Your server is ready.",
       openServer: "Open the server",
+      readyDisk:
+        "Your disk is ready. Attach it to a server from the list of free disks in the Storage tab of the server.",
+      openDisk: "My servers",
       creating: "Your server is being created. This page updates by itself.",
       delayed: "Your order is delayed. Support is looking into it. You do not need to do anything.",
       failed:

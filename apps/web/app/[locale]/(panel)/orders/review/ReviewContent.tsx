@@ -25,7 +25,12 @@ export function ReviewContent({
   // The form the draft came from: a family with its own screens (server/family-screens.ts) goes back to
   // its /new, the rest to /servers/new.
   const own = review.state === "ready" ? familyScreen(review.family) : undefined;
-  const configureHref = localePath(locale, own === undefined ? "/servers/new" : `${own.base}/new`);
+  // A disk is added from the Storage tab of a server, so its way back is the list of servers.
+  const diskOrder = review.state === "ready" && review.family === "disk";
+  const configureHref = localePath(
+    locale,
+    diskOrder ? "/servers" : own === undefined ? "/servers/new" : `${own.base}/new`,
+  );
 
   if (review.state !== "ready") {
     return (

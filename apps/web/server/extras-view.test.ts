@@ -18,7 +18,7 @@ vi.mock("@tc/db", () => ({
   readFeatureFlag: async () => true,
 }));
 
-const { loadMetrics, parsePriceLines, rangeOf, toNotificationItem } =
+const { diskOfferFor, loadMetrics, parsePriceLines, rangeOf, toNotificationItem } =
   await import("./extras-view.ts");
 
 const session = { customerId: "11111111-1111-4111-8111-111111111111" } as CustomerSession;
@@ -43,6 +43,42 @@ describe("parsePriceLines (R4: bigint paisa, a breakdown that does not add up is
     expect(parsePriceLines({ ...good, steps: [{ code: "x", amountMinor: 1.5 }] })).toBeNull();
     expect(parsePriceLines(null)).toBeNull();
     expect(parsePriceLines("{}")).toBeNull();
+  });
+});
+
+describe("diskOfferFor (addDisk: the anchor row of the server's Region, only behind the flag, R12)", () => {
+  const anchor = (over: Record<string, unknown> = {}) => ({
+    id: "0190bbbb-0000-7000-8000-000000000001",
+    family: "disk",
+    awsId: "block-storage-gb",
+    platform: null,
+    region: "ap-south-1",
+    specs: {},
+    awsPriceUsd: "0.1000",
+    billingUnit: "gb_month",
+    featureFlag: "disk",
+    active: true,
+    ...over,
+  });
+  const offer = (rows: ReturnType<typeof anchor>[], over: Record<string, unknown> = {}) =>
+    diskOfferFor({ rows, region: "ap-south-1", flagOn: true, live: true, ...over });
+
+  it("offers the id of the anchor of the Region and the size limits", () => {
+    expect(offer([anchor()])).toEqual({
+      productId: "0190bbbb-0000-7000-8000-000000000001",
+      minGb: 8,
+      maxGb: 16384,
+    });
+  });
+  it("offers nothing when the flag is off, the server is not live, or no row fits (R12, R16)", () => {
+    expect(offer([anchor()], { flagOn: false })).toBeNull();
+    expect(offer([anchor()], { live: false })).toBeNull();
+    expect(offer([anchor()], { region: null })).toBeNull();
+    expect(offer([anchor({ region: "ap-southeast-1" })])).toBeNull();
+    expect(offer([anchor({ active: false })])).toBeNull();
+    expect(offer([anchor({ awsId: "other" })])).toBeNull();
+    expect(offer([anchor({ billingUnit: "month" })])).toBeNull();
+    expect(offer([])).toBeNull();
   });
 });
 

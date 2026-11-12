@@ -21,6 +21,7 @@ export const noopActions: ExtrasActions = {
   createBackup: noop,
   deleteBackup: noop,
   setAutoBackup: noop,
+  addDisk: noop,
   attachDisk: noop,
   detachDisk: noop,
   destroyDisk: noop,
@@ -79,6 +80,7 @@ export function extras(over: Partial<ServerExtras> = {}): ServerExtras {
         attachedElsewhere: false,
       },
     ],
+    diskOffer: { productId: "0190aaaa-0000-7000-8000-0000000000d9", minGb: 8, maxGb: 16384 },
     billing: {
       status: "active",
       periodStart: new Date("2026-11-01T00:00:00Z"),

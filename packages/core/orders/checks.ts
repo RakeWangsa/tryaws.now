@@ -4,6 +4,7 @@ import type { RiskTier } from "../capacity/types";
 import { isEnabledIn } from "../flags/is-enabled";
 import { isFeatureFlag } from "../flags/keys";
 import { checkCdnOrigin, parseCdnConfig, resolveCdn } from "../products/cdn";
+import { checkDiskServer, parseDiskConfig, resolveDisk } from "../products/disk";
 import { resolveProduct, type ResolvedProduct } from "../products/instance";
 import { checkRestore, type RestoreCandidate } from "../products/restore";
 import {
@@ -146,8 +147,9 @@ async function checkRestoreSource(
 }
 
 /**
- * The product of an order. Every family but the load balancer and the CDN is resolved by
- * `resolveProduct`. A distribution names an origin: the customer's own active server, load balancer
+ * The product of an order. Every family but the load balancer, the CDN and the disk is resolved by
+ * `resolveProduct`. A disk names the server it is added for: the customer's own Linux server in the
+ * Region of the disk (checkDiskServer). A distribution names an origin: the customer's own active server, load balancer
  * or bucket, read through the tenant-scoped repository, which answers `null` for another customer's
  * resource as for a missing one (R8); checkCdnOrigin decides and only the checked id reaches the
  * resource config. A load balancer names targets, and a target must be the scope customer's own active instance in the
@@ -197,6 +199,34 @@ export async function resolveOrderProduct(
     });
     if (!checked.ok) return checked;
     return resolveCdn(config.value, product, checked.value);
+  }
+  if (family === "disk") {
+    // addDisk: the anchor row of the Region and a server of the customer's own in that Region. The
+    // server is read through the tenant-scoped repository, which answers `null` for another
+    // customer's resource as for a missing one (R8); only the checked id reaches the config.
+    const config = parseDiskConfig(rawConfig);
+    if (!config.ok) return config;
+    const anchor = await readCatalogProduct(tx, config.value.productId);
+    if (anchor === null) {
+      return { ok: false, error: "validation", fields: { productId: "unavailable" } };
+    }
+    const row = await repos.resources.get(config.value.serverId);
+    const cfgRegion = (row?.config as { region?: unknown } | null | undefined)?.region;
+    const checked = checkDiskServer({
+      requested: config.value.serverId,
+      region: config.value.region,
+      server:
+        row === null
+          ? null
+          : {
+              id: row.id,
+              family: row.family,
+              state: row.state,
+              region: row.region ?? (typeof cfgRegion === "string" ? cfgRegion : ""),
+            },
+    });
+    if (!checked.ok) return checked;
+    return resolveDisk(config.value, anchor);
   }
   if (family !== "load_balancer") {
     const resolved = await resolveProduct(family, rawConfig, (id) => readCatalogProduct(tx, id));

@@ -15,6 +15,7 @@ import type {
 import { METRIC_RANGE_KEYS } from "../../../../../server/extras-view.ts";
 import {
   ActionNotice,
+  AddDiskForm,
   AttachDiskForm,
   AutoBackupForm,
   AutoRenewForm,
@@ -36,6 +37,7 @@ export interface ExtrasActions {
   createBackup: ExtrasAction;
   deleteBackup: ExtrasAction;
   setAutoBackup: ExtrasAction;
+  addDisk: ExtrasAction;
   attachDisk: ExtrasAction;
   detachDisk: ExtrasAction;
   destroyDisk: ExtrasAction;
@@ -225,7 +227,14 @@ function StorageTab({ data, actions }: { data: ServerExtras; actions: ExtrasActi
           disks={data.freeDisks.map((d) => ({ id: d.id, name: d.name || d.id.slice(0, 8) }))}
         />
       </div>
-      <p className="seccolor mt-3">{t("addSoon")}</p>
+      <div className="mt-4">
+        <AddDiskForm
+          action={actions.addDisk}
+          serverId={data.id}
+          region={data.region}
+          offer={data.diskOffer}
+        />
+      </div>
     </>
   );
 }

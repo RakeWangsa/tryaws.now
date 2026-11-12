@@ -56,8 +56,14 @@ function bad(fn: string, field: string): never {
   throw new TypeError(`${fn}: ${field} is invalid`);
 }
 
+// Families whose rows a migration seeds and no AWS answer describes: the `disk` anchor (migration
+// 0008). The sync may neither write nor deactivate them (a structural copy of PROTECTED_FAMILIES of
+// @tc/core; this package does not import it).
+const PROTECTED_FAMILIES: readonly string[] = ["disk"];
+
 function checkKey(fn: string, key: CatalogKey): void {
   if (typeof key.family !== "string" || !FAMILY.test(key.family)) bad(fn, "family");
+  if (PROTECTED_FAMILIES.includes(key.family)) throw new TypeError(`${fn}: family is protected`);
   if (typeof key.awsId !== "string" || !AWS_ID.test(key.awsId)) bad(fn, "awsId");
   if (typeof key.region !== "string" || !REGION.test(key.region)) bad(fn, "region");
 }

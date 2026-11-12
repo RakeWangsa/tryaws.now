@@ -1,5 +1,5 @@
 import type { CustomerSession } from "@tc/auth";
-import { priceCatalog } from "@tc/core";
+import { DISK_ANCHOR_AWS_ID, MAX_DISK_GB, MIN_DISK_GB, priceCatalog } from "@tc/core";
 import {
   customerRepos,
   listCatalogProducts,
@@ -7,7 +7,7 @@ import {
   readFeatureFlag,
   withTx,
 } from "@tc/db";
-import type { InvoiceRow, NotificationRow, SubscriptionRow } from "@tc/db";
+import type { CatalogProduct, InvoiceRow, NotificationRow, SubscriptionRow } from "@tc/db";
 import { TEMPLATE_IDS, parseTemplateData, renderInApp } from "@tc/notify";
 import type { RenderContext, TemplateId } from "@tc/notify";
 import { resourceFacts } from "./extras-actions.ts";
@@ -57,6 +57,36 @@ export function parsePriceLines(snapshot: unknown): PriceLines | null {
   return { baseMinor: BigInt(base), steps: out, totalMinor: BigInt(total) };
 }
 
+/** What the add-disk form needs: the anchor row of the server's Region and the size limits. */
+export interface DiskOffer {
+  productId: string;
+  minGb: number;
+  maxGb: number;
+}
+
+/**
+ * The offer to add a disk for this server: only behind the flag `disk` (R12), only for a live server,
+ * and only from the active anchor row of the server's own Region, priced per GB-month. Anything else
+ * is no offer, and the tab shows the form switched off (R16). The price is shown on the review page.
+ */
+export function diskOfferFor(input: {
+  rows: readonly CatalogProduct[];
+  region: string | null;
+  flagOn: boolean;
+  live: boolean;
+}): DiskOffer | null {
+  if (!input.flagOn || !input.live || input.region === null) return null;
+  const row = input.rows.find(
+    (r) =>
+      r.family === "disk" &&
+      r.awsId === DISK_ANCHOR_AWS_ID &&
+      r.active &&
+      r.region === input.region &&
+      r.billingUnit === "gb_month",
+  );
+  return row === undefined ? null : { productId: row.id, minGb: MIN_DISK_GB, maxGb: MAX_DISK_GB };
+}
+
 export interface BackupItem {
   id: string;
   name: string;
@@ -95,6 +125,8 @@ export interface ServerExtras {
   disks: DiskItem[];
   /** Disks of the customer in the same Region that no server holds (the ones that can be attached). */
   freeDisks: DiskItem[];
+  /** addDisk: null = the form is shown switched off (flag off, server not live, no row for the Region). */
+  diskOffer: DiskOffer | null;
   billing: {
     status: SubscriptionRow["status"] | null;
     periodStart: Date | null;
@@ -221,6 +253,12 @@ export async function loadServerExtras(
         };
       });
     const live = LIVE.includes(server.state);
+    const diskOffer = diskOfferFor({
+      rows: await listCatalogProducts(tx, "disk"),
+      region: server.region,
+      flagOn: (await readFeatureFlag(tx, "disk", profile.market)) === true,
+      live: server.state === "active" || server.state === "stopped",
+    });
     const restorePlans = live ? await restorePlansFor(tx, profile.market, server, now) : [];
     const manualBackups = backups.filter((b) => !b.final).length;
     return {
@@ -242,6 +280,7 @@ export async function loadServerExtras(
             d.state === "active" &&
             d.region === server.region,
         ),
+        diskOffer,
         billing: {
           status: subscription?.status ?? null,
           periodStart: subscription?.periodStart ?? null,

@@ -151,6 +151,13 @@ export interface SyncPlan {
 const keyOf = (family: string, awsId: string) => `${family}\u0000${awsId}`;
 
 /**
+ * Families whose catalog rows are seeded by a migration and belong to no AWS answer: the `disk`
+ * anchor (migration 0008). The sync neither writes nor deactivates them, whatever scope it is given.
+ */
+export const PROTECTED_FAMILIES: readonly string[] = Object.freeze(["disk"]);
+const synced = (family: string) => !PROTECTED_FAMILIES.includes(family);
+
+/**
  * The plan of one scope (one Region): every mapped row is upserted; every existing active row of
  * the scope's families that the answer no longer carries (or carries refused) is deactivated.
  * Nothing is ever deleted. The plan is a pure function of its input, so a second plan built from
@@ -172,7 +179,7 @@ export function planScopeSync(input: {
       continue;
     }
     for (const row of mapped.rows) {
-      if (!input.families.includes(row.family)) continue;
+      if (!input.families.includes(row.family) || !synced(row.family)) continue;
       const key = keyOf(row.family, row.awsId);
       if (mappedKeys.has(key)) continue; // a repeated id in one answer: the first one wins
       mappedKeys.add(key);
@@ -180,7 +187,7 @@ export function planScopeSync(input: {
     }
   }
   const deactivate = input.existing
-    .filter((e) => e.active && input.families.includes(e.family))
+    .filter((e) => e.active && input.families.includes(e.family) && synced(e.family))
     .filter((e) => !mappedKeys.has(keyOf(e.family, e.awsId)))
     .map((e) => ({ family: e.family, awsId: e.awsId, region: input.region }));
   return {

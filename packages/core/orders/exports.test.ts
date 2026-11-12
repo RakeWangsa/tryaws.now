@@ -203,6 +203,11 @@ const PRODUCTS = [
   "parseLoadBalancerConfig",
   "resolveDatabase",
   "resolveLoadBalancer",
+  // WP5-T6c: the disk order seam (the config parser and the size limits; the rest is used inside core)
+  "DISK_ANCHOR_AWS_ID",
+  "MAX_DISK_GB",
+  "MIN_DISK_GB",
+  "parseDiskConfig",
   // WP2-T2: email, password policy, display name and the auth form parsers
   "PASSWORD_MAX_LENGTH",
   "PASSWORD_MIN_LENGTH",

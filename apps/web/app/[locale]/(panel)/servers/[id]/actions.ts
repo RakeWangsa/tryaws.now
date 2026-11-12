@@ -9,6 +9,7 @@ import {
   guardAction,
   orderActionDeps,
 } from "../../../../../server/action-deps.ts";
+import { addDiskDraftCore } from "../../../../../server/disk-actions.ts";
 import { createOrderDraftCore } from "../../../../../server/order-actions.ts";
 import { pick } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
@@ -79,6 +80,28 @@ export async function restoreToNewServerAction(
     await orderActionDeps(),
     pick(form, ["productId", "region", "displayName", "restoreFromBackupId"]),
     "linux_instance",
+  );
+  if (!result.ok) {
+    return { error: result.error, ...(result.fields ? { fields: result.fields } : {}) };
+  }
+  const found = await getLocale();
+  const locale: Locale = found === "en" ? "en" : "bn";
+  // redirect() throws on purpose; nothing may catch it. The token is signed and holds no secret.
+  redirect(`${localePath(locale, "/orders/review")}?d=${encodeURIComponent(result.token)}`);
+}
+
+/**
+ * `addDisk` (16.10 Storage): R9 in the core (authenticate, validate, rate limit, execute) makes the
+ * signed draft of a `disk` order, and the customer reviews the price and pays on the order page
+ * (16.11). The server must be the customer's own Linux server and the product the anchor row of its
+ * Region: the order code checks both against the customer's own rows (R8). The family is fixed in the
+ * core, never a form field.
+ */
+export async function addDiskAction(_previous: FormState, form: FormData): Promise<FormState> {
+  if (!(await guardAction())) return { error: "forbidden" };
+  const result = await addDiskDraftCore(
+    await orderActionDeps(),
+    pick(form, ["productId", "region", "serverId", "displayName", "sizeGb"]),
   );
   if (!result.ok) {
     return { error: result.error, ...(result.fields ? { fields: result.fields } : {}) };
