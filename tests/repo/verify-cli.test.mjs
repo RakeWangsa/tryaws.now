@@ -125,6 +125,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP7-T1",
     "WP7-T2",
     "WP7-T3",
+    "WP7-T4",
     "WP7-T5",
     "WP7-T6",
     "WP8-T1",
@@ -1232,6 +1233,38 @@ it("task WP6-T4s is proven by the core and web tests of the bucket and container
     "apps/web/app/[locale]/(panel)/storage/bucket-anchors.test.tsx",
     "apps/web/app/[locale]/(panel)/containers/container.test.tsx",
     "apps/web/app/[locale]/(panel)/containers/container-anchors.test.tsx",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP7-T4 is proven by the core, adapter, wiring and web tests, each filter naming a real test file", () => {
+  expect(TASKS["WP7-T4"].map((c) => c.id)).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "domain-core",
+    "domain-adapter",
+    "domain-wiring",
+    "domain-web",
+    "aws",
+    "repo",
+  ]);
+  const line = (id) => TASKS["WP7-T4"].find((c) => c.id === id).command.join(" ");
+  expect(line("domain-adapter")).toBe(
+    "pnpm test --filter @tc/aws test/domain.test --no-passWithNoTests",
+  );
+  for (const f of [
+    "packages/core/domains/rules.test.ts",
+    "packages/core/orders/domain-purchase.test.ts",
+    "packages/aws/test/domain.test.ts",
+    "functions/provisioner/domain-wiring.test.ts",
+    "apps/web/server/domain-actions.test.ts",
+    "apps/web/server/domain-tenancy.test.ts",
+    "apps/web/messages/domains-messages.test.ts",
+    "apps/web/app/[locale]/(panel)/domains/mockup-anchors.test.tsx",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
