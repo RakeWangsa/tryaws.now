@@ -4,7 +4,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { PublicCatalog, PublicOffer } from "../../../../../server/public/catalog.ts";
 import { breadcrumbLd, faqLd, productLd } from "../../../../../server/public/seo.ts";
-import { JsonLd } from "../../_components/JsonLd.tsx";
+import { JsonLds } from "../../_components/JsonLd.tsx";
 import {
   OfferCard,
   OfferTable,
@@ -35,7 +35,7 @@ export function CloudServersContent({
 }: {
   locale: Locale;
   catalog: PublicCatalog;
-  origin: string;
+  origin: string | null;
   nonce: string | undefined;
 }) {
   const t = useTranslations("Public") as unknown as Tr;
@@ -45,33 +45,34 @@ export function CloudServersContent({
     question: t(`help.items.${key}.q`),
     answer: t(`help.items.${key}.a`),
   }));
-  const url = origin + localePath(locale, "/products/cloud-servers");
 
   return (
     <>
-      <JsonLd
-        data={breadcrumbLd(origin, locale, [
-          { name: t("crumb.home"), path: "/" },
-          { name: t("cloudServers.heading"), path: "/products/cloud-servers" },
-        ])}
+      <JsonLds
+        origin={origin}
         nonce={nonce}
+        build={(o) => [
+          breadcrumbLd(o, locale, [
+            { name: t("crumb.home"), path: "/" },
+            { name: t("cloudServers.heading"), path: "/products/cloud-servers" },
+          ]),
+          faqLd(faq),
+          ...(offers.length > 0
+            ? [
+                productLd({
+                  name: t("product.linux_instance"),
+                  description: t("meta.cloudServers.description"),
+                  url: o + localePath(locale, "/products/cloud-servers"),
+                  offers: offers.map((offer) => ({
+                    name: offerName(t, offer),
+                    priceMinor: offer.priceMinor,
+                    url: o + orderHref(locale),
+                  })),
+                }),
+              ]
+            : []),
+        ]}
       />
-      <JsonLd data={faqLd(faq)} nonce={nonce} />
-      {offers.length > 0 ? (
-        <JsonLd
-          data={productLd({
-            name: t("product.linux_instance"),
-            description: t("meta.cloudServers.description"),
-            url,
-            offers: offers.map((offer) => ({
-              name: offerName(t, offer),
-              priceMinor: offer.priceMinor,
-              url: origin + orderHref(locale),
-            })),
-          })}
-          nonce={nonce}
-        />
-      ) : null}
 
       <div className="top-header overlay-video">
         <div className="container">

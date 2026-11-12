@@ -9,8 +9,8 @@ import type { Locale } from "@tc/ui/runtime";
 export const SITE_NAME = "TiCON Cloud";
 
 export interface PageMeta {
-  /** A plain origin without a final slash (WebConfig.appOrigin). */
-  origin: string;
+  /** A plain origin without a final slash (WebConfig.appOrigin); null when the site has none configured. */
+  origin: string | null;
   locale: Locale;
   /** The path without the locale prefix, for example "/pricing". */
   path: string;
@@ -22,17 +22,28 @@ export interface PageMeta {
 
 /** Title, description, canonical URL, `hreflang` for bn and en, robots and Open Graph. */
 export function pageMetadata(meta: PageMeta): Metadata {
-  const url = (locale: Locale): string => meta.origin + localePath(locale, meta.path);
   const index = meta.index !== false;
+  const robots = index ? { index: true, follow: true } : { index: false, follow: false };
+  const origin = meta.origin;
+  if (origin === null) {
+    // No origin, no URL: the page keeps its texts and its robots rule, and claims no canonical (R16).
+    return {
+      title: meta.title,
+      description: meta.description,
+      robots,
+      icons: { icon: "/brand/symbol.svg" },
+    };
+  }
+  const url = (locale: Locale): string => origin + localePath(locale, meta.path);
   return {
-    metadataBase: new URL(meta.origin),
+    metadataBase: new URL(origin),
     title: meta.title,
     description: meta.description,
     alternates: {
       canonical: url(meta.locale),
       languages: { bn: url("bn"), en: url("en"), "x-default": url("bn") },
     },
-    robots: index ? { index: true, follow: true } : { index: false, follow: false },
+    robots,
     openGraph: {
       type: "website",
       siteName: SITE_NAME,

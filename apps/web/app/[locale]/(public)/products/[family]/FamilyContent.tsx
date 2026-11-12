@@ -4,7 +4,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { FamilyPage } from "../../../../../server/public/indexing.ts";
 import { breadcrumbLd } from "../../../../../server/public/seo.ts";
-import { JsonLd } from "../../_components/JsonLd.tsx";
+import { JsonLds } from "../../_components/JsonLd.tsx";
 import type { Tr } from "../../_components/offers.tsx";
 import { NotifyForm } from "./NotifyForm.tsx";
 
@@ -24,21 +24,29 @@ export function FamilyContent({
   page: FamilyPage;
   /** true only when the flag is read and on. */
   open: boolean;
-  origin: string;
+  origin: string | null;
   nonce: string | undefined;
 }) {
   const t = useTranslations("Public") as unknown as Tr;
   const tAws = useTranslations("Aws");
   const name = t(`family.${page.nameKey}`);
-  const crumbs = breadcrumbLd(origin, locale, [
-    { name: t("crumb.home"), path: "/" },
-    { name, path: `/products/${page.slug}` },
-  ]);
+  const crumbs = (
+    <JsonLds
+      origin={origin}
+      nonce={nonce}
+      build={(o) => [
+        breadcrumbLd(o, locale, [
+          { name: t("crumb.home"), path: "/" },
+          { name, path: `/products/${page.slug}` },
+        ]),
+      ]}
+    />
+  );
 
   if (!open) {
     return (
       <>
-        <JsonLd data={crumbs} nonce={nonce} />
+        {crumbs}
         <section className="sec-normal notfound pt-150">
           <div className="container">
             <div className="tc-empty text-center">
@@ -61,7 +69,7 @@ export function FamilyContent({
   }
   return (
     <>
-      <JsonLd data={crumbs} nonce={nonce} />
+      {crumbs}
       <div className="top-header">
         <div className="container">
           <div className="wrapper">

@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import type { PublicCatalog } from "../../../../server/public/catalog.ts";
 import { breadcrumbLd, productLd } from "../../../../server/public/seo.ts";
 import { localePath } from "@tc/ui/runtime";
-import { JsonLd } from "../_components/JsonLd.tsx";
+import { JsonLds } from "../_components/JsonLd.tsx";
 import { OfferCard, OfferTable, offerName, orderHref } from "../_components/offers.tsx";
 import type { Tr } from "../_components/offers.tsx";
 
@@ -20,7 +20,7 @@ export function PricingContent({
 }: {
   locale: Locale;
   catalog: PublicCatalog;
-  origin: string;
+  origin: string | null;
   nonce: string | undefined;
 }) {
   const t = useTranslations("Public") as unknown as Tr;
@@ -30,28 +30,30 @@ export function PricingContent({
 
   return (
     <>
-      <JsonLd
-        data={breadcrumbLd(origin, locale, [
-          { name: t("crumb.home"), path: "/" },
-          { name: t("pricing.heading"), path: "/pricing" },
-        ])}
+      <JsonLds
+        origin={origin}
         nonce={nonce}
+        build={(o) => [
+          breadcrumbLd(o, locale, [
+            { name: t("crumb.home"), path: "/" },
+            { name: t("pricing.heading"), path: "/pricing" },
+          ]),
+          ...(offers.length > 0
+            ? [
+                productLd({
+                  name: t("pricing.heading"),
+                  description: t("meta.pricing.description"),
+                  url: o + localePath(locale, "/pricing"),
+                  offers: offers.map((offer) => ({
+                    name: offerName(t, offer),
+                    priceMinor: offer.priceMinor,
+                    url: o + orderHref(locale),
+                  })),
+                }),
+              ]
+            : []),
+        ]}
       />
-      {offers.length > 0 ? (
-        <JsonLd
-          data={productLd({
-            name: t("pricing.heading"),
-            description: t("meta.pricing.description"),
-            url: origin + localePath(locale, "/pricing"),
-            offers: offers.map((offer) => ({
-              name: offerName(t, offer),
-              priceMinor: offer.priceMinor,
-              url: origin + orderHref(locale),
-            })),
-          })}
-          nonce={nonce}
-        />
-      ) : null}
       <div className="top-header item1 overlay">
         <div className="container">
           <div className="row">

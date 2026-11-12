@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { LEGAL_DOCS } from "../../../../server/public/indexing.ts";
 import type { LegalDoc } from "../../../../server/public/indexing.ts";
 import { breadcrumbLd } from "../../../../server/public/seo.ts";
-import { JsonLd } from "../_components/JsonLd.tsx";
+import { JsonLds } from "../_components/JsonLd.tsx";
 import type { Tr } from "../_components/offers.tsx";
 
 // `/legal/[doc]` (legal.html): the sidebar of documents and the document. THE TEXT IS A PLACEHOLDER
@@ -26,20 +26,23 @@ export function LegalContent({
 }: {
   locale: Locale;
   doc: LegalDoc;
-  origin: string;
+  origin: string | null;
   nonce: string | undefined;
 }) {
   const t = useTranslations("Public") as unknown as Tr;
   const title = t(`legal.docs.${doc}.title`);
   return (
     <>
-      <JsonLd
-        data={breadcrumbLd(origin, locale, [
-          { name: t("crumb.home"), path: "/" },
-          { name: t("legal.heading"), path: "/legal/terms" },
-          { name: title, path: `/legal/${doc}` },
-        ])}
+      <JsonLds
+        origin={origin}
         nonce={nonce}
+        build={(o) => [
+          breadcrumbLd(o, locale, [
+            { name: t("crumb.home"), path: "/" },
+            { name: t("legal.heading"), path: "/legal/terms" },
+            { name: title, path: `/legal/${doc}` },
+          ]),
+        ]}
       />
       <div className="top-header">
         <div className="container">

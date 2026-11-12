@@ -15,3 +15,26 @@ export function JsonLd({ data, nonce }: { data: unknown; nonce: string | undefin
     />
   );
 }
+
+/**
+ * The structured data of a page. Its URLs need the origin of the site; without one (the configuration
+ * is missing) the page has no structured data rather than a wrong URL (R16).
+ */
+export function JsonLds({
+  origin,
+  nonce,
+  build,
+}: {
+  origin: string | null;
+  nonce: string | undefined;
+  build: (origin: string) => readonly unknown[];
+}) {
+  if (origin === null) return null;
+  return (
+    <>
+      {build(origin).map((data, index) => (
+        <JsonLd key={index} data={data} nonce={nonce} />
+      ))}
+    </>
+  );
+}

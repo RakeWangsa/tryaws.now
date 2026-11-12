@@ -3,7 +3,7 @@ import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { breadcrumbLd } from "../../../../server/public/seo.ts";
-import { JsonLd } from "../_components/JsonLd.tsx";
+import { JsonLds } from "../_components/JsonLd.tsx";
 import type { Tr } from "../_components/offers.tsx";
 
 // `/support` (contact.html, without the map and the newsletter box): how to reach TiCON Cloud. The
@@ -19,7 +19,7 @@ export function SupportContent({
   email,
 }: {
   locale: Locale;
-  origin: string;
+  origin: string | null;
   nonce: string | undefined;
   /** null until the decision of the owner. */
   phone: string | null;
@@ -30,12 +30,15 @@ export function SupportContent({
   const p = (path: string): string => localePath(locale, path);
   return (
     <>
-      <JsonLd
-        data={breadcrumbLd(origin, locale, [
-          { name: t("crumb.home"), path: "/" },
-          { name: t("support.heading"), path: "/support" },
-        ])}
+      <JsonLds
+        origin={origin}
         nonce={nonce}
+        build={(o) => [
+          breadcrumbLd(o, locale, [
+            { name: t("crumb.home"), path: "/" },
+            { name: t("support.heading"), path: "/support" },
+          ]),
+        ]}
       />
       <div className="top-header">
         <div className="container">

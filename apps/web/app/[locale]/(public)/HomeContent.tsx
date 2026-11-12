@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { cheapestOffer } from "../../../server/public/catalog.ts";
 import type { PublicCatalog } from "../../../server/public/catalog.ts";
 import { breadcrumbLd, organizationLd } from "../../../server/public/seo.ts";
-import { JsonLd } from "./_components/JsonLd.tsx";
+import { JsonLds } from "./_components/JsonLd.tsx";
 import { OfferCard } from "./_components/offers.tsx";
 import type { Tr } from "./_components/offers.tsx";
 
@@ -23,7 +23,7 @@ export function HomeContent({
 }: {
   locale: Locale;
   catalog: PublicCatalog;
-  origin: string;
+  origin: string | null;
   nonce: string | undefined;
 }) {
   const t = useTranslations("Public") as unknown as Tr;
@@ -41,10 +41,13 @@ export function HomeContent({
 
   return (
     <>
-      <JsonLd data={organizationLd(origin)} nonce={nonce} />
-      <JsonLd
-        data={breadcrumbLd(origin, locale, [{ name: t("crumb.home"), path: "/" }])}
+      <JsonLds
+        origin={origin}
         nonce={nonce}
+        build={(o) => [
+          organizationLd(o),
+          breadcrumbLd(o, locale, [{ name: t("crumb.home"), path: "/" }]),
+        ]}
       />
       <section className="top-header sec-bg6 pb-150 bg-colorstyle">
         <div className="container">

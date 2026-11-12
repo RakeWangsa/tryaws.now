@@ -11,9 +11,17 @@ export const publicCatalog = cache((): Promise<PublicCatalog> =>
   loadPublicCatalog(() => new Date()),
 );
 
-/** The origin of the site (APP_ORIGIN). A missing or malformed value throws: no canonical URL is guessed (R16). */
-export function publicOrigin(): string {
-  return readWebConfig(process.env).appOrigin;
+/**
+ * The origin of the site (APP_ORIGIN), or null when the configuration is missing or malformed. A page
+ * then has no canonical URL, no hreflang and no structured data: nothing is guessed (R16), and the
+ * page itself still works.
+ */
+export function publicOrigin(): string | null {
+  try {
+    return readWebConfig(process.env).appOrigin;
+  } catch {
+    return null;
+  }
 }
 
 /** The nonce the proxy made for this request; undefined when there is none (tests, static output). */

@@ -28,7 +28,9 @@ export function sitemapPaths(catalog: PublicCatalog): string[] {
   return paths;
 }
 
-export function sitemapEntries(origin: string, catalog: PublicCatalog): SitemapEntry[] {
+/** Without an origin there are no absolute URLs, so there is no sitemap (R16). */
+export function sitemapEntries(origin: string | null, catalog: PublicCatalog): SitemapEntry[] {
+  if (origin === null) return [];
   const url = (locale: Locale, path: string): string => origin + localePath(locale, path);
   return sitemapPaths(catalog).flatMap((path) =>
     (["bn", "en"] as const).map((locale): SitemapEntry => ({
@@ -42,16 +44,17 @@ export function sitemapEntries(origin: string, catalog: PublicCatalog): SitemapE
 
 export interface RobotsFile {
   rules: { userAgent: string; allow: string[]; disallow: string[] };
-  sitemap: string;
+  /** Absent without an origin. */
+  sitemap?: string;
 }
 
-export function robotsFile(origin: string): RobotsFile {
+export function robotsFile(origin: string | null): RobotsFile {
   return {
     rules: {
       userAgent: "*",
       allow: ["/"],
       disallow: DISALLOWED_PREFIXES.flatMap((prefix) => [prefix, `/en${prefix}`]),
     },
-    sitemap: `${origin}/sitemap.xml`,
+    ...(origin !== null ? { sitemap: `${origin}/sitemap.xml` } : {}),
   };
 }

@@ -3,7 +3,7 @@ import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { breadcrumbLd, faqLd } from "../../../../server/public/seo.ts";
-import { JsonLd } from "../_components/JsonLd.tsx";
+import { JsonLds } from "../_components/JsonLd.tsx";
 import type { Tr } from "../_components/offers.tsx";
 
 // `/help` (faq.html): the questions in an Accordion. The four required answers of 16.8 come first:
@@ -30,7 +30,7 @@ export function HelpContent({
   nonce,
 }: {
   locale: Locale;
-  origin: string;
+  origin: string | null;
   nonce: string | undefined;
 }) {
   const t = useTranslations("Public") as unknown as Tr;
@@ -42,16 +42,16 @@ export function HelpContent({
   }));
   return (
     <>
-      <JsonLd
-        data={breadcrumbLd(origin, locale, [
-          { name: t("crumb.home"), path: "/" },
-          { name: t("help.heading"), path: "/help" },
-        ])}
+      <JsonLds
+        origin={origin}
         nonce={nonce}
-      />
-      <JsonLd
-        data={faqLd(items.map((item) => ({ question: item.title, answer: item.answer })))}
-        nonce={nonce}
+        build={(o) => [
+          breadcrumbLd(o, locale, [
+            { name: t("crumb.home"), path: "/" },
+            { name: t("help.heading"), path: "/help" },
+          ]),
+          faqLd(items.map((item) => ({ question: item.title, answer: item.answer }))),
+        ]}
       />
       <div className="top-header">
         <div className="container">
