@@ -7,6 +7,7 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadMetrics, loadServerExtras, rangeOf } from "../../../../../server/extras-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { getReaderPort } from "../../../../../server/reader-port.ts";
+import { loadServerManage } from "../../../../../server/server-manage-view.ts";
 import { loadServerDetail } from "../../../../../server/servers-view.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { ServerDetailContent } from "./ServerDetailContent.tsx";
@@ -23,6 +24,16 @@ import {
   setAutoBackupAction,
   setAutoRenewAction,
 } from "./actions.ts";
+import {
+  addFirewallRuleAction,
+  attachStaticIpAction,
+  detachStaticIpAction,
+  rebootServerAction,
+  removeFirewallRuleAction,
+  renameServerAction,
+  startServerAction,
+  stopServerAction,
+} from "./manage-actions.ts";
 import { revealWindowsPasswordAction } from "./windows-actions.ts";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +62,18 @@ const actions = {
   renewNow: renewNowAction,
   restoreToNewServer: restoreToNewServerAction,
   destroyServer: destroyServerAction,
+};
+
+// WPU-G2: the header buttons, the rename and the Networking tab.
+const manageActions = {
+  reboot: rebootServerAction,
+  stop: stopServerAction,
+  start: startServerAction,
+  rename: renameServerAction,
+  addRule: addFirewallRuleAction,
+  removeRule: removeFirewallRuleAction,
+  attachIp: attachStaticIpAction,
+  detachIp: detachStaticIpAction,
 };
 
 const one = (value: string | string[] | undefined): string | undefined =>
@@ -82,6 +105,8 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
           actions,
         }
       : null;
+  const managed = server === null ? null : await loadServerManage(panel.session, id, newUuidV7());
+  const manage = managed === null ? null : { data: managed, actions: manageActions };
   const tab = one(query["tab"]);
   return (
     <PanelFrame locale={locale} path={path} currentId="cloudServers" panel={panel}>
@@ -90,6 +115,7 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
         numerals={numeralsFor(locale, panel)}
         server={server}
         extras={extras}
+        manage={manage}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
         windowsAction={revealWindowsPasswordAction}
       />

@@ -31,6 +31,10 @@ const EXTRAS = proof(
   `${W}extras-actions.test.ts`,
   "every action on an unknown id is not_found and writes nothing",
 );
+const SERVER_OPS = proof(
+  `${W}server-actions.test.ts`,
+  "every action on an unknown id is not_found and writes nothing",
+);
 const ORDER_SESSION = proof(
   `${W}order-actions.test.ts`,
   "refuses without a session and runs nothing else",
@@ -305,6 +309,39 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
         "another customer's server answers like a missing one: the same public answer",
       ),
     ],
+  },
+  // WPU-G2: reboot, stop, start, rename, firewall rules and static IP of a server.
+  "app/[locale]/(panel)/servers/[id]/manage-actions.ts#rebootServerAction": {
+    kind: "id",
+    proof: [SERVER_OPS],
+  },
+  "app/[locale]/(panel)/servers/[id]/manage-actions.ts#stopServerAction": {
+    kind: "id",
+    proof: [SERVER_OPS],
+  },
+  "app/[locale]/(panel)/servers/[id]/manage-actions.ts#startServerAction": {
+    kind: "id",
+    proof: [SERVER_OPS],
+  },
+  "app/[locale]/(panel)/servers/[id]/manage-actions.ts#renameServerAction": {
+    kind: "id",
+    proof: [SERVER_OPS],
+  },
+  "app/[locale]/(panel)/servers/[id]/manage-actions.ts#addFirewallRuleAction": {
+    kind: "id",
+    proof: [SERVER_OPS],
+  },
+  "app/[locale]/(panel)/servers/[id]/manage-actions.ts#removeFirewallRuleAction": {
+    kind: "id",
+    proof: [SERVER_OPS],
+  },
+  "app/[locale]/(panel)/servers/[id]/manage-actions.ts#attachStaticIpAction": {
+    kind: "id",
+    proof: [SERVER_OPS],
+  },
+  "app/[locale]/(panel)/servers/[id]/manage-actions.ts#detachStaticIpAction": {
+    kind: "id",
+    proof: [SERVER_OPS],
   },
   "app/[locale]/(panel)/servers/[id]/actions.ts#attachDiskAction": { kind: "id", proof: [EXTRAS] },
   "app/[locale]/(panel)/servers/[id]/actions.ts#detachDiskAction": { kind: "id", proof: [EXTRAS] },

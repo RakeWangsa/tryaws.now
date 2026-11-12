@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import type { ExtrasDeps } from "./extras-actions.ts";
 import type { KeyActionDeps } from "./key-actions.ts";
 import type { KycActionDeps } from "./kyc-actions.ts";
+import type { ServerOpsDeps } from "./server-actions.ts";
 import type { SettingsDeps } from "./settings-actions.ts";
 import type { SupportActionDeps } from "./support-actions.ts";
 import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
@@ -105,6 +106,32 @@ export function extrasActionDeps(): ExtrasDeps {
             const profile = await repos.profile.get();
             if (profile === null) return false;
             return (await readFeatureFlag(tx, "linux_instance", profile.market)) === true;
+          },
+        });
+      }),
+  };
+}
+
+/**
+ * The ports of the cores of the server header and the Networking tab (server-actions.ts, WPU-G2).
+ * R12, R16: the flag of the server's own family, and a flag that is off or unreadable is off.
+ */
+export function serverOpsActionDeps(): ServerOpsDeps {
+  return {
+    authenticate,
+    now: () => new Date(),
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({
+          resources: repos.resources,
+          operations: repos.operations,
+          audit: repos.audit,
+          rateLimits: repos.rateLimits,
+          familyOn: async (family) => {
+            const profile = await repos.profile.get();
+            if (profile === null) return false;
+            return (await readFeatureFlag(tx, family, profile.market)) === true;
           },
         });
       }),

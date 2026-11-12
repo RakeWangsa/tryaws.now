@@ -26,8 +26,19 @@ export const extrasEn: Same<typeof extrasBn> = {
       not_due:
         "There is nothing to renew now. The next term is already paid, or the term ends in more than 7 days.",
       unavailable: "We could not finish this now. Please try again shortly.",
+      busy: "Another change to this server is still being applied. Wait until it is done, then try again.",
+      duplicate:
+        "A rule for this protocol and port range already exists. Remove it first to change it.",
+      too_many: "This server has reached the limit of firewall rules.",
     },
     done: {
+      rebooting: "The server is rebooting. It is back in a minute or two.",
+      stopping: "The server is stopping.",
+      starting: "The server is starting.",
+      renamed: "The name was saved.",
+      firewallSaved: "The firewall change was taken. It applies in a few seconds.",
+      staticIpAttaching: "The static IP is being attached.",
+      staticIpDetaching: "The static IP is being detached. The server will get a new address.",
       backupCreated: "The backup has started. It shows as active in the list in a few minutes.",
       backupDeleting: "The request to delete the backup was taken.",
       autoBackupSet: "The automatic backup setting was saved.",

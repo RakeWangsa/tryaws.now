@@ -11,6 +11,8 @@ export {
   FIREWALL_MAX_SOURCES,
   FIREWALL_PRESETS,
   addFirewallRule,
+  currentFirewallRules,
+  defaultFirewallRules,
   firewallRuleKey,
   parseFirewallRules,
   parseFirewallSources,

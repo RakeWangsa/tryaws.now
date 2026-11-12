@@ -3,6 +3,7 @@ import {
   FIREWALL_MAX_RULES,
   FIREWALL_PRESETS,
   addFirewallRule,
+  currentFirewallRules,
   firewallRuleKey,
   parseFirewallRules,
   parseFirewallSources,
@@ -149,5 +150,20 @@ describe("parseFirewallRules (stored list)", () => {
   it("accepts ping (icmp 8 / -1)", () => {
     const ping = { protocol: "icmp", fromPort: 8, toPort: -1, cidrs: ["0.0.0.0/0"] };
     expect(parseFirewallRules([ping])).toEqual([ping]);
+  });
+});
+
+describe("currentFirewallRules", () => {
+  it("is the default of the family until a list is saved", () => {
+    expect(currentFirewallRules({}, "linux_instance")).toEqual([ssh]);
+    expect(currentFirewallRules(null, "windows_instance")).toEqual([
+      { protocol: "tcp", fromPort: 3389, toPort: 3389, cidrs: ["0.0.0.0/0"] },
+    ]);
+  });
+  it("is the saved list, also when it is empty, and null when the saved list is broken", () => {
+    expect(currentFirewallRules({ firewallRules: [] }, "linux_instance")).toEqual([]);
+    expect(
+      currentFirewallRules({ firewallRules: [{ ...ssh, cidrs: ["x"] }] }, "linux_instance"),
+    ).toBeNull();
   });
 });

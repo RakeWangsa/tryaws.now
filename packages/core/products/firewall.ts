@@ -172,3 +172,25 @@ export function parseFirewallRules(input: unknown): FirewallRule[] | null {
   }
   return out;
 }
+
+/**
+ * The rules a server has after create, until the customer changes them: SSH for Linux, RDP for
+ * Windows, both open to every IPv4 address (the adapters put exactly these).
+ */
+export function defaultFirewallRules(family: string): FirewallRule[] {
+  const shape = family === "windows_instance" ? FIREWALL_PRESETS.rdp : FIREWALL_PRESETS.ssh;
+  return [{ ...shape, cidrs: [FIREWALL_ANYWHERE] }];
+}
+
+/**
+ * The rules to show and to edit: the list the last `set_ports` saved on the resource, else the
+ * defaults of the family. A saved list that is not valid is not shown as if it were true: null.
+ */
+export function currentFirewallRules(config: unknown, family: string): FirewallRule[] | null {
+  const saved =
+    typeof config === "object" && config !== null
+      ? (config as Record<string, unknown>)["firewallRules"]
+      : undefined;
+  if (saved === undefined) return defaultFirewallRules(family);
+  return parseFirewallRules(saved);
+}
