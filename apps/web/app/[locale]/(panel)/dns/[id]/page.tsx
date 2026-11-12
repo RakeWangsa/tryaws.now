@@ -7,7 +7,7 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadZone, pickEditing } from "../../../../../server/dns-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame } from "../../PanelFrame.tsx";
-import { deleteRecordAction, saveRecordAction } from "./actions.ts";
+import { deleteRecordAction, destroyDnsZoneAction, saveRecordAction } from "./actions.ts";
 import { ZoneContent } from "./ZoneContent.tsx";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +43,7 @@ export default async function DnsZonePage({ params, searchParams }: Props) {
         editing={editing}
         saveAction={saveRecordAction}
         deleteAction={deleteRecordAction}
+        destroyAction={destroyDnsZoneAction}
       />
     </PanelFrame>
   );

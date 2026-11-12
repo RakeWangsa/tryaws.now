@@ -1,5 +1,6 @@
 import { customerRepos, findLedgerTransactionByKey, type Tx } from "@tc/db";
 import { reserveCapacity, type Reservation } from "../capacity/reserve";
+import { DNS_ZONE_TERM_DAYS } from "../dns/zone";
 import { DOMAIN_TERM_DAYS } from "../domains/resolve";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
@@ -195,13 +196,20 @@ export async function runPurchase(
   try {
     result = await tx.transaction(async (sp) => {
       const spRepos = customerRepos(sp, customerId);
-      const termDays = product.family === "domain" ? DOMAIN_TERM_DAYS : TERM_DAYS;
+      const termDays =
+        product.family === "domain"
+          ? DOMAIN_TERM_DAYS
+          : product.family === "dns_zone"
+            ? DNS_ZONE_TERM_DAYS
+            : TERM_DAYS;
 
       // 8. Capacity, last of the checks. No waitlist argument: the page offers it (open point 12).
-      // A domain lives in tc-dns: no pool account, no capacity cell, no catalog product (WP7-T4).
+      // A domain and a DNS zone live in tc-dns: no pool account, no capacity cell, no catalog product
+      // (WP7-T4, WPU-G6).
       const isDomain = product.family === "domain";
+      const isPlaceless = isDomain || product.family === "dns_zone";
       let reservation: Reservation | null = null;
-      if (!isDomain) {
+      if (!isPlaceless) {
         const reserved = await reserveCapacity(sp, {
           customerId,
           region: product.region,
@@ -216,7 +224,7 @@ export async function runPurchase(
       await spRepos.orders.createResource({
         id: resourceId,
         family: product.family,
-        productId: isDomain ? null : product.productId,
+        productId: isPlaceless ? null : product.productId,
         poolAccountId: reservation === null ? null : reservation.poolAccountId,
         region: product.region,
         config:
@@ -279,6 +287,20 @@ export async function runPurchase(
           contactEncrypted: new Uint8Array(Buffer.from(sealed, "base64")),
         });
         if (!row.ok) throw new Error("orders: the domain row was not created");
+      }
+
+      if (product.family === "dns_zone") {
+        const zoneName = product.resourceConfig["zoneName"];
+        if (typeof zoneName !== "string") {
+          throw new Error("orders: the zone configuration is incomplete");
+        }
+        const row = await spRepos.dnsZones.create({
+          id: childId(orderId, "zone"),
+          resourceId,
+          name: zoneName,
+          status: "pending",
+        });
+        if (!row.ok) throw new Error("orders: the zone row was not created");
       }
 
       // A TLD with extra parameters waits for an admin before RegisterDomain (spec 12): the operation

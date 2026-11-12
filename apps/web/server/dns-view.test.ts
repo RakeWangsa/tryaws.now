@@ -16,6 +16,7 @@ interface Row {
 }
 const state = vi.hoisted(() => ({
   rows: [] as Row[],
+  zoneRows: [] as { resourceId: string; status: string; nameServers: string[] }[],
   ops: [] as { kind: string; state: string; createdAt: Date }[],
   flag: true as boolean | undefined,
 }));
@@ -50,6 +51,11 @@ vi.mock("@tc/db", () => ({
               deletedAt: null,
             };
       },
+    },
+    dnsZones: {
+      list: async () => state.zoneRows,
+      getByResource: async (resourceId: string) =>
+        state.zoneRows.find((z) => z.resourceId === resourceId) ?? null,
     },
     operations: {
       listForResource: async () =>
@@ -93,6 +99,7 @@ const zone = (over: Partial<Row> = {}): Row => ({
 
 beforeEach(() => {
   state.rows = [zone()];
+  state.zoneRows = [];
   state.ops = [];
   state.flag = true;
 });
@@ -113,7 +120,13 @@ describe("loadZoneList", () => {
     expect(out.state).toBe("ready");
     if (out.state === "ready") {
       expect(out.zones).toEqual([
-        { id: ZONE, name: "example.com", state: "active", recordCount: 2 },
+        {
+          id: ZONE,
+          name: "example.com",
+          state: "active",
+          status: "pending_delegation",
+          recordCount: 2,
+        },
       ]);
       expect(JSON.stringify(out)).not.toMatch(/Z000001|awsdns/);
     }
@@ -203,5 +216,64 @@ describe("loadZone", () => {
     state.ops = [];
     const none = await loadZone(session(ALICE), ZONE, "r");
     expect(none?.state === "ready" && none.zone.lastChange).toBeNull();
+  });
+});
+
+describe("the status of a zone and its delete (WPU-G6)", () => {
+  const BN = (over: Record<string, unknown> = {}) => ({
+    resourceId: ZONE,
+    status: "pending_delegation",
+    nameServers: ["ns-9.awsdns-09.net"],
+    ...over,
+  });
+
+  it("is pending while the zone is being created, with no name servers and no edit", async () => {
+    state.rows = [zone({ state: "creating", config: { zoneName: "example.com" } })];
+    state.zoneRows = [BN({ status: "pending", nameServers: [] })];
+    const list = await loadZoneList(session(ALICE));
+    expect(list.state === "ready" && list.zones[0]?.status).toBe("pending");
+    const out = await loadZone(session(ALICE), ZONE, "r");
+    expect(out?.state === "ready" && out.zone).toMatchObject({
+      status: "pending",
+      nameServers: [],
+      canEdit: false,
+      canDelete: false,
+    });
+  });
+
+  it("takes the name servers and the delegation word from the zone row, and a fresh zone is editable", async () => {
+    state.rows = [zone({ config: { zoneName: "example.com", hostedZoneId: "Z1", records: [] } })];
+    state.zoneRows = [BN()];
+    const out = await loadZone(session(ALICE), ZONE, "r");
+    expect(out?.state === "ready" && out.zone).toMatchObject({
+      status: "pending_delegation",
+      nameServers: ["ns-9.awsdns-09.net"],
+      canEdit: true,
+      canDelete: true,
+    });
+    state.zoneRows = [BN({ status: "delegated" })];
+    const delegated = await loadZone(session(ALICE), ZONE, "r");
+    expect(delegated?.state === "ready" && delegated.zone.status).toBe("delegated");
+  });
+
+  it("says removing while a destroy is on its way, and offers neither edit nor delete", async () => {
+    state.zoneRows = [BN()];
+    state.ops = [{ kind: "destroy", state: "needs_approval", createdAt: new Date() }];
+    const out = await loadZone(session(ALICE), ZONE, "r");
+    expect(out?.state === "ready" && out.zone).toMatchObject({
+      status: "removing",
+      canEdit: false,
+      canDelete: false,
+    });
+    const list = await loadZoneList(session(ALICE));
+    expect(list.state === "ready" && list.zones[0]?.status).toBe("removing");
+  });
+
+  it("never lists another customer's zone row (R8) and shows no hosted zone id", async () => {
+    state.zoneRows = [BN()];
+    const out = await loadZone(session(BOB), ZONE, "r");
+    expect(out).toBeNull();
+    const list = await loadZoneList(session(BOB));
+    expect(list.state).toBe("empty");
   });
 });

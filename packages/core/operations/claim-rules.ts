@@ -9,6 +9,13 @@ import type { LocalFailure } from "./types";
 
 export const BLOCKED_RETRY_SECONDS = 60;
 
+/**
+ * The families that live in the tc-dns account and have no pool account (a domain and, since WPU-G6, a
+ * DNS zone). Their adapter reaches AWS through its own ports. The claim and the step both read this one
+ * list, so they cannot disagree; every other family still needs its pool account (R16).
+ */
+export const POOLLESS_FAMILIES: readonly string[] = Object.freeze(["domain", "dns_zone"]);
+
 export interface ClaimView {
   readonly state: OperationState;
   readonly kind: string;
@@ -83,7 +90,11 @@ export function decideClaim(view: ClaimView, options: ClaimOptions): ClaimDecisi
   if (resource.state === "destroyed" && kind !== "purge_snapshots") {
     return refuse("resource_state");
   }
-  if (resource.poolAccountId === null || resource.region === null || view.pool === null) {
+  const poolless = POOLLESS_FAMILIES.includes(resource.family);
+  if (
+    resource.region === null ||
+    (!poolless && (resource.poolAccountId === null || view.pool === null))
+  ) {
     return refuse("resource_unplaced");
   }
   if (!options.hasAdapter(resource.family)) return refuse("no_adapter");

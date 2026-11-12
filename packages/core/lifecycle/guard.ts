@@ -17,6 +17,8 @@ export const KEPT_CONFIG_FAMILIES: readonly string[] = Object.freeze([
   "container_service",
   "cdn",
   "dns",
+  // WPU-G6: the `family` value of a hosted zone is dns_zone; its records stay in resources.config.
+  "dns_zone",
 ]);
 
 // Pure. The subscription state allows the action and a final snapshot exists where the product

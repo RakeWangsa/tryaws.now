@@ -8,6 +8,7 @@ import {
   decideFailure,
   decideRefusal,
   isOperationKind,
+  POOLLESS_FAMILIES,
   sendAfterCommit,
   transitionOperation,
   type AwsNameType,
@@ -42,10 +43,10 @@ function toResourceView(row: ResourceRow): ResourceView {
   };
 }
 
-// WP7-T4: a domain lives in tc-dns and has no pool account. Its adapter reaches AWS through its own
+// WP7-T4, WPU-G6: a domain and a DNS zone live in tc-dns and have no pool account. Its adapter reaches AWS through its own
 // ports and never reads `ctx.account`; the placeholder is not a valid account reference, so a Lightsail
 // client built from it is refused (fail closed, R16).
-const POOLLESS_FAMILIES: readonly string[] = ["domain"];
+// The list is POOLLESS_FAMILIES of @tc/core (claim-rules.ts), the one the claim reads too.
 const TC_DNS_PLACEHOLDER = Object.freeze({ awsAccountId: "tc-dns", externalId: "tc-dns" });
 
 function isLightsailRegion(value: unknown): value is LightsailRegion {

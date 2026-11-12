@@ -52,13 +52,15 @@ export type FamilyResult =
 
 export interface FamilySpec {
   /** The `family` value of resources. */
-  family: "database" | "load_balancer";
+  family: "database" | "load_balancer" | "dns_zone";
   /** The form field that carries the id of the resource. */
   idField: string;
   /** Prefix of audit actions and idempotency keys. */
   prefix: string;
   /** True where Lightsail keeps a snapshot (R13); false where the settings are kept in the config. */
   withFinalSnapshot: boolean;
+  /** The config key of the name the customer types to confirm a destroy. Default `displayName`. */
+  nameKey?: "displayName" | "zoneName";
 }
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -152,9 +154,10 @@ export async function ownResource(
   return row;
 }
 
-export function nameOf(config: unknown): string {
-  const name = record(config)["displayName"];
-  return typeof name === "string" ? name.slice(0, 60) : "";
+export function nameOf(config: unknown, key: "displayName" | "zoneName" = "displayName"): string {
+  const name = record(config)[key];
+  // A display name is at most 60 characters; a zone name is a DNS name of up to 253 and is not cut.
+  return typeof name === "string" ? (key === "zoneName" ? name : name.slice(0, 60)) : "";
 }
 
 /** `stop` from active, `start` from stopped; every other state belongs to the lifecycle (R13). */
@@ -212,7 +215,7 @@ export async function destroyFamilyCore(
     async (repos) => {
       const row = await ownResource(repos, spec.family, id);
       if (!LIVE_STATES.includes(row.state)) throw new Refusal("not_allowed");
-      const name = nameOf(row.config);
+      const name = nameOf(row.config, spec.nameKey);
       if (name === "" || typed !== name) throw new Refusal("name_mismatch");
       // R13: once the subscription is `retained` (and the snapshot exists where the family has one),
       // the guard must let the destroy pass.

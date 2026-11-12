@@ -14,9 +14,42 @@ export const dnsEn: Same<typeof dnsBn> = {
     },
     empty: {
       title: "No DNS zones yet",
-      body: "When a zone is added to your account it appears here, and you can change its A, AAAA, CNAME, MX, TXT, SRV and CAA records.",
-      action: "Open domains",
+      body: "Make your first zone below with the name of your domain. When it is ready you can change its A, AAAA, CNAME, MX, TXT, SRV and CAA records.",
     },
+    status: {
+      pending: "Being created",
+      pending_delegation: "Waiting for name servers",
+      delegated: "Name servers set",
+      removing: "Being deleted",
+      removed: "Deleted",
+      failed: "Problem",
+    },
+    create: {
+      title: "New DNS zone",
+      intro:
+        "Make a DNS zone for your domain on Amazon Route 53. When the zone is ready you set the name servers we give you at the registrar of your domain.",
+      name: "Zone name (your domain)",
+      nameHint: "For example example.com. Do not type http:// or a path.",
+      declareTitle: "Confirmation",
+      declare: "I confirm that I control this domain.",
+      price:
+        "A zone runs for 30 days. The price is shown on the next step, and nothing is charged until you confirm.",
+      notDelegated:
+        "If the name servers are not set within 14 days, we send two notices and then remove the zone.",
+      registeredHere:
+        "The zone of a domain registered with us cannot be made from here yet. Write to support.",
+      submit: "Go to review",
+      fieldError: {
+        invalid_name:
+          "The zone name is not valid. Use English letters, digits and hyphens, for example example.com.",
+        taken: "Another zone has this name.",
+        registered_here:
+          "This domain is registered with us. Its zone cannot be made from here yet.",
+        required: "Confirm to go on.",
+        unavailable: "The price of this service is not set now. Please try later.",
+      },
+    },
+    order: { open: "Open the zone" },
     state: {
       creating: "Creating",
       active: "Running",
@@ -43,6 +76,22 @@ export const dnsEn: Same<typeof dnsBn> = {
         title: "Name servers",
         body: "Set these name servers at the registrar of your domain, so that the records of this zone work.",
         none: "The name servers are not ready yet. They appear here when the zone is running.",
+        steps:
+          "Steps: 1) Sign in at the registrar of your domain. 2) Open the page that changes the name servers of the domain. 3) Remove the current name servers and enter the ones below. 4) Save. The change takes some time to spread.",
+      },
+      delegation: {
+        pending: "The zone is being created. The name servers appear here within a minute.",
+        pending_delegation:
+          "The records work on the internet after you set the name servers at the registrar. If they are not set within 14 days, we send two notices and then remove the zone.",
+        delegated: "The name servers are set and the records work.",
+        removing: "The request to delete the zone was taken. It is deleted after approval.",
+      },
+      destroy: {
+        title: "Delete the zone",
+        body: "When you delete a zone, all its records leave Amazon Route 53 and your domain stops using this zone. We keep the list of records. You may need to sign in again, and our team approves the deletion before it is done.",
+        button: "Delete the zone",
+        dialogTitle: "Delete this zone?",
+        dialogBody: "Type the name of the zone to confirm. A deleted zone cannot be brought back.",
       },
       notEditable: {
         creating: "The zone is still being created. You can change records when it is ready.",
@@ -104,13 +153,19 @@ export const dnsEn: Same<typeof dnsBn> = {
         removed: "The request to delete the record was taken. It leaves the list within a minute.",
       },
     },
+    done: {
+      destroyQueued: "The request to delete the zone was taken.",
+      approval: "The zone is deleted after our team approves it.",
+    },
     error: {
       unauthenticated: "Your session has ended. Please sign in again.",
       flag_off: "This service is not open for you yet.",
       validation: "Some details are wrong. Fix the marked fields and try again.",
       rate_limited: "Too many requests in a short time. Please wait a moment and try again.",
       not_found: "This was not found.",
-      not_allowed: "Records cannot be changed while the zone is in this state.",
+      not_allowed: "This cannot be done while the zone is in this state.",
+      fresh_sign_in_required: "Please sign in again for this action.",
+      name_mismatch: "The name you typed does not match the name of the zone.",
       busy: "Another change is on its way. Try again when it is finished.",
       conflict: "A record with this name and type exists, or this name cannot hold this type.",
       limit_reached: "The zone has reached its limit of records. Delete some records first.",

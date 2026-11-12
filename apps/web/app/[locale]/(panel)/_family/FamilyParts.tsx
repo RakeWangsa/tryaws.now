@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 // Small pieces the database and load balancer screens share. Synchronous, so they render in a test
 // without a request. `ns` is the message namespace of the family; both have the same `state` keys.
 
-export type FamilyNamespace = "Databases" | "LoadBalancers";
+export type FamilyNamespace = "Databases" | "LoadBalancers" | "Dns";
 export type ResourceState =
   "creating" | "active" | "stopped" | "suspended" | "destroyed" | "failed";
 

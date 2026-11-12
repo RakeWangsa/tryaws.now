@@ -87,6 +87,44 @@ describe("the zone adapter", () => {
     expect(patch?.configMerge?.nameServers).toHaveLength(4);
   });
 
+  it("saves the record list with the zone, so the editor of a fresh zone has its read-only apex records (WPU-G6)", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    const result = await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    const merge = (result as { patch?: { configMerge?: Record<string, unknown> } }).patch
+      ?.configMerge;
+    expect(merge?.recordsStale).toBe(false);
+    const records = merge?.records as { name: string; type: string; readOnly?: true }[];
+    expect(records.map((r) => `${r.type}:${r.name}`).sort()).toEqual([
+      "NS:example.com",
+      "SOA:example.com",
+    ]);
+    expect(records.every((r) => r.readOnly === true)).toBe(true);
+    // The zone state is active, and nothing but the zone name of the customer was sent to Route 53.
+    expect((result as { patch?: { state?: string } }).patch?.state).toBe("active");
+    expect(fake.calls.filter((c) => c.op === "createHostedZone")).toHaveLength(1);
+  });
+
+  it("marks the list stale when it does not fit the step patch, instead of failing the create (R16)", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    const created = await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    const id = (created as { patch?: { configMerge?: { hostedZoneId?: string } } }).patch
+      ?.configMerge?.hostedZoneId as string;
+    const big = Array.from({ length: 400 }, (_, i) => `h${i}.example.com`);
+    await fake.port.changeRecordSets(
+      id,
+      big.map((n) => ({
+        action: "CREATE" as const,
+        set: { name: `${n}.`, type: "A", ttl: 60, values: ["192.0.2.1"] },
+      })),
+    );
+    const again = await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    const merge = (again as { patch?: { configMerge?: Record<string, unknown> } }).patch
+      ?.configMerge;
+    expect(merge).toMatchObject({ records: null, recordsStale: true });
+  });
+
   it("describe answers active for a live zone and missing otherwise", async () => {
     const fake = createFakeRoute53();
     const adapter = createDnsZoneAdapter({ route53: () => fake.port });

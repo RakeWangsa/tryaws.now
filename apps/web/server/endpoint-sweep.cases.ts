@@ -195,6 +195,34 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  // WPU-G6: the DNS zone create form and the delete. The draft acts on the session's customer only; the
+  // delete takes a zone id, and another customer's zone answers like a missing one (R8).
+  "app/[locale]/(panel)/dns/actions.ts#createDnsZoneDraftAction": {
+    kind: "session",
+    proof: [
+      proof(
+        `${W}dns-zone-actions.test.ts`,
+        "authenticates, validates, rate limits and drafts, in that order (R9), with the parsed name only",
+      ),
+      proof(
+        `${W}dns-zone-actions.test.ts`,
+        "refuses an unauthenticated request before anything else",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/dns/[id]/actions.ts#destroyDnsZoneAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}dns-zone-actions.test.ts`,
+        "another customer's zone, a missing one and another family are one answer, and nothing is written (R8)",
+      ),
+      proof(
+        `${W}dns-zone-actions.test.ts`,
+        "needs a fresh sign-in (U10), the exact zone name, then queues the destroy for approval (R13), in R9 order",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/domains/new/actions.ts#createDomainDraftAction": {
     kind: "session",
     proof: [

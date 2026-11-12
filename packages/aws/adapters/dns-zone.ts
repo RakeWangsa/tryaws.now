@@ -250,11 +250,21 @@ async function changeRecord(port: Route53Port, ctx: OpCtx<DnsZoneConfig>): Promi
     }
   }
 
+  return stepDone({ configMerge: await mirrorPatch(port, hostedZoneId, zoneName) });
+}
+
+/**
+ * The record list kept on the resource for the editor: the live sets, or a stale mark when they do not
+ * fit the step patch (the screen then says so and edits nothing, R16).
+ */
+async function mirrorPatch(
+  port: Route53Port,
+  hostedZoneId: string,
+  zoneName: string,
+): Promise<Record<string, unknown>> {
   const records = mirrorOf(await listZoneRecords(port, hostedZoneId, zoneName));
   const fits = Buffer.byteLength(JSON.stringify(records), "utf8") <= MIRROR_MAX_BYTES;
-  return stepDone({
-    configMerge: fits ? { records, recordsStale: false } : { records: null, recordsStale: true },
-  });
+  return fits ? { records, recordsStale: false } : { records: null, recordsStale: true };
 }
 
 export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneConfig> {
@@ -272,14 +282,21 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
     aws: {
       // CreateHostedZone with the operation id as caller reference: a retry finds the same zone (spec 12).
       async create(ctx: OpCtx<DnsZoneConfig>): Promise<StepResult> {
-        const { zone } = await deps.route53().createHostedZone({
+        const port = deps.route53();
+        const { zone } = await port.createHostedZone({
           name: ctx.config.zoneName,
           callerReference: ctx.operation.id,
           comment: `tc-dnszone-${ctx.resource.id.replaceAll("-", "").slice(16)}`,
         });
+        // WPU-G6: the list is saved with the zone (apex NS and SOA, read-only), so the record editor of a
+        // zone that was never changed shows what exists and can add the first record.
         return stepDone({
           state: "active",
-          configMerge: { hostedZoneId: zone.id, nameServers: [...zone.nameServers] },
+          configMerge: {
+            hostedZoneId: zone.id,
+            nameServers: [...zone.nameServers],
+            ...(await mirrorPatch(port, zone.id, ctx.config.zoneName)),
+          },
         });
       },
       // A zone has nothing to suspend: its records stay (spec 11: DNS keeps its configuration).

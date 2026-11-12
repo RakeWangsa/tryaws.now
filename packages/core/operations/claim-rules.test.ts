@@ -2,6 +2,7 @@ import { OPERATION_STATES } from "@tc/db";
 import { expect, it } from "vitest";
 import {
   BLOCKED_RETRY_SECONDS,
+  POOLLESS_FAMILIES,
   decideClaim,
   type ClaimOptions,
   type ClaimView,
@@ -113,6 +114,27 @@ it("a resource that is missing or not placed is refused", () => {
     refused("resource_unplaced"),
   );
   expect(decideClaim(view({ pool: null }), options())).toEqual(refused("resource_unplaced"));
+});
+
+it("a poolless family (a domain, a DNS zone: they live in tc-dns) runs with no pool account (WPU-G6)", () => {
+  expect(POOLLESS_FAMILIES).toEqual(["domain", "dns_zone"]);
+  for (const family of POOLLESS_FAMILIES) {
+    const resource = { ...placed, family, poolAccountId: null, region: "us-east-1" };
+    const withAdapter = options({ hasAdapter: () => true });
+    expect(decideClaim(view({ resource, pool: null }), withAdapter)).toEqual({ action: "run" });
+    // The region is still needed, and the adapter still has to exist.
+    expect(
+      decideClaim(view({ resource: { ...resource, region: null }, pool: null }), withAdapter),
+    ).toEqual(refused("resource_unplaced"));
+    expect(
+      decideClaim(view({ resource, pool: null }), options({ hasAdapter: () => false })),
+    ).toEqual(refused("no_adapter"));
+  }
+  // Every other family still needs its pool account.
+  const server = { ...placed, poolAccountId: null };
+  expect(decideClaim(view({ resource: server, pool: null }), options())).toEqual(
+    refused("resource_unplaced"),
+  );
 });
 
 it("a family without an adapter is refused", () => {

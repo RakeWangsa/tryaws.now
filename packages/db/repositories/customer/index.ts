@@ -17,6 +17,7 @@ import { kycRepo, type KycRepo } from "./kyc";
 import { notificationsRepo, type NotificationsRepo } from "./notifications";
 import { subscriptionsRepo, type SubscriptionsRepo } from "./subscriptions";
 import { domainsRepo, type DomainsRepo } from "./domains";
+import { dnsZonesRepo, type DnsZonesRepo } from "./dns-zones";
 import { supportRepo, type SupportRepo } from "./support";
 
 // The repositories of one customer (R8). Tasks 7 to 9 add sshKeys, resources, operations, audit.
@@ -38,6 +39,7 @@ export interface CustomerRepos {
   notifications: NotificationsRepo;
   subscriptions: SubscriptionsRepo;
   domains: DomainsRepo;
+  dnsZones: DnsZonesRepo;
   support: SupportRepo;
 }
 
@@ -63,6 +65,7 @@ export function customerRepos(tx: Tx, customerId: string): CustomerRepos {
     notifications: notificationsRepo(scope),
     subscriptions: subscriptionsRepo(scope),
     domains: domainsRepo(scope),
+    dnsZones: dnsZonesRepo(scope),
     support: supportRepo(scope),
   };
 }

@@ -1,9 +1,11 @@
-import { Button, Card, DataTable, EmptyState, StateBadge } from "@tc/ui";
+import { Button, Card, CopyField, DataTable, EmptyState, StateBadge } from "@tc/ui";
 import type { BadgeState } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
+import type { DnsZoneState } from "@tc/core";
 import type { RecordView, ZoneScreen, ZoneView } from "../../../../../server/dns-view.ts";
+import { DestroyPanel, type FamilyAction } from "../../_family/FamilyForms.tsx";
 import {
   DeleteRecordForm,
   RecordForm,
@@ -17,21 +19,23 @@ import {
 // id, an account id, an ARN or the text of an AWS error (U6). Synchronous, so it renders in a test
 // without a request.
 
-const BADGE_OF: Record<string, BadgeState> = {
-  creating: "creating",
-  active: "running",
-  stopped: "stopped",
-  suspended: "stopped",
+const BADGE_OF: Record<DnsZoneState, BadgeState> = {
+  pending: "creating",
+  pending_delegation: "pending",
+  delegated: "running",
+  removing: "creating",
+  removed: "stopped",
   failed: "problem",
 };
 
-export function ZoneStateBadge({ state }: { state: string }) {
-  const t = useTranslations("Dns.state");
-  const known = Object.hasOwn(BADGE_OF, state);
+/** The status of a zone: a badge with a word, never colour alone (U11). */
+export function ZoneStatusBadge({ status }: { status: DnsZoneState }) {
+  const t = useTranslations("Dns.status");
+  const known = Object.hasOwn(BADGE_OF, status);
   return (
     <StateBadge
-      state={known ? (BADGE_OF[state] as BadgeState) : "problem"}
-      label={known ? t(state) : t("failed")}
+      state={known ? BADGE_OF[status] : "problem"}
+      label={known ? t(status) : t("failed")}
     />
   );
 }
@@ -64,6 +68,7 @@ export function ZoneContent({
   editing,
   saveAction,
   deleteAction,
+  destroyAction,
 }: {
   locale: Locale;
   screen: ZoneScreen | null;
@@ -71,6 +76,7 @@ export function ZoneContent({
   editing: EditingRecord | null;
   saveAction: DnsAction;
   deleteAction: DnsAction;
+  destroyAction: FamilyAction;
 }) {
   const t = useTranslations("Dns");
   const listHref = localePath(locale, "/dns");
@@ -124,23 +130,21 @@ export function ZoneContent({
       </p>
       <div className="d-flex flex-wrap align-items-center gap-3 mb-3">
         <h1 className="h3 mergecolor mb-0">{zone.name}</h1>
-        <ZoneStateBadge state={zone.state} />
+        <ZoneStatusBadge status={zone.status} />
       </div>
       <p className="seccolor">{t("awsNote")}</p>
 
       <Card as="section" title={t("detail.nameServers.title")} className="mb-4">
+        <p className="seccolor">{t(`detail.delegation.${zone.status}`)}</p>
         {zone.nameServers.length === 0 ? (
           <p className="seccolor mb-0">{t("detail.nameServers.none")}</p>
         ) : (
           <>
             <p className="seccolor">{t("detail.nameServers.body")}</p>
-            <ul className="mb-0">
-              {zone.nameServers.map((ns) => (
-                <li key={ns}>
-                  <code>{ns}</code>
-                </li>
-              ))}
-            </ul>
+            {zone.nameServers.map((ns, i) => (
+              <CopyField key={ns} label={`${t("detail.nameServers.title")} ${i + 1}`} value={ns} />
+            ))}
+            <p className="seccolor mb-0">{t("detail.nameServers.steps")}</p>
           </>
         )}
       </Card>
@@ -230,6 +234,17 @@ export function ZoneContent({
           )}
         </>
       )}
+      <Card as="section" title={t("detail.destroy.title")} className="mt-4">
+        <DestroyPanel
+          ns="Dns"
+          action={destroyAction}
+          idField="zoneId"
+          resourceId={zone.id}
+          requestId={zone.requestId}
+          resourceName={zone.name}
+          disabled={!zone.canDelete}
+        />
+      </Card>
     </>
   );
 }

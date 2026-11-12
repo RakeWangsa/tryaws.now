@@ -34,6 +34,18 @@ describe("decideDestructive: destroy (R13)", () => {
       expect(decideDestructive("destroy", facts({ family, hasFinalSnapshot: false }))).toBe(true);
     }
   });
+  it("knows the DNS zone by its resources.family value, dns_zone (WPU-G6)", () => {
+    expect(KEPT_CONFIG_FAMILIES).toContain("dns_zone");
+    expect(
+      decideDestructive("destroy", facts({ family: "dns_zone", hasFinalSnapshot: false })),
+    ).toBe(true);
+    expect(
+      decideDestructive(
+        "destroy",
+        facts({ family: "dns_zone", subscriptionStatus: "active", hasFinalSnapshot: false }),
+      ),
+    ).toBe(false);
+  });
   it("refuses a family the lists do not know (R16)", () => {
     expect(decideDestructive("destroy", facts({ family: "mystery", hasFinalSnapshot: true }))).toBe(
       false,

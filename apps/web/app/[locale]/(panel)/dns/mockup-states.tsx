@@ -30,12 +30,26 @@ type Renderer = (locale: Locale) => string;
 export const LIST: ZoneListScreen = {
   state: "ready",
   zones: [
-    { id: ZONE_ID, name: "example.com", state: "active", recordCount: 2 },
+    {
+      id: ZONE_ID,
+      name: "example.com",
+      state: "active",
+      status: "pending_delegation",
+      recordCount: 2,
+    },
     {
       id: "0190aaaa-0000-7000-8000-0000000000d2",
       name: "shop.example.org",
       state: "creating",
+      status: "pending",
       recordCount: null,
+    },
+    {
+      id: "0190aaaa-0000-7000-8000-0000000000d3",
+      name: "blog.example.net",
+      state: "active",
+      status: "delegated",
+      recordCount: 5,
     },
   ],
 };
@@ -45,6 +59,7 @@ export function zone(over: Partial<ZoneView> = {}): ZoneView {
     id: ZONE_ID,
     name: "example.com",
     state: "active",
+    status: "pending_delegation",
     nameServers: ["ns-1.awsdns-01.org", "ns-2.awsdns-02.com"],
     records: [
       {
@@ -76,6 +91,7 @@ export function zone(over: Partial<ZoneView> = {}): ZoneView {
     busy: false,
     lastChange: null,
     canEdit: true,
+    canDelete: true,
     requestId: REQUEST_ID,
     ...over,
   };
@@ -84,7 +100,7 @@ export function zone(over: Partial<ZoneView> = {}): ZoneView {
 const list =
   (screen: ZoneListScreen): Renderer =>
   (locale) =>
-    html(<DnsContent locale={locale} screen={screen} />, locale);
+    html(<DnsContent locale={locale} screen={screen} createAction={noopAction} />, locale);
 const page =
   (screen: ZoneScreen | null, editing: EditingRecord | null = null): Renderer =>
   (locale) =>
@@ -95,6 +111,7 @@ const page =
         editing={editing}
         saveAction={noopAction}
         deleteAction={noopAction}
+        destroyAction={noopAction}
       />,
       locale,
     );
@@ -116,7 +133,18 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   }),
   "zone.working": page(ready({ busy: true, canEdit: false, lastChange: "working" })),
   "zone.failed": page(ready({ lastChange: "failed" })),
-  "zone.creating": page(ready({ state: "creating", canEdit: false, nameServers: [], records: [] })),
+  "zone.creating": page(
+    ready({
+      state: "creating",
+      status: "pending",
+      canEdit: false,
+      canDelete: false,
+      nameServers: [],
+      records: [],
+    }),
+  ),
+  "zone.fresh": page(ready({ records: [] })),
+  "zone.removing": page(ready({ status: "removing", canEdit: false, canDelete: false })),
   "zone.stale": page(ready({ records: null, recordsStale: true, canEdit: false })),
   "zone.empty_records": page(ready({ records: [] })),
   "zone.not_found": page(null),
