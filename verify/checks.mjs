@@ -1357,6 +1357,71 @@ TASKS["WP2-T5"] = [
   repo,
 ];
 
+// WP0-T2, WP0-T3, WP0-T4: the SST app is authored but not deployed here (SST is not installed, and a
+// deploy is a manual step, JOURNEY.md). The proof is the pure-logic tests of infra/lib, the static
+// rule tests that read the source text of infra/stacks, and the tooling test (tsc of infra/lib, no
+// account id or secret). The deployed outputs are listed by a person after `sst deploy --stage staging`.
+const infraTest = (id, title, file) => ({
+  id,
+  title,
+  command: ["pnpm", "test", "--filter", "repo", file, "--no-passWithNoTests"],
+});
+const infraLib = infraTest(
+  "infra-lib",
+  "infra/lib: stage guard (production refused outside CI, fake switches refused), CIDR and AZ table, allowlist, function table",
+  "infra-lib",
+);
+const infraTooling = infraTest(
+  "infra-tooling",
+  "infra/lib type-checks; infra is linted and formatted; no account id, ARN or secret in infra/",
+  "infra-tooling",
+);
+TASKS["WP0-T2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  infraLib,
+  infraTest(
+    "infra-edge-rules",
+    "WP0-T2: VPC with two AZs and NAT, CloudFront with OAC and edge signing, WAF with the admin allowlist, HSTS, no sts in web (R1)",
+    "infra-rules",
+  ),
+  infraTooling,
+  repo,
+];
+TASKS["WP0-T3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  infraLib,
+  infraTest(
+    "infra-database-rules",
+    "WP0-T3: private RDS, 14-day backups, deletion protection, TLS forced on instance and proxy, roles by the migrator only",
+    "infra-rules",
+  ),
+  infraTooling,
+  repo,
+];
+TASKS["WP0-T4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  infraLib,
+  infraTest(
+    "infra-identity-storage-rules",
+    "WP0-T4: admin TOTP and no self sign-up, SES, FIFO queue with DLQ and alarm to SNS, private KMS buckets, kyc denied to web",
+    "infra-rules",
+  ),
+  infraTooling,
+  repo,
+];
+
 // WP4-T3: capacity. The race for the last slot (10.2) on its own line; the filter names a file, and
 // tests/repo/verify-cli.test.mjs asserts that the file exists, because passWithNoTests is on.
 const capacityRace = {

@@ -89,6 +89,9 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
   // every other key of TASKS is unchanged
   expect(Object.keys(TASKS).sort()).toEqual([
     "WP0-T1",
+    "WP0-T2",
+    "WP0-T3",
+    "WP0-T4",
     "WP1-T1",
     "WP1-T2",
     "WP1-T4",
@@ -1542,5 +1545,22 @@ it("task WP9-T3 is proven by the order storm, the parallel top-up and the restor
     "docs/runbooks/restore-drill.md",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("tasks WP0-T2, WP0-T3 and WP0-T4 are proven by the infra tests, and no check runs a deploy", () => {
+  for (const id of ["WP0-T2", "WP0-T3", "WP0-T4"]) {
+    const commands = TASKS[id].map((c) => c.command.join(" "));
+    expect(commands, id).toEqual(
+      expect.arrayContaining([
+        "pnpm test --filter repo infra-lib --no-passWithNoTests",
+        "pnpm test --filter repo infra-rules --no-passWithNoTests",
+        "pnpm test --filter repo infra-tooling --no-passWithNoTests",
+      ]),
+    );
+    expect(commands.join("\n"), id).not.toMatch(/\bsst\b/);
+  }
+  for (const f of ["infra-lib", "infra-rules", "infra-tooling"]) {
+    expect(existsSync(resolve(import.meta.dirname, `${f}.test.mjs`)), f).toBe(true);
   }
 });
