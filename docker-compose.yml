@@ -1,12 +1,17 @@
 services:
   postgres:
-    image: postgres:16
+    # Pinned to a minor (WPU-B4): a change of version is a change of the file, not of the day.
+    image: postgres:16.10
     ports:
       - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: ticoncloud
+      # Password checks on every TCP connection (the tests of temp-db need them). A volume made
+      # earlier keeps its old rules: run `docker compose down -v` once to get these.
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     volumes:
       - ticoncloud-pgdata:/var/lib/postgresql/data
     healthcheck:

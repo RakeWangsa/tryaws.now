@@ -19,6 +19,12 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const isEntry = (value: unknown): value is JournalEntry =>
   isObject(value) && typeof value.when === "number" && typeof value.tag === "string";
 
+const withoutIdx = (entry: JournalEntry): Record<string, unknown> => {
+  const rest: Record<string, unknown> = { ...entry };
+  delete rest.idx;
+  return rest;
+};
+
 function journalEntries(tree: MigrationTree): JournalEntry[] {
   let parsed: unknown;
   try {
@@ -56,10 +62,14 @@ export function checkForwardOnly(base: MigrationTree, current: MigrationTree): s
   if (base.has(JOURNAL)) {
     if (!current.has(JOURNAL)) problems.push(`${JOURNAL} was deleted`);
     else {
+      // Entries are matched by tag, and `idx` (the position drizzle writes) is not compared: a merge
+      // that puts another migration before a committed one renumbers it, and that is not an edit.
+      const sameEntry = (a: JournalEntry, b: JournalEntry) =>
+        isDeepStrictEqual(withoutIdx(a), withoutIdx(b));
       baseEntries.forEach((entry, i) => {
-        if (i >= currentEntries.length) problems.push(`${JOURNAL} entry ${i} was removed`);
-        else if (!isDeepStrictEqual(entry, currentEntries[i]))
-          problems.push(`${JOURNAL} entry ${i} was changed`);
+        const now = currentEntries.find((e) => e.tag === entry.tag);
+        if (now === undefined) problems.push(`${JOURNAL} entry ${i} was removed`);
+        else if (!sameEntry(entry, now)) problems.push(`${JOURNAL} entry ${i} was changed`);
       });
     }
   }

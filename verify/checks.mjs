@@ -3086,6 +3086,99 @@ const manual = (proofId) => {
   };
 };
 
+// WPU-B4 (audit item 18): TASKS keys for backlog rows that had none. Each runs the narrowest real proof
+// available locally; what only a person or AWS can prove stays a manual check that is BLOCKED (exit 2)
+// until verify/manual-proofs.json holds a record. The gates are unchanged: they already list these manual
+// proofs (M1 core, M3 isolation, M6, M7).
+const sharedStatic = [specSync, baselineSync, lint, format];
+TASKS["WP1-T3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "pricing",
+    "WP1-T3: the engine of packages/core/pricing, all Section 8 vectors",
+    "@tc/core",
+    "pricing",
+  ),
+  repo,
+];
+TASKS["WP4-T6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  bootstrapFirewall,
+  isolationLocal,
+  manual("wp4-t6-isolation-pool-dev"),
+];
+TASKS["WP9-T1"] = [
+  ...sharedStatic,
+  infraTest(
+    "section15-local",
+    "WP9-T1: every item of Section 15 is mapped to the tests that prove its local half",
+    "section15-local",
+  ),
+  manual("wp9-t1-section15-evidence"),
+];
+TASKS["WP9-T6"] = [
+  ...sharedStatic,
+  infraTest(
+    "ci-deploy",
+    "WP9-T6: the production deploy workflow runs from a tag, after gate M5, with approval",
+    "ci-deploy",
+  ),
+  manual("wp9-t6-production-tag-deploy"),
+  manual("wp9-t6-beta-payments"),
+];
+TASKS["WP10-T2"] = [...sharedStatic, manual("wp10-t2-first-day-report")];
+TASKS["WPU-R1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "web-zod",
+    "WPU-R1: the zod form schema of apps/web and the disk action that uses it",
+    "@tc/web",
+    "server/form-schema",
+    "server/disk-actions",
+  ),
+  glueTest(
+    "tier-limits",
+    "WPU-R1: the relaxed tier limits of packages/core/orders/gates",
+    "@tc/core",
+    "orders/gates",
+  ),
+  repo,
+];
+// WPU-B4: tooling and test infrastructure (forward-only journal check, trust-auth detection in temp-db,
+// repeat runner, signal handlers, eslint timer globals, Section 15 map, SST stack type-check setup).
+TASKS["WPU-B4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "db-forward-only",
+    "WPU-B4: forward-only check after a journal renumbering (no database needed)",
+    "@tc/db",
+    "test/forward-only",
+  ),
+  glueTest(
+    "db-temp-db",
+    "WPU-B4: temp-db password check (needs local PostgreSQL; skips only under trust authentication)",
+    "@tc/db",
+    "test/temp-db",
+  ),
+  repo,
+];
+
 // A gate is the concatenation of the checks of its tasks, once per check id (the first one stays, so the
 // cheap shared checks come first). The same id with another command is a defect and stops the load.
 // A part is a task id (its TASKS block), or { checks } for a row without a TASKS block.
