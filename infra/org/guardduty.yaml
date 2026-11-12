@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud GuardDuty (Sections 3.3 and 15 item 14): the detector of the delegated administrator
+  account in ONE Region, and an alarm path for high severity findings. GuardDuty is regional: deploy
+  this template once in each approved Region (ap-southeast-1, ap-south-1, us-east-1). Enabling every
+  member account is the organization step in README.md ("GuardDuty"), not a CloudFormation resource.
+# VERIFY: GuardDuty organization APIs, in this order: (1) in the management account
+# `aws guardduty enable-organization-admin-account --admin-account-id <log archive account>` per
+# Region; (2) in the delegated administrator account this template creates the detector, then
+# `aws guardduty update-organization-configuration --detector-id <id> --auto-enable-organization-members ALL`
+# per Region; (3) `aws guardduty list-members` shows every account as Enabled. The command shapes
+# are from memory of the public API; check them against the current documentation before use.
+# VERIFY: GuardDuty sees CloudTrail management events, DNS logs and VPC flow logs of EC2. Whether it
+# sees anything of a Lightsail instance (the VPC belongs to Lightsail) is NOT established: treat
+# GuardDuty here as account-level threat detection (stolen role credentials, odd API calls), and do
+# not rely on it for instance-level abuse. The abuse runbook stays the main control.
+# VERIFY: detector Features names and the finding publishing frequency in the current CloudFormation
+# reference for AWS::GuardDuty::Detector.
+
+Parameters:
+  OnCallTopicArn:
+    Type: String
+    AllowedPattern: "^arn:aws:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$"
+    Description: >-
+      SNS topic in this account and Region that emails the on-call list (3.3). Created by DevOps; the
+      topic policy must allow events.amazonaws.com to publish.
+  MinimumSeverity:
+    Type: Number
+    Default: 7
+    Description: Findings at or above this severity (7 = high) are sent to on-call.
+
+Resources:
+  Detector:
+    Type: AWS::GuardDuty::Detector
+    Properties:
+      Enable: true
+      FindingPublishingFrequency: FIFTEEN_MINUTES
+      Features:
+        - Name: S3_DATA_EVENTS
+          Status: ENABLED
+        - Name: RDS_LOGIN_EVENTS
+          Status: ENABLED
+        - Name: LAMBDA_NETWORK_LOGS
+          Status: ENABLED
+        - Name: EBS_MALWARE_PROTECTION
+          Status: ENABLED
+
+  HighSeverityFindingsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Sends GuardDuty findings of high severity to on-call.
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.guardduty
+        detail-type:
+          - GuardDuty Finding
+        detail:
+          severity:
+            - numeric:
+                - ">="
+                - Ref: MinimumSeverity
+      Targets:
+        - Id: OnCall
+          Arn:
+            Ref: OnCallTopicArn
+
+Outputs:
+  DetectorId:
+    Value:
+      Ref: Detector

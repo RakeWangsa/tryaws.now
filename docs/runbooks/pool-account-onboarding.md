@@ -13,10 +13,10 @@ DevOps with the account owner of the AWS Organization. A person with the right r
 ## Checklist
 
 1. Create the account inside the pool OU of the existing Organization. Check the Organization account quota first (default 10) and ask AWS if it is too low.
-2. The SCP of the pool OU applies: Lightsail only. Confirm the provisioner role cannot use a denied action (gate item in Section 15).
-3. Create the roles that the platform assumes: `TcProvisioner`, `TcReader`, `TcAccessDetails`, each trusting only the platform Lambda roles of `tc-platform` (production) or `tc-platform-stg` (staging, only `tc-pool-dev`). No access key is created for any user.
-4. Set a monitored security alternate contact for AWS abuse notices (Section 15).
-5. Turn on CloudTrail and GuardDuty for the account (organization trail).
+2. The SCP of the pool OU applies (`infra/org/scps.yaml`): Lightsail only. Confirm the provisioner role cannot use a denied action (gate item in Section 15).
+3. Create the roles that the platform assumes: `TcProvisioner`, `TcReader`, `TcAccessDetails`, each trusting only the platform Lambda roles of `tc-platform` (production) or `tc-platform-stg` (staging, only `tc-pool-dev`). No access key is created for any user. Template: `infra/org/pool-roles.yaml` (order of application in `infra/org/README.md`); the ExternalId is a new plain value, recorded in step 7.
+4. Set a monitored security alternate contact for AWS abuse notices (Section 15): `infra/org/alternate-contacts.template.sh`, dry run first.
+5. Turn on CloudTrail and GuardDuty for the account (organization trail, `infra/org/cloudtrail-trail.yaml`, and GuardDuty auto-enable for members, `infra/org/guardduty.yaml`); confirm the account is a member in both.
 6. Record the real Lightsail quotas per Region (new accounts can start below the documented defaults) and file requests for the raisable ones.
 7. Admin app `/capacity`: `addPoolAccount` with the alias and tier (`trusted` or `new`), then `setCapacityLimit` for each quota code and Region with the recorded values.
 8. Smoke test on staging with `tc-pool-dev` only. Production traffic waits for the owner.

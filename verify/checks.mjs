@@ -341,6 +341,14 @@ const uiKit = {
     "--no-passWithNoTests",
   ],
 };
+// WP0-T5: the templates of infra/org are authored, not applied. The static proof is the repository test
+// tests/repo/infra-org.test.mjs; "DevOps confirms in JOURNEY.md" is the manual half of the backlog row.
+const infraOrg = {
+  id: "infra-org",
+  title: "infra/org templates: SCPs, trust policies, boundaries, trail, adapters match (static)",
+  command: ["pnpm", "test", "--filter", "repo", "infra-org", "--no-passWithNoTests"],
+};
+TASKS["WP0-T5"] = [specSync, baselineSync, lint, typecheck, format, infraOrg];
 TASKS["WPU-T2"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, repo];
 TASKS["WPU-T3"] = TASKS["WPU-T2"];
 

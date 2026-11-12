@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud organization units (Section 3.1). Applied by DevOps in the MANAGEMENT account
+  with a person's role (never by Claude Code, never by a CI role). Creates OUs only: the
+  accounts are created by hand, see accounts-and-ous.md.
+# VERIFY: AWS::Organizations::OrganizationalUnit is available in the management account, in
+# us-east-1 (the Organizations endpoint), and ParentId takes the root id (r-xxxx).
+
+Parameters:
+  RootId:
+    Type: String
+    AllowedPattern: "^r-[0-9a-z]{4,32}$"
+    Description: Id of the organization root (r-xxxx). Not an account id.
+
+Resources:
+  SecurityOu:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: TiCON-Security
+      ParentId:
+        Ref: RootId
+  PlatformProdOu:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: TiCON-Platform-Prod
+      ParentId:
+        Ref: RootId
+  PlatformStagingOu:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: TiCON-Platform-Staging
+      ParentId:
+        Ref: RootId
+  DnsOu:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: TiCON-Dns
+      ParentId:
+        Ref: RootId
+  PoolsOu:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: TiCON-Pools
+      ParentId:
+        Ref: RootId
+  PoolsDevOu:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: TiCON-Pools-Dev
+      ParentId:
+        Ref: RootId
+
+Outputs:
+  SecurityOuId:
+    Value:
+      Ref: SecurityOu
+  PlatformProdOuId:
+    Value:
+      Ref: PlatformProdOu
+  PlatformStagingOuId:
+    Value:
+      Ref: PlatformStagingOu
+  DnsOuId:
+    Value:
+      Ref: DnsOu
+  PoolsOuId:
+    Value:
+      Ref: PoolsOu
+  PoolsDevOuId:
+    Value:
+      Ref: PoolsDevOu

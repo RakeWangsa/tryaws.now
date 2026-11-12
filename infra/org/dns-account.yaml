@@ -1,0 +1,243 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud roles in tc-dns (Sections 6.3 and 12): TcDnsProvisioner, TcDnsReader and TcBillingReader,
+  with one permissions boundary. Deploy once, in tc-dns, with the DevOps admin role. tc-dns trusts
+  tc-platform only. Section 3.1 says staging also works with test zones in tc-dns. This template does not
+  open tc-dns to tc-platform-stg: the owner decides first how test zones are kept apart from customer
+  zones (JOURNEY, Needs decision).
+# VERIFY: the exact Route 53 and Route 53 Domains actions that the real adapter calls (the adapter for
+# the AWS SDK is not in packages/aws yet: only the ports route53-port.ts and domains-port.ts exist).
+# VERIFY: RegisterDomain needs route53:CreateHostedZone, route53:GetHostedZone and
+# route53:ListHostedZonesByName next to route53domains:RegisterDomain (12, "VERIFY in tc-dns with the
+# first real registration"); add or drop actions after that registration.
+# VERIFY: Route 53 Domains and Route 53 API calls are served from us-east-1, so the Region condition
+# below is us-east-1 only.
+
+Parameters:
+  ControlPlaneAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: tc-platform (production). Entered by DevOps at deploy time; never written into this repository.
+  ExternalId:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9+=,.@:/_-]{16,1224}$"
+    Description: The ExternalId of tc-dns, the same plain value as pool_accounts.external_id.
+  ProvisionerFunctionRoleName:
+    Type: String
+    Default: tc-fn-provisioner
+  ReaderFunctionRoleName:
+    Type: String
+    Default: tc-fn-reader
+  CatalogSyncFunctionRoleName:
+    Type: String
+    Default: tc-fn-catalog-sync
+  ReconcilerFunctionRoleName:
+    Type: String
+    Default: tc-fn-reconciler
+  MaxSessionSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 3600
+
+Resources:
+  PermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: TcDnsPermissionsBoundary
+      Description: Ceiling for every Tc role of tc-dns.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Route53AndDomainsOnly
+            Effect: Allow
+            Action:
+              - route53:*
+              - route53domains:*
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: BillingRead
+            Effect: Allow
+            Action:
+              - ce:GetCostAndUsage
+            Resource: "*"
+          - Sid: NeverAllowed
+            Effect: Deny
+            Action:
+              - route53domains:TransferDomain
+              - route53domains:TransferDomainToAnotherAwsAccount
+              - route53domains:AcceptDomainTransferFromAnotherAwsAccount
+              - route53domains:DeleteDomain
+              - route53domains:DisableDomainTransferLock
+              - route53domains:RetrieveDomainAuthCode
+              - route53:CreateVPCAssociationAuthorization
+              - route53:AssociateVPCWithHostedZone
+            Resource: "*"
+          - Sid: NoIamNoKeys
+            Effect: Deny
+            Action:
+              - iam:*
+              - sts:GetSessionToken
+            Resource: "*"
+
+  TcDnsProvisioner:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcDnsProvisioner
+      Description: Hosted zones, records and domain registrations. Assumed by the provisioner function only.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      PermissionsBoundary:
+        Ref: PermissionsBoundary
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ProvisionerFunctionOfTheControlPlane
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn:
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ProvisionerFunctionRoleName}"
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      Policies:
+        - PolicyName: Route53Provisioning
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: HostedZonesAndRecords
+                Effect: Allow
+                Action:
+                  - route53:CreateHostedZone
+                  - route53:GetHostedZone
+                  - route53:ListHostedZonesByName
+                  - route53:ListResourceRecordSets
+                  - route53:ChangeResourceRecordSets
+                  - route53:GetChange
+                  - route53:DeleteHostedZone
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: us-east-1
+              - Sid: DomainRegistration
+                Effect: Allow
+                Action:
+                  - route53domains:CheckDomainAvailability
+                  - route53domains:ListPrices
+                  - route53domains:RegisterDomain
+                  - route53domains:GetOperationDetail
+                  - route53domains:RenewDomain
+                  - route53domains:GetDomainDetail
+                  - route53domains:ResendContactReachabilityEmail
+                  - route53domains:UpdateDomainNameservers
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: us-east-1
+              - Sid: ExplicitDeny
+                Effect: Deny
+                Action:
+                  - route53domains:TransferDomain
+                  - route53domains:TransferDomainToAnotherAwsAccount
+                  - route53domains:AcceptDomainTransferFromAnotherAwsAccount
+                  - route53domains:DeleteDomain
+                  - route53domains:DisableDomainTransferLock
+                  - route53domains:RetrieveDomainAuthCode
+                Resource: "*"
+
+  TcDnsReader:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcDnsReader
+      Description: Read-only Route 53 and Route 53 Domains. Assumed by reader, catalog-sync and reconciler.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      PermissionsBoundary:
+        Ref: PermissionsBoundary
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReadersOfTheControlPlane
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn:
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReaderFunctionRoleName}"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${CatalogSyncFunctionRoleName}"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReconcilerFunctionRoleName}"
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      Policies:
+        - PolicyName: Route53Read
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListedReadsOnly
+                Effect: Allow
+                Action:
+                  - route53domains:CheckDomainAvailability
+                  - route53domains:GetDomainSuggestions
+                  - route53domains:ListPrices
+                  - route53domains:GetDomainDetail
+                  - route53domains:GetContactReachabilityStatus
+                  - route53domains:ListDomains
+                  - route53:ListHostedZones
+                  - route53:GetHostedZone
+                  - route53:ListResourceRecordSets
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: us-east-1
+
+  TcBillingReader:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcBillingReader
+      Description: Cost of tc-dns only. Assumed by the reconciler.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      PermissionsBoundary:
+        Ref: PermissionsBoundary
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReconcilerOfTheControlPlane
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn:
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReconcilerFunctionRoleName}"
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      Policies:
+        - PolicyName: CostRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CostAndUsage
+                Effect: Allow
+                Action:
+                  - ce:GetCostAndUsage
+                Resource: "*"
+
+Outputs:
+  RoleNames:
+    Description: Names only. The platform builds the ARN from the account id in pool_accounts.
+    Value: TcDnsProvisioner,TcDnsReader,TcBillingReader

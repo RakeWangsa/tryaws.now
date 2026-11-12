@@ -89,6 +89,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
   // every other key of TASKS is unchanged
   expect(Object.keys(TASKS).sort()).toEqual([
     "WP0-T1",
+    "WP0-T5",
     "WP1-T1",
     "WP1-T2",
     "WP1-T4",

@@ -1,0 +1,389 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud roles in ONE pool account (Section 6.3): TcProvisioner, TcReader, TcAccessDetails and
+  TcBillingReader, with one permissions boundary. Deploy once per pool account (tc-pool-v1, tc-pool-n1,
+  tc-pool-dev, ...) with the DevOps admin role; never with a platform role or a StackSet execution role. Production pools trust tc-platform; tc-pool-dev trusts tc-platform-stg and nothing else.
+  The trust names the control plane ACCOUNT with an aws:PrincipalArn condition on the fixed name of the
+  function role (a trust that names a role directly stores its internal id and breaks when a deploy
+  recreates the role). The web and admin function roles appear nowhere in this file (R1, 3.2).
+# VERIFY: Lightsail IAM resource ARN forms (arn:aws:lightsail:<region>:<account>:Instance/<id>, Bucket/,
+# RelationalDatabase/) and that Lightsail evaluates aws:ResourceTag/<key> for GetInstanceAccessDetails.
+# If the condition key is not evaluated the allow never matches and the role fails closed (R16): the
+# customer then sees no Windows password. Check in tc-pool-dev with a tagged Windows instance and with a
+# Linux one (JOURNEY VERIFY of WP6-T1, item 2).
+# VERIFY: whether Lightsail supports tag-based authorization (aws:ResourceTag/tc:resource, the tag key of
+# packages/core/naming/tags.ts) for UpdateBucket and UpdateDistribution, and the ARN forms
+# Bucket/<id> and Distribution/<id>. If not, the allow never matches and bucket and CDN changes fail
+# closed (R16): then move both actions back to Resource "*" and keep the code control above.
+# VERIFY: lightsail:TagResource is also checked by AWS when a create call carries tags (6.3).
+
+Parameters:
+  ControlPlaneAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: >-
+      The account of the control plane: tc-platform for a customer pool, tc-platform-stg for tc-pool-dev.
+      Entered by DevOps at deploy time; never written into this repository.
+  ExternalId:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9+=,.@:/_-]{16,1224}$"
+    Description: >-
+      The ExternalId of this pool account, the same plain value as pool_accounts.external_id (7). One
+      value per pool account. It is not a secret, but it must differ between pool accounts.
+  ProvisionerFunctionRoleName:
+    Type: String
+    Default: tc-fn-provisioner
+    Description: Fixed name of the provisioner function role in the control plane account (set in infra/).
+  ReaderFunctionRoleName:
+    Type: String
+    Default: tc-fn-reader
+  CatalogSyncFunctionRoleName:
+    Type: String
+    Default: tc-fn-catalog-sync
+  ReconcilerFunctionRoleName:
+    Type: String
+    Default: tc-fn-reconciler
+  AccessDetailsFunctionRoleName:
+    Type: String
+    Default: tc-fn-access-details
+  MaxSessionSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 3600
+    Description: One hour, the shortest the service allows. The functions assume the role per request.
+
+Resources:
+  PermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: TcPoolPermissionsBoundary
+      Description: Ceiling for every Tc role of a pool account. Identity policies enumerate the actions.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: LightsailInApprovedRegionsOnly
+            Effect: Allow
+            Action:
+              - lightsail:*
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:RequestedRegion:
+                  - ap-southeast-1
+                  - ap-south-1
+                  - us-east-1
+          - Sid: BillingRead
+            Effect: Allow
+            Action:
+              - ce:GetCostAndUsage
+            Resource: "*"
+          - Sid: NeverAllowed
+            Effect: Deny
+            Action:
+              - lightsail:DownloadDefaultKeyPair
+              - lightsail:PeerVpc
+              - lightsail:UnpeerVpc
+              - lightsail:ExportSnapshot
+              - lightsail:CreateCloudFormationStack
+            Resource: "*"
+          - Sid: NoIamNoKeys
+            Effect: Deny
+            Action:
+              - iam:*
+              - sts:GetSessionToken
+            Resource: "*"
+
+  TcProvisioner:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcProvisioner
+      Description: Creates and changes customer Lightsail resources. Assumed by the provisioner function only.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      PermissionsBoundary:
+        Ref: PermissionsBoundary
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ProvisionerFunctionOfTheControlPlane
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn:
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ProvisionerFunctionRoleName}"
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      Policies:
+        - PolicyName: LightsailAdapters
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowListOfTheAdapters
+                Effect: Allow
+                Action:
+                  - lightsail:AllocateStaticIp
+                  - lightsail:AttachDisk
+                  - lightsail:AttachInstancesToLoadBalancer
+                  - lightsail:AttachStaticIp
+                  # Residual risk, accepted (JOURNEY, Needs decision): Lightsail has no condition key for the
+                  # public access rules or readonlyAccessAccounts of a bucket, nor for a distribution's origin,
+                  # so CreateBucket, CreateDistribution (and the two Update calls below) cannot be narrowed
+                  # here. The compensating control is in code: packages/aws/adapters/bucket.ts pins
+                  # accessRules to PRIVATE ({ getObject: "private", allowPublicOverrides: false }) and never
+                  # takes readonlyAccessAccounts from customer input; packages/aws/adapters/cdn.ts takes the
+                  # origin only from a resource of the same customer and pool. Proof: packages/aws/test/
+                  # bucket.test.ts ("creates the bucket ... then makes it private") and cdn.test.ts ("looks
+                  # the origin up by family", "fails closed, before any create, without ... an origin of the
+                  # customer").
+                  - lightsail:CreateBucket
+                  - lightsail:CreateContainerService
+                  - lightsail:CreateContainerServiceDeployment
+                  - lightsail:CreateDisk
+                  - lightsail:CreateDiskSnapshot
+                  - lightsail:CreateDistribution
+                  - lightsail:CreateInstanceSnapshot
+                  - lightsail:CreateInstances
+                  - lightsail:CreateInstancesFromSnapshot
+                  - lightsail:CreateLoadBalancer
+                  - lightsail:CreateRelationalDatabase
+                  - lightsail:CreateRelationalDatabaseSnapshot
+                  - lightsail:DeleteBucket
+                  - lightsail:DeleteBucketAccessKey
+                  - lightsail:DeleteContainerService
+                  - lightsail:DeleteDisk
+                  - lightsail:DeleteDiskSnapshot
+                  - lightsail:DeleteDistribution
+                  - lightsail:DeleteInstance
+                  - lightsail:DeleteInstanceSnapshot
+                  - lightsail:DeleteLoadBalancer
+                  - lightsail:DeleteRelationalDatabase
+                  - lightsail:DeleteRelationalDatabaseSnapshot
+                  - lightsail:DetachDisk
+                  - lightsail:DetachInstancesFromLoadBalancer
+                  - lightsail:DisableAddOn
+                  - lightsail:EnableAddOn
+                  - lightsail:GetBucketAccessKeys
+                  - lightsail:GetBuckets
+                  - lightsail:GetContainerServices
+                  - lightsail:GetDisk
+                  - lightsail:GetDiskSnapshot
+                  - lightsail:GetDistributions
+                  - lightsail:GetInstance
+                  - lightsail:GetInstancePortStates
+                  - lightsail:GetInstanceSnapshot
+                  - lightsail:GetKeyPair
+                  - lightsail:GetLoadBalancer
+                  - lightsail:GetRelationalDatabase
+                  - lightsail:GetRelationalDatabaseSnapshot
+                  - lightsail:GetStaticIp
+                  - lightsail:ImportKeyPair
+                  - lightsail:PutInstancePublicPorts
+                  - lightsail:RebootInstance
+                  - lightsail:ReleaseStaticIp
+                  - lightsail:StartInstance
+                  - lightsail:StartRelationalDatabase
+                  - lightsail:StopInstance
+                  - lightsail:StopRelationalDatabase
+                  - lightsail:TagResource
+                  - lightsail:UpdateContainerService
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      - ap-southeast-1
+                      - ap-south-1
+                      - us-east-1
+              - Sid: ChangeOnlyResourcesTheDatabasePlatformTagged
+                Effect: Allow
+                Action:
+                  - lightsail:UpdateBucket
+                  - lightsail:UpdateDistribution
+                Resource:
+                  - Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:Bucket/*"
+                  - Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:Distribution/*"
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      - ap-southeast-1
+                      - ap-south-1
+                      - us-east-1
+                  "Null":
+                    aws:ResourceTag/tc:resource: "false"
+              - Sid: ExplicitDeny
+                Effect: Deny
+                Action:
+                  - lightsail:DownloadDefaultKeyPair
+                  - lightsail:PeerVpc
+                  - lightsail:UnpeerVpc
+                  - lightsail:ExportSnapshot
+                  - lightsail:CreateCloudFormationStack
+                  - lightsail:GetInstanceAccessDetails
+                Resource: "*"
+
+  TcReader:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcReader
+      Description: Read-only Lightsail. Assumed by reader, catalog-sync and reconciler.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      PermissionsBoundary:
+        Ref: PermissionsBoundary
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReadersOfTheControlPlane
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn:
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReaderFunctionRoleName}"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${CatalogSyncFunctionRoleName}"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReconcilerFunctionRoleName}"
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      Policies:
+        - PolicyName: LightsailRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: GetOnly
+                Effect: Allow
+                Action:
+                  - lightsail:Get*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion:
+                      - ap-southeast-1
+                      - ap-south-1
+                      - us-east-1
+              - Sid: NoSecretsNoKeys
+                Effect: Deny
+                Action:
+                  - lightsail:GetInstanceAccessDetails
+                  - lightsail:GetRelationalDatabaseMasterUserPassword
+                  - lightsail:DownloadDefaultKeyPair
+                Resource: "*"
+
+  TcAccessDetails:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcAccessDetails
+      Description: Windows password, database master password, bucket access key. Assumed by access-details only.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      PermissionsBoundary:
+        Ref: PermissionsBoundary
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AccessDetailsFunctionOfTheControlPlane
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn:
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${AccessDetailsFunctionRoleName}"
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      Policies:
+        - PolicyName: AccessDetails
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: WindowsPasswordOnlyForWindowsInstances
+                Effect: Allow
+                Action:
+                  - lightsail:GetInstanceAccessDetails
+                Resource:
+                  Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:Instance/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/tc:os: windows
+              - Sid: NeverForALinuxOrUntaggedInstance
+                Effect: Deny
+                Action:
+                  - lightsail:GetInstanceAccessDetails
+                Resource: "*"
+                Condition:
+                  StringNotEquals:
+                    aws:ResourceTag/tc:os: windows
+              - Sid: DatabaseMasterPassword
+                Effect: Allow
+                Action:
+                  - lightsail:GetRelationalDatabaseMasterUserPassword
+                Resource:
+                  Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:RelationalDatabase/*"
+              - Sid: BucketAccessKey
+                Effect: Allow
+                Action:
+                  - lightsail:CreateBucketAccessKey
+                  - lightsail:GetBucketAccessKeys
+                Resource:
+                  Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:Bucket/*"
+              - Sid: ExplicitDeny
+                Effect: Deny
+                Action:
+                  - lightsail:DownloadDefaultKeyPair
+                  - lightsail:PeerVpc
+                  - lightsail:UnpeerVpc
+                  - lightsail:ExportSnapshot
+                  - lightsail:CreateCloudFormationStack
+                Resource: "*"
+
+  TcBillingReader:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcBillingReader
+      Description: Cost of this account only (a member account sees only its own cost). Assumed by the reconciler.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      PermissionsBoundary:
+        Ref: PermissionsBoundary
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReconcilerOfTheControlPlane
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              ArnEquals:
+                aws:PrincipalArn:
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReconcilerFunctionRoleName}"
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      Policies:
+        - PolicyName: CostRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CostAndUsage
+                Effect: Allow
+                Action:
+                  - ce:GetCostAndUsage
+                Resource: "*"
+
+Outputs:
+  RoleNames:
+    Description: Names only. The platform builds the ARN from the account id in pool_accounts.
+    Value: TcProvisioner,TcReader,TcAccessDetails,TcBillingReader
