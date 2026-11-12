@@ -68,7 +68,7 @@ export const PUBLIC_ANCHORS: readonly MockupAnchor[] = [
   {
     state: "home.data",
     mockupFile: "template/index.html",
-    why: "Why TiCON Cloud: section.services with the service tiles",
+    why: "Why MeghVPS: section.services with the service tiles",
     classes: [
       "services",
       "sec-normal",

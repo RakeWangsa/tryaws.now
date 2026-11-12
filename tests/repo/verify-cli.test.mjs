@@ -155,6 +155,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T2",
     "WPP-T3",
     "WPP-T4",
+    "WPU-B1",
     "WPU-C1",
     "WPU-D1",
     "WPU-D2",
@@ -926,6 +927,28 @@ it("task WPU-D1 is proven by lint, types, format, the renderer and repository te
     ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-B1 is proven by lint, types, format, the core, notify, web, admin and ui tests and the repository tests", () => {
+  expect(TASKS["WPU-B1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core-brand", "pnpm test --filter @tc/core invoices --no-passWithNoTests"],
+    ["notify-brand", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["web-brand", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin-brand", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-B1 exists: the repository test that bans the old brand in customer-facing files", () => {
+  expect(readFileSync("tests/repo/brand.test.mjs", "utf8")).toContain(
+    "no customer-facing message, template, logo or invoice text says TiCON Cloud",
+  );
 });
 
 it("task WPU-F1 is proven by lint, types, format, the digit helper, mail, renderer and ui tests and the repository tests", () => {

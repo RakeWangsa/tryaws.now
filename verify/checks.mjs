@@ -3116,6 +3116,43 @@ TASKS["WPU-N2"] = [
   repo,
 ];
 
+// WPU-B1: the brand rename from TiCON Cloud to MeghVPS. Messages, mail and SMS text, invoice text, page titles
+// and the site name (web, admin, ui, notify, core invoices) and the repository test that fails when the old
+// name returns to a customer-facing file. No AWS call.
+const brandWeb = {
+  id: "web-brand",
+  title: "apps/web: messages, wording rules, SEO name and top-up copy carry the new brand",
+  command: ["pnpm", "test", "--filter", "@tc/web", "--no-passWithNoTests"],
+};
+const brandAdmin = {
+  id: "admin-brand",
+  title: "apps/admin: the title messages carry the new brand",
+  command: ["pnpm", "test", "--filter", "@tc/admin", "--no-passWithNoTests"],
+};
+const brandNotify = {
+  id: "notify-brand",
+  title: "packages/notify: templates, Cognito texts and the OTP SMS carry the new brand",
+  command: ["pnpm", "test", "--filter", "@tc/notify", "--no-passWithNoTests"],
+};
+const brandCore = {
+  id: "core-brand",
+  title: "packages/core: the invoice documents carry the new brand",
+  command: ["pnpm", "test", "--filter", "@tc/core", "invoices", "--no-passWithNoTests"],
+};
+TASKS["WPU-B1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  brandCore,
+  brandNotify,
+  brandWeb,
+  brandAdmin,
+  ui,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {
