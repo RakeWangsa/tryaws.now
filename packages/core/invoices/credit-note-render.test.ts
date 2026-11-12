@@ -5,6 +5,7 @@ import {
   formatCreditNoteNumber,
   formatInvoiceNumber,
   renderInvoiceHtml,
+  unwrapDigitOneHtml as plain,
   type InvoiceDocument,
 } from "./index";
 
@@ -96,7 +97,7 @@ describe("the date of supply and the date of issue (ruling 5)", () => {
   });
 
   it("Bengali labels and digits", () => {
-    const html = renderInvoiceHtml(invoice, "bn");
+    const html = plain(renderInvoiceHtml(invoice, "bn"));
     expect(html).toContain("<strong>সরবরাহের তারিখ:</strong> ১১-১১-২০২৬");
     expect(html).toContain("<strong>ইস্যুর তারিখ ও সময়:</strong>");
   });

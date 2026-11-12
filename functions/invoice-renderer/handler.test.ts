@@ -169,6 +169,27 @@ describe("invoice-renderer handler", () => {
       });
     }
   });
+  it("accepts the Bengali templates with the digit-one span, the credit note and customer text with ১ and markup (WPU-F1)", async () => {
+    const { handler } = setup();
+    const credit = {
+      originalNumber: "TC-2026-000001",
+      originalIssuedAt: new Date("2026-11-01T05:00:00Z"),
+      reason: "refund",
+    } as const;
+    const pages = [
+      renderInvoiceHtml(doc, "bn"),
+      renderInvoiceHtml({ ...doc, kind: "credit_note", credit }, "bn"),
+      renderInvoiceHtml({ ...doc, kind: "receipt" }, "bn"),
+      renderInvoiceHtml({ ...doc, customer: { name: "<১>", address: "১ নম্বর রোড" } }, "bn"),
+    ];
+    for (const page of pages) {
+      expect(page).toContain('<span class="d1">১</span>');
+      expect(page).toContain('"Hind Siliguri"');
+      expect(await handler({ customerId, invoiceId, locale: "bn", html: page })).toMatchObject({
+        ok: true,
+      });
+    }
+  });
   it("a failed engine or store throws a fixed message and logs a fixed reason, no HTML, no ids (R14)", async () => {
     const boom = setup({
       pdf: {

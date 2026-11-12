@@ -5,6 +5,7 @@
 import type { Locale, Minor } from "../types";
 import { roundedShareMinor } from "../pricing/vat-check";
 import { amountInWords } from "./words";
+import { BENGALI_DIGIT_FONT, DIGIT_ONE_CLASS, wrapDigitOneHtml } from "./digit-one";
 import type { SellerDetails } from "./seller";
 import {
   InvoiceError,
@@ -104,9 +105,14 @@ function dateText(at: Date, locale: Locale, numerals: Numerals | undefined): str
   return bengali ? text.replace(/\d/g, (d) => BENGALI_DIGITS[Number(d)] ?? d) : text;
 }
 
-// The font names are packaged with the function (VERIFY: Bengali shaping in the PDF engine).
+// The font names are packaged with the function (VERIFY: Bengali shaping in the PDF engine). Fonts are
+// named for fontconfig, never fetched: a @font-face URL would be an aborted request in the PDF engine.
+// Hind Siliguri draws the Bengali text (owner decision, WPU-F1); the digit one is wrapped in a span of
+// class d1 and drawn with BENGALI_DIGIT_FONT (digit-one.ts), through a rule of the <style> block.
+const TEXT_FONTS = `"Hind Siliguri","${BENGALI_DIGIT_FONT}","Noto Sans",sans-serif`;
+const DIGIT_RULE = `.${DIGIT_ONE_CLASS}{font-family:"${BENGALI_DIGIT_FONT}","Hind Siliguri",sans-serif}`;
 const CSS = `
-body{font-family:"Noto Sans Bengali","Noto Sans",sans-serif;color:#1b1f23;font-size:13px;line-height:1.5;margin:0;padding:32px}
+body{font-family:${TEXT_FONTS};color:#1b1f23;font-size:13px;line-height:1.5;margin:0;padding:32px}
 header{display:flex;justify-content:space-between;border-bottom:2px solid #1b1f23;padding-bottom:12px}
 h1{font-size:22px;margin:0}
 .brand{font-size:20px;font-weight:700}
@@ -117,6 +123,7 @@ tfoot td{font-weight:700;border-top:2px solid #1b1f23;border-bottom:0}
 .meta{margin-top:16px;display:flex;justify-content:space-between}
 .note{margin-top:16px}
 footer{margin-top:32px;border-top:1px solid #d0d4d9;padding-top:12px;font-size:11px;color:#4a5159}
+${DIGIT_RULE}
 `.trim();
 
 // ---- Mushak 6.3 (tax invoice, VAT Rules 2016) ----------------------------------------------------
@@ -252,7 +259,7 @@ function timeText(at: Date, locale: Locale, numerals: Numerals | undefined): str
 
 const MUSHAK_CSS = `
 @page{size:A4;margin:12mm}
-body{font-family:"Noto Sans Bengali","Noto Sans",sans-serif;color:#1b1f23;font-size:12px;line-height:1.45;margin:0;padding:16px}
+body{font-family:${TEXT_FONTS};color:#1b1f23;font-size:12px;line-height:1.45;margin:0;padding:16px}
 .head{text-align:center}
 .head .gov{font-size:13px;font-weight:700}
 .head h1{font-size:18px;margin:6px 0 2px}
@@ -271,6 +278,7 @@ tfoot td{font-weight:700}
 .sig>div{width:45%;border-top:1px solid #1b1f23;padding-top:6px}
 footer{margin-top:20px;border-top:1px solid #d0d4d9;padding-top:8px;font-size:10px;color:#4a5159}
 @media print{body{padding:0}th{background:#eee}}
+${DIGIT_RULE}
 `.trim();
 
 // One row of the line table of the Mushak 6.3. `value` is the base the VAT of the row is charged on; for
@@ -426,52 +434,56 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
         `<strong>${t.issued}:</strong> ${when}`,
       ].join("");
 
-  return [
-    "<!doctype html>",
-    `<html lang="${locale}">`,
-    `<head><meta charset="utf-8"><title>${esc(title)} ${esc(doc.number)}</title><style>${MUSHAK_CSS}</style></head>`,
-    "<body>",
-    `<div class="form">${esc(form)}</div>`,
-    `<div class="copy">${esc(t.original)}</div>`,
-    `<div class="head"><div class="gov">${esc(t.gov)}</div><div class="gov">${esc(t.board)}</div>`,
-    // The rule citation of the credit note form is not checked against the official text: none is printed.
-    `<h1>${esc(title)}</h1>${credit ? "" : `<div>${esc(t.rule)}</div>`}</div>`,
-    `<div class="grid"><div><h2>${t.seller}</h2>`,
-    `<div><strong>${t.sellerName}:</strong> ${esc(name)}</div>`,
-    `<div><strong>${t.bin}:</strong> ${num(esc(seller.bin))}</div>`,
-    `<div><strong>${t.address}:</strong> ${esc(address)}</div>`,
-    seller.vatCircle !== undefined
-      ? `<div><strong>${t.circle}:</strong> ${esc(seller.vatCircle)}</div>`
-      : "",
-    contact.length > 0
-      ? `<div><strong>${t.contact}:</strong> ${contact.map(esc).join(", ")}</div>`
-      : "",
-    `</div><div><h2>${t.buyer}</h2>`,
-    `<div><strong>${t.sellerName}:</strong> ${buyerName}</div>`,
-    `<div><strong>${t.address}:</strong> ${buyerAddress}</div>`,
-    `<div><strong>${t.bin}:</strong> ${buyerTaxText}</div>`,
-    `</div></div>`,
-    `<div class="grid"><div>${numberBlock}</div>`,
-    `<div><strong>${t.destination}:</strong> ${buyerAddress}<br><strong>${t.vehicle}:</strong> ${dash}</div></div>`,
-    `<table><thead><tr><th>${t.serial}</th><th>${t.description}</th><th>${t.quantity}</th>`,
-    `<th class="num">${t.unitPrice}</th><th class="num">${t.totalExcl}</th><th class="num">${t.sd}</th>`,
-    `<th class="num">${t.value}</th><th class="num">${t.vatRate}</th><th class="num">${t.vatAmount}</th><th class="num">${t.totalIncl}</th></tr></thead>`,
-    `<tbody>${rows.map((r, i) => mushakRowHtml(r, i, t.unit, money, num)).join("")}</tbody>`,
-    `<tfoot><tr><td colspan="4">${t.total}</td><td class="num">${money(rows.reduce((s, r) => s + r.priceExcl, 0n))}</td><td class="num">${money(0n)}</td>`,
-    `<td></td><td></td><td class="num">${money(rows.reduce((s, r) => s + r.vat, 0n))}</td><td class="num">${money(doc.totalMinor)}</td></tr></tfoot></table>`,
-    `<p class="words"><strong>${credit ? t.creditWords : t.words}:</strong> ${amountInWords(doc.totalMinor, locale)}</p>`,
-    credit ? `<p>${t.reverses}</p>` : "",
-    `<table><caption>${t.components}</caption><tbody>${parsed
-      .filter((p) => !(p.line.kind === "step" && p.line.code === VAT_CODE))
-      .map(
-        (p) =>
-          `<tr><td>${esc(p.line.label[locale])}</td><td class="num">${money(p.amount)}</td></tr>`,
-      )
-      .join("")}</tbody></table>`,
-    `<div class="sig"><div><strong>${t.signatory}</strong><br>${t.sigName}: ${esc(seller.signatoryName)}<br>${t.sigDesignation}: ${esc(seller.signatoryDesignation)}<br>${t.sigDate}: ${dateText(doc.issuedAt, locale, doc.numerals)}<br>${t.sigLine}:</div></div>`,
-    `<footer><p>${SHORT_STATEMENT[locale]} ${SELLER_LINE[locale]}</p><p>${TRADEMARK_LINE}</p></footer>`,
-    "</body></html>",
-  ].join("\n");
+  // Escaped first, wrapped after: the digit one of every text node (money, dates, numbers, the buyer's
+  // address) gets its span in one pass over the finished document (digit-one.ts).
+  return wrapDigitOneHtml(
+    [
+      "<!doctype html>",
+      `<html lang="${locale}">`,
+      `<head><meta charset="utf-8"><title>${esc(title)} ${esc(doc.number)}</title><style>${MUSHAK_CSS}</style></head>`,
+      "<body>",
+      `<div class="form">${esc(form)}</div>`,
+      `<div class="copy">${esc(t.original)}</div>`,
+      `<div class="head"><div class="gov">${esc(t.gov)}</div><div class="gov">${esc(t.board)}</div>`,
+      // The rule citation of the credit note form is not checked against the official text: none is printed.
+      `<h1>${esc(title)}</h1>${credit ? "" : `<div>${esc(t.rule)}</div>`}</div>`,
+      `<div class="grid"><div><h2>${t.seller}</h2>`,
+      `<div><strong>${t.sellerName}:</strong> ${esc(name)}</div>`,
+      `<div><strong>${t.bin}:</strong> ${num(esc(seller.bin))}</div>`,
+      `<div><strong>${t.address}:</strong> ${esc(address)}</div>`,
+      seller.vatCircle !== undefined
+        ? `<div><strong>${t.circle}:</strong> ${esc(seller.vatCircle)}</div>`
+        : "",
+      contact.length > 0
+        ? `<div><strong>${t.contact}:</strong> ${contact.map(esc).join(", ")}</div>`
+        : "",
+      `</div><div><h2>${t.buyer}</h2>`,
+      `<div><strong>${t.sellerName}:</strong> ${buyerName}</div>`,
+      `<div><strong>${t.address}:</strong> ${buyerAddress}</div>`,
+      `<div><strong>${t.bin}:</strong> ${buyerTaxText}</div>`,
+      `</div></div>`,
+      `<div class="grid"><div>${numberBlock}</div>`,
+      `<div><strong>${t.destination}:</strong> ${buyerAddress}<br><strong>${t.vehicle}:</strong> ${dash}</div></div>`,
+      `<table><thead><tr><th>${t.serial}</th><th>${t.description}</th><th>${t.quantity}</th>`,
+      `<th class="num">${t.unitPrice}</th><th class="num">${t.totalExcl}</th><th class="num">${t.sd}</th>`,
+      `<th class="num">${t.value}</th><th class="num">${t.vatRate}</th><th class="num">${t.vatAmount}</th><th class="num">${t.totalIncl}</th></tr></thead>`,
+      `<tbody>${rows.map((r, i) => mushakRowHtml(r, i, t.unit, money, num)).join("")}</tbody>`,
+      `<tfoot><tr><td colspan="4">${t.total}</td><td class="num">${money(rows.reduce((s, r) => s + r.priceExcl, 0n))}</td><td class="num">${money(0n)}</td>`,
+      `<td></td><td></td><td class="num">${money(rows.reduce((s, r) => s + r.vat, 0n))}</td><td class="num">${money(doc.totalMinor)}</td></tr></tfoot></table>`,
+      `<p class="words"><strong>${credit ? t.creditWords : t.words}:</strong> ${amountInWords(doc.totalMinor, locale)}</p>`,
+      credit ? `<p>${t.reverses}</p>` : "",
+      `<table><caption>${t.components}</caption><tbody>${parsed
+        .filter((p) => !(p.line.kind === "step" && p.line.code === VAT_CODE))
+        .map(
+          (p) =>
+            `<tr><td>${esc(p.line.label[locale])}</td><td class="num">${money(p.amount)}</td></tr>`,
+        )
+        .join("")}</tbody></table>`,
+      `<div class="sig"><div><strong>${t.signatory}</strong><br>${t.sigName}: ${esc(seller.signatoryName)}<br>${t.sigDesignation}: ${esc(seller.signatoryDesignation)}<br>${t.sigDate}: ${dateText(doc.issuedAt, locale, doc.numerals)}<br>${t.sigLine}:</div></div>`,
+      `<footer><p>${SHORT_STATEMENT[locale]} ${SELLER_LINE[locale]}</p><p>${TRADEMARK_LINE}</p></footer>`,
+      "</body></html>",
+    ].join("\n"),
+  );
 }
 
 export function renderInvoiceHtml(doc: InvoiceDocument, locale: Locale): string {
@@ -493,20 +505,22 @@ export function renderInvoiceHtml(doc: InvoiceDocument, locale: Locale): string 
     .map(escapeHtml)
     .join("<br>");
 
-  return [
-    "<!doctype html>",
-    `<html lang="${locale}">`,
-    `<head><meta charset="utf-8"><title>${escapeHtml(title)} ${escapeHtml(doc.number)}</title><style>${CSS}</style></head>`,
-    "<body>",
-    `<header><div><div class="brand">${escapeHtml(doc.company.name)}</div><div>${company}</div></div>`,
-    `<div><h1>${escapeHtml(title)}</h1></div></header>`,
-    `<div class="meta"><div><strong>${t.billedTo}</strong><br>${customer}</div>`,
-    `<div><strong>${t.number}</strong> ${escapeHtml(doc.number)}<br><strong>${t.date}</strong> ${dateText(doc.issuedAt, locale, doc.numerals)}</div></div>`,
-    `<table><thead><tr><th>${t.description}</th><th class="num">${t.amount}</th></tr></thead>`,
-    `<tbody>${rows.join("")}</tbody>`,
-    `<tfoot><tr><td>${t.total}</td><td class="num">${formatMinor(doc.totalMinor, locale, doc.numerals)}</td></tr></tfoot></table>`,
-    doc.kind === "receipt" ? `<p class="note">${t.notTax}</p>` : "",
-    `<footer><p>${SHORT_STATEMENT[locale]} ${SELLER_LINE[locale]}</p><p>${TRADEMARK_LINE}</p></footer>`,
-    "</body></html>",
-  ].join("\n");
+  return wrapDigitOneHtml(
+    [
+      "<!doctype html>",
+      `<html lang="${locale}">`,
+      `<head><meta charset="utf-8"><title>${escapeHtml(title)} ${escapeHtml(doc.number)}</title><style>${CSS}</style></head>`,
+      "<body>",
+      `<header><div><div class="brand">${escapeHtml(doc.company.name)}</div><div>${company}</div></div>`,
+      `<div><h1>${escapeHtml(title)}</h1></div></header>`,
+      `<div class="meta"><div><strong>${t.billedTo}</strong><br>${customer}</div>`,
+      `<div><strong>${t.number}</strong> ${escapeHtml(doc.number)}<br><strong>${t.date}</strong> ${dateText(doc.issuedAt, locale, doc.numerals)}</div></div>`,
+      `<table><thead><tr><th>${t.description}</th><th class="num">${t.amount}</th></tr></thead>`,
+      `<tbody>${rows.join("")}</tbody>`,
+      `<tfoot><tr><td>${t.total}</td><td class="num">${formatMinor(doc.totalMinor, locale, doc.numerals)}</td></tr></tfoot></table>`,
+      doc.kind === "receipt" ? `<p class="note">${t.notTax}</p>` : "",
+      `<footer><p>${SHORT_STATEMENT[locale]} ${SELLER_LINE[locale]}</p><p>${TRADEMARK_LINE}</p></footer>`,
+      "</body></html>",
+    ].join("\n"),
+  );
 }

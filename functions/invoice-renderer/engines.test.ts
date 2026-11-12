@@ -192,6 +192,41 @@ describe("the pdf engine (WPU-D1)", () => {
     ).resolves.toBeInstanceOf(Uint8Array);
   });
 
+  it("names Hind Siliguri for the text and Noto Sans Bengali for the digit one, Regular and Bold of each (WPU-F1)", () => {
+    expect([...BENGALI_FONT_FILES].sort()).toEqual([
+      "HindSiliguri-Bold.ttf",
+      "HindSiliguri-Regular.ttf",
+      "NotoSansBengali-Bold.ttf",
+      "NotoSansBengali-Regular.ttf",
+    ]);
+  });
+
+  it("packages every named font file: a real TrueType file with a licence beside it (OFL)", () => {
+    const dir = fileURLToPath(new URL("./fonts/", import.meta.url));
+    for (const file of BENGALI_FONT_FILES) {
+      const bytes = readFileSync(join(dir, file));
+      expect(bytes.length, file).toBeGreaterThan(100_000);
+      expect(bytes.readUInt32BE(0), file).toBe(0x00010000); // TrueType
+    }
+    expect(readFileSync(join(dir, "OFL.txt"), "utf8")).toContain("SIL Open Font License");
+    expect(readFileSync(join(dir, "OFL-HindSiliguri.txt"), "utf8")).toContain(
+      "Indian Type Foundry",
+    );
+  });
+
+  it("refuses a Bengali invoice when only the Hind Siliguri files are there: the digit font is required too", async () => {
+    const f = fake();
+    const pdf = createPdfRenderer({
+      launch: f.launch,
+      fontsDir: "/fonts",
+      fontOk: async (p) => p.includes("HindSiliguri"),
+    });
+    await expect(pdf.render("<p>১</p>", { locale: "bn" })).rejects.toThrow(
+      "invoice-renderer: the packaged font is missing",
+    );
+    expect(f.launches()).toBe(0);
+  });
+
   it("renders a Bengali invoice when both font files are present", async () => {
     const f = fake();
     const seen: string[] = [];

@@ -6,3 +6,4 @@ export * from "./render";
 export * from "./seller";
 export * from "./words";
 export * from "./buyer";
+export * from "./digit-one";

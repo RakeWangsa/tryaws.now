@@ -9,6 +9,7 @@ import { listFiles } from "./glob.ts";
 import {
   TC_CSS,
   TC_FONTS,
+  TC_OWN_FONTS,
   THEME_MANIFEST,
   VENDORED_ASSETS,
   type ThemeManifest,
@@ -67,6 +68,12 @@ function fakeFonts(): (name: string) => string {
   }
   return (name) => join(base, TC_FONTS.find((f) => f.package === name)?.id ?? "unknown");
 }
+/** The files of TC_OWN_FONTS (Hind Siliguri sits in the repository itself). */
+const OWN_FONT_FILES = Object.fromEntries(
+  TC_OWN_FONTS.flatMap((font) =>
+    [...font.files, font.license].map((file) => [`${font.dir}/${file}`, `bytes of ${file}`]),
+  ),
+);
 function miniRepo(extra: Record<string, string> = {}): string {
   const root = temp("publish-");
   write(root, {
@@ -82,6 +89,7 @@ function miniRepo(extra: Record<string, string> = {}): string {
     [`${VENDORED_ASSETS}/img/x.svg`]: SVG,
     [`${VENDORED_ASSETS}/fonts/svg/inline.svg`]: SVG,
     [TC_CSS]: TC,
+    ...OWN_FONT_FILES,
     ...extra,
   });
   return root;
@@ -90,6 +98,7 @@ const inputs = (root: string, fonts = fakeFonts()) => ({
   vendoredRoot: join(root, VENDORED_ASSETS),
   tcCssFile: join(root, TC_CSS),
   fontPackageDir: fonts,
+  repoRoot: root,
   manifest,
 });
 function run(argv: string[], root: string, fonts = fakeFonts()) {
@@ -119,8 +128,13 @@ describe("buildPublishTree", () => {
     expect(buildPublishTree(inputs(miniRepo())).tree.files.map((f) => f.path)).toEqual([
       "assets/css/a.css",
       "assets/img/x.svg",
+      "fonts/LICENSE-hind-siliguri.txt",
       "fonts/LICENSE-noto-sans-bengali.txt",
       "fonts/LICENSE-open-sans.txt",
+      "fonts/hind-siliguri-400.woff2",
+      "fonts/hind-siliguri-500.woff2",
+      "fonts/hind-siliguri-600.woff2",
+      "fonts/hind-siliguri-700.woff2",
       "fonts/noto-sans-bengali-bengali-wght-normal.woff2",
       "fonts/open-sans-latin-ext-wght-normal.woff2",
       "fonts/open-sans-latin-wght-normal.woff2",
@@ -158,16 +172,16 @@ describe("--stage publish on a small repository", () => {
     const first = run(["--stage", "publish"], root, fonts);
     expect(first.err).toEqual([]);
     expect(first.code).toBe(0);
-    expect(first.out).toContain("publish web: 8 written, 0 removed, 0 unchanged");
-    expect(first.out).toContain("publish admin: 8 written, 0 removed, 0 unchanged");
-    expect(first.out).toContain("publish web: scanned 8 files, 0 findings");
+    expect(first.out).toContain("publish web: 13 written, 0 removed, 0 unchanged");
+    expect(first.out).toContain("publish admin: 13 written, 0 removed, 0 unchanged");
+    expect(first.out).toContain("publish web: scanned 13 files, 0 findings");
     expect(existsSync(join(root, "design"))).toBe(false); // the build needs no design/
     const web = listFiles(join(root, "apps/web/public/theme"));
     expect(web).toEqual(listFiles(join(root, "apps/admin/public/theme")));
     expect(web).toContain("assets/css/a.css");
     const second = run(["--stage", "publish"], root, fonts);
-    expect(second.out).toContain("publish web: 0 written, 0 removed, 8 unchanged");
-    expect(second.out).toContain("publish admin: 0 written, 0 removed, 8 unchanged");
+    expect(second.out).toContain("publish web: 0 written, 0 removed, 13 unchanged");
+    expect(second.out).toContain("publish admin: 0 written, 0 removed, 13 unchanged");
   });
 
   it("Review Focus 5: leftovers of an earlier run are removed, and the scan is clean afterwards", () => {
@@ -180,7 +194,7 @@ describe("--stage publish on a small repository", () => {
     });
     const result = run(["--stage", "publish", "--app", "web"], root, fonts);
     expect(result.code).toBe(0);
-    expect(result.out).toContain("publish web: 0 written, 2 removed, 8 unchanged");
+    expect(result.out).toContain("publish web: 0 written, 2 removed, 13 unchanged");
     expect(existsSync(join(root, "apps/web/public/theme/assets/js"))).toBe(false);
   });
 
@@ -223,6 +237,7 @@ describe("--stage publish on a small repository", () => {
       "design/mockup/template/assets/img/x.svg": SVG,
       "design/mockup/template/assets/fonts/svg/inline.svg": SVG,
       [TC_CSS]: TC,
+      ...OWN_FONT_FILES,
     });
     const result = run([], root);
     expect(result.err).toEqual([]);
@@ -250,17 +265,18 @@ describe("the real repository", { timeout: 30000 }, () => {
     vendoredRoot: join(repoRoot, VENDORED_ASSETS),
     tcCssFile: join(repoRoot, TC_CSS),
     fontPackageDir,
+    repoRoot,
     manifest: THEME_MANIFEST,
   };
   const { tree, refs } = buildPublishTree(real);
 
-  it("publishes 61 files: the 55 of the theme, tc.css, three fonts and two licences", () => {
-    expect(tree.files).toHaveLength(61);
+  it("publishes 66 files: the 55 of the theme, tc.css, seven fonts and three licences", () => {
+    expect(tree.files).toHaveLength(66);
     const paths = tree.files.map((f) => f.path);
     expect(paths.filter((p) => p.startsWith("assets/"))).toHaveLength(55);
-    expect(paths.filter((p) => p.startsWith("fonts/"))).toHaveLength(5);
+    expect(paths.filter((p) => p.startsWith("fonts/"))).toHaveLength(10);
     expect(paths).toContain("tc.css");
-    expect(refs).toMatchObject({ shipped: 24 });
+    expect(refs).toMatchObject({ shipped: 28 });
     expect(refs.unshippedFallbacks).toHaveLength(4);
     expect(refs.knownMissing).toHaveLength(4);
     expect(buildPublishTree(real).tree.digest).toBe(tree.digest);
@@ -280,7 +296,7 @@ describe("the real repository", { timeout: 30000 }, () => {
       dest,
       scriptHashSet(readScriptList(join(repoRoot, SCRIPT_HASH_FILE))),
     );
-    expect([files, findings]).toEqual([61, []]);
+    expect([files, findings]).toEqual([66, []]);
     for (const path of listFiles(dest))
       expect(path, path).not.toMatch(/\.(js|mjs|cjs|map|php|tpl)$/);
     expect(readFileSync(join(dest, "tc.css"), "utf8")).toBe(readFileSync(real.tcCssFile, "utf8"));

@@ -38,7 +38,7 @@ export interface FontPreload {
 }
 
 const LATIN_FONT = "/theme/fonts/open-sans-latin-wght-normal.woff2";
-const BENGALI_FONT = "/theme/fonts/noto-sans-bengali-bengali-wght-normal.woff2";
+const BENGALI_FONT = "/theme/fonts/hind-siliguri-400.woff2";
 
 // A preload of a font needs crossorigin, even from the same origin, or the browser fetches it twice.
 function preload(href: string): FontPreload {

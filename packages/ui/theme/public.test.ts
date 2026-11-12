@@ -3,7 +3,7 @@ import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { readFontFaces } from "./font-faces.ts";
-import { TC_FONTS } from "./manifest.ts";
+import { TC_FONTS, TC_OWN_FONTS } from "./manifest.ts";
 import {
   THEME_CONTENT_CLASSES,
   THEME_STYLESHEETS,
@@ -100,7 +100,7 @@ describe("fontPreloads", () => {
         crossOrigin: "anonymous",
       },
       {
-        href: "/theme/fonts/noto-sans-bengali-bengali-wght-normal.woff2",
+        href: "/theme/fonts/hind-siliguri-400.woff2",
         as: "font",
         type: "font/woff2",
         crossOrigin: "anonymous",
@@ -113,7 +113,10 @@ describe("fontPreloads", () => {
 
   it("names files that tc.css declares and that the publish stage copies", () => {
     const declared = new Set(tcFaces.map((f) => basename(f.url)));
-    const copied = new Set<string>(TC_FONTS.flatMap((f) => f.files));
+    const copied = new Set<string>([
+      ...TC_FONTS.flatMap((f) => f.files),
+      ...TC_OWN_FONTS.flatMap((f) => f.files),
+    ]);
     for (const preload of fontPreloads("bn")) {
       expect(declared.has(basename(preload.href)), preload.href).toBe(true);
       expect(copied.has(basename(preload.href)), preload.href).toBe(true);

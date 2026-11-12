@@ -40,7 +40,10 @@ describe.each(TEMPLATE_IDS)("template %s", (id) => {
         expect(s).not.toMatch(/\{[A-Za-z]+\}/);
       }
       // the AWS statement and the trademark line of 16.13, unchanged, in the footer
-      expect(email.html).toContain(SHARED[locale].awsShort);
+      // (the digit one of the Bengali text is wrapped in its own span, WPU-F1: compare without it)
+      expect(email.html.replace(/<span style="[^"]*">১<\/span>/g, "১")).toContain(
+        SHARED[locale].awsShort,
+      );
       expect(email.text).toContain(SHARED[locale].trademark);
       // table layout and inline CSS only: no style element, no script, no external origin
       expect(email.html).toContain("<table");

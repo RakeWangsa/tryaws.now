@@ -106,6 +106,25 @@ export const TC_FONTS = [
   },
 ] as const;
 
+/**
+ * Font files that the repository itself holds (not an installed package): Hind Siliguri, which Fontsource
+ * does not offer as a static family under the name used here. Source, version and licence: JOURNEY.md
+ * (WPU-F1). `dir` is relative to the repository root.
+ */
+export const TC_OWN_FONTS = [
+  {
+    id: "hind-siliguri",
+    dir: "packages/ui/fonts/hind-siliguri",
+    files: [
+      "hind-siliguri-400.woff2",
+      "hind-siliguri-500.woff2",
+      "hind-siliguri-600.woff2",
+      "hind-siliguri-700.woff2",
+    ],
+    license: "OFL.txt",
+  },
+] as const;
+
 export const SCRIPT_EXTENSIONS = [".js", ".mjs", ".cjs", ".map", ".php", ".tpl"] as const;
 export const FORBIDDEN_SEGMENTS = ["order-form", "whmcs-template"] as const;
 
