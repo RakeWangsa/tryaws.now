@@ -46,7 +46,10 @@ export function layoutEmail(p: EmailParts): { html: string; text: string } {
   const e = escapeHtml;
   const paragraphs = p.paragraphs
     .filter((x) => x.length > 0)
-    .map((x) => `<p style="margin:0 0 14px 0;font-size:16px;color:${C.text};${base}">${e(x)}</p>`)
+    .map(
+      (x) =>
+        `<p style="margin:0 0 14px 0;font-size:16px;color:${C.text};${base}">${e(x).replaceAll("\n", "<br>")}</p>`,
+    )
     .join("");
   const button =
     p.button === undefined

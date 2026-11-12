@@ -54,6 +54,8 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       top_up: "টপ আপ করুন",
       security: "নিরাপত্তা সেটিং",
       open_domain: "ডোমেইন দেখুন",
+      open_support: "সাপোর্ট পেজ খুলুন",
+      order_now: "এখনই অর্ডার করুন",
     },
     products: {
       instance: "ক্লাউড সার্ভার",
@@ -93,6 +95,8 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       top_up: "Top up",
       security: "Security settings",
       open_domain: "View domain",
+      open_support: "Open the support page",
+      order_now: "Order now",
     },
     products: {
       instance: "Cloud Server",
@@ -291,6 +295,23 @@ export const BN: Catalog = {
     ],
     sms: "TiCON Cloud: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। রিনিউ করুন।",
   },
+  support_reply: {
+    subject: "আপনার সাপোর্ট অনুরোধের উত্তর",
+    headline: "সাপোর্টের উত্তর",
+    body: [
+      "TiCON Cloud সাপোর্ট আপনার অনুরোধের উত্তর দিয়েছে:",
+      "{message}",
+      "আরও সাহায্য লাগলে প্যানেলের সাপোর্ট পেজে জানান।",
+    ],
+  },
+  waitlist_capacity_available: {
+    subject: "{product}: এখন জায়গা আছে",
+    headline: "অপেক্ষার তালিকা: জায়গা খালি হয়েছে",
+    body: [
+      "আপনি {product} এর জন্য অপেক্ষায় ছিলেন। {region} লোকেশনে এখন জায়গা খালি হয়েছে।",
+      "এই জায়গা আপনার জন্য আলাদা করে রাখা হয়নি। অন্য কেউ আগে অর্ডার করলে ভরে যেতে পারে, তাই দেরি না করে অর্ডার করুন।",
+    ],
+  },
 };
 
 const SECURITY_EN = (what: string, subject: string, sms: string): TemplateText => ({
@@ -473,5 +494,22 @@ export const EN: Catalog = {
       "If you do not renew, you can lose the domain.",
     ],
     sms: "TiCON Cloud: {domain} ends in {days} days ({date}). Renew it.",
+  },
+  support_reply: {
+    subject: "Reply to your support request",
+    headline: "Reply from support",
+    body: [
+      "TiCON Cloud support has answered your request:",
+      "{message}",
+      "If you need more help, tell us on the support page of the panel.",
+    ],
+  },
+  waitlist_capacity_available: {
+    subject: "{product}: space is available now",
+    headline: "Waitlist: space is available",
+    body: [
+      "You were waiting for a {product}. There is space in {region} now.",
+      "This space is not held for you. It can fill up if someone else orders first, so order soon.",
+    ],
   },
 };

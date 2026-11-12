@@ -21,6 +21,7 @@ import {
   type AdminRepos,
 } from "@tc/db";
 import { notifyWaitlist, postTransaction, reverseTransaction } from "@tc/core";
+import { notify, waitlistNoticeToInput } from "@tc/notify";
 import type { OperationQueue } from "@tc/core";
 import type { Tx } from "@tc/db";
 import { unavailableAdminDirectory, type AdminDirectory } from "./admin-directory.ts";
@@ -230,12 +231,11 @@ export function capacityFlowDeps(): CapacityFlowDeps {
     authorize: (roles) => requireAdmin([...roles]),
     limiter: adminLimiter("admin_capacity_action", OPS_ACTION_LIMIT),
     run: (actor, fn) => withTx((tx: Tx) => fn(adminRepos(tx, actor), tx)),
-    // Fails closed: the template waitlist_capacity_available is not registered in @tc/notify yet, so the
-    // whole action rolls back and no entry is marked notified without a message (R16).
+    // WPU-D4: one notification row per taken entry, in the transaction of the action. A refusal of
+    // notify() throws and the whole action rolls back, so no entry is marked notified without a message
+    // (R16); a replay of an entry is a no-op by its dedupe key (R7).
     notifyWaitlist: (tx, actor, input) =>
-      notifyWaitlist(tx, actor, input, async () => {
-        throw new Error("waitlist: no notifier template");
-      }),
+      notifyWaitlist(tx, actor, input, (tx2, notice) => notify(tx2, waitlistNoticeToInput(notice))),
     clock: { now: () => new Date() },
   };
 }

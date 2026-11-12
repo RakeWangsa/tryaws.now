@@ -5,7 +5,12 @@ import { IDS, SAMPLES, WITHOUT_SMS } from "./samples";
 
 // The table of 16.14, row by row. `sms` is "yes", "no", or the condition of the row.
 type Sms = "yes" | "no" | "only_when";
-const TABLE: ReadonlyArray<{ row: string; templates: readonly TemplateId[]; sms: Sms }> = [
+const TABLE: ReadonlyArray<{
+  row: string;
+  templates: readonly TemplateId[];
+  sms: Sms;
+  bell?: false;
+}> = [
   {
     row: "Sign-up and verification: Welcome (the email code is Cognito, the OTP is direct)",
     templates: ["welcome"],
@@ -50,18 +55,26 @@ const TABLE: ReadonlyArray<{ row: string; templates: readonly TemplateId[]; sms:
     sms: "no",
   },
   { row: "Domain: renewal reminders", templates: ["domain_renewal_reminder"], sms: "only_when" },
+  {
+    row: "WPU-D4: capacity free for a waitlist entry",
+    templates: ["waitlist_capacity_available"],
+    sms: "no",
+  },
+  // A reply of support goes to a visitor too, who has no bell: email only.
+  { row: "WPU-D4: reply of support", templates: ["support_reply"], sms: "no", bell: false },
 ];
 
 const planned = (template: TemplateId, data: Record<string, unknown>) =>
   planRows({ customerId: IDS.customer, template, data, dedupeKey: "k" }).map((r) => r.channel);
 
 describe("16.14 table", () => {
-  it.each(TABLE)("$row", ({ templates, sms }) => {
+  it.each(TABLE)("$row", ({ templates, sms, bell }) => {
     for (const t of templates) {
       const channels = planned(t, SAMPLES[t].data);
-      // every trigger has an email and a bell item
+      // every trigger has an email and a bell item (a reply of support: the email only)
       expect(channels).toContain("email");
-      expect(channels).toContain("in_app");
+      if (bell === false) expect(channels).not.toContain("in_app");
+      else expect(channels).toContain("in_app");
       if (sms === "yes") expect(channels).toContain("sms");
       if (sms === "no") expect(channels).not.toContain("sms");
       if (sms === "only_when") {
