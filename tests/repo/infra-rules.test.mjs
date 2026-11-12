@@ -334,6 +334,16 @@ describe("WP0-T3: database, proxy and roles", () => {
     expect(admin).toContain("link: [secrets.db.admin_rw]");
   });
 
+  it("ships the migrations folder with the migrator and tells it where it is", () => {
+    expect(workers).toContain('copyFiles: [{ from: "packages/db/migrations", to: "migrations" }]');
+    expect(workers).toContain('env.MIGRATIONS_DIR = "/var/task/migrations"');
+  });
+
+  it("gives the notifier the panel origin and the verified sender, not a key", () => {
+    expect(workers).toContain("env.PANEL_ORIGIN = `https://${config.webDomain}`");
+    expect(workers).toContain("env.SES_FROM = config.sesFromAddress");
+  });
+
   it("runs the migrator at deploy time, in the VPC", () => {
     expect(workers).toContain('new sst.aws.Function("Migrator"');
     expect(workers).toContain('new aws.lambda.Invocation("MigratorRun"');
@@ -473,5 +483,15 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
   it("links no EPS secret to the admin app", () => {
     const admin = between(web, 'new sst.aws.Nextjs("Admin"');
     expect(admin).not.toMatch(/WEB_SECRETS|Eps/);
+  });
+
+  it("gives web, admin and the database functions the NAME of their password secret, never a value", () => {
+    expect(workers).toContain("env.DB_PASSWORD_SECRET = DB_PASSWORD_SECRET[spec.dbRole]");
+    expect(web).toContain("DB_PASSWORD_SECRET: DB_PASSWORD_SECRET[role]");
+    expect(web).toContain('dbEnvironment("web_rw")');
+    expect(web).toContain('dbEnvironment("admin_rw")');
+    for (const [name, text] of Object.entries({ web, workers })) {
+      expect(text, name).not.toMatch(/DB_PASSWORD\b|DATABASE_URL|\.password\b/);
+    }
   });
 });

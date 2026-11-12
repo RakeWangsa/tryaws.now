@@ -222,7 +222,7 @@ describe("function table", () => {
       expect(exported, `${spec.dir} ${spec.handlerExport}`).toBe(spec.exportExists);
       if (!spec.exportExists) missing.push(spec.dir);
     }
-    expect(missing.sort()).toEqual(["cognito-messages", "migrator", "notifier"]);
+    expect(missing.sort()).toEqual([]);
   });
 
   it("lets only provisioner, reader, access-details, catalog-sync and reconciler assume pool roles (3.2, R1)", () => {

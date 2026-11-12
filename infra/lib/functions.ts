@@ -211,9 +211,8 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
   {
     dir: "notifier",
     component: "Notifier",
-    // functions/notifier/index.ts exports createNotifierHandler only; the process entry is WP5-T5.
     handlerExport: "handler",
-    exportExists: false,
+    exportExists: true,
     placement: "app",
     dbRole: "worker_rw",
     secrets: ["SmsApiKey"],
@@ -225,9 +224,8 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
   {
     dir: "migrator",
     component: "Migrator",
-    // functions/migrator/index.ts is empty today (`export {}`); the handler comes with the migrations task.
     handlerExport: "handler",
-    exportExists: false,
+    exportExists: true,
     placement: "app",
     dbRole: "migrator",
     secrets: [],
@@ -240,7 +238,7 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     dir: "cognito-messages",
     component: "CognitoMessages",
     handlerExport: "handler",
-    exportExists: false,
+    exportExists: true,
     placement: "none",
     dbRole: "none",
     secrets: [],
