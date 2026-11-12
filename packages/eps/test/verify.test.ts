@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkLedger, ledgerKey } from "@tc/core";
+import { checkLedger, ledgerKey, openWallet } from "@tc/core";
 import type { EpsGateway } from "../gateway";
 import { readVerifyResponse } from "../status";
 import { verifyPayment } from "../verify";
@@ -73,17 +73,40 @@ describe("a verified success", () => {
     expect(p.verifyPayload).toMatchObject({ status: "success", totalAmount: "300.00" });
   });
 
-  it("calls the onCredited hook inside the credit transaction", async () => {
+  it("calls the onCredited hook after the credit transaction has committed (WPU-D3)", async () => {
     const s = await startPayment(k, 30000n);
     settle(s, { status: "Success" });
-    const seen: Array<{ id: string; customerId: string; status: string }> = [];
+    const seen: Array<{ id: string; customerId: string; status: string; committed: boolean }> = [];
     const deps = k.deps("web_rw", {
-      onCredited: async (_tx, payment) => {
-        seen.push({ id: payment.id, customerId: payment.customerId, status: payment.status });
+      onCredited: async (payment) => {
+        // Read through another connection: the row and the balance are already visible.
+        const row = await k.payment(payment.id);
+        seen.push({
+          id: payment.id,
+          customerId: payment.customerId,
+          status: payment.status,
+          committed: row.status === "credited" && (await k.balance(payment.customerId)) === 30000n,
+        });
       },
     });
     await verifyPayment(deps, s.merchantTransactionId);
-    expect(seen).toEqual([{ id: s.paymentId, customerId: s.customerId, status: "credited" }]);
+    expect(seen).toEqual([
+      { id: s.paymentId, customerId: s.customerId, status: "credited", committed: true },
+    ]);
+  });
+
+  it("does not call the hook for a payment that was not credited by this pass", async () => {
+    const s = await startPayment(k, 30000n);
+    settle(s, { status: "Failed" });
+    let calls = 0;
+    const deps = k.deps("web_rw", {
+      onCredited: async () => {
+        calls += 1;
+      },
+    });
+    await verifyPayment(deps, s.merchantTransactionId);
+    await verifyPayment(deps, s.merchantTransactionId);
+    expect(calls).toBe(0);
   });
 });
 
@@ -325,21 +348,58 @@ describe("the credit is one transaction", () => {
     expect(await k.balance(s.customerId)).toBe(150000n);
   });
 
-  it("an error after the post (the hook) rolls back the post and the row update together", async () => {
+  it("a hook that fails after the commit never undoes or hides the credit (WPU-D3, C.8)", async () => {
+    k.reset();
     const s = await startPayment(k);
     settle(s, { status: "Success" });
     const deps = k.deps("web_rw", {
       onCredited: async () => {
-        throw new Error("hook failed");
+        throw new Error("hook failed: " + PLANTED_SECRET);
       },
     });
-    expect(await verifyPayment(deps, s.merchantTransactionId)).toEqual({
-      ok: false,
-      error: "internal",
-    });
+    expect(await verifyPayment(deps, s.merchantTransactionId)).toEqual(credited);
+    expect((await k.payment(s.paymentId)).status).toBe("credited");
+    expect(await k.ledgerRows(ledgerKey.topup(s.paymentId))).toBe(1);
+    expect(await k.balance(s.customerId)).toBe(150000n);
+    expect(k.logs.some((l) => l.fields.reason === "on_credited_failed")).toBe(true);
+    expect(JSON.stringify(k.logs)).not.toContain(PLANTED_SECRET);
+    // the next callback finds it credited and does not run the hook again
+    let again = 0;
+    await verifyPayment(
+      k.deps("web_rw", {
+        onCredited: async () => {
+          again += 1;
+        },
+      }),
+      s.merchantTransactionId,
+    );
+    expect(again).toBe(0);
+  });
+
+  it("a verified success with no wallet to credit raises credit_blocked and credits nothing (WPU-D3, C.8)", async () => {
+    k.reset();
+    const s = await startPayment(k);
+    settle(s, { status: "Success" });
+    // worker_rw cannot open a wallet; the customer's wallet row is gone
+    await k.pool.query("delete from wallets where customer_id = $1", [s.customerId]);
+    const r = await verifyPayment(k.deps("worker_rw"), s.merchantTransactionId);
+    expect(r).toEqual({ ok: false, error: "internal" });
+    expect(k.alerts).toEqual([
+      {
+        kind: "credit_blocked",
+        paymentId: s.paymentId,
+        reason: "wallet_missing",
+        expectedMinor: 150000n,
+        gotMinor: 150000n,
+      },
+    ]);
+    expect(k.logs.some((l) => l.fields.reason === "wallet_missing")).toBe(true);
     expect((await k.payment(s.paymentId)).status).toBe("redirected");
     expect(await k.ledgerRows(ledgerKey.topup(s.paymentId))).toBe(0);
-    expect(await k.balance(s.customerId)).toBe(0n);
+    // the payment is not lost: with a wallet again, the next pass credits it
+    await k.run((tx) => openWallet(tx, s.customerId), "web_rw");
+    expect(await verify(s.merchantTransactionId)).toEqual(credited);
+    expect(await k.balance(s.customerId)).toBe(150000n);
   });
 
   it("logs hold only the allowed keys and no id of the payment at EPS", async () => {

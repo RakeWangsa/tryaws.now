@@ -1,10 +1,5 @@
 import { expect, it } from "vitest";
-import {
-  BILLING_ADDRESS_MAX,
-  BILLING_NAME_MAX,
-  maskNid,
-  parseBillingProfile,
-} from "./billing-profile";
+import { BILLING_ADDRESS_MAX, BILLING_NAME_MAX, parseBillingProfile } from "./billing-profile";
 
 const ok = (form: Record<string, unknown>) => {
   const r = parseBillingProfile(form);
@@ -22,12 +17,9 @@ it("an empty form clears the profile: every field is null", () => {
     billingName: null,
     billingAddress: null,
     customerBin: null,
-    customerNid: null,
   };
   expect(ok({})).toEqual(empty);
-  expect(ok({ billingName: "  ", billingAddress: "", customerBin: " ", customerNid: "" })).toEqual(
-    empty,
-  );
+  expect(ok({ billingName: "  ", billingAddress: "", customerBin: " " })).toEqual(empty);
 });
 
 it("a BIN is exactly 13 digits; spaces, hyphens and Bengali digits are normalised", () => {
@@ -39,26 +31,13 @@ it("a BIN is exactly 13 digits; spaces, hyphens and Bengali digits are normalise
   }
 });
 
-it("a NID is 10, 13 or 17 digits and nothing else", () => {
-  for (const good of ["1234567890", "1234567890123", "12345678901234567"]) {
-    expect(ok({ customerNid: good }).customerNid).toBe(good);
-  }
-  for (const bad of [
-    "123456789",
-    "12345678901",
-    "123456789012345",
-    "123456789012345678",
-    "12a4567890",
-  ]) {
-    expect(fields({ customerNid: bad })).toEqual({ customerNid: "invalid" });
-  }
-});
-
-it("a BIN and a NID together are refused: an invoice names one", () => {
-  expect(fields({ customerBin: "1234567890123", customerNid: "1234567890" })).toEqual({
-    customerBin: "conflict",
-    customerNid: "conflict",
+it("there is no NID: a customerNid in the form is ignored and never carried on (WPU-D3)", () => {
+  expect(ok({ customerNid: "1234567890", customerBin: "1234567890123" })).toEqual({
+    billingName: null,
+    billingAddress: null,
+    customerBin: "1234567890123",
   });
+  expect(ok({ customerNid: "not digits at all" })).not.toHaveProperty("customerNid");
 });
 
 it("the address: trimmed, whitespace (even a newline) collapsed, 5 to 300 code points", () => {
@@ -121,20 +100,5 @@ it("an unknown key is ignored and never carried on", () => {
     billingName: "Rahim",
     billingAddress: null,
     customerBin: null,
-    customerNid: null,
   });
-});
-
-it("maskNid shows the last 4 digits only and never the rest (WPU-S8)", () => {
-  expect(maskNid("1234567890")).toBe("******7890");
-  expect(maskNid("1990123456789")).toBe("*********6789");
-  expect(maskNid("19901234567890123")).toBe("*************0123");
-  for (const nid of ["1234567890", "1990123456789", "19901234567890123"]) {
-    expect(maskNid(nid)).not.toContain(nid.slice(0, 6));
-    expect(maskNid(nid)).toHaveLength(nid.length);
-  }
-  // anything that is no stored NID gives no hint of its content
-  expect(maskNid(null)).toBe("");
-  expect(maskNid("")).toBe("");
-  expect(maskNid("123")).toBe("***");
 });

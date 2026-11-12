@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { adminUsers } from "./admins";
@@ -216,6 +217,10 @@ export const payments = pgTable(
     unique("payments_ledger_transaction_id_unique").on(t.ledgerTransactionId),
     // The sweeper.
     index("payments_status_created_at_idx").on(t.status, t.createdAt),
+    // WPU-D3: one EPS transaction id belongs to one payment (migration 0021).
+    uniqueIndex("payments_gateway_transaction_id_unique")
+      .on(t.gatewayTransactionId)
+      .where(sql`${t.gatewayTransactionId} is not null`),
     // 9.2.
     check("payments_merchant_transaction_id_check", sql`length(${t.merchantTransactionId}) >= 10`),
     check("payments_amount_minor_check", sql`${t.amountMinor} > 0`),

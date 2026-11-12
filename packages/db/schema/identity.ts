@@ -8,6 +8,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { adminUsers } from "./admins";
@@ -45,9 +46,8 @@ export const customers = pgTable(
     // 6.3 invoice. All nullable. personal or business identifiers: never logged (R14).
     billingName: text("billing_name"),
     billingAddress: text("billing_address"),
-    // 13-digit BIN of a registered business; or a 10, 13 or 17 digit NID; the invoice names one.
+    // 13-digit BIN of a registered business (WPU-D3: no NID, migration 0019 dropped customer_nid).
     customerBin: text("customer_bin"),
-    customerNid: text("customer_nid"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -64,11 +64,6 @@ export const customers = pgTable(
       "customers_customer_bin_check",
       sql`${t.customerBin} is null or ${t.customerBin} ~ '^[0-9]{13}$'`,
     ),
-    check(
-      "customers_customer_nid_check",
-      sql`${t.customerNid} is null or ${t.customerNid} ~ '^([0-9]{10}|[0-9]{13}|[0-9]{17})$'`,
-    ),
-    check("customers_tax_id_one_check", sql`${t.customerBin} is null or ${t.customerNid} is null`),
     check("customers_type_check", inList(t.type, CUSTOMER_TYPES)),
     check("customers_kyc_status_check", inList(t.kycStatus, KYC_STATUSES)),
     check("customers_risk_tier_check", inList(t.riskTier, RISK_TIERS)),
@@ -99,6 +94,10 @@ export const kycSubmissions = pgTable(
   },
   (t) => [
     index("kyc_submissions_customer_id_idx").on(t.customerId),
+    // WPU-D3: one open submission per customer, enforced by the database (migration 0020).
+    uniqueIndex("kyc_submissions_one_pending_idx")
+      .on(t.customerId)
+      .where(sql`${t.status} = 'pending'`),
     check("kyc_submissions_s3_keys_check", sql`cardinality(${t.s3Keys}) >= 1`),
     check("kyc_submissions_status_check", inList(t.status, KYC_SUBMISSION_STATUSES)),
     check(

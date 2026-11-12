@@ -39,12 +39,14 @@ describe("/settings/profile", () => {
     expect(profile(SCREEN)("en")).toContain("last 10 minutes");
   });
 
-  it("has a Billing details section with the four optional fields, in both languages (WPU-I3)", () => {
+  it("has a Billing details section with the three optional fields, in both languages (WPU-I3)", () => {
     const en = profile(SCREEN)("en");
     expect(en).toContain("Billing details");
-    for (const name of ["billingName", "billingAddress", "customerBin", "customerNid"]) {
+    for (const name of ["billingName", "billingAddress", "customerBin"]) {
       expect(en).toContain(`name="${name}"`);
     }
+    expect(en).not.toContain("customerNid");
+    expect(en).not.toContain("NID");
     expect(en).toContain("<textarea");
     // empty state: says nothing has been entered; the form is not required
     expect(en).toContain("No billing details have been entered yet.");
@@ -61,8 +63,6 @@ describe("/settings/profile", () => {
         billingName: "Rahim & Sons",
         billingAddress: "House 5, Dhaka",
         customerBin: "1234567890123",
-        customerNidMasked: "",
-        hasNid: false,
       },
     })("en");
     expect(html).toContain("Rahim &amp; Sons");
@@ -77,55 +77,40 @@ describe("/settings/profile", () => {
       billingName: "",
       billingAddress: "",
       customerBin: "",
-      customerNidMasked: "",
-      hasNid: false,
     });
     expect(
       toBillingScreen({
         billingName: null,
         billingAddress: "House 5, Dhaka",
         customerBin: null,
-        customerNid: "1234567890",
       }),
     ).toEqual({
       billingName: "",
       billingAddress: "House 5, Dhaka",
       customerBin: "",
-      customerNidMasked: "******7890",
-      hasNid: true,
     });
     expect(toProfileScreen({ ...base0, phoneVerifiedAt: null }, true).billing).toEqual(
       toBillingScreen(null),
     );
   });
 
-  // WPU-S8 (L2)
-  it("the loader never carries the full NID: only the last 4 digits reach the browser", () => {
-    const nid = "1990123456789";
+  // WPU-D3: no NID anywhere on the screen.
+  it("the loader carries no NID field, and the form has no NID input, mask or clear box", () => {
     const screen = toProfileScreen({ ...base0, phoneVerifiedAt: null }, true, {
       billingName: "Rahim",
       billingAddress: "House 5, Dhaka",
       customerBin: null,
-      customerNid: nid,
-    });
-    const wire = JSON.stringify(screen);
-    expect(wire).not.toContain(nid);
-    expect(wire).not.toContain(nid.slice(0, 9));
-    expect(screen.billing.customerNidMasked).toBe("*********6789");
-    expect(screen.billing.hasNid).toBe(true);
-    expect(Object.keys(screen.billing)).not.toContain("customerNid");
-  });
-
-  it("shows a stored NID masked, never in full, with a keep-or-replace field and a remove box", () => {
-    const stored = { ...SCREEN.billing, customerNidMasked: "*********6789", hasNid: true };
-    const html = profile({ ...SCREEN, billing: stored })("en");
-    expect(html).toContain("*********6789");
-    expect(html).not.toContain("1990123456789");
-    expect(html).toMatch(/name="customerNid"[^>]*value=""|value=""[^>]*name="customerNid"/);
-    expect(html).toContain('name="clearCustomerNid"');
-    const bn = profile({ ...SCREEN, billing: stored })("bn");
-    expect(bn).toContain("*********6789");
-    expect(bn).toContain('name="clearCustomerNid"');
+      customerNid: "1990123456789",
+    } as never);
+    expect(JSON.stringify(screen)).not.toContain("1990123456789");
+    expect(Object.keys(screen.billing).sort()).toEqual(
+      ["billingAddress", "billingName", "customerBin"].sort(),
+    );
+    for (const locale of ["en", "bn"] as const) {
+      const html = profile(SCREEN)(locale);
+      expect(html).not.toContain("clearCustomerNid");
+      expect(html).not.toContain('name="customerNid"');
+    }
   });
 
   it("shows no remove box when no NID is stored, and the BIN responsibility text in both languages", () => {

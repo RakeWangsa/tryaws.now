@@ -14,8 +14,8 @@ import {
 export interface BuyerSnapshot {
   name: string | null;
   address: string | null;
-  /** A BIN (13 digits) or a NID (10, 13 or 17 digits); the invoice names one. */
-  taxId: { kind: "bin" | "nid"; value: string } | null;
+  /** The BIN (13 digits) of a registered business, or null. There is no NID (WPU-D3). */
+  taxId: { kind: "bin"; value: string } | null;
 }
 
 /** The fields of the customer's billing profile that the snapshot is made from. */
@@ -23,13 +23,11 @@ export interface BillingFields {
   billingName: string | null;
   billingAddress: string | null;
   customerBin: string | null;
-  customerNid: string | null;
 }
 
 // WPU-I5: the limits and the way a length is counted are one rule, in @tc/db (the db check uses it too).
 const NAME_MAX = BUYER_NAME_MAX;
 const ADDRESS_MAX = BUYER_ADDRESS_MAX;
-const NID_LENGTHS: readonly number[] = [10, 13, 17];
 
 /**
  * null when the profile holds no billing detail at all: nothing is stored, the invoice prints "-".
@@ -41,11 +39,7 @@ export function buyerSnapshotFrom(
   fallbackName: string | null = null,
 ): BuyerSnapshot | null {
   const taxId =
-    profile.customerBin !== null
-      ? ({ kind: "bin", value: profile.customerBin } as const)
-      : profile.customerNid !== null
-        ? ({ kind: "nid", value: profile.customerNid } as const)
-        : null;
+    profile.customerBin !== null ? ({ kind: "bin", value: profile.customerBin } as const) : null;
   if (profile.billingName === null && profile.billingAddress === null && taxId === null) {
     return null;
   }
@@ -63,7 +57,11 @@ function optionalText(value: unknown, max: number): string | null | undefined {
   return value;
 }
 
-/** The stored snapshot, or null when it is missing or malformed. Unknown keys are dropped. */
+/**
+ * The stored snapshot, or null when it is missing or malformed. Unknown keys are dropped. A snapshot
+ * issued before WPU-D3 may hold a NID as its tax id: it is accepted (the invoice stays readable) but the
+ * number is never returned or printed, the tax id becomes null.
+ */
 export function parseBuyerSnapshot(value: unknown): BuyerSnapshot | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
@@ -78,8 +76,7 @@ export function parseBuyerSnapshot(value: unknown): BuyerSnapshot | null {
     const v = t["value"];
     if (typeof v !== "string" || !/^[0-9]+$/.test(v)) return null;
     if (t["kind"] === "bin" && v.length === 13) taxId = { kind: "bin", value: v };
-    else if (t["kind"] === "nid" && NID_LENGTHS.includes(v.length))
-      taxId = { kind: "nid", value: v };
+    else if (t["kind"] === "nid" && [10, 13, 17].includes(v.length)) taxId = null;
     else return null;
   }
   return { name, address, taxId };

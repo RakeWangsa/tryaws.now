@@ -218,8 +218,10 @@ export function createEpsGateway(credentials: EpsCredentials, deps: HttpDeps): E
         return { ok: false, reason: "unavailable" };
       if (hasErrorCode(pick(r.body, "ErrorCode", "errorCode")))
         return { ok: false, reason: "rejected" };
+      // The .test host is accepted only outside production mode (WPU-D3).
       const redirectUrl = checkGatewayRedirect(
         pick(r.body, "RedirectURL", "redirectURL", "redirectUrl"),
+        { allowTestHosts: credentials.mode !== "production" },
       );
       if (redirectUrl === null) return { ok: false, reason: "unavailable" };
       return {

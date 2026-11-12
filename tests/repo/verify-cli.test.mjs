@@ -157,6 +157,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T4",
     "WPU-C1",
     "WPU-D1",
+    "WPU-D3",
     "WPU-G1",
     "WPU-G10",
     "WPU-G11",
@@ -179,6 +180,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-M3",
     "WPU-M4",
     "WPU-M5",
+    "WPU-M6",
     "WPU-S1",
     "WPU-S2",
     "WPU-S3",
@@ -387,6 +389,50 @@ it("the proof of WPU-I4 exists: both snapshots, the buyer read at issue, the gra
   }
 });
 
+it("task WPU-D3 is proven by lint, types, format, the core, db, aws, eps, sweeper, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-D3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["eps", "pnpm test --filter @tc/eps --no-passWithNoTests"],
+    ["payments-sweeper", "pnpm test --filter @tc/fn-payments-sweeper --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-D3 exists: no NID, the DNS price and margin, the guards on payments, the KYC index, the redirect list, the alert, the address", () => {
+  for (const [file, part] of [
+    ["packages/db/migrations/0019_drop_customer_nid.sql", 'DROP COLUMN "customer_nid"'],
+    ["packages/db/test/billing-profile.test.ts", "the NID column and its checks are gone"],
+    ["packages/core/invoices/buyer.test.ts", "never returned"],
+    ["packages/core/orders/config-price-order.test.ts", "the seeded book is a 15 percent margin"],
+    [
+      "packages/core/orders/config-price-order.test.ts",
+      "with no book row the price is the base only",
+    ],
+    ["packages/db/test/dns-seed-migration.test.ts", "never overwrites an edited price"],
+    ["packages/db/test/payments-guards.test.ts", "a credited payment is final"],
+    ["packages/db/test/kyc-repo.test.ts", "one pending submission per customer"],
+    ["packages/eps/test/redirect.test.ts", "the test host is refused by default"],
+    ["packages/eps/test/verify.test.ts", "raises credit_blocked"],
+    ["packages/eps/test/verify.test.ts", "after the credit transaction has committed"],
+    ["packages/aws/test/linux-instance.test.ts", "written to the resource config at create"],
+    [
+      "packages/aws/test/container-service.test.ts",
+      "stores the public host in the resource config",
+    ],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
 it("task WPU-I5 is proven by lint, types, format, the core, db, scheduler, web and admin tests and the repository tests", () => {
   expect(TASKS["WPU-I5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
     ["spec-sync", "pnpm spec:check"],
@@ -479,6 +525,53 @@ it("the proof of WPU-C1 exists: the supply date, the credit note, its numbers, t
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
   }
+});
+
+it("task WPU-M6 is proven by the checks of both merged sides: lint, types, format, the core, db, scheduler, aws, eps, sweeper, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-M6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["eps", "pnpm test --filter @tc/eps --no-passWithNoTests"],
+    ["payments-sweeper", "pnpm test --filter @tc/fn-payments-sweeper --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-M6 exists: one journal in order and one snapshot chain over 0018, 0019 to 0021 and 0023", () => {
+  const dir = "packages/db/migrations";
+  const journal = JSON.parse(readFileSync(`${dir}/meta/_journal.json`, "utf8"));
+  const tags = journal.entries.map((e) => e.tag);
+  expect(tags.slice(-5)).toEqual([
+    "0018_invoice_order_and_reversal",
+    "0019_drop_customer_nid",
+    "0020_dns_zone_price_and_kyc_open_index",
+    "0021_payments_gateway_id_unique_and_credited_guard",
+    "0023_invoice_supply_date_and_credit_notes",
+  ]);
+  journal.entries.forEach((e, i) => {
+    expect(e.idx, e.tag).toBe(i);
+    if (i > 0) expect(e.when, e.tag).toBeGreaterThan(journal.entries[i - 1].when);
+    expect(existsSync(`${dir}/${e.tag}.sql`), e.tag).toBe(true);
+  });
+  const snap = (tag) =>
+    JSON.parse(readFileSync(`${dir}/meta/${tag.slice(0, 4)}_snapshot.json`, "utf8"));
+  const chain = tags.slice(-5).map(snap);
+  chain.forEach((s, i) => {
+    if (i > 0) expect(s.prevId, tags.slice(-5)[i]).toBe(chain[i - 1].id);
+  });
+  const invoices = chain[4].tables["public.invoices"] ?? chain[4].tables.public?.invoices;
+  expect(JSON.stringify(chain[4])).not.toContain("customer_nid");
+  expect(JSON.stringify(chain[4])).toContain("invoices_fiscal_year_kind_number_unique");
+  expect(invoices).toBeDefined();
 });
 
 it("task WPU-I3 is proven by lint, types, format, the core, db, web and admin tests and the repository tests", () => {
@@ -723,12 +816,12 @@ it("task WPU-S8 is proven by lint, types, format, the core, renderer, web and re
   ]);
 });
 
-it("the proof of WPU-S8 exists: the admin grants, the fresh sign-in, the masked NID and the renderer check", () => {
+it("the proof of WPU-S8 exists: the admin grants, the fresh sign-in for the BIN, no NID and the renderer check", () => {
   for (const [file, part] of [
     ["tests/repo/infra-rules.test.mjs", "away from the admin role (WPU-S8)"],
-    ["apps/web/server/billing-actions.test.ts", "tax identifiers need a fresh sign-in (WPU-S8)"],
-    ["apps/web/app/[locale]/(panel)/settings/settings.test.tsx", "never carries the full NID"],
-    ["packages/core/validation/billing-profile.test.ts", "maskNid shows the last 4 digits only"],
+    ["apps/web/server/billing-actions.test.ts", "the BIN needs a fresh sign-in (WPU-S8)"],
+    ["apps/web/app/[locale]/(panel)/settings/settings.test.tsx", "the loader carries no NID field"],
+    ["packages/core/validation/billing-profile.test.ts", "there is no NID"],
     [
       "functions/invoice-renderer/handler.test.ts",
       "renders the customer's own text as escaped text",

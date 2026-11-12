@@ -1,6 +1,6 @@
 {
   "id": "7d5a4c62-3e7b-4d99-8c8a-2e39e3c1f023",
-  "prevId": "7d4f3b51-2d6a-4c88-8b79-1d28d2b0e018",
+  "prevId": "7d5a4f3b-2d6a-4c88-8b79-1d28d2b0e021",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -840,12 +840,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "customer_nid": {
-          "name": "customer_nid",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -907,14 +901,6 @@
         "customers_customer_bin_check": {
           "name": "customers_customer_bin_check",
           "value": "\"customers\".\"customer_bin\" is null or \"customers\".\"customer_bin\" ~ '^[0-9]{13}$'"
-        },
-        "customers_customer_nid_check": {
-          "name": "customers_customer_nid_check",
-          "value": "\"customers\".\"customer_nid\" is null or \"customers\".\"customer_nid\" ~ '^([0-9]{10}|[0-9]{13}|[0-9]{17})$'"
-        },
-        "customers_tax_id_one_check": {
-          "name": "customers_tax_id_one_check",
-          "value": "\"customers\".\"customer_bin\" is null or \"customers\".\"customer_nid\" is null"
         }
       },
       "isRLSEnabled": false
@@ -998,6 +984,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kyc_submissions_one_pending_idx": {
+          "name": "kyc_submissions_one_pending_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"kyc_submissions\".\"status\" = 'pending'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2220,6 +2222,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payments_gateway_transaction_id_unique": {
+          "name": "payments_gateway_transaction_id_unique",
+          "columns": [
+            {
+              "expression": "gateway_transaction_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"payments\".\"gateway_transaction_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

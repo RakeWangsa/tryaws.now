@@ -131,7 +131,7 @@ export function InvoiceDetailContent({
             {buyer?.address ? <p className="seccolor small mb-0">{buyer.address}</p> : null}
             {taxId !== null ? (
               <p className="seccolor small mb-0">
-                {taxId.kind === "bin" ? t("detail.taxIdBin") : t("detail.taxIdNid")}: {taxId.value}
+                {t("detail.taxIdBin")}: {taxId.value}
               </p>
             ) : null}
           </div>

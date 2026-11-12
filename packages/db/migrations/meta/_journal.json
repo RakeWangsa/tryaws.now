@@ -131,6 +131,27 @@
     {
       "idx": 18,
       "version": "7",
+      "when": 1794493378288,
+      "tag": "0019_drop_customer_nid",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794496978288,
+      "tag": "0020_dns_zone_price_and_kyc_open_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794500578288,
+      "tag": "0021_payments_gateway_id_unique_and_credited_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
       "when": 1794507778288,
       "tag": "0023_invoice_supply_date_and_credit_notes",
       "breakpoints": true

@@ -2,30 +2,26 @@ import { expect, it } from "vitest";
 import { buyerSnapshotFrom, parseBuyerSnapshot } from "./buyer";
 import { renderInvoiceHtml, type InvoiceDocument } from "./render";
 
-const none = { billingName: null, billingAddress: null, customerBin: null, customerNid: null };
+const none = { billingName: null, billingAddress: null, customerBin: null };
 
 it("no billing detail at all gives no snapshot: the invoice prints '-' as before", () => {
   expect(buyerSnapshotFrom(none)).toBeNull();
 });
 
-it("a snapshot holds exactly what the profile held, with the BIN or the NID as one tax id", () => {
+it("a snapshot holds exactly what the profile held, with the BIN as the tax id", () => {
   expect(
     buyerSnapshotFrom({
       billingName: "Rahim & Sons",
       billingAddress: "House 5, Dhaka",
       customerBin: "1234567890123",
-      customerNid: null,
     }),
   ).toEqual({
     name: "Rahim & Sons",
     address: "House 5, Dhaka",
     taxId: { kind: "bin", value: "1234567890123" },
   });
-  expect(buyerSnapshotFrom({ ...none, customerNid: "1234567890" })).toEqual({
-    name: null,
-    address: null,
-    taxId: { kind: "nid", value: "1234567890" },
-  });
+  // A profile object that still carries a NID (an old caller) never puts it on the snapshot.
+  expect(buyerSnapshotFrom({ ...none, customerNid: "1234567890" } as never)).toBeNull();
   expect(buyerSnapshotFrom({ ...none, billingAddress: "House 5, Dhaka" })).toEqual({
     name: null,
     address: "House 5, Dhaka",
@@ -42,7 +38,7 @@ it("the billing name defaults to the profile name, but only when some billing de
   });
   expect(
     buyerSnapshotFrom(
-      { ...none, billingName: "Rahim Traders", customerNid: "1234567890" },
+      { ...none, billingName: "Rahim Traders", customerBin: "1234567890123" },
       "Karim",
     ),
   ).toMatchObject({ name: "Rahim Traders" });
@@ -62,6 +58,13 @@ it("parseBuyerSnapshot reads a stored snapshot and refuses anything malformed (R
   expect(
     parseBuyerSnapshot({ ...stored, taxId: { kind: "nid", value: "123456789012" } }),
   ).toBeNull();
+  // WPU-D3: a snapshot issued before the NID was removed is still accepted, but the number is never returned.
+  const old = parseBuyerSnapshot({ ...stored, taxId: { kind: "nid", value: "1234567890" } });
+  expect(old).toEqual({ name: "A B", address: "House 5, Dhaka", taxId: null });
+  expect(JSON.stringify(old)).not.toMatch(/1234567890(?!\d)/);
+  expect(JSON.stringify(parseBuyerSnapshot({ ...stored, nid: "1990123456" }))).not.toContain(
+    "1990123456",
+  );
   expect(
     parseBuyerSnapshot({ ...stored, taxId: { kind: "tin", value: "1234567890123" } }),
   ).toBeNull();
@@ -114,12 +117,14 @@ it("renders the buyer address and BIN, in Bengali digits for bn", () => {
   expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
 });
 
-it("renders a NID with the NID label, and '-' for what the customer did not enter", () => {
+it("prints the BIN only, never a NID, and '-' for what the customer did not enter", () => {
   const html = renderInvoiceHtml(
-    doc({ name: "Rahim", address: null, taxId: { kind: "nid", value: "1234567890" } }),
+    doc({ name: "Rahim", address: null, taxId: { kind: "nid", value: "1234567890" } as never }),
     "en",
   );
-  expect(html).toContain("<strong>NID:</strong> 1234567890");
+  expect(html).not.toContain("1234567890");
+  expect(html).not.toContain("NID");
+  expect(html).toContain("<strong>BIN:</strong> -");
   expect(html).toContain("<strong>Address:</strong> -");
   const empty = renderInvoiceHtml(doc({ name: "Rahim" }), "en");
   expect(empty).toContain("<strong>Address:</strong> -");

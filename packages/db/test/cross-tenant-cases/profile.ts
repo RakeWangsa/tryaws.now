@@ -32,7 +32,6 @@ export const profileCases: CaseSet = defineCaseSet<{ customerId: string }>({
             billingName: "Rahim Traders",
             billingAddress: "House 5, Dhaka",
             customerBin: "1234567890123",
-            customerNid: null,
           }),
         ),
     },

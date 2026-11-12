@@ -107,19 +107,58 @@ async function run(
   const reading = sanitize(asked.reading);
 
   // 5. Transaction B: the locked row decides. `first` is not used below.
-  const applied = await deps.run((tx) => settle(deps, tx, id, reading, options));
+  let applied: Applied | null;
+  try {
+    applied = await deps.run((tx) => settle(deps, tx, id, reading, options));
+  } catch (error) {
+    // A verified success that cannot be credited because the wallet is missing (WPU-D3, audit C.8): the
+    // transaction rolled back, nothing was credited (R16). Finance is told, after the rollback, and the
+    // answer is an error so the payment is tried again (the sweeper or the next return).
+    if (error instanceof CreditBlockedError) {
+      await raiseAlert(deps, {
+        kind: "credit_blocked",
+        paymentId: error.paymentId,
+        reason: "wallet_missing",
+        expectedMinor: error.expectedMinor,
+        gotMinor: error.expectedMinor,
+      });
+      safeLog(deps, "eps.verify", { paymentId: error.paymentId, reason: "wallet_missing" });
+      return { result: { ok: false, error: "internal" }, kind: "error" };
+    }
+    throw error;
+  }
   if (applied === null) return refused("not_found");
 
   // After the commit: the alert. A failing alert never hides the result and is not retried here.
-  if (applied.alert !== null) {
+  if (applied.alert !== null) await raiseAlert(deps, applied.alert);
+  // After the commit: the credited hook (WPU-D3). The credit is final; a failing hook is logged only.
+  if (applied.credited !== null && deps.onCredited !== undefined) {
     try {
-      await deps.alert.raise(applied.alert);
+      await deps.onCredited(applied.credited);
     } catch {
-      safeLog(deps, "eps.verify", { paymentId: applied.paymentId, reason: "alert_failed" });
+      safeLog(deps, "eps.verify", { paymentId: applied.paymentId, reason: "on_credited_failed" });
     }
   }
   safeLog(deps, "eps.verify", { paymentId: applied.paymentId, state: applied.status });
   return answered(publicState(applied.status), applied.kind);
+}
+
+async function raiseAlert(deps: EpsDeps, event: Parameters<EpsDeps["alert"]["raise"]>[0]) {
+  try {
+    await deps.alert.raise(event);
+  } catch {
+    safeLog(deps, "eps.verify", { paymentId: event.paymentId, reason: "alert_failed" });
+  }
+}
+
+/** The credit cannot be posted because the customer has no wallet and none could be opened. */
+class CreditBlockedError extends Error {
+  constructor(
+    readonly paymentId: string,
+    readonly expectedMinor: bigint,
+  ) {
+    super("credit: no wallet");
+  }
 }
 
 function answered(state: PublicState, kind: VerifyKind): VerifyReport {
@@ -162,6 +201,8 @@ interface Applied {
   paymentId: string;
   status: PaymentState;
   kind: VerifyKind;
+  /** Set when this pass posted the credit: the hook runs on it after the commit. */
+  credited: StoredPayment | null;
   alert: {
     kind: "payment_review";
     paymentId: string;
@@ -237,6 +278,7 @@ async function settle(
     paymentId: payment.id,
     status,
     kind,
+    credited: null,
     alert: null,
   });
 
@@ -244,8 +286,12 @@ async function settle(
     case "credit": {
       // The wallet exists from sign-up. Only a missing one is opened (worker_rw cannot insert wallets).
       if ((await readWalletRow(tx, payment.customerId.toLowerCase())) === null) {
-        const opened = await openWallet(tx, payment.customerId);
-        if (!opened.ok) throw new Error("credit: no wallet");
+        // A role that may not open a wallet gets a database error, not a refusal: both are the same
+        // outcome here (WPU-D3). Nothing of the error is kept (R14).
+        const opened = await openWallet(tx, payment.customerId).catch(() => null);
+        if (opened === null || !opened.ok) {
+          throw new CreditBlockedError(payment.id, payment.amountMinor);
+        }
       }
       const posted = await postTransaction(tx, {
         kind: "topup",
@@ -276,8 +322,7 @@ async function settle(
       });
       // The guard says the row was not open any more: roll the credit back, no double (R6).
       if (!moved) throw new Error("credit: the payment was not open");
-      await deps.onCredited?.(tx, { ...payment, status: "credited" });
-      return done("credited", "credited");
+      return { ...done("credited", "credited"), credited: { ...payment, status: "credited" } };
     }
     case "move": {
       const moved = await systemPayments.applyOutcome(
@@ -305,6 +350,7 @@ async function settle(
         paymentId: payment.id,
         status: "review",
         kind: "review",
+        credited: null,
         alert: {
           kind: "payment_review",
           paymentId: payment.id,

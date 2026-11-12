@@ -129,6 +129,38 @@ async function findService(
   return got?.containerServices?.find((s) => s.containerServiceName === name) ?? null;
 }
 
+const URL_HOST_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const URL_HOST = new RegExp(`^${URL_HOST_LABEL}(?:\\.${URL_HOST_LABEL}){1,7}$`);
+
+/**
+ * WPU-D3 (audit C.36): the public address of the service, as a plain host name. AWS gives `url` as
+ * "https://<name>.<id>.<region>.cs.amazonlightsail.com/"; only an https URL with a plain host and no
+ * credentials, port, path content, query or fragment is kept. Anything else is no address (null): the
+ * screens then show none, never a guess (R16). It is AWS data about the customer's own service: it holds
+ * no account id and no ARN.
+ */
+export function publicHostOf(url: unknown): string | null {
+  if (typeof url !== "string" || url.length === 0 || url.length > 300) return null;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || u.username !== "" || u.password !== "" || u.port !== "") {
+      return null;
+    }
+    if (u.search !== "" || u.hash !== "" || (u.pathname !== "/" && u.pathname !== "")) return null;
+    const host = u.hostname.toLowerCase();
+    return host.length <= 253 && URL_HOST.test(host) ? host : null;
+  } catch {
+    return null;
+  }
+}
+
+const withPublicUrl = (
+  service: ContainerService | null,
+): { configMerge?: { publicUrl: string } } => {
+  const host = publicHostOf(service?.url);
+  return host === null ? {} : { configMerge: { publicUrl: host } };
+};
+
 function awsDeployment(serviceName: string, deployment: Deployment) {
   const endpoint = deployment.publicEndpoint;
   return {
@@ -221,7 +253,13 @@ export function createContainerServiceAdapter(
       }
       case "deploy": {
         const deployment = savedDeployment(ctx);
-        if (deployment === null) return stepDone({ state: "active", awsName: name });
+        if (deployment === null) {
+          return stepDone({
+            state: "active",
+            awsName: name,
+            ...withPublicUrl(await findService(lightsail, name)),
+          });
+        }
         const service = await findService(lightsail, name);
         if (service === null) throw fail("upstream_unavailable");
         // A retry does not make a second deployment.
@@ -234,8 +272,11 @@ export function createContainerServiceAdapter(
         return stepNext("wait_deploy");
       }
       case "wait_deploy": {
-        const state = (await findService(lightsail, name))?.state;
-        if (state === "RUNNING") return stepDone({ state: "active", awsName: name });
+        const service = await findService(lightsail, name);
+        const state = service?.state;
+        if (state === "RUNNING") {
+          return stepDone({ state: "active", awsName: name, ...withPublicUrl(service) });
+        }
         if (state === "DEPLOYING" || state === "UPDATING" || state === "PENDING") {
           checkWaitBudget(ctx);
           return stepWait("wait_deploy", pollAt(ctx));

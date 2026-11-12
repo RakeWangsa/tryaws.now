@@ -29,8 +29,8 @@ export interface InvoiceDocument {
   customer: {
     name: string | null;
     address?: string | null;
-    /** The buyer's BIN or NID, only when the customer has one. */
-    taxId?: { kind: "bin" | "nid"; value: string } | null;
+    /** The buyer's BIN, only when the customer has one (a registered business). No NID (WPU-D3). */
+    taxId?: { kind: "bin"; value: string } | null;
   };
   lines: readonly InvoiceLine[];
   totalMinor: Minor;
@@ -133,7 +133,6 @@ const MUSHAK = {
     address: "Address",
     circle: "VAT circle / commissionerate",
     buyer: "Buyer",
-    nid: "NID",
     invoiceNo: "Challan / invoice no.",
     issued: "Date and time of issue",
     destination: "Delivery destination",
@@ -187,7 +186,6 @@ const MUSHAK = {
     address: "ঠিকানা",
     circle: "ভ্যাট সার্কেল / কমিশনারেট",
     buyer: "ক্রেতা",
-    nid: "এনআইডি",
     invoiceNo: "চালান / ইনভয়েস নম্বর",
     issued: "ইস্যুর তারিখ ও সময়",
     destination: "সরবরাহের গন্তব্য",
@@ -401,7 +399,9 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
   const buyerName =
     doc.customer.name === null || doc.customer.name === "" ? dash : esc(doc.customer.name);
   const buyerTaxText =
-    buyerTax === null || buyerTax === undefined ? dash : num(esc(buyerTax.value));
+    buyerTax === null || buyerTax === undefined || buyerTax.kind !== "bin"
+      ? dash
+      : num(esc(buyerTax.value));
   const when = `${dateText(doc.issuedAt, locale, doc.numerals)} ${timeText(doc.issuedAt, locale, doc.numerals)}`;
   const credit = doc.kind === "credit_note";
   // A credit note names the invoice it credits and the reason (ruling 6); it never prints without them (R16).
@@ -449,7 +449,7 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
     `</div><div><h2>${t.buyer}</h2>`,
     `<div><strong>${t.sellerName}:</strong> ${buyerName}</div>`,
     `<div><strong>${t.address}:</strong> ${buyerAddress}</div>`,
-    `<div><strong>${buyerTax?.kind === "nid" ? t.nid : t.bin}:</strong> ${buyerTaxText}</div>`,
+    `<div><strong>${t.bin}:</strong> ${buyerTaxText}</div>`,
     `</div></div>`,
     `<div class="grid"><div>${numberBlock}</div>`,
     `<div><strong>${t.destination}:</strong> ${buyerAddress}<br><strong>${t.vehicle}:</strong> ${dash}</div></div>`,

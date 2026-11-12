@@ -66,7 +66,7 @@ export type CreditNoteResult =
 export interface NewInvoiceBuyer {
   name: string | null;
   address: string | null;
-  taxId: { kind: "bin" | "nid"; value: string } | null;
+  taxId: { kind: "bin"; value: string } | null;
 }
 
 export interface NewInvoice {
@@ -218,9 +218,8 @@ function buyerValid(b: unknown): boolean {
   if (typeof taxId !== "object" || Array.isArray(taxId)) return false;
   const { kind, value } = taxId as Record<string, unknown>;
   if (typeof value !== "string" || !DIGITS.test(value)) return false;
-  return kind === "bin"
-    ? value.length === 13
-    : kind === "nid" && [10, 13, 17].includes(value.length);
+  // BIN only (WPU-D3): a new snapshot never carries a NID.
+  return kind === "bin" && value.length === 13;
 }
 
 // WPU-I5: the fiscal year (July to June, Dhaka UTC+6) of an instant, in the database, so that the year and

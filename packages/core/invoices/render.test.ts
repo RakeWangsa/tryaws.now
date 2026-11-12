@@ -105,14 +105,14 @@ describe("renderInvoiceHtml", () => {
   });
   it("shows the seller legal name, BIN and address in the locale, and the buyer", () => {
     const en = renderInvoiceHtml(
-      { ...doc, customer: { ...doc.customer, taxId: { kind: "nid", value: "1990123456789" } } },
+      { ...doc, customer: { ...doc.customer, taxId: { kind: "bin", value: "1990123456789" } } },
       "en",
     );
     expect(en).toContain("Example Services Limited");
     expect(en).toContain("1234567890123");
     expect(en).toContain("Road 1, Dhaka");
     expect(en).toContain("Dhaka South");
-    expect(en).toContain("NID");
+    expect(en).not.toContain("NID");
     expect(en).toContain("1990123456789");
     const bn = renderInvoiceHtml(doc, "bn");
     expect(bn).toContain("উদাহরণ সার্ভিসেস লিমিটেড");
