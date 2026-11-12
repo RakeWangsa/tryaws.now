@@ -79,11 +79,13 @@ export function web(inputs: WebInputs) {
   const stage = config.stage;
   const vpc = { privateSubnets: net.vpc.privateSubnets, securityGroups: [net.appSecurityGroup.id] };
   const invoke = (...dirs: string[]) => dirs.map((dir) => workers.invoked[dir]?.arn);
-  const dbEnvironment = (role: string) => ({
+  const dbEnvironment = (role: "web_rw" | "admin_rw") => ({
     DB_HOST: db.connection.host,
     DB_PORT: db.connection.port,
     DB_NAME: db.connection.name,
     DB_USER: role,
+    // The name of the linked secret that holds this role's password (packages/db/env.ts).
+    DB_PASSWORD_SECRET: DB_PASSWORD_SECRET[role],
     DB_SSLMODE: "verify-full",
   });
 

@@ -8,7 +8,7 @@ export { loadReadTarget } from "./operations/reader";
 export type { ReadCaller, ReadTarget } from "./operations/reader";
 export { createDatabase } from "./client";
 export type { Database, Tx } from "./client";
-export { databaseUrl, LOCAL_DATABASE_URL } from "./env";
+export { databaseUrl, databaseUrlFromEnv, DATABASE_URL_ERROR, LOCAL_DATABASE_URL } from "./env";
 export { DbError, isRetryable, RETRYABLE_SQLSTATES } from "./errors";
 export { withTx, closeDatabase } from "./tx";
 export type { DatabaseRole } from "./tx";

@@ -474,4 +474,14 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     const admin = between(web, 'new sst.aws.Nextjs("Admin"');
     expect(admin).not.toMatch(/WEB_SECRETS|Eps/);
   });
+
+  it("gives web, admin and the database functions the NAME of their password secret, never a value", () => {
+    expect(workers).toContain("env.DB_PASSWORD_SECRET = DB_PASSWORD_SECRET[spec.dbRole]");
+    expect(web).toContain("DB_PASSWORD_SECRET: DB_PASSWORD_SECRET[role]");
+    expect(web).toContain('dbEnvironment("web_rw")');
+    expect(web).toContain('dbEnvironment("admin_rw")');
+    for (const [name, text] of Object.entries({ web, workers })) {
+      expect(text, name).not.toMatch(/DB_PASSWORD\b|DATABASE_URL|\.password\b/);
+    }
+  });
 });

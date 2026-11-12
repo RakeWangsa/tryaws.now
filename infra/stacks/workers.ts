@@ -10,7 +10,7 @@
 //
 // NOT TYPE-CHECKED, see network.ts.
 import { PROVISIONING_QUEUE } from "../../packages/core/operations/queue-config";
-import { DB_ROLES, FUNCTIONS, type FunctionSpec } from "../lib/functions";
+import { DB_PASSWORD_SECRET, DB_ROLES, FUNCTIONS, type FunctionSpec } from "../lib/functions";
 import { assumableRoleArns, roleName, type StageConfig } from "../lib/stage";
 import type { Database } from "./database";
 import type { Messaging } from "./messaging";
@@ -60,12 +60,14 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
   };
   if (spec.dbRole !== "none") {
     // R2: through the proxy, TLS only. The password comes from the linked secret of this role.
-    // HAND-OFF: packages/db reads DATABASE_URL (packages/db/env.ts). A task of packages/db must
-    // build the URL at run time from these variables and the linked password (JOURNEY.md).
+    // packages/db builds the URL at run time (databaseUrlFromEnv): the parts here, the password from
+    // the linked secret that DB_PASSWORD_SECRET names (SST_RESOURCE_<name>). The migrator reads the
+    // master user from the linked Postgres resource and ignores DB_USER and DB_PASSWORD_SECRET.
     env.DB_HOST = db.connection.host;
     env.DB_PORT = db.connection.port;
     env.DB_NAME = db.connection.name;
     env.DB_USER = spec.dbRole;
+    env.DB_PASSWORD_SECRET = DB_PASSWORD_SECRET[spec.dbRole];
     env.DB_SSLMODE = "verify-full";
   }
   if (spec.dir === "provisioner" || spec.dir === "scheduler") {
