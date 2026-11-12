@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import {
   fxChangeNeedsSecondAdmin,
   previewBook,
+  previewConfigPrice,
   previewChange,
   savePricingRule,
   setFeatureFlag,
@@ -57,6 +58,7 @@ export function pricingFlowDeps(): PricingFlowDeps {
     clock: { now: () => new Date() },
     core: {
       previewBook,
+      previewConfigPrice,
       previewChange,
       savePricingRule,
       setFxRate,

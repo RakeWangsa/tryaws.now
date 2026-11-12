@@ -198,6 +198,45 @@ const GATE_CASES: Record<string, GateCase> = {
       r.blueprints.setEnabled({ market: "BD", blueprintId: "some_image", enabled: true }, "r"),
     deny: "finance",
   },
+  "blueprints.setMinPower": {
+    call: (r) =>
+      r.blueprints.setMinPower({ market: "BD", blueprintId: "some_image", minPower: 500 }, "r"),
+    deny: "finance",
+  },
+  "configPrices.read": { call: (r) => r.configPrices.read("BD"), deny: "support" },
+  "configPrices.save": {
+    call: (r) =>
+      r.configPrices.save(
+        {
+          market: "BD",
+          key: "config_price.load_balancer_month",
+          usd: "18",
+          effectiveFrom: AT,
+          at: AT,
+        },
+        "r",
+      ),
+    deny: "support",
+  },
+  "tierLimits.read": { call: (r) => r.tierLimits.read("BD"), deny: "finance" },
+  "tierLimits.save": {
+    call: (r) =>
+      r.tierLimits.save(
+        {
+          market: "BD",
+          tier: "new",
+          limits: {
+            maxInstances: 5,
+            maxBundleUsd: "24",
+            windows: false,
+            containers: false,
+            maxStaticIps: 1,
+          },
+        },
+        "r",
+      ),
+    deny: "finance",
+  },
   "priceBook.read": { call: (r) => r.priceBook.read("BD"), deny: "support" },
   "priceBook.save": {
     call: (r) =>

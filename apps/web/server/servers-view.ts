@@ -5,6 +5,7 @@ import {
   imageLogoOf,
   isBlueprintId,
   loginUserOf,
+  minPowerOf,
   offeredImages,
   optionOf,
   priceCatalog,
@@ -54,6 +55,15 @@ export function planSpecsOf(specs: unknown): PlanSpecs {
   if (isCount(raw["diskGb"])) out.diskGb = raw["diskGb"];
   if (isCount(raw["transferGb"])) out.transferGb = raw["transferGb"];
   return out;
+}
+
+/** The bundle power of a plan from the catalog specs; null when it is not a whole number (WPU-G10). */
+export function powerOf(specs: unknown): number | null {
+  const power =
+    typeof specs === "object" && specs !== null
+      ? (specs as Record<string, unknown>)["power"]
+      : undefined;
+  return isCount(power) ? power : null;
 }
 
 export interface ServerConfig {
@@ -113,6 +123,8 @@ export interface PlanOption {
   region: string;
   priceMinor: bigint;
   specs: PlanSpecs;
+  /** WPU-G10: the bundle power (the unit of an image's minimum); absent or null when unknown. */
+  power?: number | null;
 }
 export interface KeyOption {
   id: string;
@@ -128,6 +140,8 @@ export interface ImageOption {
   version: string | null;
   loginUser: string | null;
   logo: string | null;
+  /** WPU-G10: the least bundle power the image needs (admin override, AWS value or the default); absent is 0. */
+  minPower?: number;
 }
 
 export type ConfiguratorScreen =
@@ -163,6 +177,7 @@ export async function loadConfigurator(
       region: row.region,
       priceMinor: row.priceBdt.totalMinor,
       specs: planSpecsOf(row.specs),
+      power: powerOf(row.specs),
     }));
     const keys = await repos.sshKeys.list();
     const regions = [...new Set(plans.map((plan) => plan.region))];
@@ -181,6 +196,7 @@ export async function loadConfigurator(
         version: o.version,
         loginUser: o.loginUser,
         logo: imageLogoOf(o.id),
+        minPower: switches === null ? 0 : minPowerOf(o, switches),
       }));
     }
     return {

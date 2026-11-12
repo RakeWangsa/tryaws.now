@@ -26,7 +26,7 @@ vi.mock("@tc/db", () => ({
       id: "p1",
       region: "ap-southeast-1",
       platform: "linux",
-      specs: { vcpus: 2 },
+      specs: { vcpus: 2, power: 1000 },
       awsPriceUsd: "5",
       featureFlag: "linux_instance",
     },
@@ -97,6 +97,7 @@ describe("loadConfigurator: the images of each Region", () => {
         version: null,
         loginUser: "ubuntu",
         logo: "ubuntu",
+        minPower: 0,
       },
       {
         id: "wordpress",
@@ -105,6 +106,7 @@ describe("loadConfigurator: the images of each Region", () => {
         version: null,
         loginUser: "bitnami",
         logo: "wordpress",
+        minPower: 1000, // an app with no known minimum: the default of the core
       },
       {
         id: "amazon_linux_2023",
@@ -113,11 +115,32 @@ describe("loadConfigurator: the images of each Region", () => {
         version: null,
         loginUser: "ec2-user",
         logo: null,
+        minPower: 0,
       },
     ]);
     // Each Region is asked for its own images; one with none has an empty list, not the other's.
     expect(screen.images["ap-south-1"]).toEqual([]);
     expect([...state.asked].sort()).toEqual(["ap-south-1", "ap-southeast-1"]);
+  });
+
+  it("WPU-G10: carries the minimum plan power of each image (AWS value, admin override) and the power of each plan", async () => {
+    state.images = {
+      "ap-southeast-1": [
+        {
+          ...img("wordpress", "app", "WordPress"),
+          specs: { ...img("wordpress", "app").specs, minPower: 2000 },
+        },
+        img("nodejs", "app", "Node"),
+        img("ubuntu_24_04", "os", "Ubuntu"),
+      ],
+    };
+    state.switches = { state: "ok", switches: { on: [], off: [], minPower: { nodejs: 500 } } };
+    const screen = (await loadConfigurator(session, now)) as Ready;
+    const byId = Object.fromEntries(
+      (screen.images["ap-southeast-1"] ?? []).map((i) => [i.id, i.minPower]),
+    );
+    expect(byId).toEqual({ wordpress: 2000, nodejs: 500, ubuntu_24_04: 0 });
+    expect(screen.plans.map((p) => p.power)).toEqual([1000, null]);
   });
 
   it("follows the admin switches: an image switched on appears, a default one switched off goes", async () => {

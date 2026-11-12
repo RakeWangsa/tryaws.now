@@ -25,3 +25,11 @@ export function lockPriceBookWrites(tx: Tx, market: string): Promise<void> {
 export function lockImageAllowListWrites(tx: Tx, market: string): Promise<void> {
   return lock(tx, "image_allowlist", market);
 }
+
+export function lockConfigPriceWrites(tx: Tx, market: string): Promise<void> {
+  return lock(tx, "config_price", market);
+}
+
+export function lockTierLimitsWrites(tx: Tx, market: string): Promise<void> {
+  return lock(tx, "tier_limits", market);
+}

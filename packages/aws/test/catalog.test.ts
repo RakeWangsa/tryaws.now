@@ -276,7 +276,9 @@ it("blueprints: follows nextPageToken, asks for inactive images too, and maps fi
     "lightsail",
     "GetBlueprints",
     lightsailOk({ blueprints: [bpWire()], nextPageToken: "p2" }),
-    lightsailOk({ blueprints: [bpWire({ blueprintId: "wordpress", type: "app" })] }),
+    lightsailOk({
+      blueprints: [bpWire({ blueprintId: "wordpress", type: "app", minPower: 1000 })],
+    }),
   );
   const out = await source.instanceBlueprints(POOL, "ap-southeast-1");
   expect(out.map((b) => b.blueprintId)).toEqual(["ubuntu_24_04", "wordpress"]);
@@ -288,7 +290,10 @@ it("blueprints: follows nextPageToken, asks for inactive images too, and maps fi
     version: "24.04 LTS",
     platform: "LINUX_UNIX",
     isActive: true,
+    minPower: null,
   });
+  // WPU-G10: minPower is read as the number AWS sends, and anything else is null
+  expect(out[1]).toMatchObject({ blueprintId: "wordpress", minPower: 1000 });
   const calls = aws.seen.filter((r) => r.action === "GetBlueprints");
   expect(calls).toHaveLength(2);
   expect(JSON.parse(calls[0]!.body)).toMatchObject({ includeInactive: true });
@@ -313,7 +318,16 @@ it("blueprints: a wrong field type becomes null or false, never a guessed defaul
     "lightsail",
     "GetBlueprints",
     lightsailOk({
-      blueprints: [bpWire({ blueprintId: 7, name: 5, type: ["os"], isActive: "yes", version: 1 })],
+      blueprints: [
+        bpWire({
+          blueprintId: 7,
+          name: 5,
+          type: ["os"],
+          isActive: "yes",
+          version: 1,
+          minPower: "1000",
+        }),
+      ],
     }),
   );
   const [b] = await source.instanceBlueprints(POOL, "ap-southeast-1");
@@ -323,6 +337,7 @@ it("blueprints: a wrong field type becomes null or false, never a guessed defaul
     type: null,
     version: null,
     isActive: false,
+    minPower: null,
   });
 });
 

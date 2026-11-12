@@ -346,6 +346,10 @@ const SERVER_CONTROLS = [
   "mapBlueprint",
   "offeredImages",
   "optionOf",
+  // WPU-G10: the minimum plan power of an image.
+  "DEFAULT_APP_MIN_POWER",
+  "minPowerOf",
+  "planFitsImage",
   "FIREWALL_ANYWHERE",
   "FIREWALL_MAX_RULES",
   "FIREWALL_MAX_SOURCES",
@@ -415,6 +419,9 @@ const PRICE_BOOK = [
   "BOOK_MAX_MARGIN_PERCENT",
   "isBookTerms",
   "previewBook",
+  // WPU-G10: the preview of a config price.
+  "CONFIG_PRICE_FAMILY",
+  "previewConfigPrice",
   "quoteWithBook",
   "validateBookTerms",
 ];

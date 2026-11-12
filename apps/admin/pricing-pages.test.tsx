@@ -42,6 +42,7 @@ vi.mock("./server/pricing-actions.ts", () => ({
   approveFxAction: async () => {},
   setFlagAction: async () => {},
   setImageAction: async () => {},
+  setImageMinPowerAction: async () => {},
 }));
 vi.mock("./server/pricing-data.ts", () => ({
   loadPricing: async (_admin: unknown, raw: unknown) => {
@@ -180,6 +181,9 @@ function catalog() {
           regions: ["ap-southeast-1", "ap-south-1"],
           on: true,
           explicit: false,
+          minPower: 1000,
+          minPowerBy: "default",
+          minPowerAdmin: null,
         },
         {
           id: "ubuntu_24_04",
@@ -189,6 +193,9 @@ function catalog() {
           regions: [],
           on: false,
           explicit: true,
+          minPower: 500,
+          minPowerBy: "admin",
+          minPowerAdmin: 500,
         },
       ],
       imagesInvalid: false,
@@ -419,6 +426,24 @@ describe("/catalog", () => {
     // Nothing synced from AWS is editable here.
     expect(html).not.toMatch(/name="(loginUser|kind|regions|blueprintId)"/);
   });
+
+  it.each(LOCALES)(
+    "WPU-G10: each image shows the minimum plan power in force and where it comes from, and has its own form in %s",
+    async (locale) => {
+      as("ops");
+      const html = inProvider(await CatalogPage(params(locale)), locale);
+      const m = msgs(locale).AdminCatalog.images;
+      expect(html).toContain(m.minPower);
+      expect(html).toContain(m.minPowerBy.default);
+      expect(html).toContain(m.minPowerBy.admin);
+      expect(html).toContain("<strong>1000</strong>");
+      expect(html).toContain(m.minPowerSave);
+      // one form for each image, with a reason of its own; the admin's value is the default of the field
+      expect(html.match(/name="powerReason"/g)?.length).toBe(2);
+      expect(html.match(/name="minPower"/g)?.length).toBe(2);
+      expect(html).toMatch(/name="minPower"[^>]*value="500"/);
+    },
+  );
 
   it("a stored list that cannot be read says so, and no image is shown as on", async () => {
     as("ops");

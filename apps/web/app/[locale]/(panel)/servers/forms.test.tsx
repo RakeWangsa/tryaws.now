@@ -5,7 +5,14 @@ import type { Locale } from "@tc/ui/runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { webMessages } from "../../../../i18n/messages.ts";
 import type { FormState } from "../../../../server/action-state.ts";
-import { configurator, noopAction, review } from "./servers.fixtures.ts";
+import {
+  PRODUCT_A,
+  PRODUCT_B,
+  configurator,
+  noopAction,
+  plan,
+  review,
+} from "./servers.fixtures.ts";
 
 // The forms keep the answer of their Server Action with useActionState. Static markup cannot submit,
 // so the answer is injected here, and the test reads what each answer makes the form show.
@@ -163,7 +170,21 @@ describe("ConfigForm (createOrderDraft)", () => {
     expect(en).not.toContain("disabled");
   });
 
-  it("a customer with no key sees how to add one and cannot submit; a Region with no image says so", () => {
+  it("WPU-G10: the key step offers the three ways of the console, and the existing key is the first when there is one", () => {
+    const en = config("en");
+    expect(en).toContain('name="keyMode" value="existing"');
+    expect(en).toContain("Use a key I already have");
+    expect(en).toContain("Create a new key pair");
+    expect(en).toContain("Upload my public key");
+    // the other two modes post their fields only when chosen
+    expect(en).not.toContain('name="newKeyName"');
+    expect(en).not.toContain('name="newKeyPublic"');
+    const bn = config("bn");
+    expect(bn).toContain("নতুন কী জোড়া বানাব");
+    expect(bn).toContain("আমার পাবলিক কী দেব");
+  });
+
+  it("WPU-G10: a customer with no key starts on the new key pair; the server cannot be created before the private key is downloaded", () => {
     const noKeys = intl(
       <ConfigForm
         locale="en"
@@ -175,9 +196,135 @@ describe("ConfigForm (createOrderDraft)", () => {
       />,
       "en",
     );
-    expect(noKeys).toContain("Add an SSH key first");
+    expect(noKeys).not.toContain("Add an SSH key first");
     expect(noKeys).not.toContain('name="keyPairId"');
-    expect(noKeys).toMatch(/<button[^>]*disabled/);
+    expect(noKeys).toContain('name="keyMode" value="generate"');
+    expect(noKeys).not.toContain("Use a key I already have");
+    expect(noKeys).toContain('name="newKeyName"');
+    expect(noKeys).toContain('<input type="hidden" name="newKeyPublic" value=""');
+    expect(noKeys).toContain("The private key never reaches us");
+    expect(noKeys).toMatch(/<button[^>]*type="submit"[^>]*disabled/);
+    // no private key text and no download link before a pair exists
+    expect(noKeys).not.toContain("PRIVATE KEY");
+    expect(noKeys).not.toContain("Download private key");
+  });
+
+  it("WPU-G10: a plan below the minimum power of the image is disabled with the reason, and the choice moves to a plan that fits", () => {
+    const small = plan({ id: PRODUCT_A, specs: { vcpus: 1, ramGb: "0.5" }, power: 500 });
+    const big = plan({ id: PRODUCT_B, specs: { vcpus: 2, ramGb: "1" }, power: 1000 });
+    const withApp = (minPower: number) =>
+      intl(
+        <ConfigForm
+          locale="en"
+          plans={[small, big]}
+          regions={["ap-south-1"]}
+          keys={screen.keys}
+          images={{
+            "ap-south-1": [
+              {
+                id: "wordpress",
+                name: "WordPress",
+                kind: "app",
+                version: null,
+                loginUser: "bitnami",
+                logo: "wordpress",
+                minPower,
+              },
+            ],
+          }}
+          action={noopAction}
+        />,
+        "en",
+      );
+    const en = withApp(1000);
+    const radio = (id: string) =>
+      (en.match(/<input[^>]*tc-plan-radio[^>]*>/g) ?? []).find((tag) => tag.includes(id)) ?? "";
+    expect(radio(PRODUCT_A)).toContain("disabled");
+    expect(radio(PRODUCT_B)).not.toContain("disabled");
+    expect(radio(PRODUCT_B)).toContain("checked");
+    expect(en).toContain("Too small for this image");
+    expect(en).toContain("WordPress needs a plan with 1 GB RAM or more");
+    // the hidden plan id is the plan that fits
+    expect(en).toContain('name="productId" value="0190aaaa-0000-7000-8000-0000000000b2"');
+    // a minimum of 0 disables nothing and shows no explanation
+    const free = withApp(0);
+    expect(free).not.toContain("Too small for this image");
+    expect(free).not.toContain("needs a plan with");
+  });
+
+  it("WPU-G10: when no plan of the Region fits the image the form says so and cannot be submitted", () => {
+    const html = intl(
+      <ConfigForm
+        locale="en"
+        plans={[plan({ power: 500 })]}
+        regions={["ap-south-1"]}
+        keys={screen.keys}
+        images={{
+          "ap-south-1": [
+            {
+              id: "wordpress",
+              name: "WordPress",
+              kind: "app",
+              version: null,
+              loginUser: "bitnami",
+              logo: "wordpress",
+              minPower: 2000,
+            },
+          ],
+        }}
+        action={noopAction}
+      />,
+      "en",
+    );
+    expect(html).toContain("No plan in this location is big enough to run WordPress");
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled/);
+    const bn = intl(
+      <ConfigForm
+        locale="bn"
+        plans={[plan({ power: 500 })]}
+        regions={["ap-south-1"]}
+        keys={screen.keys}
+        images={{
+          "ap-south-1": [
+            {
+              id: "wordpress",
+              name: "WordPress",
+              kind: "app",
+              version: null,
+              loginUser: "bitnami",
+              logo: "wordpress",
+              minPower: 2000,
+            },
+          ],
+        }}
+        action={noopAction}
+      />,
+      "bn",
+    );
+    expect(bn).toContain("চালানোর মতো বড় প্ল্যান এই লোকেশনে নেই");
+  });
+
+  it("WPU-G10: the answers of the server for the new key and for a plan too small are shown at their fields", () => {
+    hold.state = {
+      error: "validation",
+      fields: { newKeyName: "taken", productId: "plan_too_small" },
+    } satisfies FormState;
+    const noKeys = intl(
+      <ConfigForm
+        locale="en"
+        plans={screen.plans}
+        regions={screen.regions}
+        keys={[]}
+        images={screen.images}
+        action={noopAction}
+      />,
+      "en",
+    );
+    expect(noKeys).toContain("You already have another key with this name");
+    expect(noKeys).toContain("This plan is too small for the image");
+  });
+
+  it("a Region with no image says so", () => {
     const noImages = intl(
       <ConfigForm
         locale="en"

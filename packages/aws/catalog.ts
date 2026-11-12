@@ -89,6 +89,8 @@ function toRawBlueprint(item: unknown): RawBlueprint {
     version: text(item.version),
     platform: text(item.platform),
     isActive: item.isActive === true,
+    // WPU-G10: the least bundle power the image runs on; anything but a number is "unknown" (null).
+    minPower: typeof item.minPower === "number" ? item.minPower : null,
   };
 }
 

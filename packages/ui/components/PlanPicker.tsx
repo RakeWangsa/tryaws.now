@@ -12,6 +12,12 @@ export interface PickerPlan {
   /** Paisa. A number throws TypeError (R4). */
   priceMinor: bigint;
   lines: string[];
+  /**
+   * WPU-G10. A plan the customer cannot pick now (for example a plan too small for the chosen image).
+   * The radio is disabled, the slider skips it, and `note` says why.
+   */
+  disabled?: boolean;
+  note?: string;
 }
 
 export interface PlanPickerProps {
@@ -45,7 +51,8 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
 
   if (plans.length === 0) return <p className="seccolor">{t("none")}</p>;
 
-  const wanted = value ?? inner ?? (plans[0] as PickerPlan).id;
+  const firstEnabled = plans.find((plan) => plan.disabled !== true) ?? (plans[0] as PickerPlan);
+  const wanted = value ?? inner ?? firstEnabled.id;
   const index = plans.findIndex((plan) => plan.id === wanted);
   if (index < 0) throw new RangeError(`PlanPicker: unknown plan id ${wanted}`);
   const selected = plans[index] as PickerPlan;
@@ -55,7 +62,11 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
     onChange?.(id);
   };
   const onRange = (event: ChangeEvent<HTMLInputElement>): void => {
-    const next = plans[Number(event.target.value)];
+    const at = Number(event.target.value);
+    // A disabled plan is skipped: to the nearest plan that can be picked, upward first.
+    const next =
+      plans.slice(at).find((plan) => plan.disabled !== true) ??
+      [...plans.slice(0, at)].reverse().find((plan) => plan.disabled !== true);
     if (next) choose(next.id);
   };
   const valueText = `${selected.name}, ${formatMoney(selected.priceMinor, { locale, mode: "wholeUp" })}`;
@@ -75,6 +86,7 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
                 value={plan.id}
                 className="tc-plan-radio"
                 checked={plan.id === selected.id}
+                disabled={plan.disabled === true}
                 onChange={() => choose(plan.id)}
               />
               <label htmlFor={id} className="tc-plan-card bg-seccolorstyle noshadow">
@@ -84,6 +96,12 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
                     {line}
                   </span>
                 ))}
+                {plan.disabled === true && plan.note !== undefined ? (
+                  <span className="d-block seccolor">
+                    <i className="fas fa-info-circle me-1" aria-hidden="true" />
+                    {plan.note}
+                  </span>
+                ) : null}
                 <span className="d-block price seccolor">
                   <MoneyText minor={plan.priceMinor} mode="wholeUp" />{" "}
                   <span className="period">{t("perPeriod")}</span>
@@ -107,7 +125,9 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
         />
         <ul className="tc-plan-range-labels d-flex justify-content-between list-unstyled seccolor">
           {plans.map((plan) => (
-            <li key={plan.id}>{plan.name}</li>
+            <li key={plan.id} {...(plan.disabled === true ? { "aria-disabled": true } : {})}>
+              {plan.name}
+            </li>
           ))}
         </ul>
       </div>

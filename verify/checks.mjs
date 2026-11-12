@@ -2451,6 +2451,28 @@ TASKS["WPU-G3"] = [
   repo,
 ];
 
+// WPU-G10: the console behaviours of the create wizard and the admin settings behind it. A key made in the
+// browser or pasted inside the wizard (web), the minimum plan power of an image (GetBlueprints minPower in
+// the catalog sync, the admin override in the allow-list, the plan check of the wizard and of the order
+// gate), the tier limits as an audited `settings` row (scope tier) read by the order path, and the dated
+// config prices with their admin screen (core, db, admin). No migration. The db and core suites need the
+// local PostgreSQL (pnpm db:up).
+TASKS["WPU-G10"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  aws,
+  db,
+  catalogSyncAll,
+  ui,
+  web,
+  admin,
+  repo,
+];
+
 // WPU-H1: money safety. The proof test of the ledger at the database: as web_rw, worker_rw and admin_rw
 // an unbalanced, single-sided, zero, negative or mixed-currency post is refused by the DATABASE (the
 // application check is skipped on purpose), a reversal balances, and UPDATE, DELETE and TRUNCATE of the

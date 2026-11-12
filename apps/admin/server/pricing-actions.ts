@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { DEFAULT_LOCALE, isLocale, localePath } from "@tc/ui/runtime";
+import { makeConfigPriceFlow } from "./config-price-flow.ts";
 import { makePriceBookFlow } from "./price-book-flow.ts";
+import { makeTierLimitsFlow } from "./tier-limits-flow.ts";
 import { readDraft } from "./pricing-draft.ts";
 import { makePricingFlow, type FlowAnswer } from "./pricing-flow.ts";
 import { pricingFlowDeps } from "./pricing-runtime.ts";
@@ -14,6 +16,7 @@ import { pricingFlowDeps } from "./pricing-runtime.ts";
 
 const MARKET = /^[A-Z]{2}$/;
 const FAMILY = /^[a-z][a-z_]{0,39}$/;
+const CONFIG_KEY = /^config_price\.[a-z_]{1,40}$/;
 
 function text(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value : "";
@@ -21,7 +24,7 @@ function text(value: FormDataEntryValue | null): string {
 
 function back(
   form: FormData,
-  path: "/pricing" | "/pricing/book" | "/catalog",
+  path: "/pricing" | "/pricing/book" | "/pricing/config" | "/catalog" | "/catalog/limits",
   answer: FlowAnswer<unknown>,
 ): never {
   const rawLocale = text(form.get("locale"));
@@ -37,6 +40,17 @@ function back(
   // The price list opens again on the family that was edited (a name of lower-case letters only).
   if (path === "/pricing/book" && FAMILY.test(text(form.get("family")))) {
     query.set("family", text(form.get("family")));
+  }
+  // The config price page opens again on the price that was edited (a key of lower-case letters and _).
+  if (path === "/pricing/config" && CONFIG_KEY.test(text(form.get("key")))) {
+    query.set("key", text(form.get("key")));
+  }
+  // The limits page opens again on the tier that was edited.
+  if (
+    path === "/catalog/limits" &&
+    (text(form.get("tier")) === "new" || text(form.get("tier")) === "trusted")
+  ) {
+    query.set("tier", text(form.get("tier")));
   }
   redirect(`${localePath(locale, path)}?${query.toString()}`);
 }
@@ -105,6 +119,44 @@ export async function setImageAction(form: FormData): Promise<void> {
     reason: text(form.get("imageReason")),
   });
   back(form, "/catalog", answer);
+}
+
+// WPU-G10. The admin's minimum plan power for one image.
+export async function setImageMinPowerAction(form: FormData): Promise<void> {
+  const answer = await makePricingFlow(pricingFlowDeps()).setImageMinPower({
+    blueprintId: text(form.get("image")),
+    market: text(form.get("market")),
+    minPower: text(form.get("minPower")),
+    reason: text(form.get("powerReason")),
+  });
+  back(form, "/catalog", answer);
+}
+
+// WPU-G10. The limits of a risk tier, on /catalog/limits (the checkboxes are "on" or absent).
+export async function saveTierLimitsAction(form: FormData): Promise<void> {
+  const answer = await makeTierLimitsFlow(pricingFlowDeps()).saveTierLimits({
+    market: text(form.get("market")),
+    tier: text(form.get("tier")),
+    maxInstances: text(form.get("maxInstances")),
+    maxBundleUsd: text(form.get("maxBundleUsd")),
+    windows: text(form.get("windows")),
+    containers: text(form.get("containers")),
+    maxStaticIps: text(form.get("maxStaticIps")),
+    reason: text(form.get("reason")),
+  });
+  back(form, "/catalog/limits", answer);
+}
+
+// WPU-G10. A config price (load balancer, snapshot, block storage, hosted zone), on /pricing/config.
+export async function saveConfigPriceAction(form: FormData): Promise<void> {
+  const answer = await makeConfigPriceFlow(pricingFlowDeps()).saveConfigPrice({
+    market: text(form.get("market")),
+    key: text(form.get("key")),
+    usd: text(form.get("usd")),
+    from: text(form.get("from")),
+    reason: text(form.get("reason")),
+  });
+  back(form, "/pricing/config", answer);
 }
 
 export async function saveBookAction(form: FormData): Promise<void> {

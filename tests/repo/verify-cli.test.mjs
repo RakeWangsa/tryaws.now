@@ -155,6 +155,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T3",
     "WPP-T4",
     "WPU-G1",
+    "WPU-G10",
     "WPU-G2",
     "WPU-G3",
     "WPU-G4",
@@ -219,6 +220,61 @@ it("task WPU-G3 is proven by lint, types, format, the core, aws, db, catalog-syn
     ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-G10 is proven by lint, types, format, the core, aws, db, catalog-sync, ui, web, admin and repository tests", () => {
+  expect(TASKS["WPU-G10"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["catalog-sync", "pnpm test --filter @tc/fn-catalog-sync --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof tests of WPU-G10 exist: the key made in the browser, the plan check, the tier limits and the dated config price", () => {
+  for (const [file, title] of [
+    [
+      "apps/web/app/[locale]/(panel)/servers/new/ssh-keygen.test.ts",
+      "the seed signs and the public key verifies",
+    ],
+    [
+      "tests/repo/ssh-keygen-openssh.test.mjs",
+      "is read by ssh-keygen and gives the same public key",
+    ],
+    [
+      "apps/web/app/[locale]/(panel)/servers/new/KeyStep.test.tsx",
+      "is not ready until the private key was downloaded",
+    ],
+    ["apps/web/server/wizard-key.test.ts", "a private key in the public field is refused"],
+    ["packages/core/orders/image-min-power-order.test.ts", "refuses a 512 MB plan for an app"],
+    [
+      "packages/core/orders/tier-limits-order.test.ts",
+      "a row that does not parse refuses the order",
+    ],
+    [
+      "packages/core/orders/config-price-order.test.ts",
+      "no entry has started yet: nothing is sold",
+    ],
+    ["packages/db/test/admin-config-prices.test.ts", "a later start is a scheduled change"],
+    ["packages/db/test/admin-tier-limits.test.ts", "only superadmin and ops read and write"],
+    [
+      "packages/db/test/image-min-power.test.ts",
+      "an admin sets the minimum of an image with a reason",
+    ],
+    ["apps/admin/server/admin-sweep.test.ts", "the config-price flow authorizes in its one write"],
+  ]) {
+    const text = readFileSync(file, "utf8");
+    expect(text, file).toContain(title);
+  }
 });
 
 it("task WPU-H1 is proven by lint, types, format, the ledger-at-the-database proof, the core and db tests and the repository tests", () => {
