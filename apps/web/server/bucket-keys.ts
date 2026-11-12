@@ -28,13 +28,39 @@ export type CreateKeyPort = (input: {
   requestId: string;
 }) => Promise<CreateKeyAnswer>;
 
+/** One key of the list: the id and facts that are not secret (the secret is shown once, at creation). */
+export interface KeyView {
+  accessKeyId: string;
+  status: "active" | "inactive";
+  createdAt: string | null;
+}
+
+export type ListKeysPort = (input: {
+  customerId: string;
+  resourceId: string;
+}) => Promise<{ ok: true; value: { keys: KeyView[] } } | { ok: false; error: string }>;
+
 export interface BucketKeysDeps {
   authenticate(): Promise<CustomerSession | null>;
   now(): Date;
+  /**
+   * The customer's own bucket through the scoped repository with the family flag on: its state and the
+   * name the customer must type, else null. Another customer's bucket and a missing one are the same
+   * answer (R8).
+   */
+  ownedBucket(
+    customerId: string,
+    bucketId: string,
+  ): Promise<{ state: string; name: string } | null>;
   /** One hit against the customer's limit for this action; false when it is used up. */
-  rateLimit(session: CustomerSession): Promise<boolean>;
+  rateLimit(
+    session: CustomerSession,
+    action: "bucket_key.create" | "bucket_key.list",
+  ): Promise<boolean>;
   /** The invocation of access-details; the customer id is the session's (R8). null: not wired. */
   createKey: CreateKeyPort | null;
+  /** The list of the bucket's keys by the same function. null: not wired. */
+  listKeys: ListKeysPort | null;
 }
 
 export type BucketKeysError =
@@ -44,8 +70,10 @@ export type BucketKeysError =
   | "rate_limited"
   | "not_found"
   | "not_ready"
+  | "name_mismatch"
   | "limit_reached"
   | "key_not_created"
+  | "already_created"
   | "unavailable";
 
 export type BucketKeysResult =
@@ -63,7 +91,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KeyForm = formObject({
   bucketId: formText.pipe(z.string().regex(UUID)),
   requestId: formText.pipe(z.string().regex(UUID)),
+  // The typed name of the bucket (U10); anything but text reads as empty and is refused by the name check.
+  confirmName: formText.pipe(z.string().max(253)).catch(""),
 });
+const ListForm = formObject({ bucketId: formText.pipe(z.string().regex(UUID)) });
 
 // What the function answers becomes a public key; its text, if any, is dropped.
 function publicError(code: string): BucketKeysError {
@@ -83,6 +114,8 @@ function publicError(code: string): BucketKeysError {
     // (docs/runbooks/bucket-access-key-orphan.md).
     case "key_not_created":
       return "key_not_created";
+    case "already_created":
+      return "already_created";
     case "rate_limited":
       return "rate_limited";
     default:
@@ -101,11 +134,18 @@ export async function createBucketKeyCore(
 
   const parsed = KeyForm.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "validation" };
-  const { bucketId, requestId } = parsed.data;
+  const { bucketId, requestId, confirmName: typed } = parsed.data;
   if (deps.createKey === null) return { ok: false, error: "unavailable" };
 
   try {
-    if (!(await deps.rateLimit(session))) return { ok: false, error: "rate_limited" };
+    // The customer's own active bucket and the typed name (U10): R8 first, then the state, then the name.
+    const owned = await deps.ownedBucket(session.customerId, bucketId);
+    if (owned === null) return { ok: false, error: "not_found" };
+    if (owned.state !== "active") return { ok: false, error: "not_ready" };
+    if (owned.name === "" || typed !== owned.name) return { ok: false, error: "name_mismatch" };
+    if (!(await deps.rateLimit(session, "bucket_key.create"))) {
+      return { ok: false, error: "rate_limited" };
+    }
     const answer = await deps.createKey({
       customerId: session.customerId,
       resourceId: bucketId,
@@ -118,6 +158,38 @@ export async function createBucketKeyCore(
       secretAccessKey: answer.value.secretAccessKey,
       cacheControl: "no-store",
     };
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+}
+
+export type ListKeysResult = { ok: true; keys: KeyView[] } | { ok: false; error: BucketKeysError };
+
+/**
+ * The keys of the customer's own bucket, for the Keys tab. R9 order: authenticate, authorize (own
+ * bucket), validate, rate limit, execute. No secret is in the answer (AWS never returns it for a
+ * listed key). Any failure is "unavailable" or "not_found": the tab then says it cannot list (R16).
+ */
+export async function listBucketKeysCore(
+  deps: BucketKeysDeps,
+  raw: unknown,
+): Promise<ListKeysResult> {
+  const session = await deps.authenticate();
+  if (session === null) return { ok: false, error: "unauthenticated" };
+  const parsedList = ListForm.safeParse(raw);
+  if (!parsedList.success) return { ok: false, error: "validation" };
+  const { bucketId } = parsedList.data;
+  if (deps.listKeys === null) return { ok: false, error: "unavailable" };
+  try {
+    const owned = await deps.ownedBucket(session.customerId, bucketId);
+    if (owned === null) return { ok: false, error: "not_found" };
+    if (owned.state !== "active") return { ok: false, error: "not_ready" };
+    if (!(await deps.rateLimit(session, "bucket_key.list"))) {
+      return { ok: false, error: "rate_limited" };
+    }
+    const answer = await deps.listKeys({ customerId: session.customerId, resourceId: bucketId });
+    if (!answer.ok) return { ok: false, error: publicError(answer.error) };
+    return { ok: true, keys: answer.value.keys.map((k) => ({ ...k })) };
   } catch {
     return { ok: false, error: "unavailable" };
   }

@@ -218,7 +218,24 @@ describe("setBucketAccessCore", () => {
 });
 
 describe("deleteAccessKeyCore", () => {
-  const input = { bucketId: BUCKET, requestId: REQ, accessKeyId: KEY };
+  const input = { bucketId: BUCKET, requestId: REQ, accessKeyId: KEY, confirmName: "Site assets" };
+
+  it("needs a fresh sign-in and the typed bucket name before anything is queued (WPU-N2)", async () => {
+    const stale = world({ session: session(new Date(NOW.getTime() - 3_600_000)) });
+    expect(await deleteAccessKeyCore(stale.deps, input)).toEqual({
+      ok: false,
+      error: "fresh_sign_in_required",
+    });
+    expect(stale.calls).toEqual([]);
+    for (const confirmName of ["", "site assets", "Other"]) {
+      const w = world();
+      expect(await deleteAccessKeyCore(w.deps, { ...input, confirmName })).toEqual({
+        ok: false,
+        error: "name_mismatch",
+      });
+      expect(w.calls.some((c) => c.startsWith("op:") || c.startsWith("audit:"))).toBe(false);
+    }
+  });
 
   it("queues delete_access_key with the key id as payload and audits without it", async () => {
     const { deps, calls, payloads } = world();

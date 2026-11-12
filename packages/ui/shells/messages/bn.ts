@@ -3,9 +3,9 @@
 export const bn = {
   Shell: {
     skip: "মূল অংশে যান",
-    brand: "TiCON Cloud",
-    logoAlt: "TiCON Cloud",
-    homeLabel: "TiCON Cloud হোম",
+    brand: "MeghVPS",
+    logoAlt: "MeghVPS",
+    homeLabel: "MeghVPS হোম",
     menu: "মেনু",
     close: "বন্ধ করুন",
     public: {
@@ -90,7 +90,7 @@ export const bn = {
   },
   Aws: {
     short: "১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
-    long: "এখানে কেনা প্রতিটি সার্ভার, ডেটাবেস ও স্টোরেজ একটি Amazon Lightsail resource, যা Singapore বা Mumbai AWS Region থেকে চলে। বিক্রি, বিল ও সাপোর্ট TiCON Cloud দেয়। সবকিছু এই প্যানেল থেকেই চালানো যায়, আলাদা AWS account লাগে না।",
+    long: "এখানে কেনা প্রতিটি সার্ভার, ডেটাবেস ও স্টোরেজ একটি Amazon Lightsail resource, যা Singapore বা Mumbai AWS Region থেকে চলে। বিক্রি, বিল ও সাপোর্ট MeghVPS দেয়। সবকিছু এই প্যানেল থেকেই চালানো যায়, আলাদা AWS account লাগে না।",
     trademark:
       "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.",
   },

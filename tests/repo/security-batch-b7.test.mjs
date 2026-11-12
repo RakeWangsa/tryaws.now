@@ -38,29 +38,30 @@ describe("L1: the admin role holds no queue permission", () => {
   });
 });
 
-describe("L2: invoices/* stays readable for the web role", () => {
-  it("the renderer returns the key of a stored PDF, not bytes, and web reads the bucket", () => {
+describe("L2: the web role reads no invoice object", () => {
+  it("the renderer returns the PDF bytes in its answer (WPU-N1) and web holds exports/* only", () => {
     const handler = read("functions/invoice-renderer/handler.ts");
-    expect(handler).toContain("return { ok: true, key, bytes: bytes.byteLength }");
-    expect(customer).toContain("$interpolate`${storage.invoices.arn}/*`");
+    expect(handler).toContain("pdfBase64");
+    expect(customer).not.toContain("${storage.invoices.arn}");
     expect(customer).toContain("$interpolate`${storage.exports.arn}/*`");
   });
 });
 
 describe("L3: the invoice renderer is invoked by its web alias only", () => {
-  it("publishes a version and has one alias named web", () => {
+  it("publishes a version and has exactly one alias, named web", () => {
     expect(workers).toMatch(/spec\.dir === "reader" \|\| spec\.dir === "invoice-renderer"/);
-    expect(workers).toMatch(/new aws\.lambda\.Alias\("RendererAliasWeb",\s*\{\s*name: "web"/);
-    expect(workers).toContain("rendererAlias");
+    expect(workers.match(/Alias\("InvoiceRendererAliasWeb"/g)).toHaveLength(1);
+    expect(workers.match(/aws\.lambda\.Alias\(/g)?.length).toBeGreaterThanOrEqual(3);
   });
-  it("grants the web role the alias ARN and no role the unqualified ARN of the renderer", () => {
-    expect(web).toContain("workers.rendererAlias.arn");
+  it("grants the web role the alias ARNs and no role an unqualified ARN of the renderer", () => {
+    expect(web).toContain("workers.rendererAliasWeb.arn");
     expect(web).not.toMatch(/invoke\([^)]*invoice-renderer/);
-    expect(web).not.toContain('workers.invoked["invoice-renderer"]');
+    // only the NAME of the function is passed (for the invoke port); its ARN is granted to no one
+    expect(web).not.toContain('workers.invoked["invoice-renderer"]?.arn');
+    expect(web).not.toContain('workers.invoked["invoice-renderer"].arn');
     expect(admin).not.toContain("invoice-renderer");
     expect(admin).not.toContain("rendererAlias");
-    // exactly one place names the alias in the web file
-    expect(web.match(/rendererAlias/g)).toHaveLength(1);
+    expect(web.match(/rendererAliasWeb/g)).toHaveLength(1);
   });
   it("the handler reads the tier from the invoked ARN of the context, never from the event", () => {
     const index = read("functions/invoice-renderer/index.ts");

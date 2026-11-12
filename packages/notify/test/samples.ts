@@ -9,6 +9,7 @@ export const IDS = {
   invoice: "0193f7c4-2b3d-7071-9d5f-56789abcdef0",
   resource: "0193f7c5-3c4d-7182-8e60-6789abcdef01",
   subscription: "0193f7c5-3c4e-7293-9f71-789abcdef012",
+  request: "0193f7c6-4d5e-7394-8f82-89abcdef0123",
 } as const;
 
 const at = "2026-11-10T20:00:00.000Z";
@@ -116,6 +117,22 @@ export const SAMPLES: Record<TemplateId, { data: Record<string, unknown>; channe
   domain_renewal_reminder: {
     data: { domain: "example.com", days: 7, expiresAt: at },
     channels: ["email", "sms", "in_app"],
+  },
+  // WPU-D4: a reply of support (email only: a visitor has no bell) and the capacity notice of the waitlist.
+  support_reply: {
+    data: {
+      requestId: IDS.request,
+      body: "Hello,\nWe fixed the problem on your side.\n\nPlease try again and tell us.",
+    },
+    channels: ["email"],
+  },
+  waitlist_capacity_available: {
+    data: { productFamily: "linux_instance", region: "ap-southeast-1" },
+    channels: ["email", "in_app"],
+  },
+  dns_delegation_notice: {
+    data: { domain: "shop.example.com", day: 12, removeAt: "2026-11-29T06:00:00.000Z" },
+    channels: ["email", "in_app"],
   },
 };
 

@@ -7,7 +7,11 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadDomainDetail } from "../../../../../server/domain-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
-import { setDomainAutoRenewAction } from "./actions.ts";
+import {
+  resendVerificationAction,
+  setDomainAutoRenewAction,
+  setNameServersAction,
+} from "./actions.ts";
 import { DomainDetailContent } from "./DomainDetailContent.tsx";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +40,8 @@ export default async function DomainDetailPage({ params }: Props) {
         domain={domain}
         requestId={newUuidV7()}
         renewAction={setDomainAutoRenewAction}
+        resendAction={resendVerificationAction}
+        nameServersAction={setNameServersAction}
       />
     </PanelFrame>
   );

@@ -71,6 +71,8 @@ export interface CreditNoteToIssue {
   readonly reversalTransactionId: string;
   /** The ledger transaction of the original charge (names the notice row). */
   readonly ledgerTransactionId: string;
+  /** WPU-B3: when the reversal was posted; a credit note that is refused for long is escalated by its age. */
+  readonly reversedAt: Date;
 }
 
 export interface InvoiceBacklogRepo {
@@ -309,9 +311,14 @@ export function invoiceBacklogRepo(tx: Tx): InvoiceBacklogRepo {
 
     async creditNotesToIssue(limit) {
       if (!Number.isInteger(limit) || limit < 1) throw new TypeError("invoiceBacklog: limit");
-      const rows = await tx.execute<{ customer_id: string; reversal_id: string; ltx: string }>(sql`
+      const rows = await tx.execute<{
+        customer_id: string;
+        reversal_id: string;
+        ltx: string;
+        reversed_at: Date | string;
+      }>(sql`
         select i.customer_id::text as customer_id, rv.id::text as reversal_id,
-               i.ledger_transaction_id::text as ltx
+               i.ledger_transaction_id::text as ltx, rv.created_at as reversed_at
         from invoices i
         join ledger_transactions rv on rv.kind = 'reversal' and rv.reference_type = 'ledger_transaction'
                                    and rv.reference_id = i.ledger_transaction_id
@@ -323,6 +330,7 @@ export function invoiceBacklogRepo(tx: Tx): InvoiceBacklogRepo {
         customerId: r.customer_id,
         reversalTransactionId: r.reversal_id,
         ledgerTransactionId: r.ltx,
+        reversedAt: r.reversed_at instanceof Date ? r.reversed_at : new Date(r.reversed_at),
       }));
     },
 

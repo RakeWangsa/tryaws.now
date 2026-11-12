@@ -10,7 +10,9 @@ import type {
   AuditRepo,
   CustomerLimit,
   DomainsRepo,
+  OperationsRepo,
   RateLimitsRepo,
+  ResourcesRepo,
   SubscriptionsRepo,
 } from "@tc/db";
 import { formObject, formText } from "./form-schema.ts";
@@ -140,6 +142,9 @@ export async function createDomainDraftCore(
 export interface DomainRepos {
   domains: DomainsRepo;
   subscriptions: SubscriptionsRepo;
+  /** WPU-B2: the resource of the domain (family, state) and the operation rows of the two domain actions. */
+  resources: ResourcesRepo;
+  operations: OperationsRepo;
   audit: AuditRepo;
   rateLimits: RateLimitsRepo;
   /** R12, R16: the flag `domain` for the customer's market; false when it cannot be read. */

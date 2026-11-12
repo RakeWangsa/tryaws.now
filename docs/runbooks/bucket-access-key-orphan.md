@@ -10,8 +10,8 @@ A customer writes that creating a bucket access key failed ("we could not finish
 
 The access-details function claims the request id (the unique key and the audit row, R7), then asks Amazon Lightsail to create the key. AWS returns the secret only in that one answer.
 
-- AWS refused before a key existed (the bucket is not active, the key limit, an error answer): the function releases the claim and answers `key_not_created`. The customer may retry with the same request id. Nothing to do here.
-- The answer was lost after the create call was sent (timeout, the function was stopped): a key may exist at AWS whose secret nobody received. The claim is kept, so a retry with the same request id creates no second key, and the customer sees "unavailable". This is the orphan key. It counts against the two keys of the bucket.
+- AWS refused before a key existed (the bucket is not active, the key limit, an error answer): no key exists. The claim of the request id is a counter that is not released, so a retry with the same request id answers "already created"; the customer reloads the Keys tab to get a new request id and tries again. Nothing to do here.
+- The answer was lost after the create call was sent (timeout, the function was stopped): a key may exist at AWS whose secret nobody received. The claim is kept, so a retry with the same request id creates no second key, and the customer sees "unavailable" or "already created". This is the orphan key. It counts against the two keys of the bucket.
 
 ## Who
 

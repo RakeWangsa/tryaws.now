@@ -344,6 +344,23 @@ describe("WP0-T3: database, proxy and roles", () => {
     expect(workers).toContain("env.SES_FROM = config.sesFromAddress");
   });
 
+  it("WPU-D4: tells the provisioner the tc-dns account and its ExternalId (plain values), and nothing else of it", () => {
+    expect(workers).toMatch(
+      /if \(spec\.dir === "provisioner"\) \{(?:(?!spec\.dir)[\s\S])*?env\.TC_DNS_ACCOUNT_ID = config\.dnsAccountId;\s*env\.TC_DNS_EXTERNAL_ID = config\.dnsExternalId;\s*\}/,
+    );
+    // the role to assume stays the function table's: the provisioner has the DNS provisioner role
+    expect(workers).toContain("assumableRoleArns(role, config)");
+  });
+
+  it("WPU-D4: allows ses:SendEmail on the one verified identity, to the notifier only, and tells it the ARN", () => {
+    expect(workers).toMatch(
+      /if \(spec\.dir === "notifier"\) \{\s*permissions\.push\(\{\s*actions: \["ses:SendEmail"\],\s*resources: \[config\.sesIdentityArn\],?\s*\}\);/,
+    );
+    expect(workers.match(/"ses:/g)).toHaveLength(1);
+    expect(workers).toContain("env.SES_IDENTITY_ARN = config.sesIdentityArn");
+    expect(workers).not.toMatch(/ses:\*|ses:Send\*/);
+  });
+
   it("runs the migrator at deploy time, in the VPC", () => {
     expect(workers).toContain('new sst.aws.Function("Migrator"');
     expect(workers).toContain('new aws.lambda.Invocation("MigratorRun"');
@@ -486,12 +503,18 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(admin).toContain("$interpolate`${storage.exports.arn}/*`");
     expect(admin).toContain('...invoke("catalog-sync")');
     expect(admin).toContain("storage.filesKey.arn");
-    // the customer path still reads its own invoices and invokes the renderer
+    // the customer path invokes the renderer and gets the PDF in its answer (WPU-N1); WPU-B7 (L2): it holds
+    // no read of the invoices bucket, only of exports
     const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
-    expect(customer).toContain("$interpolate`${storage.invoices.arn}/*`");
-    // WPU-B7 (L3): the renderer by its "web" alias only, never the unqualified ARN
-    expect(customer).toContain("workers.rendererAlias.arn");
-    expect(customer).toContain('...invoke("access-details")');
+    expect(customer).not.toContain("${storage.invoices.arn}");
+    expect(customer).toContain("$interpolate`${storage.exports.arn}/*`");
+    expect(customer).toContain("workers.rendererAliasWeb.arn");
+    // WPU-N2: access-details only through its "web" alias, never the bare function
+    expect(customer).toContain("workers.accessAliases.web.arn");
+    expect(customer).not.toContain('invoke("access-details"');
+    expect(customer).not.toMatch(/invoke\([^)]*"invoice-renderer"/);
+    expect(customer).toContain("INVOICE_RENDERER_FUNCTION_NAME");
+    expect(web.match(/rendererAliasWeb/g)).toHaveLength(1);
     expect(customer).not.toMatch(
       /s3:PutObject"\], resources: \[\$interpolate`\$\{storage\.invoices/,
     );

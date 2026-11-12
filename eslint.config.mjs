@@ -25,6 +25,10 @@ export const awsSdkClients = [
   "aws-sdk",
 ];
 
+// AWS clients that functions/ may import directly (the notifier sends mail with SESv2, WPU-D4) but that
+// apps/ and packages/ (except packages/aws) must never import (R1). The list of six above stays as pinned.
+export const awsSdkClientsFunctionsOnly = ["@aws-sdk/client-sesv2"];
+
 // Each group matches the bare package and every sub-path of it.
 const withSubpaths = (names) => names.flatMap((n) => [n, `${n}/*`]);
 
@@ -47,6 +51,10 @@ const R1 = {
 const SDK = {
   message: "Spec section 4: these AWS SDK packages are used only inside packages/aws.",
   group: withSubpaths(awsSdkClients),
+};
+const SDK_FUNCTIONS_ONLY = {
+  message: "R1: this AWS client is imported only by functions/, never by apps/ or packages/.",
+  group: withSubpaths(awsSdkClientsFunctionsOnly),
 };
 const PURE_CORE = {
   message: "packages/core is pure logic: no AWS and no HTTP (spec section 5).",
@@ -243,17 +251,17 @@ export default tseslint.config(
     // apps/** and packages/** (except aws and core): R1, the SDK rule and R4.
     files: ["apps/**", "packages/**"],
     ignores: ["packages/aws/**", "packages/core/**", "packages/db/**"],
-    rules: restrict(R1, SDK, DECIMAL, AWS_LOADERS),
+    rules: restrict(R1, SDK, SDK_FUNCTIONS_ONLY, DECIMAL, AWS_LOADERS),
   },
   {
     // apps/**: the same, plus the modules that only a server process may use.
     files: ["apps/**"],
-    rules: restrict(R1, SDK, DECIMAL, AWS_LOADERS, APP_MODULES, SYSTEM_WRITES),
+    rules: restrict(R1, SDK, SDK_FUNCTIONS_ONLY, DECIMAL, AWS_LOADERS, APP_MODULES, SYSTEM_WRITES),
   },
   {
     // packages/db: R1, the SDK rule, R4, and the direction of the dependency on packages/core.
     files: ["packages/db/**"],
-    rules: restrict(R1, SDK, DECIMAL, AWS_LOADERS, DB_BELOW_CORE),
+    rules: restrict(R1, SDK, SDK_FUNCTIONS_ONLY, DECIMAL, AWS_LOADERS, DB_BELOW_CORE),
   },
   {
     // packages/aws: R4 only (it is the one place that may import the SDK clients).
@@ -323,8 +331,12 @@ export default tseslint.config(
   },
   {
     // Code built from text cannot be checked by any import rule.
-    // no-implied-eval sees a bare setTimeout("...") only once the config declares the globals of the runtime; until then it catches the globalThis. and window. forms.
-    files: ["apps/**", "packages/**"],
+    // no-implied-eval sees a bare setTimeout("...") only when the config declares the timer globals
+    // (WPU-B4: declared below, so the bare form is caught as well as globalThis. and window.).
+    files: ["apps/**", "packages/**", "functions/**", "scripts/**", "infra/**", "verify/**"],
+    languageOptions: {
+      globals: { setTimeout: "readonly", setInterval: "readonly", setImmediate: "readonly" },
+    },
     rules: { "no-eval": "error", "no-implied-eval": "error", "no-new-func": "error" },
   },
   {

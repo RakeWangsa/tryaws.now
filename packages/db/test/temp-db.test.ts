@@ -104,9 +104,28 @@ it("fails with a clear message, without the password, when the server cannot be 
   }
 }, 30_000);
 
-// This test needs a server that checks passwords (scram or md5). With trust authentication
-// the wrong password is accepted; the test then fails and says so.
-it("does not call a refused password 'cannot reach'", async () => {
+// "trust" when the first rule that can match a TCP connection from this machine is trust,
+// otherwise the method found, or "unknown" when the rules cannot be read.
+async function trustRules(wrongUrl: string): Promise<string> {
+  const probe = await createTempDatabase({ url: wrongUrl, migrate: false });
+  try {
+    const { rows } = await probe.pool.query<{ auth_method: string }>(
+      "select auth_method from pg_hba_file_rules where type in ('host','hostnossl','hostssl') " +
+        "and error is null order by line_number",
+    );
+    const first = rows[0]?.auth_method;
+    return first ?? "unknown";
+  } catch {
+    return "unknown";
+  } finally {
+    await probe.drop();
+  }
+}
+
+// This test needs a server that checks passwords (scram or md5). With trust authentication the
+// wrong password is accepted, and the test is skipped with that reason. With scram or md5 the
+// check is strict: an accepted wrong password fails the test.
+it("does not call a refused password 'cannot reach'", async (ctx) => {
   const u = new URL(databaseUrl());
   u.password = "wrong-" + u.password;
   let accepted: TempDatabase | undefined;
@@ -119,8 +138,17 @@ it("does not call a refused password 'cannot reach'", async () => {
     if (accepted) await accepted.drop();
   }
   if (accepted) {
+    // The server took a wrong password. That is right under trust authentication and wrong
+    // otherwise. Ask the server which methods its rules use: only a rule of "trust" for this
+    // connection excuses the skip. Anything else (scram, md5, or an answer we cannot read) fails.
+    const methods = await trustRules(u.toString());
+    if (methods === "trust") {
+      ctx.skip(
+        "PostgreSQL uses trust authentication (no password is checked); docker-compose.yml and CI use scram-sha-256, where this check runs",
+      );
+    }
     throw new Error(
-      "the server accepted a wrong password (trust authentication?); this test needs password authentication",
+      `the server accepted a wrong password and its rules say "${methods}"; this must not happen`,
     );
   }
   expect(err).toBeInstanceOf(Error);

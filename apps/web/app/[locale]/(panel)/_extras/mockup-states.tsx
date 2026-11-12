@@ -87,6 +87,7 @@ export const STATE_RENDERERS: Record<string, Renderer> = {
         autoRenew: false,
         lines: null,
         invoices: [],
+        renewalWait: null,
       },
     },
   }),

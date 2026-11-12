@@ -11,15 +11,19 @@ const actionsOf = (text: string) =>
   [...text.matchAll(/action: "([a-z0-9_.]+)"/g)].map((m) => m[1] as string);
 
 describe("rate limit action names per tier (L4)", () => {
-  const fn = actionsOf(read("functions/access-details/deps.ts"));
+  // The function's table: `"windows_password.reveal": 20,` and so on.
+  const fn = [
+    ...read("functions/access-details/deps.ts").matchAll(/^ {2}"([a-z_.]+)": \d+,$/gm),
+  ].map((m) => m[1] as string);
   const web = [
     ...actionsOf(read("apps/web/app/[locale]/(panel)/servers/[id]/windows-actions.ts")),
     ...actionsOf(read("apps/web/app/[locale]/(panel)/databases/[id]/access-actions.ts")),
     ...actionsOf(read("apps/web/server/bucket-deps.ts")),
   ];
   it("finds the names", () => {
-    expect(fn).toEqual(["windows_password.reveal"]);
-    expect(web).toHaveLength(3);
+    expect(fn).toContain("windows_password.reveal");
+    expect(fn).toContain("bucket_key.create");
+    expect(web.length).toBeGreaterThanOrEqual(4);
   });
   it("gives every web name the suffix .web and shares none with the function", () => {
     for (const name of web) {

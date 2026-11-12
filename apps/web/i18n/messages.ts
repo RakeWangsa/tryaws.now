@@ -41,6 +41,8 @@ import { dbg9En } from "../messages/dbg9-en.ts";
 import { consoleEn } from "../messages/console-en.ts";
 import { dnsBn } from "../messages/dns-bn.ts";
 import { dnsEn } from "../messages/dns-en.ts";
+import { historyBn } from "../messages/history-bn.ts";
+import { historyEn } from "../messages/history-en.ts";
 import { invoicesBn } from "../messages/invoices-bn.ts";
 import { invoicesEn } from "../messages/invoices-en.ts";
 import { supportBn } from "../messages/support-bn.ts";
@@ -76,6 +78,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     consoleBn,
     dbg9Bn,
     invoicesBn,
+    historyBn,
     authOwn.bn,
     kycOwn.bn,
     settingsOwn.bn,
@@ -102,6 +105,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     consoleEn,
     dbg9En,
     invoicesEn,
+    historyEn,
     authOwn.en,
     kycOwn.en,
     settingsOwn.en,

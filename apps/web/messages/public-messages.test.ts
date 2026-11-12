@@ -25,7 +25,7 @@ describe("public site messages (WPP-T1 to WPP-T4)", () => {
     expect(Object.keys(items).length).toBeGreaterThanOrEqual(10);
     expect(publicEn.Public.help.items.realAws.a).toMatch(/^Yes, 100%/);
     expect(publicEn.Public.help.items.noAccount.a).toMatch(/^No\./);
-    expect(publicEn.Public.help.items.billing.a).toMatch(/^TiCON Cloud/);
+    expect(publicEn.Public.help.items.billing.a).toMatch(/^MeghVPS/);
     expect(publicEn.Public.help.items.dataLocation.a).toMatch(/AWS Singapore/);
   });
 

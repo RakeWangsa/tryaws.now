@@ -524,6 +524,6 @@ describe("issueCreditNotes", () => {
       },
       10,
     );
-    expect(out).toEqual({ issued: 0, replayed: 0, refused: 0 });
+    expect(out).toEqual({ issued: 0, replayed: 0, refused: 0, stuck: 0 });
   });
 });

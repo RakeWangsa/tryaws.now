@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   baseRef,
   checkForwardOnly,
@@ -170,6 +170,69 @@ it("in the folder layout, a new migration must sort last", () => {
       tree(["20261111120000_catalog/migration.sql", "20261110000000_early/migration.sql"]),
     ),
   ).toEqual(["20261110000000_early sorts before an existing migration"]);
+});
+
+// WPU-B4 (audit item 17): a merge that puts a migration before a committed one renumbers the idx of
+// the committed entries. That is not an edit; an edit of an entry, or of its SQL file, still is.
+describe("a journal renumbered by a merge", () => {
+  const baseTwo = tree(
+    ["0000_catalog.sql", "0001_late.sql"],
+    [
+      [1000, "0000_catalog"],
+      [3000, "0001_late"],
+    ],
+  );
+  const files = ["0000_catalog.sql", "0001_middle.sql"];
+
+  it("is clean when a committed entry only moves to a later idx", () => {
+    const merged = tree(
+      [...files, "0001_late.sql"],
+      [
+        [1000, "0000_catalog"],
+        [2000, "0001_middle"],
+        [3000, "0001_late"],
+      ],
+    );
+    expect(checkForwardOnly(baseTwo, merged)).toEqual([]);
+  });
+
+  it("still rejects an edited SQL file", () => {
+    const merged = tree(
+      [...files, ["0001_late.sql", "-- 0001_late.sql edited"]],
+      [
+        [1000, "0000_catalog"],
+        [2000, "0001_middle"],
+        [3000, "0001_late"],
+      ],
+    );
+    expect(checkForwardOnly(baseTwo, merged)).toEqual(["0001_late.sql was changed"]);
+  });
+
+  it("still rejects an edited entry", () => {
+    const merged = tree(
+      [...files, "0001_late.sql"],
+      [
+        [1000, "0000_catalog"],
+        [2000, "0001_middle"],
+        [3500, "0001_late"],
+      ],
+    );
+    expect(checkForwardOnly(baseTwo, merged)).toEqual(["meta/_journal.json entry 1 was changed"]);
+  });
+
+  it("still rejects a removed entry", () => {
+    const merged = tree(
+      [...files, "0001_late.sql"],
+      [
+        [1000, "0000_catalog"],
+        [2000, "0001_middle"],
+      ],
+    );
+    expect(checkForwardOnly(baseTwo, merged)).toEqual([
+      "meta/_journal.json entry 1 was removed",
+      "0001_late.sql has no journal entry",
+    ]);
+  });
 });
 
 it("the migrations of this branch pass against the base branch (while main has no migration, only rule 3 runs)", () => {

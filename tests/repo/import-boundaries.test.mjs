@@ -349,3 +349,20 @@ it("no source file of apps/ or packages/ is ignored, and R1 is switched on for e
   }
   expect(problems).toEqual([]);
 });
+
+// WPU-B4 (audit item 34): the timer globals are declared, so a bare setTimeout("...") is an implied eval.
+it.each([
+  ["apps/web/x.ts", 'setTimeout("run()", 10);'],
+  ["packages/core/x.ts", 'setInterval("run()", 10);'],
+  ["functions/reader/x.ts", 'setTimeout("run()", 10);'],
+  ["scripts/x.mjs", 'setTimeout("run()", 10);'],
+  ["packages/core/x.ts", 'globalThis.setTimeout("run()", 10);'],
+])("%s: %s is an implied eval", async (filePath, code) => {
+  expect(await errors(filePath, code)).toContain(
+    "Implied eval. Consider passing a function instead of a string.",
+  );
+});
+
+it("a timer with a function is not an implied eval", async () => {
+  expect(await errors("apps/web/x.ts", "setTimeout(() => undefined, 10);")).toEqual([]);
+});

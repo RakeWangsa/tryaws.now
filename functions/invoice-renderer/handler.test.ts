@@ -4,6 +4,7 @@ import {
   createInvoiceRendererHandler,
   MAX_HTML_BYTES,
   rendererTierOf,
+  MAX_RETURN_BYTES,
   type RendererDeps,
 } from "./handler";
 import { createFakePdfRenderer } from "./fake";
@@ -15,7 +16,7 @@ const doc: InvoiceDocument = {
   kind: "invoice",
   number: "TC-2026-000042",
   issuedAt: new Date("2026-11-11T05:00:00Z"),
-  company: { name: "TiCON Cloud", address: ["Dhaka"] },
+  company: { name: "MeghVPS", address: ["Dhaka"] },
   // A test fixture only: these are not the owner's details. A tax invoice is refused without a seller.
   seller: {
     legalNameBn: "পরীক্ষা বিক্রেতা",
@@ -258,5 +259,39 @@ describe("tier of the invocation (WPU-B7 L3)", () => {
     }
     expect(stored.size).toBe(0);
     expect(logs.every((l) => l["reason"] === "wrong_tier")).toBe(true);
+  });
+});
+
+// WPU-N1: the web tier cannot read the invoices bucket with its own SDK (no new dependency), so on request
+// the renderer also RETURNS the bytes (base64, size-limited). The object is still stored for audit.
+describe("invoice-renderer handler, returnBytes", () => {
+  it("returns the PDF as base64 only when asked, and still stores it", async () => {
+    const { handler, stored } = setup();
+    const plain = await handler({ customerId, invoiceId, locale: "en", html });
+    expect(plain).not.toHaveProperty("pdfBase64");
+    const r = await handler({ customerId, invoiceId, locale: "en", html, returnBytes: true });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const key = `invoices/${customerId}/${invoiceId}.en.pdf`;
+    expect(r.pdfBase64).toBe(Buffer.from(stored.get(key) ?? new Uint8Array()).toString("base64"));
+    expect(stored.has(key)).toBe(true);
+  });
+  it("stores but does not return a PDF over the limit", async () => {
+    const big = new Uint8Array(MAX_RETURN_BYTES + 1);
+    const { handler, stored } = setup({
+      pdf: { render: async () => big },
+    });
+    const r = await handler({ customerId, invoiceId, locale: "en", html, returnBytes: true });
+    expect(r).toEqual({
+      ok: true,
+      key: `invoices/${customerId}/${invoiceId}.en.pdf`,
+      bytes: big.byteLength,
+    });
+    expect(stored.size).toBe(1);
+  });
+  it("ignores a returnBytes that is not the boolean true", async () => {
+    const { handler } = setup();
+    const r = await handler({ customerId, invoiceId, locale: "en", html, returnBytes: "yes" });
+    expect(r).not.toHaveProperty("pdfBase64");
   });
 });

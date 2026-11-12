@@ -1,6 +1,7 @@
 import {
   DOMAIN_YEARS,
   normalizeDomainName,
+  parseNameServers,
   parseRegistrantContact,
   stepDone,
   stepNext,
@@ -8,6 +9,7 @@ import {
   type RegistrantContact,
   type StepResult,
 } from "@tc/core";
+import type { OperationKind } from "@tc/core";
 import { AwsError } from "../errors";
 import type { DomainsPort } from "./domains-port";
 import type { Route53Port } from "./route53-port";
@@ -94,6 +96,24 @@ async function contactOf(
   const parsed = parseRegistrantContact(opened);
   if (!parsed.ok) throw fail("validation");
   return parsed.value;
+}
+
+function savedId(config: unknown, key: string): string | null {
+  const id = recordOf(config)[key];
+  return typeof id === "string" && OPERATION_ID.test(id) ? id : null;
+}
+
+/** 2 to 8 distinct host names (the rule of @tc/core, the same one the web action ran). */
+function parseServers(raw: unknown): string[] {
+  const checked = parseNameServers(raw);
+  if (!checked.ok) throw fail("validation");
+  return checked.value;
+}
+
+function sameHosts(a: readonly string[], b: readonly string[]): boolean {
+  const norm = (list: readonly string[]): string =>
+    [...new Set(list.map((n) => n.toLowerCase().replace(/\.$/, "")))].sort().join(",");
+  return norm(a) === norm(b);
 }
 
 export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdapterConfig> {
@@ -184,6 +204,96 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
     });
   }
 
+  // ---- WPU-B2: the actions of a registered domain --------------------------------------------------
+
+  async function resendAction(ctx: Ctx): Promise<StepResult> {
+    const outcome = await resendVerification(deps.domains(), ctx.config.name);
+    return stepDone({
+      configMerge:
+        outcome === "sent"
+          ? { verificationEmailResentAt: ctx.clock.now().toISOString() }
+          : { reachability: "done", domainStatus: "registered" },
+    });
+  }
+
+  async function nameServersAction(ctx: Ctx): Promise<StepResult> {
+    const port = deps.domains();
+    const { name } = ctx.config;
+    if (ctx.operation.step === "poll") {
+      const operationId = savedId(ctx.resource.config, "nameServerOperationId");
+      if (operationId === null) throw fail("internal");
+      const { status } = await port.getOperationDetail(operationId);
+      if (status === "failed") throw fail("conflict");
+      if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
+      const detail = await port.getDomainDetail(name);
+      if (detail === null) throw fail("upstream_unavailable", true);
+      return stepDone({ configMerge: { nameServers: [...detail.nameServers] } });
+    }
+    const servers = parseServers(recordOf(ctx.operation.payload)["nameServers"]);
+    const detail = await port.getDomainDetail(name);
+    if (detail === null) throw fail("validation");
+    // The registry already has these servers: a repeat of the start is not a second call (R7).
+    if (sameHosts(detail.nameServers, servers)) {
+      return stepDone({ configMerge: { nameServers: [...detail.nameServers] } });
+    }
+    const { operationId } = await port.updateNameServers(name, servers);
+    return stepWait("poll", inSeconds(ctx, POLL_SECONDS), {
+      configMerge: { nameServerOperationId: operationId },
+    });
+  }
+
+  async function renewAction(ctx: Ctx): Promise<StepResult> {
+    const port = deps.domains();
+    const { name } = ctx.config;
+    if (ctx.operation.step === "poll") {
+      const operationId = savedId(ctx.resource.config, "renewOperationId");
+      if (operationId === null) throw fail("internal");
+      const { status } = await port.getOperationDetail(operationId);
+      if (status === "failed") throw fail("conflict");
+      if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
+      return renewedExpiry(port, name);
+    }
+    const payload = recordOf(ctx.operation.payload);
+    const year = payload["currentExpiryYear"];
+    const years = payload["years"] === undefined ? DOMAIN_YEARS : payload["years"];
+    if (typeof year !== "number" || !Number.isInteger(year) || year < 2000 || year > 2200) {
+      throw fail("validation");
+    }
+    if (typeof years !== "number" || !Number.isInteger(years) || years < 1 || years > 10) {
+      throw fail("validation");
+    }
+    const detail = await port.getDomainDetail(name);
+    if (detail === null || detail.expiresAt === null) throw fail("validation");
+    const live = detail.expiresAt.getUTCFullYear();
+    // The year in the payload is the one the row had when the customer paid. A later live year means
+    // that this renewal already went through (a lost answer): nothing is renewed twice (R7).
+    if (live > year)
+      return stepDone({ configMerge: { expiresAt: detail.expiresAt.toISOString() } });
+    // An earlier live year, or a payload that is ahead of AWS, means row and registry disagree (R16).
+    if (live !== year) throw fail("validation");
+    const { operationId } = await port.renewDomain({
+      name,
+      years,
+      currentExpiryYear: year,
+    });
+    return stepWait("poll", inSeconds(ctx, POLL_SECONDS), {
+      configMerge: { renewOperationId: operationId },
+    });
+  }
+
+  function waitOrGiveUp(ctx: Ctx, step: string): StepResult {
+    if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
+      throw fail("upstream_unavailable");
+    }
+    return stepWait(step, inSeconds(ctx, POLL_SECONDS));
+  }
+
+  async function renewedExpiry(port: DomainsPort, name: string): Promise<StepResult> {
+    const detail = await port.getDomainDetail(name);
+    if (detail === null || detail.expiresAt === null) throw fail("upstream_unavailable", true);
+    return stepDone({ configMerge: { expiresAt: detail.expiresAt.toISOString() } });
+  }
+
   return {
     family: "domain",
     parseConfig(input: unknown): DomainAdapterConfig {
@@ -230,9 +340,18 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
         const detail = await deps.domains().getDomainDetail(ctx.config.name);
         return { state: detail === null ? "missing" : "active" };
       },
-      // No operation kind of the contract is a domain action yet (JOURNEY: Needs decision).
-      action: async () => {
-        throw fail("validation");
+      // WPU-B2: the three domain actions. Any other kind is refused.
+      async action(kind: OperationKind, ctx: Ctx): Promise<StepResult> {
+        switch (kind) {
+          case "resend_verification":
+            return resendAction(ctx);
+          case "set_name_servers":
+            return nameServersAction(ctx);
+          case "renew_domain":
+            return renewAction(ctx);
+          default:
+            throw fail("validation");
+        }
       },
     },
   };

@@ -7,6 +7,9 @@
 import { invoicePdfKey, type Locale, type Logger } from "@tc/core";
 
 export const MAX_HTML_BYTES = 512 * 1024;
+// WPU-N1: a synchronous Lambda response is limited to 6 MB. Base64 adds a third, so the raw PDF that may
+// be returned stops at 3 MB (4 MB of base64). A larger PDF is only stored; the caller then shows "not ready".
+export const MAX_RETURN_BYTES = 3 * 1024 * 1024;
 
 export interface PdfRenderer {
   render(html: string, opts: { locale: Locale }): Promise<Uint8Array>;
@@ -21,7 +24,7 @@ export interface RendererDeps {
 }
 
 export type RenderReport =
-  | { ok: true; key: string; bytes: number }
+  | { ok: true; key: string; bytes: number; pdfBase64?: string }
   | { ok: false; reason: "invalid_event" | "unsafe_html" | "wrong_tier" };
 
 // WPU-B7 (L3). The renderer has one alias, "web". The infra grants lambda:InvokeFunction on that alias ARN
@@ -131,9 +134,13 @@ function isSafeMarkup(html: string): boolean {
   return !text.includes("<");
 }
 
-function parse(
-  event: unknown,
-): { customerId: string; invoiceId: string; locale: Locale; html: string } | null {
+function parse(event: unknown): {
+  customerId: string;
+  invoiceId: string;
+  locale: Locale;
+  html: string;
+  returnBytes: boolean;
+} | null {
   if (typeof event !== "object" || event === null) return null;
   const e = event as Record<string, unknown>;
   const { customerId, invoiceId, locale, html } = e;
@@ -141,7 +148,7 @@ function parse(
   if (typeof invoiceId !== "string" || !UUID.test(invoiceId)) return null;
   if (locale !== "bn" && locale !== "en") return null;
   if (typeof html !== "string" || html.length === 0 || html.length > MAX_HTML_BYTES) return null;
-  return { customerId, invoiceId, locale, html };
+  return { customerId, invoiceId, locale, html, returnBytes: e["returnBytes"] === true };
 }
 
 // Logs fixed reasons only: no id, no number, no customer text, no HTML (R14). A failure of the engine or
@@ -179,6 +186,14 @@ export function createInvoiceRendererHandler(
       throw new Error("invoice-renderer: store failed");
     }
     deps.log({ event: "invoice_rendered", locale: input.locale, bytes: bytes.byteLength });
+    if (input.returnBytes && bytes.byteLength <= MAX_RETURN_BYTES) {
+      return {
+        ok: true,
+        key,
+        bytes: bytes.byteLength,
+        pdfBase64: Buffer.from(bytes).toString("base64"),
+      };
+    }
     return { ok: true, key, bytes: bytes.byteLength };
   };
 }

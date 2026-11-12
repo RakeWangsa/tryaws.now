@@ -7,7 +7,7 @@ export const publicBn = {
     crumb: { home: "হোম" },
     meta: {
       home: {
-        title: "TiCON Cloud: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
+        title: "MeghVPS: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
         description:
           "বাংলাদেশের জন্য প্রিপেইড ক্লাউড প্যানেল। ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি। টাকায় মূল্য, EPS দিয়ে টপ আপ।",
       },
@@ -24,15 +24,15 @@ export const publicBn = {
       help: {
         title: "সাহায্য ও সাধারণ প্রশ্ন",
         description:
-          "TiCON Cloud ও Amazon Lightsail নিয়ে সাধারণ প্রশ্নের উত্তর: AWS, বিল, সাপোর্ট, ডেটা কোথায় থাকে।",
+          "MeghVPS ও Amazon Lightsail নিয়ে সাধারণ প্রশ্নের উত্তর: AWS, বিল, সাপোর্ট, ডেটা কোথায় থাকে।",
       },
       support: {
         title: "সাপোর্ট ও যোগাযোগ",
-        description: "TiCON Cloud সাপোর্ট টিমের সঙ্গে যোগাযোগের উপায়।",
+        description: "MeghVPS সাপোর্ট টিমের সঙ্গে যোগাযোগের উপায়।",
       },
       legal: {
         title: "আইনি নথি",
-        description: "TiCON Cloud-এর শর্তাবলি, গোপনীয়তা, গ্রহণযোগ্য ব্যবহার ও ফেরতের নীতি।",
+        description: "MeghVPS-এর শর্তাবলি, গোপনীয়তা, গ্রহণযোগ্য ব্যবহার ও ফেরতের নীতি।",
       },
       soon: {
         description: "এই পণ্য এখনো খোলা হয়নি। খোলা হলে ইমেইলে জানাতে আপনার ঠিকানা দিন।",
@@ -81,7 +81,7 @@ export const publicBn = {
       plansTitle: "জনপ্রিয় ক্লাউড সার্ভার প্ল্যান",
       plansLead:
         "বর্তমানে খোলা সবচেয়ে কম মূল্যের প্ল্যান। সব মূল্য সরাসরি মূল্য তালিকা থেকে নেওয়া।",
-      whyTitle: "কেন TiCON Cloud",
+      whyTitle: "কেন MeghVPS",
       why: {
         aws: {
           title: "১০০% AWS অবকাঠামো",
@@ -93,11 +93,11 @@ export const publicBn = {
         },
         panel: {
           title: "এক প্যানেল, আলাদা AWS account নয়",
-          text: "সার্ভার তৈরি, চালু-বন্ধ ও ব্যাকআপ TiCON Cloud প্যানেল থেকেই। AWS console-এর দরকার নেই।",
+          text: "সার্ভার তৈরি, চালু-বন্ধ ও ব্যাকআপ MeghVPS প্যানেল থেকেই। AWS console-এর দরকার নেই।",
         },
         support: {
-          title: "বিল ও সাপোর্ট TiCON Cloud-এর",
-          text: "বিক্রি, বিল ও সাপোর্ট TiCON Cloud দেয়। প্রশ্ন থাকলে সরাসরি আমাদের জানান।",
+          title: "বিল ও সাপোর্ট MeghVPS-এর",
+          text: "বিক্রি, বিল ও সাপোর্ট MeghVPS দেয়। প্রশ্ন থাকলে সরাসরি আমাদের জানান।",
         },
       },
       locationsTitle: "দুটি লোকেশন",
@@ -180,7 +180,7 @@ export const publicBn = {
     },
     help: {
       heading: "সাধারণ প্রশ্ন",
-      lead: "TiCON Cloud ও Amazon Lightsail নিয়ে সবচেয়ে বেশি জিজ্ঞাসিত প্রশ্ন।",
+      lead: "MeghVPS ও Amazon Lightsail নিয়ে সবচেয়ে বেশি জিজ্ঞাসিত প্রশ্ন।",
       listTitle: "প্রশ্নোত্তর",
       stillTitle: "উত্তর পাননি?",
       stillText: "সাপোর্ট পাতায় আমাদের জানান।",
@@ -191,11 +191,11 @@ export const publicBn = {
         },
         noAccount: {
           q: "আমি কি AWS account বা AWS console পাব?",
-          a: "না। আপনি TiCON Cloud প্যানেল থেকেই সবকিছু চালান। আলাদা AWS account বা AWS console লাগে না।",
+          a: "না। আপনি MeghVPS প্যানেল থেকেই সবকিছু চালান। আলাদা AWS account বা AWS console লাগে না।",
         },
         billing: {
           q: "বিল ও সাপোর্ট কে দেয়?",
-          a: "TiCON Cloud। আমরা বিক্রি করি, বিল করি ও সাপোর্ট দিই।",
+          a: "MeghVPS। আমরা বিক্রি করি, বিল করি ও সাপোর্ট দিই।",
         },
         dataLocation: {
           q: "আমার ডেটা কোথায় থাকে?",
@@ -237,7 +237,7 @@ export const publicBn = {
     },
     support: {
       heading: "সাপোর্ট ও যোগাযোগ",
-      lead: "TiCON Cloud বিক্রি, বিল ও সাপোর্ট দেয়। নিচের উপায়ে আমাদের জানান।",
+      lead: "MeghVPS বিক্রি, বিল ও সাপোর্ট দেয়। নিচের উপায়ে আমাদের জানান।",
       signedInTitle: "আপনার অ্যাকাউন্ট থাকলে",
       signedInText:
         "প্যানেলে ঢুকে সাপোর্ট পাতা থেকে অনুরোধ পাঠান। তাতে আপনার সার্ভার ও অর্ডারের তথ্য আমাদের কাছে আগেই থাকে।",
@@ -262,7 +262,7 @@ export const publicBn = {
         terms: {
           title: "ব্যবহারের শর্তাবলি",
           sections: {
-            scope: "পরিসর: TiCON Cloud সেবার বিবরণ ও কে কী দেয়। [আইনি লেখা বাকি]",
+            scope: "পরিসর: MeghVPS সেবার বিবরণ ও কে কী দেয়। [আইনি লেখা বাকি]",
             payment: "টাকা, ওয়ালেট ও নবায়ন। [আইনি লেখা বাকি]",
             suspension: "সেবা স্থগিত ও বন্ধ করার অধিকার। [আইনি লেখা বাকি]",
           },
@@ -275,7 +275,7 @@ export const publicBn = {
             transfer:
               "অন্য AWS সেবার ডেটা ফি এড়াতে Amazon Lightsail ব্যবহার, ভিডিও স্ট্রিমিং বা অতি উচ্চ অনুরোধ-সংখ্যা CDN দিয়ে চালানো এবং বাইরে যাওয়া পোর্ট ২৫ নিয়ে নিয়ম। [আইনি লেখা বাকি]",
             suspend:
-              "নিয়ম ভাঙলে বা AWS-এর নোটিস এলে TiCON Cloud তৎক্ষণাৎ রিসোর্স স্থগিত করতে পারবে। [আইনি লেখা বাকি]",
+              "নিয়ম ভাঙলে বা AWS-এর নোটিস এলে MeghVPS তৎক্ষণাৎ রিসোর্স স্থগিত করতে পারবে। [আইনি লেখা বাকি]",
           },
         },
         privacy: {

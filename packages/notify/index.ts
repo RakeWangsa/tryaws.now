@@ -4,6 +4,8 @@ export * from "./otp/index";
 // WP5-T5: the queue (F's `notify`), the templates, the providers and the delivery loop.
 export { notify, planRows, rowKey } from "./queue/notify";
 export type { NotifyInput, PlannedRow } from "./queue/notify";
+export { waitlistNoticeToInput } from "./queue/waitlist";
+export type { WaitlistNoticeLike } from "./queue/waitlist";
 export { TEMPLATE_IDS, DIRECT_ONLY_IDS, NotifyError } from "./queue/types";
 export type { TemplateId, Channel, NotifyErrorCode } from "./queue/types";
 export { runNotifier, MAX_ATTEMPTS } from "./queue/run";

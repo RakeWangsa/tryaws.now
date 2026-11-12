@@ -58,6 +58,8 @@ const EXPORTS = {
     "./testing": "./testing/index.ts",
   },
   "packages/eps": { ".": "./index.ts", "./redirect": "./redirect.ts" },
+  // "./capacity-worker": the release of capacity, worker code that the barrel no longer exports (WPU-B3).
+  "packages/core": { ".": "./index.ts", "./capacity-worker": "./capacity/worker.ts" },
   // "./admin-ip": the pure allowlist functions, light enough for the proxy of the admin app (WP8-T1).
   // "./proxy": the session refresh and the pool config for proxy.ts of the customer app, which must
   // not load the database driver (WP2-T2).

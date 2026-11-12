@@ -63,11 +63,14 @@ describe("WPU-B7 M3: loadTarget of the access-details function, customer B again
 
   it("does the same through the invocation entry", async () => {
     const { handler, count } = build();
-    const viaEvent = await handler({
-      action: "windows_password",
-      resourceId: world.windowsA,
-      caller: { customerId: world.b },
-    });
+    const viaEvent = await handler(
+      {
+        action: "windows_password",
+        resourceId: world.windowsA,
+        caller: { customerId: world.b },
+      },
+      "web",
+    );
     expect(viaEvent).toEqual({ ok: false, error: "not_found" });
     expect(count()).toBe(1);
   });

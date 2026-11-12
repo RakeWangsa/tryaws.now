@@ -3,14 +3,14 @@ import { NOTIFIER_CONFIG_ERROR, readNotifierConfig } from "./config";
 
 const env = (over: Record<string, string | undefined> = {}) => ({
   PANEL_ORIGIN: "https://my.ticoncloud.test",
-  SES_FROM: "TiCON Cloud <no-reply@ticoncloud.test>",
+  SES_FROM: "MeghVPS <no-reply@ticoncloud.test>",
   ...over,
 });
 
 it("reads the panel origin and the sender", () => {
   expect(readNotifierConfig(env())).toEqual({
     panelOrigin: "https://my.ticoncloud.test",
-    sesFrom: "TiCON Cloud <no-reply@ticoncloud.test>",
+    sesFrom: "MeghVPS <no-reply@ticoncloud.test>",
   });
   expect(readNotifierConfig(env({ SES_FROM: "no-reply@ticoncloud.test" })).sesFrom).toBe(
     "no-reply@ticoncloud.test",

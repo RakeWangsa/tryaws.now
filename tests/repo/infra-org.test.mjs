@@ -526,6 +526,32 @@ describe("permissions", () => {
     );
   });
 
+  it("WPU-D4: TcDnsProvisioner allows exactly the hosted zone calls of the Route 53 client, in us-east-1 only", () => {
+    const role = roleByName(tpl["dns-account.yaml"], "TcDnsProvisioner");
+    const statement = rolePolicyDocs(role)
+      .flatMap(statementsOf)
+      .find((s) => s.Sid === "HostedZonesAndRecords");
+    expect(statement.Effect).toBe("Allow");
+    expect(list(statement.Action).sort()).toEqual(
+      [
+        "route53:ChangeResourceRecordSets",
+        "route53:CreateHostedZone",
+        "route53:DeleteHostedZone",
+        "route53:GetChange",
+        "route53:GetHostedZone",
+        "route53:ListHostedZonesByName",
+        "route53:ListResourceRecordSets",
+      ].sort(),
+    );
+    expect(statement.Condition).toEqual({ StringEquals: { "aws:RequestedRegion": "us-east-1" } });
+    // the reader of tc-dns can never write a zone
+    const reader = roleByName(tpl["dns-account.yaml"], "TcDnsReader");
+    const readerRoute53 = rolePolicyDocs(reader)
+      .flatMap(allowActions)
+      .filter((a) => a.startsWith("route53:"));
+    expect(readerRoute53.filter((a) => /Create|Change|Delete/.test(a))).toEqual([]);
+  });
+
   it("every Allow of a Lightsail or Route 53 role is limited to the approved Regions", () => {
     const check = (roles, regions) => {
       for (const role of roles) {
@@ -565,7 +591,11 @@ describe("the allow-lists match the adapters of packages/aws", () => {
   const adapters = readdirSync(join(awsDir, "adapters"))
     .filter((n) => n.endsWith(".ts"))
     .map((n) => `adapters/${n}`);
-  const accessFiles = ["adapters/bucket-access.ts", "adapters/windows-access.ts"];
+  const accessFiles = [
+    "adapters/bucket-access.ts",
+    "adapters/database-access.ts",
+    "adapters/windows-access.ts",
+  ];
   const readFiles = ["reader-source.ts", "catalog.ts"];
 
   it("finds the adapters (the test would pass on an empty list otherwise)", () => {

@@ -35,12 +35,13 @@ const MAX_KEYS = 2;
  * the unique key (R7, R8, R9): a key is not an idempotent thing, so a retried request must be
  * answered from its audit row, never by calling this again.
  *
- * What the caller must do with a failure (WPU-B7, L5): an error thrown BEFORE `CreateBucketAccessKey`
- * was sent (the state check, the list of keys, the key limit) or an error answer of AWS to it means that
- * no key exists; the caller releases the claim of the request id and answers `key_not_created`, so the
- * customer may retry with the same request id. A timeout or a lost answer after the create call was sent
- * may have left a key: the caller keeps the claim, answers `internal` and ops follows
- * docs/runbooks/bucket-access-key-orphan.md.
+ * What a failure means (WPU-B7, L5): an error thrown BEFORE `CreateBucketAccessKey` was sent (the state
+ * check, the list of keys, the key limit) means that no key exists. A timeout or a lost answer after the
+ * create call was sent may have left a key nobody saw (an orphan): see
+ * docs/runbooks/bucket-access-key-orphan.md. The function claims the request id before AWS is asked
+ * (a counter that cannot be released), so after any failure the customer reloads the Keys tab for a new
+ * request id; the web core has the public answer `key_not_created` for a function that can say that no
+ * key was made.
  *
  * A bucket that is not active gets no key: suspend removed the access and a new key would undo it
  * (R16).
@@ -61,4 +62,37 @@ export async function createBucketAccessKey(input: BucketAccessKeyInput): Promis
     throw new AwsError({ code: "upstream_unavailable", retryable: false });
   }
   return { accessKeyId: key.accessKeyId, secretAccessKey: key.secretAccessKey };
+}
+
+/** A key of the list: the id and facts that are not secret. AWS never returns the secret of a listed key. */
+export interface BucketAccessKeyListed {
+  readonly accessKeyId: string;
+  readonly status: "active" | "inactive";
+  /** ISO time, or null when AWS did not say. */
+  readonly createdAt: string | null;
+}
+
+/**
+ * Lists the access keys of a bucket (at most two). Only the id, the status and the creation time are
+ * kept: the secret field of the response is dropped by construction (U9, R14). VERIFY: the field names
+ * `accessKeyId`, `status`, `createdAt` of GetBucketAccessKeys.
+ */
+export async function listBucketAccessKeys(
+  input: Omit<BucketAccessKeyInput, "resourceState"> & { readonly resourceState?: string },
+): Promise<BucketAccessKeyListed[]> {
+  const bucketName = awsResourceName("bucket", input.resourceId);
+  const lightsail = input.access.lightsail(input.account, input.region, "TcAccessDetails");
+  const got = await lightsail.send(new GetBucketAccessKeysCommand({ bucketName }));
+  const out: BucketAccessKeyListed[] = [];
+  for (const key of got.accessKeys ?? []) {
+    if (typeof key.accessKeyId !== "string" || key.accessKeyId === "") continue;
+    const created = key.createdAt instanceof Date ? key.createdAt : null;
+    out.push({
+      accessKeyId: key.accessKeyId,
+      status: String(key.status ?? "").toLowerCase() === "inactive" ? "inactive" : "active",
+      createdAt:
+        created !== null && !Number.isNaN(created.getTime()) ? created.toISOString() : null,
+    });
+  }
+  return out.slice(0, MAX_KEYS);
 }

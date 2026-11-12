@@ -133,6 +133,15 @@ export function DeleteKeyForm({
         disabled={!allowed}
         {...(state.fields?.["accessKeyId"] !== undefined ? { error: t("deleteHint") } : {})}
       />
+      <Field
+        name="confirmName"
+        label={t("deleteNameLabel")}
+        hint={t("deleteNameHint")}
+        maxLength={120}
+        autoComplete="off"
+        disabled={!allowed}
+        {...(state.error === "name_mismatch" ? { error: t("deleteNameHint") } : {})}
+      />
       <StorageNotice state={state} />
       <SubmitButton variant="destructive" icon="fas fa-trash-alt" disabled={!allowed}>
         {t("delete")}

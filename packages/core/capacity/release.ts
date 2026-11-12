@@ -1,6 +1,7 @@
 import {
   capacityReleaseRepo,
   capacityRepo,
+  insertAudit,
   isReservedCell,
   ROLLING_WINDOW_CODES,
   type CapacityCellRow,
@@ -8,6 +9,7 @@ import {
   type Tx,
   type UsedChange,
 } from "@tc/db";
+import type { Logger } from "../operations/types";
 import type { Clock, Result } from "../types";
 
 const MAX_RECORD_CELLS = 20;
@@ -60,13 +62,49 @@ function readRecord(
   return { poolAccountId, cells: cells as ReservedCell[] };
 }
 
+/** The problems that leave the units of a resource unreleased and need a person (WPU-B3). */
+export const RELEASE_PROBLEM_EVENT = "capacity_release_problem";
+
+// WPU-B3. One audit row for every release that did something or found a problem, and, for a problem,
+// one structured log line with severity "alert" that the stage alarm matches (infra/stacks/alarms.ts).
+// Ids and a fixed reason only (R14). The audit row is written in the transaction of the release.
+async function auditRelease(
+  tx: Tx,
+  resourceId: string,
+  action: "capacity.released" | "capacity.release_problem",
+  metadata: Record<string, string | number>,
+): Promise<void> {
+  await insertAudit(tx, {
+    actorType: "system",
+    actorId: null,
+    action,
+    targetType: "resource",
+    targetId: resourceId,
+    metadata,
+  });
+}
+
+async function reportProblem(
+  tx: Tx,
+  input: { resourceId: string; log?: Logger },
+  reason: "malformed_record" | "row_missing",
+): Promise<void> {
+  await auditRelease(tx, input.resourceId, "capacity.release_problem", { reason });
+  input.log?.({
+    event: RELEASE_PROBLEM_EVENT,
+    severity: "alert",
+    resourceId: input.resourceId,
+    reason,
+  });
+}
+
 // Gives the units of a resource in `failed` or `destroyed` back, once, in the transaction of the
 // failure step or the destroy step. It throws only for a database error: a bad stored record
 // opens a discrepancy and answers released:false, so that the refund in the same transaction
 // stands (10.1).
 export async function releaseCapacity(
   tx: Tx,
-  input: { resourceId: string; clock: Clock },
+  input: { resourceId: string; clock: Clock; log?: Logger },
 ): Promise<Result<ReleaseOutcome>> {
   const releaseRepo = capacityReleaseRepo(tx);
   const found = await releaseRepo.inspect(input.resourceId);
@@ -80,6 +118,7 @@ export async function releaseCapacity(
   const record = readRecord(found.record, found.poolAccountId);
   if (!record) {
     await releaseRepo.recordProblem(input.resourceId, "malformed_record");
+    await reportProblem(tx, input, "malformed_record");
     return { ok: true, value: { released: false, reason: "malformed_record" } };
   }
   const rows = await capacityRepo(tx).lockCells({
@@ -89,11 +128,16 @@ export async function releaseCapacity(
   const plan = planRelease(rows, record.cells);
   if (plan.missing.length > 0) {
     await releaseRepo.recordProblem(input.resourceId, "row_missing");
+    await reportProblem(tx, input, "row_missing");
     return { ok: true, value: { released: false, reason: "row_missing" } };
   }
   if (!(await releaseRepo.mark(input.resourceId, input.clock.now().toISOString()))) {
     return { ok: true, value: { released: false, reason: "already_released" } };
   }
   await capacityRepo(tx).setUsed(plan.changes);
+  await auditRelease(tx, input.resourceId, "capacity.released", {
+    cells: record.cells.length,
+    clamped: plan.clamped.length,
+  });
   return { ok: true, value: { released: true, cells: record.cells, clamped: plan.clamped } };
 }

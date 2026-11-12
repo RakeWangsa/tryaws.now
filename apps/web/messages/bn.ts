@@ -3,13 +3,13 @@
 export const bn = {
   Web: {
     meta: {
-      title: "TiCON Cloud",
+      title: "MeghVPS",
       description:
         "বাংলাদেশের জন্য প্রিপেইড ক্লাউড প্যানেল। ১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
     },
-    announcement: "TiCON Cloud শীঘ্রই আসছে।",
+    announcement: "MeghVPS শীঘ্রই আসছে।",
     home: {
-      title: "TiCON Cloud শীঘ্রই আসছে",
+      title: "MeghVPS শীঘ্রই আসছে",
     },
   },
 };

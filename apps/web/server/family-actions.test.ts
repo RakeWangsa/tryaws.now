@@ -183,6 +183,20 @@ describe("setRunningCore", () => {
     expect(other).toEqual(missing);
   });
 
+  it("a foreign or missing id spends no rate limit, for stop/start and for destroy (R9, WPU-N1)", async () => {
+    const a = world({ rows: [] });
+    await setRunningCore(a.deps, DB_SPEC, stop);
+    expect(a.calls).not.toContain("rate");
+    const b = world({ rows: [] });
+    const out = await destroyFamilyCore(b.deps, DB_SPEC, {
+      databaseId: DB,
+      requestId: REQ,
+      confirmName: "x",
+    });
+    expect(out).toEqual({ ok: false, error: "not_found" });
+    expect(b.calls).not.toContain("rate");
+  });
+
   it("is rate limited; a refused audit or operation rolls back with a fixed key (R16)", async () => {
     expect(await setRunningCore(world({ allowed: false }).deps, DB_SPEC, stop)).toEqual({
       ok: false,

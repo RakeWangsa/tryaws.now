@@ -280,12 +280,12 @@ describe("/wallet/topup: errors and states", () => {
     expect(await render("en")).not.toContain("Payments waiting");
   });
 
-  it("explains how the payment works and that card details never reach TiCON Cloud", async () => {
+  it("explains how the payment works and that card details never reach MeghVPS", async () => {
     const en = await render("en");
     expect(en).toContain("You are taken to the secure EPS page to pay.");
-    expect(en).toContain("Card and mobile-wallet details never reach TiCON Cloud.");
+    expect(en).toContain("Card and mobile-wallet details never reach MeghVPS.");
     const bn = await render("bn");
-    expect(bn).toContain("কার্ড বা মোবাইল ওয়ালেটের তথ্য TiCON Cloud-এ আসে না।");
+    expect(bn).toContain("কার্ড বা মোবাইল ওয়ালেটের তথ্য MeghVPS-এ আসে না।");
   });
 });
 

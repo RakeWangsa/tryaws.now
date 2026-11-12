@@ -280,6 +280,28 @@ export const LEDGER_LOG_MESSAGES = {
   ok: "ledger_check_ok",
 } as const;
 export const LEDGER_METRIC_NAMESPACE = "TiconCloud/Ledger";
+
+// WPU-B3 (audit items 14, 15 and 36): the structured log lines (field `event`, R14) that the alerts match.
+// Each one is written by the code named beside it; tests/repo/infra-alerts.test.mjs checks that the text
+// is really in that file, so a rename cannot silence an alarm. `severity: "alert"` lines are for a person.
+export const ALERT_LOG_EVENTS = {
+  // packages/core/capacity/release.ts (log by the provisioner): the units of a failed or destroyed
+  // resource could not be given back (row_missing, malformed_record).
+  capacityReleaseProblem: "capacity_release_problem",
+  // packages/core/invoices/credit-note.ts (log by the scheduler): a credit note refused for 24 hours.
+  creditNoteStuck: "credit_note_stuck",
+  // functions/reconciler/reconcile.ts (the hourly run): a run that found orphans or missing resources,
+  // could not read something, found stale operations, or could not write usage.
+  reconcileFindings: "reconcile_findings",
+  reconcileIncomplete: "reconcile_incomplete",
+  reconcileStaleOperations: "reconcile_stale_operations",
+  reconcileUsageFailed: "reconcile_usage_failed",
+  // The healthy line of a run: its silence is an alarm too.
+  reconcileOk: "reconcile_ok",
+} as const;
+export const ALERT_METRIC_NAMESPACE = "TiconCloud/Alerts";
+// The reconciler runs every hour and logs reconcile_ok or reconcile_incomplete every time it finishes.
+export const RECONCILE_SILENCE_HOURS = 3;
 // 24 hours between runs of the daily check plus two hours of slack; the hourly reconciler also logs it.
 export const LEDGER_SILENCE_HOURS = 26;
 

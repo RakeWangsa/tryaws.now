@@ -2,6 +2,7 @@
 
 import { currentCustomer } from "@tc/auth";
 import { customerRepos, readFeatureFlag, withTx } from "@tc/db";
+import { getAccessPort } from "../../../../../server/access-port.ts";
 import { guardAction } from "../../../../../server/action-deps.ts";
 import { pick } from "../../../../../server/action-state.ts";
 import { revealDatabasePasswordCore } from "../../../../../server/databases-access.ts";
@@ -11,13 +12,13 @@ import type { DatabaseRevealResult } from "./DatabaseAccess.tsx";
 // validate, rate limit, execute). The audit row is written by the access-details function. The answer
 // is returned to the browser once and holds the secret: nothing here logs or keeps it (U9, R14).
 //
-// The transport to the access-details function (a direct invocation) is not wired yet, as for the
-// Windows password: until it is, `reveal` is null and the core refuses every request (R16). VERIFY at
-// deploy time (JOURNEY.md, Needs decision).
+// The transport to the access-details function is the invoke port of server/access-invoke.ts (WPU-N2).
+// L4 (WPU-B7): the web tier counts under its own action name (the function counts "database_password.reveal").
 const REVEAL_LIMITS = [{ action: "database_password.reveal.web", limit: 20, windowSeconds: 3600 }];
 
 export async function revealDatabasePasswordAction(form: FormData): Promise<DatabaseRevealResult> {
   if (!(await guardAction())) return { ok: false, error: "unauthenticated" };
+  const port = await getAccessPort();
   const result = await revealDatabasePasswordCore(
     {
       authenticate: async () => {
@@ -43,9 +44,9 @@ export async function revealDatabasePasswordAction(form: FormData): Promise<Data
           );
           return decision.allowed;
         }),
-      // TODO(infra): a `RevealPort` (HTTPS function URL with SigV4, or a Lambda client). Until it
-      // is decided and wired this stays null and every request is refused (R16).
-      reveal: null,
+      // WPU-N2: the invoke port of access-details (the "web" alias); null when it is not configured,
+      // and the core then refuses every request (R16).
+      reveal: port === null ? null : (input) => port.databasePassword(input),
     },
     pick(form, ["resourceId"]),
   );

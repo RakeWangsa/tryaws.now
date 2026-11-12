@@ -12,6 +12,10 @@ export interface CompensationOrder {
   readonly ledgerTransactionId: string;
   readonly customerId: string;
   readonly status: "paid" | "fulfilled" | "reversed";
+  /** `orders.total_minor`: what the reversal gives back (WPU-B3, for the message to the customer). */
+  readonly totalMinor: bigint;
+  /** `resources.family` of the resource of the order, or "" when the row is not readable. */
+  readonly family: string;
 }
 
 export interface CompensationRepo {
@@ -42,8 +46,13 @@ export function compensationRepo(tx: Tx, customerId: string): CompensationRepo {
         ledgerTransactionId: string;
         customerId: string;
         status: CompensationOrder["status"];
+        totalMinor: string;
+        family: string | null;
       }>(sql`select o.id, o.ledger_transaction_id as "ledgerTransactionId",
-                    o.customer_id as "customerId", o.status
+                    o.customer_id as "customerId", o.status,
+                    o.total_minor::text as "totalMinor",
+                    (select r.family from resources r
+                      where r.id = ${resourceId}::uuid and r.customer_id = ${customerId}) as family
                from orders o
               where o.customer_id = ${customerId} and o.items @> ${JSON.stringify([{ resourceId }])}::jsonb
               order by o.created_at, o.id
@@ -56,6 +65,8 @@ export function compensationRepo(tx: Tx, customerId: string): CompensationRepo {
             ledgerTransactionId: row.ledgerTransactionId,
             customerId: row.customerId,
             status: row.status,
+            totalMinor: BigInt(row.totalMinor),
+            family: row.family ?? "",
           };
     },
 

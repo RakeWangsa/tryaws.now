@@ -104,6 +104,12 @@ export function OrderStatusContent({
         <div className="alert alert-danger text-start" role="alert">
           <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
           {t("failed", words)}
+          {order.refunded === true ? (
+            // WPU-B3: the reversal is posted: say so with the amount, not only that it will come.
+            <p className="mt-2 mb-0">
+              {t("refunded")} <MoneyText minor={order.totalMinor} />
+            </p>
+          ) : null}
           <div className="mt-3">
             <Button variant="primary" href={localePath(locale, "/wallet")}>
               {t("wallet")}
