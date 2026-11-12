@@ -192,6 +192,12 @@ const GATE_CASES: Record<string, GateCase> = {
       ),
     deny: null,
   },
+  "blueprints.list": { call: (r) => r.blueprints.list("BD"), deny: "finance" },
+  "blueprints.setEnabled": {
+    call: (r) =>
+      r.blueprints.setEnabled({ market: "BD", blueprintId: "some_image", enabled: true }, "r"),
+    deny: "finance",
+  },
   "priceBook.read": { call: (r) => r.priceBook.read("BD"), deny: "support" },
   "priceBook.save": {
     call: (r) =>

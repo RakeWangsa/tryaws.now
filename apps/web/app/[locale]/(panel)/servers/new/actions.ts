@@ -18,7 +18,7 @@ export async function createOrderDraftAction(
   if (!(await guardAction())) return { error: "forbidden" };
   const result = await createOrderDraftCore(
     await orderActionDeps(),
-    pick(form, ["productId", "region", "displayName", "keyPairId"]),
+    pick(form, ["productId", "region", "displayName", "keyPairId", "blueprintId"]),
   );
   if (!result.ok)
     return { error: result.error, ...(result.fields ? { fields: result.fields } : {}) };

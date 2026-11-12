@@ -9,6 +9,33 @@ import { ImageTile } from "./ImageTile";
 const src = "/theme/assets/apps/ubuntu.svg";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../");
 
+describe("ImageTile without a logo", () => {
+  it("shows the generic server icon, no img, and keeps the input and the name", () => {
+    const { container } = renderKit(
+      <ImageTile
+        type="radio"
+        name="os"
+        value="amazon_linux_2023"
+        label="Amazon Linux"
+        imageSrc={null}
+      />,
+    );
+    const label = container.firstElementChild as HTMLElement;
+    expect(label.querySelector("img")).toBeNull();
+    const icon = label.querySelector("i.tc-image-tile-generic");
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
+    expect(label.querySelector("input")?.getAttribute("value")).toBe("amazon_linux_2023");
+    expect(label.textContent).toBe("Amazon Linux");
+  });
+  it("still refuses a logo path outside the theme apps", () => {
+    expect(() =>
+      renderKit(
+        <ImageTile type="radio" name="os" value="x" label="X" imageSrc="https://evil/x.svg" />,
+      ),
+    ).toThrow(RangeError);
+  });
+});
+
 describe("ImageTile", () => {
   it("has the markup of the mockup (header.html, div.os)", () => {
     const { container } = renderKit(

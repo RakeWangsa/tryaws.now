@@ -14,8 +14,13 @@ import {
 import type { FlagState } from "@tc/core";
 import { localePath, type Locale } from "@tc/ui/runtime";
 import { dependenciesOf, missingDependencies } from "../../server/flag-dependencies.ts";
-import { setFlagAction } from "../../server/pricing-actions.ts";
-import type { CatalogFamily, CatalogScreen, Loaded } from "../../server/pricing-data.ts";
+import { setFlagAction, setImageAction } from "../../server/pricing-actions.ts";
+import type {
+  CatalogFamily,
+  CatalogScreen,
+  ImageAdminRow,
+  Loaded,
+} from "../../server/pricing-data.ts";
 
 const RESULT_CODES = [
   "ok",
@@ -121,6 +126,80 @@ function FlagsCard({ locale, screen }: { locale: Locale; screen: CatalogScreen }
   );
 }
 
+// WPU-G3. The allow-list of the Linux create wizard: the switch is the only thing an admin changes.
+function ImagesCard({ locale, screen }: { locale: Locale; screen: CatalogScreen }) {
+  const t = useTranslations("AdminCatalog.images");
+  const columns: DataTableColumn<ImageAdminRow>[] = [
+    { key: "name", header: t("name"), cell: (row) => `${row.name} (${row.id})` },
+    {
+      key: "kind",
+      header: t("kind"),
+      cell: (row) => (row.kind === "app" ? t("kindApp") : t("kindOs")),
+    },
+    { key: "user", header: t("user"), cell: (row) => row.loginUser ?? t("userUnknown") },
+    {
+      key: "regions",
+      header: t("regions"),
+      cell: (row) => (row.regions.length === 0 ? t("regionsNone") : row.regions.join(", ")),
+    },
+    {
+      key: "state",
+      header: t("state"),
+      cell: (row) => (
+        <>
+          <Badge tone={row.on ? "purple" : "grey"}>{row.on ? t("on") : t("off")}</Badge>{" "}
+          <span className="form-text seccolor">
+            {row.explicit ? t("bySwitch") : t("byDefault")}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "act",
+      header: "",
+      cell: (row) => (
+        <form action={setImageAction}>
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="market" value={screen.market} />
+          <input type="hidden" name="image" value={row.id} />
+          <input type="hidden" name="imageTurn" value={row.on ? "off" : "on"} />
+          <Field
+            name="imageReason"
+            id={`image-reason-${row.id}`}
+            label={t("reasonHint")}
+            required
+            maxLength={500}
+            autoComplete="off"
+          />
+          <SubmitButton variant={row.on ? "destructive" : "primary"} size="sm">
+            {row.on ? t("turnOff") : t("turnOn")}
+          </SubmitButton>
+        </form>
+      ),
+    },
+  ];
+  return (
+    <Card title={t("title")}>
+      <p className="form-text seccolor">{t("intro")}</p>
+      {screen.imagesInvalid ? (
+        <p role="alert" className="form-text seccolor mb-3">
+          {t("invalid")}
+        </p>
+      ) : null}
+      {screen.images.length === 0 ? (
+        <EmptyState title={t("empty")} description="" />
+      ) : (
+        <DataTable
+          caption={t("caption")}
+          columns={columns}
+          rows={[...screen.images]}
+          rowKey={(row) => row.id}
+        />
+      )}
+    </Card>
+  );
+}
+
 type ProductRow = CatalogFamily["rows"][number];
 
 function FamilyTable({ family }: { family: CatalogFamily }) {
@@ -212,6 +291,7 @@ export function CatalogView({ locale, screen, result }: CatalogViewProps) {
             <MarketForm locale={locale} screen={screen.value} />
           </Card>
           <FlagsCard locale={locale} screen={screen.value} />
+          <ImagesCard locale={locale} screen={screen.value} />
           <ProductsCard screen={screen.value} />
         </>
       )}

@@ -306,6 +306,17 @@ const WP7 = [
 // WPU-G2: the firewall rules, the connect help and the server name rule (packages/core/products).
 const SERVER_CONTROLS = [
   "DEFAULT_BLUEPRINT_ID",
+  // WPU-G3: the images of the create wizard.
+  "BLUEPRINT_FAMILY",
+  "DEFAULT_ENABLED_BLUEPRINTS",
+  "EMPTY_ALLOW_LIST",
+  "groupBlueprints",
+  "imageLogoOf",
+  "isBlueprintId",
+  "isImageOn",
+  "mapBlueprint",
+  "offeredImages",
+  "optionOf",
   "FIREWALL_ANYWHERE",
   "FIREWALL_MAX_RULES",
   "FIREWALL_MAX_SOURCES",

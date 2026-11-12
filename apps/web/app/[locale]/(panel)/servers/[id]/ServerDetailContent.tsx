@@ -1,4 +1,4 @@
-import { DEFAULT_BLUEPRINT_ID, keyFileName, loginUserOf, sshCommandOf } from "@tc/core";
+import { keyFileName, sshCommandOf } from "@tc/core";
 import { Button, Card, CopyField, EmptyState, StatTile, Tabs, formatDate } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
@@ -72,13 +72,8 @@ export function ServerDetailContent({
   }
 
   const ids = manage === null ? null : { serverId: server.id, requestId: manage.data.requestId };
-  // The user of the image every Linux server is launched with; the loaded data may say it is unknown.
-  const loginUser =
-    manage !== null
-      ? manage.data.loginUser
-      : server.family === "linux_instance"
-        ? loginUserOf(DEFAULT_BLUEPRINT_ID)
-        : null;
+  // WPU-G13: the user of the image this server runs (the loaded data says it is unknown when it is).
+  const loginUser = manage !== null ? manage.data.loginUser : server.loginUser;
   const sshCommand =
     server.publicIp === null
       ? null
@@ -165,6 +160,13 @@ export function ServerDetailContent({
               <code>{loginUser}</code>
             </p>
           </>
+        )}
+        {server.imageName === null ? null : (
+          <p className="seccolor mb-1">
+            <b>{t("detail.access.image")}</b>
+            {": "}
+            {server.imageName}
+          </p>
         )}
         <p className="seccolor mb-1">
           <b>{t("detail.access.keyName")}</b>

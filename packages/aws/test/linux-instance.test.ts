@@ -42,7 +42,7 @@ function setup(over: Partial<LinuxInstanceDeps> = {}) {
   const adapter = createLinuxInstanceAdapter(deps);
   const ctx = (
     step: string | null,
-    extra: { payload?: unknown; config?: unknown; createdAt?: Date } = {},
+    extra: { payload?: unknown; config?: unknown; createdAt?: Date; blueprintId?: string } = {},
   ): OpCtx<ReturnType<typeof adapter.parseConfig>> => ({
     operation: {
       id: "op-1",
@@ -68,6 +68,7 @@ function setup(over: Partial<LinuxInstanceDeps> = {}) {
       region: "ap-southeast-1",
       displayName: "My Secret Server",
       keyPairId: KID,
+      ...(extra.blueprintId === undefined ? {} : { blueprintId: extra.blueprintId }),
     }),
     account: POOL,
     region: "ap-southeast-1",
@@ -79,6 +80,45 @@ function setup(over: Partial<LinuxInstanceDeps> = {}) {
   const calls = () => aws.seen.filter((r) => r.service === "lightsail").map((r) => r.action);
   return { aws, adapter, ctx, calls, launchCalls };
 }
+
+// WPU-G3: the image the customer chose reaches the launch lookup, with the Region; none = the default.
+describe("the image of the order", () => {
+  it("asks for the chosen image in the Region of the server, in the key step and in the create step", async () => {
+    const launchCalls: unknown[] = [];
+    const { aws, adapter, ctx } = setup({
+      loadLaunch: async (input) => {
+        launchCalls.push(input);
+        return {
+          bundleId: "nano_3_0",
+          blueprintId: input.blueprintId ?? "ubuntu_24_04",
+          publicKey: PUBLIC_KEY,
+        };
+      },
+    });
+    aws.on("lightsail", "GetKeyPair", lightsailError(400, "NotFoundException", "x"));
+    aws.on("lightsail", "ImportKeyPair", lightsailOk({}));
+    aws.on("lightsail", "GetInstance", lightsailError(400, "NotFoundException", "x"));
+    aws.on("lightsail", "CreateInstances", lightsailOk({ operations: [] }));
+    await adapter.aws.create(ctx(null, { blueprintId: "wordpress" }));
+    await adapter.aws.create(ctx("create_instance", { blueprintId: "wordpress" }));
+    expect(launchCalls).toHaveLength(2);
+    for (const call of launchCalls) {
+      expect(call).toMatchObject({ blueprintId: "wordpress", region: "ap-southeast-1" });
+    }
+    const create = aws.seen.find((r) => r.action === "CreateInstances")!;
+    expect(JSON.parse(create.body)).toMatchObject({ blueprintId: "wordpress" });
+  });
+
+  it("an order without an image asks with null, and the lookup decides the default", async () => {
+    const { aws, adapter, ctx, launchCalls } = setup();
+    aws.on("lightsail", "GetInstance", lightsailError(400, "NotFoundException", "x"));
+    aws.on("lightsail", "CreateInstances", lightsailOk({ operations: [] }));
+    await adapter.aws.create(ctx("create_instance"));
+    expect(launchCalls[0]).toMatchObject({ blueprintId: null });
+    const create = aws.seen.find((r) => r.action === "CreateInstances")!;
+    expect(JSON.parse(create.body)).toMatchObject({ blueprintId: "ubuntu_24_04" });
+  });
+});
 
 const notFound = () => lightsailError(400, "NotFoundException", "raw aws text 210987654321");
 
@@ -172,6 +212,8 @@ describe("create: key import, instance, static IP, ports", () => {
         customerId: CID,
         productId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         keyPairId: KID,
+        blueprintId: null,
+        region: "ap-southeast-1",
       },
     ]);
   });

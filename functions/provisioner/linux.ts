@@ -1,4 +1,4 @@
-import { readLaunchInputs, withTx } from "@tc/db";
+import { readImage, readLaunchInputs, withTx } from "@tc/db";
 import {
   createBeaconMarker,
   createLinuxInstanceAdapter,
@@ -10,9 +10,10 @@ import { DEFAULT_BLUEPRINT_ID } from "@tc/core";
 import type { ProductAdapter } from "@tc/aws";
 import { backupDeps } from "./backup";
 
-// Not in the catalog row (WP4-T5 open point 1): one blueprint for every Linux instance until the
-// catalog or the config carries it. VERIFY the id with GetBlueprints in tc-pool-dev. The constant
-// lives in @tc/core so that the Connect tab names the login user of the same image (WPU-G13).
+// WPU-G3: the image is the one the customer chose (the order configuration carries its id; the order
+// code checked it against the admin allow-list). An order that has none (older orders) is launched
+// with the default image. The constant lives in @tc/core so that the Connect tab names the login user
+// of the same image (WPU-G13). VERIFY the ids with GetBlueprints in tc-pool-dev.
 export { DEFAULT_BLUEPRINT_ID };
 
 export interface LinuxWiring {
@@ -32,17 +33,24 @@ export interface LinuxWiring {
 export function linuxDeps(wiring: LinuxWiring = {}): LinuxInstanceDeps {
   const sources = parseProbeSources(wiring.probeSources ?? undefined);
   return {
-    loadLaunch: async ({ customerId, productId, keyPairId }) => {
-      const found = await withTx((tx) =>
-        readLaunchInputs(tx, { customerId, productId, keyPairId }),
-      );
-      return found === null
-        ? null
-        : {
+    loadLaunch: async ({ customerId, productId, keyPairId, blueprintId, region }) => {
+      return withTx(async (tx) => {
+        const found = await readLaunchInputs(tx, { customerId, productId, keyPairId });
+        if (found === null) return null;
+        if (blueprintId === null) {
+          return {
             bundleId: found.bundleId,
             blueprintId: DEFAULT_BLUEPRINT_ID,
             publicKey: found.publicKey,
           };
+        }
+        // A paid server is made from the image that was sold, even if an admin switched it off since
+        // (the switch only stops new orders). It must still exist and be active at AWS in the Region:
+        // otherwise the create fails closed (R16) and the order is refunded.
+        const image = await readImage(tx, region, blueprintId);
+        if (image === null || !image.active) return null;
+        return { bundleId: found.bundleId, blueprintId, publicKey: found.publicKey };
+      });
     },
     vpcCidr: async () => wiring.vpcCidr ?? null,
     beaconSources: async () => sources,

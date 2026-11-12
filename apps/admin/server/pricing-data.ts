@@ -1,5 +1,8 @@
 import {
+  BLUEPRINT_FAMILY,
+  isImageOn,
   listFeatureFlags,
+  optionOf,
   pricingInForce,
   previewChange,
   priceCatalog,
@@ -11,6 +14,8 @@ import {
 import {
   adminRepos,
   listCatalogProductsForAdmin,
+  listImagesForAdmin,
+  readImageSwitches,
   readFxRateInForce,
   readFxRates,
   readMarkets,
@@ -158,11 +163,28 @@ export interface CatalogFamily {
   }[];
 }
 
+/** One image (WPU-G3) as the allow-list card shows it: AWS facts, the Regions where it is active, the switch. */
+export interface ImageAdminRow {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: "app" | "os";
+  readonly loginUser: string | null;
+  /** The Regions where AWS lists it as active. */
+  readonly regions: readonly string[];
+  /** On for customers of the market: an explicit switch, else the default list. */
+  readonly on: boolean;
+  /** True when an admin has switched it; false when it follows the default list. */
+  readonly explicit: boolean;
+}
+
 export interface CatalogScreen {
   readonly markets: readonly string[];
   readonly market: string;
   readonly flags: readonly FlagState[];
   readonly families: readonly CatalogFamily[];
+  readonly images: readonly ImageAdminRow[];
+  /** A stored allow-list that does not parse: nothing is offered until an admin saves a switch. */
+  readonly imagesInvalid: boolean;
 }
 
 export async function loadCatalog(
@@ -177,7 +199,31 @@ export async function loadCatalog(
       const markets = (await readMarkets(tx)).map((m) => m.code);
       const market = markets.includes(asked) ? asked : (markets[0] ?? DEFAULT_MARKET);
       const flags = await listFeatureFlags(tx, market);
-      const rows = await listCatalogProductsForAdmin(tx, {});
+      // The images are rows of the same table (family `blueprint`) but have no price: their own card.
+      const rows = (await listCatalogProductsForAdmin(tx, {})).filter(
+        (r) => r.family !== BLUEPRINT_FAMILY,
+      );
+      const stored = await readImageSwitches(tx, market);
+      const switches = stored.state === "ok" ? stored.switches : { on: [], off: [] };
+      const byImage = new Map<string, ImageAdminRow>();
+      for (const row of await listImagesForAdmin(tx)) {
+        const option = optionOf(row);
+        if (option === null) continue;
+        const seen = byImage.get(option.id);
+        const regions = [...(seen?.regions ?? []), ...(row.active ? [row.region] : [])];
+        byImage.set(option.id, {
+          id: option.id,
+          name: option.name,
+          kind: option.kind,
+          loginUser: option.loginUser,
+          regions,
+          on: stored.state !== "invalid" && isImageOn(switches, option.id),
+          explicit: switches.on.includes(option.id) || switches.off.includes(option.id),
+        });
+      }
+      const images = [...byImage.values()].sort((a, b) =>
+        a.kind === b.kind ? a.name.localeCompare(b.name, "en") : a.kind === "app" ? -1 : 1,
+      );
       const byFamily = new Map<string, CatalogAdminRow[]>();
       for (const row of rows) byFamily.set(row.family, [...(byFamily.get(row.family) ?? []), row]);
       const families: CatalogFamily[] = [];
@@ -203,7 +249,14 @@ export async function loadCatalog(
           rows: list.map((row) => ({ row, price: byId.get(row.id) ?? null })),
         });
       }
-      return { markets, market, flags, families };
+      return {
+        markets,
+        market,
+        flags,
+        families,
+        images,
+        imagesInvalid: stored.state === "invalid",
+      };
     });
     return { kind: "ok", value };
   } catch {

@@ -2,6 +2,7 @@ import type { CatalogProduct } from "@tc/db";
 import type { CapacityNeed } from "../capacity/types";
 import type { ProductFacts } from "../orders/gates";
 import type { Result } from "../types";
+import { isBlueprintId } from "./blueprints";
 import { parseBucketConfig, resolveBucket } from "./bucket";
 import { parseContainerConfig, resolveContainer } from "./container";
 import { parseDatabaseConfig, resolveDatabase } from "./database";
@@ -12,6 +13,12 @@ export interface InstanceConfig {
   /** Stored and shown only. It never becomes an AWS name, a tag or markup (R11). */
   readonly displayName: string;
   readonly keyPairId: string | null;
+  /**
+   * WPU-G3: the image (Lightsail blueprint) the customer chose. Absent for older orders and for a
+   * restore; the provisioner then uses DEFAULT_BLUEPRINT_ID. Checked against the admin allow-list by
+   * the order code (gateBlueprint) before it counts. It is an id, never an AWS name (R11).
+   */
+  readonly blueprintId?: string;
   /**
    * restoreToNewServer: the id of a backup of the customer's own server. Present only for a
    * restore; the order code checks it against the customer's rows (checkRestore) before it counts.
@@ -57,7 +64,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseInstanceConfig(raw: unknown): Result<InstanceConfig> {
   const input = isRecord(raw) ? raw : {};
   const fields: Record<string, string> = {};
-  const { productId, region, displayName, keyPairId, restoreFromBackupId } = input;
+  const { productId, region, displayName, keyPairId, restoreFromBackupId, blueprintId } = input;
+  if (blueprintId !== undefined && blueprintId !== null && !isBlueprintId(blueprintId)) {
+    fields.blueprintId = "invalid";
+  }
   if (typeof productId !== "string" || !UUID.test(productId)) fields.productId = "invalid";
   if (typeof region !== "string" || !REGION.test(region)) fields.region = "invalid";
   if (typeof displayName !== "string" || !DISPLAY_NAME.test(displayName)) {
@@ -72,6 +82,8 @@ export function parseInstanceConfig(raw: unknown): Result<InstanceConfig> {
     }
     // The restored server keeps the keys of the image: no customer key pair with a restore.
     if (typeof keyPairId === "string") fields.keyPairId = "invalid";
+    // ... and no image choice either: the image is the one of the backup.
+    if (typeof blueprintId === "string") fields.blueprintId = "invalid";
   }
   if (Object.keys(fields).length > 0) return { ok: false, error: "validation", fields };
   return {
@@ -81,6 +93,7 @@ export function parseInstanceConfig(raw: unknown): Result<InstanceConfig> {
       region: region as string,
       displayName: displayName as string,
       keyPairId: typeof keyPairId === "string" ? keyPairId : null,
+      ...(typeof blueprintId === "string" ? { blueprintId } : {}),
       ...(typeof restoreFromBackupId === "string" ? { restoreFromBackupId } : {}),
     },
   };
@@ -149,6 +162,10 @@ export function resolveInstance(
         displayName: config.displayName,
         // Windows uses the pool's default key pair (10.3): no customer key is ever stored for it.
         keyPairId: family === "windows_instance" ? null : config.keyPairId,
+        // Windows has its own image flow; no image choice is stored for it.
+        ...(family === "linux_instance" && config.blueprintId !== undefined
+          ? { blueprintId: config.blueprintId }
+          : {}),
         ...(config.restoreFromBackupId === undefined
           ? {}
           : { restoreFromBackupId: config.restoreFromBackupId }),

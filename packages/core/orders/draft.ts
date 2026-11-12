@@ -3,7 +3,7 @@ import { checkCapacity } from "../capacity/check";
 import type { Logger, OperationQueue, RunTx } from "../operations/index";
 import { quoteInForce } from "../rates/in-force";
 import type { Clock, Result } from "../types";
-import { gateCustomer, gateKeyPair, gateProduct, resolveOrderProduct } from "./checks";
+import { gateCustomer, gateImage, gateKeyPair, gateProduct, resolveOrderProduct } from "./checks";
 import { INTERNAL, runGuarded } from "./guard";
 import { assertSecrets, signDraft } from "./token";
 import { DRAFT_TTL_SECONDS, type DraftClaims, type OrderDraft, type OrderSession } from "./types";
@@ -73,6 +73,9 @@ export async function createDraft(
 
     const keyed = await gateKeyPair(repos, product);
     if (!keyed.ok) return keyed;
+
+    const imaged = await gateImage(tx, customer.value, product);
+    if (!imaged.ok) return imaged;
 
     // "Available but not yet reserved": no lock, no unit taken, no waitlist entry.
     // A domain lives in tc-dns and takes no capacity cell (WP7-T4).

@@ -256,3 +256,94 @@ it("parseTldPrices marks an item whose shape it does not understand as needing r
   expect(out.prices.find((p) => p.tld === "xyz")!.needsExtraParams).toBe(true);
   expect(() => parseTldPrices({})).toThrow(/catalog_response_invalid/);
 });
+
+// WPU-G3: GetBlueprints, the images of the Linux create wizard.
+const bpWire = (over: Record<string, unknown> = {}) => ({
+  blueprintId: "ubuntu_24_04",
+  name: "Ubuntu",
+  group: "ubuntu",
+  type: "os",
+  version: "24.04 LTS",
+  platform: "LINUX_UNIX",
+  isActive: true,
+  description: "Free text that is never read",
+  ...over,
+});
+
+it("blueprints: follows nextPageToken, asks for inactive images too, and maps field by field", async () => {
+  const { aws, source } = setup();
+  aws.on(
+    "lightsail",
+    "GetBlueprints",
+    lightsailOk({ blueprints: [bpWire()], nextPageToken: "p2" }),
+    lightsailOk({ blueprints: [bpWire({ blueprintId: "wordpress", type: "app" })] }),
+  );
+  const out = await source.instanceBlueprints(POOL, "ap-southeast-1");
+  expect(out.map((b) => b.blueprintId)).toEqual(["ubuntu_24_04", "wordpress"]);
+  expect(out[0]).toEqual({
+    blueprintId: "ubuntu_24_04",
+    name: "Ubuntu",
+    type: "os",
+    group: "ubuntu",
+    version: "24.04 LTS",
+    platform: "LINUX_UNIX",
+    isActive: true,
+  });
+  const calls = aws.seen.filter((r) => r.action === "GetBlueprints");
+  expect(calls).toHaveLength(2);
+  expect(JSON.parse(calls[0]!.body)).toMatchObject({ includeInactive: true });
+  expect(JSON.parse(calls[1]!.body)).toMatchObject({ includeInactive: true, pageToken: "p2" });
+});
+
+it("blueprints: signs with TcReader in the asked Region and sends only read calls", async () => {
+  const { aws, source } = setup();
+  aws.on("lightsail", "GetBlueprints", lightsailOk({ blueprints: [bpWire()] }));
+  await source.instanceBlueprints(POOL, "ap-south-1");
+  const sts = aws.seen.find((r) => r.action === "AssumeRole")!;
+  expect(decodeURIComponent(sts.body)).toMatch(/role\/TcReader/);
+  expect(aws.seen.find((r) => r.action === "GetBlueprints")!.host).toBe(
+    "lightsail.ap-south-1.amazonaws.com",
+  );
+  for (const r of aws.seen) expect(r.action).toMatch(/^(Get|List|AssumeRole)/);
+});
+
+it("blueprints: a wrong field type becomes null or false, never a guessed default", async () => {
+  const { aws, source } = setup();
+  aws.on(
+    "lightsail",
+    "GetBlueprints",
+    lightsailOk({
+      blueprints: [bpWire({ blueprintId: 7, name: 5, type: ["os"], isActive: "yes", version: 1 })],
+    }),
+  );
+  const [b] = await source.instanceBlueprints(POOL, "ap-southeast-1");
+  expect(b).toMatchObject({
+    blueprintId: "",
+    name: "",
+    type: null,
+    version: null,
+    isActive: false,
+  });
+});
+
+it.each([[{}], [{ blueprints: "x" }], [{ blueprints: null }]])(
+  "blueprints: a body that is not a list (%j) fails the whole scope",
+  async (body) => {
+    const { aws, source } = setup();
+    aws.on("lightsail", "GetBlueprints", lightsailOk(body));
+    await expect(source.instanceBlueprints(POOL, "ap-southeast-1")).rejects.toMatchObject({
+      name: "AwsError",
+      reason: "catalog_response_invalid",
+    });
+  },
+);
+
+it("blueprints: a page token that never ends stops after maxPages", async () => {
+  const { aws, source } = setup({ maxPages: 2 });
+  aws.on("lightsail", "GetBlueprints", lightsailOk({ blueprints: [bpWire()], nextPageToken: "s" }));
+  await expect(source.instanceBlueprints(POOL, "ap-southeast-1")).rejects.toMatchObject({
+    code: "internal",
+    reason: "catalog_pages_exceeded",
+  });
+  expect(aws.seen.filter((r) => r.action === "GetBlueprints")).toHaveLength(2);
+});

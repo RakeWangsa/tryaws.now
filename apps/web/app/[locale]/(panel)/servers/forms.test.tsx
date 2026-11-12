@@ -113,6 +113,7 @@ describe("ConfigForm (createOrderDraft)", () => {
         plans={screen.plans}
         regions={screen.regions}
         keys={screen.keys}
+        images={screen.images}
         action={noopAction}
       />,
       locale,
@@ -124,6 +125,82 @@ describe("ConfigForm (createOrderDraft)", () => {
     expect(html).toContain("৳690.00");
     // The plan of the other Region (৳720.00) is not offered until that Region is chosen.
     expect(html).not.toContain("৳720.00");
+  });
+
+  it("WPU-G3: shows the images of the first Region in two groups, with the logo or the generic icon and the login user", () => {
+    const en = config("en");
+    expect(en).toContain("Apps + OS");
+    expect(en).toContain("OS only");
+    expect(en.indexOf("Apps + OS")).toBeLessThan(en.indexOf("OS only"));
+    expect(en).toContain('name="blueprintId" value="wordpress"');
+    // The first OS is preselected: the customer cannot submit without an image.
+    expect(en).toContain('name="blueprintId" checked="" value="ubuntu_24_04"');
+    expect(en).not.toContain('name="blueprintId" checked="" value="wordpress"');
+    expect(en).toContain("/theme/assets/apps/ubuntu.svg");
+    expect(en).toContain("tc-image-tile-generic");
+    expect(en).toContain("Login user: ubuntu");
+    expect(en).toContain("Ubuntu 24.04 LTS");
+    const bn = config("bn");
+    expect(bn).toContain("অ্যাপ ও OS");
+    expect(bn).toContain("শুধু OS");
+    expect(bn).toContain("লগইন ইউজার: ubuntu");
+  });
+
+  it("the image step comes after the location and before the plan, and the summary names the image", () => {
+    const en = config("en");
+    expect(en.indexOf("Location")).toBeLessThan(en.indexOf(">Image<"));
+    expect(en.indexOf(">Image<")).toBeLessThan(en.indexOf("Choose a plan"));
+    expect(en).toContain("Image</div></td><td>Ubuntu</td>");
+  });
+
+  it("WPU-G6: the key is required, with no empty choice, the first key is preselected, and the page links to the key page", () => {
+    const en = config("en");
+    expect(en).toMatch(/<select[^>]*name="keyPairId"[^>]*required/);
+    expect(en).not.toContain('<option value=""');
+    expect(en).not.toContain("No key");
+    expect(en).toContain("An SSH key is needed");
+    expect(en).toContain('href="/en/settings/ssh-keys"');
+    expect(en).not.toContain("disabled");
+  });
+
+  it("a customer with no key sees how to add one and cannot submit; a Region with no image says so", () => {
+    const noKeys = intl(
+      <ConfigForm
+        locale="en"
+        plans={screen.plans}
+        regions={screen.regions}
+        keys={[]}
+        images={screen.images}
+        action={noopAction}
+      />,
+      "en",
+    );
+    expect(noKeys).toContain("Add an SSH key first");
+    expect(noKeys).not.toContain('name="keyPairId"');
+    expect(noKeys).toMatch(/<button[^>]*disabled/);
+    const noImages = intl(
+      <ConfigForm
+        locale="en"
+        plans={screen.plans}
+        regions={screen.regions}
+        keys={screen.keys}
+        images={{ "ap-south-1": [], "ap-southeast-1": [] }}
+        action={noopAction}
+      />,
+      "en",
+    );
+    expect(noImages).toContain("No image is available in this location right now");
+    expect(noImages).not.toContain('name="blueprintId"');
+    expect(noImages).toMatch(/<button[^>]*disabled/);
+  });
+
+  it("a refused image or key shows the field error from the server (U8)", () => {
+    hold.state = {
+      error: "validation",
+      fields: { blueprintId: "required", keyPairId: "required" },
+    } satisfies FormState;
+    const html = config("en");
+    expect(html.match(/The value in this field is not valid\./g)?.length).toBeGreaterThanOrEqual(2);
   });
 
   it("shows field errors from the server for the fields that were refused (U8)", () => {

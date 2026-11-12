@@ -2,11 +2,13 @@ import type { CustomerSession } from "@tc/auth";
 import {
   DEFAULT_BLUEPRINT_ID,
   currentFirewallRules,
+  isBlueprintId,
   loginUserOf,
+  optionOf,
   rulesOpenSshToWorld,
 } from "@tc/core";
 import type { FirewallRule } from "@tc/core";
-import { customerRepos, readFeatureFlag, withTx } from "@tc/db";
+import { customerRepos, readFeatureFlag, readImage, withTx } from "@tc/db";
 
 // What the header buttons and the Networking tab of /servers/[id] need (WPU-G2), read through the
 // repositories of the session's customer only (R8). A database error is thrown, never answered with
@@ -60,6 +62,22 @@ export async function loadServerManage(
         ? (resource.config as Record<string, unknown>)
         : {};
     const rules = currentFirewallRules(resource.config, resource.family);
+    // WPU-G13: the login user of the image this server runs (the one ordered, else the default one):
+    // the synced row says it, the table of names covers a row that is gone.
+    const imageId =
+      resource.family !== "linux_instance"
+        ? null
+        : isBlueprintId(config["blueprintId"])
+          ? config["blueprintId"]
+          : DEFAULT_BLUEPRINT_ID;
+    const imageRow =
+      imageId === null || resource.region === null
+        ? null
+        : await readImage(tx, resource.region, imageId);
+    const loginUser =
+      imageId === null
+        ? null
+        : ((imageRow === null ? null : optionOf(imageRow)?.loginUser) ?? loginUserOf(imageId));
     return {
       flagOn,
       requestId,
@@ -67,7 +85,7 @@ export async function loadServerManage(
       rules,
       sshOpenToWorld: rules !== null && rulesOpenSshToWorld(rules),
       staticIpAttached: config["staticIpAttached"] !== false,
-      loginUser: resource.family === "linux_instance" ? loginUserOf(DEFAULT_BLUEPRINT_ID) : null,
+      loginUser,
       busy: operations.some((o) => IN_FLIGHT.includes(o.state) && CONFLICTING.includes(o.kind)),
     };
   });

@@ -85,16 +85,29 @@ export async function createOrderDraftCore(
   // restoreToNewServer (16.10 Backups): a backup to start from. The order code reads it through the
   // customer's own repository; here it is only a well-formed id and never goes with a key pair.
   const restore = text(input, "restoreFromBackupId");
+  const image = text(input, "blueprintId");
   const config = {
     productId: text(input, "productId"),
     region: text(input, "region"),
     displayName: text(input, "displayName"),
     keyPairId: key === "" || key === undefined ? null : key,
+    ...(image === "" || image === undefined ? {} : { blueprintId: image }),
     ...(restore === "" || restore === undefined ? {} : { restoreFromBackupId: restore }),
   };
   const parsed = parseInstanceConfig(config);
   if (!parsed.ok) {
     return { ok: false, error: "validation", ...(parsed.fields ? { fields: parsed.fields } : {}) };
+  }
+  // WPU-G3 and G6, like the Lightsail console: a new Linux server needs an image and an SSH key. A
+  // restore keeps the image and the keys of its backup, and Windows has its own flow. The order code
+  // checks the image against the admin allow-list and the key against the customer (R8).
+  if (family === "linux_instance" && parsed.value.restoreFromBackupId === undefined) {
+    const missing: Record<string, string> = {};
+    if (parsed.value.keyPairId === null) missing.keyPairId = "required";
+    if (parsed.value.blueprintId === undefined) missing.blueprintId = "required";
+    if (Object.keys(missing).length > 0) {
+      return { ok: false, error: "validation", fields: missing };
+    }
   }
 
   if (deps.orders === null) return { ok: false, error: "unavailable" };

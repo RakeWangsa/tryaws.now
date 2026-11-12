@@ -1,11 +1,24 @@
 import type { CustomerSession } from "@tc/auth";
-import { priceCatalog } from "@tc/core";
+import {
+  DEFAULT_BLUEPRINT_ID,
+  EMPTY_ALLOW_LIST,
+  imageLogoOf,
+  isBlueprintId,
+  loginUserOf,
+  offeredImages,
+  optionOf,
+  priceCatalog,
+  type BlueprintKind,
+} from "@tc/core";
 import type { SshKey } from "@tc/db";
 import {
   customerRepos,
+  listActiveImages,
   listCatalogProducts,
   readCatalogProduct,
   readFeatureFlag,
+  readImage,
+  readImageSwitches,
   withTx,
 } from "@tc/db";
 import type { ResourceSummary } from "@tc/db";
@@ -47,6 +60,8 @@ export interface ServerConfig {
   displayName: string;
   keyPairId: string | null;
   publicIp: string | null;
+  /** WPU-G3: the image the server was ordered with; null for an older server (the default image). */
+  blueprintId: string | null;
 }
 
 const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
@@ -57,7 +72,9 @@ export function serverConfigOf(config: unknown): ServerConfig {
   const name = raw["displayName"];
   const key = raw["keyPairId"];
   const ip = raw["publicIpv4"];
+  const blueprint = raw["blueprintId"];
   return {
+    blueprintId: isBlueprintId(blueprint) ? blueprint : null,
     displayName: typeof name === "string" ? name.slice(0, 60) : "",
     keyPairId: typeof key === "string" && key !== "" ? key : null,
     publicIp: typeof ip === "string" && IPV4.test(ip) ? ip : null,
@@ -103,10 +120,27 @@ export interface KeyOption {
   fingerprint: string;
 }
 
+/** An image the customer can pick in a Region (WPU-G3), with the logo file of the theme or null. */
+export interface ImageOption {
+  id: string;
+  name: string;
+  kind: BlueprintKind;
+  version: string | null;
+  loginUser: string | null;
+  logo: string | null;
+}
+
 export type ConfiguratorScreen =
   | { state: "flag_off" }
   | { state: "kyc_required" }
-  | { state: "ready"; plans: PlanOption[]; regions: string[]; keys: KeyOption[] };
+  | {
+      state: "ready";
+      plans: PlanOption[];
+      regions: string[];
+      keys: KeyOption[];
+      /** The offered images of each Region of `regions` (active at AWS and switched on by an admin). */
+      images: Record<string, ImageOption[]>;
+    };
 
 export async function loadConfigurator(
   session: CustomerSession,
@@ -131,11 +165,30 @@ export async function loadConfigurator(
       specs: planSpecsOf(row.specs),
     }));
     const keys = await repos.sshKeys.list();
+    const regions = [...new Set(plans.map((plan) => plan.region))];
+    // WPU-G3. A stored allow-list that does not parse offers nothing (R16); one that was never saved
+    // follows the default list.
+    const stored = await readImageSwitches(tx, profile.market);
+    const switches =
+      stored.state === "ok" ? stored.switches : stored.state === "none" ? EMPTY_ALLOW_LIST : null;
+    const images: Record<string, ImageOption[]> = {};
+    for (const region of regions) {
+      const rows = switches === null ? [] : await listActiveImages(tx, region);
+      images[region] = (switches === null ? [] : offeredImages(rows, switches)).map((o) => ({
+        id: o.id,
+        name: o.name,
+        kind: o.kind,
+        version: o.version,
+        loginUser: o.loginUser,
+        logo: imageLogoOf(o.id),
+      }));
+    }
     return {
       state: "ready",
       plans,
-      regions: [...new Set(plans.map((plan) => plan.region))],
+      regions,
       keys: keys.map((k) => ({ id: k.id, name: k.name, fingerprint: k.fingerprint })),
+      images,
     };
   });
 }
@@ -190,6 +243,9 @@ export async function loadServers(session: CustomerSession): Promise<ServersScre
 export interface ServerDetail extends ServerRow {
   family: "linux_instance" | "windows_instance";
   keyName: string | null;
+  /** WPU-G13: the image the server runs and the user to log in with (null for Windows or unknown). */
+  imageName: string | null;
+  loginUser: string | null;
   createdAt: Date;
 }
 
@@ -216,6 +272,14 @@ export async function loadServerDetail(
       resource.productId !== null ? readCatalogProduct(tx, resource.productId) : null,
       config.keyPairId !== null ? repos.sshKeys.get(config.keyPairId) : null,
     ]);
+    // The image of the server: the one ordered, else the default one. Its row (any switch) gives the
+    // name and the login user; the table of user names covers a row that is gone. Public catalog data.
+    const imageId = family === WINDOWS_FAMILY ? null : (config.blueprintId ?? DEFAULT_BLUEPRINT_ID);
+    const imageRow =
+      imageId === null || resource.region === null
+        ? null
+        : await readImage(tx, resource.region, imageId);
+    const option = imageRow === null ? null : optionOf(imageRow);
     return {
       id: resource.id,
       family,
@@ -225,6 +289,8 @@ export async function loadServerDetail(
       publicIp: config.publicIp,
       specs: product === null ? {} : planSpecsOf(product.specs),
       keyName: family === WINDOWS_FAMILY ? null : (key?.name ?? null),
+      imageName: option?.name ?? null,
+      loginUser: imageId === null ? null : (option?.loginUser ?? loginUserOf(imageId)),
       createdAt: resource.createdAt,
     };
   });

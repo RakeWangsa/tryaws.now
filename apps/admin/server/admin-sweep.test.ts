@@ -200,9 +200,9 @@ describe("flows: authorize with roles is the first step, before the limiter, the
     }
   });
 
-  it("the pricing flow authorizes in each of its four writes", () => {
+  it("the pricing flow authorizes in each of its five writes (the fifth is WPU-G3, the image allow-list)", () => {
     const code = read(join(ROOT, "server/pricing-flow.ts")).replace(/\/\/.*$/gm, "");
-    expect([...code.matchAll(/await authorize\(/g)].length).toBe(4);
+    expect([...code.matchAll(/await authorize\(/g)].length).toBe(5);
   });
 });
 

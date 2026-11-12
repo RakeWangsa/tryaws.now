@@ -56,6 +56,17 @@ function setup(role: AdminRole = "finance", over: Partial<PricingFlowDeps> = {})
     fxInForce: vi.fn(async () => ({ rate: "122" })),
     needsSecondAdmin: vi.fn(() => false),
   };
+  const blueprints = {
+    list: vi.fn(),
+    setEnabled: vi.fn(async (input: { blueprintId: string; enabled: boolean }) => {
+      order.push("image");
+      return {
+        ok: true,
+        replayed: false,
+        value: { market: "BD", blueprintId: input.blueprintId, enabled: input.enabled },
+      };
+    }),
+  };
   const pending = {
     market: "BD",
     rate: "140",
@@ -80,7 +91,7 @@ function setup(role: AdminRole = "finance", over: Partial<PricingFlowDeps> = {})
     }),
   };
   const deps: PricingFlowDeps = {
-    repos: () => ({ fxChanges }) as never,
+    repos: () => ({ fxChanges, blueprints }) as never,
     authorize: vi.fn(async (roles: readonly AdminRole[]) => {
       order.push("authorize");
       if (!roles.includes(role)) throw new Error("no");
@@ -99,7 +110,7 @@ function setup(role: AdminRole = "finance", over: Partial<PricingFlowDeps> = {})
     stage: "staging",
     ...over,
   };
-  return { deps, core, order, fxChanges, flow: makePricingFlow(deps) };
+  return { deps, core, order, fxChanges, blueprints, flow: makePricingFlow(deps) };
 }
 
 describe("roles", () => {
@@ -531,6 +542,78 @@ describe("setFlag", () => {
   it("an unknown stage is treated as production (R16)", async () => {
     const { flow } = setup("ops", { stage: "" });
     expect((await flow.setFlag({ ...FLAG, reason: "ok" })).ok).toBe(false);
+  });
+});
+
+describe("setImage (WPU-G3)", () => {
+  const IMAGE = {
+    blueprintId: "wordpress",
+    market: "BD",
+    enabled: true,
+    reason: "isolation test passed",
+  };
+
+  it("switches an image in the order of R9 and passes the reason to the audited write", async () => {
+    const { flow, blueprints, order } = setup("ops");
+    expect(await flow.setImage(IMAGE)).toEqual({
+      ok: true,
+      replayed: false,
+      value: { blueprintId: "wordpress", enabled: true },
+    });
+    expect(order).toEqual(["authorize", "limit", "run", "image"]);
+    expect(blueprints.setEnabled).toHaveBeenCalledWith(
+      { market: "BD", blueprintId: "wordpress", enabled: true },
+      "isolation test passed",
+    );
+  });
+
+  it.each(["support", "finance"] as const)("%s is denied before anything else", async (role) => {
+    const { flow, blueprints, order } = setup(role);
+    expect(await flow.setImage(IMAGE)).toEqual({ ok: false, code: "denied", fields: [] });
+    expect(order).toEqual(["authorize"]);
+    expect(blueprints.setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("superadmin may", async () => {
+    expect((await setup("superadmin").flow.setImage(IMAGE)).ok).toBe(true);
+  });
+
+  it("names the invalid fields and calls nothing: id, market, switch, reason", async () => {
+    const { flow, blueprints, order } = setup("ops");
+    expect(
+      await flow.setImage({ blueprintId: "Bad Id", market: "bd", enabled: "yes", reason: " " }),
+    ).toEqual({
+      ok: false,
+      code: "invalid",
+      fields: ["blueprintId", "market", "enabled", "reason"],
+    });
+    expect(order).toEqual(["authorize"]);
+    expect(blueprints.setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("an over-limit hit is rate_limited and writes nothing", async () => {
+    const { flow, blueprints } = setup("ops", { limiter: vi.fn(async () => false) });
+    expect(await flow.setImage(IMAGE)).toMatchObject({ ok: false, code: "rate_limited" });
+    expect(blueprints.setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("a repository refusal becomes a fixed code, and a thrown error becomes unavailable (R16)", async () => {
+    const missing = setup("ops");
+    missing.blueprints.setEnabled.mockResolvedValueOnce({ ok: false, error: "not_found" } as never);
+    expect(await missing.flow.setImage(IMAGE)).toMatchObject({ ok: false, code: "not_found" });
+    const broken = setup("ops");
+    broken.blueprints.setEnabled.mockRejectedValueOnce(new Error("db 210987654321"));
+    expect(await broken.flow.setImage(IMAGE)).toEqual({
+      ok: false,
+      code: "unavailable",
+      fields: [],
+    });
+  });
+
+  it("carries no actor, role or customer from the request", async () => {
+    const { flow, blueprints } = setup("ops");
+    await flow.setImage({ ...IMAGE, adminId: "evil", role: "superadmin" } as never);
+    expect(JSON.stringify(blueprints.setEnabled.mock.calls[0])).not.toMatch(/evil|superadmin/);
   });
 });
 

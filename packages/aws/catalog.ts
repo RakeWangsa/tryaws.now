@@ -1,5 +1,5 @@
-import { GetBundlesCommand } from "@aws-sdk/client-lightsail";
-import type { RawBundle } from "@tc/core";
+import { GetBlueprintsCommand, GetBundlesCommand } from "@aws-sdk/client-lightsail";
+import type { RawBlueprint, RawBundle } from "@tc/core";
 import type { AwsAccess } from "./access";
 import { AwsError } from "./errors";
 import type { AccountRef, LightsailRegion } from "./roles";
@@ -21,6 +21,11 @@ export interface TldPrice {
 
 export interface CatalogSource {
   instanceBundles(account: AccountRef, region: LightsailRegion): Promise<readonly RawBundle[]>;
+  /** WPU-G3: the images (blueprints) of one Region, inactive ones too. */
+  instanceBlueprints(
+    account: AccountRef,
+    region: LightsailRegion,
+  ): Promise<readonly RawBlueprint[]>;
   tldPrices(account: AccountRef): Promise<readonly TldPrice[]>;
 }
 
@@ -68,6 +73,22 @@ function toRawBundle(item: unknown): RawBundle {
     isActive: item.isActive === true,
     instanceType: typeof item.instanceType === "string" ? item.instanceType : null,
     power: typeof item.power === "number" ? item.power : null,
+  };
+}
+
+const text = (v: unknown): string | null => (typeof v === "string" ? v : null);
+
+/** A field of the wrong type becomes null or false so that the mapping refuses it; no default is guessed. */
+function toRawBlueprint(item: unknown): RawBlueprint {
+  if (!isRecord(item)) throw invalid();
+  return {
+    blueprintId: typeof item.blueprintId === "string" ? item.blueprintId : "",
+    name: typeof item.name === "string" ? item.name : "",
+    type: text(item.type),
+    group: text(item.group),
+    version: text(item.version),
+    platform: text(item.platform),
+    isActive: item.isActive === true,
   };
 }
 
@@ -149,6 +170,31 @@ export function createCatalogSource(
         retryable: true,
         reason: "catalog_pages_exceeded",
         operation: "GetBundles",
+      });
+    },
+    async instanceBlueprints(account, region) {
+      const client = access.lightsail(account, region, "TcReader");
+      const out: RawBlueprint[] = [];
+      let pageToken: string | undefined;
+      for (let page = 0; page < maxPages; page += 1) {
+        const response: unknown = await client.send(
+          new GetBlueprintsCommand({
+            includeInactive: true,
+            ...(pageToken === undefined ? {} : { pageToken }),
+          }),
+        );
+        if (!isRecord(response) || !Array.isArray(response.blueprints)) throw invalid();
+        for (const item of response.blueprints) out.push(toRawBlueprint(item));
+        const next = response.nextPageToken;
+        if (next === undefined || next === null || next === "") return out;
+        if (typeof next !== "string") throw invalid();
+        pageToken = next;
+      }
+      throw new AwsError({
+        code: "internal",
+        retryable: true,
+        reason: "catalog_pages_exceeded",
+        operation: "GetBlueprints",
       });
     },
     async tldPrices() {

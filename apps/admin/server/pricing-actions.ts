@@ -96,6 +96,17 @@ export async function setFlagAction(form: FormData): Promise<void> {
   back(form, "/catalog", answer);
 }
 
+export async function setImageAction(form: FormData): Promise<void> {
+  const turn = text(form.get("imageTurn"));
+  const answer = await makePricingFlow(pricingFlowDeps()).setImage({
+    blueprintId: text(form.get("image")),
+    market: text(form.get("market")),
+    enabled: turn === "on" ? true : turn === "off" ? false : null,
+    reason: text(form.get("imageReason")),
+  });
+  back(form, "/catalog", answer);
+}
+
 export async function saveBookAction(form: FormData): Promise<void> {
   const answer = await makePriceBookFlow(pricingFlowDeps()).saveBook({
     market: text(form.get("market")),

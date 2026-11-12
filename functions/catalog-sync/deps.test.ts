@@ -53,6 +53,9 @@ describe("buildCatalogSyncDeps", () => {
         events.push("source");
         return [NANO];
       },
+      async instanceBlueprints() {
+        return [];
+      },
       async tldPrices() {
         events.push("tlds");
         return [];
@@ -60,6 +63,7 @@ describe("buildCatalogSyncDeps", () => {
     };
     const logs: LogEvent[] = [];
     const { handler } = buildCatalogSyncDeps({
+      syncImages: false,
       config,
       access: {} as AwsAccess<"catalog-sync">,
       runTx: async (fn) => {
@@ -111,7 +115,12 @@ describe("buildCatalogSyncDeps", () => {
         runTx: async (fn) => fn(fakeTx([])),
         clock: { now: () => new Date(0) },
         log: () => {},
-        source: { instanceBundles: async () => [], tldPrices: async () => [] },
+        source: {
+          instanceBundles: async () => [],
+          instanceBlueprints: async () => [],
+          tldPrices: async () => [],
+        },
+        syncImages: false,
       });
     } finally {
       Object.defineProperty(process, "env", { value: savedEnv, configurable: true });
@@ -123,6 +132,7 @@ describe("buildCatalogSyncDeps", () => {
   it("turns the DNS settings into the DNS account", async () => {
     let seen: AccountRef | undefined;
     const { handler } = buildCatalogSyncDeps({
+      syncImages: false,
       config: {
         ...config,
         dnsAccountId: "444455556666",
@@ -136,6 +146,7 @@ describe("buildCatalogSyncDeps", () => {
       log: () => {},
       source: {
         instanceBundles: async () => [NANO],
+        instanceBlueprints: async () => [],
         tldPrices: async (a) => {
           seen = a;
           return [];

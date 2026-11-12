@@ -40,7 +40,10 @@ export const FX_PENDING_HOURS = 24;
 
 export interface PricingFlowDeps {
   // The admin repositories of the actor in this transaction (adminRepos), for the pending FX change.
-  readonly repos: (tx: Tx, actor: AdminActor) => Pick<AdminRepos, "fxChanges" | "priceBook">;
+  readonly repos: (
+    tx: Tx,
+    actor: AdminActor,
+  ) => Pick<AdminRepos, "fxChanges" | "priceBook" | "blueprints">;
   // requireAdmin(roles): rejects when there is no admin session or the role is wrong.
   readonly authorize: (roles: readonly AdminRole[]) => Promise<AdminActor>;
   // True when the hit was counted, false over the limit.
@@ -106,7 +109,15 @@ export interface SetFlagRequest {
   readonly reason: unknown;
 }
 
+export interface SetImageRequest {
+  readonly blueprintId: unknown;
+  readonly market: unknown;
+  readonly enabled: unknown;
+  readonly reason: unknown;
+}
+
 const MARKET = /^[A-Z]{2}$/;
+const BLUEPRINT_ID = /^[a-z0-9_]{1,64}$/;
 const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_.[\]]{0,39}$/;
 const SECOND_ADMIN_TOKENS: readonly FlowCode[] = [
   "second_admin_required",
@@ -183,6 +194,10 @@ export interface PricingFlow {
   setFx(request: SetFxRequest): Promise<FlowAnswer<FxResult>>;
   approveFx(request: ApproveFxRequest): Promise<FlowAnswer<FxResult>>;
   setFlag(request: SetFlagRequest): Promise<FlowAnswer<{ key: string; enabled: boolean }>>;
+  // WPU-G3: the image allow-list of the Linux create wizard (ops and superadmin, as the flags).
+  setImage(
+    request: SetImageRequest,
+  ): Promise<FlowAnswer<{ blueprintId: string; enabled: boolean }>>;
 }
 
 export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
@@ -424,6 +439,40 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
           ok: true,
           replayed: saved.value.replayed,
           value: { key: saved.value.key, enabled: saved.value.enabled },
+        };
+      });
+    },
+
+    async setImage(request) {
+      const { blueprintId, market, enabled, reason } = request;
+      const auth = await authorize(FLAG_ROLES);
+      if (!auth.ok) return auth.answer;
+      const bad: string[] = [];
+      if (typeof blueprintId !== "string" || !BLUEPRINT_ID.test(blueprintId)) {
+        bad.push("blueprintId");
+      }
+      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (typeof enabled !== "boolean") bad.push("enabled");
+      const why = readReason(reason);
+      if (!why.ok) bad.push("reason");
+      if (
+        bad.length > 0 ||
+        typeof blueprintId !== "string" ||
+        typeof market !== "string" ||
+        typeof enabled !== "boolean"
+      ) {
+        return fail("invalid", bad);
+      }
+      const actor = auth.actor;
+      return execute<{ blueprintId: string; enabled: boolean }>(actor, async (tx) => {
+        const saved = await deps
+          .repos(tx, actor)
+          .blueprints.setEnabled({ market, blueprintId, enabled }, why.text);
+        if (!saved.ok) return repoRefusal(saved.error);
+        return {
+          ok: true,
+          replayed: saved.replayed,
+          value: { blueprintId: saved.value.blueprintId, enabled: saved.value.enabled },
         };
       });
     },

@@ -6,7 +6,16 @@ import {
   type LightsailRegion,
   type TldPrice,
 } from "@tc/aws";
-import { planIsSafe, planScopeSync, type CatalogRowInput, type Clock, type Logger } from "@tc/core";
+import {
+  BLUEPRINT_FAMILY,
+  mapBlueprint,
+  planIsSafe,
+  planScopeSync,
+  type BlueprintRow,
+  type CatalogRowInput,
+  type Clock,
+  type Logger,
+} from "@tc/core";
 
 /** The families this task syncs (open point 1). A later family adds a mapper and a source method. */
 export const SYNC_FAMILIES = ["linux_instance", "windows_instance"] as const;
@@ -16,6 +25,13 @@ const FIXED_FAILURE = "catalog-sync: sync failed";
 export interface ScopeWrite {
   readonly region: string;
   readonly rows: readonly CatalogRowInput[];
+  readonly deactivate: readonly { family: string; awsId: string; region: string }[];
+  readonly at: Date;
+}
+
+export interface ImageScopeWrite {
+  readonly region: string;
+  readonly rows: readonly BlueprintRow[];
   readonly deactivate: readonly { family: string; awsId: string; region: string }[];
   readonly at: Date;
 }
@@ -32,6 +48,10 @@ export interface CatalogStore {
     families: readonly string[];
   }): Promise<{ family: string; awsId: string; active: boolean }[]>;
   apply(scope: ScopeWrite): Promise<{ inserted: number; updated: number; deactivated: number }>;
+  /** WPU-G3: the images (family `blueprint`) of one Region, written like the plans but never priced. */
+  applyImages(
+    scope: ImageScopeWrite,
+  ): Promise<{ inserted: number; updated: number; deactivated: number }>;
   applyTlds(rows: readonly TldPrice[], at: Date): Promise<{ inserted: number; updated: number }>;
 }
 
@@ -44,6 +64,8 @@ export interface CatalogSyncDeps {
   readonly dnsAccount: AccountRef | null;
   readonly regions: readonly LightsailRegion[];
   readonly syncTlds: boolean;
+  /** WPU-G3: also sync the images (GetBlueprints) of each Region. */
+  readonly syncImages: boolean;
   /** Time after which no new scope starts (open point 10). Default 240000. */
   readonly budgetMs?: number;
 }
@@ -57,6 +79,16 @@ export interface CatalogSyncReport {
     refused: number;
     active: number;
     inactiveIpv6: number;
+    inserted: number;
+    updated: number;
+    deactivated: number;
+  }[];
+  /** One entry per Region when the images are synced, else empty. */
+  readonly images: readonly {
+    region: string;
+    ok: boolean;
+    seen: number;
+    mapped: number;
     inserted: number;
     updated: number;
     deactivated: number;
@@ -190,16 +222,60 @@ export function createCatalogSyncHandler(
       }
     }
 
+    // WPU-G3. The images (GetBlueprints) of each Region, after the plans. One scope each; a failed
+    // scope is logged with a fixed reason and its rows stay as they are. An answer with no usable
+    // Linux image is refused before any write: it would switch every image off (R16).
+    const images: CatalogSyncReport["images"][number][] = [];
+    for (const region of deps.syncImages ? deps.regions : []) {
+      try {
+        if (overBudget()) throw new ScopeRefused("budget");
+        const raw = await deps.source.instanceBlueprints(account, region);
+        const rows: BlueprintRow[] = [];
+        for (const item of raw) {
+          const row = mapBlueprint(item, region);
+          if (row !== null && !rows.some((r) => r.awsId === row.awsId)) rows.push(row);
+        }
+        if (rows.length === 0) throw new ScopeRefused("unsafe_plan");
+        const existing = await deps.store.existing({ region, families: [BLUEPRINT_FAMILY] });
+        const seen = new Set(rows.map((r) => r.awsId));
+        const deactivate = existing
+          .filter((e) => e.active && !seen.has(e.awsId))
+          .map((e) => ({ family: e.family, awsId: e.awsId, region }));
+        const done = await deps.store.applyImages({
+          region,
+          rows,
+          deactivate,
+          at: deps.clock.now(),
+        });
+        const entry = { region, ok: true, seen: raw.length, mapped: rows.length, ...done };
+        images.push(entry);
+        deps.log({ event: "catalog_sync_images", ...entry });
+      } catch (e) {
+        images.push({
+          region,
+          ok: false,
+          seen: 0,
+          mapped: 0,
+          inserted: 0,
+          updated: 0,
+          deactivated: 0,
+        });
+        deps.log({ event: "catalog_sync_images", region, ok: false, ...failureFields(e) });
+      }
+    }
+
     const tlds: CatalogSyncReport["tlds"] = deps.syncTlds ? await syncTldStep() : null;
 
     const failedScopes = regions.filter((r) => !r.ok).length;
     const tldFailed = tlds !== null && !tlds.ok && !tlds.skipped;
-    const ok = failedScopes === 0 && !tldFailed;
+    const imagesFailed = images.filter((r) => !r.ok).length;
+    const ok = failedScopes === 0 && imagesFailed === 0 && !tldFailed;
     deps.log({
       event: "catalog_sync",
       result: ok ? "ok" : "failed",
       regions: regions.length,
       regionsFailed: failedScopes,
+      imagesFailed,
       tldsFailed: tldFailed,
       tldsSkipped: tlds?.skipped === true,
       seen: regions.reduce((n, r) => n + r.seen, 0),
@@ -210,6 +286,6 @@ export function createCatalogSyncHandler(
       deactivated: regions.reduce((n, r) => n + r.deactivated, 0),
     });
     if (!ok) throw new Error(FIXED_FAILURE);
-    return { regions, tlds };
+    return { regions, images, tlds };
   };
 }
