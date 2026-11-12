@@ -137,6 +137,7 @@ function world(over = {}) {
     }
     const copy = env.PGDATABASE !== "ticoncloud";
     const table = /^select count\(\*\) from (\w+)$/.exec(sql);
+    if (table && over.unmigrated) return { status: 1, stdout: "" };
     if (table) {
       const rows = over.rows ?? 3;
       return { status: 0, stdout: String(copy && over.lose === table[1] ? rows - 1 : rows) };
@@ -179,6 +180,14 @@ describe("runDrill", () => {
       expect(out.lines.join("\n")).toContain("BLOCKED");
       expect(w.state.created).toEqual([]);
     }
+  });
+  it("is BLOCKED, not failed, when the source database is not migrated, and creates nothing", () => {
+    const w = world({ unmigrated: true });
+    const out = w.run();
+    expect(out.exit).toBe(EXIT.blocked);
+    expect(out.lines.join("\n")).toContain("pnpm db:migrate");
+    expect(w.state.created).toEqual([]);
+    expect(w.state.removed).toBe(true);
   });
   it("is BLOCKED when the local database is down", () => {
     expect(world({ down: true }).run().exit).toBe(EXIT.blocked);

@@ -90,8 +90,13 @@ export function runDrill({ env, argv, exec, tempDir, name = tempDatabaseName }) 
     try {
       source = measure(undefined);
     } catch {
-      say("FAIL the source database cannot be read (is it migrated? `pnpm db:migrate`)");
-      return done(EXIT.failed);
+      // Not a failed restore: there is nothing to restore yet. A skipped drill is BLOCKED, never a pass.
+      say(
+        blocked(
+          "the source database has no ledger tables (not migrated?); run `pnpm db:migrate` first",
+        ).line,
+      );
+      return done(EXIT.blocked);
     }
     const file = `${scratch.path}/drill.dump`;
     const dump = run(
