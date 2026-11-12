@@ -4,7 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useId, useState, type ChangeEvent } from "react";
 import { formatMoney } from "./format";
 import { MoneyText } from "./MoneyText";
-import { toLocale } from "./types";
+import { toLocale, type Numerals } from "./types";
 
 export interface PickerPlan {
   id: string;
@@ -28,13 +28,23 @@ export interface PlanPickerProps {
   defaultId?: string;
   value?: string;
   onChange?: (id: string) => void;
+  /** The digits of the market setting; the digits of the locale when missing. */
+  numerals?: Numerals;
 }
 
 /**
  * One choice among plans: radio cards on phones, a slider from 992 px. Both write one state, and one
  * hidden input carries the plan id. With `value` the parent owns the state.
  */
-export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: PlanPickerProps) {
+export function PlanPicker({
+  name,
+  legend,
+  plans,
+  defaultId,
+  value,
+  onChange,
+  numerals,
+}: PlanPickerProps) {
   const t = useTranslations("kit.plan");
   const locale = toLocale(useLocale());
   const base = useId();
@@ -69,7 +79,7 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
       [...plans.slice(0, at)].reverse().find((plan) => plan.disabled !== true);
     if (next) choose(next.id);
   };
-  const valueText = `${selected.name}, ${formatMoney(selected.priceMinor, { locale, mode: "wholeUp" })}`;
+  const valueText = `${selected.name}, ${formatMoney(selected.priceMinor, { locale, mode: "wholeUp", numerals })}`;
 
   return (
     <fieldset>
@@ -103,7 +113,7 @@ export function PlanPicker({ name, legend, plans, defaultId, value, onChange }: 
                   </span>
                 ) : null}
                 <span className="d-block price seccolor">
-                  <MoneyText minor={plan.priceMinor} mode="wholeUp" />{" "}
+                  <MoneyText minor={plan.priceMinor} mode="wholeUp" numerals={numerals} />{" "}
                   <span className="period">{t("perPeriod")}</span>
                 </span>
               </label>

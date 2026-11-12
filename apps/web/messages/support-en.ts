@@ -19,6 +19,11 @@ export const supportEn: Same<typeof supportBn> = {
         abuse: "Abuse report",
         other: "Something else",
       },
+      related: {
+        label: "Related to (optional)",
+        none: "Nothing in particular",
+        hint: "Pick the server or service this is about.",
+      },
       subject: { label: "Subject", hint: "One line, up to 120 characters." },
       message: {
         label: "Message",

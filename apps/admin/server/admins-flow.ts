@@ -1,3 +1,4 @@
+import { MAX_REASON_LENGTH, adminsAction, check } from "./schemas.ts";
 import type { AdminActor, AdminRepos, AdminRole } from "@tc/db";
 import type { AdminDirectory } from "./admin-directory.ts";
 
@@ -42,18 +43,7 @@ export interface AdminsFlowDeps {
   readonly clock: { now(): Date };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const EMAIL = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
-const ROLES: readonly AdminRole[] = ["support", "finance", "ops", "superadmin"];
-const KINDS: readonly AdminsActionKind[] = [
-  "inviteAdmin",
-  "setAdminRole",
-  "disableAdmin",
-  "enableAdmin",
-  "resetAdminMfa",
-];
-export const MAX_REASON = 500;
-const MAX_EMAIL = 254;
+export const MAX_REASON = MAX_REASON_LENGTH;
 
 interface Valid {
   readonly kind: AdminsActionKind;
@@ -63,29 +53,9 @@ interface Valid {
   readonly role: AdminRole | null;
 }
 
+// Step 3 of R9: the zod schema adminsAction of schemas.ts.
 function validate(request: AdminsActionRequest): Valid | null {
-  const { kind, id, email, role, reason } = request;
-  if (typeof kind !== "string" || !KINDS.includes(kind)) return null;
-  if (typeof reason !== "string") return null;
-  const cleanReason = reason.trim();
-  if (cleanReason === "" || cleanReason.length > MAX_REASON) return null;
-  const out = { kind, reason: cleanReason, id: null, email: null, role: null } as {
-    -readonly [K in keyof Valid]: Valid[K];
-  };
-  if (kind === "inviteAdmin") {
-    if (typeof email !== "string") return null;
-    const clean = email.trim().toLowerCase();
-    if (clean.length > MAX_EMAIL || !EMAIL.test(clean)) return null;
-    out.email = clean;
-  } else {
-    if (typeof id !== "string" || !UUID.test(id)) return null;
-    out.id = id.toLowerCase();
-  }
-  if (kind === "inviteAdmin" || kind === "setAdminRole") {
-    if (typeof role !== "string" || !(ROLES as readonly string[]).includes(role)) return null;
-    out.role = role as AdminRole;
-  }
-  return out;
+  return check(adminsAction, request);
 }
 
 type Outcome =

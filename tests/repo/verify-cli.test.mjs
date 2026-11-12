@@ -165,6 +165,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-B3",
     "WPU-B4",
     "WPU-B5",
+    "WPU-B6",
     "WPU-B7",
     "WPU-C1",
     "WPU-D1",
@@ -1114,6 +1115,43 @@ it("the proof of WPU-B5 exists: the admin mark, the restore, the CDN and databas
       "another customer's snapshot answers like a missing one",
     ],
     ["apps/web/server/disk-restore-actions.test.ts", "restoreDiskDraftCore"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-B6 is proven by lint, types, format, the db and notify tests of the caps and the form, web, admin, ui and the repository tests", () => {
+  expect(TASKS["WPU-B6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    [
+      "db-b6",
+      "pnpm test --filter @tc/db test/visitor-support test/market-settings --no-passWithNoTests",
+    ],
+    [
+      "notify-b6",
+      "pnpm test --filter @tc/notify test/otp-daily-cap test/sms-cap --no-passWithNoTests",
+    ],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-B6 exists: the schemas, the honeypot form, the caps, the numerals and the picker", () => {
+  for (const [file, part] of [
+    ["apps/admin/server/schemas.test.ts", "takaToMinor is integer arithmetic"],
+    ["apps/web/server/public/support-form.test.ts", "a filled honeypot answers done"],
+    ["apps/web/server/public/catalog.test.ts", "carries the numerals setting of the market"],
+    ["packages/db/test/visitor-support.test.ts", "is idempotent"],
+    ["packages/db/test/market-settings.test.ts", "a bad value are null"],
+    ["packages/notify/test/otp-daily-cap.test.ts", "the 4th send in a day is refused"],
+    ["packages/notify/test/sms-cap.test.ts", "refuses an SMS over the cap"],
+    ["apps/web/app/[locale]/(panel)/support/new/related-resource.test.tsx", "escapes the name"],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
   }

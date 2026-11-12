@@ -43,11 +43,11 @@ function view(state: FormState, locale: "bn" | "en" = "bn", submit = true) {
 describe("AuthTabs", () => {
   it("renders two li.btn.btn-secondary, marks the active one and links to the routes (bn)", () => {
     const out = html(<AuthTabs active="login" locale="bn" />, "bn");
-    expect(out.match(/<li class="btn btn-secondary/g)).toHaveLength(2);
+    expect(out.match(/<li class="btn btn-secondary tc-auth-tab/g)).toHaveLength(2);
     expect(out).toContain(
-      '<li class="btn btn-secondary active mb-2"><a href="/login" aria-current="page">',
+      '<li class="btn btn-secondary tc-auth-tab active mb-2"><a href="/login" aria-current="page">',
     );
-    expect(out).toContain('<li class="btn btn-secondary mb-2"><a href="/signup">');
+    expect(out).toContain('<li class="btn btn-secondary tc-auth-tab mb-2"><a href="/signup">');
   });
 
   it("uses /en/... in English and puts aria-current on the signup tab", () => {

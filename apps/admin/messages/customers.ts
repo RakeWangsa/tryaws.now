@@ -59,6 +59,7 @@ export const customersBn = {
       market: "বাজার",
       locale: "ভাষা",
       wallet: "ওয়ালেট",
+      walletLink: "ওয়ালেট খুলুন",
       noWallet: "ওয়ালেট নেই",
       resources: "সক্রিয় রিসোর্স",
       back: "তালিকায় ফিরুন",

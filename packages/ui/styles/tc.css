@@ -798,3 +798,16 @@ div.tc-modal-open {
     padding-bottom: 9rem;
   }
 }
+
+/* ===== 9. Sign-in tabs as links (WPU-B6) ===== */
+/* login.html drives its tabs with script; here each tab is a link inside the item. The link takes the
+   color of the button so it reads on both pages, and fills the item so the whole tab is the target. */
+.tc-auth-tab a {
+  color: inherit;
+  display: block;
+  text-decoration: none;
+}
+.tc-auth-tab a:focus-visible {
+  outline: 2px solid var(--tc-focus);
+  outline-offset: 2px;
+}

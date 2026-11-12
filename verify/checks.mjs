@@ -3228,6 +3228,49 @@ TASKS["WPU-B5"] = [
   repo,
 ];
 
+// WPU-B6: zod in the admin app (item 28), the numerals of the market on the public prices and the public
+// /support form with a honeypot (item 7), the OTP and notification SMS daily caps with store.requeue
+// (item 29) and the small UI items (item 33). No AWS call.
+const b6Db = {
+  id: "db-b6",
+  title: "packages/db: the visitor support request and the market setting reader",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "test/visitor-support",
+    "test/market-settings",
+    "--no-passWithNoTests",
+  ],
+};
+const b6Notify = {
+  id: "notify-b6",
+  title: "packages/notify: the OTP daily cap, the SMS daily cap and requeue",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/notify",
+    "test/otp-daily-cap",
+    "test/sms-cap",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WPU-B6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  b6Db,
+  b6Notify,
+  web,
+  admin,
+  ui,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

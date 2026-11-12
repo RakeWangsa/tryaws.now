@@ -1,6 +1,7 @@
 import { sendAfterCommit } from "@tc/core";
+import { check, planMarkAction } from "./schemas.ts";
 import type { AdminMessage } from "@tc/db";
-import { MAX_REASON, OPS_ROLES, type OpsFlowDeps } from "./ops-flow.ts";
+import { OPS_ROLES, type OpsFlowDeps } from "./ops-flow.ts";
 
 // WPA-P2. The admin action that clears the failure mark of a plan change (container service, CDN), in
 // the order of R9: authenticate and authorize, validate, rate limit, execute (one transaction; the write
@@ -28,8 +29,6 @@ export type PlanMarkAnswer =
     }
   | { readonly ok: false; readonly code: PlanMarkCode };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 type Outcome =
   { ok: true; replayed: boolean; message: AdminMessage | null } | { ok: false; code: PlanMarkCode };
 
@@ -50,22 +49,16 @@ export function makePlanMarkAction(
     }
     try {
       // 3. Validate.
-      if (typeof resourceId !== "string" || !UUID.test(resourceId)) {
-        return { ok: false, code: "invalid" };
-      }
-      if (typeof requestId !== "string" || !UUID.test(requestId)) {
-        return { ok: false, code: "invalid" };
-      }
-      if (typeof reason !== "string") return { ok: false, code: "invalid" };
-      const why = reason.trim();
-      if (why === "" || why.length > MAX_REASON) return { ok: false, code: "invalid" };
+      const valid = check(planMarkAction, { resourceId, requestId, reason });
+      if (valid === null) return { ok: false, code: "invalid" };
+      const why = valid.reason;
       const at = deps.clock.now();
       // 4. Rate limit.
       if (!(await deps.limiter(actor, at))) return { ok: false, code: "rate_limited" };
       // 5 and 6. Execute and audit, in one transaction.
       const outcome = await deps.run<Outcome>(actor, async (repos) => {
         const written = await repos.operations.clearPlanChangeMark(
-          { resourceId: resourceId.toLowerCase(), requestId: requestId.toLowerCase(), at },
+          { resourceId: valid.resourceId, requestId: valid.requestId, at },
           why,
         );
         if (!written.ok) {
@@ -88,7 +81,7 @@ export function makePlanMarkAction(
       // After the commit: a lost send is found again by the scheduler, so it is not an error.
       const sent =
         outcome.message === null ? true : await sendAfterCommit(deps.queue, outcome.message);
-      return { ok: true, replayed: outcome.replayed, targetId: resourceId.toLowerCase(), sent };
+      return { ok: true, replayed: outcome.replayed, targetId: valid.resourceId, sent };
     } catch {
       // Fail closed (R16): a database or limiter error is not a success and tells nothing.
       return { ok: false, code: "unavailable" };

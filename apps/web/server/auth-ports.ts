@@ -7,8 +7,14 @@ import {
 } from "@tc/auth";
 import type { AuthRuntimeLike, CustomerSession, SignedIn } from "@tc/auth";
 import type { Clock } from "@tc/core";
-import { LAUNCH_MARKET, customerRepos, readMarketBasics, withTx } from "@tc/db";
-import { sendPhoneOtp, verifyPhoneOtp } from "@tc/notify";
+import {
+  LAUNCH_MARKET,
+  customerRepos,
+  readMarketBasics,
+  readMarketSettingNumber,
+  withTx,
+} from "@tc/db";
+import { OTP_DAILY_CAP_SETTING, otpSendRules, sendPhoneOtp, verifyPhoneOtp } from "@tc/notify";
 import type { Numerals, SendOtpDeps } from "@tc/notify";
 import { enforceAuthLimit } from "./auth/limits.ts";
 import type { AuthPorts } from "./auth/ports.ts";
@@ -95,12 +101,17 @@ export function productionPorts(runtime: WebRuntime, clock: Clock): AuthPorts {
       const otp = runtime.otp;
       if (otp === null) return { ok: false, error: "upstream_unavailable" };
       // The digits of the SMS are the market's setting, read per request, not at start-up.
-      const numerals: Numerals = await withTx(async (tx) => {
+      // The daily cap of the customer is a market setting too (WPU-B6); a missing or bad row is the default.
+      const { numerals, dailyCap } = await withTx(async (tx) => {
         const profile = await customerRepos(tx, session.customerId).profile.get();
         const market = profile === null ? null : await readMarketBasics(tx, profile.market);
-        return market?.numerals ?? "beng";
+        const cap =
+          profile === null
+            ? null
+            : await readMarketSettingNumber(tx, profile.market, OTP_DAILY_CAP_SETTING);
+        return { numerals: (market?.numerals ?? "beng") as Numerals, dailyCap: cap };
       });
-      const deps: SendOtpDeps = { ...otp, numerals };
+      const deps: SendOtpDeps = { ...otp, numerals, limits: otpSendRules(dailyCap) };
       return sendPhoneOtp(deps, session, input);
     },
 

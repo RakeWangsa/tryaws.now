@@ -1,3 +1,12 @@
+import {
+  LIMIT_MAX,
+  MAX_REASON_LENGTH,
+  capacityEnvelope,
+  capacityLimit,
+  capacityWaitlist,
+  check,
+  wholeNumber,
+} from "./schemas.ts";
 import { correctedUsed, type Result } from "@tc/core";
 import {
   QUOTA_CODES,
@@ -48,23 +57,10 @@ export interface CapacityFlowDeps {
   readonly clock: { now(): Date };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const REGION = /^(?:global|[a-z]{2}(?:-[a-z]+)+-[0-9])$/;
-const FAMILY = /^[a-z][a-z0-9_]{0,39}$/;
-export const MAX_REASON = 500;
-const LIMIT_MAX = 1_000_000;
-const COUNT_MAX = 100;
+export const MAX_REASON = MAX_REASON_LENGTH;
 
 export const CAPACITY_ROLES: readonly AdminRole[] = ["ops", "superadmin"];
 const KINDS: readonly CapacityActionKind[] = ["setCapacityLimit", "notifyWaitlist"];
-
-// Whole numbers from a form: digits only, no sign, no exponent, no float.
-function wholeNumber(value: unknown, max: number, min: number): number | null {
-  const text = typeof value === "number" ? String(value) : value;
-  if (typeof text !== "string" || !/^[0-9]{1,9}$/.test(text.trim())) return null;
-  const n = Number.parseInt(text.trim(), 10);
-  return n >= min && n <= max ? n : null;
-}
 
 export interface Correction {
   readonly used: number;
@@ -82,7 +78,7 @@ export function describeCorrection(used: number, live: number, pending: number):
 }
 
 export function parseLive(value: unknown): number | null {
-  return wholeNumber(value, LIMIT_MAX, 0);
+  return check(wholeNumber(0, LIMIT_MAX), value);
 }
 
 type Outcome =
@@ -114,31 +110,24 @@ export function makeCapacityAction(
       if (typeof s.kind !== "string" || !KINDS.includes(s.kind)) {
         return { ok: false, code: "invalid" };
       }
-      if (typeof s.reason !== "string") return { ok: false, code: "invalid" };
-      const why = s.reason.trim();
-      if (why === "" || why.length > MAX_REASON) return { ok: false, code: "invalid" };
-      if (typeof s.region !== "string" || !REGION.test(s.region)) {
-        return { ok: false, code: "invalid" };
-      }
-      const region = s.region;
+      const head = check(capacityEnvelope, { kind: s.kind, reason: s.reason, region: s.region });
+      if (head === null) return { ok: false, code: "invalid" };
+      const why = head.reason;
+      const region = head.region;
 
       let work: (repos: AdminRepos, tx: Tx) => Promise<Outcome>;
       if (s.kind === "setCapacityLimit") {
-        const limit = wholeNumber(s.limit, LIMIT_MAX, 0);
-        if (
-          typeof s.poolAccountId !== "string" ||
-          !UUID.test(s.poolAccountId) ||
-          typeof s.quotaCode !== "string" ||
-          !(QUOTA_CODES as readonly string[]).includes(s.quotaCode) ||
-          limit === null
-        ) {
-          return { ok: false, code: "invalid" };
-        }
+        const valid = check(capacityLimit(QUOTA_CODES as unknown as [string, ...string[]]), {
+          poolAccountId: s.poolAccountId,
+          quotaCode: s.quotaCode,
+          limit: s.limit,
+        });
+        if (valid === null) return { ok: false, code: "invalid" };
         const input = {
-          poolAccountId: s.poolAccountId.toLowerCase(),
+          poolAccountId: valid.poolAccountId,
           region,
-          quotaCode: s.quotaCode as (typeof QUOTA_CODES)[number],
-          limit,
+          quotaCode: valid.quotaCode as (typeof QUOTA_CODES)[number],
+          limit: valid.limit,
         };
         work = async (repos) => {
           const done = await repos.capacity.setLimit(input, why);
@@ -147,20 +136,17 @@ export function makeCapacityAction(
             : { ok: false, code: mapRefusal(done.error) };
         };
       } else {
-        const count = wholeNumber(s.count, COUNT_MAX, 1);
-        if (
-          typeof s.productFamily !== "string" ||
-          !FAMILY.test(s.productFamily) ||
-          (s.waitlistReason !== "capacity" && s.waitlistReason !== "flag_off") ||
-          count === null
-        ) {
-          return { ok: false, code: "invalid" };
-        }
-        const input = {
+        const valid = check(capacityWaitlist, {
           productFamily: s.productFamily,
+          waitlistReason: s.waitlistReason,
+          count: s.count,
+        });
+        if (valid === null) return { ok: false, code: "invalid" };
+        const input = {
+          productFamily: valid.productFamily,
           region,
-          reason: s.waitlistReason as "capacity" | "flag_off",
-          count,
+          reason: valid.waitlistReason,
+          count: valid.count,
           why,
         };
         work = async (_repos, tx) => {

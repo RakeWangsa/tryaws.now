@@ -1,10 +1,12 @@
 import type { CustomerSession } from "@tc/auth";
 import {
+  DEFAULT_LIFECYCLE_CONFIG,
   DISK_ANCHOR_AWS_ID,
   MAX_DISK_GB,
   MIN_DISK_GB,
   onboardingSteps,
   priceCatalog,
+  readLifecycleConfig,
 } from "@tc/core";
 import type { Onboarding } from "@tc/core";
 import {
@@ -149,6 +151,8 @@ export interface ServerExtras {
   destroy: {
     allowed: boolean;
     manualBackups: number;
+    /** Days the final backup is kept: the lifecycle setting of the market (WPU-B6), 14 until set. */
+    retentionDays: number;
   };
   /**
    * restoreToNewServer: the plans of this server's Region whose disk is not smaller than the disk
@@ -282,6 +286,11 @@ export async function loadServerExtras(
     });
     const restorePlans = live ? await restorePlansFor(tx, profile.market, server, now) : [];
     const manualBackups = backups.filter((b) => !b.final).length;
+    // The text must not say a number that the engine does not use: the setting, or the default of the
+    // engine when it cannot be read (the engine itself fails closed on a bad row).
+    const retentionDays = await readLifecycleConfig(tx)
+      .then((c) => c.retentionDays)
+      .catch(() => DEFAULT_LIFECYCLE_CONFIG.retentionDays);
     return {
       state: "ready",
       extras: {
@@ -322,6 +331,7 @@ export async function loadServerExtras(
             subscription !== null &&
             (subscription.status === "active" || subscription.status === "grace"),
           manualBackups,
+          retentionDays,
         },
         requestId,
       },

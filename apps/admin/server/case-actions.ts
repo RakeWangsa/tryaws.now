@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { isUuid } from "./schemas.ts";
 import { DEFAULT_LOCALE, isLocale, localePath } from "@tc/ui/runtime";
 import type { AbuseActionKind } from "./abuse-flow.ts";
 import { makeAbuseAction } from "./abuse-flow.ts";
@@ -16,8 +17,6 @@ import { makeSupportAction, type SupportActionKind } from "./support-flow.ts";
 // Thin Server Actions (R9 is inside the flows). A "use server" file exports async functions only. The
 // kind comes from the form and is checked by the flow. The acting admin is the one of the session: no
 // form field names one. The redirect goes to a page whose id has the shape of a UUID, nothing else.
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function text(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value : "";
@@ -46,7 +45,7 @@ export async function supportAction(form: FormData): Promise<void> {
     replyId: text(form.get("replyId")),
     body: text(form.get("body")),
   });
-  if (!UUID.test(id)) redirect(localePath(locale, "/support"));
+  if (!isUuid(id)) redirect(localePath(locale, "/support"));
   redirect(`${localePath(locale, `/support/${id.toLowerCase()}`)}?result=${resultOf(answer)}`);
 }
 
@@ -64,7 +63,7 @@ export async function abuseAction(form: FormData): Promise<void> {
     noteId: text(form.get("noteId")),
     note: text(form.get("note")),
   });
-  if (!UUID.test(id)) redirect(localePath(locale, "/abuse"));
+  if (!isUuid(id)) redirect(localePath(locale, "/abuse"));
   // A case that could not be opened has no page yet: back to the list with the code.
   if (!answer.ok && text(form.get("kind")) === "openAbuseCase") {
     redirect(`${localePath(locale, "/abuse")}?result=${resultOf(answer)}`);

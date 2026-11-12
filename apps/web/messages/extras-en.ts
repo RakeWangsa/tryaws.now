@@ -250,7 +250,7 @@ export const extrasEn: Same<typeof extrasBn> = {
       keepsBody:
         "Your manual backups ({count}) and the final backup taken before the destroy. The final backup can restore the server later.",
       period: "Restore period",
-      periodBody: "The final backup is kept for 14 days after the destroy, then it is deleted.",
+      periodBody: "The final backup is kept for {days} days after the destroy, then it is deleted.",
       notAllowed: "This server cannot be destroyed in its current state.",
       button: "Destroy server",
       confirmTitle: "Destroy this server?",

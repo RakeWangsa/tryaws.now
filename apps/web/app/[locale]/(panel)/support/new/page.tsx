@@ -33,6 +33,7 @@ export default async function SupportNewPage({ params }: Props) {
       <SupportContent
         numerals={numeralsFor(locale, panel)}
         requests={screen.requests}
+        resources={screen.resources}
         action={createSupportRequestAction}
       />
     </PanelFrame>

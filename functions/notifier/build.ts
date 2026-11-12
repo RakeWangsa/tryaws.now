@@ -45,6 +45,9 @@ export function withoutChannels(store: NotifierStore, hidden: readonly string[])
     claim: (id, attempts) => store.claim(id, attempts),
     markSent: (id, now) => store.markSent(id, now),
     markFailed: (id) => store.markFailed(id),
+    requeue: (id) => store.requeue(id),
+    smsSentSince: (id, since) => store.smsSentSince(id, since),
+    smsDailyCap: () => store.smsDailyCap(),
   };
 }
 

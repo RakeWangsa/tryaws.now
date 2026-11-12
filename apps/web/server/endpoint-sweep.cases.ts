@@ -826,6 +826,16 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  "app/[locale]/(public)/support/actions.ts#publicSupportAction": {
+    kind: "public",
+    proof: [
+      proof(`${W}public/support-form.test.ts`, "is the same answer for a replay (R7)"),
+      proof(
+        `${W}public/support-form.test.ts`,
+        "a filled honeypot answers done, stores nothing and does not use the limiter",
+      ),
+    ],
+  },
   "app/[locale]/(public)/products/[family]/page.tsx": {
     kind: "public",
     proof: [

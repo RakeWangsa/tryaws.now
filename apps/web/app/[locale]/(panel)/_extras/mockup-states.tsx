@@ -91,7 +91,9 @@ export const STATE_RENDERERS: Record<string, Renderer> = {
       },
     },
   }),
-  "tabs.destroy_blocked": tabs({ data: { destroy: { allowed: false, manualBackups: 0 } } }),
+  "tabs.destroy_blocked": tabs({
+    data: { destroy: { allowed: false, manualBackups: 0, retentionDays: 14 } },
+  }),
   "tabs.not_live": tabs({ data: { live: false, canBackup: false, state: "creating" } }),
   "tabs.loading": (locale) => html(<ScreenLoading lines={[2, 6]} />, locale),
   "tabs.error": (locale) => html(errorNode(), locale),

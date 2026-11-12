@@ -3,13 +3,13 @@
 import { redirect } from "next/navigation";
 import { DEFAULT_LOCALE, isLocale, localePath } from "@tc/ui/runtime";
 import { makeMoneyAction, type MoneyActionKind } from "./money-flow.ts";
+import { isUuid } from "./schemas.ts";
 import { ensureAdminAuth, moneyFlowDeps } from "./runtime.ts";
 
 // A thin Server Action (R9 is inside makeMoneyAction). A "use server" file exports async functions
 // only. The kind of action comes from the form and is checked by the flow. Nothing from the request
 // decides the redirect except ids that have the shape of a UUID.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAYMENT_KINDS = ["reverifyPayment", "recordManualRefund"];
 
 function text(value: FormDataEntryValue | null): string {
@@ -35,12 +35,12 @@ export async function moneyAction(form: FormData): Promise<void> {
   const shownCustomer = text(form.get("customerId"));
   const customerId = answer.ok && answer.customerId !== null ? answer.customerId : shownCustomer;
   const shownPayment = text(form.get("id"));
-  if (PAYMENT_KINDS.includes(kind) && UUID.test(shownPayment)) {
+  if (PAYMENT_KINDS.includes(kind) && isUuid(shownPayment)) {
     redirect(`${localePath(locale, `/payments/${shownPayment.toLowerCase()}`)}?result=${result}`);
   }
   // WPU-M4: the credit is asked on the page of the operation; a refusal returns there.
   const shownOperation = text(form.get("id"));
-  if (kind === "creditWalletForFailedChange" && !answer.ok && UUID.test(shownOperation)) {
+  if (kind === "creditWalletForFailedChange" && !answer.ok && isUuid(shownOperation)) {
     redirect(
       `${localePath(locale, `/operations/${shownOperation.toLowerCase()}`)}?result=${result}`,
     );
@@ -48,6 +48,6 @@ export async function moneyAction(form: FormData): Promise<void> {
   if (kind === "resolveDiscrepancy") {
     redirect(`${localePath(locale, "/payments")}?result=${result}`);
   }
-  if (!UUID.test(customerId)) redirect(localePath(locale, "/payments"));
+  if (!isUuid(customerId)) redirect(localePath(locale, "/payments"));
   redirect(`${localePath(locale, `/wallets/${customerId.toLowerCase()}`)}?result=${result}`);
 }

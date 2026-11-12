@@ -1,3 +1,4 @@
+import { check, customerAction } from "./schemas.ts";
 import type { AdminActor, AdminRepos, CustomerChanged, KycDecided, RiskTier } from "@tc/db";
 
 // The five decisions on /customers/[id] in the order of R9: authenticate and authorize (the roles
@@ -34,16 +35,7 @@ export interface CustomerFlowDeps {
   readonly clock: { now(): Date };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const MAX_TEXT = 500;
-const TIERS: readonly RiskTier[] = ["new", "trusted"];
-const KINDS: readonly CustomerActionKind[] = [
-  "approveKyc",
-  "rejectKyc",
-  "setRiskTier",
-  "suspend",
-  "resume",
-];
 
 interface Valid {
   readonly kind: CustomerActionKind;
@@ -53,24 +45,9 @@ interface Valid {
   readonly tier: RiskTier | undefined;
 }
 
+// Step 3 of R9: the zod schema customerAction of schemas.ts.
 function validate(request: CustomerActionRequest): Valid | null {
-  const { kind, id, reason, note, tier } = request;
-  if (typeof kind !== "string" || !KINDS.includes(kind)) return null;
-  if (typeof id !== "string" || !UUID.test(id)) return null;
-  if (typeof reason !== "string") return null;
-  const cleanReason = reason.trim();
-  if (cleanReason === "" || cleanReason.length > MAX_TEXT) return null;
-  let cleanNote: string | undefined;
-  if (note !== undefined && note !== null && note !== "") {
-    if (typeof note !== "string" || note.length > MAX_TEXT) return null;
-    cleanNote = note.trim() === "" ? undefined : note.trim();
-  }
-  let cleanTier: RiskTier | undefined;
-  if (kind === "setRiskTier") {
-    if (typeof tier !== "string" || !TIERS.includes(tier as RiskTier)) return null;
-    cleanTier = tier as RiskTier;
-  }
-  return { kind, id, reason: cleanReason, note: cleanNote, tier: cleanTier };
+  return check(customerAction, request);
 }
 
 type Outcome =

@@ -61,6 +61,7 @@ export const customersEn: Same<typeof customersBn> = {
       locale: "Language",
       wallet: "Wallet",
       noWallet: "No wallet",
+      walletLink: "Open the wallet",
       resources: "Active resources",
       back: "Back to the list",
       readOnly: "Your role can read this page but cannot make decisions.",

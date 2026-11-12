@@ -69,6 +69,11 @@ export function cardSpecs(t: Tr, specs: PlanSpecs): [PlanSpec, PlanSpec, PlanSpe
 }
 
 /** Where "Order now" goes: the sign-in page, and then the configurator (U12: a relative allowed path). */
+/** The digits of a price: the market setting on Bengali pages, Latin on English pages (as the panel). */
+export function offerNumerals(locale: Locale, offer: PublicOffer): "beng" | "latn" {
+  return locale === "bn" ? (offer.numerals ?? "beng") : "latn";
+}
+
 export function orderHref(locale: Locale): string {
   return `${localePath(locale, "/login")}?next=${encodeURIComponent("/servers/new")}`;
 }
@@ -95,6 +100,7 @@ export function OfferCard({
       specs={cardSpecs(t, offer.specs)}
       cta={{ label: label ?? t("common.orderNow"), href: href ?? orderHref(locale) }}
       recommended={recommended === true}
+      numerals={offerNumerals(locale, offer)}
     />
   );
 }
@@ -152,7 +158,11 @@ export function OfferTable({
                 <td>{v.transfer}</td>
                 <td>
                   <b className="c-black mergecolor">
-                    <MoneyText minor={offer.priceMinor} mode="wholeUp" />
+                    <MoneyText
+                      minor={offer.priceMinor}
+                      mode="wholeUp"
+                      numerals={offerNumerals(locale, offer)}
+                    />
                   </b>
                 </td>
                 <td>

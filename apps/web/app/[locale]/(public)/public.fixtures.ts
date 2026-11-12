@@ -71,6 +71,7 @@ export const FIXTURE_ROWS: Readonly<Record<string, readonly CatalogRowForPricing
 export function fixtureDeps(flags: readonly string[]): CatalogDeps {
   return {
     run: async (fn) => fn({} as Tx),
+    numerals: async () => "beng",
     flags: async () => flags.map((key) => ({ key, enabled: true })),
     rows: async (_tx, family) => FIXTURE_ROWS[family] ?? [],
     price: async (_tx, rows) => {

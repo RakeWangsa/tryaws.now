@@ -1,16 +1,19 @@
 import { parseCspReports, violationLogLine } from "@tc/ui/runtime";
+import { CSP_REPORT_MAX_BYTES, cspReportBody } from "../../../server/schemas.ts";
 import { adminGate } from "../../../server/gate.ts";
 
 // Anonymous by design (R9, open point: no rate limit yet): the body is capped, parsed defensively
 // and never echoed. Only the sanitized fields of a report are logged (R14).
 export const dynamic = "force-dynamic";
 
-const MAX_BODY_BYTES = 16384;
+const MAX_BODY_BYTES = CSP_REPORT_MAX_BYTES;
 
 // A parse error counts as no report.
 function parseJson(text: string): unknown {
   try {
-    return JSON.parse(text);
+    // Validate (R9): a report is one object or a list; anything else counts as no report.
+    const parsed = cspReportBody.safeParse(JSON.parse(text));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
