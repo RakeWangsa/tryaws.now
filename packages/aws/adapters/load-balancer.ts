@@ -1,21 +1,28 @@
 import {
   AttachInstancesToLoadBalancerCommand,
+  AttachLoadBalancerTlsCertificateCommand,
   CreateLoadBalancerCommand,
+  CreateLoadBalancerTlsCertificateCommand,
   DeleteLoadBalancerCommand,
   DetachInstancesFromLoadBalancerCommand,
   GetInstanceCommand,
   GetLoadBalancerCommand,
+  GetLoadBalancerTlsCertificatesCommand,
+  UpdateLoadBalancerAttributeCommand,
   type LightsailClient,
 } from "@aws-sdk/client-lightsail";
 import {
   awsResourceName,
   checkLbTargets,
+  checkedDomainName,
+  checkedHealthPath,
   parseLoadBalancerConfig,
   resourceTags,
   stepDone,
   stepNext,
   stepWait,
   type LoadBalancerConfig,
+  type OperationKind,
   type StepResult,
   type TargetCandidate,
 } from "@tc/core";
@@ -137,6 +144,16 @@ async function attach(ctx: Ctx, ids: readonly string[], skipPresent: boolean): P
   );
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function payloadOf(ctx: Ctx): Record<string, unknown> {
+  const p = ctx.operation.payload;
+  return typeof p === "object" && p !== null && !Array.isArray(p)
+    ? (p as Record<string, unknown>)
+    : {};
+}
+
+const certName = (ctx: Ctx): string => awsResourceName("lbcert", ctx.resource.id);
+
 export function createLoadBalancerAdapter(): ProductAdapter<LoadBalancerConfig> {
   async function create(ctx: Ctx): Promise<StepResult> {
     const name = lbName(ctx);
@@ -229,9 +246,136 @@ export function createLoadBalancerAdapter(): ProductAdapter<LoadBalancerConfig> 
     return { state: got?.loadBalancer?.state ?? "missing" };
   }
 
-  async function action(): Promise<StepResult> {
-    // No action is built for this family (changing targets needs its own operation kind): refuse (R16).
-    throw fail("validation");
+  // The console actions (WPU-G7). The payload is written by the web tier, so it is input (R9, R16).
+  async function action(kind: OperationKind, ctx: Ctx): Promise<StepResult> {
+    const payload = payloadOf(ctx);
+    const lightsail = client(ctx);
+    switch (kind) {
+      case "set_targets": {
+        const ids = payload.targetIds;
+        if (
+          !Array.isArray(ids) ||
+          ids.length === 0 ||
+          ids.length > 64 ||
+          !ids.every((id) => typeof id === "string" && UUID.test(id))
+        ) {
+          throw fail("validation");
+        }
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const wanted = await checkedInstanceNames(ctx, ids as string[]);
+        const got = await lightsail.send(
+          new GetLoadBalancerCommand({ loadBalancerName: lbName(ctx) }),
+        );
+        const present = new Set(
+          (got.loadBalancer?.instanceHealthSummary ?? []).map((x) => x.instanceName ?? ""),
+        );
+        const toAttach = wanted.filter((n) => !present.has(n));
+        const toDetach = [...present].filter((n) => n !== "" && !wanted.includes(n));
+        if (toAttach.length > 0) {
+          await lightsail.send(
+            new AttachInstancesToLoadBalancerCommand({
+              loadBalancerName: lbName(ctx),
+              instanceNames: toAttach,
+            }),
+          );
+        }
+        if (toDetach.length > 0) {
+          await lightsail.send(
+            new DetachInstancesFromLoadBalancerCommand({
+              loadBalancerName: lbName(ctx),
+              instanceNames: toDetach,
+            }),
+          );
+        }
+        return stepDone({ configMerge: { targetIds: [...(ids as string[])] } });
+      }
+      case "set_lb_attributes": {
+        const path = payload.healthCheckPath;
+        const redirect = payload.httpsRedirect;
+        if (path === undefined && redirect === undefined) throw fail("validation");
+        if (path !== undefined && checkedHealthPath(path) === null) {
+          throw fail("validation");
+        }
+        if (redirect !== undefined && typeof redirect !== "boolean") throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const merge: Record<string, unknown> = {};
+        if (path !== undefined) {
+          await lightsail.send(
+            new UpdateLoadBalancerAttributeCommand({
+              loadBalancerName: lbName(ctx),
+              attributeName: "HealthCheckPath",
+              attributeValue: path as string,
+            }),
+          );
+          merge.healthCheckPath = path;
+        }
+        if (redirect !== undefined) {
+          await lightsail.send(
+            new UpdateLoadBalancerAttributeCommand({
+              loadBalancerName: lbName(ctx),
+              attributeName: "HttpsRedirectionEnabled",
+              attributeValue: String(redirect),
+            }),
+          );
+          merge.httpsRedirect = redirect;
+        }
+        return stepDone({ configMerge: merge });
+      }
+      case "request_certificate": {
+        const domain = checkedDomainName(payload.domain);
+        if (domain === null) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const listed = await lightsail.send(
+          new GetLoadBalancerTlsCertificatesCommand({ loadBalancerName: lbName(ctx) }),
+        );
+        const exists = (listed.tlsCertificates ?? []).some((c) => c.name === certName(ctx));
+        if (!exists) {
+          await lightsail.send(
+            new CreateLoadBalancerTlsCertificateCommand({
+              loadBalancerName: lbName(ctx),
+              certificateName: certName(ctx),
+              certificateDomainName: domain,
+            }),
+          );
+        }
+        return stepDone({
+          configMerge: {
+            certificate: { domain, status: "PENDING_VALIDATION", attached: false, records: [] },
+          },
+        });
+      }
+      case "refresh_certificate": {
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const listed = await lightsail.send(
+          new GetLoadBalancerTlsCertificatesCommand({ loadBalancerName: lbName(ctx) }),
+        );
+        const found = (listed.tlsCertificates ?? []).find((c) => c.name === certName(ctx));
+        if (found === undefined) throw fail("validation");
+        const status = found.status ?? "UNKNOWN";
+        let attached = found.isAttached === true;
+        if (status === "ISSUED" && !attached) {
+          await lightsail.send(
+            new AttachLoadBalancerTlsCertificateCommand({
+              loadBalancerName: lbName(ctx),
+              certificateName: certName(ctx),
+            }),
+          );
+          attached = true;
+        }
+        const records = (found.domainValidationRecords ?? []).slice(0, 8).map((r) => ({
+          name: r.name ?? "",
+          type: r.type ?? "",
+          value: r.value ?? "",
+        }));
+        return stepDone({
+          configMerge: {
+            certificate: { domain: found.domainName ?? "", status, attached, records },
+          },
+        });
+      }
+      default:
+        throw fail("validation");
+    }
   }
 
   return {

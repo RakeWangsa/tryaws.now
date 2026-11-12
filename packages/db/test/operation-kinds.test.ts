@@ -11,7 +11,7 @@ import {
 
 it("every kind has one row of info and nothing else has", () => {
   expect(Object.keys(OPERATION_KIND_INFO).sort()).toEqual([...OPERATION_KINDS].sort());
-  expect(OPERATION_KINDS).toHaveLength(24);
+  expect(OPERATION_KINDS).toHaveLength(32);
   expect(OPERATION_KINDS).toContain("rename");
   expect(OPERATION_KINDS).toContain("reject_operation");
 });
@@ -47,6 +47,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
     "attach_static_ip",
     "change_dns_record",
     "create_backup",
+    "create_db_snapshot",
     "delete_access_key",
     "delete_backup",
     "deploy_containers",
@@ -54,11 +55,18 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
     "detach_disk",
     "detach_static_ip",
     "reboot",
+    "refresh_certificate",
     "rename",
+    "request_certificate",
+    "reset_cache",
     "scale_container",
     "set_auto_backup",
     "set_bucket_access",
+    "set_bucket_versioning",
+    "set_db_options",
+    "set_lb_attributes",
     "set_ports",
+    "set_targets",
     "start",
     "stop",
   ]);
@@ -67,7 +75,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
   );
 });
 
-it("isOperationKind accepts the 24 kinds and nothing else, prototype names included", () => {
+it("isOperationKind accepts the 32 kinds and nothing else, prototype names included", () => {
   for (const kind of OPERATION_KINDS) expect(isOperationKind(kind)).toBe(true);
   for (const x of [
     "__proto__",
