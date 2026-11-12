@@ -118,7 +118,7 @@ export const opsBn = {
       columns: {
         kind: "ধরন",
         state: "অবস্থা",
-        resource: "সম্পদ",
+        resource: "রিসোর্স",
         attempts: "চেষ্টা",
         error: "শেষ ত্রুটি",
         created: "তৈরি",
@@ -148,7 +148,7 @@ export const opsBn = {
       region: "অঞ্চল",
       created: "তৈরি",
       lastError: "শেষ ত্রুটি",
-      resource: "সম্পদ",
+      resource: "রিসোর্স",
       trailTitle: "অ্যাডমিনদের সিদ্ধান্ত",
       trailCaption: "এই কাজে অ্যাডমিনরা যা করেছেন, পুরোনো আগে",
       trailEmpty: "এখনও কোনো সিদ্ধান্ত নেই।",

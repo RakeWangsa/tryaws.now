@@ -2070,6 +2070,33 @@ TASKS["WP9-T4b"] = [
   repo,
 ];
 
+// WP9-T5: the wording pass. One machine check over every message namespace of web, admin and the kit
+// in bn and en (same keys and placeholders, no empty or copied English text, no ARN, account id, raw
+// AWS error or internal name, the marks of 16.13, trademark line), and the same rules on the notify
+// templates. The legal placeholders stay and are listed as Needs decision; the review by a native
+// speaker is a manual step of the owner.
+const wordingMessages = {
+  id: "wording-messages",
+  title:
+    "WP9-T5: web and admin messages in bn and en: same keys, no empty or copied text, placeholders match, no forbidden wording",
+  command: ["pnpm", "test", "--filter", "@tc/web", "messages/wording", "--no-passWithNoTests"],
+};
+const wordingNotify = {
+  id: "wording-notify",
+  title: "WP9-T5: the email and SMS templates follow the same wording rules in bn and en",
+  command: ["pnpm", "test", "--filter", "@tc/notify", "wording", "--no-passWithNoTests"],
+};
+TASKS["WP9-T5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  wordingMessages,
+  wordingNotify,
+  repo,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

@@ -35,7 +35,7 @@ export const containerBn = {
       xlarge: "এক্সট্রা লার্জ",
     },
     plan: {
-      scale: "{count, plural, one {# টি কন্টেইনার ইনস্ট্যান্স} other {# টি কন্টেইনার ইনস্ট্যান্স}}",
+      scale: "{count, plural, one {#টি কন্টেইনার ইনস্ট্যান্স} other {#টি কন্টেইনার ইনস্ট্যান্স}}",
       vcpu: "প্রতিটিতে {count} vCPU",
       ram: "প্রতিটিতে {size} GB RAM",
     },
