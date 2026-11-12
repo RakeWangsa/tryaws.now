@@ -77,7 +77,7 @@ describe("wording check (WP9-T5)", () => {
     }
     const missing = checkWording({ A: { b: "ঢাকা" } }, { A: { b: "Dhaka", extra: "x" } });
     expect(missing.map((f) => f.rule)).toContain("missing-in-bn");
-    expect(isLanguageNeutral("TiCON Cloud 24 {n} GB")).toBe(true);
+    expect(isLanguageNeutral("MeghVPS 24 {n} GB")).toBe(true);
     expect(isLanguageNeutral("Save")).toBe(false);
     expect(placeholdersOf("{count, plural, one {# x} other {{n} y}}")).toEqual(["count", "n"]);
   });

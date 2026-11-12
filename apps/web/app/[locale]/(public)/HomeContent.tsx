@@ -10,7 +10,7 @@ import { OfferCard } from "./_components/offers.tsx";
 import type { Tr } from "./_components/offers.tsx";
 
 // `/` (index.html): the hero with the AWS statement of 16.13, three plan cards from the catalog (the
-// cheapest open plan of three families), "Why TiCON Cloud" tiles, the two locations as text, the
+// cheapest open plan of three families), "Why MeghVPS" tiles, the two locations as text, the
 // help strip. Not used from the mockup: the case study block and the map of seven datacenters.
 
 const WHY = ["aws", "bdt", "panel", "support"] as const;

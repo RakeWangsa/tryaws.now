@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": [
+    "sst.config.ts",
+    "stacks/**/*.ts",
+    "lib/**/*.ts",
+    "../.sst/platform/config.d.ts",
+    "../sst-env.d.ts"
+  ]
+}

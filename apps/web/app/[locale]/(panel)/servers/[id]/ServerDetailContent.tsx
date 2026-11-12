@@ -15,6 +15,7 @@ import { useTranslations } from "next-intl";
 import type { ServerManage as ManageData } from "../../../../../server/server-manage-view.ts";
 import type { ServerDetail } from "../../../../../server/servers-view.ts";
 import { ServerState, useRegionLabel, useSpecLine } from "../ServerParts.tsx";
+import type { HistoryScreen } from "../../../../../server/resource-history.ts";
 import { useExtraTabs } from "./ExtrasTabs.tsx";
 import type { ExtrasBundle } from "./ExtrasTabs.tsx";
 import {
@@ -24,6 +25,7 @@ import {
   StaticIpPanel,
   type ManageActions,
 } from "./ServerManage.tsx";
+import { HistoryTab } from "./HistoryTab.tsx";
 import { WindowsAccess, type RevealResult } from "./WindowsAccess.tsx";
 
 // The content of /servers/[id] (16.10): a header and the tabs Overview, Access and Networking
@@ -47,6 +49,7 @@ export function ServerDetailContent({
   server,
   extras = null,
   manage = null,
+  history = null,
   defaultTab,
   windowsAction = refuseReveal,
 }: {
@@ -56,11 +59,14 @@ export function ServerDetailContent({
   /** The tabs of WP5-T6; null while the flag is off or the data is not loaded. */
   extras?: ExtrasBundle | null;
   manage?: ManageBundle | null;
+  /** The History tab (WPU-N1); null while it is not loaded, then the tab is not shown. */
+  history?: HistoryScreen | null;
   defaultTab?: string;
   /** The Server Action of the Windows password; the page passes `revealWindowsPasswordAction`. */
   windowsAction?: (form: FormData) => Promise<RevealResult>;
 }) {
   const t = useTranslations("Servers");
+  const tHistory = useTranslations("History");
   const specLine = useSpecLine();
   const regionLabel = useRegionLabel();
   const listHref = localePath(locale, "/servers");
@@ -274,9 +280,19 @@ export function ServerDetailContent({
             { id: "access", title: t("detail.tab.access"), content: access },
             { id: "networking", title: t("detail.tab.networking"), content: networking },
             ...extraTabs,
+            ...(history !== null
+              ? [
+                  {
+                    id: "history",
+                    title: tHistory("tab"),
+                    content: <HistoryTab screen={history} numerals={numerals} />,
+                  },
+                ]
+              : []),
           ]}
           {...(defaultTab !== undefined &&
           (defaultTab === "networking" ||
+            (defaultTab === "history" && history !== null) ||
             (["backups", "storage", "metrics", "billing", "destroy"].includes(defaultTab) &&
               extraTabs.length > 0))
             ? { defaultId: defaultTab }

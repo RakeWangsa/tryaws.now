@@ -30,10 +30,11 @@ interface Text {
   readonly body: readonly string[];
 }
 
-const TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>> = {
+// Exported for the wording test only (it is not part of the package entry).
+export const COGNITO_TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>> = {
   verify_code: {
     bn: {
-      subject: "TiCON Cloud: আপনার ইমেইল যাচাইয়ের কোড",
+      subject: "MeghVPS: আপনার ইমেইল যাচাইয়ের কোড",
       headline: "ইমেইল যাচাই করুন",
       body: [
         "আপনার ইমেইল যাচাই করতে নিচের কোডটি প্যানেলে লিখুন।",
@@ -42,7 +43,7 @@ const TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>
       ],
     },
     en: {
-      subject: "TiCON Cloud: your email verification code",
+      subject: "MeghVPS: your email verification code",
       headline: "Verify your email",
       body: [
         "Enter this code in the panel to verify your email.",
@@ -53,7 +54,7 @@ const TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>
   },
   reset_code: {
     bn: {
-      subject: "TiCON Cloud: পাসওয়ার্ড রিসেটের কোড",
+      subject: "MeghVPS: পাসওয়ার্ড রিসেটের কোড",
       headline: "পাসওয়ার্ড রিসেট",
       body: [
         "পাসওয়ার্ড রিসেট করতে নিচের কোডটি প্যানেলে লিখুন।",
@@ -62,7 +63,7 @@ const TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>
       ],
     },
     en: {
-      subject: "TiCON Cloud: your password reset code",
+      subject: "MeghVPS: your password reset code",
       headline: "Reset your password",
       body: [
         "Enter this code in the panel to reset your password.",
@@ -73,7 +74,7 @@ const TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>
   },
   admin_temp_password: {
     bn: {
-      subject: "TiCON Cloud অ্যাডমিন: আপনার সাময়িক পাসওয়ার্ড",
+      subject: "MeghVPS অ্যাডমিন: আপনার সাময়িক পাসওয়ার্ড",
       headline: "অ্যাডমিন অ্যাকাউন্ট তৈরি হয়েছে",
       body: [
         "আপনার অ্যাডমিন অ্যাকাউন্ট তৈরি হয়েছে।",
@@ -83,7 +84,7 @@ const TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>
       ],
     },
     en: {
-      subject: "TiCON Cloud admin: your temporary password",
+      subject: "MeghVPS admin: your temporary password",
       headline: "Your admin account is ready",
       body: [
         "Your admin account has been created.",
@@ -115,7 +116,7 @@ export function renderCognitoMessage(
   if (kind === "admin_temp_password" && username === undefined) {
     throw new TypeError("cognito message: bad placeholder");
   }
-  const text = TEXTS[kind][locale];
+  const text = COGNITO_TEXTS[kind][locale];
   // "{username}" stays as it is: Cognito replaces it.
   const fill = (s: string) => s.replace("{code}", placeholders.code);
   const { html } = layoutEmail({

@@ -222,9 +222,6 @@ export function PublicShell({
                     <li className="menu-item">
                       <a href={p("/pricing")}>{t("footer.pricing")}</a>
                     </li>
-                    <li className="menu-item">
-                      <a href={p("/payments")}>{t("footer.payments")}</a>
-                    </li>
                   </ul>
                 </div>
                 <div className="col-sm-6 col-md-3">

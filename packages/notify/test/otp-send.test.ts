@@ -31,8 +31,8 @@ beforeEach(kit.reset);
 afterEach(() => vi.restoreAllMocks());
 
 it.each([
-  ["bn", "TiCON Cloud যাচাই কোড: "],
-  ["en", "TiCON Cloud verification code: "],
+  ["bn", "MeghVPS যাচাই কোড: "],
+  ["en", "MeghVPS verification code: "],
 ] as const)(
   "sends the code by SMS in %s, answers without it, and stores only its hash",
   async (locale, prefix) => {

@@ -86,6 +86,7 @@ export function extras(over: Partial<ServerExtras> = {}): ServerExtras {
       status: "active",
       periodStart: new Date("2026-11-01T00:00:00Z"),
       periodEnd: new Date("2026-12-01T00:00:00Z"),
+      renewalWait: null,
       autoRenew: true,
       lines: {
         baseMinor: 60000n,

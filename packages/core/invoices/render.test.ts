@@ -23,7 +23,7 @@ const doc: InvoiceDocument = {
   kind: "invoice",
   number: "TC-2026-000042",
   issuedAt: new Date("2026-11-11T05:00:00Z"),
-  company: { name: "TiCON Cloud", address: ["House 1, Road 2", "Dhaka"] },
+  company: { name: "MeghVPS", address: ["House 1, Road 2", "Dhaka"] },
   customer: { name: "Rahim & <Sons>", address: "Mirpur, Dhaka" },
   lines: [
     {
@@ -77,7 +77,7 @@ describe("renderInvoiceHtml", () => {
     expect(en).toContain(
       "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.",
     );
-    expect(en).toContain("TiCON Cloud sells, bills and supports");
+    expect(en).toContain("MeghVPS sells, bills and supports");
     const bn = plain(renderInvoiceHtml(doc, "bn"));
     expect(bn).toContain("১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।");
     expect(en).not.toMatch(/AWS Lightsail/);

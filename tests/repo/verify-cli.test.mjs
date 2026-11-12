@@ -30,7 +30,7 @@ it("gate M0 and task WP0-T1 are the same six checks", () => {
 });
 it.each([
   [["--gate", "M9"], "Gate M9 does not exist", "gate-M9"],
-  [["--task", "WP10-T2"], "Task WP10-T2 has no proof yet", "task-WP10-T2"],
+  [["--task", "WP10-T1"], "Task WP10-T1 has no proof yet", "task-WP10-T1"],
 ])("fails closed for %j", (args, title, name) => {
   rmSync(`verify/report-${name}.json`, { force: true });
   const result = verify(...args);
@@ -98,8 +98,10 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP0-T6",
     "WP1-T1",
     "WP1-T2",
+    "WP1-T3",
     "WP1-T4",
     "WP1-T5",
+    "WP10-T2",
     "WP2-T1",
     "WP2-T2",
     "WP2-T3",
@@ -115,6 +117,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP4-T3",
     "WP4-T4",
     "WP4-T5",
+    "WP4-T6",
     "WP4-T7",
     "WP5-T1",
     "WP5-T2",
@@ -144,22 +147,27 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP8-T5",
     "WP8-T6",
     "WP8-T7",
+    "WP9-T1",
     "WP9-T2",
     "WP9-T3",
     "WP9-T4",
     "WP9-T4b",
     "WP9-T5",
+    "WP9-T6",
     "WPA-P1",
     "WPA-P2",
     "WPP-T1",
     "WPP-T2",
     "WPP-T3",
     "WPP-T4",
+    "WPU-B1",
     "WPU-B3",
+    "WPU-B4",
     "WPU-C1",
     "WPU-D1",
     "WPU-D2",
     "WPU-D3",
+    "WPU-D4",
     "WPU-F1",
     "WPU-G1",
     "WPU-G10",
@@ -185,6 +193,10 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-M5",
     "WPU-M6",
     "WPU-M7",
+    "WPU-M8",
+    "WPU-N1",
+    "WPU-N2",
+    "WPU-R1",
     "WPU-S1",
     "WPU-S2",
     "WPU-S3",
@@ -724,6 +736,46 @@ it("task WPU-G6 is proven by lint, types, format, the core, db, aws, provisioner
   ]);
 });
 
+it("task WPU-D4 is proven by lint, types, format, the core, db, aws, notify, notifier, provisioner, scheduler, admin and repository tests", () => {
+  expect(TASKS["WPU-D4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["notify", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["notifier-fn", "pnpm test --filter @tc/fn-notifier --no-passWithNoTests"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-M8 is proven by lint, types, format and the suites that both merged sides touch", () => {
+  expect(TASKS["WPU-M8"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["notify", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["notifier-fn", "pnpm test --filter @tc/fn-notifier --no-passWithNoTests"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
 it("task WPU-S1 is proven by lint, types, format, the core, db and repository tests", () => {
   expect(TASKS["WPU-S1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
     ["spec-sync", "pnpm spec:check"],
@@ -911,11 +963,34 @@ it("the proof of WPU-B3 exists: the cleanup follow-up, the release alarm, the st
     ["packages/core/invoices/credit-note-stuck.test.ts", "escalates every run"],
     ["packages/core/metering/usage-writer.test.ts", "refuses two samples for one resource"],
     ["packages/core/lifecycle/polling.test.ts", "queues read_db_parameters once"],
+    ["packages/db/test/polling.db.test.ts", "certificatesToRefresh"],
     ["functions/reconciler/usage.test.ts", "fails closed"],
     ["tests/repo/infra-alerts.test.mjs", "exist in the code that writes them"],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
   }
+});
+
+it("task WPU-B1 is proven by lint, types, format, the core, notify, web, admin and ui tests and the repository tests", () => {
+  expect(TASKS["WPU-B1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core-brand", "pnpm test --filter @tc/core invoices --no-passWithNoTests"],
+    ["notify-brand", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["web-brand", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin-brand", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-B1 exists: the repository test that bans the old brand in customer-facing files", () => {
+  expect(readFileSync("tests/repo/brand.test.mjs", "utf8")).toContain(
+    "no customer-facing message, template, logo or invoice text says TiCON Cloud",
+  );
 });
 
 it("task WPU-F1 is proven by lint, types, format, the digit helper, mail, renderer and ui tests and the repository tests", () => {
@@ -960,6 +1035,34 @@ it("the proof of WPU-F1 exists: the digit helper, the invoice stack and spans, t
     ["packages/ui/theme/tc-fonts.test.ts", "no third-party font origin anywhere (U3)"],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-N2 is proven by lint, types, format, aws, access-details, web and repository tests", () => {
+  expect(TASKS["WPU-N2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["secrets-aws", "pnpm test --filter @tc/aws access-n2 --no-passWithNoTests"],
+    ["access-details", "pnpm test --filter @tc/fn-access-details --no-passWithNoTests"],
+    [
+      "secrets-web",
+      "pnpm test --filter @tc/web server/bucket-keys server/bucket-actions server/auth/context --no-passWithNoTests",
+    ],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-N2 exists", () => {
+  for (const file of [
+    "packages/aws/test/access-n2.test.ts",
+    "functions/access-details/secrets.test.ts",
+    "apps/web/server/bucket-keys.test.ts",
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain("it(");
   }
 });
 
@@ -2956,6 +3059,31 @@ it("a gate with a manual proof and no record fails (BLOCKED is a failure, never 
   }
 });
 
+it("task WPU-N1 is proven by lint, types, format, the web and ui tests and the repository tests", () => {
+  expect(TASKS["WPU-N1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-N1 exists: the files of the task are in place", () => {
+  for (const file of [
+    "apps/web/server/invoice-pdf.ts",
+    "apps/web/server/renewal-wait.ts",
+    "apps/web/server/resource-history.ts",
+    "apps/web/server/public/signed-in.ts",
+  ]) {
+    expect(readFileSync(file, "utf8").length, file).toBeGreaterThan(0);
+  }
+  expect(readFileSync("apps/web/server/family-actions.ts", "utf8")).toContain("own: {");
+});
+
 it("task WPU-M7 is proven by the renderer and migrator tests and the infra tests of both merged sides", () => {
   expect(TASKS["WPU-M7"].map((c) => [c.id, c.command.join(" ")])).toEqual([
     ["spec-sync", "pnpm spec:check"],
@@ -2983,4 +3111,89 @@ it("the proof of WPU-M7 exists: the renderer settings and the provisioner networ
     expect(workers, part).toContain(part);
   }
   expect(JSON.parse(readFileSync("package.json", "utf8")).devDependencies.sst).toBe("4.17.2");
+});
+
+// WPU-B4 (audit item 18): TASKS keys for the backlog rows that had none. A manual check is BLOCKED, never a pass.
+const rows = (key) => TASKS[key].map((c) => [c.id, c.command.join(" ")]);
+const STATIC = [
+  ["spec-sync", "pnpm spec:check"],
+  ["baseline-sync", "pnpm baseline:check"],
+  ["lint", "pnpm lint"],
+  ["format", "pnpm format:check"],
+];
+const TYPED = [STATIC[0], STATIC[1], STATIC[2], ["typecheck", "pnpm typecheck"], STATIC[3]];
+const manualRow = (id) => [`manual-${id}`, `node scripts/manual-proof.mjs ${id}`];
+
+it("task WP1-T3 is proven by the pricing tests of packages/core", () => {
+  expect(rows("WP1-T3")).toEqual([
+    ...TYPED,
+    ["pricing", "pnpm test --filter @tc/core pricing --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WP4-T6 is proven by the firewall template and isolation case tests; the real pool is a BLOCKED manual proof", () => {
+  expect(rows("WP4-T6")).toEqual([
+    ...TYPED,
+    ["bootstrap-firewall", "pnpm test --filter @tc/aws bootstrap --no-passWithNoTests"],
+    ["isolation-local", "pnpm test --filter isolation --no-passWithNoTests"],
+    manualRow("wp4-t6-isolation-pool-dev"),
+  ]);
+});
+
+it("task WP9-T1 maps Section 15 to its tests and keeps the evidence a manual proof", () => {
+  expect(rows("WP9-T1")).toEqual([
+    ...STATIC,
+    ["section15-local", "pnpm test --filter repo section15-local --no-passWithNoTests"],
+    manualRow("wp9-t1-section15-evidence"),
+  ]);
+});
+
+it("task WP9-T6 is proven by the deploy workflow tests; the deploy and the beta payments are manual proofs", () => {
+  expect(rows("WP9-T6")).toEqual([
+    ...STATIC,
+    ["ci-deploy", "pnpm test --filter repo ci-deploy --no-passWithNoTests"],
+    manualRow("wp9-t6-production-tag-deploy"),
+    manualRow("wp9-t6-beta-payments"),
+  ]);
+});
+
+it("task WP10-T2 has only static checks and the manual first-day report", () => {
+  expect(rows("WP10-T2")).toEqual([...STATIC, manualRow("wp10-t2-first-day-report")]);
+});
+
+it("task WPU-R1 is proven by the zod form schema tests and the tier limit tests", () => {
+  expect(rows("WPU-R1")).toEqual([
+    ...TYPED,
+    [
+      "web-zod",
+      "pnpm test --filter @tc/web server/form-schema server/disk-actions --no-passWithNoTests",
+    ],
+    ["tier-limits", "pnpm test --filter @tc/core orders/gates --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-B4 is proven by the forward-only and temp-db tests and the repository tests", () => {
+  expect(rows("WPU-B4")).toEqual([
+    ...TYPED,
+    ["db-forward-only", "pnpm test --filter @tc/db test/forward-only --no-passWithNoTests"],
+    ["db-temp-db", "pnpm test --filter @tc/db test/temp-db --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the manual checks of the new keys exist in the catalogue and are in the gates already", () => {
+  const manualIds = ["WP4-T6", "WP9-T1", "WP9-T6", "WP10-T2"]
+    .flatMap((key) => TASKS[key])
+    .filter((c) => c.id.startsWith("manual-"))
+    .map((c) => c.id.slice("manual-".length));
+  expect(manualIds).toHaveLength(5);
+  for (const id of manualIds) {
+    expect(Object.hasOwn(MANUAL_PROOFS, id), id).toBe(true);
+    expect(
+      GATES.M7.map((c) => c.id),
+      id,
+    ).toContain(`manual-${id}`);
+  }
 });

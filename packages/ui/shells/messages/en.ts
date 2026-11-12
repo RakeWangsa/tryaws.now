@@ -6,9 +6,9 @@ type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 export const en: Same<typeof bn> = {
   Shell: {
     skip: "Skip to main content",
-    brand: "TiCON Cloud",
-    logoAlt: "TiCON Cloud",
-    homeLabel: "TiCON Cloud home",
+    brand: "MeghVPS",
+    logoAlt: "MeghVPS",
+    homeLabel: "MeghVPS home",
     menu: "Menu",
     close: "Close",
     public: {
@@ -93,7 +93,7 @@ export const en: Same<typeof bn> = {
   },
   Aws: {
     short: "100% AWS infrastructure. Built on Amazon Lightsail.",
-    long: "Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai). TiCON Cloud sells, bills and supports the service. You manage everything from this panel and do not need an AWS account.",
+    long: "Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai). MeghVPS sells, bills and supports the service. You manage everything from this panel and do not need an AWS account.",
     trademark:
       "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.",
   },

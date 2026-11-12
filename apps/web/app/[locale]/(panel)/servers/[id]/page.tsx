@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
 import { loadMetrics, loadServerExtras, rangeOf } from "../../../../../server/extras-view.ts";
+import { loadResourceHistory } from "../../../../../server/resource-history.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { getReaderPort } from "../../../../../server/reader-port.ts";
 import { loadServerManage } from "../../../../../server/server-manage-view.ts";
@@ -107,6 +108,7 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
       : null;
   const managed = server === null ? null : await loadServerManage(panel.session, id, newUuidV7());
   const manage = managed === null ? null : { data: managed, actions: manageActions };
+  const history = server === null ? null : await loadResourceHistory(panel.session, id);
   const tab = one(query["tab"]);
   return (
     <PanelFrame locale={locale} path={path} currentId="cloudServers" panel={panel}>
@@ -116,6 +118,7 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
         server={server}
         extras={extras}
         manage={manage}
+        history={history}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
         windowsAction={revealWindowsPasswordAction}
       />

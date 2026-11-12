@@ -55,3 +55,36 @@ export async function createBucketAccessKey(input: BucketAccessKeyInput): Promis
   }
   return { accessKeyId: key.accessKeyId, secretAccessKey: key.secretAccessKey };
 }
+
+/** A key of the list: the id and facts that are not secret. AWS never returns the secret of a listed key. */
+export interface BucketAccessKeyListed {
+  readonly accessKeyId: string;
+  readonly status: "active" | "inactive";
+  /** ISO time, or null when AWS did not say. */
+  readonly createdAt: string | null;
+}
+
+/**
+ * Lists the access keys of a bucket (at most two). Only the id, the status and the creation time are
+ * kept: the secret field of the response is dropped by construction (U9, R14). VERIFY: the field names
+ * `accessKeyId`, `status`, `createdAt` of GetBucketAccessKeys.
+ */
+export async function listBucketAccessKeys(
+  input: Omit<BucketAccessKeyInput, "resourceState"> & { readonly resourceState?: string },
+): Promise<BucketAccessKeyListed[]> {
+  const bucketName = awsResourceName("bucket", input.resourceId);
+  const lightsail = input.access.lightsail(input.account, input.region, "TcAccessDetails");
+  const got = await lightsail.send(new GetBucketAccessKeysCommand({ bucketName }));
+  const out: BucketAccessKeyListed[] = [];
+  for (const key of got.accessKeys ?? []) {
+    if (typeof key.accessKeyId !== "string" || key.accessKeyId === "") continue;
+    const created = key.createdAt instanceof Date ? key.createdAt : null;
+    out.push({
+      accessKeyId: key.accessKeyId,
+      status: String(key.status ?? "").toLowerCase() === "inactive" ? "inactive" : "active",
+      createdAt:
+        created !== null && !Number.isNaN(created.getTime()) ? created.toISOString() : null,
+    });
+  }
+  return out.slice(0, MAX_KEYS);
+}

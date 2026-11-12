@@ -31,7 +31,10 @@ function specRow(markdown: string, label: string): { en: string; bn: string } {
     .map((c) => c.trim());
   const [, en, bn] = cells;
   if (en === undefined || bn === undefined) throw new Error(`row has no two statements: ${label}`);
-  return { en, bn };
+  // WPU-B1: docs/spec/16.13 still names the old brand (the plan is edited in its own pull request); the
+  // statements are compared with the brand of the product.
+  const brand = (text: string): string => text.replaceAll("TiCON Cloud", "MeghVPS");
+  return { en: brand(en), bn: brand(bn) };
 }
 
 describe("shellMessages", () => {

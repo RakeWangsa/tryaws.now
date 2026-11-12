@@ -1,7 +1,13 @@
-import { createAwsAccess, fetchWindowsPassword } from "@tc/aws";
+import {
+  createAwsAccess,
+  createBucketAccessKey,
+  fetchDatabasePassword,
+  fetchWindowsPassword,
+  listBucketAccessKeys,
+} from "@tc/aws";
 import type { Clock, Logger } from "@tc/core";
-import { customerRepos, loadReadTarget, type Tx } from "@tc/db";
-import { createAccessDetails, type AccessDetails } from "./handler";
+import { customerRepos, loadReadTarget, type ReadTarget, type Tx } from "@tc/db";
+import { createAccessDetails, type AccessDetails, type RateAction } from "./handler";
 import { createInvoke } from "./invoke";
 
 export interface AccessDetailsEnv {
@@ -10,10 +16,27 @@ export interface AccessDetailsEnv {
   readonly log: Logger;
 }
 
-// 20 reveals in an hour per customer: a password is read on demand, not polled.
-const REVEAL_LIMITS = Object.freeze([
-  Object.freeze({ action: "windows_password.reveal", limit: 20, windowSeconds: 3600 }),
-]);
+// Per customer and hour: a password is read on demand, not polled; a bucket has two keys at most.
+const LIMITS: Readonly<Record<RateAction, number>> = Object.freeze({
+  "windows_password.reveal": 20,
+  "database_password.reveal": 20,
+  "bucket_key.create": 10,
+  "bucket_key.list": 60,
+});
+
+// The unique claim of a request id (R7) on the atomic counter of rate_limits: a limit of one hit per
+// day under an action made of the request id, so the first call is allowed and every later one is not.
+// The action pattern allows 48 characters: "bucket_key.r." plus the 32 hex digits of the id.
+export function claimActionOf(requestId: string): string {
+  return `bucket_key.r.${requestId.replaceAll("-", "")}`;
+}
+
+const params = (target: ReadTarget) => ({
+  account: target.account,
+  region: target.region as never,
+  resourceId: target.resource.id,
+  resourceState: target.resource.state,
+});
 
 // Assembles the function from values handed in: no environment access, no global clock. The tenant
 // check, the rate limit and the audit row each run in a short transaction of their own, and AWS is
@@ -26,22 +49,26 @@ export function buildAccessDetails(env: AccessDetailsEnv): {
   const access = createAccessDetails({
     loadTarget: (caller, resourceId) =>
       env.runTx((tx) => loadReadTarget(tx, { customerId: caller.customerId }, resourceId)),
-    rateLimit: (customerId) =>
+    rateLimit: (customerId, action) =>
       env.runTx(async (tx) => {
         const decision = await customerRepos(tx, customerId).rateLimits.consume(
-          REVEAL_LIMITS,
+          [Object.freeze({ action, limit: LIMITS[action], windowSeconds: 3600 })],
           env.clock.now(),
         );
         return decision.allowed;
       }),
-    windowsPassword: (target) =>
-      fetchWindowsPassword({
-        access: awsAccess,
-        account: target.account,
-        region: target.region as never,
-        resourceId: target.resource.id,
-        resourceState: target.resource.state,
+    claimRequest: (customerId, requestId) =>
+      env.runTx(async (tx) => {
+        const decision = await customerRepos(tx, customerId).rateLimits.consume(
+          [Object.freeze({ action: claimActionOf(requestId), limit: 1, windowSeconds: 86_400 })],
+          env.clock.now(),
+        );
+        return decision.allowed;
       }),
+    windowsPassword: (target) => fetchWindowsPassword({ access: awsAccess, ...params(target) }),
+    databasePassword: (target) => fetchDatabasePassword({ access: awsAccess, ...params(target) }),
+    bucketKeyCreate: (target) => createBucketAccessKey({ access: awsAccess, ...params(target) }),
+    bucketKeyList: (target) => listBucketAccessKeys({ access: awsAccess, ...params(target) }),
     audit: (entry) =>
       env.runTx(async (tx) => {
         const written = await customerRepos(tx, entry.customerId).audit.record({
