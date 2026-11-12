@@ -191,13 +191,18 @@ async function main() {
       const server = start("pnpm", ["--filter", app.filter, "dev"], env);
       const up = await waitForServer(server, app.origin);
       if (!up) {
-        const refused = /EPERM|EACCES|EADDRINUSE|listen/i.test(server.output);
+        // Only a real port refusal is BLOCKED ("listen EPERM", "EACCES", "EADDRINUSE"); the last lines of
+        // the server output are always shown, so the reason is never hidden behind a generic help line.
+        const refused = /listen EPERM|listen EACCES|EADDRINUSE|operation not permitted/i.test(
+          server.output,
+        );
+        const tail = server.output.trim().split("\n").slice(-4).join(" | ");
         record(
           `server ${app.name}`,
           refused ? STATUS.BLOCKED : STATUS.FAIL,
           refused
-            ? blockedHelp("port")
-            : `the app did not answer on ${app.origin}: ${server.output.trim().split("\n").slice(-3).join(" | ")}`,
+            ? `${blockedHelp("port")} (server said: ${tail})`
+            : `the app did not answer on ${app.origin}: ${tail}`,
         );
         killChild(server.child);
         continue;
