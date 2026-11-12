@@ -6,6 +6,7 @@ import type { ExtrasDeps } from "./extras-actions.ts";
 import type { KeyActionDeps } from "./key-actions.ts";
 import type { KycActionDeps } from "./kyc-actions.ts";
 import type { SettingsDeps } from "./settings-actions.ts";
+import type { SupportActionDeps } from "./support-actions.ts";
 import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
 import type { OrderActionDeps } from "./order-actions.ts";
 import { getOrdersRuntime } from "./orders-runtime.ts";
@@ -105,6 +106,30 @@ export function extrasActionDeps(): ExtrasDeps {
             if (profile === null) return false;
             return (await readFeatureFlag(tx, "linux_instance", profile.market)) === true;
           },
+        });
+      }),
+  };
+}
+
+/** The ports of createSupportRequestCore (16.10 /support, WP9-T4b): the customer's own repositories. */
+export function supportActionDeps(): SupportActionDeps {
+  return {
+    authenticate,
+    now: () => new Date(),
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({
+          support: {
+            create: async (input) => {
+              const written = await repos.support.create(input);
+              return written.ok
+                ? { ok: true, id: written.value.id, replayed: written.replayed }
+                : { ok: false, error: written.error };
+            },
+          },
+          audit: repos.audit,
+          rateLimits: repos.rateLimits,
         });
       }),
   };
