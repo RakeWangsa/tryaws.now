@@ -17,3 +17,11 @@ export {
   parsePhoneCodeForm,
 } from "./auth-forms";
 export type { FieldCode, Parsed, SignUpInput } from "./auth-forms";
+export {
+  parseBillingProfile,
+  BILLING_NAME_MIN,
+  BILLING_NAME_MAX,
+  BILLING_ADDRESS_MIN,
+  BILLING_ADDRESS_MAX,
+} from "./billing-profile";
+export type { BillingFieldCode, BillingParsed, BillingProfileInput } from "./billing-profile";

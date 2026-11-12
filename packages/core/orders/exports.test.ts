@@ -488,6 +488,17 @@ const DNS_ZONE = [
   "zoneStatusWord",
 ];
 
+// WPU-I3: the billing profile validation and the buyer snapshot of the tax invoice.
+const BILLING = [
+  "BILLING_ADDRESS_MAX",
+  "BILLING_ADDRESS_MIN",
+  "BILLING_NAME_MAX",
+  "BILLING_NAME_MIN",
+  "buyerSnapshotFrom",
+  "parseBillingProfile",
+  "parseBuyerSnapshot",
+];
+
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
     expect(Object.keys(orders).sort()).toEqual(ORDERS_VALUES);
@@ -524,6 +535,7 @@ describe("the public surface of the order flow", () => {
           ...ACCOUNT_OVERVIEW,
           ...PRICE_BOOK,
           ...DNS_ZONE,
+          ...BILLING,
         ]),
       ].sort(),
     );

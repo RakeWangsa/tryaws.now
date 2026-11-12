@@ -28,6 +28,9 @@ export const invoicesEn: Same<typeof invoicesBn> = {
       date: "Date",
       billedTo: "Billed to",
       noName: "No name given",
+      address: "Address",
+      taxIdBin: "BIN",
+      taxIdNid: "NID",
       notFound: {
         title: "This invoice was not found",
         body: "Check the link, or go back to the list of all invoices.",

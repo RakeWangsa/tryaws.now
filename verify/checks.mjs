@@ -2797,6 +2797,13 @@ TASKS["WPU-H1"] = [
 // flow and sweep (admin). No AWS call.
 TASKS["WPU-I1"] = [specSync, baselineSync, lint, typecheck, format, core, db, web, admin, repo];
 
+// WPU-I3: the customer billing profile (billing name, address, BIN or NID) that the Mushak 6.3 invoice
+// prints for the buyer. The validation and the buyer snapshot (core), migration 0017 with its column
+// grants, the tenant-scoped repository and the snapshot stored with the invoice (db, with the local
+// PostgreSQL), the Server Action, the settings section, the invoice view and the sweep entry (web).
+// No AWS call, no KYC document, no decryption.
+TASKS["WPU-I3"] = [specSync, baselineSync, lint, typecheck, format, core, db, web, admin, repo];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

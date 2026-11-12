@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // answers (R16).
 
 const state = vi.hoisted(() => ({
-  rows: [] as { id: string; customerId: string; lines: unknown; totalMinor: bigint }[],
+  rows: [] as {
+    id: string;
+    customerId: string;
+    lines: unknown;
+    totalMinor: bigint;
+    buyer?: unknown;
+  }[],
   seller: { state: "none" } as unknown,
 }));
 vi.mock("@tc/db", () => ({
@@ -103,6 +109,53 @@ describe("the printable invoice", () => {
     const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
     expect(bn).toContain("বিক্রেতা লিমিটেড");
     expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
+  });
+
+  it("prints the buyer's address and BIN from the snapshot stored on the invoice, escaped (WPU-I3)", async () => {
+    state.rows = [
+      {
+        id: INV,
+        customerId: A,
+        lines: LINES,
+        totalMinor: 69000n,
+        buyer: {
+          name: "Rahim & <Sons>",
+          address: "House 5, Road 3, Dhaka",
+          taxId: { kind: "bin", value: "1234567890123" },
+        },
+      },
+    ];
+    const html = (await invoiceDocument(deps(A, "Profile Name"), "en", INV)).html as string;
+    expect(html).toContain("Rahim &amp; &lt;Sons&gt;");
+    expect(html).not.toContain("Profile Name");
+    expect(html).toContain("<strong>Address:</strong> House 5, Road 3, Dhaka");
+    expect(html).toContain("<strong>BIN:</strong> 1234567890123");
+    const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
+    expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
+    // a NID prints with its own label
+    state.rows[0]!.buyer = {
+      name: null,
+      address: null,
+      taxId: { kind: "nid", value: "1234567890" },
+    };
+    const nid = (await invoiceDocument(deps(A, "Karim"), "en", INV)).html as string;
+    expect(nid).toContain("<strong>NID:</strong> 1234567890");
+    expect(nid).toContain("Karim");
+  });
+
+  it("an invoice with no snapshot, or a snapshot that does not parse, prints '-' (R16)", async () => {
+    for (const buyer of [
+      undefined,
+      null,
+      "x",
+      { name: 1 },
+      { taxId: { kind: "bin", value: "12" } },
+    ]) {
+      state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n, buyer }];
+      const html = (await invoiceDocument(deps(A), "en", INV)).html as string;
+      expect(html, JSON.stringify(buyer)).toMatch(/Address:<\/strong> -</);
+      expect(html).toMatch(/BIN:<\/strong> -</);
+    }
   });
 
   it("answers 503 and prints nothing when the seller details are missing or unreadable (R16)", async () => {

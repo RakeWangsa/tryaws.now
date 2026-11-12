@@ -41,10 +41,34 @@ export const customers = pgTable(
       .references(() => markets.code),
     locale: text("locale").notNull().default("bn"),
     status: text("status").notNull().default("active"),
+    // WPU-I3: the billing profile the customer enters in settings, printed as the buyer of the Mushak
+    // 6.3 invoice. All nullable. personal or business identifiers: never logged (R14).
+    billingName: text("billing_name"),
+    billingAddress: text("billing_address"),
+    // 13-digit BIN of a registered business; or a 10, 13 or 17 digit NID; the invoice names one.
+    customerBin: text("customer_bin"),
+    customerNid: text("customer_nid"),
     createdAt: createdAt(),
   },
   (t) => [
     unique("customers_cognito_sub_unique").on(t.cognitoSub),
+    check(
+      "customers_billing_name_check",
+      sql`${t.billingName} is null or (char_length(${t.billingName}) between 2 and 120 and ${t.billingName} !~ '[[:cntrl:]<>]')`,
+    ),
+    check(
+      "customers_billing_address_check",
+      sql`${t.billingAddress} is null or (char_length(${t.billingAddress}) between 5 and 300 and ${t.billingAddress} !~ '[[:cntrl:]<>]')`,
+    ),
+    check(
+      "customers_customer_bin_check",
+      sql`${t.customerBin} is null or ${t.customerBin} ~ '^[0-9]{13}$'`,
+    ),
+    check(
+      "customers_customer_nid_check",
+      sql`${t.customerNid} is null or ${t.customerNid} ~ '^([0-9]{10}|[0-9]{13}|[0-9]{17})$'`,
+    ),
+    check("customers_tax_id_one_check", sql`${t.customerBin} is null or ${t.customerNid} is null`),
     check("customers_type_check", inList(t.type, CUSTOMER_TYPES)),
     check("customers_kyc_status_check", inList(t.kycStatus, KYC_STATUSES)),
     check("customers_risk_tier_check", inList(t.riskTier, RISK_TIERS)),

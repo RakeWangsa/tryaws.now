@@ -2,9 +2,34 @@ import { defineCaseSet, type CaseSet } from "./define";
 
 export const profileCases: CaseSet = defineCaseSet<{ customerId: string }>({
   repo: "profile",
-  seed: async (_pool, customerId) => ({ customerId }),
+  seed: async (pool, customerId) => {
+    await pool.query(
+      "update customers set billing_name = 'Seed Traders', billing_address = 'Seed address, Dhaka', customer_bin = '9999999999999' where id = $1",
+      [customerId],
+    );
+    return { customerId };
+  },
   cases: ({ asCustomer }) => ({
     "profile.get": { kind: "read", run: (c) => asCustomer(c, (r) => r.profile.get()) },
+    // The answer is the actor's own billing profile; it carries the actor's id so that the helper can
+    // tell an answer about the actor's row from an empty one. The seed gives every customer a profile.
+    "profile.getBilling": {
+      kind: "read",
+      run: (c) =>
+        asCustomer(c, async (r) => ({ customerId: c, billing: await r.profile.getBilling() })),
+    },
+    "profile.setBilling": {
+      kind: "self-write",
+      run: (c) =>
+        asCustomer(c, (r) =>
+          r.profile.setBilling({
+            billingName: "Rahim Traders",
+            billingAddress: "House 5, Dhaka",
+            customerBin: "1234567890123",
+            customerNid: null,
+          }),
+        ),
+    },
     "profile.update": {
       kind: "self-write",
       run: (c) => asCustomer(c, (r) => r.profile.update({ name: "Rahim" })),

@@ -16,6 +16,16 @@ export interface InvoiceRow {
   totalMinor: bigint;
   issuedAt: Date;
   pdfKey: string | null;
+  // WPU-I3: the buyer as the billing profile read on the day of issue, or null (none entered). Stored
+  // jsonb, parsed by parseBuyerSnapshot of the core; contains personal identifiers: never logged (R14).
+  buyer: unknown;
+}
+
+// The buyer snapshot as the caller passes it (the shape of BuyerSnapshot of packages/core/invoices).
+export interface NewInvoiceBuyer {
+  name: string | null;
+  address: string | null;
+  taxId: { kind: "bin" | "nid"; value: string } | null;
 }
 
 export interface NewInvoice {
@@ -25,6 +35,9 @@ export interface NewInvoice {
   fiscalYear: number;
   lines: readonly unknown[];
   totalMinor: bigint;
+  // WPU-I3: optional. The caller reads the customer's billing profile (profile.getBilling) in the same
+  // transaction and passes the buyer; it is stored with the invoice. Omitted: the invoice has no buyer.
+  buyer?: NewInvoiceBuyer | null;
 }
 
 // Keyset cursor: (fiscal year, number) is unique, so the order is exact and no row is skipped or
@@ -66,10 +79,27 @@ const INVOICE_COLUMNS = {
   totalMinor: invoices.totalMinor,
   issuedAt: invoices.issuedAt,
   pdfKey: invoices.pdfKey,
+  buyer: invoices.buyer,
 };
 
 const toInvoice = (row: Record<keyof InvoiceRow, unknown>): InvoiceRow =>
   row as unknown as InvoiceRow;
+
+const DIGITS = /^[0-9]+$/;
+const textOrNull = (v: unknown, max: number): boolean =>
+  v === null || (typeof v === "string" && v !== "" && Array.from(v).length <= max);
+function buyerValid(b: unknown): boolean {
+  if (typeof b !== "object" || b === null || Array.isArray(b)) return false;
+  const { name, address, taxId } = b as Record<string, unknown>;
+  if (!textOrNull(name, 120) || !textOrNull(address, 300)) return false;
+  if (taxId === null) return true;
+  if (typeof taxId !== "object" || Array.isArray(taxId)) return false;
+  const { kind, value } = taxId as Record<string, unknown>;
+  if (typeof value !== "string" || !DIGITS.test(value)) return false;
+  return kind === "bin"
+    ? value.length === 13
+    : kind === "nid" && [10, 13, 17].includes(value.length);
+}
 
 function requireUuid(value: unknown, what: string): asserts value is string {
   if (typeof value !== "string" || !isUuid(value)) {
@@ -147,10 +177,20 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
         input.fiscalYear < 2026 ||
         input.fiscalYear > 32000 ||
         !Array.isArray(input.lines) ||
-        input.lines.length === 0
+        input.lines.length === 0 ||
+        (input.buyer !== undefined && input.buyer !== null && !buyerValid(input.buyer))
       ) {
         return refused("validation");
       }
+      // Only the three named keys are stored: nothing else of the input reaches the row.
+      const buyerJson =
+        input.buyer === undefined || input.buyer === null
+          ? null
+          : JSON.stringify({
+              name: input.buyer.name,
+              address: input.buyer.address,
+              taxId: input.buyer.taxId,
+            });
       const fiscalYear = input.fiscalYear;
       // One invoice at a time per fiscal year: the lock is held to the end of the transaction, so the
       // next number is read after the previous one is committed or rolled back (gap-free).
@@ -185,10 +225,11 @@ export function invoicesRepo(scope: TenantScope): InvoicesRepo {
       // must be the total of the invoice: an order of another customer, a missing one and a wrong
       // total insert nothing (R8, R16).
       const inserted = await tx.execute(sql`
-        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor)
+        insert into invoices (id, fiscal_year, number, customer_id, order_id, lines, total_minor, buyer)
         select ${input.id}, ${fiscalYear}::smallint,
                coalesce((select max(i.number) from invoices i where i.fiscal_year = ${fiscalYear}::smallint), 0) + 1,
-               o.customer_id, o.id, ${JSON.stringify(input.lines)}::jsonb, o.total_minor
+               o.customer_id, o.id, ${JSON.stringify(input.lines)}::jsonb, o.total_minor,
+               ${buyerJson}::jsonb
         from orders o
         where o.id = ${input.orderId} and o.customer_id = ${customerId}
           and o.total_minor = ${input.totalMinor.toString()}::bigint

@@ -14,6 +14,7 @@ import {
   confirmPhoneChangeAction,
   startEmailChangeAction,
   startPhoneChangeAction,
+  updateBillingAction,
   updateProfileAction,
 } from "./actions.ts";
 import { ProfileContent } from "./ProfileContent.tsx";
@@ -44,6 +45,7 @@ export default async function ProfilePage({ params }: Props) {
         screen={screen}
         actions={{
           updateProfile: updateProfileAction,
+          updateBilling: updateBillingAction,
           startEmail: startEmailChangeAction,
           confirmEmail: confirmEmailChangeAction,
           startPhone: startPhoneChangeAction,

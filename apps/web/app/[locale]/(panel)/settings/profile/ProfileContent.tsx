@@ -2,7 +2,7 @@ import { Button, Card, EmptyState } from "@tc/ui";
 import { useTranslations } from "next-intl";
 import type { FormState } from "../../../../../server/action-state.ts";
 import type { ProfileScreen } from "../../../../../server/settings-view.ts";
-import { DetailsForm, EmailChange, PhoneChange } from "./ProfileForms.tsx";
+import { BillingForm, DetailsForm, EmailChange, PhoneChange } from "./ProfileForms.tsx";
 
 // The content of /settings/profile: name and language, then e-mail and phone, each changed in two
 // steps behind a fresh sign-in (6.1). Synchronous, so it renders in a test without a request. When
@@ -12,6 +12,7 @@ type Action = (previous: FormState, form: FormData) => Promise<FormState>;
 
 export interface ProfileActions {
   updateProfile: Action;
+  updateBilling: Action;
   startEmail: Action;
   confirmEmail: Action;
   startPhone: Action;
@@ -43,6 +44,14 @@ export function ProfileContent({
           action={actions.updateProfile}
           name={screen.name}
           locale={screen.locale}
+          signInHref={signInHref}
+        />
+      </Card>
+      <Card title={t("profile.billing.title")} className="mb-4">
+        <p className="seccolor mb-3">{t("profile.billing.intro")}</p>
+        <BillingForm
+          action={actions.updateBilling}
+          billing={screen.billing}
           signInHref={signInHref}
         />
       </Card>

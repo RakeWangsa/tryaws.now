@@ -34,6 +34,17 @@ export interface ProfileUpdate {
   locale?: (typeof LOCALES)[number];
 }
 
+// WPU-I3: the billing profile of the customer, printed as the buyer of the Mushak 6.3 invoice. Kept
+// apart from CustomerProfile: the profile screen and every other reader of `get` never carry the tax
+// ids. BIN and NID are personal or business identifiers: never logged (R14), read only through the
+// session customer's scope.
+export interface BillingProfile {
+  billingName: string | null;
+  billingAddress: string | null;
+  customerBin: string | null;
+  customerNid: string | null;
+}
+
 export interface ProfileRepo {
   // `lock: "share"` keeps the row against a concurrent update (a KYC revocation, a suspension) until
   // the transaction ends: the purchase reads the customer this way so a decision that commits
@@ -45,11 +56,48 @@ export interface ProfileRepo {
   // Called by the e-mail change action (WP2-T5) after the identity provider confirmed the code that
   // it sent to the new address, never from a form.
   setEmail(email: string): Promise<Written<CustomerProfile>>;
+  // The billing profile (WPU-I3): read for the settings form and for the buyer snapshot at issue time.
+  getBilling(): Promise<BillingProfile | null>;
+  // Absolute assignment of all four fields (null clears one): the same input gives the same state, so a
+  // repeated submit is harmless (R7). Validated here as the CHECKs of the table are (defence in depth).
+  setBilling(input: BillingProfile): Promise<Written<BillingProfile>>;
 }
 
 // The finer rule is the one of packages/core/validation; @tc/db cannot import @tc/core.
 const BD_PHONE = /^\+880[0-9]{10}$/;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}$/;
+
+// The same rules as the CHECKs customers_billing_*_check, customers_customer_*_check and
+// customers_tax_id_one_check, and as parseBillingProfile of the core (which @tc/db cannot import).
+const CONTROL_OR_MARKUP = /[\p{Cc}<>]/u;
+const NID = /^([0-9]{10}|[0-9]{13}|[0-9]{17})$/;
+const BIN = /^[0-9]{13}$/;
+const textOk = (value: unknown, min: number, max: number): boolean =>
+  value === null ||
+  (typeof value === "string" &&
+    Array.from(value).length >= min &&
+    Array.from(value).length <= max &&
+    !CONTROL_OR_MARKUP.test(value));
+function billingValid(input: BillingProfile): boolean {
+  if (typeof input !== "object" || input === null) return false;
+  const { billingName, billingAddress, customerBin, customerNid } = input;
+  if (!textOk(billingName, 2, 120) || !textOk(billingAddress, 5, 300)) return false;
+  if (customerBin !== null && !(typeof customerBin === "string" && BIN.test(customerBin))) {
+    return false;
+  }
+  if (customerNid !== null && !(typeof customerNid === "string" && NID.test(customerNid))) {
+    return false;
+  }
+  return customerBin === null || customerNid === null;
+}
+
+// Only these four columns, named: the repository never reads or returns a column it did not list.
+const BILLING_COLUMNS = {
+  billingName: customers.billingName,
+  billingAddress: customers.billingAddress,
+  customerBin: customers.customerBin,
+  customerNid: customers.customerNid,
+};
 
 // Selected and returned by name: the repository never reads or returns a column it did not list.
 const PROFILE_COLUMNS = {
@@ -128,6 +176,30 @@ export function profileRepo(scope: TenantScope): ProfileRepo {
         .where(eq(customers.id, scope.customerId))
         .returning(PROFILE_COLUMNS);
       return row === undefined ? refused("not_found") : created(toProfile(row));
+    },
+
+    getBilling: async () => {
+      const [row] = await scope.tx
+        .select(BILLING_COLUMNS)
+        .from(customers)
+        .where(eq(customers.id, scope.customerId));
+      return row === undefined ? null : row;
+    },
+
+    setBilling: async (input) => {
+      if (!billingValid(input)) return refused("validation");
+      // The four values are named one by one: nothing else of the input reaches the statement.
+      const [row] = await scope.tx
+        .update(customers)
+        .set({
+          billingName: input.billingName,
+          billingAddress: input.billingAddress,
+          customerBin: input.customerBin,
+          customerNid: input.customerNid,
+        })
+        .where(eq(customers.id, scope.customerId))
+        .returning(BILLING_COLUMNS);
+      return row === undefined ? refused("not_found") : created(row);
     },
   };
 }

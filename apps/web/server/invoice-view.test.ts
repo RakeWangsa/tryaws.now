@@ -188,6 +188,22 @@ describe("loadInvoice", () => {
       });
     }
   });
+  it("carries the buyer snapshot stored on the invoice; none or malformed means no buyer (WPU-I3)", async () => {
+    const buyer = {
+      name: "Rahim Traders",
+      address: "House 5, Dhaka",
+      taxId: { kind: "bin", value: "1234567890123" },
+    };
+    state.rows = [row({ buyer })];
+    expect(await loadInvoice(session(A), INV)).toMatchObject({ state: "ready", buyer });
+    for (const stored of [undefined, null, "x", [], { taxId: { kind: "bin", value: "1" } }]) {
+      state.rows = [row({ buyer: stored })];
+      expect(await loadInvoice(session(A), INV), JSON.stringify(stored)).toMatchObject({
+        state: "ready",
+        buyer: null,
+      });
+    }
+  });
   it("another customer's invoice is still null even when the seller is missing (R8)", async () => {
     state.rows = [row()];
     state.seller = { state: "none" };
