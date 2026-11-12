@@ -1,0 +1,117 @@
+name: deploy-staging
+
+# WP0-T6. Deploys the SST app to the staging stage. Manual only, and only from the protected branch.
+#
+# Approval: the job `deploy` uses the GitHub environment `staging`; DevOps sets required reviewers on it.
+# Credentials: GitHub OIDC (R3). There is no AWS key in GitHub, no `secrets.*` in this file. The role is
+# assumed in the staging account only. Trust policy of that role (DevOps creates it, see JOURNEY.md):
+#   token.actions.githubusercontent.com:aud = sts.amazonaws.com
+#   token.actions.githubusercontent.com:sub = repo:<org>/<repo>:environment:staging
+# Secrets of the app (EPS keys and so on) are set by a person with `sst secret set` and live in AWS.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gate:
+        description: "Gate that must pass before the deploy (verify/checks.mjs GATES)"
+        type: choice
+        default: M0
+        options: [M0, M1, M2, M3, M4, M5, M6, M7]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PROTECTED_BRANCH: main
+
+jobs:
+  verify:
+    # Fail closed: a dispatch from any other ref does nothing.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-throwaway-password@localhost:5432/postgres
+      GATE: ${{ inputs.gate }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # A throwaway password for the service container of this job. No secret, no AWS.
+          POSTGRES_PASSWORD: ci-throwaway-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Gate
+        run: pnpm verify --gate "$GATE"
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Required reviewers are set on this environment by DevOps.
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      TC_ACCOUNT_ID: ${{ vars.TC_ACCOUNT_ID }}
+      TC_POOL_ACCOUNT_IDS: ${{ vars.TC_POOL_ACCOUNT_IDS }}
+      TC_DNS_ACCOUNT_ID: ${{ vars.TC_DNS_ACCOUNT_ID }}
+      TC_DNS_EXTERNAL_ID: ${{ vars.TC_DNS_EXTERNAL_ID }}
+      TC_DOMAIN_WEB: ${{ vars.TC_DOMAIN_WEB }}
+      TC_DOMAIN_ADMIN: ${{ vars.TC_DOMAIN_ADMIN }}
+      TC_ADMIN_ALLOWLIST: ${{ vars.TC_ADMIN_ALLOWLIST }}
+      TC_ALARM_EMAILS: ${{ vars.TC_ALARM_EMAILS }}
+      TC_SES_IDENTITY_ARN: ${{ vars.TC_SES_IDENTITY_ARN }}
+      TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Assume the staging deploy role (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.TC_STAGING_DEPLOY_ROLE_ARN }}
+          role-session-name: tc-deploy-staging
+          aws-region: ap-southeast-1
+          role-duration-seconds: 3600
+      - name: SST diff
+        run: |
+          pnpm exec sst diff --stage staging 2>&1 | tee sst-diff.txt
+          {
+            echo '## sst diff --stage staging'
+            echo '```'
+            cat sst-diff.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: SST deploy
+        run: pnpm exec sst deploy --stage staging

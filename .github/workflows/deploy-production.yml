@@ -1,0 +1,206 @@
+name: deploy-production
+
+# WP0-T6. The only way to deploy the production stage. Runs on a version tag `v*` and nothing else
+# (no pull_request, no branch push, no manual dispatch). Spec: WP0-T6 and WP9-T6 of the backlog.
+#
+# Flow (three jobs, one concurrency group, so two production deploys never run at once):
+#   1. verify  no AWS. The tag must be vX.Y.Z and its commit must be on the protected branch. Gate M5 must pass.
+#   2. plan    environment `production-plan` (no reviewers). A read-only role runs `sst diff` and writes it to
+#              the job summary. DevOps reads the summary here, before approving the next job.
+#   3. deploy  environment `production` (required reviewers: DevOps). A separate role runs `sst diff` again,
+#              `sst deploy`, then the read-only post-deploy check.
+#
+# OIDC (R3): no AWS key in GitHub and no `secrets.*` in this file. Role ARNs are variables of the environments.
+# Trust policy conditions DevOps puts on each role (the `sub` claim is the environment name, so a branch, a
+# tag or a pull request cannot assume the role by itself):
+#   token.actions.githubusercontent.com:aud = sts.amazonaws.com
+#   deploy role:  token.actions.githubusercontent.com:sub = repo:<org>/<repo>:environment:production
+#   plan role:    token.actions.githubusercontent.com:sub = repo:<org>/<repo>:environment:production-plan
+# Also pin the repository ref in the role with the claim `job_workflow_ref`
+#   (repo:<org>/<repo>/.github/workflows/deploy-production.yml@refs/tags/v*) when the account supports it.
+# The plan role holds read and `sst diff` permissions only. The deploy role is the only production deploy role.
+# The production account is a different account from staging; its role cannot assume a pool role for
+# customers (R1): the control plane roles do that, not the CI role.
+#
+# The guard in infra/lib/stage.ts refuses the production stage unless CI=true and TC_PRODUCTION_DEPLOY=ci-approved.
+# The variable is set per step, only on the steps that run sst, never at workflow or job level. The plan step
+# needs it too, because `sst.config.ts` checks it before any command; that role cannot change anything.
+# No step prints a secret: nothing here reads one, values come from `sst secret` in AWS.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PROTECTED_BRANCH: main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-throwaway-password@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # A throwaway password for the service container of this job. No secret, no AWS.
+          POSTGRES_PASSWORD: ci-throwaway-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tag is vX.Y.Z and its commit is on the protected branch
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag is not vX.Y.Z"
+            exit 1
+          fi
+          git fetch --no-tags origin "+refs/heads/${PROTECTED_BRANCH}:refs/remotes/origin/${PROTECTED_BRANCH}"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "refs/remotes/origin/${PROTECTED_BRANCH}"; then
+            echo "::error::the tag commit is not on ${PROTECTED_BRANCH}"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Gate M5
+        run: pnpm verify --gate M5
+
+  plan:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # No required reviewers on this environment. It exists so the read-only role can have its own trust condition.
+    environment: production-plan
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      TC_ACCOUNT_ID: ${{ vars.TC_ACCOUNT_ID }}
+      TC_POOL_ACCOUNT_IDS: ${{ vars.TC_POOL_ACCOUNT_IDS }}
+      TC_DNS_ACCOUNT_ID: ${{ vars.TC_DNS_ACCOUNT_ID }}
+      TC_DNS_EXTERNAL_ID: ${{ vars.TC_DNS_EXTERNAL_ID }}
+      TC_DOMAIN_WEB: ${{ vars.TC_DOMAIN_WEB }}
+      TC_DOMAIN_ADMIN: ${{ vars.TC_DOMAIN_ADMIN }}
+      TC_ADMIN_ALLOWLIST: ${{ vars.TC_ADMIN_ALLOWLIST }}
+      TC_ALARM_EMAILS: ${{ vars.TC_ALARM_EMAILS }}
+      TC_SES_IDENTITY_ARN: ${{ vars.TC_SES_IDENTITY_ARN }}
+      TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Assume the production plan role (OIDC, read only)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.TC_PRODUCTION_PLAN_ROLE_ARN }}
+          role-session-name: tc-plan-production
+          aws-region: ap-southeast-1
+          role-duration-seconds: 3600
+      - name: SST diff for the approver
+        env:
+          CI: "true"
+          TC_PRODUCTION_DEPLOY: ci-approved
+        run: |
+          pnpm exec sst diff --stage production 2>&1 | tee sst-diff.txt
+          {
+            echo '## sst diff --stage production (read before you approve the deploy job)'
+            echo '```'
+            cat sst-diff.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Required reviewers (DevOps) are set on this environment. The job waits here for the approval.
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      TC_ACCOUNT_ID: ${{ vars.TC_ACCOUNT_ID }}
+      TC_POOL_ACCOUNT_IDS: ${{ vars.TC_POOL_ACCOUNT_IDS }}
+      TC_DNS_ACCOUNT_ID: ${{ vars.TC_DNS_ACCOUNT_ID }}
+      TC_DNS_EXTERNAL_ID: ${{ vars.TC_DNS_EXTERNAL_ID }}
+      TC_DOMAIN_WEB: ${{ vars.TC_DOMAIN_WEB }}
+      TC_DOMAIN_ADMIN: ${{ vars.TC_DOMAIN_ADMIN }}
+      TC_ADMIN_ALLOWLIST: ${{ vars.TC_ADMIN_ALLOWLIST }}
+      TC_ALARM_EMAILS: ${{ vars.TC_ALARM_EMAILS }}
+      TC_SES_IDENTITY_ARN: ${{ vars.TC_SES_IDENTITY_ARN }}
+      TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Tag commit is still on the protected branch
+        run: |
+          git fetch --no-tags origin "+refs/heads/${PROTECTED_BRANCH}:refs/remotes/origin/${PROTECTED_BRANCH}"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "refs/remotes/origin/${PROTECTED_BRANCH}"; then
+            echo "::error::the tag commit is not on ${PROTECTED_BRANCH}"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Assume the production deploy role (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.TC_PRODUCTION_DEPLOY_ROLE_ARN }}
+          role-session-name: tc-deploy-production
+          aws-region: ap-southeast-1
+          role-duration-seconds: 3600
+      - name: SST diff
+        env:
+          CI: "true"
+          TC_PRODUCTION_DEPLOY: ci-approved
+        run: |
+          pnpm exec sst diff --stage production 2>&1 | tee sst-diff.txt
+          {
+            echo '## sst diff --stage production (approved job)'
+            echo '```'
+            cat sst-diff.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: SST deploy
+        env:
+          CI: "true"
+          TC_PRODUCTION_DEPLOY: ci-approved
+        run: pnpm exec sst deploy --stage production
+      - name: Post-deploy check (read only)
+        run: node scripts/post-deploy-check.mjs --stage production --outputs .sst/outputs.json
