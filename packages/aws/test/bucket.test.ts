@@ -186,7 +186,7 @@ describe("suspend and resume: access is removed and restored", () => {
     aws.on("lightsail", "UpdateBucket", lightsailOk({}));
     expect(await adapter.aws.suspend(ctx("block"))).toMatchObject({
       kind: "next",
-      step: "delete_keys",
+      step: "revoke_access",
     });
     expect(body("UpdateBucket")).toEqual({
       bucketName: BUCKET,

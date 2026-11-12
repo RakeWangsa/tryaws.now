@@ -1,8 +1,14 @@
-import { checkedBackupWindow, checkedDomainName, checkedHealthPath } from "@tc/core";
+import {
+  checkedBackupWindow,
+  checkedDomainName,
+  checkedHealthPath,
+  checkedMaintenanceWindow,
+} from "@tc/core";
 import type { OperationKind } from "@tc/core";
 import {
   FAMILY_WRITE_LIMIT,
   Refusal,
+  UUID,
   audit,
   frame,
   ownResource,
@@ -38,6 +44,12 @@ export interface ConsoleSpec {
   states: readonly string[];
   /** The rate limit bucket. */
   limitKey: string;
+  /**
+   * A second resource of the customer that the action names (WPU-G9: the instance a bucket is opened
+   * to). It is read through the scoped repository like the first one: another customer's row and a
+   * missing one are one answer (R8). Its id is a checked field of the payload.
+   */
+  alsoOwns?: { field: string; families: readonly string[]; states: readonly string[] };
   payload(input: Record<string, unknown>): ConsolePayload;
 }
 
@@ -119,6 +131,12 @@ export const DB_OPTIONS: ConsoleSpec = {
       if (checkedBackupWindow(window) === null) fields["backupWindow"] = "invalid";
       else payload["backupWindow"] = window;
     }
+    const maintenance = clean(input["maintenanceWindow"]);
+    if (maintenance !== undefined) {
+      // ddd:hh24:mi-ddd:hh24:mi in UTC, at least 30 minutes (WPU-G9).
+      if (checkedMaintenanceWindow(maintenance) === null) fields["maintenanceWindow"] = "invalid";
+      else payload["maintenanceWindow"] = maintenance;
+    }
     const mode = clean(input["publicMode"]);
     if (mode !== undefined) {
       if (mode !== "on" && mode !== "off") fields["publicMode"] = "invalid";
@@ -152,6 +170,33 @@ export const BUCKET_VERSIONING: ConsoleSpec = {
   },
 };
 
+/** WPU-G9: let one instance of the customer reach the bucket, or stop it (Resource access). */
+export const BUCKET_INSTANCE_ACCESS: ConsoleSpec = {
+  family: "bucket",
+  idField: "bucketId",
+  kind: "set_bucket_resource_access",
+  keyPrefix: "bucket-instance-access",
+  audit: "bucket.instance_access",
+  done: "instanceAccessQueued",
+  states: ["active"],
+  limitKey: "bucket.access",
+  alsoOwns: {
+    field: "instanceId",
+    families: ["linux_instance", "windows_instance"],
+    states: ["active", "stopped"],
+  },
+  payload(input) {
+    const fields: Record<string, string> = {};
+    const instanceId = clean(input["instanceId"]);
+    if (instanceId === undefined || !UUID.test(instanceId)) fields["instanceId"] = "invalid";
+    const access = clean(input["access"]);
+    if (access !== "allow" && access !== "deny") fields["access"] = "invalid";
+    return Object.keys(fields).length > 0
+      ? { ok: false, fields }
+      : { ok: true, payload: { instanceId, access } };
+  },
+};
+
 export const CDN_RESET_CACHE: ConsoleSpec = {
   family: "cdn",
   idField: "cdnId",
@@ -182,6 +227,20 @@ export function consoleCore(
       async (repos) => {
         const row = await ownResource(repos, spec.family, id);
         if (!spec.states.includes(row.state)) throw new Refusal("not_allowed");
+        if (spec.alsoOwns !== undefined) {
+          // The second row is the customer's own or it is nothing (R8); a family or state that the
+          // action does not serve answers the same way.
+          const second = await repos.resources.get(
+            String((built as { payload: Record<string, unknown> }).payload[spec.alsoOwns.field]),
+          );
+          if (
+            second === null ||
+            !spec.alsoOwns.families.includes(second.family) ||
+            !spec.alsoOwns.states.includes(second.state)
+          ) {
+            throw new Refusal("not_found");
+          }
+        }
         const written = await repos.operations.request({
           resourceId: row.id,
           kind: spec.kind,

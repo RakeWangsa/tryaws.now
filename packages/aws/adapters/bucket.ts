@@ -21,7 +21,7 @@ import {
   type StepResult,
 } from "@tc/core";
 import { AwsError } from "../errors";
-import { isUuid } from "./shared";
+import { ignoreNotFound, isUuid } from "./shared";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 
 /**
@@ -190,6 +190,34 @@ export function createBucketAdapter(deps: BucketDeps): ProductAdapter<BucketConf
           readonlyAccessAccounts: [],
         }),
       );
+      return stepNext("revoke_access");
+    }
+    if (step === "revoke_access") {
+      // WPU-G9 (security review): a suspended bucket is closed for every instance too. The deny goes to
+      // the instances the platform opened it to and to every resource AWS lists as receiving access,
+      // grants made outside the platform included. A list that cannot be read fails the step (R16);
+      // a deny is idempotent, so a retry repeats it (R7).
+      const bucket = await findBucket(lightsail, name);
+      if (bucket === null) throw fail("not_found");
+      const names = new Set<string>();
+      const saved = (ctx.resource.config as Record<string, unknown> | null)?.accessInstances;
+      if (Array.isArray(saved)) {
+        for (const id of saved) if (isUuid(id)) names.add(awsResourceName("instance", id));
+      }
+      for (const r of bucket.resourcesReceivingAccess ?? []) {
+        if (typeof r.name === "string" && r.name !== "") names.add(r.name);
+      }
+      for (const resourceName of names) {
+        await ignoreNotFound(() =>
+          lightsail.send(
+            new SetResourceAccessForBucketCommand({
+              resourceName,
+              bucketName: name,
+              access: "deny",
+            }),
+          ),
+        );
+      }
       return stepNext("delete_keys");
     }
     if (step === "delete_keys") {
@@ -210,7 +238,8 @@ export function createBucketAdapter(deps: BucketDeps): ProductAdapter<BucketConf
       }),
     );
     // Cleared, so that a later suspend saves the rules of that day.
-    return stepDone({ state: "active", configMerge: { savedAccess: null } });
+    // The instances stay closed on purpose: the customer opens them again from the Access tab.
+    return stepDone({ state: "active", configMerge: { savedAccess: null, accessInstances: [] } });
   }
 
   // A bucket has no snapshot (R13 ruling in JOURNEY.md): nothing to do.
