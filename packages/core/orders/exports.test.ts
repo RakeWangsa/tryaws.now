@@ -292,6 +292,7 @@ const PRODUCTS = [
   "isValidBin",
   "parseSellerDetails",
   "percentText",
+  "sellerFieldErrors",
   "sellerValueOf",
   // WP1-T5: catalog sync (the mapping, the active rule, the plan, the BDT price on read)
   "decideActive",

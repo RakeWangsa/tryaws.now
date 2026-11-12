@@ -7,6 +7,7 @@ export const pricingEn: Same<typeof pricingBn> = {
     title: "Pricing and exchange rate",
     bookLink: "Price list: margin, commission and product prices",
     configLink: "Prices AWS does not publish: load balancer, snapshot, DNS zone",
+    sellerLink: "Seller details: legal name, BIN and address of the tax invoice (Mushak-6.3)",
     market: { label: "Market", submit: "Show" },
     unavailable: {
       title: "The data could not be loaded",

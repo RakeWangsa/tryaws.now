@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isValidBin, parseSellerDetails, sellerValueOf, SELLER_SETTING_KEY } from "./index";
+import {
+  isValidBin,
+  parseSellerDetails,
+  sellerFieldErrors,
+  sellerValueOf,
+  SELLER_SETTING_KEY,
+} from "./index";
 
 const good = {
   legalNameBn: "উদাহরণ লিমিটেড",
@@ -41,6 +47,15 @@ describe("seller details (invoice_seller)", () => {
     expect(parseSellerDetails(null)).toBeNull();
     expect(parseSellerDetails("x")).toBeNull();
     expect(parseSellerDetails({ ...good, bin: "12" })).toBeNull();
+  });
+  it("names the bad fields and nothing else", () => {
+    expect(sellerFieldErrors(good)).toEqual([]);
+    expect(sellerFieldErrors({ ...good, bin: "1", addressEn: "", email: "x" })).toEqual([
+      "addressEn",
+      "bin",
+      "email",
+    ]);
+    expect(sellerFieldErrors(null)).toEqual(["seller"]);
   });
   it("refuses control characters and over-long text; optional fields are checked when given", () => {
     expect(parseSellerDetails({ ...good, addressEn: "a\u0000b" })).toBeNull();

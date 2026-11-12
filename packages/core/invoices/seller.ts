@@ -50,6 +50,24 @@ function text(value: unknown, max: number): string | null {
   return t;
 }
 
+/** The NAMES of the fields that are missing or malformed (never their values, R14). Empty = complete. */
+export function sellerFieldErrors(value: unknown): string[] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return ["seller"];
+  const raw = value as Record<string, unknown>;
+  const bad: string[] = [];
+  for (const [key, max] of REQUIRED) if (text(raw[key], max) === null) bad.push(key);
+  if (!isValidBin(raw["bin"])) bad.push("bin");
+  for (const [key, max] of OPTIONAL) {
+    const given = raw[key];
+    if (given === undefined || given === null || given === "") continue;
+    const t = text(given, max);
+    if (t === null || (key === "phone" && !PHONE.test(t)) || (key === "email" && !EMAIL.test(t))) {
+      bad.push(key);
+    }
+  }
+  return bad;
+}
+
 /** The row as the document uses it, or null when anything is missing or malformed (R16). */
 export function parseSellerDetails(value: unknown): SellerDetails | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;

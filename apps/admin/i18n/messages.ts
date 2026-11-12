@@ -15,6 +15,8 @@ import { moneyBn } from "../messages/money.ts";
 import { moneyEn } from "../messages/money.en.ts";
 import { configPriceBn } from "../messages/configprice.ts";
 import { configPriceEn } from "../messages/configprice.en.ts";
+import { invoiceSellerBn } from "../messages/invoiceseller.ts";
+import { invoiceSellerEn } from "../messages/invoiceseller.en.ts";
 import { tierLimitsBn } from "../messages/tierlimits.ts";
 import { tierLimitsEn } from "../messages/tierlimits.en.ts";
 import { priceBookBn } from "../messages/pricebook.ts";
@@ -46,6 +48,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     priceBookBn,
     configPriceBn,
     tierLimitsBn,
+    invoiceSellerBn,
     ops.bn,
     planChangeBn,
     auditBn,
@@ -63,6 +66,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     priceBookEn,
     configPriceEn,
     tierLimitsEn,
+    invoiceSellerEn,
     ops.en,
     planChangeEn,
     auditEn,

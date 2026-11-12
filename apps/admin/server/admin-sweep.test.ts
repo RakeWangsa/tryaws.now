@@ -159,6 +159,7 @@ describe("flows: authorize with roles is the first step, before the limiter, the
       "server/capacity-flow.ts",
       "server/config-price-flow.ts",
       "server/customer-flow.ts",
+      "server/invoice-seller-flow.ts",
       "server/money-flow.ts",
       "server/ops-flow.ts",
       "server/plan-mark-flow.ts",
@@ -217,6 +218,24 @@ describe("flows: authorize with roles is the first step, before the limiter, the
     expect([...code.matchAll(/await authorize\(PRICING_ROLES\)/g)].length).toBe(1);
     expect([...code.matchAll(/await authorize\(/g)].length).toBe(1);
     expect(code).not.toMatch(/customerId|customerRepos|\bsession\b/);
+  });
+
+  // WPU-I1. The seller of the tax invoices: one write, finance and superadmin (the pricing area). Market
+  // configuration only; no customer's data is read or written, so there is no tenant to cross.
+  it("the invoice-seller flow authorizes in its one write, with the roles of the pricing area", () => {
+    const code = read(join(ROOT, "server/invoice-seller-flow.ts")).replace(/\/\/.*$/gm, "");
+    expect([...code.matchAll(/await authorize\(PRICING_ROLES\)/g)].length).toBe(1);
+    expect([...code.matchAll(/await authorize\(/g)].length).toBe(1);
+    expect(code).not.toMatch(/customerId|customerRepos|\bsession\b/);
+  });
+
+  it("the seller action is a Server Action of pricing-actions.ts that uses the flow and carries no actor", () => {
+    const source = read(join(ROOT, "server/pricing-actions.ts"));
+    const head = source.indexOf("export async function saveInvoiceSellerAction(");
+    expect(head).toBeGreaterThanOrEqual(0);
+    const body = source.slice(head, source.indexOf("\n}\n", head));
+    expect(body).toContain("makeInvoiceSellerFlow(pricingFlowDeps())");
+    expect(body).not.toMatch(/adminId|role|approver|actor/i);
   });
 
   // WPU-G10. The tier limits: one write, ops and superadmin (the catalog area).

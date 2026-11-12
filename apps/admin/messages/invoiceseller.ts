@@ -1,0 +1,65 @@
+// Namespace `AdminInvoiceSeller`: /pricing/seller, the legal details of the seller on the tax invoices
+// (Mushak 6.3, WPU-I1): legal name, BIN, address and signatory. A namespace of its own. Bengali first (rule
+// U5); the English tree is typed from it, so a missing key fails `tsc`.
+export const invoiceSellerBn = {
+  AdminInvoiceSeller: {
+    title: "বিক্রেতার তথ্য (কর চালানপত্র)",
+    intro:
+      "বাংলাদেশের প্রতিটি গ্রাহক ইনভয়েস জাতীয় রাজস্ব বোর্ডের মূসক-৬.৩ (কর চালানপত্র) ছকে ছাপা হয়। ছকে বিক্রেতার আইনি নাম, ১৩ অঙ্কের বিআইএন, ঠিকানা এবং স্বাক্ষরকারীর নাম ও পদবি থাকতে হয়। মান এখানে দিন; কোনো মান আগে থেকে ভরা নেই।",
+    back: "দামের পাতায় ফিরুন",
+    market: { label: "বাজার", submit: "দেখুন" },
+    unavailable: {
+      title: "তথ্য আনা যায়নি",
+      body: "এখন তথ্য পাওয়া যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
+    },
+    result: {
+      ok: "সংরক্ষণ হয়েছে।",
+      replayed: "এই তথ্য আগেই সংরক্ষিত ছিল।",
+      invalid: "ফর্মের তথ্য ঠিক নয়। ঘরগুলো আবার দেখুন এবং কারণ লিখুন।",
+      denied: "এই কাজের অনুমতি আপনার নেই।",
+      conflict: "একই সময়ে অন্য একটি পরিবর্তন হয়েছে। আবার চেষ্টা করুন।",
+      not_found: "পাওয়া যায়নি।",
+      rate_limited: "অনেকবার চেষ্টা হয়েছে। কিছুক্ষণ পরে আবার চেষ্টা করুন।",
+      unavailable: "এখন কাজটি করা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
+    },
+    status: {
+      title: "এখনকার অবস্থা",
+      missing: "দেওয়া নেই",
+      invalid: "পড়া যাচ্ছে না",
+      ready: "সম্পূর্ণ",
+      version: "সংস্করণ {version}",
+    },
+    notice: {
+      missing:
+        "বিক্রেতার তথ্য দেওয়া নেই। যতক্ষণ না দেওয়া হচ্ছে, এই বাজারে কোনো ইনভয়েস তৈরি বা ছাপা হবে না। নিচের ফর্মে সব তথ্য দিন।",
+      invalid:
+        "সংরক্ষিত তথ্য পড়া যাচ্ছে না বা অসম্পূর্ণ। যতক্ষণ না ঠিক করা হচ্ছে, কোনো ইনভয়েস তৈরি বা ছাপা হবে না।",
+    },
+    current: { title: "সংরক্ষিত তথ্য", empty: "-" },
+    form: {
+      legalNameBn: "আইনি নাম (বাংলা)",
+      legalNameEn: "আইনি নাম (ইংরেজি)",
+      bin: "বিআইএন",
+      binHint: "১৩টি ল্যাটিন অঙ্ক (0 থেকে 9), যেমন 1234567890123।",
+      addressBn: "ঠিকানা (বাংলা)",
+      addressEn: "ঠিকানা (ইংরেজি)",
+      vatCircle: "ভ্যাট সার্কেল / কমিশনারেট (ঐচ্ছিক)",
+      signatoryName: "স্বাক্ষরকারীর নাম",
+      signatoryDesignation: "স্বাক্ষরকারীর পদবি",
+      phone: "ফোন (ঐচ্ছিক)",
+      email: "ইমেইল (ঐচ্ছিক)",
+      reason: "কারণ",
+      reasonHint: "অডিট লগে যাবে।",
+      save: "বিক্রেতার তথ্য সংরক্ষণ করুন",
+    },
+    history: {
+      title: "ইতিহাস",
+      caption: "বিক্রেতার তথ্যের পরিবর্তন",
+      empty: "বিক্রেতার তথ্য কখনো সংরক্ষণ করা হয়নি।",
+      when: "কখন",
+      by: "কে",
+      change: "যে ঘর বদলেছে",
+      reason: "কারণ",
+    },
+  },
+};
