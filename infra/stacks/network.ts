@@ -6,15 +6,20 @@
 // and tests/repo/infra-rules.test.mjs reads the text. Every detail the SST and Pulumi documents did
 // not confirm is marked `VERIFY:` and listed in JOURNEY.md.
 import { AZ_COUNT, VPC_CIDR, isolatedSubnets } from "../lib/network";
+import { sizing } from "../lib/lean";
 import { REGION, resourceName, type StageConfig } from "../lib/stage";
 
 export function network(config: StageConfig) {
   const stage = config.stage;
 
-  // az: 2 and nat: "managed" are documented (sst.aws.Vpc: az default 2, nat "managed" = a NAT gateway per AZ).
+  // az: 2 is documented (sst.aws.Vpc: az default 2). nat comes from the stage size (WPU-B8): "managed"
+  // (a NAT gateway per AZ) in full, "ec2" (a NAT instance) in lean.
+  // VERIFY: sst.aws.Vpc nat: "ec2" makes one instance for the whole VPC or one per AZ, its default
+  // instance type, and that the private route tables of both AZs point at it; TC_PROBE_SOURCES must
+  // then list the address(es) of the instance(s) (max 10, one is fine).
   const vpc = new sst.aws.Vpc("Vpc", {
     az: AZ_COUNT,
-    nat: "managed",
+    nat: sizing(config.size, config.kind).network.nat,
     transform: {
       vpc: (args: { cidrBlock?: string }) => {
         // VERIFY: transform.vpc is listed in the docs; that aws.ec2.Vpc cidrBlock set here is honoured

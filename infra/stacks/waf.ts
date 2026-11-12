@@ -4,6 +4,7 @@
 // NOT TYPE-CHECKED, see network.ts. WAF is built with Pulumi aws.wafv2 in a second provider for
 // us-east-1 (scope CLOUDFRONT).
 import { parseAllowlist } from "../lib/allowlist";
+import { sizing } from "../lib/lean";
 import { EDGE_REGION, resourceName, type StageConfig } from "../lib/stage";
 
 // Rate-based rules (3.3). They are a coarse net per IP; the main control is the per-account and
@@ -129,6 +130,9 @@ export function waf(config: StageConfig) {
   const stage = config.stage;
   const edge = new aws.Provider("EdgeProvider", { region: EDGE_REGION });
   const opts = { provider: edge };
+  // WPU-B8: lean keeps the Common group only; full keeps the three groups. Rate rules and the admin
+  // allowlist are the same in both sizes.
+  const managed = sizing(config.size, config.kind).waf.managedGroups;
 
   const customerAcl = new aws.wafv2.WebAcl(
     "CustomerWebAcl",
@@ -137,9 +141,7 @@ export function waf(config: StageConfig) {
       scope: "CLOUDFRONT",
       defaultAction: { allow: {} },
       rules: [
-        managedGroup("AWSManagedRulesCommonRuleSet", 10),
-        managedGroup("AWSManagedRulesKnownBadInputsRuleSet", 20),
-        managedGroup("AWSManagedRulesAmazonIpReputationList", 30),
+        ...managed.map((group) => managedGroup(group.name, group.priority)),
         ...rateRules(40),
       ],
       visibilityConfig: visibility(resourceName(stage, "web-acl")),
@@ -198,9 +200,7 @@ export function waf(config: StageConfig) {
       defaultAction: { allow: {} },
       rules: [
         outsideAllowlist,
-        managedGroup("AWSManagedRulesCommonRuleSet", 10),
-        managedGroup("AWSManagedRulesKnownBadInputsRuleSet", 20),
-        managedGroup("AWSManagedRulesAmazonIpReputationList", 30),
+        ...managed.map((group) => managedGroup(group.name, group.priority)),
       ],
       visibilityConfig: visibility(resourceName(stage, "admin-acl")),
     },

@@ -19,6 +19,7 @@ import {
   provisionerNetworkEnvironment,
   type FunctionSpec,
 } from "../lib/functions";
+import { logRetentionOf } from "../lib/lean";
 import { assumableRoleArns, roleName, type StageConfig } from "../lib/stage";
 import type { Database } from "./database";
 import type { Messaging } from "./messaging";
@@ -161,6 +162,10 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
   return {
     ...rendererArgs(spec),
     handler: `functions/${spec.dir}/index.${spec.handlerExport}`,
+    // WPU-B8: log groups expire (7 days lean, 14 full).
+    // VERIFY: `logging.retention` of sst.aws.Function and its accepted strings; the Next.js servers
+    // (web.ts) are not covered here, their log retention is a separate VERIFY.
+    logging: { retention: logRetentionOf(inputs.config.size) },
     timeout: `${spec.timeoutSeconds} seconds`,
     memory: `${spec.memoryMb} MB`,
     // VERIFY: `copyFiles` of sst.aws.Function copies the folder into the deployment package; the

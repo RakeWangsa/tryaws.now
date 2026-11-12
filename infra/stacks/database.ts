@@ -9,13 +9,16 @@
 //
 // NOT TYPE-CHECKED, see network.ts.
 import { DB_PASSWORD_SECRET, PROXY_ROLES } from "../lib/functions";
+import { sizing } from "../lib/lean";
 import { resourceName, type StageConfig } from "../lib/stage";
 import type { Network } from "./network";
 import type { Secrets } from "./secrets";
 
 export function database(config: StageConfig, net: Network, secrets: Secrets) {
   const stage = config.stage;
-  const production = config.kind === "production";
+  // WPU-B8: instance, Multi-AZ, storage and backup days come from the stage size. Proxy, TLS, KMS,
+  // deletion protection and the final snapshot are the same in both sizes (R2, R13).
+  const size = sizing(config.size, config.kind).database;
 
   const key = new aws.kms.Key("DatabaseKey", {
     description: `tc ${stage} database storage`,
@@ -26,10 +29,10 @@ export function database(config: StageConfig, net: Network, secrets: Secrets) {
   const postgres = new sst.aws.Postgres("Database", {
     vpc: net.vpc,
     version: "17",
-    instance: production ? "t4g.medium" : "t4g.micro",
+    instance: size.instance,
     // 3.3: Multi-AZ in production
-    multiAz: production,
-    storage: "20 GB",
+    multiAz: size.multiAz,
+    storage: size.storage,
     // 3.3: list web_rw, admin_rw, worker_rw and report_ro; the component does not create these users.
     // The migrator function creates every role (workers.ts), with the passwords of the sst.Secret
     // values below. No password is written in code.
@@ -41,11 +44,11 @@ export function database(config: StageConfig, net: Network, secrets: Secrets) {
     },
     transform: {
       instance: (args: Record<string, unknown>) => {
-        // R2: private only. 3.3: 14 days, deletion protection, KMS storage encryption, a final
+        // R2: private only. 3.3: 14 days (7 in lean), deletion protection, KMS storage encryption, a final
         // snapshot, and the instance's own security group (never the VPC default group).
         args.publiclyAccessible = false;
         args.deletionProtection = true;
-        args.backupRetentionPeriod = 14;
+        args.backupRetentionPeriod = size.backupRetentionDays;
         args.storageEncrypted = true;
         args.kmsKeyId = key.arn;
         args.skipFinalSnapshot = false;

@@ -47,6 +47,7 @@ export default $config({
     const { workers } = await import("./stacks/workers");
     const { web } = await import("./stacks/web");
     const { alarms } = await import("./stacks/alarms");
+    const { budget } = await import("./stacks/budget");
 
     const secretSet = secrets();
     const net = network(config);
@@ -75,6 +76,10 @@ export default $config({
       workers: fns,
     });
     const alarm = alarms(config, queues, fns, apps);
+    // WPU-B8: the monthly budget alarm exists only on a lean stage; it needs the alarm topic.
+    if (config.size === "lean") {
+      budget(config, alarm.topic);
+    }
 
     // Outputs listed by `sst deploy`; names only, never a secret value.
     return {
