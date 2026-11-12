@@ -82,7 +82,7 @@ At 50 USD (ACTUAL spend):
 
 ## Rollback
 
-To `full` on the same account: unset `TC_STAGE_SIZE` (or set `full`), redeploy through CI after approval. The database becomes Multi-AZ and the network gets managed NAT gateways, so `TC_PROBE_SOURCES` must be replaced with the two gateway addresses (first deploy with documentation addresses, then redeploy, as above). Expect a short interruption while the database changes; do it in a quiet hour and announce it. The cost of `full` is higher; check the budget limit first.
+To `full` on the same account: unset `TC_STAGE_SIZE` (or set `full`), redeploy through CI after approval. The network gets managed NAT gateways, the log retention becomes 14 days, the other WAF managed groups return, and on a production stage the database becomes `db.t4g.medium` and Multi-AZ (on other stages it stays `db.t4g.micro` single-zone, with 14 day backups), so `TC_PROBE_SOURCES` must be replaced with the two gateway addresses (first deploy with documentation addresses, then redeploy, as above). Expect a short interruption while the database or network changes; do it in a quiet hour and announce it. The cost of `full` is higher; check the budget limit first.
 
 To separate accounts: follow [pool-account-onboarding.md](pool-account-onboarding.md) for a new pool account, register it, set its real limits, then move new homes there (a home never moves by itself: customers placed in the shared account stay until a planned migration). Create the DNS account separately and point `TC_DNS_ACCOUNT_ID` to it. Change variables one at a time and redeploy after each. Rotate any ExternalId that was ever written outside the CI secrets ([secret-rotation.md](secret-rotation.md)).
 
