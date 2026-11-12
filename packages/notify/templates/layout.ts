@@ -52,7 +52,10 @@ export function layoutEmail(p: EmailParts): { html: string; text: string } {
     bn ? e(text).replaceAll(BENGALI_DIGIT_ONE, digitOne) : e(text);
   const paragraphs = p.paragraphs
     .filter((x) => x.length > 0)
-    .map((x) => `<p style="margin:0 0 14px 0;font-size:16px;color:${C.text};${base}">${t(x)}</p>`)
+    .map(
+      (x) =>
+        `<p style="margin:0 0 14px 0;font-size:16px;color:${C.text};${base}">${t(x).replaceAll("\n", "<br>")}</p>`,
+    )
     .join("");
   const button =
     p.button === undefined

@@ -3251,6 +3251,50 @@ const M7 = gate(
   },
 );
 
+// WPU-D4: the AWS clients that were missing and the DNS delegation job. The SES transport of the notifier
+// and the templates support_reply, waitlist_capacity_available and dns_delegation_notice (notify, the
+// notifier function and the admin app), the Route 53 client behind Route53Port with the STS AssumeRole of
+// tc-dns (aws, provisioner), the delegation rules and the job (core, db, scheduler), and the IAM pins and
+// the dependency pins (repo). The db and scheduler suites need the local PostgreSQL (pnpm db:up). No AWS
+// call: every client is tested against a fake.
+TASKS["WPU-D4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  notifyAll,
+  notifierFn,
+  provisioner,
+  scheduler,
+  admin,
+  repo,
+];
+
+// WPU-M8: the merge of WPU-D4 (SES transport, Route 53 client, DNS delegation job) into the line with
+// WPU-C1, D1 to D3 and F1. No behaviour of its own: the proof is every suite the two sides touch.
+TASKS["WPU-M8"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  notifyAll,
+  notifierFn,
+  provisioner,
+  scheduler,
+  invoiceRenderer,
+  admin,
+  ui,
+  repo,
+];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

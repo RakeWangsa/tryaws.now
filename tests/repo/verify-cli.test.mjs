@@ -159,6 +159,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-D1",
     "WPU-D2",
     "WPU-D3",
+    "WPU-D4",
     "WPU-F1",
     "WPU-G1",
     "WPU-G10",
@@ -184,6 +185,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-M5",
     "WPU-M6",
     "WPU-M7",
+    "WPU-M8",
     "WPU-N1",
     "WPU-S1",
     "WPU-S2",
@@ -720,6 +722,46 @@ it("task WPU-G6 is proven by lint, types, format, the core, db, aws, provisioner
     ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
     ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
     ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-D4 is proven by lint, types, format, the core, db, aws, notify, notifier, provisioner, scheduler, admin and repository tests", () => {
+  expect(TASKS["WPU-D4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["notify", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["notifier-fn", "pnpm test --filter @tc/fn-notifier --no-passWithNoTests"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-M8 is proven by lint, types, format and the suites that both merged sides touch", () => {
+  expect(TASKS["WPU-M8"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["notify", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["notifier-fn", "pnpm test --filter @tc/fn-notifier --no-passWithNoTests"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
 });

@@ -1,4 +1,5 @@
 import type { LightsailClient } from "@aws-sdk/client-lightsail";
+import type { Route53Client } from "@aws-sdk/client-route-53";
 import type { STSClient } from "@aws-sdk/client-sts";
 import type { ErrorCode } from "@tc/core";
 
@@ -418,9 +419,10 @@ export function toLogFields(error: AwsError): AwsLogFields {
 }
 
 export function mapErrors(client: LightsailClient, onError?: (error: AwsError) => void): void;
+export function mapErrors(client: Route53Client, onError?: (error: AwsError) => void): void;
 export function mapErrors(client: STSClient): void;
 export function mapErrors(
-  client: LightsailClient | STSClient,
+  client: LightsailClient | Route53Client | STSClient,
   onError?: (error: AwsError) => void,
 ): void {
   // The two clients have middleware stacks of different types: one cast, then one `add`.

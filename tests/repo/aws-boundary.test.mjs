@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { URL, fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { awsSdkClients } from "../../eslint.config.mjs";
+import { awsSdkClients, awsSdkClientsFunctionsOnly } from "../../eslint.config.mjs";
 import {
   boundaryProblems,
   readDirectLinks,
@@ -60,6 +60,11 @@ const SDK = awsSdkClients;
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const { packages, graph } = readInstalledGraph(ROOT);
 const problems = boundaryProblems(ROOT, SDK);
+
+it("client-sesv2 (WPU-D4) is the one AWS client that only functions/ may import, and it is banned for apps/ and packages/", () => {
+  expect(awsSdkClientsFunctionsOnly).toEqual(["@aws-sdk/client-sesv2"]);
+  expect(readFileSync("eslint.config.mjs", "utf8")).toContain("SDK_FUNCTIONS_ONLY");
+});
 
 it("the banned AWS packages are the six AWS packages (five of section 4 and credential-providers, open point 17) and aws-sdk of the lint config", () => {
   expect([...awsSdkClients].sort()).toEqual([
