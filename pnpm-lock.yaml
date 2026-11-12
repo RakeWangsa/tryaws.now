@@ -238,6 +238,9 @@ importers:
 
   functions/reconciler:
     dependencies:
+      '@tc/aws':
+        specifier: workspace:*
+        version: link:../../packages/aws
       '@tc/core':
         specifier: workspace:*
         version: link:../../packages/core
