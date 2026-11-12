@@ -17,6 +17,8 @@ import { settingsBn } from "../messages/settings-bn.ts";
 import { settingsEn } from "../messages/settings-en.ts";
 import { windowsAccessBn } from "../messages/windows-access-bn.ts";
 import { windowsAccessEn } from "../messages/windows-access-en.ts";
+import { diskRestoreBn } from "../messages/disk-restore-bn.ts";
+import { diskRestoreEn } from "../messages/disk-restore-en.ts";
 import { extrasBn } from "../messages/extras-bn.ts";
 import { extrasEn } from "../messages/extras-en.ts";
 import { cdnBn } from "../messages/cdn-bn.ts";
@@ -67,6 +69,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     serversOwn.bn,
     windowsAccessBn,
     extrasOwn.bn,
+    diskRestoreBn,
     accountBn,
     cdnBn,
     databasesBn,
@@ -94,6 +97,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     serversOwn.en,
     windowsAccessEn,
     extrasOwn.en,
+    diskRestoreEn,
     accountEn,
     cdnEn,
     databasesEn,

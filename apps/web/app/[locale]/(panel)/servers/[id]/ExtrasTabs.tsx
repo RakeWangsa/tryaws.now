@@ -183,8 +183,17 @@ function MountHelp() {
   );
 }
 
-function StorageTab({ data, actions }: { data: ServerExtras; actions: ExtrasActions }) {
+function StorageTab({
+  data,
+  actions,
+  locale,
+}: {
+  data: ServerExtras;
+  actions: ExtrasActions;
+  locale: Locale;
+}) {
   const t = useTranslations("Extras.storage");
+  const tr = useTranslations("DiskRestore");
   const te = useTranslations("Extras");
   const size = (disk: DiskItem): ReactNode =>
     disk.sizeGb === null ? te("none") : `${disk.sizeGb} GB`;
@@ -263,6 +272,13 @@ function StorageTab({ data, actions }: { data: ServerExtras; actions: ExtrasActi
           offer={data.diskOffer}
         />
       </div>
+      {data.diskOffer === null ? null : (
+        <p className="mt-3">
+          <Button href={localePath(locale, "/servers/disk-restore")} size="sm">
+            {tr("link")}
+          </Button>
+        </p>
+      )}
     </>
   );
 }
@@ -458,7 +474,11 @@ export function useExtraTabs(
       title: t("backups"),
       content: <BackupsTab data={data} actions={actions} numerals={numerals} />,
     },
-    { id: "storage", title: t("storage"), content: <StorageTab data={data} actions={actions} /> },
+    {
+      id: "storage",
+      title: t("storage"),
+      content: <StorageTab data={data} actions={actions} locale={locale} />,
+    },
     {
       id: "metrics",
       title: t("metrics"),
