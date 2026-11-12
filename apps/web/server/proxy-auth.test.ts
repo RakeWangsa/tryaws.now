@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const POOL = {
   COGNITO_CUSTOMER_POOL_ID: "ap-southeast-1_AbCdEf123",
@@ -52,6 +52,20 @@ describe("proxyAuthRuntime", () => {
     const runtime = await proxyAuthRuntime({ ...FAKE, ...POOL });
     expect(runtime?.verifier).toBeDefined();
     expect(runtime?.port).toBeDefined();
+  });
+
+  it("loads no fake in a production build, even if the env handed in asks for the identity fake (R12, R16)", async () => {
+    // The env object says "test", the process says "production": the second guard of build() alone must hold.
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      const { proxyAuthRuntime } = await load();
+      const runtime = await proxyAuthRuntime({ ...FAKE, ...POOL });
+      expect(runtime?.config.customer.userPoolId).toBe(POOL.COGNITO_CUSTOMER_POOL_ID);
+      expect(runtime?.verifier).toBeUndefined();
+      expect(runtime?.port).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("is null when the pool variables are missing or the config is refused (R16)", async () => {
