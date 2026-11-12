@@ -115,6 +115,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP5-T4",
     "WP5-T5",
     "WP5-T6",
+    "WP5-T6b",
     "WP6-T1",
     "WP6-T1b",
     "WP6-T2",
@@ -1059,6 +1060,44 @@ it("task WP5-T6 is proven by the shared checks, core, db, the cross-tenant test,
     "apps/web/messages/extras-messages.test.ts",
     "packages/db/test/extras-repos.test.ts",
     "packages/core/lifecycle/guard.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP5-T6b is proven by core, the renewal and restore database tests, the action cores, the screens and the sweep", () => {
+  expect(TASKS["WP5-T6b"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["renew-now", "pnpm test --filter @tc/core lifecycle/renew-now --no-passWithNoTests"],
+    ["restore-order", "pnpm test --filter @tc/core restore --no-passWithNoTests"],
+    [
+      "order-kinds-cores",
+      "pnpm test --filter @tc/web server/extras-actions server/order-actions --no-passWithNoTests",
+    ],
+    ["extras-pages", "pnpm test --filter @tc/web _extras/pages --no-passWithNoTests"],
+    [
+      "extras-mockup-anchors",
+      "pnpm test --filter @tc/web _extras/mockup-anchors --no-passWithNoTests",
+    ],
+    ["extras-messages", "pnpm test --filter @tc/web messages/extras --no-passWithNoTests"],
+    [
+      "order-kinds-sweep",
+      "pnpm test --filter @tc/web server/endpoint-sweep --no-passWithNoTests",
+    ],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/core/lifecycle/renew-now.db.test.ts",
+    "packages/core/orders/restore-order.test.ts",
+    "packages/core/products/restore.test.ts",
+    "apps/web/server/extras-actions.test.ts",
+    "apps/web/server/order-actions.test.ts",
+    "apps/web/server/endpoint-sweep.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }
