@@ -77,6 +77,8 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
     // Links in a message go only to the panel's own domain (16.14); the sender is the verified identity.
     env.PANEL_ORIGIN = `https://${config.webDomain}`;
     env.SES_FROM = config.sesFromAddress;
+    // WPU-D4: the same identity ARN that the IAM statement allows; no configuration set is defined yet.
+    env.SES_IDENTITY_ARN = config.sesIdentityArn;
   }
   if (spec.dir === "migrator") {
     // copyFiles (functionArgs) puts packages/db/migrations here, next to the bundle.

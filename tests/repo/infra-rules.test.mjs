@@ -344,6 +344,15 @@ describe("WP0-T3: database, proxy and roles", () => {
     expect(workers).toContain("env.SES_FROM = config.sesFromAddress");
   });
 
+  it("WPU-D4: allows ses:SendEmail on the one verified identity, to the notifier only, and tells it the ARN", () => {
+    expect(workers).toMatch(
+      /if \(spec\.dir === "notifier"\) \{\s*permissions\.push\(\{\s*actions: \["ses:SendEmail"\],\s*resources: \[config\.sesIdentityArn\],?\s*\}\);/,
+    );
+    expect(workers.match(/"ses:/g)).toHaveLength(1);
+    expect(workers).toContain("env.SES_IDENTITY_ARN = config.sesIdentityArn");
+    expect(workers).not.toMatch(/ses:\*|ses:Send\*/);
+  });
+
   it("runs the migrator at deploy time, in the VPC", () => {
     expect(workers).toContain('new sst.aws.Function("Migrator"');
     expect(workers).toContain('new aws.lambda.Invocation("MigratorRun"');
