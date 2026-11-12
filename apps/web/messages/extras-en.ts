@@ -21,7 +21,8 @@ export const extrasEn: Same<typeof extrasBn> = {
       name_mismatch: "The name does not match. Type exactly the same name.",
       not_allowed: "This cannot be done in the current state.",
       limit_reached: "This server has reached its limit of manual backups. Delete one first.",
-      insufficient_balance: "Your wallet does not have enough money. Add money to the wallet first.",
+      insufficient_balance:
+        "Your wallet does not have enough money. Add money to the wallet first.",
       not_due:
         "There is nothing to renew now. The next term is already paid, or the term ends in more than 7 days.",
       unavailable: "We could not finish this now. Please try again shortly.",
@@ -86,7 +87,23 @@ export const extrasEn: Same<typeof extrasBn> = {
         on: "On, {hour} UTC",
         off: "Off",
       },
-      restoreSoon: "Creating a new server from a backup is coming soon.",
+      restore: {
+        title: "New server from a backup",
+        body: "A backup becomes a new server in the same location. The disk of the new server cannot be smaller than the disk of this server. The price is shown on the next step, and you confirm before any money is taken.",
+        backup: "Backup",
+        plan: "Plan",
+        planInvalid: "This plan cannot be chosen. Pick a plan whose disk is not smaller.",
+        name: "Name of the new server",
+        hint: "Letters, digits, spaces, dots, hyphens and underscores, up to 60 characters.",
+        submit: "Go to the next step",
+        none: "There is no active backup or suitable plan to restore from right now.",
+        error: {
+          limit_reached: "You have reached the limit of servers.",
+          capacity_full: "There is no room in this location right now. Please try again later.",
+          kyc_required: "Complete the identity check first.",
+          forbidden: "This is not open for you.",
+        },
+      },
     },
     storage: {
       title: "Block Storage",

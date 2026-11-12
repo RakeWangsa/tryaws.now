@@ -6,6 +6,8 @@ import { useTranslations } from "next-intl";
 import { startTransition, useActionState, useEffect, useState } from "react";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
+import type { PlanOption } from "../../../../../server/servers-view.ts";
+import { useSpecLine } from "../ServerParts.tsx";
 
 // The forms of the server tabs Backups, Storage, Billing and Destroy (U8: field errors from the
 // server's own check, a button inert while its action runs). Every form carries the request id that
@@ -73,6 +75,102 @@ export function CreateBackupForm({
         autoComplete="off"
         disabled={disabled}
         {...(state.fields?.["name"] !== undefined ? { error: tf("field.invalid") } : {})}
+      />
+      <SubmitButton variant="primary" disabled={disabled}>
+        {t("submit")}
+      </SubmitButton>
+    </form>
+  );
+}
+
+/**
+ * 16.10 Backups: `restoreToNewServer`. The action makes the signed draft and sends the customer to the
+ * review page (16.11), where the price is shown before anything is charged. The Region is the one of
+ * this server (a snapshot cannot cross a Region); the server checks it again with the backup.
+ */
+export function RestoreForm({
+  action,
+  region,
+  backups,
+  plans,
+  disabled,
+}: {
+  action: ExtrasAction;
+  region: string;
+  backups: { id: string; name: string }[];
+  plans: PlanOption[];
+  disabled: boolean;
+}) {
+  const t = useTranslations("Extras.backups.restore");
+  const te = useTranslations("Extras");
+  const tf = useTranslations("Flow");
+  const specLine = useSpecLine();
+  const [state, formAction] = useActionState(action, INITIAL_FORM_STATE);
+  if (backups.length === 0 || plans.length === 0) {
+    return (
+      <>
+        <h3 className="mergecolor h4">{t("title")}</h3>
+        <p className="seccolor">{t("none")}</p>
+      </>
+    );
+  }
+  const error = state.error;
+  return (
+    <form action={formAction} noValidate>
+      <h3 className="mergecolor h4">{t("title")}</h3>
+      <p className="seccolor">{t("body")}</p>
+      {error === undefined ? null : (
+        <div className="alert alert-danger text-start" role="alert">
+          <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
+          {t.has(`error.${error}`)
+            ? t(`error.${error}`)
+            : te.has(`error.${error}`)
+              ? te(`error.${error}`)
+              : te("error.unavailable")}
+        </div>
+      )}
+      <input type="hidden" name="region" value={region} />
+      <div className="mb-3">
+        <label className="form-label" htmlFor="restore-backup">
+          {t("backup")}
+        </label>
+        <select
+          className="form-select"
+          id="restore-backup"
+          name="restoreFromBackupId"
+          disabled={disabled}
+        >
+          {backups.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="mb-3">
+        <label className="form-label" htmlFor="restore-plan">
+          {t("plan")}
+        </label>
+        <select className="form-select" id="restore-plan" name="productId" disabled={disabled}>
+          {plans.map((p) => (
+            <option key={p.id} value={p.id}>
+              {specLine(p.specs)}
+            </option>
+          ))}
+        </select>
+        {state.fields?.["productId"] !== undefined ? (
+          <div className="invalid-feedback d-block">{t("planInvalid")}</div>
+        ) : null}
+      </div>
+      <Field
+        name="displayName"
+        label={t("name")}
+        hint={t("hint")}
+        maxLength={60}
+        required
+        autoComplete="off"
+        disabled={disabled}
+        {...(state.fields?.["displayName"] !== undefined ? { error: tf("field.invalid") } : {})}
       />
       <SubmitButton variant="primary" disabled={disabled}>
         {t("submit")}

@@ -268,6 +268,16 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  "app/[locale]/(panel)/servers/[id]/actions.ts#restoreToNewServerAction": {
+    kind: "id",
+    proof: [
+      proof(
+        "packages/core/orders/restore-order.test.ts",
+        "another customer's backup answers like a missing one (R8)",
+      ),
+      proof(`${W}order-actions.test.ts`, "refuses without a session and runs nothing else"),
+    ],
+  },
   "app/[locale]/(panel)/servers/[id]/actions.ts#renewNowAction": {
     kind: "id",
     proof: [

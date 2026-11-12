@@ -115,6 +115,32 @@ describe("createOrderDraftCore", () => {
     ]);
   });
 
+  it("forwards a backup to restore from, validated as an id, and no key pair with it", async () => {
+    const backup = "0190aaaa-0000-7000-8000-0000000000b1";
+    const { deps: d, calls } = deps();
+    await createOrderDraftCore(d, { ...form, restoreFromBackupId: backup });
+    const sent = JSON.parse(calls[3] as string) as { config: Record<string, unknown> };
+    expect(sent.config["restoreFromBackupId"]).toBe(backup);
+    expect(sent.config["keyPairId"]).toBeNull();
+
+    const bad = deps();
+    expect(await createOrderDraftCore(bad.deps, { ...form, restoreFromBackupId: "../x" })).toEqual({
+      ok: false,
+      error: "validation",
+      fields: { restoreFromBackupId: "invalid" },
+    });
+    expect(bad.calls).toEqual(["authenticate"]);
+
+    const withKey = deps();
+    expect(
+      await createOrderDraftCore(withKey.deps, {
+        ...form,
+        restoreFromBackupId: backup,
+        keyPairId: "0190aaaa-0000-7000-8000-0000000000c1",
+      }),
+    ).toMatchObject({ ok: false, error: "validation", fields: { keyPairId: "invalid" } });
+  });
+
   it("answers rate_limited when the limit is spent and does not call the order code", async () => {
     const { deps: d, calls } = deps({ rateLimit: async () => ({ allowed: false }) });
     expect(await createOrderDraftCore(d, form)).toEqual({ ok: false, error: "rate_limited" });

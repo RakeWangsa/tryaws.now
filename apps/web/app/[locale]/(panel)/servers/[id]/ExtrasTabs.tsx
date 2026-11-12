@@ -19,6 +19,7 @@ import {
   AutoBackupForm,
   AutoRenewForm,
   RenewNowForm,
+  RestoreForm,
   CreateBackupForm,
   DestroyButton,
   PostButton,
@@ -40,6 +41,7 @@ export interface ExtrasActions {
   destroyDisk: ExtrasAction;
   setAutoRenew: ExtrasAction;
   renewNow: ExtrasAction;
+  restoreToNewServer: ExtrasAction;
   destroyServer: ExtrasAction;
 }
 
@@ -137,7 +139,17 @@ function BackupsTab({
           />
         </div>
       </div>
-      <p className="seccolor mt-3">{t("restoreSoon")}</p>
+      <div className="mt-4">
+        <RestoreForm
+          action={actions.restoreToNewServer}
+          region={data.region ?? ""}
+          backups={rows
+            .filter((b) => b.state === "active")
+            .map((b) => ({ id: b.id, name: b.name !== "" ? b.name : t("final") }))}
+          plans={data.restorePlans}
+          disabled={!data.canBackup || data.region === null}
+        />
+      </div>
     </>
   );
 }

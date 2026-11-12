@@ -1,10 +1,18 @@
 import type { CustomerSession } from "@tc/auth";
-import { customerRepos, readFeatureFlag, withTx } from "@tc/db";
+import { priceCatalog } from "@tc/core";
+import {
+  customerRepos,
+  listCatalogProducts,
+  readCatalogProduct,
+  readFeatureFlag,
+  withTx,
+} from "@tc/db";
 import type { InvoiceRow, NotificationRow, SubscriptionRow } from "@tc/db";
 import { TEMPLATE_IDS, parseTemplateData, renderInApp } from "@tc/notify";
 import type { RenderContext, TemplateId } from "@tc/notify";
 import { resourceFacts } from "./extras-actions.ts";
-import { serverConfigOf } from "./servers-view.ts";
+import { planSpecsOf, serverConfigOf } from "./servers-view.ts";
+import type { PlanOption } from "./servers-view.ts";
 
 // What the server tabs Backups, Storage, Billing and Destroy, the dashboard and /notifications show,
 // read through the repositories of the session's customer only (R8). A database error is thrown,
@@ -77,6 +85,8 @@ export interface InvoiceItem {
 export interface ServerExtras {
   id: string;
   name: string;
+  /** The Region of the server; a restore stays in it. */
+  region: string | null;
   state: string;
   live: boolean;
   autoBackup: { enabled: boolean; hour: string | null };
@@ -97,6 +107,11 @@ export interface ServerExtras {
     allowed: boolean;
     manualBackups: number;
   };
+  /**
+   * restoreToNewServer: the plans of this server's Region whose disk is not smaller than the disk
+   * of this server's plan, priced for the customer. Empty when nothing can be offered (R16).
+   */
+  restorePlans: PlanOption[];
   /** The id of the request, put in every form of the tabs (R7). */
   requestId: string;
 }
@@ -125,11 +140,46 @@ const toInvoice = (row: InvoiceRow): InvoiceItem => ({
   issuedAt: row.issuedAt,
 });
 
+/**
+ * The plans a backup of this server can be restored to: Linux plans of the same Region with a disk
+ * that is not smaller (Lightsail refuses a smaller one). Priced with the rate and rule in force; if
+ * that is not possible or the disk size of this server's plan is unknown, nothing is offered.
+ */
+async function restorePlansFor(
+  tx: Parameters<Parameters<typeof withTx>[0]>[0],
+  market: string,
+  server: { productId: string | null; region: string | null },
+  now: () => Date,
+): Promise<PlanOption[]> {
+  if (server.productId === null || server.region === null) return [];
+  const own = await readCatalogProduct(tx, server.productId);
+  const minDisk = planSpecsOf(own?.specs).diskGb;
+  if (minDisk === undefined || minDisk <= 0) return [];
+  const rows = (await listCatalogProducts(tx, FAMILY)).filter((row) => {
+    const disk = planSpecsOf(row.specs).diskGb;
+    return (
+      row.platform === "linux" &&
+      row.region === server.region &&
+      disk !== undefined &&
+      disk >= minDisk
+    );
+  });
+  const priced = await priceCatalog(tx, rows, { market }, { now });
+  if (!priced.ok) return [];
+  return priced.value.map((row) => ({
+    id: row.id,
+    region: row.region,
+    priceMinor: row.priceBdt.totalMinor,
+    specs: planSpecsOf(row.specs),
+  }));
+}
+
 /** null extras = the server is missing or another customer's (R8). */
 export async function loadServerExtras(
   session: CustomerSession,
   id: string,
   requestId: string,
+  now: () => Date = () => new Date(),
 ): Promise<ExtrasScreen> {
   return withTx(async (tx) => {
     const repos = customerRepos(tx, session.customerId);
@@ -171,11 +221,13 @@ export async function loadServerExtras(
         };
       });
     const live = LIVE.includes(server.state);
+    const restorePlans = live ? await restorePlansFor(tx, profile.market, server, now) : [];
     const manualBackups = backups.filter((b) => !b.final).length;
     return {
       state: "ready",
       extras: {
         id: server.id,
+        region: server.region,
         name: serverConfigOf(server.config).displayName,
         state: server.state,
         live,
@@ -198,6 +250,7 @@ export async function loadServerExtras(
           lines: subscription === null ? null : parsePriceLines(subscription.priceSnapshot),
           invoices: invoices.items.map(toInvoice),
         },
+        restorePlans,
         destroy: {
           allowed:
             live &&
