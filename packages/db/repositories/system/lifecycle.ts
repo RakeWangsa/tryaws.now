@@ -198,13 +198,14 @@ export function lifecycleRepo(tx: Tx) {
       };
     },
 
-    // One row per dedupe key; a repeat answers false and writes nothing (R7).
+    // One row per dedupe key; a repeat answers false and writes nothing (R7). No conflict target: web_rw
+    // (renewNow) has no SELECT on dedupe_key, which a target would need; the only unique key is that one.
     async insertNotification(n: NewLifecycleNotification): Promise<boolean> {
       assertUuid(n.customerId, "customer id");
       const { rows } = await tx.execute<{ id: string }>(sql`
         insert into notifications (id, customer_id, channel, template, payload, dedupe_key)
         values (${uuidv7()}, ${n.customerId}, ${n.channel}, ${n.template}, ${JSON.stringify(n.payload)}::jsonb, ${n.dedupeKey})
-        on conflict (dedupe_key) do nothing
+        on conflict do nothing
         returning id`);
       return rows.length === 1;
     },
