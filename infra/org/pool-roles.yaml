@@ -30,22 +30,14 @@ Parameters:
     Description: >-
       The ExternalId of this pool account, the same plain value as pool_accounts.external_id (7). One
       value per pool account. It is not a secret, but it must differ between pool accounts.
-  ProvisionerFunctionRoleName:
+  ControlPlaneStage:
     Type: String
-    Default: tc-fn-provisioner
-    Description: Fixed name of the provisioner function role in the control plane account (set in infra/).
-  ReaderFunctionRoleName:
-    Type: String
-    Default: tc-fn-reader
-  CatalogSyncFunctionRoleName:
-    Type: String
-    Default: tc-fn-catalog-sync
-  ReconcilerFunctionRoleName:
-    Type: String
-    Default: tc-fn-reconciler
-  AccessDetailsFunctionRoleName:
-    Type: String
-    Default: tc-fn-access-details
+    AllowedValues: [staging, production]
+    Description: >-
+      The SST stage of the control plane this account trusts: staging for tc-pool-dev, production for the
+      customer pools. The function roles that stage creates are named tc-<stage>-<function>-role
+      (infra/lib/stage.ts roleName), so the trust below names them exactly. No default: a pool account is
+      never trusted by the wrong stage by omission.
   MaxSessionSeconds:
     Type: Number
     Default: 3600
@@ -115,7 +107,7 @@ Resources:
             Condition:
               ArnEquals:
                 aws:PrincipalArn:
-                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ProvisionerFunctionRoleName}"
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-provisioner-role"
               StringEquals:
                 sts:ExternalId:
                   Ref: ExternalId
@@ -266,9 +258,9 @@ Resources:
             Condition:
               ArnEquals:
                 aws:PrincipalArn:
-                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReaderFunctionRoleName}"
-                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${CatalogSyncFunctionRoleName}"
-                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReconcilerFunctionRoleName}"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-reader-role"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-catalog-sync-role"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-reconciler-role"
               StringEquals:
                 sts:ExternalId:
                   Ref: ExternalId
@@ -317,7 +309,7 @@ Resources:
             Condition:
               ArnEquals:
                 aws:PrincipalArn:
-                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${AccessDetailsFunctionRoleName}"
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-access-details-role"
               StringEquals:
                 sts:ExternalId:
                   Ref: ExternalId
@@ -387,7 +379,7 @@ Resources:
             Condition:
               ArnEquals:
                 aws:PrincipalArn:
-                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReconcilerFunctionRoleName}"
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-reconciler-role"
               StringEquals:
                 sts:ExternalId:
                   Ref: ExternalId

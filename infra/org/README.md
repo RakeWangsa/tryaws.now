@@ -41,7 +41,7 @@ Every step: a named person, a session in the AWS console or CLI with a role (IAM
 11. Staging proof: from the staging `provisioner` function role, assume `TcProvisioner` in `tc-pool-dev` (works); from the staging `web` function role the same call must be denied (this is the manual twin of the static test).
 12. `ISOLATION.md`: the manual isolation test in `tc-pool-dev`.
 
-The function role names (`tc-fn-provisioner`, `tc-fn-reader`, `tc-fn-catalog-sync`, `tc-fn-reconciler`, `tc-fn-access-details`) are the defaults of the parameters of `pool-roles.yaml`. The SST app must create its function roles with exactly these names (6.3: fixed names), or the parameters are changed to match.
+The function role names are `tc-<stage>-<function>-role` (`roleName` in `infra/lib/stage.ts`, applied by `infra/stacks/workers.ts`), for example `tc-staging-provisioner-role`. `pool-roles.yaml` and `dns-account.yaml` build them from the parameter `ControlPlaneStage` (`staging` for `tc-pool-dev`, `production` for the customer pools and `tc-dns`), so the trust names the roles SST really creates. A repo test pins this against the function table. No name is a parameter any more; a changed name in `infra/lib/stage.ts` fails that test.
 
 ## Pool account added later (runbook)
 

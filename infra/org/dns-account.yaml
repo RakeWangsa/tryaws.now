@@ -22,18 +22,13 @@ Parameters:
     Type: String
     AllowedPattern: "^[A-Za-z0-9+=,.@:/_-]{16,1224}$"
     Description: The ExternalId of tc-dns, the same plain value as pool_accounts.external_id.
-  ProvisionerFunctionRoleName:
+  ControlPlaneStage:
     Type: String
-    Default: tc-fn-provisioner
-  ReaderFunctionRoleName:
-    Type: String
-    Default: tc-fn-reader
-  CatalogSyncFunctionRoleName:
-    Type: String
-    Default: tc-fn-catalog-sync
-  ReconcilerFunctionRoleName:
-    Type: String
-    Default: tc-fn-reconciler
+    AllowedValues: [production]
+    Default: production
+    Description: >-
+      The SST stage of the control plane. The function roles it creates are named
+      tc-<stage>-<function>-role (infra/lib/stage.ts roleName), so the trust below names them exactly.
   MaxSessionSeconds:
     Type: Number
     Default: 3600
@@ -103,7 +98,7 @@ Resources:
             Condition:
               ArnEquals:
                 aws:PrincipalArn:
-                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ProvisionerFunctionRoleName}"
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-provisioner-role"
               StringEquals:
                 sts:ExternalId:
                   Ref: ExternalId
@@ -173,9 +168,9 @@ Resources:
             Condition:
               ArnEquals:
                 aws:PrincipalArn:
-                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReaderFunctionRoleName}"
-                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${CatalogSyncFunctionRoleName}"
-                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReconcilerFunctionRoleName}"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-reader-role"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-catalog-sync-role"
+                  - Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-reconciler-role"
               StringEquals:
                 sts:ExternalId:
                   Ref: ExternalId
@@ -222,7 +217,7 @@ Resources:
             Condition:
               ArnEquals:
                 aws:PrincipalArn:
-                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/${ReconcilerFunctionRoleName}"
+                  Fn::Sub: "arn:aws:iam::${ControlPlaneAccountId}:role/tc-${ControlPlaneStage}-reconciler-role"
               StringEquals:
                 sts:ExternalId:
                   Ref: ExternalId
