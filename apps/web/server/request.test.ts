@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { WebConfig } from "./config.ts";
 import { NEXT_PREFIXES, assertSameOrigin, clientIpOf, requestId, safeNext } from "./request.ts";
@@ -25,7 +27,7 @@ describe("safeNext (U12)", () => {
     for (const prefix of NEXT_PREFIXES) expect(safeNext(prefix), prefix).toBe(prefix);
   });
 
-  it("lists the seven prefixes of the panel", () => {
+  it("lists the panel routes that are safe redirect targets (WPU-N1)", () => {
     expect([...NEXT_PREFIXES]).toEqual([
       "/dashboard",
       "/wallet",
@@ -34,7 +36,37 @@ describe("safeNext (U12)", () => {
       "/invoices",
       "/settings",
       "/support",
+      "/kyc",
+      "/dns",
+      "/domains",
+      "/databases",
+      "/storage",
+      "/load-balancers",
+      "/containers",
+      "/cdn",
+      "/billing",
+      "/snapshots",
+      "/static-ips",
+      "/notifications",
     ]);
+  });
+
+  it("every prefix is a real route of the customer panel, and every panel route is a prefix", () => {
+    const panel = join(import.meta.dirname, "../app/[locale]/(panel)");
+    const routes = readdirSync(panel, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith("_"))
+      .map((d) => `/${d.name}`);
+    for (const prefix of NEXT_PREFIXES) expect(routes, prefix).toContain(prefix);
+    expect(routes.filter((r) => !NEXT_PREFIXES.includes(r))).toEqual([]);
+  });
+
+  it("passes the new panel routes with their query and refuses look-alikes and non-panel paths", () => {
+    expect(safeNext("/kyc")).toBe("/kyc");
+    expect(safeNext("/dns/0190aaaa?tab=records")).toBe("/dns/0190aaaa?tab=records");
+    expect(safeNext("/static-ips/x")).toBe("/static-ips/x");
+    for (const raw of ["/kycx", "/faq", "/payments", "/kyc/../admin", "//kyc", "/%2F%2Fevil.com"]) {
+      expect(safeNext(raw), raw).toBeNull();
+    }
   });
 
   it("refuses everything else", () => {

@@ -17,7 +17,9 @@ import type { WebConfig } from "./config.ts";
 import type { ReaderPort } from "./extras-view.ts";
 import type { KycPorts } from "./kyc-actions.ts";
 import { writeLog } from "./log.ts";
+import { accessPortFromEnv, type AccessPort } from "./access-invoke.ts";
 import { readerPortFromEnv } from "./reader-invoke.ts";
+import { rendererPortFromEnv, type RendererPort } from "./renderer-invoke.ts";
 import { resourceSecrets } from "./secrets.ts";
 import type { AccountPorts } from "./settings-actions.ts";
 
@@ -53,6 +55,17 @@ export interface WebRuntime {
    * tab says "not available" (R16). Local and test with fakes use a dev reader instead.
    */
   reader: ReaderPort | null;
+  /**
+   * The invoke port of the `access-details` function (WPU-N2): the Windows and database passwords and
+   * the bucket access keys. null = not configured: every reveal and key action refuses (R16). Local
+   * and test with fakes use a dev port instead.
+   */
+  access: AccessPort | null;
+  /**
+   * The invoke port of the `invoice-renderer` function for "Download PDF" (WPU-N1). null = not
+   * configured: the action says "not available" (R16). Local and test with fakes use a dev renderer.
+   */
+  renderer: RendererPort | null;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -212,8 +225,35 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     reader = readerFake.devReader();
   }
 
+  // access-details (WPU-N2): the Lambda invoke port when ACCESS_DETAILS_FUNCTION_NAME is set; a dev
+  // port with fixed fake values only in development and test with fakes. The literal NODE_ENV
+  // condition lets the bundler drop the import, so the production bundle holds no fake.
+  let access: AccessPort | null = accessPortFromEnv(env);
+  if (process.env.NODE_ENV !== "production" && config.fakes) {
+    const accessFake = await import("./fakes/access-fake.ts");
+    access = accessFake.devAccess();
+  }
+
+  // The same for the invoice renderer (WPU-N1).
+  let renderer: RendererPort | null = rendererPortFromEnv(env);
+  if (process.env.NODE_ENV !== "production" && config.fakes) {
+    const rendererFake = await import("./fakes/renderer-fake.ts");
+    renderer = rendererFake.devRenderer();
+  }
+
   return {
-    runtime: { config, eps, identity, otp, authLimitKey, kyc, account, reader },
+    runtime: {
+      config,
+      eps,
+      identity,
+      otp,
+      authLimitKey,
+      kyc,
+      account,
+      reader,
+      access,
+      renderer,
+    },
     deps,
     ...(verifier !== undefined ? { verifier } : {}),
   };

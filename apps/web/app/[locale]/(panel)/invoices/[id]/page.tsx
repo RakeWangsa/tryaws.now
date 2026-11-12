@@ -10,7 +10,12 @@ import { InvoiceDetailContent } from "./InvoiceDetailContent.tsx";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ locale: string; id: string }> };
+type Props = {
+  params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<{ pdf?: string | string[] }>;
+};
+
+const PDF_NOTICES = ["unavailable", "not_ready", "busy"] as const;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params;
@@ -20,8 +25,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 /** /invoices/[id] (WPU-G4). The id of another customer's invoice answers like a missing one (R8). */
-export default async function InvoiceDetailPage({ params }: Props) {
+export default async function InvoiceDetailPage({ params, searchParams }: Props) {
   const { locale, id } = await params;
+  const { pdf } = await searchParams;
+  const pdfNotice = PDF_NOTICES.find((n) => n === pdf) ?? null;
   if (!hasLocale(routing.locales, locale)) notFound();
   const path = `/invoices/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
@@ -33,6 +40,7 @@ export default async function InvoiceDetailPage({ params }: Props) {
         numerals={numeralsFor(locale, panel)}
         screen={screen}
         customerName={panel.displayName}
+        pdfNotice={pdfNotice}
       />
     </PanelFrame>
   );

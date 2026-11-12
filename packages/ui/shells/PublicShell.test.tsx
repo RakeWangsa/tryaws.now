@@ -129,16 +129,11 @@ describe.each(LOCALES)("PublicShell (%s)", (locale) => {
   it("links the footer pages", () => {
     const { container } = shell(locale);
     const all = hrefs(container.querySelector("footer") as HTMLElement);
-    for (const path of [
-      "/pricing",
-      "/payments",
-      "/help",
-      "/support",
-      "/legal/terms",
-      "/legal/privacy",
-    ]) {
+    for (const path of ["/pricing", "/help", "/support", "/legal/terms", "/legal/privacy"]) {
       expect(all).toContain(`${prefix}${path}`);
     }
+    // WPU-N1: there is no public /payments page, so the footer does not link to one.
+    expect(all).not.toContain(`${prefix}/payments`);
   });
 
   it("holds Aws.short and the trademark line unchanged in the footer", () => {
@@ -165,7 +160,7 @@ describe.each(LOCALES)("PublicShell (%s)", (locale) => {
     }
   });
 
-  it("puts the TiCON name before any AWS text", () => {
+  it("puts the MeghVPS name before any AWS text", () => {
     const { container } = shell(locale);
     const body = container.textContent as string;
     const brand = body.indexOf(t.footer["companyName"] as string);

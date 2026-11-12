@@ -52,7 +52,16 @@ export {
   hostedZoneHeldByOther,
   zoneNameDomainHold,
 } from "./repositories/domain-names";
-export { markDnsZone, recordDnsZoneCreated } from "./repositories/dns-zone-sync";
+export {
+  listDnsZonesPendingDelegation,
+  markDnsZone,
+  markDnsZoneDelegated,
+  recordDnsZoneCreated,
+  recordDnsZoneNotices,
+  retireUndelegatedDnsZone,
+  type PendingDnsZone,
+  type RetiredDnsZone,
+} from "./repositories/dns-zone-sync";
 export {
   applyDomainFacts,
   readDomainSyncView,

@@ -58,12 +58,12 @@ it("the fake refuses a host it does not know, loudly", async () => {
   const aws = fakeAws();
   const client = new LightsailClient({
     region: "ap-south-1",
-    endpoint: "https://route53.amazonaws.com",
+    endpoint: "https://ec2.amazonaws.com",
     requestHandler: aws.handler,
     maxAttempts: 1,
   });
   await expect(client.send(new GetRegionsCommand({}))).rejects.toThrow(
-    "fake-aws: unknown service host route53.amazonaws.com",
+    "fake-aws: unknown service host ec2.amazonaws.com",
   );
   expect(aws.seen).toEqual([]);
 });

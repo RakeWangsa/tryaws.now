@@ -46,6 +46,7 @@ export const deleteAccessKeyAction = run(deleteAccessKeyCore, [
   "bucketId",
   "requestId",
   "accessKeyId",
+  "confirmName",
 ]);
 export const destroyBucketAction = run(destroyBucketCore, ["bucketId", "requestId", "confirmName"]);
 

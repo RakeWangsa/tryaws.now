@@ -31,8 +31,11 @@ describe("access-details boundaries", () => {
     }
     const handler = files.find((f) => f.name === "handler.ts")!.text;
     // the log call carries three fixed words and nothing of the result
-    expect(handler).toMatch(
-      /deps\.log\(\{ event: "access_details", action: "windows_password", outcome \}\)/,
-    );
+    // (the word is a fixed literal of this file, passed by each action; WPU-N2)
+    expect(
+      handler.match(/deps\.log\(\{ event: "access_details", action: [^,]+, outcome \}\)/g),
+    ).toHaveLength(2);
+    expect(handler).not.toMatch(/deps\.log\(\{[^}]*(value|secret|password|resourceId|customerId)/);
+    expect(handler).toMatch(/secretFlow\("windows_password"/);
   });
 });

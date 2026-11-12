@@ -17,6 +17,7 @@
     "@tc/auth": "workspace:*",
     "@tc/core": "workspace:*",
     "@tc/db": "workspace:*",
+    "@tc/notify": "workspace:*",
     "@tc/ui": "workspace:*",
     "next": "16.4.6",
     "next-intl": "4.14.10",

@@ -3094,6 +3094,84 @@ TASKS["WPU-F1"] = [
   repo,
 ];
 
+// WPU-N1: the customer-facing gaps of audit 2 section D: CI variables, the invoice PDF download, the
+// next-path allow-list, the signed-in public menu, /faq and Support links, `own` before the rate limit,
+// the History tab and the renewal-waits line. No AWS call.
+TASKS["WPU-N1"] = [specSync, baselineSync, lint, typecheck, format, web, ui, repo];
+
+// WPU-N2: one-time secret transport. The web tier invokes the "web" alias of access-details (no
+// packages/aws import); the function reveals the Windows password, the database password and creates or
+// lists bucket keys. Tests of the aws adapters, the function, the web port, actions and bucket keys, and
+// the repository tests (infra rules). No AWS call.
+const secretsAws = {
+  id: "secrets-aws",
+  title: "packages/aws: database password and bucket key adapters (no network)",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "access-n2", "--no-passWithNoTests"],
+};
+const secretsWeb = {
+  id: "secrets-web",
+  title: "apps/web: access port, reveal actions, bucket keys, tenant isolation",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "server/bucket-keys",
+    "server/bucket-actions",
+    "server/auth/context",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WPU-N2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  secretsAws,
+  accessDetailsFn,
+  secretsWeb,
+  web,
+  repo,
+];
+
+// WPU-B1: the brand rename from TiCON Cloud to MeghVPS. Messages, mail and SMS text, invoice text, page titles
+// and the site name (web, admin, ui, notify, core invoices) and the repository test that fails when the old
+// name returns to a customer-facing file. No AWS call.
+const brandWeb = {
+  id: "web-brand",
+  title: "apps/web: messages, wording rules, SEO name and top-up copy carry the new brand",
+  command: ["pnpm", "test", "--filter", "@tc/web", "--no-passWithNoTests"],
+};
+const brandAdmin = {
+  id: "admin-brand",
+  title: "apps/admin: the title messages carry the new brand",
+  command: ["pnpm", "test", "--filter", "@tc/admin", "--no-passWithNoTests"],
+};
+const brandNotify = {
+  id: "notify-brand",
+  title: "packages/notify: templates, Cognito texts and the OTP SMS carry the new brand",
+  command: ["pnpm", "test", "--filter", "@tc/notify", "--no-passWithNoTests"],
+};
+const brandCore = {
+  id: "core-brand",
+  title: "packages/core: the invoice documents carry the new brand",
+  command: ["pnpm", "test", "--filter", "@tc/core", "invoices", "--no-passWithNoTests"],
+};
+TASKS["WPU-B1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  brandCore,
+  brandNotify,
+  brandWeb,
+  brandAdmin,
+  ui,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {
@@ -3104,6 +3182,99 @@ const manual = (proofId) => {
     command: ["node", "scripts/manual-proof.mjs", proofId],
   };
 };
+
+// WPU-B4 (audit item 18): TASKS keys for backlog rows that had none. Each runs the narrowest real proof
+// available locally; what only a person or AWS can prove stays a manual check that is BLOCKED (exit 2)
+// until verify/manual-proofs.json holds a record. The gates are unchanged: they already list these manual
+// proofs (M1 core, M3 isolation, M6, M7).
+const sharedStatic = [specSync, baselineSync, lint, format];
+TASKS["WP1-T3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "pricing",
+    "WP1-T3: the engine of packages/core/pricing, all Section 8 vectors",
+    "@tc/core",
+    "pricing",
+  ),
+  repo,
+];
+TASKS["WP4-T6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  bootstrapFirewall,
+  isolationLocal,
+  manual("wp4-t6-isolation-pool-dev"),
+];
+TASKS["WP9-T1"] = [
+  ...sharedStatic,
+  infraTest(
+    "section15-local",
+    "WP9-T1: every item of Section 15 is mapped to the tests that prove its local half",
+    "section15-local",
+  ),
+  manual("wp9-t1-section15-evidence"),
+];
+TASKS["WP9-T6"] = [
+  ...sharedStatic,
+  infraTest(
+    "ci-deploy",
+    "WP9-T6: the production deploy workflow runs from a tag, after gate M5, with approval",
+    "ci-deploy",
+  ),
+  manual("wp9-t6-production-tag-deploy"),
+  manual("wp9-t6-beta-payments"),
+];
+TASKS["WP10-T2"] = [...sharedStatic, manual("wp10-t2-first-day-report")];
+TASKS["WPU-R1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "web-zod",
+    "WPU-R1: the zod form schema of apps/web and the disk action that uses it",
+    "@tc/web",
+    "server/form-schema",
+    "server/disk-actions",
+  ),
+  glueTest(
+    "tier-limits",
+    "WPU-R1: the relaxed tier limits of packages/core/orders/gates",
+    "@tc/core",
+    "orders/gates",
+  ),
+  repo,
+];
+// WPU-B4: tooling and test infrastructure (forward-only journal check, trust-auth detection in temp-db,
+// repeat runner, signal handlers, eslint timer globals, Section 15 map, SST stack type-check setup).
+TASKS["WPU-B4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "db-forward-only",
+    "WPU-B4: forward-only check after a journal renumbering (no database needed)",
+    "@tc/db",
+    "test/forward-only",
+  ),
+  glueTest(
+    "db-temp-db",
+    "WPU-B4: temp-db password check (needs local PostgreSQL; skips only under trust authentication)",
+    "@tc/db",
+    "test/temp-db",
+  ),
+  repo,
+];
 
 // A gate is the concatenation of the checks of its tasks, once per check id (the first one stays, so the
 // cheap shared checks come first). The same id with another command is a defect and stops the load.
@@ -3264,6 +3435,50 @@ const M7 = gate(
     ],
   },
 );
+
+// WPU-D4: the AWS clients that were missing and the DNS delegation job. The SES transport of the notifier
+// and the templates support_reply, waitlist_capacity_available and dns_delegation_notice (notify, the
+// notifier function and the admin app), the Route 53 client behind Route53Port with the STS AssumeRole of
+// tc-dns (aws, provisioner), the delegation rules and the job (core, db, scheduler), and the IAM pins and
+// the dependency pins (repo). The db and scheduler suites need the local PostgreSQL (pnpm db:up). No AWS
+// call: every client is tested against a fake.
+TASKS["WPU-D4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  notifyAll,
+  notifierFn,
+  provisioner,
+  scheduler,
+  admin,
+  repo,
+];
+
+// WPU-M8: the merge of WPU-D4 (SES transport, Route 53 client, DNS delegation job) into the line with
+// WPU-C1, D1 to D3 and F1. No behaviour of its own: the proof is every suite the two sides touch.
+TASKS["WPU-M8"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  notifyAll,
+  notifierFn,
+  provisioner,
+  scheduler,
+  invoiceRenderer,
+  admin,
+  ui,
+  repo,
+];
 
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 

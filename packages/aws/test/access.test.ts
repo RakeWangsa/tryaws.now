@@ -118,7 +118,7 @@ it("a refused AssumeRole stops the call before Lightsail is reached (R16)", asyn
   expect(aws.seen.filter((r) => r.service === "lightsail")).toHaveLength(0);
 });
 
-it("the client does not print the secret, and the access object holds only caller and lightsail", async () => {
+it("the client does not print the secret, and the access object holds only caller, lightsail and route53", async () => {
   const { aws, access } = setup("provisioner");
   aws.on("lightsail", "GetRegions", lightsailOk({ regions: [] }));
   const client = access.lightsail(POOL, "ap-southeast-1", "TcProvisioner");
@@ -129,7 +129,7 @@ it("the client does not print the secret, and the access object holds only calle
   for (const secret of ["tc-test-assumed-secret-1", "tc-test-assumed-token-1", "tc-ext-7f3a9c"]) {
     expect(printed).not.toContain(secret);
   }
-  expect(Object.keys(access).sort()).toEqual(["caller", "lightsail"]);
+  expect(Object.keys(access).sort()).toEqual(["caller", "lightsail", "route53"]);
 });
 
 it("with the real transport, nothing leaves the machine, and the time limits are set", async () => {

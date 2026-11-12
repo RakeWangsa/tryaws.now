@@ -112,7 +112,12 @@ export async function setBucketAccessCore(
   );
 }
 
-/** 16.10 `deleteAccessKey`: the key id (not a secret) goes into the operation; the audit row has none. */
+/**
+ * 16.10 `deleteAccessKey`: the key id (not a secret) goes into the operation; the audit row has none.
+ * WPU-N2: a fresh sign-in and the bucket name typed by the customer (R13, U10); deleting a key breaks
+ * every program that uses it. The delete itself stays an operation of the provisioner (R1): it returns
+ * no secret, so it needs no direct invocation.
+ */
 export async function deleteAccessKeyCore(
   deps: FamilyActionDeps,
   raw: unknown,
@@ -121,14 +126,17 @@ export async function deleteAccessKeyCore(
   const { bad, id, requestId } = idFields(input, "bucketId");
   const key = text(input, "accessKeyId");
   if (typeof key !== "string" || !KEY_ID.test(key)) bad["accessKeyId"] = "invalid";
+  const typed = typeof input["confirmName"] === "string" ? input["confirmName"] : "";
   return frame(
     deps,
-    { destructive: false, limits: BUCKET_WRITE_LIMIT },
+    { destructive: true, limits: BUCKET_WRITE_LIMIT },
     () => parsedFrom(bad),
     async (repos) => {
       const row = await ownResource(repos, id, FAMILY);
       // A suspended bucket has no keys (suspend deleted them).
       if (row.state !== "active") throw new Refusal("not_allowed");
+      const name = displayNameOf(row.config);
+      if (name === "" || typed !== name) throw new Refusal("name_mismatch");
       const written = await repos.operations.request({
         resourceId: row.id,
         kind: "delete_access_key",

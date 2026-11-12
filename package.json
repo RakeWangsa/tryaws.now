@@ -10,6 +10,7 @@
     "lint": "eslint -c eslint.config.mjs .",
     "typecheck": "pnpm -r typecheck",
     "test": "node scripts/run-tests.mjs",
+    "test:repeat": "node scripts/test-repeat.mjs",
     "spec:split": "node scripts/split-plan.mjs",
     "spec:check": "node scripts/split-plan.mjs --check",
     "e2e:wallet": "node scripts/smoke-wallet.mjs",

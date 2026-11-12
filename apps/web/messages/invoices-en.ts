@@ -7,7 +7,7 @@ export const invoicesEn: Same<typeof invoicesBn> = {
     meta: { title: "Invoices" },
     heading: "Invoices",
     intro:
-      "The invoice of every purchase and renewal is here. TiCON Cloud sells, bills and supports the service.",
+      "The invoice of every purchase and renewal is here. MeghVPS sells, bills and supports the service.",
     list: {
       caption: "Your invoices",
       number: "Number",
@@ -52,6 +52,15 @@ export const invoicesEn: Same<typeof invoicesBn> = {
         total: "Total",
       },
       print: "Print or save as PDF",
+      downloadPdf: "Download PDF",
+      downloadHint: "The PDF is made when you click. It can take a few seconds.",
+      pdfNotice: {
+        unavailable:
+          "The PDF could not be made now. Please try again in a moment, or print the invoice instead.",
+        not_ready:
+          "The PDF is not ready to download. Please print the invoice instead, or write to support.",
+        busy: "Too many PDF requests. Please wait a minute and try again.",
+      },
       printHint:
         "The invoice opens on a new page. There, choose “Save as PDF” in the print dialog of your browser.",
       unavailable: {

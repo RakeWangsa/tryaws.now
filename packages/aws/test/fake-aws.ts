@@ -18,7 +18,7 @@ export type FakeReply =
   | { errorName: string };
 
 export interface SeenRequest {
-  service: "sts" | "lightsail";
+  service: "sts" | "lightsail" | "route53";
   host: string;
   action: string;
   body: string;
@@ -28,7 +28,7 @@ export interface SeenRequest {
 export interface FakeAws {
   handler: AwsRequestHandler;
   seen: SeenRequest[];
-  on(service: "sts" | "lightsail", action: string, ...replies: FakeReply[]): void;
+  on(service: "sts" | "lightsail" | "route53", action: string, ...replies: FakeReply[]): void;
 }
 
 export const ASSUMED = {
@@ -123,6 +123,10 @@ export function stsError(status: number, code: string, message: string): FakeRep
   return { status, contentType: "text/xml", body };
 }
 
+export function route53Xml(status: number, body: string): FakeReply {
+  return { status, contentType: "text/xml", body };
+}
+
 export function lightsailOk(json: unknown): FakeReply {
   return {
     status: 200,
@@ -141,8 +145,9 @@ export function lightsailError(status: number, type: string, message: string): F
 
 type FakeHandler = Extract<AwsRequestHandler, { handle: unknown }>;
 
-function serviceOf(host: string): "sts" | "lightsail" | undefined {
+function serviceOf(host: string): "sts" | "lightsail" | "route53" | undefined {
   if (host.startsWith("sts.")) return "sts";
+  if (host === "route53.amazonaws.com") return "route53";
   if (host.startsWith("lightsail.") || host.startsWith("lightsail-fips.")) return "lightsail";
   return undefined;
 }
@@ -178,6 +183,10 @@ export function fakeAws(): FakeAws {
       let action: string;
       if (service === "sts") {
         action = new URLSearchParams(body).get("Action") ?? "";
+      } else if (service === "route53") {
+        // REST: the "action" of a test script is the method and the path, for example
+        // "GET /2013-04-01/hostedzone/Z0TESTZONE1".
+        action = `${request.method} ${request.path}`;
       } else {
         const target = header(request.headers, "x-amz-target");
         action = target.startsWith(LIGHTSAIL_TARGET_PREFIX)

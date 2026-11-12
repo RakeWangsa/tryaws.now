@@ -8,6 +8,7 @@ import type { BucketDetail } from "../../../../../server/bucket-view.ts";
 import { BucketState, useRegionLabel } from "../StorageParts.tsx";
 import { BucketKeys } from "./BucketKeys.tsx";
 import type { KeyResult } from "./BucketKeys.tsx";
+import type { KeyView as KeyRow } from "../../../../../server/bucket-keys.ts";
 import { AccessForms, DeleteKeyForm, DestroyPanel } from "./StorageForms.tsx";
 
 // The content of /storage/[id] (16.10): a header and the tabs Overview, Access, Access keys and
@@ -32,6 +33,7 @@ export function StorageDetailContent({
   deleteKeyAction = refuse,
   destroyAction = refuse,
   createKeyAction = refuseKey,
+  keys: keyList = null,
   defaultTab,
   extra = null,
 }: {
@@ -44,6 +46,8 @@ export function StorageDetailContent({
   deleteKeyAction?: Action;
   destroyAction?: Action;
   createKeyAction?: (form: FormData) => Promise<KeyResult>;
+  /** The keys of the bucket (WPU-N2); null when the list could not be read: the tab says so (R16). */
+  keys?: readonly KeyRow[] | null;
   defaultTab?: string;
   /** The versioning form (WPU-G7), built by the page. */
   extra?: ReactNode;
@@ -153,6 +157,35 @@ export function StorageDetailContent({
         active={active}
         action={createKeyAction}
       />
+      <h3 className="mergecolor h4 mt-4">{t("detail.keys.listTitle")}</h3>
+      {keyList === null ? (
+        <p className="seccolor">{t("detail.keys.listUnavailable")}</p>
+      ) : keyList.length === 0 ? (
+        <p className="seccolor">{t("detail.keys.listEmpty")}</p>
+      ) : (
+        <div className="table-responsive-sm">
+          <table className="table">
+            <thead>
+              <tr>
+                <th scope="col">{t("detail.keys.listKeyId")}</th>
+                <th scope="col">{t("detail.keys.listStatus")}</th>
+                <th scope="col">{t("detail.keys.listCreated")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {keyList.map((key) => (
+                <tr key={key.accessKeyId}>
+                  <td>{key.accessKeyId}</td>
+                  <td>{t(`detail.keys.status.${key.status}`)}</td>
+                  <td>
+                    {key.createdAt === null ? "-" : formatDate(key.createdAt, { locale, numerals })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <hr />
       <DeleteKeyForm
         action={deleteKeyAction}

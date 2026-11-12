@@ -117,7 +117,8 @@ export function renderInApp(
     body: text.body
       .map((p) => fillFrom(p, vars))
       .filter((p) => p.length > 0)
-      .join(" "),
+      .join(" ")
+      .replace(/\s*\n\s*/g, " "),
     href,
   };
 }
