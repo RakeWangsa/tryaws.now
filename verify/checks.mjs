@@ -3157,6 +3157,21 @@ TASKS["WPU-N2"] = [
   repo,
 ];
 
+// WPU-B7: the fixes of the security review (zod in the one-time-secret cores, the real tenant read of the
+// Windows password, the alias tier of the renderer, per-tier rate limit names, the log words). Local proof only.
+TASKS["WPU-B7"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  epsAll,
+  web,
+  accessDetailsFn,
+  invoiceRenderer,
+  repo,
+];
+
 // WPU-B1: the brand rename from TiCON Cloud to MeghVPS. Messages, mail and SMS text, invoice text, page titles
 // and the site name (web, admin, ui, notify, core invoices) and the repository test that fails when the old
 // name returns to a customer-facing file. No AWS call.

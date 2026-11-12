@@ -36,8 +36,8 @@ export function familyActionDeps(flag: string): FamilyActionDeps {
 }
 
 const KEY_LIMITS = {
-  "bucket_key.create": [{ action: "bucket_key.create", limit: 10, windowSeconds: 3600 }],
-  "bucket_key.list": [{ action: "bucket_key.list", limit: 60, windowSeconds: 3600 }],
+  "bucket_key.create": [{ action: "bucket_key.create.web", limit: 10, windowSeconds: 3600 }],
+  "bucket_key.list": [{ action: "bucket_key.list.web", limit: 60, windowSeconds: 3600 }],
 } as const;
 
 /**

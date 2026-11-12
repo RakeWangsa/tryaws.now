@@ -173,8 +173,9 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
     permissions: permissionsOf(spec, inputs),
     environment: environmentOf(spec, inputs),
     transform: {
-      // Only the reader publishes versions: its tier aliases need a numbered version (WPU-S6).
-      ...(spec.dir === "reader"
+      // Only the reader and the invoice renderer publish versions: their aliases need a numbered
+      // version (WPU-S6, WPU-B7 L3).
+      ...(spec.dir === "reader" || spec.dir === "invoice-renderer"
         ? {
             function: (args: { publish?: boolean }) => {
               args.publish = true;

@@ -25,7 +25,28 @@ export interface RendererDeps {
 
 export type RenderReport =
   | { ok: true; key: string; bytes: number; pdfBase64?: string }
-  | { ok: false; reason: "invalid_event" | "unsafe_html" };
+  | { ok: false; reason: "invalid_event" | "unsafe_html" | "wrong_tier" };
+
+// WPU-B7 (L3). The renderer has one alias, "web". The infra grants lambda:InvokeFunction on that alias ARN
+// and on nothing else, and Lambda puts the alias into context.invokedFunctionArn, which the caller of the
+// event cannot choose. Anything but exactly that alias (the unqualified ARN, $LATEST, another alias, a
+// malformed ARN) is no tier and is refused before the event is read (R16).
+export type RendererTier = "web";
+
+export function rendererTierOf(invokedFunctionArn: unknown): RendererTier | null {
+  if (typeof invokedFunctionArn !== "string") return null;
+  const parts = invokedFunctionArn.split(":");
+  if (
+    parts.length !== 8 ||
+    parts[0] !== "arn" ||
+    parts[2] !== "lambda" ||
+    parts[5] !== "function" ||
+    parts[7] !== "web"
+  ) {
+    return null;
+  }
+  return "web";
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // The safety check looks at the MARKUP of the page and not at the customer's text (WPU-S8, L3). Every value
@@ -135,8 +156,12 @@ function parse(event: unknown): {
 // derived, so a retry overwrites the same object.
 export function createInvoiceRendererHandler(
   deps: RendererDeps,
-): (event: unknown) => Promise<RenderReport> {
-  return async (event) => {
+): (event: unknown, tier: RendererTier | null) => Promise<RenderReport> {
+  return async (event, tier) => {
+    if (tier !== "web") {
+      deps.log({ event: "invoice_render_refused", reason: "wrong_tier" });
+      return { ok: false, reason: "wrong_tier" };
+    }
     const input = parse(event);
     if (input === null) {
       deps.log({ event: "invoice_render_refused", reason: "invalid_event" });

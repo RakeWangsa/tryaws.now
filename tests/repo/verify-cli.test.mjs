@@ -165,6 +165,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-B3",
     "WPU-B4",
     "WPU-B5",
+    "WPU-B7",
     "WPU-C1",
     "WPU-D1",
     "WPU-D2",
@@ -1158,6 +1159,47 @@ it("task WPU-N2 is proven by lint, types, format, aws, access-details, web and r
     ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-B7 is proven by lint, types, format, the eps, web, access-details and renderer tests and the repository tests", () => {
+  expect(TASKS["WPU-B7"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["eps", "pnpm test --filter @tc/eps --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["access-details", "pnpm test --filter @tc/fn-access-details --no-passWithNoTests"],
+    ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-B7 exists: zod cores, the real tenant read, the DB-level cross-tenant test, the alias, the limits and the log words", () => {
+  for (const [file, part] of [
+    [
+      "apps/web/server/windows-access.test.ts",
+      "customer B asking for customer A's server gets the answer of a missing id, and the tenant read ran (R8)",
+    ],
+    [
+      "functions/access-details/test/proof-cross-tenant.test.ts",
+      "answers B asking for A's server exactly as a missing id, in one transaction (the tenant read)",
+    ],
+    ["apps/web/server/bucket-keys.test.ts", "validates with zod: only the named fields are read"],
+    ["apps/web/server/bucket-keys.test.ts", "L5: key_not_created is a public answer of its own"],
+    ["apps/web/server/domain-actions.test.ts", "reads only name, requestId and enabled with zod"],
+    ["apps/web/server/rate-limit-names.test.ts", "gives every web name the suffix .web"],
+    ["apps/web/server/log.test.ts", "drops free text under reason and state, keeps the event"],
+    ["packages/eps/test/log.test.ts", "drops free text under reason and state"],
+    [
+      "functions/invoice-renderer/handler.test.ts",
+      "accepts exactly the alias web and nothing else",
+    ],
+    ["tests/repo/security-batch-b7.test.mjs", "has no sqs action and no queue URL"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
 });
 
 it("the proof of WPU-N2 exists", () => {

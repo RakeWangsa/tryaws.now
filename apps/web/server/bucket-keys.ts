@@ -1,5 +1,7 @@
 import { requireFreshSignIn } from "@tc/auth";
 import type { CustomerSession } from "@tc/auth";
+import { z } from "zod";
+import { formObject, formText } from "./form-schema.ts";
 
 // The core of the Keys tab's "create an access key" action (16.10, U9). R9 order: authenticate,
 // authorize (a fresh sign-in, 6.1), validate, rate limit, execute. The audit row and the unique key
@@ -70,6 +72,7 @@ export type BucketKeysError =
   | "not_ready"
   | "name_mismatch"
   | "limit_reached"
+  | "key_not_created"
   | "already_created"
   | "unavailable";
 
@@ -84,6 +87,14 @@ export type BucketKeysResult =
   | { ok: false; error: BucketKeysError };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// R9 validate: the shape is a zod schema (only these two fields are read, R11).
+const KeyForm = formObject({
+  bucketId: formText.pipe(z.string().regex(UUID)),
+  requestId: formText.pipe(z.string().regex(UUID)),
+  // The typed name of the bucket (U10); anything but text reads as empty and is refused by the name check.
+  confirmName: formText.pipe(z.string().max(253)).catch(""),
+});
+const ListForm = formObject({ bucketId: formText.pipe(z.string().regex(UUID)) });
 
 // What the function answers becomes a public key; its text, if any, is dropped.
 function publicError(code: string): BucketKeysError {
@@ -96,6 +107,13 @@ function publicError(code: string): BucketKeysError {
       return "not_ready";
     case "limit_reached":
       return "limit_reached";
+    // L5 (WPU-B7). The function answers `key_not_created` only when AWS failed before a key existed and
+    // it has released the claim of the request id, so the same request id may be sent again. Any other
+    // failure (a lost answer, a timeout after the call) may have left a key at AWS: it stays
+    // "unavailable" and the claim stays, because a retry must not create a second key
+    // (docs/runbooks/bucket-access-key-orphan.md).
+    case "key_not_created":
+      return "key_not_created";
     case "already_created":
       return "already_created";
     case "rate_limited":
@@ -114,18 +132,9 @@ export async function createBucketKeyCore(
   const fresh = requireFreshSignIn(session, { now: deps.now });
   if (!fresh.ok) return { ok: false, error: "fresh_sign_in_required" };
 
-  const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  const bucketId = input["bucketId"];
-  const requestId = input["requestId"];
-  const typed = typeof input["confirmName"] === "string" ? input["confirmName"] : "";
-  if (
-    typeof bucketId !== "string" ||
-    !UUID.test(bucketId) ||
-    typeof requestId !== "string" ||
-    !UUID.test(requestId)
-  ) {
-    return { ok: false, error: "validation" };
-  }
+  const parsed = KeyForm.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: "validation" };
+  const { bucketId, requestId, confirmName: typed } = parsed.data;
   if (deps.createKey === null) return { ok: false, error: "unavailable" };
 
   try {
@@ -167,11 +176,9 @@ export async function listBucketKeysCore(
 ): Promise<ListKeysResult> {
   const session = await deps.authenticate();
   if (session === null) return { ok: false, error: "unauthenticated" };
-  const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  const bucketId = input["bucketId"];
-  if (typeof bucketId !== "string" || !UUID.test(bucketId)) {
-    return { ok: false, error: "validation" };
-  }
+  const parsedList = ListForm.safeParse(raw);
+  if (!parsedList.success) return { ok: false, error: "validation" };
+  const { bucketId } = parsedList.data;
   if (deps.listKeys === null) return { ok: false, error: "unavailable" };
   try {
     const owned = await deps.ownedBucket(session.customerId, bucketId);

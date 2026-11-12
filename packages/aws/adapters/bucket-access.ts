@@ -35,6 +35,14 @@ const MAX_KEYS = 2;
  * the unique key (R7, R8, R9): a key is not an idempotent thing, so a retried request must be
  * answered from its audit row, never by calling this again.
  *
+ * What a failure means (WPU-B7, L5): an error thrown BEFORE `CreateBucketAccessKey` was sent (the state
+ * check, the list of keys, the key limit) means that no key exists. A timeout or a lost answer after the
+ * create call was sent may have left a key nobody saw (an orphan): see
+ * docs/runbooks/bucket-access-key-orphan.md. The function claims the request id before AWS is asked
+ * (a counter that cannot be released), so after any failure the customer reloads the Keys tab for a new
+ * request id; the web core has the public answer `key_not_created` for a function that can say that no
+ * key was made.
+ *
  * A bucket that is not active gets no key: suspend removed the access and a new key would undo it
  * (R16).
  */

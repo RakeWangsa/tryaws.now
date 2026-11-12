@@ -148,10 +148,9 @@ export function web(inputs: WebInputs) {
       { actions: ["kms:GenerateDataKey"], resources: [storage.kycKey.arn] },
       {
         actions: ["s3:GetObject"],
-        resources: [
-          $interpolate`${storage.invoices.arn}/*`,
-          $interpolate`${storage.exports.arn}/*`,
-        ],
+        // WPU-B7 (L2): exports/* only. The invoice PDF reaches the customer in the answer of the renderer
+        // (pdfBase64, WPU-N1); nothing in the web tier reads the invoices bucket.
+        resources: [$interpolate`${storage.exports.arn}/*`],
       },
       { actions: ["kms:Decrypt"], resources: [storage.filesKey.arn] },
       { actions: ["cognito-idp:AdminUserGlobalSignOut"], resources: [auth.customers.arn] },
@@ -177,7 +176,6 @@ export function web(inputs: WebInputs) {
       ...dbEnvironment("admin_rw"),
       COGNITO_USER_POOL_ID: auth.admins.id,
       COGNITO_CLIENT_ID: auth.adminClient.id,
-      PROVISIONING_QUEUE_URL: queues.provisioning.url,
       KYC_BUCKET: storage.kyc.name,
       EXPORTS_BUCKET: storage.exports.name,
     },
@@ -185,8 +183,9 @@ export function web(inputs: WebInputs) {
     // API of the admin pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
     // invoice-renderer (WPU-S8): an invoice PDF holds the buyer's BIN or NID and address; the renderer
     // function writes it and the customer's own web path reads it.
+    // WPU-B7 (L1): no sqs:SendMessage and no queue URL: the admin app has no queue client, it writes
+    // operation rows and the scheduler enqueues them (R1).
     permissions: record([
-      { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
         resources: [workers.readerAliases.admin.arn, ...invoke("catalog-sync")],

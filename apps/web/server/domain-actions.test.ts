@@ -187,4 +187,17 @@ describe("setDomainAutoRenewCore", () => {
       error: "rate_limited",
     });
   });
+  it("reads only name, requestId and enabled with zod and refuses other shapes before the store", async () => {
+    const { deps, setAutoRenew } = renewDeps();
+    expect(
+      await setDomainAutoRenewCore(deps, { ...REQ, name: ` SHOP.com `, customerId: "evil" }),
+    ).toEqual({ ok: true, done: "autoRenewOn" });
+    for (const raw of [null, [], "x", { ...REQ, name: 5 }, { ...REQ, name: "a".repeat(300) }]) {
+      expect(await setDomainAutoRenewCore(deps, raw)).toMatchObject({
+        ok: false,
+        error: "validation",
+      });
+    }
+    expect(setAutoRenew).toHaveBeenCalledTimes(1);
+  });
 });

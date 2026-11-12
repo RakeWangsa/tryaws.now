@@ -220,3 +220,37 @@ describe("listBucketKeysCore", () => {
     });
   });
 });
+
+describe("WPU-B7: zod shapes and the key_not_created answer", () => {
+  it("L5: key_not_created is a public answer of its own; a lost answer stays unavailable", async () => {
+    const answer = (error: string) =>
+      createBucketKeyCore(setup({ createKey: async () => ({ ok: false, error }) }).deps, input);
+    expect(await answer("key_not_created")).toEqual({ ok: false, error: "key_not_created" });
+    expect(await answer("internal")).toEqual({ ok: false, error: "unavailable" });
+    expect(await answer("upstream_unavailable")).toEqual({ ok: false, error: "unavailable" });
+  });
+
+  it("validates with zod: only the named fields are read, ids are trimmed, shapes are refused", async () => {
+    const { deps, asked, order } = setup();
+    await createBucketKeyCore(deps, { ...input, bucketId: ` ${BUCKET} `, extra: "x" });
+    expect(asked).toEqual([{ customerId: CUSTOMER, resourceId: BUCKET, requestId: REQ }]);
+    for (const raw of [
+      null,
+      [],
+      { bucketId: BUCKET },
+      { bucketId: [BUCKET], requestId: REQ },
+      { bucketId: BUCKET, requestId: "not-a-uuid" },
+    ]) {
+      expect(await createBucketKeyCore(deps, raw)).toEqual({ ok: false, error: "validation" });
+    }
+    expect(order.filter((o) => o === "limit")).toHaveLength(1);
+  });
+
+  it("a non-text confirmName reads as empty and is a name mismatch", async () => {
+    const w = setup();
+    expect(await createBucketKeyCore(w.deps, { ...input, confirmName: 5 })).toEqual({
+      ok: false,
+      error: "name_mismatch",
+    });
+  });
+});

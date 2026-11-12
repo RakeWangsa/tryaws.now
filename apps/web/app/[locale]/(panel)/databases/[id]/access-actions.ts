@@ -13,7 +13,8 @@ import type { DatabaseRevealResult } from "./DatabaseAccess.tsx";
 // is returned to the browser once and holds the secret: nothing here logs or keeps it (U9, R14).
 //
 // The transport to the access-details function is the invoke port of server/access-invoke.ts (WPU-N2).
-const REVEAL_LIMITS = [{ action: "database_password.reveal", limit: 20, windowSeconds: 3600 }];
+// L4 (WPU-B7): the web tier counts under its own action name (the function counts "database_password.reveal").
+const REVEAL_LIMITS = [{ action: "database_password.reveal.web", limit: 20, windowSeconds: 3600 }];
 
 export async function revealDatabasePasswordAction(form: FormData): Promise<DatabaseRevealResult> {
   if (!(await guardAction())) return { ok: false, error: "unauthenticated" };

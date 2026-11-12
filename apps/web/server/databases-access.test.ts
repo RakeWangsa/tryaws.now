@@ -123,4 +123,18 @@ describe("revealDatabasePasswordCore", () => {
       JSON.stringify(await revealDatabasePasswordCore(thrown.deps, { resourceId: DB })),
     ).not.toContain("abc");
   });
+
+  it("validates with zod before the ownership read: padded ids are trimmed, other shapes are refused", async () => {
+    const { deps, calls } = world();
+    await revealDatabasePasswordCore(deps, { resourceId: ` ${DB} `, x: 1 });
+    expect(calls[0]).toBe(`owned:${CUSTOMER}:${DB}`);
+    const bad = world();
+    for (const raw of [null, [], {}, { resourceId: [DB] }, { resourceId: "x" }]) {
+      expect(await revealDatabasePasswordCore(bad.deps, raw)).toEqual({
+        ok: false,
+        error: "validation",
+      });
+    }
+    expect(bad.calls).toEqual([]);
+  });
 });

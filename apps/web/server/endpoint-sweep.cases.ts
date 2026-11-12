@@ -647,7 +647,7 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     proof: [
       proof(
         `${W}windows-access.test.ts`,
-        "another customer's server and a missing one give the same answer (R8)",
+        "customer B asking for customer A's server gets the answer of a missing id, and the tenant read ran (R8)",
       ),
     ],
   },

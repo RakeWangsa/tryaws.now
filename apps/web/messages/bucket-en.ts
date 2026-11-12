@@ -181,6 +181,7 @@ export const bucketEn: Same<typeof bucketBn> = {
       not_allowed: "This cannot be done in the current state.",
       not_ready: "The bucket is not on right now.",
       limit_reached: "The bucket already has two keys. Delete one first.",
+      key_not_created: "The key was not created and nothing was changed. You can try again.",
       already_created:
         "This key was already made, and its secret key cannot be shown again. Delete it and make a new key if you lost the secret.",
       unavailable: "We could not finish this now. Please try again shortly.",

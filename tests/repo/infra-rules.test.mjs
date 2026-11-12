@@ -503,9 +503,11 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(admin).toContain("$interpolate`${storage.exports.arn}/*`");
     expect(admin).toContain('...invoke("catalog-sync")');
     expect(admin).toContain("storage.filesKey.arn");
-    // the customer path still reads its own invoices and invokes the renderer
+    // the customer path invokes the renderer and gets the PDF in its answer (WPU-N1); WPU-B7 (L2): it holds
+    // no read of the invoices bucket, only of exports
     const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
-    expect(customer).toContain("$interpolate`${storage.invoices.arn}/*`");
+    expect(customer).not.toContain("${storage.invoices.arn}");
+    expect(customer).toContain("$interpolate`${storage.exports.arn}/*`");
     expect(customer).toContain("workers.rendererAliasWeb.arn");
     // WPU-N2: access-details only through its "web" alias, never the bare function
     expect(customer).toContain("workers.accessAliases.web.arn");
