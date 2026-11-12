@@ -62,3 +62,58 @@ export async function addDiskDraftCore(
   }
   return { ok: true, token: result.value.token };
 }
+
+// WPU-B5 item 26. A NEW disk from a snapshot of the customer's own disk. The same R9 order and the same
+// draft as addDisk: nothing is created here, the customer reviews the price (the per-GB price of a disk
+// times the size, like any disk) and pays on the order page, where the purchase writes the `create`
+// operation and enqueues it (R1). The snapshot, its disk, the Region and the size are checked inside
+// the order code through the customer's own repositories (R8). No server id is read: a restored disk is
+// made unattached and attached later with the existing attach action.
+const RestoreForm = formObject({
+  productId: formText,
+  region: formText,
+  displayName: formText,
+  sizeGb: formDigits(5),
+  restoreFromBackupId: formText,
+});
+
+export async function restoreDiskDraftCore(
+  deps: OrderActionDeps,
+  raw: unknown,
+): Promise<DraftActionResult> {
+  const session = await deps.authenticate();
+  if (session === null) return { ok: false, error: "unauthenticated" };
+
+  // A form with no snapshot is not a restore: refuse it as such, never as a plain disk (R16).
+  const form = readForm(RestoreForm, raw);
+  const named = (form as { restoreFromBackupId?: unknown }).restoreFromBackupId;
+  if (typeof named !== "string" || named === "") {
+    return { ok: false, error: "validation", fields: { restoreFromBackupId: "invalid" } };
+  }
+  const parsed = parseDiskConfig(form);
+  if (!parsed.ok) {
+    return { ok: false, error: "validation", ...(parsed.fields ? { fields: parsed.fields } : {}) };
+  }
+
+  if (deps.orders === null) return { ok: false, error: "unavailable" };
+  let allowed: boolean;
+  try {
+    allowed = (await deps.rateLimit(session)).allowed;
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+  if (!allowed) return { ok: false, error: "rate_limited" };
+
+  const result = await deps.orders.createOrderDraft(session, {
+    family: FAMILY,
+    config: { ...parsed.value },
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: publicErrorOf(result.error),
+      ...(result.error === "validation" && result.fields ? { fields: result.fields } : {}),
+    };
+  }
+  return { ok: true, token: result.value.token };
+}

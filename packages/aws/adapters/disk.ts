@@ -1,6 +1,7 @@
 import {
   AttachDiskCommand,
   CreateDiskCommand,
+  CreateDiskFromSnapshotCommand,
   DeleteDiskCommand,
   DetachDiskCommand,
   GetDiskCommand,
@@ -22,6 +23,7 @@ import {
   isUuid,
   lightsailOf,
   orNull,
+  payloadOf,
   pollAt,
   tagsFor,
 } from "./shared";
@@ -87,6 +89,33 @@ export function createDiskAdapter(deps: BackupDeps): ProductAdapter<DiskConfig> 
     return disk;
   }
 
+  /**
+   * WPU-B5 item 26. The snapshot a restore starts from, as an AWS name made from the id of the backup
+   * row (R11). R8: the payload names rows; the snapshot must be the customer's own, `active`, the child
+   * of a disk of the customer, and the new disk must not be smaller than that disk (Lightsail refuses a
+   * smaller size). Anything else is a refusal (R16).
+   */
+  async function snapshotToRestore(ctx: OpCtx<DiskConfig>): Promise<string> {
+    const backupId = payloadOf(ctx).restoreFromBackupId;
+    if (!isUuid(backupId)) throw fail("validation");
+    const backup = await ctx.owned(backupId);
+    if (
+      backup === null ||
+      backup.family !== "backup" ||
+      backup.state !== "active" ||
+      backup.parentResourceId === null
+    ) {
+      throw fail("validation");
+    }
+    const source = await ctx.owned(backup.parentResourceId);
+    if (source === null || source.family !== "disk") throw fail("validation");
+    const sourceSize = (source.config as { sizeGb?: unknown } | null)?.sizeGb;
+    if (typeof sourceSize !== "number" || !(sourceSize <= ctx.config.sizeGb)) {
+      throw fail("validation");
+    }
+    return awsResourceName("snapshot", backup.id);
+  }
+
   async function create(ctx: OpCtx<DiskConfig>): Promise<StepResult> {
     const name = diskName(ctx);
     switch (ctx.operation.step) {
@@ -94,14 +123,27 @@ export function createDiskAdapter(deps: BackupDeps): ProductAdapter<DiskConfig> 
       case "create_disk": {
         // A retry continues with what an earlier try made, if it is ours.
         if ((await ourDisk(ctx)) === null) {
-          await lightsailOf(ctx).send(
-            new CreateDiskCommand({
-              diskName: name,
-              availabilityZone: `${ctx.region}a`,
-              sizeInGb: ctx.config.sizeGb,
-              tags: tagsFor(ctx, ctx.resource.id),
-            }),
-          );
+          if (payloadOf(ctx).restoreFromBackupId !== undefined) {
+            const snapshotName = await snapshotToRestore(ctx);
+            await lightsailOf(ctx).send(
+              new CreateDiskFromSnapshotCommand({
+                diskName: name,
+                diskSnapshotName: snapshotName,
+                availabilityZone: `${ctx.region}a`,
+                sizeInGb: ctx.config.sizeGb,
+                tags: tagsFor(ctx, ctx.resource.id),
+              }),
+            );
+          } else {
+            await lightsailOf(ctx).send(
+              new CreateDiskCommand({
+                diskName: name,
+                availabilityZone: `${ctx.region}a`,
+                sizeInGb: ctx.config.sizeGb,
+                tags: tagsFor(ctx, ctx.resource.id),
+              }),
+            );
+          }
         }
         return stepNext("wait_available", { awsName: name });
       }

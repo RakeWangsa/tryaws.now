@@ -532,6 +532,19 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  "app/[locale]/(panel)/servers/[id]/actions.ts#restoreDiskAction": {
+    kind: "id",
+    proof: [
+      proof(
+        "packages/core/orders/disk-restore-order.test.ts",
+        "another customer's snapshot answers like a missing one and writes nothing (R8)",
+      ),
+      proof(
+        `${W}disk-restore-actions.test.ts`,
+        "another customer's snapshot answers like a missing one: the same public answer (R8)",
+      ),
+    ],
+  },
   // WPU-G2: reboot, stop, start, rename, firewall rules and static IP of a server.
   "app/[locale]/(panel)/servers/[id]/manage-actions.ts#rebootServerAction": {
     kind: "id",

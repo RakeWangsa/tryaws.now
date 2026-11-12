@@ -309,6 +309,18 @@ export function AbuseDetailView({
           </div>
         </div>
       ) : null}
+      {abuse.resourceState === "suspended" && canSuspend ? (
+        <Card title={t("restore.title")}>
+          <form action={abuseAction}>
+            <Hidden locale={locale} kind="restoreResource" id={abuse.id} />
+            <p className="form-text seccolor">{t("restore.hint")}</p>
+            <ReasonField suffix="restore" />
+            <SubmitButton variant="primary" size="sm">
+              {t("restore.submit")}
+            </SubmitButton>
+          </form>
+        </Card>
+      ) : null}
       <TrailCard
         rows={abuse.audit}
         labels={{

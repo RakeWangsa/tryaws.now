@@ -131,6 +131,7 @@ export type {
   AbuseListResult,
   AbuseNoted,
   AbuseOpened,
+  AbuseRestored,
   AbuseSource,
   AbuseStatus,
   AbuseSuspended,

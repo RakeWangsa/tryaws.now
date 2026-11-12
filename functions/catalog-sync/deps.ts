@@ -12,6 +12,8 @@ export interface CatalogSyncEnv {
   readonly log: Logger;
   /** WPU-G3: sync the images too. Default true; a test of the store sequence turns it off. */
   readonly syncImages?: boolean;
+  /** WPU-B5: sync the CDN bundles and the database engines. Default true; tests turn them off. */
+  readonly syncExtras?: boolean;
   /** Tests only: replaces the AWS source. */
   readonly source?: CatalogSource;
 }
@@ -35,6 +37,10 @@ export function buildCatalogSyncDeps(env: CatalogSyncEnv): {
       runTx((tx) =>
         applyCatalogScope(tx, { rows: scope.rows, deactivate: scope.deactivate, at: scope.at }),
       ),
+    applyExtra: (scope) =>
+      runTx((tx) =>
+        applyCatalogScope(tx, { rows: scope.rows, deactivate: scope.deactivate, at: scope.at }),
+      ),
     applyTlds: (rows, at) => runTx((tx) => applyTlds(tx, { rows, at })),
   };
   const dnsAccount: AccountRef | null =
@@ -51,6 +57,8 @@ export function buildCatalogSyncDeps(env: CatalogSyncEnv): {
     regions: config.regions,
     syncTlds: config.syncTlds,
     syncImages: env.syncImages ?? true,
+    syncCdn: env.syncExtras ?? true,
+    syncDbBlueprints: env.syncExtras ?? true,
   });
   return { handler };
 }

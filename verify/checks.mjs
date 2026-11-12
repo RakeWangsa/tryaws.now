@@ -3075,6 +3075,25 @@ TASKS["WPU-F1"] = [
   repo,
 ];
 
+// WPU-B5: AWS adapters and the provisioner batch. The admin mark of a suspension (provisioner, db, admin),
+// the CDN bundles and the database engines of the catalog (aws, core, catalog-sync), and a disk from a
+// snapshot (aws adapter, core order rules, web action). Fake AWS clients and the local database only.
+TASKS["WPU-B5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  aws,
+  core,
+  db,
+  provisioner,
+  catalogSyncAll,
+  web,
+  admin,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

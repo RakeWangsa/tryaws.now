@@ -193,6 +193,20 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
     r.abuse.close({ caseId: await seedAbuseCase(), at: AT }, "false alarm"),
   "abuse.suspendResource": async (r) =>
     r.abuse.suspendResource({ caseId: await seedAbuseCase(), at: AT }, "spam"),
+  "abuse.restoreResource": async (r) =>
+    r.abuse.restoreResource(
+      {
+        caseId: await insertRow(t.pool, "abuse_cases", {
+          resource_id: await newResource(t.pool, await newCustomer(t.pool), {
+            state: "suspended",
+            config: JSON.stringify({ adminSuspended: true }),
+          }),
+          source: "monitoring",
+        }),
+        at: AT,
+      },
+      "false alarm",
+    ),
   "support.reply": async (r) =>
     r.support.reply(
       { requestId: await seedSupportRequest(), replyId: uuidv7(), body: "Hello" },

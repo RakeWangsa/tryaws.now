@@ -220,6 +220,20 @@ const PRODUCTS = [
   "checkDbPointInTime",
   "checkDbSnapshotRestore",
   "pointInTimeWindow",
+  // WPU-B5: CDN bundles and database engines of the catalog, a disk from a snapshot
+  "CDN_FAMILY",
+  "CDN_SYNC_REGION",
+  "DB_BLUEPRINT_FAMILY",
+  "mapDbBlueprint",
+  "mapDistributionBundle",
+  "checkDiskSnapshotRestore",
+  // WPU-F1 (was missing from this list): the digit one helper
+  "BENGALI_DIGIT_FONT",
+  "BENGALI_DIGIT_ONE",
+  "DIGIT_ONE_CLASS",
+  "splitDigitOne",
+  "unwrapDigitOneHtml",
+  "wrapDigitOneHtml",
   "SNAPSHOT_PRICE_FAMILY",
   "snapshotPrice",
   // WPU-M1: the price of an unattached static IP

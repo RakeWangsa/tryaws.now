@@ -1,5 +1,10 @@
-import { GetBlueprintsCommand, GetBundlesCommand } from "@aws-sdk/client-lightsail";
-import type { RawBlueprint, RawBundle } from "@tc/core";
+import {
+  GetBlueprintsCommand,
+  GetBundlesCommand,
+  GetDistributionBundlesCommand,
+  GetRelationalDatabaseBlueprintsCommand,
+} from "@aws-sdk/client-lightsail";
+import type { RawBlueprint, RawBundle, RawDbBlueprint, RawDistributionBundle } from "@tc/core";
 import type { AwsAccess } from "./access";
 import { AwsError } from "./errors";
 import type { AccountRef, LightsailRegion } from "./roles";
@@ -27,9 +32,21 @@ export interface CatalogSource {
     region: LightsailRegion,
   ): Promise<readonly RawBlueprint[]>;
   tldPrices(account: AccountRef): Promise<readonly TldPrice[]>;
+  /**
+   * WPU-B5: the CDN bundles. Distribution APIs exist in us-east-1 only, so the Region is fixed here
+   * and the answer has no page token (API reference, GetDistributionBundles).
+   */
+  distributionBundles(account: AccountRef): Promise<readonly RawDistributionBundle[]>;
+  /** WPU-B5: engine and version of the managed databases of one Region. */
+  databaseBlueprints(
+    account: AccountRef,
+    region: LightsailRegion,
+  ): Promise<readonly RawDbBlueprint[]>;
 }
 
 const DEFAULT_MAX_PAGES = 20;
+// Distribution APIs are available in us-east-1 only (API reference, WPU-B5).
+const CDN_REGION: LightsailRegion = "us-east-1";
 // A price that is plain decimal text with at most 4 decimals (numeric(12,4)). A string check:
 // `String(n)` of a float artifact (0.30000000000000004) or of an exponent form fails it.
 const PRICE_TEXT = /^\d+(\.\d{1,4})?$/;
@@ -91,6 +108,29 @@ function toRawBlueprint(item: unknown): RawBlueprint {
     isActive: item.isActive === true,
     // WPU-G10: the least bundle power the image runs on; anything but a number is "unknown" (null).
     minPower: typeof item.minPower === "number" ? item.minPower : null,
+  };
+}
+
+function toRawDistributionBundle(item: unknown): RawDistributionBundle {
+  if (!isRecord(item)) throw invalid();
+  return {
+    bundleId: typeof item.bundleId === "string" ? item.bundleId : "",
+    name: typeof item.name === "string" ? item.name : "",
+    priceUsd: priceText(item.price) ?? "",
+    transferPerMonthInGb: num(item.transferPerMonthInGb),
+    isActive: item.isActive === true,
+  };
+}
+
+function toRawDbBlueprint(item: unknown): RawDbBlueprint {
+  if (!isRecord(item)) throw invalid();
+  return {
+    blueprintId: typeof item.blueprintId === "string" ? item.blueprintId : "",
+    engine: text(item.engine),
+    engineVersion: text(item.engineVersion),
+    engineDescription: text(item.engineDescription),
+    engineVersionDescription: text(item.engineVersionDescription),
+    isEngineDefault: item.isEngineDefault === true,
   };
 }
 
@@ -197,6 +237,34 @@ export function createCatalogSource(
         retryable: true,
         reason: "catalog_pages_exceeded",
         operation: "GetBlueprints",
+      });
+    },
+    async distributionBundles(account) {
+      const client = access.lightsail(account, CDN_REGION, "TcReader");
+      const response: unknown = await client.send(new GetDistributionBundlesCommand({}));
+      if (!isRecord(response) || !Array.isArray(response.bundles)) throw invalid();
+      return response.bundles.map(toRawDistributionBundle);
+    },
+    async databaseBlueprints(account, region) {
+      const client = access.lightsail(account, region, "TcReader");
+      const out: RawDbBlueprint[] = [];
+      let pageToken: string | undefined;
+      for (let page = 0; page < maxPages; page += 1) {
+        const response: unknown = await client.send(
+          new GetRelationalDatabaseBlueprintsCommand(pageToken === undefined ? {} : { pageToken }),
+        );
+        if (!isRecord(response) || !Array.isArray(response.blueprints)) throw invalid();
+        for (const item of response.blueprints) out.push(toRawDbBlueprint(item));
+        const next = response.nextPageToken;
+        if (next === undefined || next === null || next === "") return out;
+        if (typeof next !== "string") throw invalid();
+        pageToken = next;
+      }
+      throw new AwsError({
+        code: "internal",
+        retryable: true,
+        reason: "catalog_pages_exceeded",
+        operation: "GetRelationalDatabaseBlueprints",
       });
     },
     async tldPrices() {

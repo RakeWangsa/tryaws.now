@@ -1,5 +1,11 @@
 import { AwsError, type AccountRef, type CatalogSource, type LightsailRegion } from "@tc/aws";
-import type { LogEvent, RawBlueprint, RawBundle } from "@tc/core";
+import type {
+  LogEvent,
+  RawBlueprint,
+  RawBundle,
+  RawDbBlueprint,
+  RawDistributionBundle,
+} from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { createCatalogSyncHandler, type CatalogStore, type CatalogSyncDeps } from "./handler";
 
@@ -86,6 +92,25 @@ function fakeStore(over: { account?: AccountRef | null } = {}) {
       }
       return { inserted, updated, deactivated };
     },
+    async applyExtra(scope) {
+      let inserted = 0;
+      let updated = 0;
+      for (const r of scope.rows) {
+        const k = key(r.region, r.family, r.awsId);
+        if (rows.has(k)) updated += 1;
+        else inserted += 1;
+        rows.set(k, { active: r.active, priceUsd: r.awsPriceUsd });
+      }
+      let deactivated = 0;
+      for (const d of scope.deactivate) {
+        const row = rows.get(key(d.region, d.family, d.awsId));
+        if (row?.active) {
+          row.active = false;
+          deactivated += 1;
+        }
+      }
+      return { inserted, updated, deactivated };
+    },
     async applyTlds(list) {
       return { inserted: list.length, updated: 0 };
     },
@@ -99,6 +124,10 @@ function harness(
 ) {
   const images: Partial<Record<LightsailRegion, RawBlueprint[] | Error>> = {};
   const calls: { region: string; account: AccountRef }[] = [];
+  const extras: {
+    cdn: RawDistributionBundle[] | Error;
+    db: Partial<Record<LightsailRegion, RawDbBlueprint[] | Error>>;
+  } = { cdn: [], db: {} };
   let tldCalls = 0;
   const logs: LogEvent[] = [];
   const { store, rows } = fakeStore();
@@ -111,6 +140,15 @@ function harness(
     },
     async instanceBlueprints(_account, region) {
       const answer = images[region];
+      if (answer instanceof Error) throw answer;
+      return answer ?? [];
+    },
+    async distributionBundles() {
+      if (extras.cdn instanceof Error) throw extras.cdn;
+      return extras.cdn;
+    },
+    async databaseBlueprints(_account, region) {
+      const answer = extras.db[region];
       if (answer instanceof Error) throw answer;
       return answer ?? [];
     },
@@ -146,6 +184,7 @@ function harness(
     rows,
     tldCalls: () => tldCalls,
     images,
+    extras,
     deps,
   };
 }
@@ -433,6 +472,100 @@ describe("catalog-sync handler", () => {
       expect(h.rows.has(`${B}|blueprint|ubuntu_24_04`)).toBe(true);
       const text = JSON.stringify(h.logs);
       expect(text).not.toContain(ACCOUNT_ID);
+    });
+  });
+
+  describe("CDN bundles and database engines (WPU-B5)", () => {
+    const cdn = (
+      bundleId: string,
+      over: Partial<RawDistributionBundle> = {},
+    ): RawDistributionBundle => ({
+      bundleId,
+      name: "Small",
+      priceUsd: "5",
+      transferPerMonthInGb: 50,
+      isActive: true,
+      ...over,
+    });
+    const db = (blueprintId: string, over: Partial<RawDbBlueprint> = {}): RawDbBlueprint => ({
+      blueprintId,
+      engine: "postgres",
+      engineVersion: "16.4",
+      engineDescription: "PostgreSQL",
+      engineVersionDescription: "PostgreSQL 16.4-R1",
+      isEngineDefault: true,
+      ...over,
+    });
+    const on = () => harness({ [A]: ONE, [B]: ONE }, { syncCdn: true, syncDbBlueprints: true });
+
+    it("off by default: neither source method is called and the report has no entries", async () => {
+      const h = harness({ [A]: ONE, [B]: ONE });
+      h.extras.cdn = new Error("must not be called");
+      h.extras.db[A] = new Error("must not be called");
+      const report = await h.run();
+      expect(report).not.toHaveProperty("cdn");
+      expect(report).not.toHaveProperty("dbBlueprints");
+    });
+
+    it("writes the CDN bundles in us-east-1 and the engines of each Region", async () => {
+      const h = on();
+      h.extras.cdn = [cdn("small_1_0"), cdn("bad id"), cdn("medium_1_0", { priceUsd: "" })];
+      h.extras.db[A] = [
+        db("postgres_16"),
+        db("mysql_8_0", { engine: "mysql", engineVersion: "8.0.36" }),
+      ];
+      h.extras.db[B] = [db("postgres_16")];
+      const report = await h.run();
+      expect(report.cdn).toEqual({
+        region: "us-east-1",
+        ok: true,
+        seen: 3,
+        mapped: 1,
+        inserted: 1,
+        updated: 0,
+        deactivated: 0,
+      });
+      expect(report.dbBlueprints?.map((r) => [r.region, r.mapped])).toEqual([
+        [A, 2],
+        [B, 1],
+      ]);
+      expect(h.rows.get("us-east-1|cdn|small_1_0")).toEqual({ active: true, priceUsd: "5" });
+      expect(h.rows.get(`${A}|db_blueprint|mysql_8_0`)).toEqual({ active: true, priceUsd: "0" });
+    });
+
+    it("a bundle AWS no longer lists is deactivated, never deleted; a second run changes nothing (R7)", async () => {
+      const h = on();
+      h.extras.cdn = [cdn("small_1_0"), cdn("old_1_0")];
+      h.extras.db[A] = [db("postgres_16")];
+      h.extras.db[B] = [db("postgres_16")];
+      await h.run();
+      h.extras.cdn = [cdn("small_1_0")];
+      const second = await h.run();
+      expect(second.cdn).toMatchObject({ deactivated: 1, inserted: 0 });
+      expect(h.rows.get("us-east-1|cdn|old_1_0")?.active).toBe(false);
+      const third = await h.run();
+      expect(third.cdn).toMatchObject({ deactivated: 0, inserted: 0 });
+    });
+
+    it("an answer with nothing usable is refused before any write and fails the run (R16)", async () => {
+      const h = on();
+      h.extras.cdn = [cdn("small_1_0")];
+      h.extras.db[A] = [db("postgres_16")];
+      h.extras.db[B] = [db("postgres_16")];
+      await h.run();
+      h.extras.cdn = [];
+      await expect(h.run()).rejects.toThrow(FIXED);
+      expect(h.rows.get("us-east-1|cdn|small_1_0")?.active).toBe(true);
+    });
+
+    it("a failing scope logs a fixed reason, does not stop the other Region and leaks nothing", async () => {
+      const h = on();
+      h.extras.cdn = [cdn("small_1_0")];
+      h.extras.db[A] = new Error(`secret ${ACCOUNT_ID}`);
+      h.extras.db[B] = [db("postgres_16")];
+      await expect(h.run()).rejects.toThrow(FIXED);
+      expect(h.rows.has(`${B}|db_blueprint|postgres_16`)).toBe(true);
+      expect(JSON.stringify(h.logs)).not.toContain(ACCOUNT_ID);
     });
   });
 

@@ -190,6 +190,18 @@ export {
   type RawBundle,
   type SyncPlan,
 } from "./catalog-sync";
+export { checkDiskSnapshotRestore, type DiskSnapshotRestoreCheck } from "./disk-restore";
+export {
+  CDN_FAMILY,
+  CDN_SYNC_REGION,
+  DB_BLUEPRINT_FAMILY,
+  mapDbBlueprint,
+  mapDistributionBundle,
+  type CdnBundleRow,
+  type DbBlueprintRow,
+  type RawDbBlueprint,
+  type RawDistributionBundle,
+} from "./catalog-extra";
 export {
   ONBOARDING_STEP_KEYS,
   groupSnapshots,

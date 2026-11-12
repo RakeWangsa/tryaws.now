@@ -150,6 +150,7 @@ function makeSync(
     runTx: asRole(over.role ?? "worker_rw"),
     // The images are proven in their own test below; the other tests count catalog rows.
     syncImages: over.blueprints !== undefined,
+    syncExtras: false,
     clock: { now: () => new Date(at) },
     log: (e) => logs.push(e),
   });

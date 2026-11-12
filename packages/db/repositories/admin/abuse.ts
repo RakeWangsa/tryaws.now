@@ -129,7 +129,13 @@ export interface AbuseAdminRepo {
   addNote(input: AbuseNoteInput, reason: string): Promise<Written<AbuseNoted>>;
   close(input: AbuseCloseInput, reason: string): Promise<Written<AbuseClosed>>;
   suspendResource(input: AbuseSuspendInput, reason: string): Promise<Written<AbuseSuspended>>;
+  /** WPU-B5 item 22: lift the suspension of an admin (a `resume` that clears config.adminSuspended). */
+  restoreResource(input: AbuseSuspendInput, reason: string): Promise<Written<AbuseRestored>>;
 }
+
+// The same shape as a suspension: the operation to send after the commit (null on a replay).
+export type AbuseRestored = AbuseSuspended;
+const RESTORE_KEY = "abuse-restore:";
 
 // Thrown inside the audited write, so that a refusal writes no audit row.
 class Refusal extends Error {
@@ -379,6 +385,73 @@ export function abuseAdminRepo(scope: AdminScope): AbuseAdminRepo {
               replayed: closed,
               before: { status: current.status },
               after: { status: "closed" },
+            };
+          },
+        );
+      } catch (error) {
+        if (error instanceof Refusal) return refused(error.code);
+        throw error;
+      }
+    },
+
+    async restoreResource(input, reason) {
+      const { caseId, at } = input;
+      if (!canSuspend) return refused("forbidden");
+      if (typeof caseId !== "string" || !isUuid(caseId) || !isValidDate(at)) {
+        return refused("validation");
+      }
+      const key = `${RESTORE_KEY}${caseId}`;
+      try {
+        return await audited(
+          scope,
+          { action: "abuse.restore_resource", targetType: "abuse_case", targetId: caseId, reason },
+          async () => {
+            // A case may be closed already: closing it never resumed the resource.
+            const current = await lockCase(caseId);
+            const resourceId = current.resource_id;
+            const known = await scope.tx.execute<{ id: string }>(
+              sql`select id from operations where idempotency_key = ${key}`,
+            );
+            const prior = known.rows[0];
+            if (prior !== undefined) {
+              return {
+                value: { caseId, resourceId, operationId: prior.id, message: null },
+                replayed: true,
+                before: null,
+                after: { resourceId, operationId: prior.id },
+              };
+            }
+            const resource = await scope.tx.execute<{ state: string; marked: boolean }>(
+              sql`select state, coalesce((config -> 'adminSuspended') = 'true'::jsonb, false) as marked
+                  from resources where id = ${resourceId}`,
+            );
+            const row = resource.rows[0];
+            if (row === undefined) throw new Refusal("not_found");
+            // Only a suspension that an admin made (the mark the provisioner set) is lifted here; a
+            // grace suspension is lifted by the renewal (R16).
+            if (row.state !== "suspended" || !row.marked) throw new Refusal("conflict");
+            const op = await insertOperation(
+              scope.tx,
+              {
+                resourceId,
+                kind: "resume",
+                payload: { adminSuspended: false, abuseCaseId: caseId },
+                idempotencyKey: key,
+              },
+              at,
+            );
+            return {
+              value: {
+                caseId,
+                resourceId,
+                operationId: op.operationId,
+                message: op.created
+                  ? { operationId: op.operationId, resourceId, enqueueSeq: op.enqueueSeq }
+                  : null,
+              },
+              replayed: !op.created,
+              before: { resourceState: row.state },
+              after: { resourceId, operationId: op.operationId, kind: "resume" },
             };
           },
         );

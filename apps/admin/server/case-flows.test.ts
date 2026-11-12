@@ -42,6 +42,7 @@ function rig(over: Over = {}) {
       addNote: record("addNote"),
       close: record("close"),
       suspendResource: record("suspend"),
+      restoreResource: record("restore"),
     },
     payments: { resolveDiscrepancy: record("resolve") },
   } as unknown as AdminRepos;
@@ -220,6 +221,20 @@ describe("abuse actions in the order of R9", () => {
       sent: true,
     });
     expect(r.asked).toEqual([["ops", "superadmin"]]);
+    expect(r.steps).toEqual(["authorize", "limit", "execute", "committed", "send"]);
+    expect(r.sent).toEqual([MESSAGE]);
+  });
+
+  it("restoreResource (WPU-B5) asks for ops and superadmin only, calls the restore and sends after the commit", async () => {
+    const r = rig({ answer: OK({ message: MESSAGE }) });
+    expect(await r.abuse(base("restoreResource"))).toEqual({
+      ok: true,
+      replayed: false,
+      targetId: ID,
+      sent: true,
+    });
+    expect(r.asked).toEqual([["ops", "superadmin"]]);
+    expect(r.calls).toEqual([["restore", { caseId: ID, at: NOW }, "spam reported"]]);
     expect(r.steps).toEqual(["authorize", "limit", "execute", "committed", "send"]);
     expect(r.sent).toEqual([MESSAGE]);
   });

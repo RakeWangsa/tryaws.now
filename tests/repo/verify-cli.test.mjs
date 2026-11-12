@@ -155,6 +155,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T2",
     "WPP-T3",
     "WPP-T4",
+    "WPU-B5",
     "WPU-C1",
     "WPU-D1",
     "WPU-D2",
@@ -903,6 +904,47 @@ it("task WPU-F1 is proven by lint, types, format, the digit helper, mail, render
     ["ui", "pnpm test --filter @tc/ui"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-B5 is proven by lint, types, format, the aws, core, db, provisioner, catalog-sync, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-B5"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["provisioner", "pnpm test --filter @tc/fn-provisioner --no-passWithNoTests"],
+    ["catalog-sync", "pnpm test --filter @tc/fn-catalog-sync --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-B5 exists: the admin mark, the restore, the CDN and database catalog, and the disk from a snapshot", () => {
+  for (const [file, part] of [
+    [
+      "functions/provisioner/admin-suspended.test.ts",
+      "is cleared when a resume with adminSuspended false succeeds",
+    ],
+    ["packages/db/test/admin-abuse-restore.test.ts", "restoreResource writes one resume operation"],
+    [
+      "packages/aws/test/catalog-cdn-db.test.ts",
+      "distributionBundles: reads GetDistributionBundles in us-east-1",
+    ],
+    ["functions/catalog-sync/handler.test.ts", "CDN bundles and database engines (WPU-B5)"],
+    ["packages/aws/test/disk-restore.test.ts", "calls CreateDiskFromSnapshot with generated names"],
+    [
+      "packages/core/orders/disk-restore-order.test.ts",
+      "another customer's snapshot answers like a missing one",
+    ],
+    ["apps/web/server/disk-restore-actions.test.ts", "restoreDiskDraftCore"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
 });
 
 it("the proof of WPU-F1 exists: the digit helper, the invoice stack and spans, the mail, the packaged fonts, the web unicode-range and U3", () => {

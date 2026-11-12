@@ -140,6 +140,11 @@ export const casesEn: Same<typeof casesBn> = {
         onlyOps: "Suspending a resource needs the ops or superadmin role.",
         customerHint: "To suspend the whole account of the customer, open the customer page.",
       },
+      restore: {
+        title: "Switch the resource on again",
+        hint: "This writes a resume request into the operation queue and lifts the admin suspension. A resource that was not suspended by an admin is refused. No customer data changes.",
+        submit: "Switch on",
+      },
       close: {
         title: "Close the case",
         hint: "Closing the case does not switch the resource on again.",
