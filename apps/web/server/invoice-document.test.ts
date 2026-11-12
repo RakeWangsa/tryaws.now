@@ -3,13 +3,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // WPU-G4: the printable invoice. Cross-tenant proof for the route (R8), the headers, the fail-closed
 // answers (R16).
 
+// WPU-I2: the seller is read from the invoice (the snapshot of the day of issue), never from the
+// settings. `state.seller` keeps its shape and is turned into the stored value here.
+const snapshotOf = vi.hoisted(() => (stored: unknown): unknown => {
+  const s = stored as { state: string; seller?: unknown; version?: number };
+  if (s.state === "ok") return { v: 1, version: s.version ?? 1, ...(s.seller as object) };
+  if (s.state === "invalid") return { v: 1 };
+  return null;
+});
+
 const state = vi.hoisted(() => ({
-  rows: [] as { id: string; customerId: string; lines: unknown; totalMinor: bigint }[],
+  rows: [] as {
+    id: string;
+    customerId: string;
+    lines: unknown;
+    totalMinor: bigint;
+    seller?: unknown;
+  }[],
   seller: { state: "none" } as unknown,
 }));
-vi.mock("@tc/db", () => ({
+vi.mock("@tc/db", async () => ({
+  parseSellerRowValue: (await vi.importActual<typeof import("@tc/db")>("@tc/db"))
+    .parseSellerRowValue,
   withTx: async (fn: (tx: unknown) => unknown) => fn({}),
-  readInvoiceSeller: async () => state.seller,
   customerRepos: (_tx: unknown, customerId: string) => ({
     profile: { get: async () => ({ id: customerId, market: "BD", name: "Rahim" }) },
     invoices: {
@@ -18,6 +34,7 @@ vi.mock("@tc/db", () => ({
         return found === undefined
           ? null
           : {
+              seller: (found as { seller?: unknown }).seller ?? snapshotOf(state.seller),
               ...found,
               fiscalYear: 2026,
               number: 12,
@@ -103,6 +120,30 @@ describe("the printable invoice", () => {
     const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
     expect(bn).toContain("বিক্রেতা লিমিটেড");
     expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
+  });
+
+  it("WPU-I2: a reprint shows the seller of the day of issue, not the current setting", async () => {
+    const issuedUnder = {
+      v: 1,
+      version: 1,
+      ...SELLER,
+      legalNameEn: "Old Name Ltd",
+      addressEn: "Old Road",
+    };
+    state.rows = [
+      { id: INV, customerId: A, lines: LINES, totalMinor: 69000n, seller: issuedUnder },
+    ];
+    // The owner changes the seller after the issue.
+    state.seller = {
+      state: "ok",
+      seller: { ...SELLER, legalNameEn: "New Name Ltd", addressEn: "New Road" },
+      version: 2,
+    };
+    const html = (await invoiceDocument(deps(A), "en", INV)).html as string;
+    expect(html).toContain("Old Name Ltd");
+    expect(html).toContain("Old Road");
+    expect(html).not.toContain("New Name Ltd");
+    expect(html).not.toContain("New Road");
   });
 
   it("answers 503 and prints nothing when the seller details are missing or unreadable (R16)", async () => {

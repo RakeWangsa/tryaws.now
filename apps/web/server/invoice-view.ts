@@ -8,7 +8,7 @@ import {
   type Numerals,
   type SellerDetails,
 } from "@tc/core";
-import { customerRepos, readInvoiceSeller, withTx } from "@tc/db";
+import { customerRepos, parseSellerRowValue, withTx } from "@tc/db";
 import type { InvoiceCursor } from "@tc/db";
 
 // What /invoices and /invoices/[id] show (WPU-G4), read through the repositories of the session's
@@ -143,21 +143,16 @@ export async function loadInvoice(
   session: CustomerSession,
   id: string,
 ): Promise<InvoiceDetailScreen | null> {
-  const { row, stored } = await withTx(async (tx) => {
-    const repos = customerRepos(tx, session.customerId);
-    const found = await repos.invoices.get(id);
-    if (found === null) return { row: null, stored: null };
-    // The market of the customer decides which seller details apply.
-    const profile = await repos.profile.get();
-    if (profile === null) return { row: found, stored: { state: "none" } as const };
-    return { row: found, stored: await readInvoiceSeller(tx, profile.market) };
-  });
+  const row = await withTx((tx) => customerRepos(tx, session.customerId).invoices.get(id));
   if (row === null) return null;
   const lines = parseStoredLines(row.lines, row.totalMinor);
   if (lines === null) return { state: "unavailable" };
-  // A tax invoice is never printed without complete seller details (R16): both a missing row and a row
-  // that does not parse give the same answer.
-  const seller = stored?.state === "ok" ? parseSellerDetails(stored.seller) : null;
+  // WPU-I2: the seller is the one written on the invoice on the day of issue, never the current setting:
+  // a legal document does not change on a reprint. A tax invoice is never printed without complete
+  // seller details (R16): an invoice with no snapshot (issued before it existed) or with one that does
+  // not parse gives the same answer as a missing seller.
+  const stored = parseSellerRowValue(row.seller);
+  const seller = stored === null ? null : parseSellerDetails(stored.seller);
   if (seller === null) return { state: "seller_missing" };
   return {
     state: "ready",
@@ -174,7 +169,7 @@ export async function loadInvoice(
 
 /**
  * The document of the core for the printable page: the Mushak 6.3 tax invoice. The seller is the legal
- * entity of the settings (WPU-I1). The buyer is the customer's name; the profile of a customer holds no
+ * entity written on the invoice at issue (WPU-I2). The buyer is the customer's name; the profile of a customer holds no
  * address and no BIN or NID yet (JOURNEY, WPU-I1, Needs decision), so those print as "-" and nothing is
  * invented. The VAT rate of a line, when stored, travels with the line (never recomputed).
  */

@@ -295,6 +295,15 @@ const PRODUCTS = [
   "percentText",
   "sellerFieldErrors",
   "sellerValueOf",
+  // WPU-I2: the invoice of a paid charge, its queue and the scheduler job
+  "INVOICE_AWS_LABEL",
+  "INVOICE_BACKLOG_PAGE",
+  "INVOICE_STEP_LABELS",
+  "invoiceIdFor",
+  "invoiceLinesOf",
+  "issueChargeInvoice",
+  "queueIdFor",
+  "runInvoiceBacklog",
   // WP1-T5: catalog sync (the mapping, the active rule, the plan, the BDT price on read)
   "decideActive",
   "mapInstanceBundle",

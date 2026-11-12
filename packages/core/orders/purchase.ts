@@ -2,6 +2,7 @@ import { customerRepos, findLedgerTransactionByKey, type Tx } from "@tc/db";
 import { reserveCapacity, type Reservation } from "../capacity/reserve";
 import { DNS_ZONE_TERM_DAYS } from "../dns/zone";
 import { DOMAIN_TERM_DAYS } from "../domains/resolve";
+import { issueChargeInvoice } from "../invoices/charge";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
@@ -320,6 +321,16 @@ export async function runPurchase(
         metadata: { totalMinor: total.toString(), family: product.family },
       });
       if (!audited.ok) throw new Error("orders: the audit entry was refused");
+
+      // WPU-I2: the tax invoice of this purchase (spec 9.3), in the same transaction so a rollback
+      // frees its number. It never fails the purchase: without seller details it is queued.
+      await issueChargeInvoice(sp, {
+        customerId,
+        charge: { kind: "order", orderId },
+        ledgerTransactionId: posted.value.transactionId,
+        snapshot: fresh,
+        now,
+      });
 
       return { ok: true, value: { orderId, resourceId, operationId, replayed: false } };
     });

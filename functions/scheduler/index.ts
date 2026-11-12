@@ -2,10 +2,12 @@ import { QUEUE_URL_PATTERN, createSqsClient, createSqsSend } from "@tc/aws";
 import {
   createFifoQueue,
   markPlanChangeFailed,
+  runInvoiceBacklog,
   runLifecycle,
   runMetering,
   runStaticIpMetering,
   sweepOperations,
+  type InvoiceBacklogReport,
   type LifecycleReport,
   type MeteringReport,
   type StaticIpReport,
@@ -29,11 +31,12 @@ export interface SchedulerReport {
   readonly lifecycle: LifecycleReport | null;
   readonly metering: MeteringReport | null;
   readonly staticIps: StaticIpReport | null;
+  readonly invoices: InvoiceBacklogReport | null;
   readonly rateLimitsPurged: number | null;
 }
 
 // Every run does the jobs of 3.2 in order: the operations sweep, the lifecycle pass (section
-// 11), the metering pass (WP7-T5), the unattached static IP pass (WPU-M1) and the purge of old rate-limit windows. One failing job does not stop the others; the run
+// 11), the metering pass (WP7-T5), the unattached static IP pass (WPU-M1), the owed invoices (WPU-I2) and the purge of old rate-limit windows. One failing job does not stop the others; the run
 // then rejects, so the error metric of the function moves (R16).
 export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<SchedulerReport> {
   return async () => {
@@ -41,6 +44,7 @@ export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<
     let lifecycle: LifecycleReport | null = null;
     let metering: MeteringReport | null = null;
     let staticIps: StaticIpReport | null = null;
+    let invoices: InvoiceBacklogReport | null = null;
     let rateLimitsPurged: number | null = null;
     const failed: string[] = [];
     const job = async (name: string, fn: () => Promise<void>): Promise<void> => {
@@ -84,13 +88,23 @@ export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<
       deps.log({ event: "static_ip_metering_run", ...staticIps });
       if (staticIps.failed > 0) throw new Error("scheduler: static ip rows failed");
     });
+    // WPU-I2: the tax invoices that were owed while the seller details were missing, oldest first. A seller
+    // that is still missing is not a failure of the job (the notice is in the admin queue); an invoice
+    // that was refused for another reason, or a queue row that cannot be read, is.
+    await job("invoice_backlog", async () => {
+      invoices = await runInvoiceBacklog({ runTx: deps.runTx, clock: deps.clock, log: deps.log });
+      deps.log({ event: "invoice_backlog_run", ...invoices });
+      if (invoices.failed > 0 || invoices.unreadable > 0) {
+        throw new Error("scheduler: invoice backlog rows failed");
+      }
+    });
     await job("rate_limits", async () => {
       const before = new Date(deps.clock.now().getTime() - RATE_LIMIT_RETENTION_MS);
       rateLimitsPurged = await deps.runTx((tx) => purgeRateLimits(tx, before));
       deps.log({ event: "rate_limits_purged", count: rateLimitsPurged });
     });
     if (failed.length > 0) throw new Error(`scheduler: ${failed.join(", ")} failed`);
-    return { sweep, lifecycle, metering, staticIps, rateLimitsPurged };
+    return { sweep, lifecycle, metering, staticIps, invoices, rateLimitsPurged };
   };
 }
 

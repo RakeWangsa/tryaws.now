@@ -1,4 +1,5 @@
 import { lifecycleRepo, type LifecycleRow, type Tx } from "@tc/db";
+import { issueChargeInvoice } from "../invoices/charge";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
@@ -95,5 +96,14 @@ export async function renewSubscription(
   if (!posted.ok) return { ok: false, error: posted.error };
 
   await lifecycleRepo(tx).setPeriod(row.id, { status: "active", periodStart, periodEnd });
+  // WPU-I2: the tax invoice of this renewal (spec 9.3), once for the charge: a replay of the posting
+  // finds the invoice of the first call. It never fails the renewal: without seller details it is queued.
+  await issueChargeInvoice(tx, {
+    customerId: row.customerId,
+    charge: { kind: "renewal" },
+    ledgerTransactionId: posted.value.transactionId,
+    snapshot: fresh,
+    now: clock.now(),
+  });
   return { ok: true, value: { periodStart, periodEnd, totalMinor: total } };
 }
