@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
-import { newOrder, seedSeller } from "../fixtures";
+import { newOrder, newRenewalCharge, seedSeller } from "../fixtures";
 import { insertRow } from "../sql";
 import { defineCaseSet, type CaseSet } from "./define";
 
@@ -9,6 +9,10 @@ interface Seed {
   // An order that has this invoice, and one that has none (the target of issue).
   orderId: string;
   freeOrderId: string;
+  // WPU-I2: a renewal charge of the customer (the target of issueForCharge), and the ledger
+  // transaction of the free order (the target of queueBacklog).
+  renewalTx: string;
+  freeOrderTx: string;
 }
 
 // The number of the seeded invoice is random: the numbers are unique per fiscal year over the whole
@@ -27,7 +31,20 @@ export const invoicesCases: CaseSet = defineCaseSet<Seed>({
       lines: "[]",
       total_minor: 100,
     });
-    return { invoiceId, orderId, freeOrderId: await newOrder(pool, customerId) };
+    const freeOrderId = await newOrder(pool, customerId);
+    const freeOrderTx = (
+      await pool.query<{ id: string }>(
+        "select ledger_transaction_id as id from orders where id = $1",
+        [freeOrderId],
+      )
+    ).rows[0]!.id;
+    return {
+      invoiceId,
+      orderId,
+      freeOrderId,
+      renewalTx: await newRenewalCharge(pool, customerId),
+      freeOrderTx,
+    };
   },
   cases: ({ asCustomer }) => ({
     "invoices.get": {
@@ -50,6 +67,37 @@ export const invoicesCases: CaseSet = defineCaseSet<Seed>({
             id: uuidv7(),
             orderId: s.freeOrderId,
             fiscalYear: 2026,
+            lines: [{ kind: "service", code: "aws" }],
+            totalMinor: 100n,
+          }),
+        ).then((w) => (w.ok ? { ok: true as const } : w)),
+    },
+    // WPU-I2: the ledger transaction must be a renewal of the customer's own subscription.
+    "invoices.issueForCharge": {
+      kind: "write",
+      run: (c, s) =>
+        asCustomer(c, (r) =>
+          r.invoices.issueForCharge({
+            id: uuidv7(),
+            ledgerTransactionId: s.renewalTx,
+            fiscalYear: 2026,
+            lines: [{ kind: "service", code: "aws" }],
+            totalMinor: 100n,
+          }),
+        ).then((w) => (w.ok ? { ok: true as const } : w)),
+    },
+    // WPU-I2: only a charge with a wallet debit of the customer in it is queued. It writes a row of the
+    // admin queue (`discrepancies`, no tenant table), so the proof is the answer: A queues its own
+    // charge, B's attempt on it answers like an attempt on a missing charge.
+    "invoices.queueBacklog": {
+      kind: "read",
+      run: (c, s) =>
+        asCustomer(c, (r) =>
+          r.invoices.queueBacklog({
+            id: uuidv7(),
+            kind: "order",
+            orderId: s.freeOrderId,
+            ledgerTransactionId: s.freeOrderTx,
             lines: [{ kind: "service", code: "aws" }],
             totalMinor: 100n,
           }),

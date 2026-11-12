@@ -10,6 +10,7 @@ import {
   type SellerRow,
 } from "../config/invoice-seller";
 import { lockInvoiceSellerWrites } from "../config/locks";
+import { INVOICE_BACKLOG_SOURCE } from "../customer/invoices";
 import { refused, type Written } from "../result";
 import { audited, isActiveAdmin } from "./audited";
 import type { AdminRole, AdminScope } from "./index";
@@ -32,7 +33,15 @@ export interface InvoiceSellerSaved {
   version: number;
 }
 
+// WPU-I2: the charges of a market that wait for an invoice because the seller details were missing.
+export interface InvoiceBacklogState {
+  count: number;
+  oldest: Date | null;
+}
+
 export interface InvoiceSellerAdminRepo {
+  /** How many charges wait for an invoice in this market, and since when. */
+  backlog(market: string): Promise<Written<InvoiceBacklogState>>;
   read(market: string): Promise<Written<SellerRead>>;
   save(input: InvoiceSellerInput, reason: string): Promise<Written<InvoiceSellerSaved>>;
 }
@@ -43,6 +52,31 @@ const same = (a: SellerRow, b: SellerRow): boolean =>
 export function invoiceSellerAdminRepo(scope: AdminScope): InvoiceSellerAdminRepo {
   const { role } = scope.actor;
   return {
+    async backlog(market) {
+      if (!ROLES.includes(role) || !(await isActiveAdmin(scope))) return refused("forbidden");
+      if (!isMarketCode(market)) return refused("validation");
+      const found = await scope.tx.execute<{ n: string; oldest: Date | null }>(
+        sql`select count(*)::text as n, min(q.created_at) as oldest from (
+              select distinct on (d.details->>'ledgerTransactionId') d.created_at, d.details
+              from discrepancies d
+              where d.kind = 'missing' and d.details->>'source' = ${INVOICE_BACKLOG_SOURCE}
+                and not exists (select 1 from invoices i
+                                where i.ledger_transaction_id::text = d.details->>'ledgerTransactionId')
+              order by d.details->>'ledgerTransactionId', d.created_at) q
+            join customers c on c.id::text = q.details->>'customerId'
+            where c.market = ${market}`,
+      );
+      const row = found.rows[0];
+      return {
+        ok: true,
+        value: {
+          count: row === undefined ? 0 : Number(row.n),
+          oldest: row?.oldest == null ? null : new Date(row.oldest),
+        },
+        replayed: false,
+      };
+    },
+
     async read(market) {
       if (!ROLES.includes(role) || !(await isActiveAdmin(scope))) return refused("forbidden");
       if (!isMarketCode(market)) return refused("validation");

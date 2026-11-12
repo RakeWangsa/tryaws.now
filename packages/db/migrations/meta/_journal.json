@@ -106,6 +106,13 @@
       "when": 1794478978288,
       "tag": "0015_static_ip_unattached_price",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794482578288,
+      "tag": "0016_invoice_seller_snapshot",
+      "breakpoints": true
     }
   ]
 }

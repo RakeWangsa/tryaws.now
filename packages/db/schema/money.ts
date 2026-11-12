@@ -275,11 +275,23 @@ export const invoices = pgTable(
     totalMinor: money("total_minor").notNull(),
     issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
     pdfKey: text("pdf_key"),
+    // WPU-I2: the seller details of the day of issue, as the seller setting held them. A legal
+    // document does not change on a reprint. NULL only on a row issued before this column existed;
+    // such a row is never printed (the reader fails closed).
+    seller: jsonb("seller"),
+    // WPU-I2: the money transaction that this invoice is for (a purchase or a renewal). Unique: one
+    // invoice for each charge (R7).
+    ledgerTransactionId: uuid("ledger_transaction_id").references(() => ledgerTransactions.id),
     createdAt: createdAt(),
   },
   (t) => [
     unique("invoices_fiscal_year_number_unique").on(t.fiscalYear, t.number),
     unique("invoices_order_id_unique").on(t.orderId),
+    unique("invoices_ledger_transaction_id_unique").on(t.ledgerTransactionId),
+    check(
+      "invoices_seller_check",
+      sql`${t.seller} IS NULL OR jsonb_typeof(${t.seller}) = 'object'`,
+    ),
     index("invoices_customer_id_idx").on(t.customerId),
     check("invoices_fiscal_year_check", sql`${t.fiscalYear} >= 2026`),
     check("invoices_number_check", sql`${t.number} > 0`),

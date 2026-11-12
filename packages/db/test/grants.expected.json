@@ -1,983 +1,4 @@
 {
-  "admin_users": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "cognito_sub", "role", "status"],
-      "updateColumns": ["role", "status"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "status"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "catalog_products": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": ["aws_price_usd"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "family",
-        "aws_id",
-        "platform",
-        "region",
-        "specs",
-        "aws_price_usd",
-        "billing_unit",
-        "feature_flag",
-        "active",
-        "synced_at"
-      ],
-      "updateColumns": [
-        "platform",
-        "specs",
-        "aws_price_usd",
-        "billing_unit",
-        "active",
-        "synced_at"
-      ],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "feature_flags": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["key", "market", "enabled"]
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "key", "market", "enabled"],
-      "updateColumns": ["enabled"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "fx_rates": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "market", "rate", "effective_from"]
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "market", "rate", "effective_from", "set_by"],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "market", "rate", "effective_from"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "markets": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["code", "currency", "locales", "numerals"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "pricing_rules": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "market", "product_family", "steps", "effective_from"]
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "market", "product_family", "steps", "effective_from", "set_by"],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "market", "product_family", "steps", "effective_from"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "settings": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "key", "market", "scope", "scope_id", "value"]
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "key", "market", "scope", "scope_id", "value", "set_by"],
-      "updateColumns": ["value", "set_by"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "key", "market", "scope", "scope_id", "value"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "tlds": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "tld",
-        "registration_price_usd",
-        "renewal_price_usd",
-        "transfer_price_usd",
-        "needs_extra_params",
-        "synced_at"
-      ],
-      "updateColumns": [
-        "registration_price_usd",
-        "renewal_price_usd",
-        "transfer_price_usd",
-        "needs_extra_params",
-        "synced_at"
-      ],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "customers": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "cognito_sub", "email", "phone", "name", "type", "market", "locale"],
-      "updateColumns": [
-        "name",
-        "locale",
-        "email",
-        "phone",
-        "phone_verified_at",
-        "sessions_valid_after",
-        "type"
-      ],
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": ["kyc_status", "risk_tier", "status", "sessions_valid_after"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "email", "phone", "phone_verified_at", "locale", "market"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "kyc_submissions": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": [
-        "id",
-        "customer_id",
-        "document_type",
-        "document_number_encrypted",
-        "s3_keys"
-      ],
-      "updateColumns": null,
-      "selectColumns": [
-        "id",
-        "customer_id",
-        "document_type",
-        "status",
-        "reviewed_at",
-        "note",
-        "created_at"
-      ]
-    },
-    "admin_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": ["status", "reviewer_id", "reviewed_at", "note"],
-      "selectColumns": [
-        "id",
-        "customer_id",
-        "document_type",
-        "s3_keys",
-        "status",
-        "reviewer_id",
-        "reviewed_at",
-        "note",
-        "created_at"
-      ]
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "legal_acceptances": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": ["id", "customer_id", "document", "version", "ip"],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "otp_challenges": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "customer_id", "phone", "code_hash", "expires_at"],
-      "updateColumns": ["attempts", "consumed_at"],
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "rate_limits": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": ["id", "scope_key", "window_start", "count"],
-      "updateColumns": ["count"],
-      "selectColumns": ["id", "scope_key", "window_start", "count"]
-    },
-    "admin_rw": {
-      "table": [],
-      "insertColumns": ["id", "scope_key", "window_start", "count"],
-      "updateColumns": ["count"],
-      "selectColumns": ["id", "scope_key", "window_start", "count"]
-    },
-    "worker_rw": {
-      "table": ["DELETE"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["window_start"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "ssh_keys": {
-    "web_rw": {
-      "table": ["SELECT", "DELETE"],
-      "insertColumns": ["id", "customer_id", "name", "public_key", "fingerprint"],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "customer_id", "public_key", "fingerprint"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "invoices": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "fiscal_year",
-        "number",
-        "customer_id",
-        "order_id",
-        "lines",
-        "total_minor"
-      ],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "fiscal_year",
-        "number",
-        "customer_id",
-        "order_id",
-        "lines",
-        "total_minor"
-      ],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "ledger_accounts": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "type", "customer_id", "currency"],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "ledger_entries": {
-    "web_rw": {
-      "table": ["SELECT", "INSERT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT", "INSERT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT", "INSERT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "ledger_transactions": {
-    "web_rw": {
-      "table": ["SELECT", "INSERT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT", "INSERT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT", "INSERT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "orders": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "customer_id",
-        "kind",
-        "items",
-        "price_snapshot",
-        "total_minor",
-        "ledger_transaction_id",
-        "idempotency_key"
-      ],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": ["status"],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "payments": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": [
-        "id",
-        "customer_id",
-        "gateway",
-        "merchant_transaction_id",
-        "idempotency_key",
-        "amount_minor",
-        "currency"
-      ],
-      "updateColumns": [
-        "status",
-        "gateway_transaction_id",
-        "verify_payload",
-        "verified_at",
-        "ledger_transaction_id"
-      ],
-      "selectColumns": [
-        "id",
-        "customer_id",
-        "gateway",
-        "merchant_transaction_id",
-        "idempotency_key",
-        "amount_minor",
-        "currency",
-        "status",
-        "gateway_transaction_id",
-        "verified_at",
-        "ledger_transaction_id",
-        "created_at"
-      ]
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": [
-        "status",
-        "gateway_transaction_id",
-        "verify_payload",
-        "verified_at",
-        "ledger_transaction_id"
-      ],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": [
-        "status",
-        "gateway_transaction_id",
-        "verify_payload",
-        "verified_at",
-        "ledger_transaction_id"
-      ],
-      "selectColumns": [
-        "id",
-        "customer_id",
-        "gateway",
-        "merchant_transaction_id",
-        "idempotency_key",
-        "amount_minor",
-        "currency",
-        "status",
-        "gateway_transaction_id",
-        "verified_at",
-        "ledger_transaction_id",
-        "created_at"
-      ]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "amount_minor", "currency", "status", "verified_at", "created_at"]
-    }
-  },
-  "wallet_adjustments": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "customer_id",
-        "direction",
-        "amount_minor",
-        "kind",
-        "reason",
-        "evidence_ref",
-        "requested_by",
-        "status",
-        "ledger_transaction_id"
-      ],
-      "updateColumns": ["approved_by", "status", "ledger_transaction_id"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "wallets": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "customer_id", "currency"],
-      "updateColumns": ["balance_minor", "version"],
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": ["balance_minor", "version"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": ["balance_minor", "version"],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "customer_homes": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "customer_id", "region", "pool_account_id"],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "operations": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": [
-        "id",
-        "resource_id",
-        "kind",
-        "state",
-        "idempotency_key",
-        "payload",
-        "needs_approval"
-      ],
-      "updateColumns": null,
-      "selectColumns": [
-        "id",
-        "resource_id",
-        "kind",
-        "state",
-        "step",
-        "needs_approval",
-        "idempotency_key",
-        "enqueue_seq",
-        "created_at"
-      ]
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "resource_id", "kind", "state", "idempotency_key", "payload"],
-      "updateColumns": ["state", "approved_by", "next_run_at", "enqueue_seq"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "resource_id",
-        "kind",
-        "state",
-        "idempotency_key",
-        "payload",
-        "needs_approval",
-        "next_run_at"
-      ],
-      "updateColumns": ["state", "step", "attempts", "enqueue_seq", "next_run_at", "last_error"],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": [
-        "id",
-        "resource_id",
-        "kind",
-        "state",
-        "attempts",
-        "next_run_at",
-        "created_at"
-      ]
-    }
-  },
-  "pool_accounts": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "tier", "status"]
-    },
-    "admin_rw": {
-      "table": [],
-      "insertColumns": [
-        "id",
-        "aws_account_id",
-        "name",
-        "tier",
-        "role_arn",
-        "external_id",
-        "status"
-      ],
-      "updateColumns": null,
-      "selectColumns": ["id", "name", "tier", "status", "created_at"]
-    },
-    "worker_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "aws_account_id", "role_arn", "external_id", "status"]
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "pool_capacity": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": ["used"],
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT", "INSERT"],
-      "insertColumns": null,
-      "updateColumns": ["quota_limit"],
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": ["used", "checked_at"],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "resources": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "customer_id",
-        "family",
-        "product_id",
-        "pool_account_id",
-        "region",
-        "parent_resource_id",
-        "config"
-      ],
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "customer_id",
-        "family",
-        "product_id",
-        "pool_account_id",
-        "region",
-        "aws_name",
-        "state",
-        "parent_resource_id",
-        "config"
-      ],
-      "updateColumns": ["state", "config", "deleted_at", "aws_name"],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": ["id", "family", "state", "region", "created_at"]
-    }
-  },
-  "subscriptions": {
-    "web_rw": {
-      "table": ["SELECT"],
-      "insertColumns": [
-        "id",
-        "resource_id",
-        "customer_id",
-        "term_days",
-        "price_snapshot",
-        "period_start",
-        "period_end",
-        "auto_renew"
-      ],
-      "updateColumns": ["auto_renew", "period_start", "period_end", "status"],
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": null,
-      "updateColumns": ["status", "period_start", "period_end"],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
-  "usage_records": {
-    "web_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "admin_rw": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    },
-    "worker_rw": {
-      "table": ["SELECT"],
-      "insertColumns": ["id", "resource_id", "metric", "period", "quantity"],
-      "updateColumns": ["quantity"],
-      "selectColumns": null
-    },
-    "report_ro": {
-      "table": [],
-      "insertColumns": null,
-      "updateColumns": null,
-      "selectColumns": null
-    }
-  },
   "abuse_cases": {
     "web_rw": {
       "table": [],
@@ -996,6 +17,32 @@
       "insertColumns": null,
       "updateColumns": null,
       "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "admin_users": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "cognito_sub", "role", "status"],
+      "updateColumns": ["role", "status"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "status"]
     },
     "report_ro": {
       "table": [],
@@ -1052,6 +99,111 @@
       ],
       "updateColumns": null,
       "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "catalog_products": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": ["aws_price_usd"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "family",
+        "aws_id",
+        "platform",
+        "region",
+        "specs",
+        "aws_price_usd",
+        "billing_unit",
+        "feature_flag",
+        "active",
+        "synced_at"
+      ],
+      "updateColumns": [
+        "platform",
+        "specs",
+        "aws_price_usd",
+        "billing_unit",
+        "active",
+        "synced_at"
+      ],
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "customer_homes": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "customer_id", "region", "pool_account_id"],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "customers": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "cognito_sub", "email", "phone", "name", "type", "market", "locale"],
+      "updateColumns": [
+        "name",
+        "locale",
+        "email",
+        "phone",
+        "phone_verified_at",
+        "sessions_valid_after",
+        "type"
+      ],
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": ["kyc_status", "risk_tier", "status", "sessions_valid_after"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "email", "phone", "phone_verified_at", "locale", "market"]
     },
     "report_ro": {
       "table": [],
@@ -1181,6 +333,284 @@
       "selectColumns": null
     }
   },
+  "feature_flags": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["key", "market", "enabled"]
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "key", "market", "enabled"],
+      "updateColumns": ["enabled"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "fx_rates": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "market", "rate", "effective_from"]
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "market", "rate", "effective_from", "set_by"],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "market", "rate", "effective_from"]
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "invoices": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "fiscal_year",
+        "number",
+        "customer_id",
+        "order_id",
+        "lines",
+        "total_minor",
+        "seller",
+        "ledger_transaction_id"
+      ],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "fiscal_year",
+        "number",
+        "customer_id",
+        "order_id",
+        "lines",
+        "total_minor",
+        "seller",
+        "ledger_transaction_id"
+      ],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "kyc_submissions": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": [
+        "id",
+        "customer_id",
+        "document_type",
+        "document_number_encrypted",
+        "s3_keys"
+      ],
+      "updateColumns": null,
+      "selectColumns": [
+        "id",
+        "customer_id",
+        "document_type",
+        "status",
+        "reviewed_at",
+        "note",
+        "created_at"
+      ]
+    },
+    "admin_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": ["status", "reviewer_id", "reviewed_at", "note"],
+      "selectColumns": [
+        "id",
+        "customer_id",
+        "document_type",
+        "s3_keys",
+        "status",
+        "reviewer_id",
+        "reviewed_at",
+        "note",
+        "created_at"
+      ]
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "ledger_accounts": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "type", "customer_id", "currency"],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "ledger_entries": {
+    "web_rw": {
+      "table": ["SELECT", "INSERT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT", "INSERT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT", "INSERT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "ledger_transactions": {
+    "web_rw": {
+      "table": ["SELECT", "INSERT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT", "INSERT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT", "INSERT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "legal_acceptances": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": ["id", "customer_id", "document", "version", "ip"],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "markets": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["code", "currency", "locales", "numerals"]
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
   "notifications": {
     "web_rw": {
       "table": [],
@@ -1240,6 +670,451 @@
       "selectColumns": null
     }
   },
+  "operations": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": [
+        "id",
+        "resource_id",
+        "kind",
+        "state",
+        "idempotency_key",
+        "payload",
+        "needs_approval"
+      ],
+      "updateColumns": null,
+      "selectColumns": [
+        "id",
+        "resource_id",
+        "kind",
+        "state",
+        "step",
+        "needs_approval",
+        "idempotency_key",
+        "enqueue_seq",
+        "created_at"
+      ]
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "resource_id", "kind", "state", "idempotency_key", "payload"],
+      "updateColumns": ["state", "approved_by", "next_run_at", "enqueue_seq"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "resource_id",
+        "kind",
+        "state",
+        "idempotency_key",
+        "payload",
+        "needs_approval",
+        "next_run_at"
+      ],
+      "updateColumns": ["state", "step", "attempts", "enqueue_seq", "next_run_at", "last_error"],
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": [
+        "id",
+        "resource_id",
+        "kind",
+        "state",
+        "attempts",
+        "next_run_at",
+        "created_at"
+      ]
+    }
+  },
+  "orders": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "customer_id",
+        "kind",
+        "items",
+        "price_snapshot",
+        "total_minor",
+        "ledger_transaction_id",
+        "idempotency_key"
+      ],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": ["status"],
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "otp_challenges": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "customer_id", "phone", "code_hash", "expires_at"],
+      "updateColumns": ["attempts", "consumed_at"],
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "payments": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": [
+        "id",
+        "customer_id",
+        "gateway",
+        "merchant_transaction_id",
+        "idempotency_key",
+        "amount_minor",
+        "currency"
+      ],
+      "updateColumns": [
+        "status",
+        "gateway_transaction_id",
+        "verify_payload",
+        "verified_at",
+        "ledger_transaction_id"
+      ],
+      "selectColumns": [
+        "id",
+        "customer_id",
+        "gateway",
+        "merchant_transaction_id",
+        "idempotency_key",
+        "amount_minor",
+        "currency",
+        "status",
+        "gateway_transaction_id",
+        "verified_at",
+        "ledger_transaction_id",
+        "created_at"
+      ]
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": [
+        "status",
+        "gateway_transaction_id",
+        "verify_payload",
+        "verified_at",
+        "ledger_transaction_id"
+      ],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": [
+        "status",
+        "gateway_transaction_id",
+        "verify_payload",
+        "verified_at",
+        "ledger_transaction_id"
+      ],
+      "selectColumns": [
+        "id",
+        "customer_id",
+        "gateway",
+        "merchant_transaction_id",
+        "idempotency_key",
+        "amount_minor",
+        "currency",
+        "status",
+        "gateway_transaction_id",
+        "verified_at",
+        "ledger_transaction_id",
+        "created_at"
+      ]
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "amount_minor", "currency", "status", "verified_at", "created_at"]
+    }
+  },
+  "pool_accounts": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "tier", "status"]
+    },
+    "admin_rw": {
+      "table": [],
+      "insertColumns": [
+        "id",
+        "aws_account_id",
+        "name",
+        "tier",
+        "role_arn",
+        "external_id",
+        "status"
+      ],
+      "updateColumns": null,
+      "selectColumns": ["id", "name", "tier", "status", "created_at"]
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "aws_account_id", "role_arn", "external_id", "status"]
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "pool_capacity": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": ["used"],
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT", "INSERT"],
+      "insertColumns": null,
+      "updateColumns": ["quota_limit"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": ["used", "checked_at"],
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "pricing_rules": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "market", "product_family", "steps", "effective_from"]
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "market", "product_family", "steps", "effective_from", "set_by"],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "market", "product_family", "steps", "effective_from"]
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "rate_limits": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": ["id", "scope_key", "window_start", "count"],
+      "updateColumns": ["count"],
+      "selectColumns": ["id", "scope_key", "window_start", "count"]
+    },
+    "admin_rw": {
+      "table": [],
+      "insertColumns": ["id", "scope_key", "window_start", "count"],
+      "updateColumns": ["count"],
+      "selectColumns": ["id", "scope_key", "window_start", "count"]
+    },
+    "worker_rw": {
+      "table": ["DELETE"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["window_start"]
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "resources": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "customer_id",
+        "family",
+        "product_id",
+        "pool_account_id",
+        "region",
+        "parent_resource_id",
+        "config"
+      ],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "customer_id",
+        "family",
+        "product_id",
+        "pool_account_id",
+        "region",
+        "aws_name",
+        "state",
+        "parent_resource_id",
+        "config"
+      ],
+      "updateColumns": ["state", "config", "deleted_at", "aws_name"],
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "family", "state", "region", "created_at"]
+    }
+  },
+  "settings": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "key", "market", "scope", "scope_id", "value"]
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "key", "market", "scope", "scope_id", "value", "set_by"],
+      "updateColumns": ["value", "set_by"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "key", "market", "scope", "scope_id", "value"]
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "ssh_keys": {
+    "web_rw": {
+      "table": ["SELECT", "DELETE"],
+      "insertColumns": ["id", "customer_id", "name", "public_key", "fingerprint"],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": ["id", "customer_id", "public_key", "fingerprint"]
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "subscriptions": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "resource_id",
+        "customer_id",
+        "term_days",
+        "price_snapshot",
+        "period_start",
+        "period_end",
+        "auto_renew"
+      ],
+      "updateColumns": ["auto_renew", "period_start", "period_end", "status"],
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": ["status", "period_start", "period_end"],
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
   "support_requests": {
     "web_rw": {
       "table": [],
@@ -1284,6 +1159,72 @@
       "selectColumns": null
     }
   },
+  "tlds": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "tld",
+        "registration_price_usd",
+        "renewal_price_usd",
+        "transfer_price_usd",
+        "needs_extra_params",
+        "synced_at"
+      ],
+      "updateColumns": [
+        "registration_price_usd",
+        "renewal_price_usd",
+        "transfer_price_usd",
+        "needs_extra_params",
+        "synced_at"
+      ],
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "usage_records": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "resource_id", "metric", "period", "quantity"],
+      "updateColumns": ["quantity"],
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
   "waitlist_entries": {
     "web_rw": {
       "table": [],
@@ -1301,6 +1242,69 @@
       "table": [],
       "insertColumns": null,
       "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "wallet_adjustments": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": [
+        "id",
+        "customer_id",
+        "direction",
+        "amount_minor",
+        "kind",
+        "reason",
+        "evidence_ref",
+        "requested_by",
+        "status",
+        "ledger_transaction_id"
+      ],
+      "updateColumns": ["approved_by", "status", "ledger_transaction_id"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
+  "wallets": {
+    "web_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "customer_id", "currency"],
+      "updateColumns": ["balance_minor", "version"],
+      "selectColumns": null
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": ["balance_minor", "version"],
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": ["SELECT"],
+      "insertColumns": null,
+      "updateColumns": ["balance_minor", "version"],
       "selectColumns": null
     },
     "report_ro": {

@@ -50,16 +50,18 @@ function priceQuote(input: QuoteInput, override: MarkupOverride | undefined): Pr
       override?.rate !== undefined && step.code === "markup"
         ? parseDecimal(override.rate, "markup rate")
         : parseDecimal(step.rate, `steps[${i}].rate`),
+    // The text that priced the step, reported with it (WPU-I2). Never used in a computation.
+    rateText: override?.rate !== undefined && step.code === "markup" ? override.rate : step.rate,
   }));
 
   const baseMinor = toMinor(aws.times(quantity).times(fx).times(100));
   let running: Minor = baseMinor;
-  const steps = priced.map(({ step, rate }) => {
+  const steps = priced.map(({ step, rate, rateText }) => {
     const basis = step.base === "aws" ? baseMinor : running;
     const added = step.code === "markup" ? (override?.addMinor ?? 0n) : 0n;
     const amountMinor = toMinor(new D(basis.toString()).times(rate)) + added;
     running += amountMinor;
-    return { code: step.code, amountMinor };
+    return { code: step.code, amountMinor, rate: rateText };
   });
 
   return {

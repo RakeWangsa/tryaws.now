@@ -178,6 +178,54 @@ export async function newOrder(q: Queryable, customerId: string): Promise<string
   });
 }
 
+// A renewal charge: a resource with a subscription, and the ledger transaction that the renewal posts.
+export async function newRenewalCharge(
+  q: pg.Pool,
+  customerId: string,
+  amount = 100,
+): Promise<string> {
+  const resource = await insertRow(q, "resources", {
+    customer_id: customerId,
+    family: "linux_instance",
+  });
+  const subscription = await insertRow(q, "subscriptions", {
+    resource_id: resource,
+    customer_id: customerId,
+    term_days: 30,
+    price_snapshot: "{}",
+    period_start: "2026-11-01",
+    period_end: "2026-12-01",
+  });
+  const found = await q.query<{ id: string }>(
+    "select id from ledger_accounts where type = 'customer_wallet' and customer_id = $1",
+    [customerId],
+  );
+  const wallet = found.rows[0]?.id ?? (await newLedgerAccount(q, "customer_wallet", customerId));
+  const revenue = await systemAccount(q, "revenue_aws_base");
+  return inTransaction(q, async (c) => {
+    const id = await insertRow(c, "ledger_transactions", {
+      kind: "renewal",
+      reference_type: "subscription",
+      reference_id: subscription,
+      idempotency_key: "renew:" + uniqueSuffix(),
+      actor_type: "system",
+    });
+    await insertRow(c, "ledger_entries", {
+      transaction_id: id,
+      account_id: wallet,
+      direction: "debit",
+      amount_minor: amount,
+    });
+    await insertRow(c, "ledger_entries", {
+      transaction_id: id,
+      account_id: revenue,
+      direction: "credit",
+      amount_minor: amount,
+    });
+    return id;
+  });
+}
+
 export const APPEND_ONLY_TABLES = [
   "ledger_transactions",
   "ledger_entries",

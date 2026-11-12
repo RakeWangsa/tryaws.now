@@ -11,7 +11,11 @@ export interface PriceQuote {
   fxRate: string;
   ruleVersion: string;
   baseMinor: Minor;
-  steps: { code: string; amountMinor: Minor }[];
+  /**
+   * `rate` is the rate that priced the step, as the text of the rule (WPU-I2: the tax invoice prints it).
+   * It is only reported: no amount is computed from it here, and a snapshot stored before has none.
+   */
+  steps: { code: string; amountMinor: Minor; rate?: string }[];
   totalMinor: Minor;
 }
 export interface PricingRule {
