@@ -328,3 +328,55 @@ describe("manual snapshots and refusals", () => {
     expect(await adapter.aws.describe(ctx(null))).toEqual({ state: "missing" });
   });
 });
+describe("set_db_options (WPU-G7)", () => {
+  const act = (h: ReturnType<typeof setup>, payload: unknown, state = "active") => {
+    const c = h.ctx(null, { kind: "set_db_options", payload });
+    return h.adapter.aws.action("set_db_options", {
+      ...c,
+      resource: { ...c.resource, state },
+    });
+  };
+
+  it("sets the backup window and the public mode with the generated name (R11)", async () => {
+    const h = setup();
+    h.aws.on("lightsail", "UpdateRelationalDatabase", lightsailOk({ operations: [] }));
+    const r = await act(h, {
+      backupWindow: "16:00-16:30",
+      publiclyAccessible: true,
+    });
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: { backupWindow: "16:00-16:30", publiclyAccessible: true },
+      },
+    });
+    expect(h.bodyOf("UpdateRelationalDatabase")).toEqual({
+      relationalDatabaseName: awsResourceName("database", RID),
+      preferredBackupWindow: "16:00-16:30",
+      publiclyAccessible: true,
+      applyImmediately: true,
+    });
+    expect(h.aws.seen.map((x) => x.body).join("\n")).not.toContain("My Secret Orders DB");
+  });
+
+  it("accepts one option alone and refuses an empty, malformed or not-active request", async () => {
+    const one = setup();
+    one.aws.on("lightsail", "UpdateRelationalDatabase", lightsailOk({ operations: [] }));
+    await act(one, { publiclyAccessible: false });
+    expect(one.bodyOf("UpdateRelationalDatabase")).not.toHaveProperty("preferredBackupWindow");
+    for (const payload of [
+      null,
+      {},
+      { backupWindow: "16:00-16:10" },
+      { backupWindow: 5 },
+      { publiclyAccessible: "yes" },
+    ]) {
+      await expect(act(setup(), payload)).rejects.toMatchObject({
+        code: "validation",
+      });
+    }
+    await expect(act(setup(), { publiclyAccessible: true }, "stopped")).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+});

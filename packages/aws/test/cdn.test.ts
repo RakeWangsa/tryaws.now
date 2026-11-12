@@ -411,3 +411,23 @@ describe("destroy, snapshots, describe and config", () => {
     expectNoLeak(error);
   });
 });
+describe("reset_cache (WPU-G7)", () => {
+  it("flushes the cache of this distribution only, by its generated name, on an active one", async () => {
+    const { aws, adapter, ctx, body } = setup();
+    aws.on("lightsail", "ResetDistributionCache", lightsailOk({ status: "Success" }));
+    const r = await adapter.aws.action(
+      "reset_cache",
+      ctx(null, { kind: "reset_cache", state: "active" }),
+    );
+    expect(r).toMatchObject({ kind: "done" });
+    expect(body("ResetDistributionCache")).toEqual({ distributionName: DIST });
+  });
+
+  it("refuses a distribution that is not active (R16)", async () => {
+    const { aws, adapter, ctx } = setup();
+    await expect(
+      adapter.aws.action("reset_cache", ctx(null, { kind: "reset_cache", state: "stopped" })),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(aws.seen.length).toBe(0);
+  });
+});

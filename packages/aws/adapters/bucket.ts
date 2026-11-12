@@ -250,6 +250,13 @@ export function createBucketAdapter(deps: BucketDeps): ProductAdapter<BucketConf
         );
         return stepDone();
       }
+      case "set_bucket_versioning": {
+        const versioning = payload?.versioning;
+        if (versioning !== "Enabled" && versioning !== "Suspended") throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await lightsail.send(new UpdateBucketCommand({ bucketName: name, versioning }));
+        return stepDone({ configMerge: { versioning } });
+      }
       case "delete_access_key": {
         const id = payload?.accessKeyId;
         if (typeof id !== "string" || !KEY_ID.test(id)) throw fail("validation");

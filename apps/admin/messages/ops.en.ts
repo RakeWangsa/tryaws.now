@@ -56,7 +56,6 @@ export const opsEn: Same<typeof opsBn> = {
       request_certificate: "Request certificate",
       refresh_certificate: "Check and attach certificate",
       set_db_options: "Change database settings",
-      create_db_snapshot: "Database snapshot",
       set_bucket_versioning: "Bucket versioning",
       reset_cache: "Flush CDN cache",
       reject_operation: "Reject a stuck operation",
