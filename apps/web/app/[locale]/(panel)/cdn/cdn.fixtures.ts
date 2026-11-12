@@ -72,6 +72,7 @@ export function detail(over: Partial<CdnDetail> = {}): CdnDetail {
     certificate: null,
     currentProductId: PLAN_SMALL,
     pendingProductId: null,
+    pendingFailed: false,
     plans: [plan(), plan({ id: PLAN_MEDIUM, bundle: "medium_1_0", priceMinor: 139000n })],
     renewsAt: new Date("2026-12-10T08:00:00Z"),
     ...over,

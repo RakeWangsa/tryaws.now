@@ -149,6 +149,12 @@ export const CONTAINER_ANCHORS: readonly MockupAnchor[] = [
     classes: ["bg-seccolorstyle", "noshadow", "wrapper", "title"],
   },
   {
+    state: "containers_detail.plan_failed",
+    mockupFile: "template/promos.html",
+    why: "a plan whose apply failed is a warning alert, text and icon, never a color alone (WPU-S3)",
+    classes: ["alert", "alert-warning"],
+  },
+  {
     state: "containers_detail.domain_issued",
     mockupFile: "template/cart.html",
     why: "the domain tab with the validation records keeps the card and table classes",

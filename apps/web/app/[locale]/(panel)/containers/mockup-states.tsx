@@ -100,6 +100,10 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
     detail({ pendingProductId: PLAN_MICRO, endpointContainer: 1 }),
     "plan",
   ),
+  "containers_detail.plan_failed": detailOf(
+    detail({ pendingProductId: PLAN_MICRO, pendingFailed: true }),
+    "plan",
+  ),
   "containers_detail.domain_issued": detailOf(
     detail({
       certificate: {

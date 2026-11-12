@@ -119,6 +119,20 @@ describe("/cdn/[id]", () => {
     expect(html).not.toMatch(/name="(bundle|bundleId|price|amount)"/);
   });
 
+  it("a plan whose apply failed is shown as failed, not as scheduled (WPU-S3)", () => {
+    for (const locale of ["en", "bn"] as const) {
+      const html = render("cdn_detail.plan_failed", locale);
+      expect(html).toContain("alert-warning");
+      expect(html).not.toContain("Starts at the next renewal");
+      expect(html).toMatch(/name="cancel" value="yes"/);
+    }
+    const html = render("cdn_detail.plan_failed");
+    expect(html).toContain("The planned change could not be applied.");
+    expect(html).toContain("Your next renewal charges the plan you have now.");
+    expect(html).not.toMatch(/conflict|lease_expired/);
+    expect(render("cdn_detail.plan_failed", "bn")).toMatch(/[ঀ-৿]/);
+  });
+
   it("the cache tab shows the saved policy with closed lists and one text box for the path rules", () => {
     const html = render("cdn_detail.cache_saved");
     expect(html).toContain("images/*=cache");

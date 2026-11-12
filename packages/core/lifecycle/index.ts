@@ -22,10 +22,14 @@ export {
   PLAN_APPLY_STATES,
   PLAN_CHANGE_FAMILIES,
   markPlanChangeFailed,
+  planApplyInFlight,
   planChangeFailed,
+  planFailedFor,
   planPriceFor,
   queuePlanChange,
   readPlanChange,
+  readPlanFailure,
+  type PlanFailure,
   type PlanPrice,
 } from "./plan-change";
 export { renewalQuote, renewSubscription, type Renewed } from "./renew";

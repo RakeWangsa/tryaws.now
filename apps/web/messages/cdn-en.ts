@@ -142,6 +142,7 @@ export const cdnEn: Same<typeof cdnBn> = {
       not_found: "This was not found.",
       name_mismatch: "The name does not match. Type exactly the same name.",
       not_allowed: "This cannot be done in the current state.",
+      busy: "A new plan is being applied to this CDN now. Try again when it is done.",
       unavailable: "We could not finish this now. Please try again shortly.",
     },
     done: {

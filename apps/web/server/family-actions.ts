@@ -55,6 +55,7 @@ export type FamilyError =
   | "not_found"
   | "name_mismatch"
   | "not_allowed"
+  | "busy"
   | "unavailable";
 
 export type FamilyResult =

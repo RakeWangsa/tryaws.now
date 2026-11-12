@@ -94,6 +94,9 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "cdn_detail.pending_domain": detailOf(detail({ state: "creating", defaultDomain: null })),
   "cdn_detail.stopped": detailOf(detail({ state: "stopped" })),
   "cdn_detail.pending_plan": detailOf(detail({ pendingProductId: PLAN_MEDIUM })),
+  "cdn_detail.plan_failed": detailOf(
+    detail({ pendingProductId: PLAN_MEDIUM, pendingFailed: true }),
+  ),
   "cdn_detail.cache_saved": detailOf(
     detail({
       cachePolicy: {

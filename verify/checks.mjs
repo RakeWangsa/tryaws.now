@@ -937,6 +937,27 @@ TASKS["WPU-S2"] = [
   repo,
 ];
 
+// WPU-S3: the downgrade gaming path of the plan change. While the apply of a pending plan is queued or
+// running, the customer cannot stop or destroy the resource or schedule another plan (busy, fail
+// closed; web), the failure mark keeps {code, productId, period} and the customer cannot clear it: the
+// same product is refused, another is allowed, a cancel leaves the mark (aws adapters, web), the next
+// renewal after a failed apply charges the plan in force (core, with the database), and the plan tab
+// shows a failed plan as failed (web). The lifecycle repository gained one read (db). No AWS call. The
+// core and db suites need the local PostgreSQL (pnpm db:up).
+TASKS["WPU-S3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  scheduler,
+  web,
+  repo,
+];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

@@ -14,9 +14,14 @@ export const consoleEn: Same<typeof consoleBn> = {
       name_mismatch: "The name does not match.",
       not_allowed:
         "This cannot be done in the current state. Try again when the earlier request has finished.",
+      busy: "The new plan is being applied now. Try again when it is done.",
       unavailable: "We could not finish this now. Please try again shortly.",
     },
-    field: { invalid: "The value of this field is not right." },
+    field: {
+      invalid: "The value of this field is not right.",
+      failed:
+        "This plan could not be applied the last time. Choose another plan, or contact support.",
+    },
     done: {
       settingsQueued: "The request to change the settings was taken.",
       certificateQueued:
@@ -51,6 +56,9 @@ export const consoleEn: Same<typeof consoleBn> = {
       renews: "Next renewal: {date}",
       pending: "Starts at the next renewal: {name}, renewal price {price}.",
       pendingGone: "The plan you chose is no longer for sale. Cancel it and choose again.",
+      failedTitle: "The planned change could not be applied.",
+      failed:
+        "The plan you chose was charged but could not be set up, so it is not scheduled. Your next renewal charges the plan you have now. Cancel this change and choose another plan, or contact support.",
       none: "No change is set for the next renewal.",
       select: "New plan",
       option: "{name}: {price} (30 days)",

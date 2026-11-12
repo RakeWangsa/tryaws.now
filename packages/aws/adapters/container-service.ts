@@ -13,6 +13,7 @@ import {
   deploymentHistoryEntry,
   parseContainerConfig,
   parseDeployment,
+  planFailedFor,
   resourceTags,
   stepDone,
   stepNext,
@@ -276,13 +277,15 @@ export function createContainerServiceAdapter(
         // nothing is called in AWS and nothing is charged now. null cancels a pending change.
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
         const productId = payload?.productId;
-        if (productId === null)
-          return stepDone({ configMerge: { pendingPlan: null, pendingPlanFailed: null } });
+        // WPU-S3: the failure mark of an earlier apply is never written here; the customer cannot
+        // clear it. Only a successful apply removes it.
+        if (productId === null) return stepDone({ configMerge: { pendingPlan: null } });
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (productId === ctx.config.productId) throw fail("validation");
+        if (planFailedFor(ctx.resource.config, productId)) throw fail("validation");
         const plan = await deps.loadPlan({ customerId: ctx.resource.customerId, productId });
         if (plan === null) throw fail("validation");
-        return stepDone({ configMerge: { pendingPlan: { productId }, pendingPlanFailed: null } });
+        return stepDone({ configMerge: { pendingPlan: { productId } } });
       }
       case "scale_container": {
         // Queued by the renewal, never by a customer: the power and scale come from the catalog

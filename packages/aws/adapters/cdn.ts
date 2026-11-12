@@ -20,6 +20,7 @@ import {
   checkCdnOrigin,
   checkedContainerCertificateDomain,
   parseCdnConfig,
+  planFailedFor,
   resourceTags,
   stepDone,
   stepNext,
@@ -305,13 +306,15 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
         // nothing is called in AWS. null cancels a pending change.
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
         const productId = payload?.productId;
-        if (productId === null)
-          return stepDone({ configMerge: { pendingPlan: null, pendingPlanFailed: null } });
+        // WPU-S3: the failure mark of an earlier apply is never written here; the customer cannot
+        // clear it. Only a successful apply removes it.
+        if (productId === null) return stepDone({ configMerge: { pendingPlan: null } });
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (productId === ctx.config.productId) throw fail("validation");
+        if (planFailedFor(ctx.resource.config, productId)) throw fail("validation");
         const bundle = await deps.loadBundle({ customerId: ctx.resource.customerId, productId });
         if (bundle === null) throw fail("validation");
-        return stepDone({ configMerge: { pendingPlan: { productId }, pendingPlanFailed: null } });
+        return stepDone({ configMerge: { pendingPlan: { productId } } });
       }
       case "change_cdn_bundle": {
         // Queued by the renewal, never by a customer. The bundle comes from the catalog product the

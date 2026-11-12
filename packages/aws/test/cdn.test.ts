@@ -511,7 +511,7 @@ describe("plan change at the next renewal (WPU-G8)", () => {
   });
 
   // WPU-S2: core/lifecycle PLAN_APPLY_STATES says cdn applies in `active` only; this pins the adapter.
-  it("change_cdn_bundle applies in the active state only, and a schedule or cancel clears the failed mark", async () => {
+  it("change_cdn_bundle applies in the active state only", async () => {
     const { adapter, ctx } = setup({ deps: { loadBundle: async () => "large_1_0" } });
     for (const state of ["stopped", "suspended", "provisioning", "retained"]) {
       await expect(
@@ -521,20 +521,44 @@ describe("plan change at the next renewal (WPU-G8)", () => {
         ),
       ).rejects.toMatchObject({ code: "conflict" });
     }
-    const scheduled = await adapter.aws.action(
+  });
+
+  // WPU-S3: the customer cannot clear the failure mark for free. Re-scheduling the failed product is
+  // refused, another product is allowed, and neither a schedule nor a cancel writes the mark.
+  it("refuses to schedule the product whose apply failed; another product is allowed; the mark is never touched", async () => {
+    const failed = {
+      pendingPlan: { productId: NEXT },
+      pendingPlanFailed: { code: "conflict", productId: NEXT, period: "2026-11-01T00:00:00.000Z" },
+    };
+    const { adapter, ctx } = setup({ resource: failed });
+    await expect(
+      adapter.aws.action(
+        "schedule_plan_change",
+        ctx(null, { state: "active", payload: { productId: NEXT } }),
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+    const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const other = await adapter.aws.action(
       "schedule_plan_change",
-      ctx(null, { state: "active", payload: { productId: NEXT } }),
+      ctx(null, { state: "active", payload: { productId: OTHER } }),
     );
-    expect(scheduled).toMatchObject({
-      patch: { configMerge: { pendingPlan: { productId: NEXT }, pendingPlanFailed: null } },
-    });
+    expect(other).toMatchObject({ patch: { configMerge: { pendingPlan: { productId: OTHER } } } });
     const cancelled = await adapter.aws.action(
       "schedule_plan_change",
       ctx(null, { state: "active", payload: { productId: null } }),
     );
-    expect(cancelled).toMatchObject({
-      patch: { configMerge: { pendingPlan: null, pendingPlanFailed: null } },
-    });
+    for (const r of [other, cancelled]) {
+      expect(
+        (r as unknown as { patch: { configMerge: object } }).patch.configMerge,
+      ).not.toHaveProperty("pendingPlanFailed");
+    }
+    const clean = setup();
+    await expect(
+      clean.adapter.aws.action(
+        "schedule_plan_change",
+        clean.ctx(null, { state: "active", payload: { productId: NEXT } }),
+      ),
+    ).resolves.toMatchObject({ kind: "done" });
   });
 });
 

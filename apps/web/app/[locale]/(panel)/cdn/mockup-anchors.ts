@@ -161,6 +161,12 @@ export const CDN_ANCHORS: readonly MockupAnchor[] = [
     classes: ["tabs", "tabs-item"],
   },
   {
+    state: "cdn_detail.plan_failed",
+    mockupFile: "template/promos.html",
+    why: "a plan whose apply failed is a warning alert, text and icon, never a color alone (WPU-S3)",
+    classes: ["alert", "alert-warning"],
+  },
+  {
     state: "cdn_detail.cache_saved",
     mockupFile: "template/checkout.html",
     why: "the cache tab keeps the tabs and the form classes",

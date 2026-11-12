@@ -415,22 +415,39 @@ describe("plan change at the next renewal (WPU-G8)", () => {
     expect(calls()).toEqual([]);
   });
 
-  it("scheduling or cancelling a plan clears the failed mark of an earlier apply", async () => {
+  // WPU-S3: the customer cannot clear the failure mark for free. Re-scheduling the failed product is
+  // refused, another product is allowed, and neither a schedule nor a cancel writes the mark.
+  it("refuses to schedule the product whose apply failed; another product is allowed; the mark is never touched", async () => {
     const { adapter, ctx } = setup();
-    const scheduled = await adapter.aws.action(
+    const failed = {
+      pendingPlan: { productId: NEXT },
+      pendingPlanFailed: { code: "conflict", productId: NEXT, period: "2026-11-01T00:00:00.000Z" },
+    };
+    await expect(
+      adapter.aws.action(
+        "schedule_plan_change",
+        ctx(null, { payload: { productId: NEXT }, config: failed }),
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+    const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const other = await adapter.aws.action(
       "schedule_plan_change",
-      ctx(null, { payload: { productId: NEXT } }),
+      ctx(null, { payload: { productId: OTHER }, config: failed }),
     );
-    expect(scheduled).toMatchObject({
-      patch: { configMerge: { pendingPlan: { productId: NEXT }, pendingPlanFailed: null } },
-    });
+    expect(other).toMatchObject({ patch: { configMerge: { pendingPlan: { productId: OTHER } } } });
     const cancelled = await adapter.aws.action(
       "schedule_plan_change",
-      ctx(null, { payload: { productId: null } }),
+      ctx(null, { payload: { productId: null }, config: failed }),
     );
-    expect(cancelled).toMatchObject({
-      patch: { configMerge: { pendingPlan: null, pendingPlanFailed: null } },
-    });
+    for (const r of [other, cancelled]) {
+      expect(
+        (r as unknown as { patch: { configMerge: object } }).patch.configMerge,
+      ).not.toHaveProperty("pendingPlanFailed");
+    }
+    // Without a mark the same product is scheduled as before.
+    await expect(
+      adapter.aws.action("schedule_plan_change", ctx(null, { payload: { productId: NEXT } })),
+    ).resolves.toMatchObject({ kind: "done" });
   });
 });
 

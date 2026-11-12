@@ -218,6 +218,8 @@ export interface ContainerDetail extends ContainerRow {
   /** The plan in force and the one chosen for the next renewal (WPU-G8). */
   currentProductId: string | null;
   pendingProductId: string | null;
+  /** WPU-S3: the apply of the pending plan failed; the plan tab says so. */
+  pendingFailed: boolean;
   /** Plans on sale in the Region of the service, priced by the engine; null when nothing can be priced. */
   plans: ContainerPlanOption[] | null;
   /** The end of the paid term: a plan change takes effect then. */
@@ -292,6 +294,7 @@ export async function loadContainerDetail(
       ),
       currentProductId: planFacts.currentProductId,
       pendingProductId: planFacts.pendingProductId,
+      pendingFailed: planFacts.pendingFailed,
       plans: all === null ? null : all.filter((p) => p.region === region),
       renewsAt: subscription?.periodEnd ?? null,
       certificate: certificateFactsOf(

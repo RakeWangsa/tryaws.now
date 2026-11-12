@@ -48,6 +48,8 @@ function world(
     destroyError?: "conflict" | "not_found";
     requestError?: "not_found" | "conflict";
     session?: CustomerSession | null;
+    /** WPU-S3: the operations of the distribution, as the customer's repository lists them. */
+    ops?: { kind: string; state: string }[] | "throws";
   } = {},
 ) {
   const calls: string[] = [];
@@ -85,7 +87,10 @@ function world(
     } as never,
     operations: {
       get: async () => null,
-      listForResource: async () => [],
+      listForResource: async () => {
+        if (over.ops === "throws") throw new Error("operations unreadable");
+        return (over.ops ?? []) as never;
+      },
       listRecent: async () => [],
       request: async (input) => {
         calls.push(`op:${input.kind}:${input.idempotencyKey}:${input.resourceId}`);
@@ -189,6 +194,55 @@ describe("setCdnEnabledCore", () => {
     expect(await setCdnEnabledCore(failed.deps, off)).toEqual({
       ok: false,
       error: "unavailable",
+    });
+  });
+});
+
+// WPU-S3: while the apply of a pending plan is queued or running, the customer cannot turn the
+// distribution off or destroy it: the apply would conflict after the renewal charged the new price.
+describe("WPU-S3: no state change while a plan apply is on its way", () => {
+  const apply = (state: string) => [{ kind: "change_cdn_bundle", state }];
+  const off = { cdnId: CDN, requestId: REQ, enabled: "off" };
+  const gone = { cdnId: CDN, requestId: REQ, confirmName: "site-cdn" };
+
+  it("refuses disabling with busy and queues, audits and consumes nothing", async () => {
+    for (const state of ["queued", "running", "waiting", "needs_approval"]) {
+      const w = world({ ops: apply(state) });
+      expect(await setCdnEnabledCore(w.deps, off)).toEqual({ ok: false, error: "busy" });
+      expect(w.calls.filter((c) => c.startsWith("op:") || c.startsWith("audit:"))).toEqual([]);
+    }
+  });
+
+  it("refuses a destroy with busy", async () => {
+    const w = world({ ops: apply("queued") });
+    expect(await destroyCdnCore(w.deps, gone)).toEqual({ ok: false, error: "busy" });
+    expect(w.calls.filter((c) => c.startsWith("destroy:") || c.startsWith("audit:"))).toEqual([]);
+  });
+
+  it("a finished or failed apply, and another kind of operation, do not block", async () => {
+    for (const ops of [
+      apply("succeeded"),
+      apply("needs_attention"),
+      [{ kind: "rename", state: "queued" }],
+    ]) {
+      expect(await setCdnEnabledCore(world({ ops }).deps, off)).toEqual({
+        ok: true,
+        done: "disabled",
+      });
+    }
+  });
+
+  it("fails closed when the operations cannot be read (R16)", async () => {
+    const w = world({ ops: "throws" });
+    expect(await setCdnEnabledCore(w.deps, off)).toEqual({ ok: false, error: "unavailable" });
+    expect(await destroyCdnCore(w.deps, gone)).toEqual({ ok: false, error: "unavailable" });
+  });
+
+  it("enabling a stopped distribution is not blocked by the check", async () => {
+    const w = world({ rows: [row({ state: "stopped" })], ops: apply("queued") });
+    expect(await setCdnEnabledCore(w.deps, { cdnId: CDN, requestId: REQ, enabled: "on" })).toEqual({
+      ok: true,
+      done: "enabled",
     });
   });
 });

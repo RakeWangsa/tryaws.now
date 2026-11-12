@@ -141,6 +141,15 @@ describe("/containers/[id]", () => {
     expect(out).not.toContain("super-secret-env-value");
   });
 
+  it("a plan whose apply failed is shown as failed, not as scheduled (WPU-S3)", () => {
+    const out = render("containers_detail.plan_failed");
+    expect(out).toContain("alert-warning");
+    expect(out).toContain("The planned change could not be applied.");
+    expect(out).not.toContain("Starts at the next renewal");
+    expect(out).toMatch(/name="cancel" value="yes"/);
+    expect(render("containers_detail.plan_failed", "bn")).toMatch(/[ঀ-৿]/);
+  });
+
   it("another customer's service and a missing one show the same not-found state", () => {
     const out = render("containers_detail.not_found");
     expect(out).toContain("Container service not found");

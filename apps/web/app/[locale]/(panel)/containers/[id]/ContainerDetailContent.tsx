@@ -334,6 +334,7 @@ export function ContainerDetailContent({
               })
       }
       hasPending={service.pendingProductId !== null}
+      pendingFailed={service.pendingFailed}
       state={
         service.state !== "active" && service.state !== "stopped" && service.state !== "suspended"
           ? "inactive"

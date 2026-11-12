@@ -135,6 +135,11 @@ it("WPU-S2: an apply of a pending plan that the sweep escalates marks the plan a
   expect(report.sweep).toMatchObject({ escalated: 1 });
   const config = (await t.pool.query("select config from resources where id = $1", [resourceId]))
     .rows[0].config;
-  expect(config.pendingPlanFailed).toEqual({ code: "lease_expired" });
+  // WPU-S3: the mark holds the failed product and the period too (this resource has no subscription).
+  expect(config.pendingPlanFailed).toEqual({
+    code: "lease_expired",
+    productId: "0190aaaa-0000-7000-8000-0000000000a1",
+    period: null,
+  });
   expect(config.pendingPlan).toBeTruthy();
 });

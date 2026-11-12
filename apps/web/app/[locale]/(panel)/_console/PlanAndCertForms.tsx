@@ -32,6 +32,7 @@ export function PlanChangeForm({
   renewsText,
   choices,
   hasPending,
+  pendingFailed,
   state,
 }: {
   action: ConsoleAction;
@@ -46,6 +47,8 @@ export function PlanChangeForm({
   renewsText: string | null;
   choices: PlanChoice[];
   hasPending: boolean;
+  /** WPU-S3: the apply of the pending plan failed, so it is NOT scheduled (the renewal charges the plan in force). */
+  pendingFailed: boolean;
   /** "ready" lets the customer choose; the others say why not. */
   state: "ready" | "unpriced" | "inactive";
 }) {
@@ -61,9 +64,16 @@ export function PlanChangeForm({
         {currentName === null ? t("currentUnknown") : t("current", { name: currentName })}
       </p>
       {renewsText === null ? null : <p className="mb-1">{renewsText}</p>}
-      <p className="mb-3">
-        <b className="mergecolor">{pendingText ?? t("none")}</b>
-      </p>
+      {pendingFailed ? (
+        <div className="alert alert-warning text-start" role="status">
+          <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
+          <b className="mergecolor">{t("failedTitle")}</b> {t("failed")}
+        </div>
+      ) : (
+        <p className="mb-3">
+          <b className="mergecolor">{pendingText ?? t("none")}</b>
+        </p>
+      )}
 
       {state === "unpriced" ? <p className="seccolor">{t("unpriced")}</p> : null}
       {state === "inactive" ? <p className="seccolor">{t("inactive")}</p> : null}
@@ -80,7 +90,11 @@ export function PlanChangeForm({
             label={t("select")}
             options={choices.map((c) => ({ value: c.id, label: c.label }))}
             {...(setState.fields?.["productId"] !== undefined
-              ? { error: tc("field.invalid") }
+              ? {
+                  error: tc(
+                    setState.fields["productId"] === "failed" ? "field.failed" : "field.invalid",
+                  ),
+                }
               : {})}
           />
           <SubmitButton variant="primary">{t("submit")}</SubmitButton>

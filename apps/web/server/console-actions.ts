@@ -9,6 +9,8 @@ import {
   checkedMaintenanceWindow,
   containerPlanFrom,
   parseCachePolicy,
+  planApplyInFlight,
+  planFailedFor,
   withPublicEndpoint,
 } from "@tc/core";
 import type { OperationKind } from "@tc/core";
@@ -282,6 +284,15 @@ function planFinalize(
       id === current
     ) {
       throw new Refusal("validation", { productId: "invalid" });
+    }
+    // WPU-S3: a plan whose apply failed is not scheduled again by the customer (that would clear the
+    // mark and repeat the discount); another plan may be. Only an admin or a successful apply
+    // removes the mark.
+    if (planFailedFor(config, id)) throw new Refusal("validation", { productId: "failed" });
+    // WPU-S3: and no plan is scheduled while the apply of the earlier one is on its way. A list that
+    // cannot be read refuses (R16).
+    if (planApplyInFlight(await repos.operations.listForResource(row.id))) {
+      throw new Refusal("busy");
     }
     return payload;
   };

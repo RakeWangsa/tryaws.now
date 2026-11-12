@@ -213,6 +213,7 @@ export function CdnDetailContent({
               })
       }
       hasPending={pending !== null}
+      pendingFailed={cdn.pendingFailed}
       state={!live ? "inactive" : cdn.plans === null ? "unpriced" : "ready"}
       choices={(cdn.plans ?? [])
         .filter((p) => p.id !== cdn.currentProductId)

@@ -1,5 +1,6 @@
 import {
   insertOperation,
+  lifecycleRepo,
   patchResource,
   readCatalogProduct,
   type LifecycleRow,
@@ -23,6 +24,13 @@ import type { OperationKind } from "../operations/kinds";
 // Otherwise the renewal charges the CURRENT plan and the pending plan stays pending. A customer is
 // never charged the price of capacity that is not delivered, and never keeps bigger capacity at a
 // smaller price.
+//
+// WPU-S3. Ruling: (1) while the apply operation of a pending plan is queued or running, the customer
+// cannot stop, destroy or re-schedule (planApplyInFlight; the web cores answer busy and fail closed);
+// (2) the failure mark `pendingPlanFailed = { code, productId, period }` is not cleared by the
+// customer: scheduling the same product is refused, another product is allowed, a cancel leaves the
+// mark, and only a successful apply (or an admin, not built) removes it; (3) a mark for the pending
+// product keeps the renewal at the applied plan's price (planPriceFor), so the discount is not repeated.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -81,21 +89,74 @@ export function readPlanChange(config: unknown): {
   return { pending: idOf(raw.pendingPlan), applied: idOf(raw.appliedPlan) };
 }
 
-/** True when the apply of the pending plan ended in needs_attention (`pendingPlanFailed`). */
+const IN_FLIGHT_STATES: readonly string[] = Object.freeze([
+  "queued",
+  "running",
+  "waiting",
+  "needs_approval",
+]);
+
+/**
+ * WPU-S3. True when an apply of a pending plan (scale_container, change_cdn_bundle) is queued, running
+ * or waiting for the resource. The renewal has already charged the new price at that point, so the
+ * customer must not turn the resource off or destroy it until the apply is over: a stopped resource
+ * makes the apply conflict, and the customer would keep the bigger capacity at the cheaper price. A
+ * failed apply (needs_attention) is not in flight: that state belongs to the failure mark.
+ */
+export function planApplyInFlight(
+  operations: readonly { readonly kind: string; readonly state: string }[],
+): boolean {
+  return operations.some(
+    (o) => PLAN_APPLY_KINDS.includes(o.kind) && IN_FLIGHT_STATES.includes(o.state),
+  );
+}
+
+export interface PlanFailure {
+  readonly code: string;
+  /** The product whose apply failed; null in a mark written before WPU-S3 (code only). */
+  readonly productId: string | null;
+  /** The start of the billing period the failed apply was charged in; null in an old mark. */
+  readonly period: string | null;
+}
+
+/** The failure mark of a resource config (`pendingPlanFailed`); anything malformed reads as none. */
+export function readPlanFailure(config: unknown): PlanFailure | null {
+  if (typeof config !== "object" || config === null || Array.isArray(config)) return null;
+  const mark = (config as Record<string, unknown>).pendingPlanFailed;
+  if (typeof mark !== "object" || mark === null || Array.isArray(mark)) return null;
+  const raw = mark as Record<string, unknown>;
+  return {
+    code: typeof raw.code === "string" ? raw.code : "unknown",
+    productId: idOf({ productId: raw.productId }),
+    period: typeof raw.period === "string" ? raw.period : null,
+  };
+}
+
+/**
+ * WPU-S3. True when the apply of this product failed and the mark is still there. The customer cannot
+ * clear the mark: scheduling or cancelling a plan leaves it; only a successful apply (the adapters) or
+ * an admin removes it. A mark without a product (written before WPU-S3) counts for the pending plan.
+ */
+export function planFailedFor(config: unknown, productId: string): boolean {
+  const failure = readPlanFailure(config);
+  if (failure === null) return false;
+  return (failure.productId ?? readPlanChange(config).pending) === productId;
+}
+
+/** True when the apply of the pending plan of this config ended in needs_attention. */
 export function planChangeFailed(config: unknown): boolean {
-  if (typeof config !== "object" || config === null || Array.isArray(config)) return false;
-  const failed = (config as Record<string, unknown>).pendingPlanFailed;
-  return typeof failed === "object" && failed !== null && !Array.isArray(failed);
+  const { pending } = readPlanChange(config);
+  return pending !== null && planFailedFor(config, pending);
 }
 
 const REASON_CODE = /^[A-Za-z][A-Za-z0-9_.:]{0,95}$/;
 
 /**
  * An apply operation ended in needs_attention (a failure that will not be retried, or the retries
- * are used up): the pending plan is marked failed with the reason code, and no renewal quotes it
- * until the customer or an admin schedules a plan again (`schedule_plan_change` clears the mark). The
- * code is the machine code of the operation, never customer text or an AWS message (R14). Any other
- * kind changes nothing.
+ * are used up): the pending plan is marked failed with `{ code, productId, period }` (WPU-S3), and no
+ * renewal quotes it. The customer cannot clear the mark (scheduling the same product again is refused,
+ * see `planFailedFor`). The code is the machine code of the operation, never customer text or an AWS
+ * message (R14). Any other kind changes nothing.
  */
 export async function markPlanChangeFailed(
   tx: Tx,
@@ -103,7 +164,13 @@ export async function markPlanChangeFailed(
 ): Promise<void> {
   if (!PLAN_APPLY_KINDS.includes(event.kind)) return;
   const code = REASON_CODE.test(event.code) ? event.code : "unknown";
-  await patchResource(tx, event.resourceId, { configMerge: { pendingPlanFailed: { code } } });
+  const facts = await lifecycleRepo(tx).planApplyFacts(event.resourceId);
+  const productId = facts === null ? null : readPlanChange(facts.config).pending;
+  await patchResource(tx, event.resourceId, {
+    configMerge: {
+      pendingPlanFailed: { code, productId, period: facts?.periodStart?.toISOString() ?? null },
+    },
+  });
 }
 
 export type PlanPrice =
@@ -148,7 +215,8 @@ export async function planPriceFor(tx: Tx, row: PlanRow): Promise<PlanPrice> {
   };
 
   const applicable =
-    spec.applyStates.includes(row.resource.state) && !planChangeFailed(row.resource.config);
+    spec.applyStates.includes(row.resource.state) &&
+    (pending === null || !planFailedFor(row.resource.config, pending));
   if (pending !== null && applicable) {
     const price = await usable(pending, true);
     if (price !== null) return { state: "pending", productId: pending, awsPriceUsd: price };

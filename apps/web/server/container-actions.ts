@@ -1,4 +1,10 @@
-import { decideDestructive, parseContainerConfig, parseDeployment, parsePortList } from "@tc/core";
+import {
+  decideDestructive,
+  parseContainerConfig,
+  parseDeployment,
+  parsePortList,
+  planApplyInFlight,
+} from "@tc/core";
 import {
   audit,
   displayNameOf,
@@ -283,6 +289,11 @@ export async function destroyContainerServiceCore(
       if (!LIVE_STATES.includes(row.state)) throw new Refusal("not_allowed");
       const name = displayNameOf(row.config);
       if (name === "" || typed !== name) throw new Refusal("name_mismatch");
+      // WPU-S3: the apply of a pending plan (scale_container), once charged, runs before the service
+      // can go; the standard busy refusal, and an unreadable list refuses too (R16).
+      if (planApplyInFlight(await repos.operations.listForResource(row.id))) {
+        throw new Refusal("busy");
+      }
       if (
         !decideDestructive("destroy", {
           subscriptionStatus: "retained",

@@ -191,6 +191,8 @@ export interface CdnDetail extends CdnRow {
   certificate: CertificateFacts | null;
   currentProductId: string | null;
   pendingProductId: string | null;
+  /** WPU-S3: the apply of the pending bundle failed; the plan tab says so. */
+  pendingFailed: boolean;
   /** Bundles on sale in the Region of the distribution, priced by the engine; null if nothing can be priced. */
   plans: CdnPlanOption[] | null;
   /** The end of the paid term: a bundle change takes effect then. */
@@ -234,6 +236,7 @@ export async function loadCdnDetail(
       certificate: certificateFactsOf(config["certificate"]),
       currentProductId: planFacts.currentProductId,
       pendingProductId: planFacts.pendingProductId,
+      pendingFailed: planFacts.pendingFailed,
       plans: all === null ? null : all.filter((p) => p.region === config["region"]),
       renewsAt: subscription?.periodEnd ?? null,
       id: resource.id,

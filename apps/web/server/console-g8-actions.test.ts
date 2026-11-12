@@ -80,7 +80,12 @@ const product = (over: Partial<CatalogProduct> = {}): CatalogProduct =>
 function world(
   main: ResourceSummary,
   extra: ResourceSummary[] = [],
-  opts: { catalog?: Record<string, CatalogProduct>; noCatalog?: boolean } = {},
+  opts: {
+    catalog?: Record<string, CatalogProduct>;
+    noCatalog?: boolean;
+    /** WPU-S3: the operations of the main resource. */
+    ops?: { kind: string; state: string }[] | "throws";
+  } = {},
 ) {
   const calls: string[] = [];
   const requests: { kind: string; idempotencyKey: string; payload: unknown }[] = [];
@@ -95,6 +100,10 @@ function world(
     } as never,
     subscriptions: {} as never,
     operations: {
+      listForResource: async () => {
+        if (opts.ops === "throws") throw new Error("operations unreadable");
+        return (opts.ops ?? []) as never;
+      },
       request: async (input: { kind: string; idempotencyKey: string; payload: unknown }) => {
         calls.push("request");
         requests.push(input);
@@ -227,6 +236,70 @@ describe("plan change at the next renewal", () => {
           productId: NEXT,
         }),
       ).toEqual({ ok: false, error: "not_allowed" });
+    });
+  });
+});
+
+// WPU-S3: the failure mark cannot be cleared by the customer for free, and a plan is not scheduled
+// while the apply of the earlier one is on its way.
+describe("WPU-S3: scheduling after a failed apply", () => {
+  const other = "0190aaaa-0000-7000-8000-0000000000c3";
+  const cases = [
+    { spec: CONTAINER_PLAN, idField: "containerId", family: "container_service", p: product() },
+    {
+      spec: CDN_PLAN,
+      idField: "cdnId",
+      family: "cdn",
+      p: product({ family: "cdn", awsId: "large_1_0", specs: {} }),
+    },
+  ];
+  describe.each(cases)("$family", ({ spec, idField, family, p }) => {
+    const failed = {
+      region: "ap-southeast-1",
+      productId: CURRENT,
+      pendingPlan: { productId: NEXT },
+      pendingPlanFailed: { code: "conflict", productId: NEXT, period: "2026-11-01T00:00:00.000Z" },
+    };
+    const catalog = { [NEXT]: p, [other]: { ...p, id: other } };
+
+    it("refuses the same product while the mark exists and queues nothing", async () => {
+      const x = world(row(family, failed), [], { catalog });
+      expect(await run(spec, x, { [idField]: ID, productId: NEXT })).toEqual({
+        ok: false,
+        error: "validation",
+        fields: { productId: "failed" },
+      });
+      expect(x.requests).toEqual([]);
+    });
+
+    it("allows another product, and a cancel", async () => {
+      const x = world(row(family, failed), [], { catalog });
+      expect(await run(spec, x, { [idField]: ID, productId: other })).toEqual({
+        ok: true,
+        done: "planScheduled",
+      });
+      expect(await run(spec, x, { [idField]: ID, cancel: "yes" })).toEqual({
+        ok: true,
+        done: "planCancelled",
+      });
+    });
+
+    it("refuses with busy while the apply is queued or running, and fails closed when the list is unreadable", async () => {
+      const kind = family === "cdn" ? "change_cdn_bundle" : "scale_container";
+      const config = { region: "ap-southeast-1", productId: CURRENT };
+      for (const state of ["queued", "running"]) {
+        const x = world(row(family, config), [], { catalog, ops: [{ kind, state }] });
+        expect(await run(spec, x, { [idField]: ID, productId: NEXT })).toEqual({
+          ok: false,
+          error: "busy",
+        });
+        expect(x.requests).toEqual([]);
+      }
+      const none = world(row(family, config), [], { catalog, ops: "throws" });
+      expect(await run(spec, none, { [idField]: ID, productId: NEXT })).toEqual({
+        ok: false,
+        error: "unavailable",
+      });
     });
   });
 });

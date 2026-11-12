@@ -1,4 +1,4 @@
-import { checkCachePolicy } from "@tc/core";
+import { checkCachePolicy, planFailedFor } from "@tc/core";
 
 // What the console forms (WPU-G7, WPU-G8) show from the config of a resource, read field by field. The
 // adapter writes these fields through `configMerge`; the web tier shows them and never trusts their
@@ -80,6 +80,12 @@ export interface PlanFacts {
   currentProductId: string | null;
   /** The plan the customer chose for the next renewal, or null. */
   pendingProductId: string | null;
+  /**
+   * WPU-S3: the apply of the pending plan failed (the mark is for that plan). The plan is then NOT
+   * scheduled: the next renewal charges the plan in force. Only a flag leaves; the reason code stays
+   * in the database (U6, R14).
+   */
+  pendingFailed: boolean;
 }
 
 /** The plan in force and the pending plan of a container service or distribution (WPU-G8). */
@@ -90,9 +96,11 @@ export function planFactsOf(config: unknown, rowProductId: string | null): PlanF
     return typeof id === "string" && UUID.test(id) ? id : null;
   };
   const current = raw["productId"];
+  const pending = read(raw["pendingPlan"]);
   return {
     currentProductId: typeof current === "string" && UUID.test(current) ? current : rowProductId,
-    pendingProductId: read(raw["pendingPlan"]),
+    pendingProductId: pending,
+    pendingFailed: pending !== null && planFailedFor(raw, pending),
   };
 }
 

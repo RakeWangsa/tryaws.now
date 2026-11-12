@@ -85,13 +85,49 @@ describe("planFactsOf (WPU-G8)", () => {
     expect(planFactsOf({ productId: A, pendingPlan: { productId: B } }, null)).toEqual({
       currentProductId: A,
       pendingProductId: B,
+      pendingFailed: false,
     });
-    expect(planFactsOf({}, B)).toEqual({ currentProductId: B, pendingProductId: null });
+    expect(planFactsOf({}, B)).toEqual({
+      currentProductId: B,
+      pendingProductId: null,
+      pendingFailed: false,
+    });
     expect(planFactsOf({ productId: "x", pendingPlan: { productId: "../etc" } }, null)).toEqual({
       currentProductId: null,
       pendingProductId: null,
+      pendingFailed: false,
     });
     expect(planFactsOf({ pendingPlan: "nope" }, A).pendingProductId).toBeNull();
+  });
+
+  // WPU-S3: a plan whose apply failed is shown as failed, not as scheduled.
+  it("marks the pending plan as failed only when the mark is for that plan; the code never leaves", () => {
+    const C = "0190aaaa-0000-7000-8000-0000000000c3";
+    const mark = (productId: string | null) => ({
+      code: "conflict",
+      productId,
+      period: "2026-11-01T00:00:00.000Z",
+    });
+    const failed = planFactsOf(
+      { productId: A, pendingPlan: { productId: B }, pendingPlanFailed: mark(B) },
+      null,
+    );
+    expect(failed).toEqual({ currentProductId: A, pendingProductId: B, pendingFailed: true });
+    expect(
+      planFactsOf({ productId: A, pendingPlan: { productId: C }, pendingPlanFailed: mark(B) }, null)
+        .pendingFailed,
+    ).toBe(false);
+    // A mark written before WPU-S3 has no product: it counts for the pending plan.
+    expect(
+      planFactsOf(
+        { productId: A, pendingPlan: { productId: B }, pendingPlanFailed: { code: "x" } },
+        null,
+      ).pendingFailed,
+    ).toBe(true);
+    // No pending plan: nothing to show as failed, whatever the mark says.
+    expect(planFactsOf({ productId: A, pendingPlanFailed: mark(B) }, null).pendingFailed).toBe(
+      false,
+    );
   });
 });
 

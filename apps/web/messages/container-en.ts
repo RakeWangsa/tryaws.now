@@ -175,6 +175,7 @@ export const containerEn: Same<typeof containerBn> = {
       name_mismatch: "The name does not match. Type exactly the same name.",
       confirm_required: "Confirmation is needed.",
       not_allowed: "This cannot be done in the current state.",
+      busy: "A new plan is being applied to this service now. Try again when it is done.",
       unavailable: "We could not finish this now. Please try again shortly.",
     },
     done: {

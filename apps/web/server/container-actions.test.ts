@@ -44,6 +44,8 @@ function world(
     allowed?: boolean;
     auditOk?: boolean;
     session?: CustomerSession | null;
+    /** WPU-S3: the operations of the service, as the customer's repository lists them. */
+    ops?: { kind: string; state: string }[] | "throws";
   } = {},
 ) {
   const calls: string[] = [];
@@ -72,7 +74,10 @@ function world(
     } as never,
     operations: {
       get: async () => null,
-      listForResource: async () => [],
+      listForResource: async () => {
+        if (over.ops === "throws") throw new Error("operations unreadable");
+        return (over.ops ?? []) as never;
+      },
       listRecent: async () => [],
       request: async (input) => {
         calls.push(`op:${input.kind}:${input.idempotencyKey}:${input.resourceId}`);
@@ -376,6 +381,38 @@ describe("destroyContainerServiceCore (U10, R13)", () => {
     expect(
       await destroyContainerServiceCore(world({ rows: [row({ state: "destroyed" })] }).deps, input),
     ).toEqual({ ok: false, error: "not_allowed" });
+  });
+});
+
+describe("WPU-S3: destroy while a plan apply is on its way", () => {
+  const input = { containerId: SERVICE, requestId: REQ, confirmName: "Web app" };
+
+  it("is refused with busy while scale_container is queued, running or waiting; nothing is queued or audited", async () => {
+    for (const state of ["queued", "running", "waiting", "needs_approval"]) {
+      const w = world({ ops: [{ kind: "scale_container", state }] });
+      expect(await destroyContainerServiceCore(w.deps, input)).toEqual({
+        ok: false,
+        error: "busy",
+      });
+      expect(w.calls.filter((c) => c.startsWith("destroy:") || c.startsWith("audit:"))).toEqual([]);
+    }
+  });
+
+  it("a finished or failed apply does not block, and an unreadable list refuses (R16)", async () => {
+    for (const state of ["succeeded", "needs_attention"]) {
+      expect(
+        (
+          await destroyContainerServiceCore(
+            world({ ops: [{ kind: "scale_container", state }] }).deps,
+            input,
+          )
+        ).ok,
+      ).toBe(true);
+    }
+    expect(await destroyContainerServiceCore(world({ ops: "throws" }).deps, input)).toEqual({
+      ok: false,
+      error: "unavailable",
+    });
   });
 });
 

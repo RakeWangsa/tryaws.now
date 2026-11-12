@@ -513,3 +513,96 @@ describe("WPU-S2: the operations that renewNow inserts reach the queue through t
     expect(ids).toContain(op!.id);
   });
 });
+
+// WPU-S3: a downgrade whose apply fails after the charge cannot be repeated for the discount.
+describe("WPU-S3: the failure mark and the repeated cycle", () => {
+  const dateOf = async (column: string, subscriptionId: string): Promise<Date> =>
+    new Date(
+      String(
+        (await q(`select ${column} as d from subscriptions where id = $1`, [subscriptionId]))[0]!.d,
+      ),
+    );
+  const failApply = (f: Fresh, kind: string) =>
+    asWorker((tx) =>
+      lifecycleHooks({ clock: kit.clock }).needsAttention(tx, {
+        resourceId: f.resourceId,
+        kind,
+        code: "conflict",
+      }),
+    );
+
+  it("the mark holds the code, the failed product and the period of the charge", async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", { region: reg(big) });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    const { r } = await renewTwoDaysBefore(f);
+    expect(r.ok).toBe(true);
+    await failApply(f, "scale_container");
+    expect((await configOf(f.resourceId)).pendingPlanFailed).toEqual({
+      code: "conflict",
+      productId: small,
+      period: (await dateOf("period_start", f.subscriptionId)).toISOString(),
+    });
+  });
+
+  it("the cycle cannot be repeated: after the failed apply the next renewal charges the applied plan", async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", { region: reg(big) });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    const first = await renewTwoDaysBefore(f);
+    expect(first.charged).toBe(await total("container_service", "5"));
+    await failApply(f, "scale_container");
+    const end2 = await dateOf("period_end", f.subscriptionId);
+    const second = await renewTwoDaysBefore({ ...f, end: end2 });
+    expect(second.r.ok).toBe(true);
+    // The customer still has the bigger capacity: the second period costs the applied plan.
+    expect(second.charged).toBe(await total("container_service", "40"));
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+  });
+
+  it("a different pending product after the failure is quoted on its own (it may be scheduled)", async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", { region: reg(big) });
+    const mid = await product("container_service", "medium", "20", { region: reg(big) });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: mid },
+      pendingPlanFailed: { code: "conflict", productId: small, period: "2026-11-01T00:00:00.000Z" },
+    };
+    const f = await fresh("container_service", config);
+    expect(
+      await asWeb((tx) => planPriceFor(tx, rowOf(f, "container_service", config))),
+    ).toMatchObject({ state: "pending", productId: mid });
+    const same = { ...config, pendingPlan: { productId: small } };
+    expect(
+      await asWeb((tx) => planPriceFor(tx, rowOf(f, "container_service", same))),
+    ).toMatchObject({ state: "applied", productId: big });
+  });
+
+  it("an upgrade is unaffected: charged the new plan and applied once", async () => {
+    const small = await product("cdn", "small_1_0", "5");
+    const big = await product("cdn", "large_1_0", "20", { region: reg(small) });
+    const config = {
+      region: reg(small),
+      appliedPlan: { productId: small },
+      pendingPlan: { productId: big },
+    };
+    const f = await fresh("cdn", config);
+    const { r, charged } = await renewTwoDaysBefore(f);
+    expect(r.ok).toBe(true);
+    expect(charged).toBe(await total("cdn", "20"));
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+    expect(await configOf(f.resourceId)).not.toHaveProperty("pendingPlanFailed");
+  });
+});

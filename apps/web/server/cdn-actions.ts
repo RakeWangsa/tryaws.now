@@ -1,6 +1,6 @@
 import { requireFreshSignIn } from "@tc/auth";
 import type { CustomerSession } from "@tc/auth";
-import { decideDestructive, parseCdnConfig } from "@tc/core";
+import { decideDestructive, parseCdnConfig, planApplyInFlight } from "@tc/core";
 import type {
   AuditRepo,
   CustomerLimit,
@@ -45,6 +45,7 @@ export type CdnError =
   | "not_found"
   | "name_mismatch"
   | "not_allowed"
+  | "busy"
   | "unavailable";
 
 export type CdnResult =
@@ -168,6 +169,18 @@ async function ownDistribution(repos: CdnRepos, id: string) {
   return row;
 }
 
+/**
+ * WPU-S3: the customer cannot turn a distribution off or destroy it while the apply of a pending plan
+ * (change_cdn_bundle) is queued or running: the renewal charged the new price already, and a stopped
+ * distribution would make the apply conflict. The standard busy refusal; a list that cannot be read
+ * throws and the action is refused as unavailable (R16).
+ */
+async function refuseWhilePlanApplies(repos: CdnRepos, resourceId: string): Promise<void> {
+  if (planApplyInFlight(await repos.operations.listForResource(resourceId))) {
+    throw new Refusal("busy");
+  }
+}
+
 function nameOf(config: unknown): string {
   const name = record(config)["displayName"];
   return typeof name === "string" ? name.slice(0, 60) : "";
@@ -192,6 +205,8 @@ export async function setCdnEnabledCore(deps: CdnActionDeps, raw: unknown): Prom
       const row = await ownDistribution(repos, id as string);
       // Off from active, on from stopped: a suspended or creating one is the lifecycle's (R13).
       if (row.state !== (on ? "stopped" : "active")) throw new Refusal("not_allowed");
+      // WPU-S3: not while the apply of a pending plan is on its way (the renewal already charged it).
+      if (!on) await refuseWhilePlanApplies(repos, row.id);
       const written = await repos.operations.request({
         resourceId: row.id,
         kind: on ? "start" : "stop",
@@ -227,6 +242,8 @@ export async function destroyCdnCore(deps: CdnActionDeps, raw: unknown): Promise
       if (!LIVE_STATES.includes(row.state)) throw new Refusal("not_allowed");
       const name = nameOf(row.config);
       if (name === "" || typed !== name) throw new Refusal("name_mismatch");
+      // WPU-S3: the apply of a pending plan, once charged, runs before the distribution can go.
+      await refuseWhilePlanApplies(repos, row.id);
       // R13: once the subscription is `retained`, the guard must let a destroy of this family pass
       // without a snapshot.
       if (

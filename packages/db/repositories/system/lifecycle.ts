@@ -198,6 +198,35 @@ export function lifecycleRepo(tx: Tx) {
       };
     },
 
+    // WPU-S3: the config of a resource and the start of the period its subscription is in, for the
+    // mark of a failed plan apply. null when the resource is unknown.
+    async planApplyFacts(
+      resourceId: string,
+    ): Promise<{ config: Record<string, unknown>; periodStart: Date | null } | null> {
+      assertUuid(resourceId, "resource id");
+      const { rows } = await tx.execute<{ config: unknown; period_start: unknown }>(sql`
+        select r.config as config, s.period_start as period_start
+        from resources r left join subscriptions s on s.resource_id = r.id
+        where r.id = ${resourceId}
+        limit 1`);
+      const row = rows[0];
+      if (row === undefined) return null;
+      const config =
+        typeof row.config === "object" && row.config !== null && !Array.isArray(row.config)
+          ? (row.config as Record<string, unknown>)
+          : {};
+      const start = row.period_start;
+      return {
+        config,
+        periodStart:
+          start === null || start === undefined
+            ? null
+            : start instanceof Date
+              ? start
+              : new Date(String(start)),
+      };
+    },
+
     // One row per dedupe key; a repeat answers false and writes nothing (R7). No conflict target: web_rw
     // (renewNow) has no SELECT on dedupe_key, which a target would need; the only unique key is that one.
     async insertNotification(n: NewLifecycleNotification): Promise<boolean> {

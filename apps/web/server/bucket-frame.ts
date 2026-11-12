@@ -43,6 +43,7 @@ export type FamilyError =
   | "name_mismatch"
   | "confirm_required"
   | "not_allowed"
+  | "busy"
   | "unavailable";
 
 export type FamilyResult =
