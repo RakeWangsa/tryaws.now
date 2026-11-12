@@ -232,6 +232,19 @@ export function workers(inputs: WorkerInputs) {
     ]),
   ) as Record<"web" | "admin", { arn: unknown }>;
 
+  // WPU-N1: the invoice renderer has one alias, "web". The customer role may invoke that alias and no
+  // other form of the function; the admin role has no grant on the renderer at all (WPU-S8).
+  // VERIFY: same as the reader aliases above (the published version, `nodes.function.version`).
+  const renderer = invoked["invoice-renderer"] as {
+    nodes: { function: { version: unknown } };
+    name: unknown;
+  };
+  const rendererAliasWeb = new aws.lambda.Alias("InvoiceRendererAliasWeb", {
+    name: "web",
+    functionName: renderer.name as string,
+    functionVersion: renderer.nodes.function.version as string,
+  }) as { arn: unknown };
+
   // Scheduled: EventBridge Scheduler (sst.aws.CronV2), retry policy 0 (the functions are idempotent
   // and the next run repeats the work). VERIFY: CronV2 args `schedule`, `function`, `retries`.
   const crons = Object.fromEntries(
@@ -265,7 +278,7 @@ export function workers(inputs: WorkerInputs) {
     triggers: { run: String(Date.now()) },
   });
 
-  return { invoked, readerAliases, crons, migrator, migration };
+  return { invoked, readerAliases, rendererAliasWeb, crons, migrator, migration };
 }
 
 export type Workers = ReturnType<typeof workers>;
