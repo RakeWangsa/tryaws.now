@@ -21,6 +21,8 @@ import { priceBookBn } from "../messages/pricebook.ts";
 import { priceBookEn } from "../messages/pricebook.en.ts";
 import { pricingBn } from "../messages/pricing.ts";
 import { pricingEn } from "../messages/pricing.en.ts";
+import { planChangeBn } from "../messages/planchange.ts";
+import { planChangeEn } from "../messages/planchange.en.ts";
 import { opsBn } from "../messages/ops.ts";
 import { opsEn } from "../messages/ops.en.ts";
 import { casesBn } from "../messages/cases.ts";
@@ -45,6 +47,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     configPriceBn,
     tierLimitsBn,
     ops.bn,
+    planChangeBn,
     auditBn,
     adminsBn,
     cases.bn,
@@ -61,6 +64,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     configPriceEn,
     tierLimitsEn,
     ops.en,
+    planChangeEn,
     auditEn,
     adminsEn,
     cases.en,

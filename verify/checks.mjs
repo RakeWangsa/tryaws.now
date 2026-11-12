@@ -2489,6 +2489,109 @@ TASKS["WPA-P1"] = [
   repo,
 ];
 
+// WPA-P2: (1) the admin sees the plan change of a container service or a CDN (applied plan, pending plan,
+// failure mark, apply operation) and clears the mark by an audited action that queues an operation (no
+// AWS call, no ledger line); (2) the disk and the load balancer orders read the editable config prices
+// (the config row wins for new orders when the market has a usable one, else the catalog row stays);
+// (3) the daily snapshot charge reads `config_price.snapshot_gb_month` through the pricing engine, with
+// the old `metering.snapshot_gb_month_minor` only as a transition fallback. No migration. The core and db
+// suites need the local PostgreSQL (pnpm db:up). Each proof has its own line; `--no-passWithNoTests` makes
+// an empty selection fail; tests/repo/verify-cli.test.mjs asserts that the files exist.
+const planMarkDb = {
+  id: "plan-mark-db",
+  title:
+    "R10, R16: the plan state is read and the failure mark cleared only by an active ops or superadmin admin, with a reason, audited, by a queued operation and no ledger row; the gate of every method",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "admin-plan-mark",
+    "admin-gates",
+    "operation-kinds",
+    "--no-passWithNoTests",
+  ],
+};
+const planMarkAws = {
+  id: "plan-mark-aws",
+  title:
+    "R1: the adapters of the container service and the CDN clear the mark by a config patch, with no AWS call",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/aws",
+    "container-service",
+    "cdn",
+    "adapter-types",
+    "--no-passWithNoTests",
+  ],
+};
+const planMarkAdmin = {
+  id: "plan-mark-admin",
+  title:
+    "R9, R10: the flow authorizes first, the page is bn and en and built from the theme classes, the admin sweep, the truthful price badge",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/admin",
+    "server/plan-mark-flow",
+    "plan-change-pages",
+    "plan-change-messages",
+    "server/admin-sweep",
+    "server/wpu-g10-data",
+    "--no-passWithNoTests",
+  ],
+};
+const configPriceOrders = {
+  id: "config-price-orders",
+  title:
+    "R4, R16: the disk and the load balancer are priced by the engine from the config price in force, else the catalog row; a row that cannot be a price sells nothing",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "products/config-price-source",
+    "orders/config-price-families",
+    "orders/disk-order",
+    "--no-passWithNoTests",
+  ],
+};
+const snapshotMetering = {
+  id: "snapshot-metering",
+  title:
+    "R4, R5: the daily snapshot charge reads the config price through the engine, with the old key as the transition fallback; the posting is unchanged",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "metering",
+    "products/snapshot-price",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WPA-P2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  planMarkDb,
+  planMarkAws,
+  planMarkAdmin,
+  configPriceOrders,
+  snapshotMetering,
+  db,
+  core,
+  aws,
+  admin,
+  scheduler,
+  repo,
+];
+
 // WPU-G3: the image (Lightsail blueprint) and the SSH key of the Linux create wizard. GetBlueprints in the
 // catalog sync (family `blueprint`, no new table), the admin allow-list (market setting `image_allowlist`,
 // audited), the order gate for the image, the provisioner that launches the chosen image, the wizard step

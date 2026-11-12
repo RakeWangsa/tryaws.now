@@ -54,7 +54,7 @@ export const configPriceBn = {
     state: {
       none: "দাম দেওয়া হয়নি",
       invalid: "পড়া যাচ্ছে না",
-      readNow: "অর্ডারে লাগে",
+      readNow: "চার্জে লাগে",
       notReadYet: "এখনো অর্ডার পড়ে না",
     },
     editor: {

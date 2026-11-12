@@ -17,6 +17,7 @@ import type { RiskTier } from "../capacity/types";
 import { isEnabledIn } from "../flags/is-enabled";
 import { isFeatureFlag } from "../flags/keys";
 import { checkCdnOrigin, parseCdnConfig, resolveCdn } from "../products/cdn";
+import { withConfigPrice } from "../products/config-price-source";
 import { checkDiskServer, parseDiskConfig, resolveDisk } from "../products/disk";
 import { resolveProduct, type ResolvedProduct } from "../products/instance";
 import {
@@ -262,6 +263,25 @@ async function checkDbRestoreSource(
 }
 
 /**
+ * WPA-P2. The market is the customer's own row (R16). The config price in force at the instant of the
+ * order replaces the catalog price when the market has a usable one; otherwise the catalog row stays
+ * authoritative (see withConfigPrice).
+ */
+async function configPriced<T extends ResolvedProduct>(
+  tx: Tx,
+  repos: CustomerRepos,
+  resolved: T,
+  key: "config_price.block_storage_gb_month" | "config_price.load_balancer_month",
+  unit: "gb_month" | "month",
+  now: Date,
+): Promise<Result<T>> {
+  const profile = await repos.profile.get();
+  if (profile === null) return { ok: false, error: "forbidden" };
+  const row = (await readConfigPrices(tx, profile.market, now))[key];
+  return withConfigPrice(resolved, row, unit);
+}
+
+/**
  * The product of an order. Every family but the load balancer, the CDN and the disk is resolved by
  * `resolveProduct`. A disk names the server it is added for: the customer's own Linux server in the
  * Region of the disk (checkDiskServer). A distribution names an origin: the customer's own active server, load balancer
@@ -372,7 +392,16 @@ export async function resolveOrderProduct(
             },
     });
     if (!checked.ok) return checked;
-    return resolveDisk(config.value, anchor);
+    const disk = resolveDisk(config.value, anchor);
+    if (!disk.ok) return disk;
+    return configPriced(
+      tx,
+      repos,
+      disk.value,
+      "config_price.block_storage_gb_month",
+      "gb_month",
+      now,
+    );
   }
   if (family !== "load_balancer") {
     const resolved = await resolveProduct(family, rawConfig, (id) => readCatalogProduct(tx, id));
@@ -421,5 +450,7 @@ export async function resolveOrderProduct(
     candidates,
   });
   if (!checked.ok) return checked;
-  return resolveLoadBalancer(config.value, product, checked.value);
+  const balancer = resolveLoadBalancer(config.value, product, checked.value);
+  if (!balancer.ok) return balancer;
+  return configPriced(tx, repos, balancer.value, "config_price.load_balancer_month", "month", now);
 }

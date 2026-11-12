@@ -150,6 +150,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP9-T4b",
     "WP9-T5",
     "WPA-P1",
+    "WPA-P2",
     "WPP-T1",
     "WPP-T2",
     "WPP-T3",
@@ -1498,6 +1499,63 @@ it("task WPA-P1 is proven by the engine, the rates, the db and the admin suites 
     "apps/admin/price-book-pages.test.tsx",
     "apps/admin/price-book-messages.test.ts",
     "apps/admin/server/admin-sweep.test.ts",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WPA-P2 is proven by the db, aws, admin, order and metering suites of the plan state and the config prices, and every filter matches a real file", () => {
+  expect(TASKS["WPA-P2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    [
+      "plan-mark-db",
+      "pnpm test --filter @tc/db admin-plan-mark admin-gates operation-kinds --no-passWithNoTests",
+    ],
+    [
+      "plan-mark-aws",
+      "pnpm test --filter @tc/aws container-service cdn adapter-types --no-passWithNoTests",
+    ],
+    [
+      "plan-mark-admin",
+      "pnpm test --filter @tc/admin server/plan-mark-flow plan-change-pages plan-change-messages server/admin-sweep server/wpu-g10-data --no-passWithNoTests",
+    ],
+    [
+      "config-price-orders",
+      "pnpm test --filter @tc/core products/config-price-source orders/config-price-families orders/disk-order --no-passWithNoTests",
+    ],
+    [
+      "snapshot-metering",
+      "pnpm test --filter @tc/core metering products/snapshot-price --no-passWithNoTests",
+    ],
+    ["db", "pnpm test --filter @tc/db"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  for (const f of [
+    "packages/db/test/admin-plan-mark.test.ts",
+    "packages/db/test/admin-gates.test.ts",
+    "packages/db/test/operation-kinds.test.ts",
+    "packages/aws/test/container-service.test.ts",
+    "packages/aws/test/cdn.test.ts",
+    "packages/aws/test/adapter-types.test.ts",
+    "apps/admin/server/plan-mark-flow.test.ts",
+    "apps/admin/plan-change-pages.test.tsx",
+    "apps/admin/plan-change-messages.test.ts",
+    "apps/admin/server/admin-sweep.test.ts",
+    "apps/admin/server/wpu-g10-data.test.ts",
+    "packages/core/products/config-price-source.test.ts",
+    "packages/core/orders/config-price-families.test.ts",
+    "packages/core/orders/disk-order.test.ts",
+    "packages/core/metering/run.test.ts",
+    "packages/core/metering/metering.db.test.ts",
+    "packages/core/products/snapshot-price.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

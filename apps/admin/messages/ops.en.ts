@@ -63,6 +63,7 @@ export const opsEn: Same<typeof opsBn> = {
       change_cdn_bundle: "Change CDN bundle",
       set_cache_behaviors: "Change cache behaviours",
       set_cdn_origin: "Change CDN origin",
+      clear_plan_change_mark: "Clear the plan change failure mark",
       reject_operation: "Reject a stuck operation",
       other: "Other kind",
     },

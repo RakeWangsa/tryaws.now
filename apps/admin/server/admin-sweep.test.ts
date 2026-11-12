@@ -161,6 +161,7 @@ describe("flows: authorize with roles is the first step, before the limiter, the
       "server/customer-flow.ts",
       "server/money-flow.ts",
       "server/ops-flow.ts",
+      "server/plan-mark-flow.ts",
       "server/price-book-flow.ts",
       "server/pricing-flow.ts",
       "server/reconciliation-flow.ts",
@@ -224,6 +225,26 @@ describe("flows: authorize with roles is the first step, before the limiter, the
     expect([...code.matchAll(/await authorize\(FLAG_ROLES\)/g)].length).toBe(1);
     expect([...code.matchAll(/await authorize\(/g)].length).toBe(1);
     expect(code).not.toMatch(/customerId|customerRepos|\bsession\b/);
+  });
+
+  // WPA-P2. The plan-mark flow: one write, ops and superadmin. It reads and writes one resource of any
+  // customer by its id (an admin sees every tenant, like /operations); the write is a queued operation,
+  // not a row change, and the request carries no actor, role or customer.
+  it("the plan-mark flow authorizes in its one write, with the roles of the operations area, and takes no actor", () => {
+    const code = read(join(ROOT, "server/plan-mark-flow.ts")).replace(/\/\/.*$/gm, "");
+    expect([...code.matchAll(/await deps\.authorize\(OPS_ROLES\)/g)].length).toBe(1);
+    expect([...code.matchAll(/authorize\(/g)].length).toBe(1);
+    expect(code).not.toMatch(/customerId|customerRepos|\bsession\b|request\.(actor|adminId|role)/);
+  });
+
+  it("the clear action is a Server Action of ops-actions.ts that uses the flow with the session check and carries no actor", () => {
+    const source = read(join(ROOT, "server/ops-actions.ts"));
+    const head = source.indexOf("export async function clearPlanChangeMarkAction(");
+    expect(head).toBeGreaterThanOrEqual(0);
+    const body = source.slice(head, source.indexOf("\n}\n", head));
+    expect(body).toContain("ensureAdminAuth()");
+    expect(body).toContain("makePlanMarkAction(opsFlowDeps())");
+    expect(body).not.toMatch(/adminId|role|approver|actor/i);
   });
 
   it("the three actions of WPU-G10 are Server Actions of pricing-actions.ts that use a flow with the session check and carry no actor", () => {

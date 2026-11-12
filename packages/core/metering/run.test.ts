@@ -38,6 +38,8 @@ function world(init: {
   transfer?: Transfer[];
   balances?: Map<string, bigint>;
   failFor?: string;
+  /** WPA-P2: what the pricing engine answers for `config_price.snapshot_gb_month` (paisa per GB-month), or null. */
+  config?: bigint | null;
 }) {
   const posted = new Map<string, PostTransactionInput>();
   const notices = new Map<string, NewLifecycleNotification>();
@@ -46,6 +48,7 @@ function world(init: {
   if (init.price !== undefined)
     settings.set(METERING_SETTING_KEYS.snapshotGbMonthMinor, init.price);
   const ops: MeteringOps = {
+    ...(init.config === undefined ? {} : { configPrice: async () => init.config ?? null }),
     repo: () => ({
       readSettings: async (keys: readonly string[]) =>
         new Map([...settings].filter(([k]) => keys.includes(k))),
@@ -218,6 +221,48 @@ describe("snapshot storage: one charge per resource and day", () => {
       expect(w.state.postCalls).toBe(0);
     },
   );
+
+  // WPA-P2. One price source: `config_price.snapshot_gb_month` through the pricing engine, the old key
+  // `metering.snapshot_gb_month_minor` only while no config price is usable.
+  it("the config price (engine, paisa per GB-month) charges the day; the report says where it came from", async () => {
+    const w = world({ config: 600n, usage: [snap(1, "10.000000", "2026-11-10")] });
+    const report = await w.run();
+    expect(report).toMatchObject({ charged: 1, priceMissing: false, priceSource: "config" });
+    const tx = w.posted.get(ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10"))!;
+    expect(tx.postings[0]!.amountMinor).toBe(200n); // 10 GB x 600 / 30
+  });
+
+  it("the config price wins over the old key when both exist", async () => {
+    const w = world({ config: 600n, price: "300", usage: [snap(1, "10", "2026-11-10")] });
+    const report = await w.run();
+    expect(report.priceSource).toBe("config");
+    expect(
+      w.posted.get(ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10"))!.postings[0]!
+        .amountMinor,
+    ).toBe(200n);
+  });
+
+  it("no usable config price: the old key still charges (transition) and the report says so", async () => {
+    const w = world({ config: null, price: "300", usage: [snap(1, "10", "2026-11-10")] });
+    const report = await w.run();
+    expect(report).toMatchObject({ charged: 1, priceMissing: false, priceSource: "legacy" });
+    expect(
+      w.posted.get(ledgerKey.metered(RES(1), "snapshot_gb", "2026-11-10"))!.postings[0]!
+        .amountMinor,
+    ).toBe(100n);
+  });
+
+  it("neither source has a price: nothing is charged and the price is reported missing (R16)", async () => {
+    const w = world({ config: null, usage: [snap(1, "10", "2026-11-10")] });
+    const report = await w.run();
+    expect(report).toMatchObject({ charged: 0, priceMissing: true, priceSource: "none" });
+    expect(w.state.postCalls).toBe(0);
+  });
+
+  it("a config price of zero is not a price: it falls to the old key like an absent one", async () => {
+    const w = world({ config: 0n, price: "300", usage: [snap(1, "10", "2026-11-10")] });
+    expect((await w.run()).priceSource).toBe("legacy");
+  });
 
   it("a failing row is counted and logged by error name only; the other rows go on", async () => {
     const w = world({

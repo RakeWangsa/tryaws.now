@@ -260,6 +260,12 @@ const GATE_CASES: Record<string, GateCase> = {
   "operations.queue": { call: (r) => r.operations.queue(), deny: "finance" },
   "operations.counts": { call: (r) => r.operations.counts(), deny: "finance" },
   "operations.detail": { call: (r) => r.operations.detail(ID()), deny: "finance" },
+  "operations.planChange": { call: (r) => r.operations.planChange(ID()), deny: "finance" },
+  "operations.clearPlanChangeMark": {
+    call: (r) =>
+      r.operations.clearPlanChangeMark({ resourceId: ID(), requestId: ID(), at: AT }, "r"),
+    deny: "finance",
+  },
   "operations.approve": {
     call: (r) => r.operations.approve({ operationId: ID(), at: AT }, "r"),
     deny: "finance",

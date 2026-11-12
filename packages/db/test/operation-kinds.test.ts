@@ -11,7 +11,7 @@ import {
 
 it("every kind has one row of info and nothing else has", () => {
   expect(Object.keys(OPERATION_KIND_INFO).sort()).toEqual([...OPERATION_KINDS].sort());
-  expect(OPERATION_KINDS).toHaveLength(36);
+  expect(OPERATION_KINDS).toHaveLength(37);
   expect(OPERATION_KINDS).toContain("rename");
   expect(OPERATION_KINDS).toContain("reject_operation");
 });
@@ -75,6 +75,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
   expect(OPERATION_KINDS.filter((k) => !OPERATION_KIND_INFO[k].customerRequestable).sort()).toEqual(
     [
       "change_cdn_bundle",
+      "clear_plan_change_mark",
       "create",
       "final_snapshot",
       "purge_snapshots",
@@ -86,7 +87,17 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
   );
 });
 
-it("isOperationKind accepts the 35 kinds and nothing else, prototype names included", () => {
+// WPA-P2. The admin clears the failure mark of a plan change by an operation that calls nothing in AWS
+// (the adapter patches the config); it is never requested by a customer and never destructive.
+it("clear_plan_change_mark is an admin-only action kind with no approval", () => {
+  expect(OPERATION_KIND_INFO.clear_plan_change_mark).toEqual({
+    method: "action",
+    destructive: false,
+    customerRequestable: false,
+  });
+});
+
+it("isOperationKind accepts every kind of the list and nothing else, prototype names included", () => {
   for (const kind of OPERATION_KINDS) expect(isOperationKind(kind)).toBe(true);
   for (const x of [
     "__proto__",

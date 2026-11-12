@@ -25,11 +25,18 @@ import { readTx } from "./pricing-runtime.ts";
 // the role again.
 
 /**
- * The config prices that a customer order reads today. Verified by search of the code (WPU-G10): only the
- * hosted zone is read when an order is priced; the other three are stored and edited here, and the screen
- * says that no order reads them yet. Adding a reader means adding the key here.
+ * The config prices that a customer is charged from today. Verified by search of the code: the hosted
+ * zone, the disk (block storage) and the load balancer are read when an order is priced
+ * (`resolveOrderProduct`, WPU-G10 and WPA-P2: the config row wins for new orders when the market has a
+ * usable one, otherwise the catalog row stays), and the snapshot price is read by the daily metered
+ * charge (`runMetering`, WPA-P2) and by the screens. Adding a reader means adding the key here.
  */
-export const READ_BY_ORDERS: ReadonlySet<ConfigPriceKey> = new Set(["config_price.dns_zone_month"]);
+export const READ_BY_ORDERS: ReadonlySet<ConfigPriceKey> = new Set([
+  "config_price.block_storage_gb_month",
+  "config_price.snapshot_gb_month",
+  "config_price.load_balancer_month",
+  "config_price.dns_zone_month",
+]);
 
 export interface ConfigPriceLine {
   readonly key: ConfigPriceKey;
