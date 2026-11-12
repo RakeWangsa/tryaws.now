@@ -244,6 +244,26 @@ export {
   readTld,
 } from "./repositories/catalog";
 export { readLaunchInputs, type LaunchInputs } from "./repositories/launch";
+export {
+  listActiveImages,
+  listImagesForAdmin,
+  readImage,
+  readImageAnyRegion,
+  readImageSwitches,
+  type ImageRow,
+} from "./repositories/blueprints";
+export {
+  IMAGE_ALLOWLIST_KEY,
+  parseImageSwitches,
+  type ImageSwitches,
+  type ImageSwitchesRead,
+} from "./repositories/config/image-allowlist";
+export type {
+  BlueprintSaved,
+  BlueprintSetInput,
+  BlueprintsAdminRepo,
+  BlueprintsView,
+} from "./repositories/admin/blueprints";
 export { ensureFinalBackup, listBackupsOf, markFinalBackup } from "./repositories/backups";
 export { compensationRepo } from "./repositories/compensation";
 export type { CompensationOrder, CompensationRepo } from "./repositories/compensation";

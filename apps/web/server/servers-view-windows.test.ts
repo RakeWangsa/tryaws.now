@@ -15,8 +15,14 @@ vi.mock("@tc/db", () => ({
   readFeatureFlag: async (_tx: unknown, key: string) => state.flags[key] ?? null,
   readCatalogProduct: async () => ({ specs: { vcpus: 2 } }),
   listCatalogProducts: async () => [],
+  readImage: async () => null,
+  readImageSwitches: async () => ({ state: "none" }),
+  listActiveImages: async () => [],
 }));
-vi.mock("@tc/core", () => ({ priceCatalog: async () => ({ ok: true, value: [] }) }));
+vi.mock("@tc/core", async (importActual) => ({
+  ...(await importActual<typeof import("@tc/core")>()),
+  priceCatalog: async () => ({ ok: true, value: [] }),
+}));
 
 const { loadServerDetail, loadServers } = await import("./servers-view.ts");
 

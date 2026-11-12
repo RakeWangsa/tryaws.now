@@ -47,6 +47,7 @@ export function ConfiguratorContent({
         plans={screen.plans}
         regions={screen.regions}
         keys={screen.keys}
+        images={screen.images}
         action={action}
       />
     </>

@@ -239,6 +239,14 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       },
       "AWS price page",
     ),
+  "blueprints.setEnabled": async (r) => {
+    const id = "repos_case_" + uniqueSuffix().toLowerCase();
+    await t.pool.query(
+      "insert into catalog_products (id, family, aws_id, platform, region, specs, aws_price_usd, billing_unit, feature_flag, active, synced_at) values ($1, 'blueprint', $2, 'linux', 'ap-southeast-1', '{}', 0, 'none', 'linux_instance', true, now())",
+      [uuidv7(), id],
+    );
+    return r.blueprints.setEnabled({ market: "BD", blueprintId: id, enabled: true }, "allow-list");
+  },
   "capacity.addPoolAccount": (r) =>
     r.capacity.addPoolAccount(
       {
@@ -322,6 +330,7 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "audit.detail",
   "audit.export",
   "audit.search",
+  "blueprints.list",
   "abuse.detail",
   "abuse.list",
   "reconciliation.list",

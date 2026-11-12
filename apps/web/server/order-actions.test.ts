@@ -53,12 +53,17 @@ function deps(over: Partial<OrderActionDeps> = {}): { deps: OrderActionDeps; cal
   return { deps: { ...base, ...over }, calls };
 }
 
+const KEY = "0190aaaa-0000-7000-8000-0000000000c1";
+// A good form of the Linux wizard (WPU-G3, G6): an image and an SSH key.
 const form = {
   productId: PRODUCT,
   region: "ap-south-1",
   displayName: "My server",
-  keyPairId: "",
+  keyPairId: KEY,
+  blueprintId: "ubuntu_24_04",
 };
+// What a restore sends: no key and no image.
+const restoreForm = { ...form, keyPairId: "", blueprintId: "" };
 
 describe("createOrderDraftCore", () => {
   it("runs in the order of R9: authenticate, validate, rate limit, execute", async () => {
@@ -67,11 +72,49 @@ describe("createOrderDraftCore", () => {
     expect(result).toEqual({ ok: true, token: "tok.en" });
     expect(calls.slice(0, 2)).toEqual(["authenticate", "rateLimit"]);
     expect(calls[2]).toBe("createOrderDraft");
-    // Only the family and the four known fields reach the order code; an empty key becomes null.
-    expect(JSON.parse(calls[3] as string)).toEqual({
-      family: "linux_instance",
-      config: { ...form, keyPairId: null },
+    // Only the family and the known fields reach the order code.
+    expect(JSON.parse(calls[3] as string)).toEqual({ family: "linux_instance", config: form });
+  });
+
+  it("WPU-G6: a new Linux server needs an SSH key, and WPU-G3 an image; nothing else runs", async () => {
+    for (const [over, fields] of [
+      [{ keyPairId: "" }, { keyPairId: "required" }],
+      [{ keyPairId: undefined }, { keyPairId: "required" }],
+      [{ blueprintId: "" }, { blueprintId: "required" }],
+      [{ blueprintId: undefined }, { blueprintId: "required" }],
+      [
+        { keyPairId: "", blueprintId: "" },
+        { keyPairId: "required", blueprintId: "required" },
+      ],
+    ] as const) {
+      const { deps: d, calls } = deps();
+      expect(await createOrderDraftCore(d, { ...form, ...over })).toEqual({
+        ok: false,
+        error: "validation",
+        fields,
+      });
+      expect(calls).toEqual(["authenticate"]);
+    }
+  });
+
+  it("a malformed image id is refused as invalid before the rate limit", async () => {
+    const { deps: d, calls } = deps();
+    expect(await createOrderDraftCore(d, { ...form, blueprintId: "Ubuntu 24.04; x" })).toEqual({
+      ok: false,
+      error: "validation",
+      fields: { blueprintId: "invalid" },
     });
+    expect(calls).toEqual(["authenticate"]);
+  });
+
+  it("Windows takes neither key nor image from the wizard rules", async () => {
+    const { deps: d } = deps();
+    const result = await createOrderDraftCore(
+      d,
+      { ...form, keyPairId: "", blueprintId: "" },
+      "windows_instance",
+    );
+    expect(result.ok).toBe(true);
   });
 
   it("refuses without a session and runs nothing else", async () => {
@@ -108,6 +151,7 @@ describe("createOrderDraftCore", () => {
     const sent = JSON.parse(calls[3] as string) as { family: string; config: object };
     expect(sent.family).toBe("linux_instance");
     expect(Object.keys(sent.config).sort()).toEqual([
+      "blueprintId",
       "displayName",
       "keyPairId",
       "productId",
@@ -118,13 +162,15 @@ describe("createOrderDraftCore", () => {
   it("forwards a backup to restore from, validated as an id, and no key pair with it", async () => {
     const backup = "0190aaaa-0000-7000-8000-0000000000b1";
     const { deps: d, calls } = deps();
-    await createOrderDraftCore(d, { ...form, restoreFromBackupId: backup });
+    await createOrderDraftCore(d, { ...restoreForm, restoreFromBackupId: backup });
     const sent = JSON.parse(calls[3] as string) as { config: Record<string, unknown> };
     expect(sent.config["restoreFromBackupId"]).toBe(backup);
     expect(sent.config["keyPairId"]).toBeNull();
 
     const bad = deps();
-    expect(await createOrderDraftCore(bad.deps, { ...form, restoreFromBackupId: "../x" })).toEqual({
+    expect(
+      await createOrderDraftCore(bad.deps, { ...restoreForm, restoreFromBackupId: "../x" }),
+    ).toEqual({
       ok: false,
       error: "validation",
       fields: { restoreFromBackupId: "invalid" },

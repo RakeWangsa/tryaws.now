@@ -4,6 +4,7 @@ const state = vi.hoisted(() => ({
   resource: null as unknown,
   flag: true as boolean | null,
   operations: [] as unknown[],
+  image: null as unknown,
 }));
 vi.mock("@tc/db", () => ({
   withTx: async (fn: (tx: unknown) => unknown) => fn({}),
@@ -13,6 +14,7 @@ vi.mock("@tc/db", () => ({
     operations: { listForResource: async () => state.operations },
   }),
   readFeatureFlag: async () => state.flag,
+  readImage: async () => state.image,
 }));
 
 const { loadServerManage } = await import("./server-manage-view.ts");
@@ -31,6 +33,7 @@ beforeEach(() => {
   state.resource = resource();
   state.flag = true;
   state.operations = [];
+  state.image = null;
 });
 
 describe("loadServerManage", () => {
@@ -45,6 +48,31 @@ describe("loadServerManage", () => {
       loginUser: "ubuntu",
       busy: false,
     });
+  });
+  it("WPU-G13: the login user is the one of the image the server was ordered with", async () => {
+    state.resource = resource({ region: "ap-southeast-1", config: { blueprintId: "wordpress" } });
+    // No synced row: the table of names answers.
+    expect(await loadServerManage(session, "x", REQ)).toMatchObject({ loginUser: "bitnami" });
+    state.resource = resource({
+      region: "ap-southeast-1",
+      config: { blueprintId: "amazon_linux_2023" },
+    });
+    expect(await loadServerManage(session, "x", REQ)).toMatchObject({ loginUser: "ec2-user" });
+    // A synced row wins over the table.
+    state.image = {
+      awsId: "amazon_linux_2023",
+      region: "ap-southeast-1",
+      active: true,
+      specs: { name: "Amazon Linux", kind: "os", loginUser: "ec2-user" },
+    };
+    expect(await loadServerManage(session, "x", REQ)).toMatchObject({ loginUser: "ec2-user" });
+    // A value in the config that is not an image id is ignored: the default image.
+    state.image = null;
+    state.resource = resource({ config: { blueprintId: "Ubuntu; rm -rf" } });
+    expect(await loadServerManage(session, "x", REQ)).toMatchObject({ loginUser: "ubuntu" });
+    // An image nobody knows has no guessed user.
+    state.resource = resource({ config: { blueprintId: "brand_new_thing" } });
+    expect(await loadServerManage(session, "x", REQ)).toMatchObject({ loginUser: null });
   });
   it("reads the saved rules, a detached IP and a restricted SSH rule", async () => {
     state.resource = resource({

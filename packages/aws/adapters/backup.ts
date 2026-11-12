@@ -352,6 +352,8 @@ export function withBackups<C extends { readonly productId: string }>(
       customerId: ctx.resource.customerId,
       productId: ctx.config.productId,
       keyPairId: null,
+      blueprintId: null,
+      region: ctx.region,
     });
     if (spec === null) throw fail("validation");
     const name = awsResourceName("instance", ctx.resource.id);

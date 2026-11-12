@@ -15,6 +15,7 @@ import {
   LAUNCH_FX_RATE,
   applyCatalogScope,
   applyTlds,
+  listActiveImages,
   readCatalogProduct,
   readFeatureFlag,
   seedLaunchData,
@@ -93,7 +94,10 @@ interface Request {
  * A fake AwsAccess: `lightsail()` hands out a client whose `send` answers GetBundles from the fixtures,
  * page by page. The real adapter (`createCatalogSource`) runs on top of it.
  */
-function fakeAccess(answers: Partial<Record<LightsailRegion, Answer>>) {
+function fakeAccess(
+  answers: Partial<Record<LightsailRegion, Answer>>,
+  blueprints: Partial<Record<LightsailRegion, unknown[]>> = {},
+) {
   const requests: Request[] = [];
   const access = {
     caller: "catalog-sync",
@@ -101,6 +105,9 @@ function fakeAccess(answers: Partial<Record<LightsailRegion, Answer>>) {
       requests.push({ region, role, account });
       return {
         send: async (command: { input: { pageToken?: string } }) => {
+          if (command.constructor.name === "GetBlueprintsCommand") {
+            return { blueprints: blueprints[region] ?? [] };
+          }
           const answer = answers[region] ?? [];
           if (answer instanceof Error) throw answer;
           const pages = (Array.isArray(answer[0]) ? answer : [answer]) as BundleItem[][];
@@ -119,9 +126,14 @@ function fakeAccess(answers: Partial<Record<LightsailRegion, Answer>>) {
 
 function makeSync(
   answers: Partial<Record<LightsailRegion, Answer>>,
-  over: { config?: Partial<CatalogSyncConfig>; at?: string; role?: DatabaseRole } = {},
+  over: {
+    config?: Partial<CatalogSyncConfig>;
+    at?: string;
+    role?: DatabaseRole;
+    blueprints?: Partial<Record<LightsailRegion, unknown[]>>;
+  } = {},
 ) {
-  const { access, requests } = fakeAccess(answers);
+  const { access, requests } = fakeAccess(answers, over.blueprints);
   const logs: LogEvent[] = [];
   const config: CatalogSyncConfig = {
     poolAccountId: POOL_ACCOUNT_ID,
@@ -136,6 +148,8 @@ function makeSync(
     config,
     access,
     runTx: asRole(over.role ?? "worker_rw"),
+    // The images are proven in their own test below; the other tests count catalog rows.
+    syncImages: over.blueprints !== undefined,
     clock: { now: () => new Date(at) },
     log: (e) => logs.push(e),
   });
@@ -531,5 +545,56 @@ describe("catalog-sync proof (fake AWS, real database)", () => {
   it("pages are followed: an answer in two pages is stored whole", async () => {
     await makeSync({ [SG]: [[NANO, NANO_IPV6], [SMALL_2GB]] }).run();
     expect(await scalar("select count(*) c from catalog_products")).toBe(3);
+  });
+
+  it("WPU-G3: the Linux images are stored as the family blueprint with no price, never as a plan, and read by web_rw", async () => {
+    const bp = (blueprintId: string, over: Record<string, unknown> = {}) => ({
+      blueprintId,
+      name: blueprintId,
+      type: "os",
+      group: "g",
+      version: "1",
+      platform: "LINUX_UNIX",
+      isActive: true,
+      ...over,
+    });
+    const blueprints = {
+      [SG]: [
+        bp("ubuntu_24_04"),
+        bp("wordpress", { type: "app" }),
+        bp("windows_server_2022", { platform: "WINDOWS" }),
+      ],
+    };
+    const first = await makeSync({ [SG]: [NANO] }, { blueprints }).run();
+    expect(first.images).toEqual([
+      { region: SG, ok: true, seen: 3, mapped: 2, inserted: 2, updated: 0, deactivated: 0 },
+    ]);
+    const images = (
+      await t.pool.query(
+        "select aws_id, platform, active, aws_price_usd::text as price, billing_unit, feature_flag, specs from catalog_products where family = 'blueprint' order by aws_id",
+      )
+    ).rows;
+    expect(images.map((r) => r.aws_id)).toEqual(["ubuntu_24_04", "wordpress"]);
+    expect(images[0]).toMatchObject({
+      platform: "linux",
+      active: true,
+      price: "0.0000",
+      billing_unit: "none",
+      feature_flag: "linux_instance",
+      specs: { name: "ubuntu_24_04", kind: "os", loginUser: "ubuntu" },
+    });
+    expect(images[1].specs).toMatchObject({ kind: "app", loginUser: "bitnami" });
+    // The plans of the Region are untouched by the image rows, and a second run changes nothing.
+    expect(
+      await scalar("select count(*) c from catalog_products where family <> 'blueprint'"),
+    ).toBe(1);
+    const second = await makeSync({ [SG]: [NANO] }, { blueprints }).run();
+    expect(second.images[0]).toMatchObject({ inserted: 0, updated: 2, deactivated: 0 });
+    const read = await asRole("web_rw")((tx) => listActiveImages(tx, SG));
+    expect(read.map((r) => r.awsId)).toEqual(["ubuntu_24_04", "wordpress"]);
+    // An image AWS stops listing is deactivated and no longer offered.
+    await makeSync({ [SG]: [NANO] }, { blueprints: { [SG]: [bp("ubuntu_24_04")] } }).run();
+    const after = await asRole("web_rw")((tx) => listActiveImages(tx, SG));
+    expect(after.map((r) => r.awsId)).toEqual(["ubuntu_24_04"]);
   });
 });

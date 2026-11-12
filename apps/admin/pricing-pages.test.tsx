@@ -41,6 +41,7 @@ vi.mock("./server/pricing-actions.ts", () => ({
   setFxAction: async () => {},
   approveFxAction: async () => {},
   setFlagAction: async () => {},
+  setImageAction: async () => {},
 }));
 vi.mock("./server/pricing-data.ts", () => ({
   loadPricing: async (_admin: unknown, raw: unknown) => {
@@ -170,6 +171,27 @@ function catalog() {
       markets: ["BD"],
       market: "BD",
       flags: FLAGS,
+      images: [
+        {
+          id: "wordpress",
+          name: "WordPress",
+          kind: "app",
+          loginUser: "bitnami",
+          regions: ["ap-southeast-1", "ap-south-1"],
+          on: true,
+          explicit: false,
+        },
+        {
+          id: "ubuntu_24_04",
+          name: "Ubuntu",
+          kind: "os",
+          loginUser: "ubuntu",
+          regions: [],
+          on: false,
+          explicit: true,
+        },
+      ],
+      imagesInvalid: false,
       families: [
         {
           family: "linux_instance",
@@ -366,6 +388,48 @@ describe("/catalog", () => {
     const html = inProvider(await CatalogPage(params("en")), "en");
     expect(html).not.toMatch(/name="(awsPriceUsd|aws_price_usd|active|awsId|region|specs)"/);
     expect(html).toContain(msgs("en").AdminCatalog.products.activeHint);
+  });
+
+  it.each(LOCALES)(
+    "shows the image allow-list with its switch, the user and the Regions in %s",
+    async (locale) => {
+      as("ops");
+      const html = inProvider(await CatalogPage(params(locale)), locale);
+      const m = msgs(locale).AdminCatalog.images;
+      expect(html).toContain(m.title);
+      expect(html).toContain("WordPress (wordpress)");
+      expect(html).toContain("bitnami");
+      expect(html).toContain("ap-southeast-1, ap-south-1");
+      expect(html).toContain(m.regionsNone);
+      expect(html).toContain(m.kindApp);
+      expect(html).toContain(m.kindOs);
+      expect(html).toContain(m.byDefault);
+      expect(html).toContain(m.bySwitch);
+    },
+  );
+
+  it("each image has its own switch and reason field, apart from the flags", async () => {
+    as("ops");
+    const html = inProvider(await CatalogPage(params("en")), "en");
+    // wordpress is on, so its button turns it off; ubuntu is off, so its button turns it on.
+    expect(html).toContain('name="imageTurn" value="off"');
+    expect(html).toContain('name="imageTurn" value="on"');
+    expect(html.match(/name="imageReason"/g)?.length).toBe(2);
+    expect(html).toContain('name="image" value="wordpress"');
+    // Nothing synced from AWS is editable here.
+    expect(html).not.toMatch(/name="(loginUser|kind|regions|blueprintId)"/);
+  });
+
+  it("a stored list that cannot be read says so, and no image is shown as on", async () => {
+    as("ops");
+    const base = catalog();
+    state.catalog = {
+      ...base,
+      value: { ...base.value, imagesInvalid: true, images: [] },
+    };
+    const html = inProvider(await CatalogPage(params("en")), "en");
+    expect(html).toContain(msgs("en").AdminCatalog.images.invalid);
+    expect(html).toContain(msgs("en").AdminCatalog.images.empty);
   });
 
   it("a finance admin is refused by the guard in the page's view: the data is never read", async () => {

@@ -1,4 +1,12 @@
-import { domainNameHolder, readCatalogProduct, readTld, type CustomerRepos, type Tx } from "@tc/db";
+import {
+  domainNameHolder,
+  readCatalogProduct,
+  readImage,
+  readImageSwitches,
+  readTld,
+  type CustomerRepos,
+  type Tx,
+} from "@tc/db";
 import { parseDomainConfig, resolveDomain } from "../domains/resolve";
 import type { RiskTier } from "../capacity/types";
 import { isEnabledIn } from "../flags/is-enabled";
@@ -6,6 +14,7 @@ import { isFeatureFlag } from "../flags/keys";
 import { checkCdnOrigin, parseCdnConfig, resolveCdn } from "../products/cdn";
 import { checkDiskServer, parseDiskConfig, resolveDisk } from "../products/disk";
 import { resolveProduct, type ResolvedProduct } from "../products/instance";
+import { isImageOn, optionOf } from "../products/blueprints";
 import { checkRestore, type RestoreCandidate } from "../products/restore";
 import {
   checkLbTargets,
@@ -60,6 +69,36 @@ export async function gateKeyPair(
     return { ok: false, error: "validation", fields: { keyPairId: "invalid" } };
   }
   return { ok: true, value: true };
+}
+
+/**
+ * WPU-G3. The image a customer chose for a new Linux server must be listed active by AWS in the Region of
+ * the plan and switched on in the admin allow-list of the market; a stored allow-list that does not
+ * parse offers nothing (R16). An order without an image (an older order, a restore) is not checked
+ * here: the provisioner then uses the default image, and a restored server keeps the image of its
+ * backup. The Server Action of the create wizard requires the image and the SSH key (G6) before the
+ * draft is made. Used by the draft and again by the purchase: the admin may have switched the image off
+ * in between. Windows has its own flow.
+ */
+export async function gateImage(
+  tx: Tx,
+  customer: Gated,
+  product: ResolvedProduct,
+): Promise<Result<true>> {
+  const id = product.resourceConfig.blueprintId;
+  if (product.family !== "linux_instance" || id === undefined) return { ok: true, value: true };
+  const invalid: Result<true> = {
+    ok: false,
+    error: "validation",
+    fields: { blueprintId: "invalid" },
+  };
+  if (typeof id !== "string") return invalid;
+  const stored = await readImageSwitches(tx, customer.market);
+  if (stored.state === "invalid") return invalid;
+  const row = await readImage(tx, product.region, id);
+  const option = row === null || !row.active ? null : optionOf(row);
+  const switches = stored.state === "ok" ? stored.switches : { on: [], off: [] };
+  return option !== null && isImageOn(switches, id) ? { ok: true, value: true } : invalid;
 }
 
 /**

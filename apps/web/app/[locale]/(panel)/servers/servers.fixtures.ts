@@ -50,6 +50,35 @@ export function configurator(
     ],
     regions: ["ap-south-1", "ap-southeast-1"],
     keys: [{ id: KEY_ID, name: "Laptop", fingerprint: "SHA256:abc" }],
+    images: {
+      "ap-south-1": [
+        {
+          id: "ubuntu_24_04",
+          name: "Ubuntu",
+          kind: "os",
+          version: "24.04 LTS",
+          loginUser: "ubuntu",
+          logo: "ubuntu",
+        },
+        {
+          id: "amazon_linux_2023",
+          name: "Amazon Linux",
+          kind: "os",
+          version: "2023",
+          loginUser: "ec2-user",
+          logo: null,
+        },
+        {
+          id: "wordpress",
+          name: "WordPress",
+          kind: "app",
+          version: null,
+          loginUser: "bitnami",
+          logo: "wordpress",
+        },
+      ],
+      "ap-southeast-1": [],
+    },
     ...over,
   };
 }
@@ -71,6 +100,8 @@ export function detail(over: Partial<ServerDetail> = {}): ServerDetail {
     ...server(),
     family: "linux_instance",
     keyName: "Laptop",
+    imageName: "Ubuntu",
+    loginUser: "ubuntu",
     createdAt: new Date("2026-11-10T06:00:00Z"),
     ...over,
   };

@@ -80,13 +80,30 @@ export const serversEn: Same<typeof serversBn> = {
         "Cloud Server, built on Amazon Lightsail. Choose, see the price, then pay from your wallet.",
       step: {
         location: "Location",
+        image: "Image",
         plan: "Plan",
         key: "SSH key",
         name: "Server name",
       },
       locationHint: "The name and code of the AWS Region are shown.",
       planLegend: "Choose a plan",
-      keyNone: "No key",
+      imageHint:
+        "The server is built from this image. Choose an operating system alone, or an operating system with an app.",
+      imageApps: "Apps + OS",
+      imageOs: "OS only",
+      imageUser: "Login user: {user}",
+      imageUserUnknown: "The login user is in the image notes",
+      noImages: {
+        title: "No image is available in this location right now",
+        body: "Choose another location, or check again in a little while.",
+      },
+      keyRequired:
+        "An SSH key is needed to log in to the server. Only the public key is sent; the private key stays with you.",
+      noKeys: {
+        title: "Add an SSH key first",
+        body: "Create a key or add your public key, then come back here to create the server.",
+        action: "Add an SSH key",
+      },
       keyHint: "Only public keys are used. To add a new key,",
       keyLink: "go to the SSH keys page",
       nameHint: "English letters, digits, spaces, dots, dashes and underscores, up to 60.",
@@ -95,6 +112,7 @@ export const serversEn: Same<typeof serversBn> = {
         title: "Order summary",
         plan: "Plan",
         location: "Location",
+        image: "Image",
         term: "Term",
         termValue: "30 days",
         price: "Total price",
@@ -135,6 +153,7 @@ export const serversEn: Same<typeof serversBn> = {
         keyFile: "Key file",
         keyFileHint:
           "This is the private key you saved when you created the key. On macOS or Linux run chmod 400 {file} once so that SSH accepts it. We never hold your private key.",
+        image: "Image",
         keyName: "Attached key",
         noKey: "No SSH key was attached to this server.",
         pendingIp: "The command shows here once the IP address is known.",

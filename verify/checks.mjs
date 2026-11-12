@@ -2334,6 +2334,28 @@ TASKS["WPA-P1"] = [
   repo,
 ];
 
+// WPU-G3: the image (Lightsail blueprint) and the SSH key of the Linux create wizard. GetBlueprints in the
+// catalog sync (family `blueprint`, no new table), the admin allow-list (market setting `image_allowlist`,
+// audited), the order gate for the image, the provisioner that launches the chosen image, the wizard step
+// with ImageTile, the required key, and the login user of the server's own image in the Connect help.
+// The db suite needs the local PostgreSQL (pnpm db:up).
+TASKS["WPU-G3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  aws,
+  db,
+  catalogSyncAll,
+  provisioner,
+  ui,
+  web,
+  admin,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

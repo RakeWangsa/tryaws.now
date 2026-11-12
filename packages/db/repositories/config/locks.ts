@@ -21,3 +21,7 @@ export function lockPricingRuleWrites(tx: Tx, market: string): Promise<void> {
 export function lockPriceBookWrites(tx: Tx, market: string): Promise<void> {
   return lock(tx, "price_book", market);
 }
+
+export function lockImageAllowListWrites(tx: Tx, market: string): Promise<void> {
+  return lock(tx, "image_allowlist", market);
+}

@@ -317,6 +317,16 @@ describe("/servers/[id] management (WPU-G2)", () => {
     expect(en).toContain("chmod 400 Laptop.pem");
     expect(en).not.toContain("&lt;user&gt;");
   });
+  it("WPU-G13: the Connect tab names the image of the server and uses that image's login user", async () => {
+    state.detail = detail({ imageName: "WordPress", loginUser: "bitnami" });
+    state.manage = manage({ loginUser: "bitnami" });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("ssh -i Laptop.pem bitnami@203.0.113.10");
+    expect(en).toContain("WordPress");
+    const bn = await renderPage(ServerDetailPage as never, "bn", { id: SERVER_ID });
+    expect(bn).toContain("ssh -i Laptop.pem bitnami@203.0.113.10");
+    expect(bn).toContain("ইমেজ");
+  });
   it("an unknown image gets no guessed user", async () => {
     state.manage = manage({ loginUser: null });
     const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });

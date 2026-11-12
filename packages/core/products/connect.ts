@@ -24,11 +24,14 @@ const LOGIN_USERS: readonly (readonly [string, string])[] = [
   ["drupal", "bitnami"],
   ["magento", "bitnami"],
   ["gitlab", "bitnami"],
+  ["nginx", "bitnami"],
   ["plesk", "ubuntu"],
 ];
 
 export function loginUserOf(blueprintId: unknown): string | null {
   if (typeof blueprintId !== "string") return null;
+  // The Bitnami stacks all log in as `bitnami` (VERIFY with GetInstanceAccessDetails in tc-pool-dev).
+  if (blueprintId.includes("bitnami")) return "bitnami";
   for (const [prefix, user] of LOGIN_USERS) {
     if (blueprintId.startsWith(prefix)) return user;
   }

@@ -17,7 +17,20 @@ describe("serverConfigOf", () => {
   it("reads the display name, key and a valid IPv4 address", () => {
     expect(
       serverConfigOf({ displayName: "web", keyPairId: "k1", publicIpv4: "203.0.113.10" }),
-    ).toEqual({ displayName: "web", keyPairId: "k1", publicIp: "203.0.113.10" });
+    ).toEqual({
+      displayName: "web",
+      keyPairId: "k1",
+      publicIp: "203.0.113.10",
+      blueprintId: null,
+    });
+  });
+  it("WPU-G3: reads the image id the server was ordered with, and only a plain id", () => {
+    expect(serverConfigOf({ displayName: "w", blueprintId: "wordpress" }).blueprintId).toBe(
+      "wordpress",
+    );
+    for (const bad of ["Ubuntu 24", "../x", 5, null, ""]) {
+      expect(serverConfigOf({ displayName: "w", blueprintId: bad }).blueprintId).toBeNull();
+    }
   });
   it("ignores an address that is not an IPv4 address, and anything that looks like an AWS id", () => {
     const config = serverConfigOf({

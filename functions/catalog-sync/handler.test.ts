@@ -1,5 +1,5 @@
 import { AwsError, type AccountRef, type CatalogSource, type LightsailRegion } from "@tc/aws";
-import type { LogEvent, RawBundle } from "@tc/core";
+import type { LogEvent, RawBlueprint, RawBundle } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { createCatalogSyncHandler, type CatalogStore, type CatalogSyncDeps } from "./handler";
 
@@ -67,6 +67,25 @@ function fakeStore(over: { account?: AccountRef | null } = {}) {
       }
       return { inserted, updated, deactivated };
     },
+    async applyImages(scope) {
+      let inserted = 0;
+      let updated = 0;
+      for (const r of scope.rows) {
+        const k = key(r.region, r.family, r.awsId);
+        if (rows.has(k)) updated += 1;
+        else inserted += 1;
+        rows.set(k, { active: r.active, priceUsd: r.awsPriceUsd });
+      }
+      let deactivated = 0;
+      for (const d of scope.deactivate) {
+        const row = rows.get(key(d.region, d.family, d.awsId));
+        if (row?.active) {
+          row.active = false;
+          deactivated += 1;
+        }
+      }
+      return { inserted, updated, deactivated };
+    },
     async applyTlds(list) {
       return { inserted: list.length, updated: 0 };
     },
@@ -78,6 +97,7 @@ function harness(
   answers: Partial<Record<LightsailRegion, RawBundle[] | Error>>,
   over: Partial<CatalogSyncDeps> = {},
 ) {
+  const images: Partial<Record<LightsailRegion, RawBlueprint[] | Error>> = {};
   const calls: { region: string; account: AccountRef }[] = [];
   let tldCalls = 0;
   const logs: LogEvent[] = [];
@@ -86,6 +106,11 @@ function harness(
     async instanceBundles(account, region) {
       calls.push({ region, account });
       const answer = answers[region];
+      if (answer instanceof Error) throw answer;
+      return answer ?? [];
+    },
+    async instanceBlueprints(_account, region) {
+      const answer = images[region];
       if (answer instanceof Error) throw answer;
       return answer ?? [];
     },
@@ -111,6 +136,7 @@ function harness(
     dnsAccount: null,
     regions: [A, B],
     syncTlds: false,
+    syncImages: false,
     ...over,
   };
   return {
@@ -119,6 +145,7 @@ function harness(
     logs,
     rows,
     tldCalls: () => tldCalls,
+    images,
     deps,
   };
 }
@@ -333,6 +360,79 @@ describe("catalog-sync handler", () => {
     expect(h.logs.find((l) => l.event === "catalog_sync_scope" && l.region === B)).toMatchObject({
       ok: false,
       reason: "budget",
+    });
+  });
+
+  describe("images (WPU-G3)", () => {
+    const bp = (id: string, over: Partial<RawBlueprint> = {}): RawBlueprint => ({
+      blueprintId: id,
+      name: id,
+      type: "os",
+      group: null,
+      version: null,
+      platform: "LINUX_UNIX",
+      isActive: true,
+      ...over,
+    });
+    const on = (answers = { [A]: ONE, [B]: ONE }) => harness(answers, { syncImages: true });
+
+    it("syncImages false never calls GetBlueprints (the report has no image entries)", async () => {
+      const h = harness({ [A]: ONE, [B]: ONE });
+      h.images[A] = new Error("must not be called");
+      const report = await h.run();
+      expect(report.images).toEqual([]);
+    });
+
+    it("writes the Linux images of each Region as the family blueprint and skips Windows and bad ids", async () => {
+      const h = on();
+      for (const r of [A, B]) {
+        h.images[r] = [
+          bp("ubuntu_24_04"),
+          bp("wordpress", { type: "app" }),
+          bp("windows_server_2022", { platform: "WINDOWS" }),
+          bp("Bad Id"),
+        ];
+      }
+      const report = await h.run();
+      expect(report.images).toEqual([
+        { region: A, ok: true, seen: 4, mapped: 2, inserted: 2, updated: 0, deactivated: 0 },
+        { region: B, ok: true, seen: 4, mapped: 2, inserted: 2, updated: 0, deactivated: 0 },
+      ]);
+      expect(h.rows.get(`${A}|blueprint|wordpress`)).toEqual({ active: true, priceUsd: "0" });
+      expect(h.rows.has(`${A}|blueprint|windows_server_2022`)).toBe(false);
+    });
+
+    it("an image AWS no longer lists is deactivated, never deleted; a second run changes nothing (R7)", async () => {
+      const h = on();
+      h.images[A] = [bp("ubuntu_24_04"), bp("old_image")];
+      h.images[B] = [bp("ubuntu_24_04")];
+      await h.run();
+      h.images[A] = [bp("ubuntu_24_04")];
+      const second = await h.run();
+      expect(second.images[0]).toMatchObject({ deactivated: 1, inserted: 0 });
+      expect(h.rows.get(`${A}|blueprint|old_image`)?.active).toBe(false);
+      const third = await h.run();
+      expect(third.images[0]).toMatchObject({ deactivated: 0, inserted: 0 });
+    });
+
+    it("an answer with no usable Linux image is refused before any write and fails the run", async () => {
+      const h = on();
+      h.images[A] = [bp("ubuntu_24_04")];
+      await h.run().catch(() => undefined);
+      h.images[A] = [bp("windows_server_2022", { platform: "WINDOWS" })];
+      h.images[B] = [];
+      await expect(h.run()).rejects.toThrow(FIXED);
+      expect(h.rows.get(`${A}|blueprint|ubuntu_24_04`)?.active).toBe(true);
+    });
+
+    it("a failing image scope is logged with a fixed reason and does not stop the other Region", async () => {
+      const h = on();
+      h.images[A] = new Error(`secret ${ACCOUNT_ID}`);
+      h.images[B] = [bp("ubuntu_24_04")];
+      await expect(h.run()).rejects.toThrow(FIXED);
+      expect(h.rows.has(`${B}|blueprint|ubuntu_24_04`)).toBe(true);
+      const text = JSON.stringify(h.logs);
+      expect(text).not.toContain(ACCOUNT_ID);
     });
   });
 

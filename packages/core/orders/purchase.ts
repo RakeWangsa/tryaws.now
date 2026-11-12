@@ -9,7 +9,7 @@ import { makeEnqueueOperation } from "../operations/enqueue";
 import { accountFor } from "../pricing/index";
 import { quoteInForce } from "../rates/in-force";
 import type { Result } from "../types";
-import { gateCustomer, gateKeyPair, gateProduct, resolveOrderProduct } from "./checks";
+import { gateCustomer, gateImage, gateKeyPair, gateProduct, resolveOrderProduct } from "./checks";
 import { comparePrice } from "./compare";
 import type { OrdersDeps } from "./draft";
 import { sqlState } from "./guard";
@@ -139,6 +139,9 @@ export async function runPurchase(
   // The key pair of the configuration is the customer's own, read through the scoped repository.
   const keyed = await gateKeyPair(repos, product);
   if (!keyed.ok) return keyed;
+  // WPU-G3: the image and the key of a new Linux server, again: the allow-list may have changed.
+  const imaged = await gateImage(tx, customer.value, product);
+  if (!imaged.ok) return imaged;
 
   // 6. Price, again, and compare with the token.
   const priced = await quoteInForce(

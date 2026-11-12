@@ -53,6 +53,9 @@ export interface LinuxInstanceDeps {
     readonly customerId: string;
     readonly productId: string;
     readonly keyPairId: string | null;
+    /** WPU-G3: the image the customer chose; null for an order that has none (the default image). */
+    readonly blueprintId: string | null;
+    readonly region: string;
   }): Promise<LinuxLaunchSpec | null>;
   /**
    * Has the bootstrap printed its marker (BOOTSTRAP_OK_MARKER)? "pending" while the instance is still
@@ -169,6 +172,8 @@ export function createLinuxInstanceAdapter(
       customerId: ctx.resource.customerId,
       productId: ctx.config.productId,
       keyPairId: ctx.config.keyPairId,
+      blueprintId: ctx.config.blueprintId ?? null,
+      region: ctx.region,
     });
     if (spec === null || spec.publicKey === null) throw fail("validation");
     const keyName = awsResourceName("keypair", ctx.config.keyPairId);
@@ -193,6 +198,8 @@ export function createLinuxInstanceAdapter(
       customerId: ctx.resource.customerId,
       productId: ctx.config.productId,
       keyPairId: ctx.config.keyPairId,
+      blueprintId: ctx.config.blueprintId ?? null,
+      region: ctx.region,
     });
     if (spec === null) throw fail("validation");
     const n = names(ctx.resource.id);
