@@ -58,6 +58,10 @@ const ROWS: Record<string, CatalogRowForPricing[]> = {
 function deps(flags: { key: string; enabled: boolean }[], calls: string[] = []): CatalogDeps {
   return {
     run: async (fn) => fn({} as Tx),
+    numerals: async (_tx, market) => {
+      calls.push(`numerals:${market}`);
+      return "latn";
+    },
     flags: async (_tx, market) => {
       calls.push(`flags:${market}`);
       return flags;
@@ -101,6 +105,22 @@ describe("loadPublicCatalog", () => {
       expect(offer.priceMinor).toBe(expected.totalMinor);
       expect(typeof offer.priceMinor).toBe("bigint");
     }
+  });
+
+  it("carries the numerals setting of the market on every offer; an unreadable setting is beng (WPU-B6)", async () => {
+    const flags = [{ key: "linux_instance", enabled: true }];
+    const read = await loadPublicCatalog(NOW, deps(flags));
+    if (read.state !== "ok") throw new Error("expected ok");
+    expect(read.families[0]?.offers.every((o) => o.numerals === "latn")).toBe(true);
+    const broken: CatalogDeps = {
+      ...deps(flags),
+      numerals: async () => {
+        throw new Error("down");
+      },
+    };
+    const fallback = await loadPublicCatalog(NOW, broken);
+    if (fallback.state !== "ok") throw new Error("expected ok");
+    expect(fallback.families[0]?.offers.every((o) => o.numerals === "beng")).toBe(true);
   });
 
   it("reads the flags of the public market and lists only the families whose flag is on (R12)", async () => {

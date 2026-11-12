@@ -1,3 +1,4 @@
+import { kycDocumentParams } from "./schemas.ts";
 import type { AdminActor, AdminRepos } from "@tc/db";
 
 // The document viewer of 16.12: the image of a KYC document is shown through a short-lived presigned
@@ -58,8 +59,6 @@ const NO_CACHE: Record<string, string> = {
   "Referrer-Policy": "no-referrer",
 };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 // R9 in order: authenticate and authorize, validate, rate limit, execute (the audit row of the view is
 // written by the repository inside the transaction, before the URL exists), answer. Every refusal has
 // the same no-store headers and no body text.
@@ -75,22 +74,15 @@ export function makeKycDocumentHandler(
       return { status: 403, headers: NO_CACHE };
     }
     try {
-      const index =
-        typeof rawIndex === "string" && /^[0-9]{1,2}$/.test(rawIndex) ? Number(rawIndex) : rawIndex;
-      if (
-        typeof submissionId !== "string" ||
-        !UUID.test(submissionId) ||
-        typeof index !== "number" ||
-        !Number.isInteger(index) ||
-        index < 0
-      ) {
-        return { status: 400, headers: NO_CACHE };
-      }
+      const params = kycDocumentParams.safeParse({ submissionId, index: rawIndex });
+      if (!params.success) return { status: 400, headers: NO_CACHE };
+      const index = params.data.index;
+      const documentSubmissionId = params.data.submissionId;
       if (!(await deps.limiter(actor, deps.clock.now()))) {
         return { status: 429, headers: NO_CACHE };
       }
       const read = await deps.run(actor, (repos) =>
-        repos.customers.documentRead({ submissionId, index }),
+        repos.customers.documentRead({ submissionId: documentSubmissionId, index }),
       );
       if (!read.ok) {
         if (read.error === "forbidden") return { status: 403, headers: NO_CACHE };

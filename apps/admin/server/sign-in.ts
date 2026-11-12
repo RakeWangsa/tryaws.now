@@ -1,4 +1,5 @@
 import { isValidSignInShape, parseViewerAddress } from "@tc/auth";
+import { check, signInForm } from "./schemas.ts";
 import type { AdminSignInInput, AdminSignInOutcome } from "@tc/auth";
 import type { AdminAccessEntry } from "@tc/db";
 
@@ -43,7 +44,10 @@ export function makeSignIn(deps: SignInDeps): (request: SignInRequest) => Promis
 
     try {
       // 2. Validate.
-      if (!isValidSignInShape({ email, password, code })) {
+      if (
+        check(signInForm, { email, password, code }) === null ||
+        !isValidSignInShape({ email, password, code })
+      ) {
         await note("invalid");
         return { ok: false, code: "invalid" };
       }

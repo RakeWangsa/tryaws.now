@@ -1,4 +1,5 @@
 import type { AdminActor, AdminRepos, AdminRole } from "@tc/db";
+import { MAX_REASON_LENGTH, UUID_PATTERN, check, reason, text, uuid } from "./schemas.ts";
 
 // What the three case flows (support, abuse, reconciliation) share: the shape of an answer, the
 // dependencies and the small validators. No next/* import: the Server Actions wire the real pieces and
@@ -28,23 +29,21 @@ export interface CaseFlowDeps {
   readonly clock: { now(): Date };
 }
 
-export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export const MAX_REASON = 500;
+export const UUID = UUID_PATTERN;
+export const MAX_REASON = MAX_REASON_LENGTH;
 
-export function cleanReason(reason: unknown): string | null {
-  if (typeof reason !== "string") return null;
-  const text = reason.trim();
-  return text === "" || text.length > MAX_REASON ? null : text;
+// Step 3 of R9 for the case flows: each helper is a zod schema of schemas.ts, answering the cleaned
+// value or null.
+export function cleanReason(value: unknown): string | null {
+  return check(reason, value);
 }
 
 export function cleanUuid(value: unknown): string | null {
-  return typeof value === "string" && UUID.test(value) ? value.toLowerCase() : null;
+  return check(uuid, value);
 }
 
 export function cleanText(value: unknown, max: number): string | null {
-  if (typeof value !== "string") return null;
-  const text = value.trim();
-  return text === "" || text.length > max ? null : text;
+  return check(text(max), value);
 }
 
 type RepoFailure = { ok: false; error: "not_found" | "conflict" | "validation" | "forbidden" };

@@ -3,7 +3,14 @@ import type { EmailProvider } from "../email/provider";
 import type { SmsProvider } from "../sms/provider";
 import { scanSecrets } from "../text/guards";
 import { isTemplateId, parseTemplateData, renderEmail, renderSms } from "../templates/render";
-import { MAX_ATTEMPTS, type NotifierStore, type Recipient, type StoredRow } from "./store";
+import {
+  MAX_ATTEMPTS,
+  SMS_DAILY_CAP_DEFAULT,
+  SMS_DAILY_WINDOW_MS,
+  type NotifierStore,
+  type Recipient,
+  type StoredRow,
+} from "./store";
 import type { Channel } from "./types";
 
 export { MAX_ATTEMPTS };
@@ -50,6 +57,20 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
   const counts = { sent: 0, retry: 0, failed: 0, skipped: 0 };
   const streak = new Map<Channel, number>();
   const paused = new Set<Channel>();
+
+  // The SMS cap per customer and day is read once per run and only when an SMS row is met. A cap
+  // that cannot be read is the default, never "no cap" (R16).
+  let smsCap: number | null = null;
+  const capOf = async (): Promise<number> => {
+    if (smsCap === null) {
+      try {
+        smsCap = await store.smsDailyCap();
+      } catch {
+        smsCap = SMS_DAILY_CAP_DEFAULT;
+      }
+    }
+    return smsCap;
+  };
 
   const rows = await store.due(clock.now(), deps.limit ?? DEFAULT_LIMIT);
 
@@ -126,6 +147,22 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
         if (recipient === null || recipient.phone === null || !recipient.phoneVerified) {
           await refuse(row, "no_verified_phone");
           continue;
+        }
+        // The daily cap: a customer gets at most `cap` notification SMS in 24 hours. The row is
+        // refused, not delayed: the same event also has an in-app item and usually an e-mail.
+        if (row.customerId !== null) {
+          const since = new Date(clock.now().getTime() - SMS_DAILY_WINDOW_MS);
+          let sentToday: number;
+          try {
+            sentToday = await store.smsSentSince(row.customerId, since);
+          } catch {
+            await refuse(row, "sms_cap_unreadable");
+            continue;
+          }
+          if (sentToday >= (await capOf())) {
+            await refuse(row, "sms_daily_cap");
+            continue;
+          }
         }
         const to = recipient.phone;
         const text = renderSms(row.template, data, ctx);

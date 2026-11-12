@@ -110,7 +110,7 @@ export function extras(over: Partial<ServerExtras> = {}): ServerExtras {
         specs: { vcpus: 1, ramGb: "1", diskGb: 40, transferGb: 2000 },
       },
     ],
-    destroy: { allowed: true, manualBackups: 1 },
+    destroy: { allowed: true, manualBackups: 1, retentionDays: 14 },
     requestId: REQUEST_ID,
     ...over,
   };

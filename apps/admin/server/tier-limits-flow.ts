@@ -1,3 +1,4 @@
+import { isMarket } from "./schemas.ts";
 import {
   TIER_LIMIT_MAX_COUNT,
   isRiskTierName,
@@ -22,7 +23,6 @@ import {
 // R10), and a fixed answer. No next/* import. Answers are fixed codes and the NAMES of fields (R14, R16).
 // A lower limit does not touch what a customer already has; it stops new orders past the limit.
 
-const MARKET = /^[A-Z]{2}$/;
 const COUNT = new RegExp(`^[0-9]{1,${String(TIER_LIMIT_MAX_COUNT).length}}$`);
 const BUNDLE_USD = /^(0|[1-9]\d{0,5})(\.\d{1,4})?$/;
 
@@ -99,7 +99,7 @@ export function makeTierLimitsFlow(deps: PricingFlowDeps): TierLimitsFlow {
       if (!auth.ok) return auth.answer;
       // 3. Validate.
       const bad: string[] = [];
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       if (!isRiskTierName(tier)) bad.push("tier");
       const instances = count(maxInstances, 1);
       if (instances === null) bad.push("maxInstances");

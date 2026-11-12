@@ -1,3 +1,4 @@
+import { isBlueprintId, isMarket } from "./schemas.ts";
 import type {
   previewBook as PreviewBook,
   previewChange as PreviewChange,
@@ -136,8 +137,6 @@ export interface SetImageMinPowerRequest {
   readonly reason: unknown;
 }
 
-const MARKET = /^[A-Z]{2}$/;
-const BLUEPRINT_ID = /^[a-z0-9_]{1,64}$/;
 const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_.[\]]{0,39}$/;
 const SECOND_ADMIN_TOKENS: readonly FlowCode[] = [
   "second_admin_required",
@@ -260,7 +259,7 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       if (!auth.ok) return auth.answer;
       // 3. Validate.
       const bad: string[] = [];
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       let productFamily: string | null = null;
       if (family !== null && family !== undefined && family !== "") {
         if (typeof family !== "string" || !isFeatureFlag(family)) {
@@ -314,7 +313,7 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       const auth = await authorize(PRICING_ROLES);
       if (!auth.ok) return auth.answer;
       const bad: string[] = [];
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       // The engine's own test of a storable rate (plain decimal text, never a number).
       if (typeof rate !== "string" || !isFxRateText(rate.trim())) bad.push("rate");
       const start = typeof from === "string" ? startOf(from) : null;
@@ -377,7 +376,7 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       const auth = await authorize(PRICING_ROLES);
       if (!auth.ok) return auth.answer;
       const bad: string[] = [];
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       const why = readReason(reason);
       if (!why.ok) bad.push("reason");
       if (bad.length > 0 || typeof market !== "string") return fail("invalid", bad);
@@ -434,7 +433,7 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       if (typeof key !== "string" || !isFeatureFlag(key)) {
         bad.push("key");
       }
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       if (typeof enabled !== "boolean") bad.push("enabled");
       const why = readReason(reason);
       if (!why.ok) bad.push("reason");
@@ -472,10 +471,10 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       const auth = await authorize(FLAG_ROLES);
       if (!auth.ok) return auth.answer;
       const bad: string[] = [];
-      if (typeof blueprintId !== "string" || !BLUEPRINT_ID.test(blueprintId)) {
+      if (!isBlueprintId(blueprintId)) {
         bad.push("blueprintId");
       }
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       if (typeof enabled !== "boolean") bad.push("enabled");
       const why = readReason(reason);
       if (!why.ok) bad.push("reason");
@@ -506,10 +505,10 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       const auth = await authorize(FLAG_ROLES);
       if (!auth.ok) return auth.answer;
       const bad: string[] = [];
-      if (typeof blueprintId !== "string" || !BLUEPRINT_ID.test(blueprintId)) {
+      if (!isBlueprintId(blueprintId)) {
         bad.push("blueprintId");
       }
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       // Plain digits only (a sign, a point, an exponent or a unit is refused); "" removes the override.
       const typed = typeof minPower === "string" ? minPower.trim() : null;
       const power =

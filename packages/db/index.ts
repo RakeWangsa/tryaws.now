@@ -420,6 +420,9 @@ export type {
 } from "./repositories/system/lifecycle";
 export { registerCustomer, isNewCustomerValid } from "./repositories/system/registration";
 export type { LegalDocument, NewCustomer, Registered } from "./repositories/system/registration";
+export { readMarketSettingNumber } from "./repositories/config/market-settings";
+export { createVisitorSupportRequest } from "./repositories/system/visitor-support";
+export type { VisitorSupportRequest } from "./repositories/system/visitor-support";
 export { joinVisitorWaitlist } from "./repositories/system/visitor-waitlist";
 export type { VisitorWaitlistJoin } from "./repositories/system/visitor-waitlist";
 export { reconcileRepo, RECONCILE_DISCREPANCY_KEYS } from "./repositories/system/reconcile";

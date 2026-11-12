@@ -68,7 +68,7 @@ function ReasonField({ suffix }: { suffix: string }) {
   );
 }
 
-function ProfileCard({ customer }: { customer: CustomerDetail }) {
+function ProfileCard({ customer, locale }: { customer: CustomerDetail; locale: Locale }) {
   const t = useTranslations("AdminCustomers");
   const typeText =
     customer.type === "individual"
@@ -112,7 +112,10 @@ function ProfileCard({ customer }: { customer: CustomerDetail }) {
           {customer.wallet === null ? (
             t("detail.noWallet")
           ) : (
-            <MoneyText minor={customer.wallet.balanceMinor} />
+            <>
+              <MoneyText minor={customer.wallet.balanceMinor} />{" "}
+              <a href={localePath(locale, `/wallets/${customer.id}`)}>{t("detail.walletLink")}</a>
+            </>
           )}
         </dd>
         <dt>{t("detail.resources")}</dt>
@@ -388,7 +391,7 @@ export function CustomerDetailView({ locale, customer, canAct, result }: Custome
         </p>
       ) : null}
       {canAct ? null : <p className="mb-3">{t("detail.readOnly")}</p>}
-      <ProfileCard customer={customer} />
+      <ProfileCard customer={customer} locale={locale} />
       <KycCard customer={customer} locale={locale} canAct={canAct} />
       {canAct ? <DecisionCards customer={customer} locale={locale} /> : null}
       <AuditCard rows={customer.audit} />

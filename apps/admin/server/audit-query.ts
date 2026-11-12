@@ -1,4 +1,5 @@
 import type { AuditFilter } from "@tc/db";
+import { isUuid } from "./schemas.ts";
 
 // The filter of /audit and of its CSV export, from the URL. A value that is not one of ours is dropped
 // (the page then shows the unfiltered or less filtered log), never passed on. Pure: no next/* import.
@@ -14,7 +15,6 @@ export interface AuditQuery {
   readonly after: string | null;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TARGET_TYPE = /^[a-z][a-z0-9_]{0,39}$/;
 const ACTION = /^[A-Za-z0-9_.:-]{1,80}$/;
 const TARGET_ID = /^[\x21-\x7e]{1,100}$/;
@@ -44,7 +44,7 @@ export function auditQueryOf(raw: Record<string, string | string[] | undefined>)
   const to = one(raw["to"]);
   const after = one(raw["after"]);
   return {
-    actorId: UUID.test(actorId) ? actorId.toLowerCase() : null,
+    actorId: isUuid(actorId) ? actorId.toLowerCase() : null,
     actorType: (ACTOR_TYPES as readonly string[]).includes(actorType)
       ? (actorType as AuditQuery["actorType"])
       : null,
@@ -53,7 +53,7 @@ export function auditQueryOf(raw: Record<string, string | string[] | undefined>)
     action: ACTION.test(action) ? action : null,
     from: validDay(from) ? from : null,
     to: validDay(to) ? to : null,
-    after: UUID.test(after) ? after.toLowerCase() : null,
+    after: isUuid(after) ? after.toLowerCase() : null,
   };
 }
 

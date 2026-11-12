@@ -422,7 +422,7 @@ function DestroyTab({ data, actions }: { data: ServerExtras; actions: ExtrasActi
       <h3 className="mergecolor h4">{t("keeps")}</h3>
       <p className="seccolor">{t("keepsBody", { count: data.destroy.manualBackups })}</p>
       <h3 className="mergecolor h4">{t("period")}</h3>
-      <p className="seccolor">{t("periodBody")}</p>
+      <p className="seccolor">{t("periodBody", { days: data.destroy.retentionDays })}</p>
       {data.name === "" ? <p className="seccolor">{t("noName")}</p> : null}
       {data.destroy.allowed ? null : <p className="seccolor">{t("notAllowed")}</p>}
       <DestroyButton

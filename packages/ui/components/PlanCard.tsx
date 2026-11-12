@@ -1,7 +1,7 @@
 import { useTranslations } from "next-intl";
 import { Button } from "./Button";
 import { MoneyText } from "./MoneyText";
-import type { LinkComponent } from "./types";
+import type { LinkComponent, Numerals } from "./types";
 
 export interface PlanSpec {
   /** A theme icon class such as `icon-drives`. */
@@ -17,10 +17,19 @@ export interface PlanCardProps {
   specs: [PlanSpec, PlanSpec, PlanSpec, PlanSpec];
   cta: { label: string; href: string; as?: LinkComponent };
   recommended?: boolean;
+  /** The digits of the market setting; the digits of the locale when missing. */
+  numerals?: Numerals;
 }
 
 /** A plan of the catalog (index.html, `section.pricing`). The price is whole taka, rounded up. */
-export function PlanCard({ name, priceMinor, specs, cta, recommended = false }: PlanCardProps) {
+export function PlanCard({
+  name,
+  priceMinor,
+  specs,
+  cta,
+  recommended = false,
+  numerals,
+}: PlanCardProps) {
   const t = useTranslations("kit.plan");
   if (typeof priceMinor !== "bigint") {
     throw new TypeError("PlanCard: priceMinor must be a bigint of paisa, never a number");
@@ -31,7 +40,7 @@ export function PlanCard({ name, priceMinor, specs, cta, recommended = false }: 
       <div className="top-content bg-seccolorstyle topradius">
         <div className="title">{name}</div>
         <div className="price seccolor">
-          <MoneyText minor={priceMinor} mode="wholeUp" />{" "}
+          <MoneyText minor={priceMinor} mode="wholeUp" numerals={numerals} />{" "}
           <span className="period">{t("perPeriod")}</span>
         </div>
         <Button variant="primary" href={cta.href} as={cta.as}>

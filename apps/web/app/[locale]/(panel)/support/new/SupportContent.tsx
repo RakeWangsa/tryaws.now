@@ -1,6 +1,9 @@
 import { Badge, Card, DataTable, DateText, EmptyState } from "@tc/ui";
 import { useTranslations } from "next-intl";
-import type { CustomerSupportRequestRow } from "../../../../../server/support-view.ts";
+import type {
+  CustomerSupportRequestRow,
+  SupportResourceChoice,
+} from "../../../../../server/support-view.ts";
 import { SupportForm } from "./SupportForm.tsx";
 import type { SupportAction } from "./SupportForm.tsx";
 
@@ -13,10 +16,12 @@ type Numerals = "beng" | "latn";
 export function SupportContent({
   numerals,
   requests,
+  resources = [],
   action,
 }: {
   numerals: Numerals;
   requests: readonly CustomerSupportRequestRow[];
+  resources?: readonly SupportResourceChoice[];
   action: SupportAction;
 }) {
   const t = useTranslations("SupportForm");
@@ -24,7 +29,7 @@ export function SupportContent({
     <>
       <p className="seccolor mb-4">{t("intro")}</p>
       <Card title={t("form.title")} className="mb-4">
-        <SupportForm action={action} />
+        <SupportForm action={action} resources={resources} />
       </Card>
       <h2 className="h5 mergecolor mb-3">{t("list.title")}</h2>
       {requests.length === 0 ? (

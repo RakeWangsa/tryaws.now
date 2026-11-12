@@ -1,4 +1,5 @@
 import { sendAfterCommit, type OperationQueue } from "@tc/core";
+import { MAX_REASON_LENGTH, check, reasonedId } from "./schemas.ts";
 import type { AdminActor, AdminMessage, AdminRepos, AdminRole } from "@tc/db";
 import { judge, OPS_ACTION_KINDS, type OpsActionKind } from "./ops-map.ts";
 
@@ -36,8 +37,7 @@ export interface OpsFlowDeps {
   readonly clock: { now(): Date };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export const MAX_REASON = 500;
+export const MAX_REASON = MAX_REASON_LENGTH;
 
 // 16.12: ops decides; superadmin owns every area.
 export const OPS_ROLES: readonly AdminRole[] = ["ops", "superadmin"];
@@ -63,14 +63,14 @@ export function makeOpsAction(
     }
     try {
       // 3. Validate.
+      // Zod (schemas.ts): the kind is checked against OPS_ACTION_KINDS below, the rest by the schema.
       if (typeof kind !== "string" || !(OPS_ACTION_KINDS as readonly string[]).includes(kind)) {
         return { ok: false, code: "invalid" };
       }
-      if (typeof id !== "string" || !UUID.test(id)) return { ok: false, code: "invalid" };
-      if (typeof reason !== "string") return { ok: false, code: "invalid" };
-      const why = reason.trim();
-      if (why === "" || why.length > MAX_REASON) return { ok: false, code: "invalid" };
-      const operationId = id.toLowerCase();
+      const valid = check(reasonedId, { id, reason });
+      if (valid === null) return { ok: false, code: "invalid" };
+      const operationId = valid.id;
+      const why = valid.reason;
       const at = deps.clock.now();
       // 4. Rate limit.
       if (!(await deps.limiter(actor, at))) return { ok: false, code: "rate_limited" };

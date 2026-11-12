@@ -64,6 +64,9 @@ it("a throw is logged with a fixed reason and re-thrown with a fixed message, no
     claim: (id, n) => fine.claim(id, n),
     markSent: (id, now) => fine.markSent(id, now),
     markFailed: (id) => fine.markFailed(id),
+    requeue: (id) => fine.requeue(id),
+    smsSentSince: (id, since) => fine.smsSentSince(id, since),
+    smsDailyCap: () => fine.smsDailyCap(),
   };
   const { handler, logs } = build(broken);
   await expect(handler()).rejects.toThrow("notifier: run failed");

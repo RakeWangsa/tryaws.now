@@ -1,3 +1,13 @@
+import {
+  MAX_REASON_LENGTH,
+  MONEY_ADJUSTMENT_KINDS,
+  MONEY_DIRECTIONS,
+  check,
+  createAdjustment,
+  manualRefund,
+  moneyEnvelope,
+  takaToMinor,
+} from "./schemas.ts";
 import type { AdminActor, AdminRepos, AdminRole, LedgerPoster, LedgerReverser } from "@tc/db";
 
 // The money actions of /wallets/[customerId] and /payments in the order of R9: authenticate and
@@ -58,9 +68,7 @@ export interface MoneyFlowDeps {
   readonly clock: { now(): Date };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export const MAX_TEXT = 500;
-const MAX_EVIDENCE = 200;
+export const MAX_TEXT = MAX_REASON_LENGTH;
 
 // 16.12: finance creates; a second finance or superadmin decides; finance re-verifies and refunds; ops
 // and finance resolve a discrepancy (superadmin owns every area).
@@ -75,19 +83,11 @@ export const KIND_ROLES: Readonly<Record<MoneyActionKind, readonly AdminRole[]>>
   resolveDiscrepancy: ["ops", "finance", "superadmin"],
 };
 const KINDS = Object.keys(KIND_ROLES) as MoneyActionKind[];
-const DIRECTIONS = ["credit", "debit"] as const;
-const ADJUSTMENT_KINDS = ["goodwill", "deposit", "correction"] as const;
 
 // Taka text to paisa with integer arithmetic only: one to fifteen whole digits and at most two
 // decimals, above zero. No Number() anywhere near money (R4).
-export function parseTaka(text: unknown): bigint | null {
-  if (typeof text !== "string") return null;
-  const match = /^(\d{1,15})(?:\.(\d{1,2}))?$/.exec(text.trim());
-  if (match === null) return null;
-  const whole = BigInt(match[1] as string);
-  const paisa = BigInt(((match[2] ?? "") + "00").slice(0, 2));
-  const minor = whole * 100n + paisa;
-  return minor > 0n ? minor : null;
+export function parseTaka(value: unknown): bigint | null {
+  return check(takaToMinor, value);
 }
 
 interface Valid {
@@ -95,23 +95,22 @@ interface Valid {
   readonly id: string;
   readonly reason: string;
   readonly customerId: string | null;
-  readonly direction: (typeof DIRECTIONS)[number] | null;
+  readonly direction: (typeof MONEY_DIRECTIONS)[number] | null;
   readonly amountMinor: bigint | null;
-  readonly adjustmentKind: (typeof ADJUSTMENT_KINDS)[number] | null;
+  readonly adjustmentKind: (typeof MONEY_ADJUSTMENT_KINDS)[number] | null;
   readonly evidence: string | undefined;
 }
 
+// Step 3 of R9: zod schemas of schemas.ts, one envelope for every kind and one more per kind.
 function validate(request: MoneyActionRequest): Valid | null {
   const { kind, id, reason, customerId, direction, amount, adjustmentKind, evidence } = request;
   if (typeof kind !== "string" || !KINDS.includes(kind)) return null;
-  if (typeof id !== "string" || !UUID.test(id)) return null;
-  if (typeof reason !== "string") return null;
-  const cleanReason = reason.trim();
-  if (cleanReason === "" || cleanReason.length > MAX_TEXT) return null;
+  const head = check(moneyEnvelope, { id, reason });
+  if (head === null) return null;
   const out = {
     kind,
-    id: id.toLowerCase(),
-    reason: cleanReason,
+    id: head.id,
+    reason: head.reason,
     customerId: null as string | null,
     direction: null as Valid["direction"],
     amountMinor: null as bigint | null,
@@ -119,27 +118,24 @@ function validate(request: MoneyActionRequest): Valid | null {
     evidence: undefined as string | undefined,
   };
   if (kind === "createAdjustment") {
-    if (typeof customerId !== "string" || !UUID.test(customerId)) return null;
-    out.customerId = customerId.toLowerCase();
-    if (typeof direction !== "string" || !(DIRECTIONS as readonly string[]).includes(direction)) {
-      return null;
-    }
-    out.direction = direction as Valid["direction"];
-    if (
-      typeof adjustmentKind !== "string" ||
-      !(ADJUSTMENT_KINDS as readonly string[]).includes(adjustmentKind)
-    ) {
-      return null;
-    }
-    out.adjustmentKind = adjustmentKind as Valid["adjustmentKind"];
-    if (evidence !== undefined && evidence !== null && evidence !== "") {
-      if (typeof evidence !== "string" || evidence.length > MAX_EVIDENCE) return null;
-      out.evidence = evidence.trim() === "" ? undefined : evidence.trim();
-    }
+    const adjustment = check(createAdjustment, {
+      customerId,
+      direction,
+      adjustmentKind,
+      evidence,
+      amount,
+    });
+    if (adjustment === null) return null;
+    out.customerId = adjustment.customerId;
+    out.direction = adjustment.direction;
+    out.adjustmentKind = adjustment.adjustmentKind;
+    out.evidence = adjustment.evidence;
+    out.amountMinor = adjustment.amount;
   }
-  if (kind === "createAdjustment" || kind === "recordManualRefund") {
-    out.amountMinor = parseTaka(amount);
-    if (out.amountMinor === null) return null;
+  if (kind === "recordManualRefund") {
+    const refund = check(manualRefund, { amount });
+    if (refund === null) return null;
+    out.amountMinor = refund.amount;
   }
   return out;
 }

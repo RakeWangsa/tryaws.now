@@ -2,7 +2,7 @@
 
 import { Button, Field, OptionGroup, SubmitButton } from "@tc/ui";
 import { useTranslations } from "next-intl";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { SupportActionResult } from "./actions.ts";
 
@@ -49,13 +49,17 @@ export function SupportDone({
 
 export function SupportForm({
   action,
+  resources = [],
   initialError = null,
 }: {
   action: SupportAction;
+  /** The customer's own named resources; the picker is shown only when there are some. */
+  resources?: readonly { id: string; name: string }[];
   /** Only for the tests of the error state. */
   initialError?: string | null;
 }) {
   const t = useTranslations("SupportForm");
+  const relatedId = useId();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
   const [fields, setFields] = useState<Readonly<Record<string, string>>>({});
@@ -77,6 +81,7 @@ export function SupportForm({
         category: String(form.get("category") ?? ""),
         subject: String(form.get("subject") ?? ""),
         message: String(form.get("message") ?? ""),
+        relatedResourceId: String(form.get("relatedResourceId") ?? ""),
         idempotencyKey: keyRef.current,
       });
       if (result.ok) {
@@ -128,6 +133,22 @@ export function SupportForm({
         }))}
         {...invalid("category")}
       />
+      {resources.length > 0 ? (
+        <div className="mb-3">
+          <label className="seccolor" htmlFor={relatedId}>
+            {t("form.related.label")}
+          </label>
+          <select className="form-select" id={relatedId} name="relatedResourceId" defaultValue="">
+            <option value="">{t("form.related.none")}</option>
+            {resources.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+          <p className="seccolor small mb-0">{t("form.related.hint")}</p>
+        </div>
+      ) : null}
       <Field
         name="subject"
         label={t("form.subject.label")}

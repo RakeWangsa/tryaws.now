@@ -1,4 +1,10 @@
-export { OTP, OTP_SEND_RULES } from "./policy";
+export {
+  OTP,
+  OTP_SEND_RULES,
+  OTP_DAILY_CAP_DEFAULT,
+  OTP_DAILY_CAP_SETTING,
+  otpSendRules,
+} from "./policy";
 export type { SendRule } from "./policy";
 export { assertPepper } from "./codes";
 export { viewerAddress, ipSubject, emailSubject } from "./keys";

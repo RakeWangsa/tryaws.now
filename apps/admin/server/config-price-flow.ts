@@ -1,3 +1,4 @@
+import { isMarket } from "./schemas.ts";
 import {
   CONFIG_PRICE_TEXT,
   isConfigPriceKey,
@@ -24,8 +25,6 @@ import {
 // and a fixed answer. No next/* import. Answers are fixed codes and the NAMES of fields, never the text of an
 // engine message or of an error (R14, R16). A change reaches the orders priced after its start; an order
 // already placed keeps its stored snapshot, and so does a renewal of the running period.
-
-const MARKET = /^[A-Z]{2}$/;
 
 export interface SaveConfigPriceRequest {
   readonly market: unknown;
@@ -77,7 +76,7 @@ export function makeConfigPriceFlow(deps: PricingFlowDeps): ConfigPriceFlow {
       if (!auth.ok) return auth.answer;
       // 3. Validate.
       const bad: string[] = [];
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       if (!isConfigPriceKey(key)) bad.push("key");
       const price = typeof usd === "string" ? usd.trim() : "";
       if (!CONFIG_PRICE_TEXT.test(price) || !/[1-9]/.test(price)) bad.push("usd");

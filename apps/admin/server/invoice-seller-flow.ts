@@ -1,3 +1,4 @@
+import { isMarket } from "./schemas.ts";
 import { sellerFieldErrors } from "@tc/core";
 import type { AdminActor, AdminRole, SellerRow, Tx } from "@tc/db";
 import {
@@ -17,7 +18,6 @@ import {
 // Answers are fixed codes and the NAMES of fields, never a value (R14, R16). Nothing is seeded or
 // defaulted here: the owner types the values.
 
-const MARKET = /^[A-Z]{2}$/;
 const OPTIONAL = ["vatCircle", "phone", "email"] as const;
 const REQUIRED = [
   "legalNameBn",
@@ -85,7 +85,7 @@ export function makeInvoiceSellerFlow(deps: PricingFlowDeps): InvoiceSellerFlow 
       if (!auth.ok) return auth.answer;
       // 3. Validate: empty optional fields are left out, the rest is the rule of the core.
       const bad: string[] = [];
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       const given: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(fields)) {
         if (

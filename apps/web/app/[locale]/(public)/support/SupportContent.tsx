@@ -3,6 +3,7 @@ import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { breadcrumbLd } from "../../../../server/public/seo.ts";
+import { PublicSupportForm } from "./PublicSupportForm.tsx";
 import { JsonLds } from "../_components/JsonLd.tsx";
 import type { Tr } from "../_components/offers.tsx";
 
@@ -78,6 +79,19 @@ export function SupportContent({
                 <Button variant="tertiary" href={p("/help")}>
                   {t("support.faqCta")}
                 </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="write" className="exapath pb-80 noimage bg-seccolorstyle">
+        <div className="container">
+          <div className="sec-main sec-up mb-0 sec-bg1 bg-seccolorstyle nomargin noshadow">
+            <div className="row">
+              <div className="col-lg-8">
+                <h2 className="h4 mergecolor">{t("support.form.title")}</h2>
+                <p className="seccolor">{t("support.form.lead")}</p>
+                <PublicSupportForm />
               </div>
             </div>
           </div>

@@ -1,3 +1,4 @@
+import { isMarket, isUuid } from "./schemas.ts";
 import { isFeatureFlag, isPlainDecimal, validateBookTerms } from "@tc/core";
 import type { AdminActor, AdminRole, Tx } from "@tc/db";
 import { termsOfDraft, startOf } from "./price-book-draft.ts";
@@ -20,8 +21,6 @@ import {
 // fields, never the text of an engine message or of an error (R14, R16). A change reaches the orders
 // priced after its start; an order already placed keeps its stored snapshot.
 
-const MARKET = /^[A-Z]{2}$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BASE_COST = /^\d{1,8}(\.\d{1,4})?$/;
 
 export interface SaveBookRequest {
@@ -92,7 +91,7 @@ export function makePriceBookFlow(deps: PricingFlowDeps): PriceBookFlow {
       if (!auth.ok) return auth.answer;
       // 3. Validate.
       const bad: string[] = [];
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       if (typeof family !== "string" || !isFeatureFlag(family)) bad.push("family");
       const terms = termsOfDraft({
         market: text(market),
@@ -157,9 +156,9 @@ export function makePriceBookFlow(deps: PricingFlowDeps): PriceBookFlow {
       const auth = await authorize(PRICING_ROLES);
       if (!auth.ok) return auth.answer;
       const bad: string[] = [];
-      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      if (!isMarket(market)) bad.push("market");
       if (typeof family !== "string" || !isFeatureFlag(family)) bad.push("family");
-      if (typeof catalogProductId !== "string" || !UUID.test(catalogProductId)) bad.push("product");
+      if (!isUuid(catalogProductId)) bad.push("product");
       const usd = typeof awsPriceUsd === "string" ? awsPriceUsd.trim() : "";
       if (!BASE_COST.test(usd) || !isPlainDecimal(usd) || !/[1-9]/.test(usd))
         bad.push("awsPriceUsd");

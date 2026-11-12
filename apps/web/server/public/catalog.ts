@@ -1,6 +1,6 @@
 import { priceCatalog } from "@tc/core";
 import type { CatalogRowForPricing, Clock, PricedCatalogRow, Result } from "@tc/core";
-import { listCatalogProducts, readFeatureFlags, withTx } from "@tc/db";
+import { listCatalogProducts, readFeatureFlags, readMarketBasics, withTx } from "@tc/db";
 import type { Tx } from "@tc/db";
 import type { ProductFamily } from "@tc/ui";
 import { enabledFamilies } from "../families.ts";
@@ -37,6 +37,8 @@ export interface PublicOffer {
   /** Paisa, the engine's `totalMinor`. */
   readonly priceMinor: bigint;
   readonly specs: PlanSpecs;
+  /** The digits of the market setting (WPU-B6); Bengali pages use them, English pages use Latin. */
+  readonly numerals?: "beng" | "latn";
 }
 
 export interface PublicFamily {
@@ -60,6 +62,8 @@ export type PublicCatalog =
 export interface CatalogDeps {
   run<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
   flags(tx: Tx, market: string): Promise<{ key: string; enabled: boolean }[]>;
+  /** The `numerals` setting of the market; null when it cannot be read. */
+  numerals(tx: Tx, market: string): Promise<"beng" | "latn" | null>;
   rows(tx: Tx, family: string): Promise<readonly CatalogRowForPricing[]>;
   price(
     tx: Tx,
@@ -72,6 +76,7 @@ export interface CatalogDeps {
 export const defaultDeps: CatalogDeps = {
   run: withTx,
   flags: readFeatureFlags,
+  numerals: async (tx, market) => (await readMarketBasics(tx, market))?.numerals ?? null,
   rows: listCatalogProducts,
   price: priceCatalog,
 };
@@ -116,6 +121,8 @@ export async function loadPublicCatalog(
   try {
     return await deps.run(async (tx) => {
       const flags = await deps.flags(tx, PUBLIC_MARKET);
+      // An unreadable setting is the default of the Bengali pages, never a refusal: digits are display only.
+      const numerals = (await deps.numerals(tx, PUBLIC_MARKET).catch(() => null)) ?? "beng";
       const on = new Set(flags.filter((f) => f.enabled).map((f) => f.key));
       const families: PublicFamily[] = [];
       for (const wanted of PRICED_FAMILIES) {
@@ -125,7 +132,10 @@ export async function loadPublicCatalog(
         const priced = await deps.price(tx, rows, { market: PUBLIC_MARKET }, { now });
         // No rate or rule in force, or a row the engine refuses: nothing is priced (R16).
         if (!priced.ok) throw new Error("public catalog: not priced");
-        families.push({ family: wanted.family, offers: offersOf(priced.value) });
+        families.push({
+          family: wanted.family,
+          offers: offersOf(priced.value).map((offer) => ({ ...offer, numerals })),
+        });
       }
       const open = enabledFamilies(flags);
       const catalog: PublicCatalog = {

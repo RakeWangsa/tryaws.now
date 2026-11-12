@@ -1,8 +1,9 @@
 import type { Locale } from "@tc/core";
 import { customers, markets, notifications, type Tx } from "@tc/db";
-import { and, asc, eq, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 import type { Numerals } from "../sms/otp-text";
 import type { PlannedRow } from "./notify";
+import { readMarketSettingNumber } from "@tc/db";
 import type { Channel } from "./types";
 
 // What the delivery loop needs from the database, as a port, so that the loop is tested without
@@ -19,6 +20,14 @@ export function isDue(attempts: number, createdAt: Date, now: Date): boolean {
   if (attempts < 0 || attempts >= MAX_ATTEMPTS) return false;
   return now.getTime() >= createdAt.getTime() + (BACKOFF_MINUTES[attempts] as number) * 60_000;
 }
+
+// Item 29 (WPU-B6): the daily cap of notification SMS for one customer. The number is a policy of the
+// owner (decision 31); until it is decided the default is conservative and the market setting
+// `notify.sms_daily_cap` can change it. OTP codes have their own cap (otp.sms_daily_cap).
+export const SMS_DAILY_CAP_SETTING = "notify.sms_daily_cap";
+export const SMS_DAILY_CAP_DEFAULT = 5;
+export const SMS_DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SETTING_MARKET = "BD";
 
 export interface StoredRow {
   readonly id: string;
@@ -49,6 +58,14 @@ export interface NotifierStore {
   markSent(id: string, now: Date): Promise<void>;
   // Only a pending row becomes failed. The attempts stay as they are.
   markFailed(id: string): Promise<void>;
+  // An admin retry of a row that failed: a failed row becomes pending again with its attempts at
+  // zero, so the loop tries it afresh. True only for a row that was failed; a pending or sent row
+  // is left as it is (a sent message is never sent again by this).
+  requeue(id: string): Promise<boolean>;
+  // How many SMS rows of the customer were sent at or after `since`.
+  smsSentSince(customerId: string, since: Date): Promise<number>;
+  // The cap per customer and day: the market setting, or the default when it is missing or bad.
+  smsDailyCap(): Promise<number>;
 }
 
 export function createPgStore(run: <T>(fn: (tx: Tx) => Promise<T>) => Promise<T>): NotifierStore {
@@ -136,6 +153,38 @@ export function createPgStore(run: <T>(fn: (tx: Tx) => Promise<T>) => Promise<T>
           .set({ status: "failed" })
           .where(and(eq(notifications.id, id), eq(notifications.status, "pending")));
       }),
+
+    requeue: (id) =>
+      run(async (tx) => {
+        const rows = await tx
+          .update(notifications)
+          .set({ status: "pending", attempts: 0 })
+          .where(and(eq(notifications.id, id), eq(notifications.status, "failed")))
+          .returning({ id: notifications.id });
+        return rows.length === 1;
+      }),
+
+    smsSentSince: (customerId, since) =>
+      run(async (tx) => {
+        const [r] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(notifications)
+          .where(
+            and(
+              eq(notifications.customerId, customerId),
+              eq(notifications.channel, "sms"),
+              eq(notifications.status, "sent"),
+              gte(notifications.sentAt, since),
+            ),
+          );
+        return r?.n ?? 0;
+      }),
+
+    smsDailyCap: () =>
+      run(async (tx) => {
+        const set = await readMarketSettingNumber(tx, SETTING_MARKET, SMS_DAILY_CAP_SETTING);
+        return set ?? SMS_DAILY_CAP_DEFAULT;
+      }),
   };
 }
 
@@ -218,5 +267,32 @@ export class InMemoryNotifierStore implements NotifierStore {
     const row = this.list.find((r) => r.id === id);
     if (row !== undefined && row.status === "pending") row.status = "failed";
     return Promise.resolve();
+  }
+
+  requeue(id: string): Promise<boolean> {
+    const row = this.list.find((r) => r.id === id);
+    if (row === undefined || row.status !== "failed") return Promise.resolve(false);
+    row.status = "pending";
+    row.attempts = 0;
+    return Promise.resolve(true);
+  }
+
+  smsSentSince(customerId: string, since: Date): Promise<number> {
+    return Promise.resolve(
+      this.list.filter(
+        (r) =>
+          r.customerId === customerId &&
+          r.channel === "sms" &&
+          r.status === "sent" &&
+          r.sentAt !== null &&
+          r.sentAt.getTime() >= since.getTime(),
+      ).length,
+    );
+  }
+
+  smsCap = SMS_DAILY_CAP_DEFAULT;
+
+  smsDailyCap(): Promise<number> {
+    return Promise.resolve(this.smsCap);
   }
 }

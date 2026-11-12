@@ -8,6 +8,7 @@ import { JsonLds } from "../../_components/JsonLd.tsx";
 import {
   OfferCard,
   OfferTable,
+  offerNumerals,
   offerName,
   orderHref,
   specValues,
@@ -135,6 +136,7 @@ export function CloudServersContent({
               <input type="hidden" name="next" value="/servers/new" />
               <PlanPicker
                 name="plan"
+                {...(offers[0] ? { numerals: offerNumerals(locale, offers[0]) } : {})}
                 legend={t("cloudServers.pickerLegend")}
                 plans={offers.map((offer) => ({
                   id: offer.id,
