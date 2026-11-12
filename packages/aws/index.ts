@@ -17,6 +17,7 @@ export {
   type MetricSeries,
   type ReadTargetRef,
 } from "./reader-source";
+export { bytesToGbText, createLightsailUsageSource, type UsageSource } from "./usage-source";
 export { AwsError, toAwsError, toLogFields, type AwsLogFields, type LocalReason } from "./errors";
 export { QUEUE_URL_PATTERN, createSqsClient, createSqsSend, type SqsLike } from "./queue";
 export {

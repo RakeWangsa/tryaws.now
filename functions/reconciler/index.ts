@@ -14,3 +14,10 @@ export {
   type ReconcileDeps,
   type ReconcileResult,
 } from "./reconcile";
+export {
+  USAGE_FLAGS,
+  buildUsageInventory,
+  usageFlagsEnabled,
+  withUsage,
+  type UsageInventoryDeps,
+} from "./usage-port";
