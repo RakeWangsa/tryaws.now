@@ -75,12 +75,15 @@ export async function createDraft(
     if (!keyed.ok) return keyed;
 
     // "Available but not yet reserved": no lock, no unit taken, no waitlist entry.
-    const room = await checkCapacity(tx, {
-      customerId: session.customerId,
-      region: product.region,
-      needs: product.needs,
-    });
-    if (!room.ok) return room;
+    // A domain lives in tc-dns and takes no capacity cell (WP7-T4).
+    if (product.family !== "domain") {
+      const room = await checkCapacity(tx, {
+        customerId: session.customerId,
+        region: product.region,
+        needs: product.needs,
+      });
+      if (!room.ok) return room;
+    }
 
     const priced = await quoteInForce(
       tx,

@@ -46,6 +46,12 @@ export interface Route53Port {
     readonly comment: string;
   }): Promise<{ readonly zone: R53Zone; readonly created: boolean }>;
   getHostedZone(hostedZoneId: string): Promise<R53Zone | null>;
+  /**
+   * WP7-T4: every zone whose name is exactly the domain name (ListHostedZonesByName follows its
+   * pagination). More than one is possible; the caller decides which one is the registration's and
+   * fails closed when it cannot tell (R16).
+   */
+  findHostedZonesByName(name: string): Promise<readonly R53Zone[]>;
   listRecordSets(hostedZoneId: string): Promise<readonly R53RecordSet[]>;
   changeRecordSets(hostedZoneId: string, changes: readonly R53Change[]): Promise<void>;
   deleteHostedZone(hostedZoneId: string): Promise<void>;

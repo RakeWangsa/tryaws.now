@@ -31,6 +31,8 @@ import { containerBn } from "../messages/container-bn.ts";
 import { containerEn } from "../messages/container-en.ts";
 import { publicBn } from "../messages/public-bn.ts";
 import { publicEn } from "../messages/public-en.ts";
+import { domainsBn } from "../messages/domains-bn.ts";
+import { domainsEn } from "../messages/domains-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
@@ -56,6 +58,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     loadBalancersBn,
     bucketBn,
     containerBn,
+    domainsBn,
     authOwn.bn,
     kycOwn.bn,
     settingsOwn.bn,
@@ -75,6 +78,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     loadBalancersEn,
     bucketEn,
     containerEn,
+    domainsEn,
     authOwn.en,
     kycOwn.en,
     settingsOwn.en,

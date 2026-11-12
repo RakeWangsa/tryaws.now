@@ -34,6 +34,8 @@ export type {
   OrderRow,
   OrdersRepo,
 } from "./repositories/customer/orders";
+export type { DomainRow, DomainsRepo, NewDomain } from "./repositories/customer/domains";
+export { domainNameHolder, hostedZoneHeldByOther } from "./repositories/domain-names";
 export { customerOperationKey } from "./repositories/customer/operations";
 export { NOTIFICATIONS_SHOWN } from "./repositories/customer/notifications";
 export type { NotificationRow, NotificationsRepo } from "./repositories/customer/notifications";
@@ -207,13 +209,15 @@ export {
 export {
   listCatalogProducts,
   listCatalogProductsForAdmin,
+  listTlds,
   readCatalogProduct,
+  readTld,
 } from "./repositories/catalog";
 export { readLaunchInputs, type LaunchInputs } from "./repositories/launch";
 export { ensureFinalBackup, listBackupsOf, markFinalBackup } from "./repositories/backups";
 export { compensationRepo } from "./repositories/compensation";
 export type { CompensationOrder, CompensationRepo } from "./repositories/compensation";
-export type { CatalogAdminRow, CatalogProduct } from "./repositories/catalog";
+export type { CatalogAdminRow, CatalogProduct, TldRecord } from "./repositories/catalog";
 export * from "./capacity-keys";
 export { capacityRepo } from "./repositories/capacity";
 export type {

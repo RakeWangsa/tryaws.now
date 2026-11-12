@@ -42,6 +42,12 @@ function toResourceView(row: ResourceRow): ResourceView {
   };
 }
 
+// WP7-T4: a domain lives in tc-dns and has no pool account. Its adapter reaches AWS through its own
+// ports and never reads `ctx.account`; the placeholder is not a valid account reference, so a Lightsail
+// client built from it is refused (fail closed, R16).
+const POOLLESS_FAMILIES: readonly string[] = ["domain"];
+const TC_DNS_PLACEHOLDER = Object.freeze({ awsAccountId: "tc-dns", externalId: "tc-dns" });
+
 function isLightsailRegion(value: unknown): value is LightsailRegion {
   return (LIGHTSAIL_REGIONS as readonly unknown[]).includes(value);
 }
@@ -63,7 +69,8 @@ function buildContext(
 ): OpCtx<unknown> {
   const { operation, resource, pool } = view;
   // runStep checked the placement before, so these are a bug if they are missing: fail closed (R16).
-  if (resource === null || pool === null || !isLightsailRegion(resource.region)) {
+  const poolless = resource !== null && POOLLESS_FAMILIES.includes(resource.family);
+  if (resource === null || (pool === null && !poolless) || !isLightsailRegion(resource.region)) {
     throw new Error("step: the resource is not placed");
   }
   const customerId = resource.customerId;
@@ -79,7 +86,11 @@ function buildContext(
     stepKey: `${operation.id}:${operation.step ?? "start"}`,
     resource: Object.freeze(toResourceView(resource)),
     config,
-    account: Object.freeze({ awsAccountId: pool.awsAccountId, externalId: pool.externalId }),
+    account: Object.freeze(
+      pool === null
+        ? TC_DNS_PLACEHOLDER
+        : { awsAccountId: pool.awsAccountId, externalId: pool.externalId },
+    ),
     region: resource.region,
     access: deps.access,
     env: deps.env,
@@ -170,7 +181,10 @@ async function plan(
   resource: ResourceRow,
 ): Promise<Plan> {
   const { operation } = view;
-  if (view.pool === null || !isLightsailRegion(resource.region)) {
+  if (
+    (view.pool === null && !POOLLESS_FAMILIES.includes(resource.family)) ||
+    !isLightsailRegion(resource.region)
+  ) {
     return refusal("resource_unplaced", operation.attempts);
   }
   let config: unknown;

@@ -8,11 +8,12 @@ import type { ProductFamily } from "@tc/ui";
 export interface FamilyScreen {
   readonly base: string;
   readonly nav: ProductFamily;
-  readonly ns: "Cdn" | "Storage" | "Containers" | "Databases" | "LoadBalancers";
+  readonly ns: "Cdn" | "Storage" | "Containers" | "Databases" | "LoadBalancers" | "Domains";
 }
 
 export const FAMILY_SCREENS: Readonly<Record<string, FamilyScreen | undefined>> = {
   cdn: { base: "/cdn", nav: "cdn", ns: "Cdn" },
+  domain: { base: "/domains", nav: "domains", ns: "Domains" },
   bucket: { base: "/storage", nav: "objectStorage", ns: "Storage" },
   database: { base: "/databases", nav: "databases", ns: "Databases" },
   load_balancer: { base: "/load-balancers", nav: "loadBalancers", ns: "LoadBalancers" },

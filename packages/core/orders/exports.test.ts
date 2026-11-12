@@ -293,6 +293,32 @@ const WP7 = [
   "validateZoneName",
 ];
 
+// WP7-T4: the pure domain rules (packages/core/domains).
+const DOMAINS = [
+  "CONTACT_TYPES",
+  "DOMAIN_EVENTS",
+  "DOMAIN_FLAG",
+  "DOMAIN_MAX_LABEL_LENGTH",
+  "DOMAIN_MAX_NAME_LENGTH",
+  "DOMAIN_REGION",
+  "DOMAIN_STATES",
+  "DOMAIN_TERM_DAYS",
+  "DOMAIN_YEARS",
+  "RENEWAL_REMINDER_DAYS",
+  "RENEW_LEAD_DAYS",
+  "canMoveDomain",
+  "checkSecondConfirmation",
+  "decideTld",
+  "domainRenewalAction",
+  "nextDomainState",
+  "normalizeDomainName",
+  "parseDomainConfig",
+  "parseRegistrantContact",
+  "redactContact",
+  "resolveDomain",
+  "tldPolicyOf",
+];
+
 // WP7-T6: the pure cores of the reconciler (packages/core/reconcile).
 const RECONCILE = [
   "compareInventory",
@@ -333,6 +359,7 @@ describe("the public surface of the order flow", () => {
           ...STORAGE_CONTAINER,
           ...KYC,
           ...RECONCILE,
+          ...DOMAINS,
         ]),
       ].sort(),
     );

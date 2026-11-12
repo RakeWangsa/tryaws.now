@@ -17,6 +17,7 @@ import { bucketAdapter } from "./bucket";
 import { cdnAdapter } from "./cdn";
 import { containerServiceAdapter } from "./container";
 import { databaseAdapter } from "./database";
+import { domainAdapter } from "./domain";
 import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
@@ -131,6 +132,8 @@ function buildDeps(): StepDeps {
       containerServiceAdapter(),
       // WP7-T2: behind the flag cdn (R12), which the order flow checks.
       cdnAdapter(),
+      // WP7-T4: behind the flag domain (R12); its ports are not built yet (JOURNEY), so it fails closed.
+      domainAdapter(),
       // WP6-T2 and WP6-T3.
       databaseAdapter(),
       loadBalancerAdapter(),

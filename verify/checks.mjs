@@ -695,6 +695,52 @@ TASKS["WP6-T1b"] = [
 // the zone adapter and the fake Route 53 are in packages/aws (no Route 53 client is built yet).
 TASKS["WP7-T3"] = [specSync, baselineSync, lint, typecheck, format, core, aws, repo];
 
+// WP7-T4: domains. The pure rules (packages/core/domains), the order path with a real database
+// (packages/core/orders/domain-purchase), the adapter against the fake Route 53 Domains (packages/aws),
+// the wiring in the provisioner and the screens with the mockup cross-check. The real Route 53 Domains
+// client is a manual VERIFY (JOURNEY: Needs decision).
+const domainCore = {
+  id: "domain-core",
+  title: "WP7-T4: name, TLD policy, confirmation, contact, state machine, renewal, order path",
+  command: ["pnpm", "test", "--filter", "@tc/core", "domain", "--no-passWithNoTests"],
+};
+const domainAdapter = {
+  id: "domain-adapter",
+  title: "WP7-T4: register, marker, zone binding and the refusal to destroy against the fake port",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "test/domain.test", "--no-passWithNoTests"],
+};
+const domainWiring = {
+  id: "domain-wiring",
+  title: "WP7-T4: the adapter is registered in the provisioner and the guard refuses a destroy",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/fn-provisioner",
+    "domain-wiring",
+    "--no-passWithNoTests",
+  ],
+};
+const domainWeb = {
+  id: "domain-web",
+  title:
+    "WP7-T4: the action cores, the views, the messages and the screens with the mockup cross-check",
+  command: ["pnpm", "test", "--filter", "@tc/web", "domain", "--no-passWithNoTests"],
+};
+TASKS["WP7-T4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  domainCore,
+  domainAdapter,
+  domainWiring,
+  domainWeb,
+  aws,
+  repo,
+];
+
 // WP7-T5: metering. The daily charge (packages/core/pricing/metering.ts), the metering run and its DB
 // test (packages/core/metering) run with the core and db checks; the scheduler job with the scheduler check.
 TASKS["WP7-T5"] = [specSync, baselineSync, lint, typecheck, format, db, core, scheduler, repo];

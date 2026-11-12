@@ -154,6 +154,24 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  "app/[locale]/(panel)/domains/[name]/actions.ts#setDomainAutoRenewAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}domain-actions.test.ts`,
+        "answers not_found for another customer's domain and flag_off with the flag off",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/domains/new/actions.ts#createDomainDraftAction": {
+    kind: "session",
+    proof: [
+      proof(
+        `${W}domain-actions.test.ts`,
+        "refuses a name outside the sellable TLDs and an anonymous caller",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/databases/new/actions.ts#createDatabaseDraftAction": {
     kind: "session",
     proof: [
@@ -514,6 +532,15 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
   },
 
   // ---- pages with an id in the path
+  "app/[locale]/(panel)/domains/[name]/page.tsx": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}domain-tenancy.test.ts`,
+        "loadDomainDetail opens only the session's repositories, finds nothing and writes nothing",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/cdn/[id]/page.tsx": {
     kind: "id",
     proof: [

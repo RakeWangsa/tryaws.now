@@ -22,7 +22,8 @@ export interface ResolvedProduct {
     | "load_balancer"
     | "cdn"
     | "bucket"
-    | "container_service";
+    | "container_service"
+    | "domain";
   readonly productId: string;
   readonly region: string;
   readonly featureFlag: string;
