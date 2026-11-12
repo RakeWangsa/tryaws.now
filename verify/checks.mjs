@@ -874,6 +874,12 @@ TASKS["WPU-G6"] = [
   repo,
 ];
 
+// WPU-S1: the DNS zone name rules after the security review. Only a delegated zone is exclusive for a name
+// (migration 0012 replaces the index of 0011), several customers may hold a pending zone for one name,
+// and a name equal to or under a domain another customer holds is refused with the generic "taken" (core
+// order path and db). The db suite needs the local PostgreSQL (pnpm db:up). No AWS call.
+TASKS["WPU-S1"] = [specSync, baselineSync, lint, typecheck, format, core, db, repo];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

@@ -45,6 +45,7 @@ export {
   dnsZoneNameHolder,
   domainNameHolder,
   hostedZoneHeldByOther,
+  zoneNameDomainHold,
 } from "./repositories/domain-names";
 export { markDnsZone, recordDnsZoneCreated } from "./repositories/dns-zone-sync";
 export { customerOperationKey } from "./repositories/customer/operations";

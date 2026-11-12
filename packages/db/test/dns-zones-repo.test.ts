@@ -1,7 +1,7 @@
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
 import type { CustomerRepos } from "../repositories/customer/index";
-import { dnsZoneNameHolder } from "../repositories/domain-names";
+import { dnsZoneNameHolder, zoneNameDomainHold } from "../repositories/domain-names";
 import { markDnsZone, recordDnsZoneCreated } from "../repositories/dns-zone-sync";
 import { withCustomerRepos } from "../testing/repos";
 import { newCustomer, newResource, uniqueSuffix } from "./fixtures";
@@ -100,29 +100,42 @@ describe("dnsZones repository", () => {
   });
 });
 
-describe("one live zone for a name (migration 0011)", () => {
-  it("rejects a second live zone with the same name, from any customer", async () => {
+describe("one delegated zone for a name (migration 0012)", () => {
+  it("lets several customers hold a pending zone for one name", async () => {
     const a = await newCustomer(t.pool);
     const b = await newCustomer(t.pool);
     const first = await zone(a);
+    await zone(b, { name: first.zoneName });
+    await zone(b, { name: first.zoneName, status: "pending_delegation" });
+  });
+
+  it("rejects a second delegated zone with the same name, from any customer", async () => {
+    const a = await newCustomer(t.pool);
+    const b = await newCustomer(t.pool);
+    const first = await zone(a, { status: "delegated" });
     const resourceId = await newResource(t.pool, b, { family: "dns_zone", region: "us-east-1" });
     await expect(
       insertRow(t.pool, "dns_zones", {
         customer_id: b,
         resource_id: resourceId,
         name: first.zoneName,
-        status: "pending",
+        status: "delegated",
       }),
+    ).rejects.toMatchObject({ code: "23505" });
+    // A pending zone is not blocked by it, and cannot become delegated beside it.
+    const pending = await zone(b, { name: first.zoneName });
+    await expect(
+      t.pool.query("update dns_zones set status = 'delegated' where id = $1", [pending.id]),
     ).rejects.toMatchObject({ code: "23505" });
   });
 
-  it("gives the name back when the zone is failed or removed", async () => {
+  it("gives the name back when the delegated zone is removed or failed", async () => {
     const a = await newCustomer(t.pool);
-    const first = await zone(a);
-    await t.pool.query("update dns_zones set status = 'failed' where id = $1", [first.id]);
-    const again = await zone(a, { name: first.zoneName });
-    await t.pool.query("update dns_zones set status = 'removed' where id = $1", [again.id]);
-    await zone(a, { name: first.zoneName });
+    const first = await zone(a, { status: "delegated" });
+    await t.pool.query("update dns_zones set status = 'removed' where id = $1", [first.id]);
+    const again = await zone(a, { name: first.zoneName, status: "delegated" });
+    await t.pool.query("update dns_zones set status = 'failed' where id = $1", [again.id]);
+    await zone(a, { name: first.zoneName, status: "delegated" });
   });
 
   it("allows only the status words of the list", async () => {
@@ -140,14 +153,16 @@ describe("one live zone for a name (migration 0011)", () => {
 });
 
 describe("dnsZoneNameHolder", () => {
-  it("answers the resource of the live zone, nothing for a failed one or a free name", async () => {
+  it("answers the resource of the delegated zone, nothing for a pending, failed or removed one or a free name", async () => {
     const a = await newCustomer(t.pool);
-    const live = await zone(a);
+    const live = await zone(a, { status: "delegated" });
     expect(await t.db.transaction((tx) => dnsZoneNameHolder(tx, live.zoneName))).toBe(
       live.resourceId,
     );
     expect(await t.db.transaction((tx) => dnsZoneNameHolder(tx, name()))).toBeNull();
-    const failed = await zone(a, {}, "failed");
+    const pending = await zone(a);
+    expect(await t.db.transaction((tx) => dnsZoneNameHolder(tx, pending.zoneName))).toBeNull();
+    const failed = await zone(a, { status: "delegated" }, "failed");
     expect(await t.db.transaction((tx) => dnsZoneNameHolder(tx, failed.zoneName))).toBeNull();
     const removed = await zone(a, { status: "removed" });
     expect(await t.db.transaction((tx) => dnsZoneNameHolder(tx, removed.zoneName))).toBeNull();
@@ -157,6 +172,73 @@ describe("dnsZoneNameHolder", () => {
     await expect(t.db.transaction((tx) => dnsZoneNameHolder(tx, "NOT A NAME"))).rejects.toThrow(
       TypeError,
     );
+  });
+});
+
+describe("zoneNameDomainHold", () => {
+  const label = (p: string) =>
+    p +
+    uniqueSuffix()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  async function domain(customerId: string, domainName: string, state = "active") {
+    const tld = domainName.slice(domainName.lastIndexOf(".") + 1);
+    await t.pool.query(
+      "insert into tlds (id, tld, synced_at) values (gen_random_uuid(), $1, now()) on conflict do nothing",
+      [tld],
+    );
+    const resourceId = await newResource(t.pool, customerId, {
+      family: "domain",
+      region: "us-east-1",
+      state,
+    });
+    await insertRow(t.pool, "domains", {
+      customer_id: customerId,
+      resource_id: resourceId,
+      name: domainName,
+      tld,
+      status: "registered",
+    });
+  }
+  const hold = (zoneName: string, customerId: string) =>
+    t.db.transaction((tx) => zoneNameDomainHold(tx, zoneName, customerId));
+
+  it("tells the same name and every subdomain of another customer's domain from the owner's own", async () => {
+    const a = await newCustomer(t.pool);
+    const b = await newCustomer(t.pool);
+    const base = `${label("b")}.example`;
+    await domain(a, base);
+    expect(await hold(base, b)).toBe("other");
+    expect(await hold(`www.${base}`, b)).toBe("other");
+    expect(await hold(`a.www.${base}`, b)).toBe("other");
+    expect(await hold(base, a)).toBe("own");
+    expect(await hold(`www.${base}`, a)).toBeNull();
+    expect(await hold(`a.www.${base}`, a)).toBeNull();
+  });
+
+  it("matches whole labels only: a look-alike suffix and a parent of the domain are no match", async () => {
+    const a = await newCustomer(t.pool);
+    const b = await newCustomer(t.pool);
+    const base = `${label("c")}.example`;
+    await domain(a, `b.${base}`);
+    expect(await hold(`a.b.${base}`, b)).toBe("other");
+    expect(await hold(`notb.${base}`, b)).toBeNull();
+    expect(await hold(`xb.${base}`, b)).toBeNull();
+    expect(await hold(`b.${base}.example`, b)).toBeNull();
+    expect(await hold(base, b)).toBeNull();
+  });
+
+  it("another customer's domain wins over the owner's parent, and a failed create holds nothing", async () => {
+    const a = await newCustomer(t.pool);
+    const b = await newCustomer(t.pool);
+    const base = `${label("d")}.example`;
+    await domain(a, base);
+    await domain(b, `sub.${base}`);
+    expect(await hold(`x.sub.${base}`, a)).toBe("other");
+    const failedBase = `${label("e")}.example`;
+    await domain(a, failedBase, "failed");
+    expect(await hold(failedBase, b)).toBeNull();
+    await expect(hold("NOT A NAME", b)).rejects.toThrow(TypeError);
   });
 });
 

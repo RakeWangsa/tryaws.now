@@ -122,7 +122,7 @@ describe("a DNS zone order", () => {
     expect(zones.rows[0]).toEqual({ n: 1 });
   });
 
-  it("refuses a second order for a name that is held, in the draft and in the purchase, and writes nothing", async () => {
+  it("lets several customers hold a pending zone for one name (a zone is harmless until delegated)", async () => {
     const kit = await zoneKit();
     const name = zoneName();
     expect(
@@ -130,47 +130,143 @@ describe("a DNS zone order", () => {
     ).toBe(true);
 
     const other = await kit.newBuyer();
-    const conflict = { ok: false, error: "conflict", fields: { zoneName: "taken" } } as const;
+    const third = await kit.newBuyer();
+    // The first zone is still pending: the second and third customers can both buy the same name.
+    expect(
+      (await place(kit, other, await draftFor(kit, other, name), "zone-two-" + "e".repeat(14))).ok,
+    ).toBe(true);
+    expect(
+      (await place(kit, third, await draftFor(kit, third, name), "zone-thr-" + "f".repeat(14))).ok,
+    ).toBe(true);
+    const rows = await t.pool.query(
+      "select count(*)::int as n from dns_zones where name = $1 and status = 'pending'",
+      [name],
+    );
+    expect(rows.rows[0]).toEqual({ n: 3 });
+  });
+
+  it("refuses a name that is delegated to a zone, in the draft and in the purchase, with one generic answer, and writes nothing", async () => {
+    const kit = await zoneKit();
+    const name = zoneName();
+    expect(
+      (await place(kit, kit, await draftFor(kit, kit, name), "zone-del-" + "d".repeat(14))).ok,
+    ).toBe(true);
+    // A token made while the zone was still pending.
+    const other = await kit.newBuyer();
+    const lateToken = await draftFor(kit, other, name);
+    await t.pool.query("update dns_zones set status = 'delegated' where name = $1", [name]);
+
+    const conflict = {
+      ok: false,
+      error: "conflict",
+      fields: { zoneName: "taken" },
+    } as const;
+    // The holder and a stranger get the same answer; it names nobody (R8).
     expect(await createDraft(kit.deps, other.session, input(name))).toEqual(conflict);
     expect(await createDraft(kit.deps, kit.session, input(name))).toEqual(conflict);
-
-    // A token made before the first order was placed is refused by the purchase itself.
-    const free = zoneName();
-    const lateToken = await draftFor(kit, other, free);
-    const winner = await draftFor(kit, kit, free);
-    expect((await place(kit, kit, winner, "zone-two-" + "e".repeat(14))).ok).toBe(true);
     const mid = await snapshotRows(t);
-    expect(await place(kit, other, lateToken, "zone-thr-" + "f".repeat(14))).toEqual(conflict);
+    expect(await place(kit, other, lateToken, "zone-lat-" + "f".repeat(14))).toEqual(conflict);
     expect(await snapshotRows(t)).toEqual(mid);
   });
 
-  it("refuses a name that a domain registered here already holds (the automatic zone is adopted, not created)", async () => {
-    const kit = await zoneKit();
-    const tld =
-      "t" +
-      uniqueSuffix()
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
+  async function registerDomain(kit: Kit, customerId: string, name: string) {
+    const tld = name.slice(name.lastIndexOf(".") + 1);
     await t.pool.query(
-      "insert into tlds (id, tld, synced_at) values (gen_random_uuid(), $1, now())",
+      "insert into tlds (id, tld, synced_at) values (gen_random_uuid(), $1, now()) on conflict do nothing",
       [tld],
     );
-    const name = `mine.${tld}`;
     const resourceId = (
       await t.pool.query(
         "insert into resources (id, customer_id, family, region) values (gen_random_uuid(), $1, 'domain', 'us-east-1') returning id",
-        [kit.customerId],
+        [customerId],
       )
     ).rows[0] as { id: string };
     await t.pool.query(
       "insert into domains (id, customer_id, resource_id, name, tld, status) values (gen_random_uuid(), $1, $2, $3, $4, 'registered')",
-      [kit.customerId, resourceId.id, name, tld],
+      [customerId, resourceId.id, name, tld],
     );
+  }
+  const label = () =>
+    "d" +
+    uniqueSuffix()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+  it("refuses the customer's own domain name (the automatic zone is adopted, not created)", async () => {
+    const kit = await zoneKit();
+    const name = `${label()}.example`;
+    await registerDomain(kit, kit.customerId, name);
     expect(await createDraft(kit.deps, kit.session, input(name))).toEqual({
       ok: false,
       error: "validation",
       fields: { zoneName: "registered_here" },
     });
+  });
+
+  it("refuses a name or a subdomain of a domain another customer holds, with the generic answer", async () => {
+    const kit = await zoneKit();
+    const stranger = await kit.newBuyer();
+    const base = `${label()}.example`;
+    await registerDomain(kit, stranger.customerId, base);
+    const taken = {
+      ok: false,
+      error: "conflict",
+      fields: { zoneName: "taken" },
+    } as const;
+    expect(await createDraft(kit.deps, kit.session, input(base))).toEqual(taken);
+    expect(await createDraft(kit.deps, kit.session, input(`www.${base}`))).toEqual(taken);
+    expect(await createDraft(kit.deps, kit.session, input(`a.b.${base}`))).toEqual(taken);
+    // The answer is the same as for a delegated zone: it does not say a domain holds the name.
+    const delegated = zoneName();
+    const holder = await kit.newBuyer();
+    expect(
+      (
+        await place(
+          kit,
+          holder,
+          await draftFor(kit, holder, delegated),
+          "zone-sub-" + "a".repeat(14),
+        )
+      ).ok,
+    ).toBe(true);
+    await t.pool.query("update dns_zones set status = 'delegated' where name = $1", [delegated]);
+    expect(await createDraft(kit.deps, kit.session, input(delegated))).toEqual(taken);
+  });
+
+  it("refuses the purchase of a token made before another customer registered the parent domain", async () => {
+    const kit = await zoneKit();
+    const stranger = await kit.newBuyer();
+    const base = `${label()}.example`;
+    const token = await draftFor(kit, kit, `shop.${base}`);
+    await registerDomain(kit, stranger.customerId, base);
+    const mid = await snapshotRows(t);
+    expect(await place(kit, kit, token, "zone-par-" + "a".repeat(14))).toEqual({
+      ok: false,
+      error: "conflict",
+      fields: { zoneName: "taken" },
+    });
+    expect(await snapshotRows(t)).toEqual(mid);
+  });
+
+  it("allows the customer's own subdomain of a domain they hold, and not a look-alike suffix", async () => {
+    const kit = await zoneKit();
+    const stranger = await kit.newBuyer();
+    const base = `${label()}.example`;
+    await registerDomain(kit, kit.customerId, base);
+    expect((await createDraft(kit.deps, kit.session, input(`blog.${base}`))).ok).toBe(true);
+    expect((await createDraft(kit.deps, kit.session, input(`a.b.${base}`))).ok).toBe(true);
+
+    // The stranger holds b.<other>: a.b.<other> is under it; notb.<other>, xb.<other> and <other> are not.
+    const other = `${label()}.example`;
+    await registerDomain(kit, stranger.customerId, `b.${other}`);
+    expect(await createDraft(kit.deps, kit.session, input(`a.b.${other}`))).toEqual({
+      ok: false,
+      error: "conflict",
+      fields: { zoneName: "taken" },
+    });
+    expect((await createDraft(kit.deps, kit.session, input(`notb.${other}`))).ok).toBe(true);
+    expect((await createDraft(kit.deps, kit.session, input(`xb.${other}`))).ok).toBe(true);
+    expect((await createDraft(kit.deps, kit.session, input(other))).ok).toBe(true);
   });
 
   it("gives the name back when the create fails: the refund is exactly once and the name can be bought again", async () => {

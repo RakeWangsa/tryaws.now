@@ -6,6 +6,7 @@ import {
   readImage,
   readImageSwitches,
   readTld,
+  zoneNameDomainHold,
   type CustomerRepos,
   type Tx,
 } from "@tc/db";
@@ -236,13 +237,21 @@ export async function resolveOrderProduct(
     const price = (await readConfigPrices(tx, profile.market))["config_price.dns_zone_month"];
     const resolved = resolveDnsZone(config.value, price);
     if (!resolved.ok) return resolved;
-    // A name registered here already has its hosted zone in tc-dns (spec 12): that zone is adopted, and
-    // CreateHostedZone is never called for it. Adoption is not built, so the order is refused (R16).
-    if ((await domainNameHolder(tx, config.value.zoneName)) !== null) {
+    // WPU-S1. A domain of ANOTHER customer that is the name or a parent of it (checked by whole labels)
+    // refuses the order with the generic "taken", which does not say whose it is (R8). The customer's own
+    // domain as the name: its hosted zone in tc-dns is adopted, not created (spec 12); adoption is not
+    // built, so the order is refused (R16). A subdomain of the customer's own domain is allowed.
+    const domainHold = await zoneNameDomainHold(tx, config.value.zoneName, customerId);
+    if (domainHold === "other") {
+      return { ok: false, error: "conflict", fields: { zoneName: "taken" } };
+    }
+    if (domainHold === "own") {
       return { ok: false, error: "validation", fields: { zoneName: "registered_here" } };
     }
-    // One zone name is held once on the platform, here for the draft and again inside the purchase
-    // transaction; the unique index of migration 0011 is the last word.
+    // Only a zone that is already DELEGATED is exclusive. A pending zone is harmless until the NS records
+    // point at it (Route 53 allows several zones for one name), so several customers may hold one. Here
+    // for the draft and again inside the purchase transaction; the unique index of migration 0012 is the
+    // last word.
     if ((await dnsZoneNameHolder(tx, config.value.zoneName)) !== null) {
       return { ok: false, error: "conflict", fields: { zoneName: "taken" } };
     }

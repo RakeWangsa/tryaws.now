@@ -98,10 +98,12 @@ export const dnsZones = pgTable(
     unique("dns_zones_resource_id_unique").on(t.resourceId),
     unique("dns_zones_hosted_zone_id_unique").on(t.hostedZoneId),
     index("dns_zones_customer_id_idx").on(t.customerId),
-    // WPU-G6: one live zone for a name on the whole platform. A failed or removed zone gives it back.
-    uniqueIndex("dns_zones_name_live_unique")
+    // WPU-S1: one DELEGATED zone for a name on the whole platform. A zone is harmless until the
+    // domain's NS records point at it, so several customers may hold a pending zone for one name; a
+    // removed or failed zone gives the name back.
+    uniqueIndex("dns_zones_name_delegated_unique")
       .on(t.name)
-      .where(sql`${t.status} not in ('removed', 'failed')`),
+      .where(sql`${t.status} = 'delegated'`),
     check("dns_zones_status_check", inList(t.status, DNS_ZONE_STATUSES)),
   ],
 );
