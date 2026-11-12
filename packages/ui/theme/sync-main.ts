@@ -174,6 +174,7 @@ function runPublish(app: AppName | null, check: boolean, ctx: SyncContext): numb
     vendoredRoot: join(ctx.repoRoot, VENDORED_ASSETS),
     tcCssFile: join(ctx.repoRoot, TC_CSS),
     fontPackageDir: ctx.fontPackageDir ?? fontPackageDir,
+    repoRoot: ctx.repoRoot,
     manifest,
   });
   // The scan needs the theme's scripts; without them nothing is written (R16).

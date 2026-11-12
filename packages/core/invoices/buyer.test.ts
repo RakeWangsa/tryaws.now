@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { buyerSnapshotFrom, parseBuyerSnapshot } from "./buyer";
+import { unwrapDigitOneHtml as plain } from "./digit-one";
 import { renderInvoiceHtml, type InvoiceDocument } from "./render";
 
 const none = { billingName: null, billingAddress: null, customerBin: null };
@@ -110,9 +111,11 @@ it("renders the buyer address and BIN, in Bengali digits for bn", () => {
   expect(html).toContain("Rahim &amp; Sons");
   expect(html).toContain("<strong>Address:</strong> House 5, Dhaka");
   expect(html).toContain("<strong>BIN:</strong> 1234567890123");
-  const bn = renderInvoiceHtml(
-    doc({ name: "রহিম", address: "বাড়ি ৫", taxId: { kind: "bin", value: "1234567890123" } }),
-    "bn",
+  const bn = plain(
+    renderInvoiceHtml(
+      doc({ name: "রহিম", address: "বাড়ি ৫", taxId: { kind: "bin", value: "1234567890123" } }),
+      "bn",
+    ),
   );
   expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
 });

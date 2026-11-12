@@ -31,5 +31,6 @@ export * from "./components/Tabs.tsx";
 export * from "./components/Toast.tsx";
 export * from "./components/WalletChip.tsx";
 export { formatMoney, formatDate } from "./components/format.ts";
+export { wrapDigitOne, splitDigitOne, DIGIT_ONE_CLASS } from "./components/digit-one.ts";
 export type * from "./components/types.ts";
 export { toLocale } from "./components/types.ts";

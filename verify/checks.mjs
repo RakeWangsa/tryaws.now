@@ -3029,6 +3029,52 @@ TASKS["WPU-M7"] = [
   repo,
 ];
 
+// WPU-F1: Hind Siliguri for the Bengali text and Noto Sans Bengali for the digit one (U+09E7). The helper and
+// the invoice HTML (core, no database), the mail layout (notify), the packaged fonts and the markup scan
+// (invoice-renderer), the web @font-face with the unicode-range of the digit and the U3 scan (ui), the
+// repository tests. No AWS call.
+const fontsCore = {
+  id: "core-fonts",
+  title: "packages/core: the digit one helper and the invoice HTML (Hind Siliguri stack, d1 span)",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/core",
+    "invoices/digit-one",
+    "invoices/render",
+    "invoices/credit-note-render",
+    "invoices/buyer.test",
+    "--no-passWithNoTests",
+  ],
+};
+const fontsNotify = {
+  id: "notify-fonts",
+  title: "packages/notify: the mail layout and every template (no database)",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/notify",
+    "test/digit-one",
+    "test/templates",
+    "test/wording",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WPU-F1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  fontsCore,
+  fontsNotify,
+  invoiceRenderer,
+  ui,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

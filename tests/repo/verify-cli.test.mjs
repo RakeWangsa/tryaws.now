@@ -159,6 +159,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-D1",
     "WPU-D2",
     "WPU-D3",
+    "WPU-F1",
     "WPU-G1",
     "WPU-G10",
     "WPU-G11",
@@ -881,6 +882,51 @@ it("task WPU-D1 is proven by lint, types, format, the renderer and repository te
     ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-F1 is proven by lint, types, format, the digit helper, mail, renderer and ui tests and the repository tests", () => {
+  expect(TASKS["WPU-F1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    [
+      "core-fonts",
+      "pnpm test --filter @tc/core invoices/digit-one invoices/render invoices/credit-note-render invoices/buyer.test --no-passWithNoTests",
+    ],
+    [
+      "notify-fonts",
+      "pnpm test --filter @tc/notify test/digit-one test/templates test/wording --no-passWithNoTests",
+    ],
+    ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-F1 exists: the digit helper, the invoice stack and spans, the mail, the packaged fonts, the web unicode-range and U3", () => {
+  for (const [file, part] of [
+    ["packages/core/invoices/digit-one.test.ts", "is idempotent"],
+    [
+      "packages/core/invoices/render.test.ts",
+      "Hind Siliguri first, the digit rule in the style block",
+    ],
+    ["packages/notify/test/digit-one.test.ts", "escapes first and wraps after"],
+    ["functions/invoice-renderer/engines.test.ts", "the digit font is required too"],
+    [
+      "functions/invoice-renderer/handler.test.ts",
+      "accepts the Bengali templates with the digit-one span",
+    ],
+    ["packages/ui/components/digit-one.test.tsx", "never touches the Latin 1"],
+    [
+      "packages/ui/theme/tc-fonts.test.ts",
+      "draws the Bengali digit one, and only it, with Noto Sans Bengali, by unicode-range alone",
+    ],
+    ["packages/ui/theme/tc-fonts.test.ts", "no third-party font origin anywhere (U3)"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
 });
 
 it("the proof of WPU-D1 exists: the engine with fakes, the store, and the renderer network and role rules", () => {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { matchPattern } from "./glob.ts";
-import { TC_FONTS, forbiddenReason, type ThemeManifest } from "./manifest.ts";
+import { TC_FONTS, TC_OWN_FONTS, forbiddenReason, type ThemeManifest } from "./manifest.ts";
 import {
   ThemeError,
   byPath,
@@ -21,6 +21,8 @@ export interface PublishInputs {
   tcCssFile: string;
   /** The folder of an installed Fontsource package. */
   fontPackageDir(packageName: string): string;
+  /** The repository root, where the fonts of `TC_OWN_FONTS` sit. */
+  repoRoot: string;
   manifest: ThemeManifest;
 }
 
@@ -72,6 +74,12 @@ export function buildPublishTree(input: PublishInputs): { tree: Tree; refs: RefR
     if (dir === null) continue;
     for (const file of font.files) sources.set(`fonts/${file}`, join(dir, "files", file));
     sources.set(`fonts/LICENSE-${font.id}.txt`, join(dir, "LICENSE"));
+  }
+
+  for (const font of TC_OWN_FONTS) {
+    const dir = join(input.repoRoot, font.dir);
+    for (const file of font.files) sources.set(`fonts/${file}`, join(dir, file));
+    sources.set(`fonts/LICENSE-${font.id}.txt`, join(dir, font.license));
   }
 
   const bytesOf = new Map<string, Buffer>();

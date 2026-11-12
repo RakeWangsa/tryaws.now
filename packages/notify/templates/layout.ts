@@ -1,4 +1,4 @@
-import type { Locale } from "@tc/core";
+import { BENGALI_DIGIT_FONT, BENGALI_DIGIT_ONE, type Locale } from "@tc/core";
 import { escapeHtml } from "../text/format";
 import { SHARED } from "./messages";
 
@@ -39,19 +39,25 @@ export function layoutEmail(p: EmailParts): { html: string; text: string } {
   const sh = SHARED[p.locale];
   const bn = p.locale === "bn";
   const font = bn
-    ? `'Noto Sans Bengali','Hind Siliguri',Arial,sans-serif`
+    ? `'Hind Siliguri','${BENGALI_DIGIT_FONT}',Arial,sans-serif`
     : `-apple-system,'Segoe UI',Arial,sans-serif`;
   // Bengali needs a taller line and no letter spacing (16.4).
   const base = `font-family:${font};line-height:${bn ? "1.7" : "1.5"};letter-spacing:0;`;
   const e = escapeHtml;
+  // A mail cannot load a font or rely on a <style> block, so the digit one of the Bengali text (a
+  // different font than the rest, WPU-F1) gets a span with the font in an inline style, like every other
+  // rule of this mail. Escape first, wrap after: escaped text holds no "<", and attributes use `e`.
+  const digitOne = `<span style="font-family:'${BENGALI_DIGIT_FONT}','Hind Siliguri',Arial,sans-serif;">${BENGALI_DIGIT_ONE}</span>`;
+  const t = (text: string): string =>
+    bn ? e(text).replaceAll(BENGALI_DIGIT_ONE, digitOne) : e(text);
   const paragraphs = p.paragraphs
     .filter((x) => x.length > 0)
-    .map((x) => `<p style="margin:0 0 14px 0;font-size:16px;color:${C.text};${base}">${e(x)}</p>`)
+    .map((x) => `<p style="margin:0 0 14px 0;font-size:16px;color:${C.text};${base}">${t(x)}</p>`)
     .join("");
   const button =
     p.button === undefined
       ? ""
-      : `<p style="margin:22px 0 0 0;"><a href="${e(p.button.url)}" style="display:inline-block;padding:12px 28px;border-radius:999px;background:${C.button};color:#000000;font-weight:bold;text-decoration:none;${base}">${e(p.button.label)}</a></p>`;
+      : `<p style="margin:22px 0 0 0;"><a href="${e(p.button.url)}" style="display:inline-block;padding:12px 28px;border-radius:999px;background:${C.button};color:#000000;font-weight:bold;text-decoration:none;${base}">${t(p.button.label)}</a></p>`;
   const html =
     `<!doctype html><html lang="${p.locale}"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
@@ -59,14 +65,14 @@ export function layoutEmail(p: EmailParts): { html: string; text: string } {
     `<body style="margin:0;padding:0;background:${C.page};">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.page};"><tr><td align="center" style="padding:24px 12px;">` +
     `<table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:640px;">` +
-    `<tr><td style="background:${C.card};padding:20px 28px;color:${C.onDark};font-size:22px;font-weight:bold;${base}">${e(sh.wordmark)}</td></tr>` +
-    `<tr><td style="background:${C.accent};padding:18px 28px;color:${C.onDark};font-size:20px;font-weight:bold;${base}">${e(p.headline)}</td></tr>` +
+    `<tr><td style="background:${C.card};padding:20px 28px;color:${C.onDark};font-size:22px;font-weight:bold;${base}">${t(sh.wordmark)}</td></tr>` +
+    `<tr><td style="background:${C.accent};padding:18px 28px;color:${C.onDark};font-size:20px;font-weight:bold;${base}">${t(p.headline)}</td></tr>` +
     `<tr><td style="background:#ffffff;padding:28px;">${paragraphs}${button}</td></tr>` +
     `<tr><td style="background:${C.card};padding:20px 28px;color:${C.muted};font-size:12px;${base}">` +
-    `<p style="margin:0 0 8px 0;color:${C.onDark};">${e(sh.awsShort)}</p>` +
-    `<p style="margin:0 0 8px 0;">${e(sh.footerNote)}</p>` +
-    `<p style="margin:0 0 8px 0;">${e(sh.address)}</p>` +
-    `<p style="margin:0;">${e(sh.trademark)}</p>` +
+    `<p style="margin:0 0 8px 0;color:${C.onDark};">${t(sh.awsShort)}</p>` +
+    `<p style="margin:0 0 8px 0;">${t(sh.footerNote)}</p>` +
+    `<p style="margin:0 0 8px 0;">${t(sh.address)}</p>` +
+    `<p style="margin:0;">${t(sh.trademark)}</p>` +
     `</td></tr></table></td></tr></table></body></html>`;
   const text = [
     p.headline,

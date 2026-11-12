@@ -39,7 +39,11 @@ const ERR_STORE = "invoice-renderer: the store failed";
 // folder that the fonts.conf of @sparticuz/chromium lists. Chromium reads them through fontconfig, so no
 // font is fetched (a font URL would be a request and is aborted like every other).
 export const FONTS_DIR = "/var/task/fonts";
+// Hind Siliguri draws the Bengali text; Noto Sans Bengali draws the digit one (BENGALI_DIGIT_FONT of @tc/core)
+// and is the fallback. A missing file fails closed: no PDF with empty boxes or a wrong digit (WPU-F1).
 export const BENGALI_FONT_FILES: readonly string[] = [
+  "HindSiliguri-Regular.ttf",
+  "HindSiliguri-Bold.ttf",
   "NotoSansBengali-Regular.ttf",
   "NotoSansBengali-Bold.ttf",
 ];

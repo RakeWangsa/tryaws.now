@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { InvoiceError, renderInvoiceHtml, type InvoiceDocument } from "./index";
+import {
+  InvoiceError,
+  renderInvoiceHtml,
+  unwrapDigitOneHtml as plain,
+  wrapDigitOneHtml,
+  type InvoiceDocument,
+} from "./index";
 
 const seller = {
   legalNameBn: "উদাহরণ সার্ভিসেস লিমিটেড",
@@ -58,7 +64,7 @@ describe("renderInvoiceHtml", () => {
     expect(html).toContain('lang="en"');
   });
   it("renders Bengali labels and Bengali digits in bn, but the number in Latin digits", () => {
-    const html = renderInvoiceHtml(doc, "bn");
+    const html = plain(renderInvoiceHtml(doc, "bn"));
     expect(html).toContain('lang="bn"');
     expect(html).toContain("ক্লাউড সার্ভার");
     expect(html).toContain("১০৫.৫০");
@@ -72,7 +78,7 @@ describe("renderInvoiceHtml", () => {
       "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.",
     );
     expect(en).toContain("TiCON Cloud sells, bills and supports");
-    const bn = renderInvoiceHtml(doc, "bn");
+    const bn = plain(renderInvoiceHtml(doc, "bn"));
     expect(bn).toContain("১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।");
     expect(en).not.toMatch(/AWS Lightsail/);
   });
@@ -98,7 +104,7 @@ describe("renderInvoiceHtml", () => {
     expect(html).toContain("Government of the People&#39;s Republic of Bangladesh");
     expect(html).toContain("National Board of Revenue");
     expect(html).toContain("Tax Invoice");
-    const bn = renderInvoiceHtml(doc, "bn");
+    const bn = plain(renderInvoiceHtml(doc, "bn"));
     expect(bn).toContain("কর চালানপত্র");
     expect(bn).toContain("গণপ্রজাতন্ত্রী বাংলাদেশ সরকার");
     expect(bn).toContain("জাতীয় রাজস্ব বোর্ড");
@@ -114,7 +120,7 @@ describe("renderInvoiceHtml", () => {
     expect(en).toContain("Dhaka South");
     expect(en).not.toContain("NID");
     expect(en).toContain("1990123456789");
-    const bn = renderInvoiceHtml(doc, "bn");
+    const bn = plain(renderInvoiceHtml(doc, "bn"));
     expect(bn).toContain("উদাহরণ সার্ভিসেস লিমিটেড");
     expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
     expect(bn).toContain("১ নম্বর রোড, ঢাকা");
@@ -130,8 +136,8 @@ describe("renderInvoiceHtml", () => {
   it("prints the amount in words and the date and time of issue in Dhaka time", () => {
     expect(renderInvoiceHtml(doc, "en")).toContain("One Hundred Five Taka and Fifty Paisa only");
     expect(renderInvoiceHtml(doc, "en")).toContain("11:00");
-    expect(renderInvoiceHtml(doc, "bn")).toContain("একশত পাঁচ টাকা ও পঞ্চাশ পয়সা মাত্র");
-    expect(renderInvoiceHtml(doc, "bn")).toContain("১১:০০");
+    expect(plain(renderInvoiceHtml(doc, "bn"))).toContain("একশত পাঁচ টাকা ও পঞ্চাশ পয়সা মাত্র");
+    expect(plain(renderInvoiceHtml(doc, "bn"))).toContain("১১:০০");
   });
   it("has the signatory block, the print stylesheet and A4", () => {
     const html = renderInvoiceHtml(doc, "en");
@@ -155,9 +161,71 @@ describe("renderInvoiceHtml", () => {
     expect(html).not.toContain("<b>&</b>");
   });
   it("is the same for the same input (pure)", () => {
-    expect(renderInvoiceHtml(doc, "bn")).toBe(renderInvoiceHtml(doc, "bn"));
+    expect(plain(renderInvoiceHtml(doc, "bn"))).toBe(plain(renderInvoiceHtml(doc, "bn")));
   });
   it("fails closed when the lines do not add up to the total (R16)", () => {
     expect(() => renderInvoiceHtml({ ...doc, totalMinor: 1n }, "en")).toThrow(InvoiceError);
+  });
+});
+
+// WPU-F1: Hind Siliguri for the Bengali text, Noto Sans Bengali for the digit one, by fontconfig name.
+describe("the fonts of the invoice (WPU-F1)", () => {
+  const SPAN = '<span class="d1">১</span>';
+  const kinds = ["invoice", "receipt", "credit_note"] as const;
+  const credit = {
+    originalNumber: "TC-2026-000001",
+    originalIssuedAt: new Date("2026-11-01T05:00:00Z"),
+    reason: "refund",
+  } as const;
+  const make = (kind: (typeof kinds)[number]): InvoiceDocument =>
+    kind === "credit_note" ? { ...doc, kind, credit } : { ...doc, kind };
+
+  it.each(kinds)(
+    "%s: Hind Siliguri first, the digit rule in the style block, no inline style",
+    (kind) => {
+      const html = renderInvoiceHtml(make(kind), "bn");
+      expect(html).toContain(
+        'font-family:"Hind Siliguri","Noto Sans Bengali","Noto Sans",sans-serif',
+      );
+      expect(html).toContain('.d1{font-family:"Noto Sans Bengali","Hind Siliguri",sans-serif}');
+      expect(html).not.toMatch(/\sstyle\s*=/i);
+      expect(html).not.toMatch(/@font-face|url\(/i);
+    },
+  );
+
+  it.each(kinds)("%s: every ১ of the text is wrapped, and only in text", (kind) => {
+    const html = renderInvoiceHtml(make(kind), "bn");
+    const body = html.slice(html.indexOf("<body>"));
+    expect(body).toContain(SPAN);
+    // no ১ outside a span: removing the spans leaves none behind
+    expect(body.replaceAll(SPAN, "")).not.toContain("১");
+    expect(plain(html)).not.toContain("<span");
+  });
+
+  it("wraps the digit one of money, dates and the number of rows, and not the other digits", () => {
+    const html = renderInvoiceHtml(doc, "bn");
+    expect(html).toContain(`<td class="num">${SPAN}০০.০০</td>`); // 100.00
+    expect(html).toContain(`${SPAN}${SPAN}-${SPAN}${SPAN}-২০২৬`); // 11-11-2026
+    expect(html).not.toContain('<span class="d1">২</span>');
+    expect(html).not.toContain('<span class="d1">0</span>');
+  });
+
+  it("escapes first and wraps after: customer text with ১ and markup stays inert (R11)", () => {
+    const html = renderInvoiceHtml(
+      { ...doc, customer: { name: "<১>", address: '১ নম্বর রোড, "১১" & Co' } },
+      "bn",
+    );
+    expect(html).toContain(`&lt;${SPAN}&gt;`);
+    expect(html).toContain(`${SPAN} নম্বর রোড, &quot;${SPAN}${SPAN}&quot; &amp; Co`);
+    expect(html).not.toContain("<১>");
+  });
+
+  it("is idempotent: wrapping the finished document again changes nothing", () => {
+    const html = renderInvoiceHtml(doc, "bn");
+    expect(wrapDigitOneHtml(html)).toBe(html);
+  });
+
+  it("an English invoice with Latin digits has no span at all", () => {
+    expect(renderInvoiceHtml(doc, "en")).not.toContain('<span class="d1">');
   });
 });
