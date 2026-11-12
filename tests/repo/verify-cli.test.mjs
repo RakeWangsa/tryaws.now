@@ -213,7 +213,30 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-T2",
     "WPU-T3",
     "WPU-T4",
+    "WPU-X6",
   ]);
+});
+
+it("task WPU-X6 is proven by lint, types, format, the axe browser smoke and the repository tests; the smoke fails when it cannot run", () => {
+  expect(TASKS["WPU-X6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["a11y-smoke", "node scripts/smoke-a11y.mjs"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+  expect(TASKS["WPU-X6"].find((c) => c.id === "a11y-smoke").timeoutMs).toBe(1_800_000);
+  for (const [file, part] of [
+    ["scripts/smoke-a11y.mjs", "BLOCKED"],
+    ["scripts/smoke-a11y.mjs", "exitCodeFor"],
+    ["tests/e2e/a11y.spec.ts", "AxeBuilder"],
+    ["tests/e2e/a11y.config.ts", "width: 360"],
+    ["tests/e2e/a11y.config.ts", "width: 1280"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
 });
 
 it("task WPU-G1 is proven by lint, types, format, the aws, core, db, provisioner and web tests and the repository tests", () => {
