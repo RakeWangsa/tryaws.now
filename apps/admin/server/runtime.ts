@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { headers } from "next/headers";
 import {
   adminAuthConfigFromEnv,
@@ -37,6 +36,7 @@ import type { CaseFlowDeps } from "./case-flow-common.ts";
 import type { SupportFlowDeps } from "./support-flow.ts";
 import { SUPPORT_REPLY_ENABLED } from "./support-reply.ts";
 import { unavailableKycStore, type KycDocumentDeps } from "./kyc-documents.ts";
+import { rateSubject, resolveRateKey } from "./rate-subject.ts";
 import { makeSignIn, makeSignOut, type SignInDeps } from "./sign-in.ts";
 
 // The composition of the operator app (the pattern of the web app: one module that builds the
@@ -46,7 +46,6 @@ import { makeSignIn, makeSignOut, type SignInDeps } from "./sign-in.ts";
 // 10 attempts for each address in 10 minutes; a person who mistypes a code needs a few, a script a lot.
 const SIGN_IN_LIMIT = 10;
 const SIGN_IN_WINDOW_SECONDS = 600;
-const RATE_KEY = "tc-admin-ip-v1";
 
 let config: AdminAuthConfig | null = null;
 let sessionDeps: AdminSessionDeps | null = null;
@@ -91,8 +90,9 @@ export const viewerAddressOf = async (): Promise<string | null> =>
   (await headers()).get("cloudfront-viewer-address");
 export const userAgentOf = async (): Promise<string | null> => (await headers()).get("user-agent");
 
-const subjectOf = (ip: string): string =>
-  createHmac("sha256", RATE_KEY).update(ip).digest("hex").slice(0, 32);
+// WPU-X1: the HMAC key is the per-stage secret AdminIpLimitKey; read per call, never held in a module
+// constant, and a missing one throws (R16), so the limiter refuses and the sign-in fails closed.
+const subjectOf = (value: string): string => rateSubject(resolveRateKey(process.env), value);
 
 const audit: SignInDeps["audit"] = (entry) =>
   withTx((tx) =>

@@ -10,7 +10,7 @@
 // - HSTS comes from the CloudFront response headers policy (waf.ts), not from application code.
 //
 // NOT TYPE-CHECKED, see network.ts.
-import { DB_PASSWORD_SECRET, WEB_SECRETS } from "../lib/functions";
+import { ADMIN_SECRETS, DB_PASSWORD_SECRET, WEB_SECRETS } from "../lib/functions";
 import { roleName, type StageConfig } from "../lib/stage";
 import type { Auth } from "./auth";
 import type { Database } from "./database";
@@ -166,8 +166,9 @@ export function web(inputs: WebInputs) {
     protection: "oac-with-edge-signing",
     vpc,
     domain: config.adminDomain,
-    // The admin app links no EPS secret. Its database role is admin_rw.
-    link: [secrets.db.admin_rw],
+    // The admin app links no EPS secret. Its database role is admin_rw. WPU-X1: AdminIpLimitKey is the
+    // HMAC key of the sign-in rate-limit subject (apps/admin/server/rate-subject.ts).
+    link: [...ADMIN_SECRETS.map((name) => secrets.app[name]), secrets.db.admin_rw],
     environment: {
       TC_STAGE: config.tcStage,
       APP_ORIGIN: `https://${config.adminDomain}`,
