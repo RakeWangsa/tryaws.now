@@ -50,6 +50,7 @@ export const opsBn = {
       delete_access_key: "অ্যাক্সেস কী মোছা",
       deploy_containers: "কনটেইনার চালানো",
       scale_container: "কনটেইনারের মাপ বদল",
+      change_dns_record: "ডিএনএস রেকর্ড বদল",
       reject_operation: "অনুরোধ বাতিলের কাজ",
       other: "অন্য ধরন",
     },

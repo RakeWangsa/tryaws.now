@@ -29,6 +29,8 @@ export const OPERATION_KINDS = [
   "delete_access_key",
   "deploy_containers",
   "scale_container",
+  // WPU-G4: one record change of a DNS zone (the record editor).
+  "change_dns_record",
   "reject_operation",
 ] as const;
 
@@ -81,6 +83,7 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   delete_access_key: info("action", false, true),
   deploy_containers: info("action", false, true),
   scale_container: info("action", false, true),
+  change_dns_record: info("action", false, true),
   reject_operation: info("engine", false, false),
 };
 

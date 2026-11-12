@@ -312,6 +312,64 @@ export function validateRecord(zone: string, input: DnsRecordInput): Result<Vali
   };
 }
 
+export interface RecordKey {
+  readonly fqdn: string;
+  readonly type: DnsRecordType;
+  readonly isApex: boolean;
+}
+
+/**
+ * The name and the type of a record set, for a delete: the same name and type rules as
+ * `validateRecord`, and no values or TTL. The apex NS and any SOA are never a key (spec 12).
+ */
+export function validateRecordKey(zone: string, name: unknown, type: unknown): Result<RecordKey> {
+  const fields: Fields = {};
+  const named = normalizeName(zone, name);
+  if (!named.ok) fields.name = named.code;
+  if (!isType(type)) fields.type = "unsupported_type";
+  if (named.ok && isType(type) && type === "NS" && named.isApex) fields.name = "apex_read_only";
+  if (Object.keys(fields).length > 0 || !named.ok || !isType(type)) return refuse(fields);
+  return {
+    ok: true,
+    value: Object.freeze({ fqdn: named.fqdn, type, isApex: named.isApex }),
+  };
+}
+
+/**
+ * What a customer types to get a stored value back: the chunks of a TXT value are joined and the
+ * escapes removed (the inverse of the TXT checker); every other type is already in the form it was
+ * typed in. A value that is not quoted text is returned as it is.
+ */
+export function editableValue(type: string, wire: string): string {
+  if (type !== "TXT") return wire;
+  const chunks: string[] = [];
+  let rest = wire.trim();
+  while (rest.length > 0) {
+    if (!rest.startsWith('"')) return wire;
+    let i = 1;
+    let chunk = "";
+    let closed = false;
+    while (i < rest.length) {
+      const ch = rest[i] as string;
+      if (ch === "\\" && i + 1 < rest.length) {
+        chunk += rest[i + 1];
+        i += 2;
+      } else if (ch === '"') {
+        closed = true;
+        i += 1;
+        break;
+      } else {
+        chunk += ch;
+        i += 1;
+      }
+    }
+    if (!closed) return wire;
+    chunks.push(chunk);
+    rest = rest.slice(i).trimStart();
+  }
+  return chunks.length === 0 ? wire : chunks.join("");
+}
+
 export interface ExistingSet {
   readonly fqdn: string;
   readonly type: string;

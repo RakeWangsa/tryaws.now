@@ -4,6 +4,8 @@ import {
   DNS_RECORD_TYPES,
   checkChange,
   stepDone,
+  validateRecord,
+  validateRecordKey,
   validateZoneName,
   type Result,
   type StepResult,
@@ -156,6 +158,105 @@ export async function applyRecordChange(
   return { ok: true, value: undefined };
 }
 
+// ---- change_dns_record (WPU-G4) -----------------------------------------------------------------
+
+const CHANGES = ["create", "upsert", "delete"] as const;
+// The record list kept on the resource for the editor screen. The step patch holds 16 KB at most; the
+// list stays well below it, or the screen is told that the list is stale and shows no records (R16).
+const MIRROR_MAX_BYTES = 12_000;
+
+interface MirrorRecord {
+  readonly name: string;
+  readonly type: string;
+  readonly ttl: number;
+  readonly values: readonly string[];
+  readonly readOnly?: true;
+}
+
+function mirrorOf(views: readonly ZoneRecordView[]): readonly MirrorRecord[] {
+  return views.map((v) => ({
+    name: v.fqdn,
+    type: v.type,
+    ttl: v.ttl,
+    values: v.values,
+    ...(v.readOnly ? { readOnly: true as const } : {}),
+  }));
+}
+
+const sameValues = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
+
+/**
+ * One record change of the payload. The payload is written by the web tier, so it is input: it is
+ * validated again with the rules of the core, and only what passed becomes a batch (R9, R11). The hosted
+ * zone id comes from the resource, never from the payload. A repeat of a step that already succeeded
+ * ends as done: a create whose set is already there with the same TTL and values, a delete whose set is
+ * gone (R7).
+ */
+async function changeRecord(port: Route53Port, ctx: OpCtx<DnsZoneConfig>): Promise<StepResult> {
+  const hostedZoneId = savedZoneId(ctx.resource.config);
+  if (hostedZoneId === null) throw fail("validation");
+  const payload: Record<string, unknown> =
+    typeof ctx.operation.payload === "object" && ctx.operation.payload !== null
+      ? (ctx.operation.payload as Record<string, unknown>)
+      : {};
+  const change = CHANGES.find((c) => c === payload.change);
+  if (change === undefined) throw fail("validation");
+  const zoneName = ctx.config.zoneName;
+
+  let record: ValidRecord;
+  if (change === "delete") {
+    const key = validateRecordKey(zoneName, payload.name, payload.type);
+    if (!key.ok) throw fail("validation");
+    // Only the name and the type matter for a delete: Route 53 removes the exact live set (below).
+    record = {
+      fqdn: key.value.fqdn,
+      type: key.value.type,
+      ttl: DNS_MIN_TTL,
+      values: ["-"],
+      isApex: key.value.isApex,
+    };
+  } else {
+    const checked = validateRecord(zoneName, {
+      name: payload.name as string,
+      type: payload.type as string,
+      ttl: payload.ttl as number,
+      values: payload.values as string[],
+    });
+    if (!checked.ok) throw fail("validation");
+    record = checked.value;
+  }
+
+  const input: RecordChangeInput = { hostedZoneId, zoneName, action: change, record };
+  const applied = await applyRecordChange(port, input);
+  if (!applied.ok) {
+    if (applied.error === "not_found" && change === "delete") {
+      // A zone that is gone is not "already deleted": only a missing set is.
+      if ((await port.getHostedZone(hostedZoneId)) === null) {
+        throw new AwsError({ code: "not_found", retryable: false });
+      }
+    } else if (applied.error === "conflict" && change === "create") {
+      const live = await port.listRecordSets(hostedZoneId);
+      const there = live.find((s) => plain(s.name) === record.fqdn && s.type === record.type);
+      if (
+        there === undefined ||
+        there.ttl !== record.ttl ||
+        !sameValues(there.values, record.values)
+      ) {
+        throw fail("validation");
+      }
+    } else {
+      throw fail("validation");
+    }
+  }
+
+  const records = mirrorOf(await listZoneRecords(port, hostedZoneId, zoneName));
+  const fits = Buffer.byteLength(JSON.stringify(records), "utf8") <= MIRROR_MAX_BYTES;
+  return stepDone({
+    configMerge: fits ? { records, recordsStale: false } : { records: null, recordsStale: true },
+  });
+}
+
 export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneConfig> {
   return {
     family: "dns_zone",
@@ -210,9 +311,10 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
         const zone = await deps.route53().getHostedZone(id);
         return { state: zone === null ? "missing" : "active" };
       },
-      async action(): Promise<StepResult> {
-        // Record changes are not an operation kind yet (JOURNEY: needs decision); nothing else applies to a zone.
-        throw fail("validation");
+      async action(kind, ctx: OpCtx<DnsZoneConfig>): Promise<StepResult> {
+        // The record editor (WPU-G4) is the one action of a zone; nothing else applies to it.
+        if (kind !== "change_dns_record") throw fail("validation");
+        return changeRecord(deps.route53(), ctx);
       },
     },
   };

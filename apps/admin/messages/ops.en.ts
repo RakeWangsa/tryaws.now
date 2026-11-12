@@ -50,6 +50,7 @@ export const opsEn: Same<typeof opsBn> = {
       delete_access_key: "Delete access key",
       deploy_containers: "Deploy containers",
       scale_container: "Scale container",
+      change_dns_record: "Change DNS record",
       reject_operation: "Reject a stuck operation",
       other: "Other kind",
     },
