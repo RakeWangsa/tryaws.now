@@ -1034,6 +1034,12 @@ TASKS["WPU-S7"] = [
   repo,
 ];
 
+// WPU-D1: the real invoice PDF engine. Headless Chromium (puppeteer-core with @sparticuz/chromium) runs with
+// JavaScript disabled, the page offline and every request aborted; the store is one PutObject for the
+// derived key; the renderer has no route to the internet. Proven with fakes (no Chromium, no AWS call) by
+// the renderer tests and the repository tests of the infra stacks. No AWS call, no deploy.
+TASKS["WPU-D1"] = [specSync, baselineSync, lint, typecheck, format, invoiceRenderer, repo];
+
 // WPU-S8: three LOW findings of an independent review. L1: the admin role has no grant on the invoices
 // bucket and cannot invoke invoice-renderer (the repo tests of the infra stacks). L2: a change to the BIN
 // or the NID needs a fresh sign-in, the stored NID reaches the browser masked only, and the BIN disclaimer

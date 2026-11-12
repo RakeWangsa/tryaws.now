@@ -53,7 +53,7 @@ function permissionsOf(spec: FunctionSpec, inputs: WorkerInputs) {
 }
 
 function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string, unknown> {
-  const { config, db, queues } = inputs;
+  const { config, db, queues, storage } = inputs;
   const env: Record<string, unknown> = {
     TC_STAGE: config.tcStage,
     TC_ENV: config.tcStage,
@@ -72,6 +72,10 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
   }
   if (spec.dir === "provisioner" || spec.dir === "scheduler") {
     env.PROVISIONING_QUEUE_URL = queues.provisioning.url;
+  }
+  if (spec.dir === "invoice-renderer") {
+    // The one bucket the renderer writes to (PutObject on invoices/* only, permissionsOf).
+    env.INVOICES_BUCKET = storage.invoices.name;
   }
   if (spec.dir === "notifier") {
     // Links in a message go only to the panel's own domain (16.14); the sender is the verified identity.
@@ -119,8 +123,26 @@ function vpcOf(spec: FunctionSpec, net: Network) {
   return undefined;
 }
 
+// invoice-renderer (WPU-D1, 3.2): headless Chromium on x86_64, in the isolated subnets (network.ts) with
+// no route to the internet. @sparticuz/chromium and puppeteer-core stay OUTSIDE the bundle (nodejs.install):
+// the Chromium binary is read from the package's bin folder, which a bundler would move. The Bengali
+// fonts are copied to /var/task/fonts, a folder that the fonts.conf of @sparticuz/chromium lists. The
+// browser unpacks itself to /tmp, so the function gets 2 GB of /tmp.
+// VERIFY (staging): nodejs.install installs the two packages with the versions of
+// functions/invoice-renderer/package.json; copyFiles puts the folder at /var/task/fonts.
+function rendererArgs(spec: FunctionSpec) {
+  if (spec.dir !== "invoice-renderer") return {};
+  return {
+    architecture: "x86_64",
+    storage: "2 GB",
+    nodejs: { install: ["@sparticuz/chromium", "puppeteer-core"] },
+    copyFiles: [{ from: "functions/invoice-renderer/fonts", to: "fonts" }],
+  };
+}
+
 export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
   return {
+    ...rendererArgs(spec),
     handler: `functions/${spec.dir}/index.${spec.handlerExport}`,
     timeout: `${spec.timeoutSeconds} seconds`,
     memory: `${spec.memoryMb} MB`,

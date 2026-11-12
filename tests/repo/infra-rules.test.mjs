@@ -499,6 +499,60 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     );
   });
 
+  // WPU-D1: the renderer runs a real browser on HTML it was given. Its network has no way out (no NAT, no
+  // internet gateway route, one egress rule to the S3 prefix list on 443), its role has one S3 action on
+  // one prefix and the key use that SSE-KMS needs, and its package carries the browser and the fonts.
+  it("gives invoice-renderer no internet egress and no S3 action but PutObject (WPU-D1)", () => {
+    // placement and size (the table, then the function declaration)
+    const functionsLib = source("infra/lib/functions.ts");
+    const spec = between(functionsLib, 'dir: "invoice-renderer"', 'dir: "scheduler"');
+    expect(spec).toContain('placement: "isolated"');
+    expect(spec).toContain('dbRole: "none"');
+    expect(spec).toContain("poolRoles: []");
+    expect(spec).toContain("timeoutSeconds: 60");
+    expect(spec).toContain("memoryMb: 2048");
+    expect(workers).toMatch(
+      /spec\.placement === "isolated"\) \{ return \{ privateSubnets: net\.isolatedSubnetIds, securityGroups: \[net\.isolatedSecurityGroup\.id\]/,
+    );
+    // network: the subnets' route table has no default route, the group has one egress rule
+    const isolatedNetwork = between(
+      network,
+      'new aws.ec2.RouteTable("IsolatedRouteTable"',
+      "return {",
+    );
+    expect(isolatedNetwork).not.toMatch(
+      /natGatewayId|gatewayId|transitGatewayId|vpcPeeringConnectionId|egressOnlyGatewayId|0\.0\.0\.0|::\/0/,
+    );
+    expect(isolatedNetwork).not.toMatch(/routes:|new aws\.ec2\.Route\(/);
+    expect([...isolatedNetwork.matchAll(/prefixListIds/g)]).toHaveLength(1);
+    expect([...isolatedNetwork.matchAll(/toPort: \d+/g)].map((m) => m[0])).toEqual(["toPort: 443"]);
+    expect(isolatedNetwork).not.toMatch(/ingress/i);
+    // role: PutObject on invoices/* and the key use, and no other S3 action, anywhere in the renderer branch
+    const branch = between(
+      workers,
+      'if (spec.dir === "invoice-renderer") { permissions.push(',
+      "return permissions;",
+    );
+    expect([...branch.matchAll(/actions: \[([^\]]*)\]/g)].map((m) => m[1])).toEqual([
+      '"s3:PutObject"',
+      '"kms:GenerateDataKey"',
+    ]);
+    expect(branch).toContain("$interpolate`${storage.invoices.arn}/*`");
+    expect(branch).toContain("storage.filesKey.arn");
+    expect(branch).not.toMatch(/s3:(Get|List|Delete|\*)|kms:(Decrypt|\*)|sts:|"\*"/);
+    // no other function branch grants the renderer anything, and the renderer has no link and no secret
+    expect(workers).not.toMatch(/invoice-renderer[^;]*sts:AssumeRole/);
+    // environment and package
+    expect(workers).toContain(
+      'spec.dir === "invoice-renderer") { env.INVOICES_BUCKET = storage.invoices.name',
+    );
+    expect(workers).toContain('nodejs: { install: ["@sparticuz/chromium", "puppeteer-core"] }');
+    expect(workers).toContain(
+      'copyFiles: [{ from: "functions/invoice-renderer/fonts", to: "fonts" }]',
+    );
+    expect(workers).toContain('architecture: "x86_64"');
+  });
+
   it("names the web role identically where it is created and where kyc denies it", () => {
     expect(web).toContain('server: fixedServerRole(roleName(stage, "web"))');
     expect(web).toContain('server: fixedServerRole(roleName(stage, "admin"))');

@@ -18,15 +18,32 @@ describe("invoice-renderer boundaries", () => {
       expect.arrayContaining(["handler.ts", "engines.ts", "fake.ts", "index.ts"]),
     );
   });
-  it("never imports AWS code, the database or a PDF library (R1, R2, R17)", () => {
+  it("imports AWS code, the database or a PDF library only in engines.ts (R1, R2, R17)", () => {
     for (const f of files) {
-      expect(f.text, f.name).not.toMatch(
-        /@tc\/aws|@tc\/db|@aws-sdk|puppeteer|playwright|chromium-|pdfkit|jspdf/,
-      );
+      expect(f.text, f.name).not.toMatch(/@tc\/aws|@tc\/db|pdfkit|jspdf|playwright/);
+      if (f.name === "engines.ts") continue;
+      expect(f.text, f.name).not.toMatch(/@aws-sdk|puppeteer|chromium/);
     }
-    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["@tc/core"]);
+    // R17: the three dependencies of WPU-D1 are pinned to exact versions
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual([
+      "@aws-sdk/client-s3",
+      "@sparticuz/chromium",
+      "@tc/core",
+      "puppeteer-core",
+    ]);
+    for (const [name, version] of Object.entries(pkg.dependencies ?? {})) {
+      if (name !== "@tc/core") expect(version, name).toMatch(/^\d+\.\d+\.\d+$/);
+    }
   });
-  it("the lazy wrapper fails closed while the engine and the bucket are not linked (R16)", async () => {
-    await expect(handler({})).rejects.toThrow("invoice-renderer: the pdf engine is not linked");
+  it("the lazy wrapper fails closed without the invoices bucket (R16)", async () => {
+    const before = process.env["INVOICES_BUCKET"];
+    delete process.env["INVOICES_BUCKET"];
+    try {
+      await expect(handler({})).rejects.toThrow(
+        "invoice-renderer: the invoices bucket is not configured",
+      );
+    } finally {
+      if (before !== undefined) process.env["INVOICES_BUCKET"] = before;
+    }
   });
 });

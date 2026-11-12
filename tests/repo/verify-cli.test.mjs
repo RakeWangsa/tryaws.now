@@ -155,6 +155,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T2",
     "WPP-T3",
     "WPP-T4",
+    "WPU-D1",
     "WPU-G1",
     "WPU-G10",
     "WPU-G11",
@@ -674,6 +675,41 @@ it("the proof of WPU-S8 exists: the admin grants, the fresh sign-in, the masked 
     [
       "functions/invoice-renderer/handler.test.ts",
       "renders the customer's own text as escaped text",
+    ],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-D1 is proven by lint, types, format, the renderer and repository tests", () => {
+  expect(TASKS["WPU-D1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-D1 exists: the engine with fakes, the store, and the renderer network and role rules", () => {
+  for (const [file, part] of [
+    [
+      "functions/invoice-renderer/engines.test.ts",
+      "disables JavaScript, goes offline and intercepts requests before the content is set",
+    ],
+    [
+      "functions/invoice-renderer/engines.test.ts",
+      "aborts every request: an external URL, a data URL, a file URL and an about URL",
+    ],
+    [
+      "functions/invoice-renderer/engines.test.ts",
+      "sends exactly one PutObject with the derived key",
+    ],
+    [
+      "tests/repo/infra-rules.test.mjs",
+      "gives invoice-renderer no internet egress and no S3 action but PutObject (WPU-D1)",
     ],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
