@@ -2916,6 +2916,46 @@ TASKS["WPU-C1"] = [
   repo,
 ];
 
+// WPU-D2: deploy readiness (audit C.1 to C.5, C.10, C.13, C.14, C.40). sst is pinned, the stacks output
+// featureFlagDefaults and webRolePolicies for the post-deploy check, the trust names the roles SST creates,
+// the GitHub OIDC provider and the CI role templates (bounded deploy roles, minimal plan role), the probe
+// sources and the VPC CIDR are required stack config, the ledger check has its 02:00 schedule and alarms,
+// the migrator checks applied hashes and ensures the system accounts, and the runbooks cite the real alarm
+// names. Authored only: no deploy, no AWS call. The migrator and db tests use the local PostgreSQL.
+TASKS["WPU-D2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "migrator",
+    "functions/migrator: five roles, TLS check, applied-hash check, system accounts after the migrations",
+    "@tc/fn-migrator",
+  ),
+  glueTest(
+    "migration-hashes",
+    "packages/db: the hashes drizzle stores are the hashes of the files",
+    "@tc/db",
+    "test/migration-hashes",
+  ),
+  infraLib,
+  infraTest(
+    "infra-org",
+    "infra/org: trust names the SST roles, pool and DNS templates",
+    "infra-org",
+  ),
+  infraTest(
+    "infra-ci-oidc",
+    "infra/org: GitHub OIDC provider and the CI roles (boundary, name prefix, minimal plan role)",
+    "infra-ci-oidc",
+  ),
+  infraTest("infra-rules", "infra/stacks: static rules of the SST declarations", "infra-rules"),
+  infraTest("ci-deploy", "post-deploy check and the deploy workflows", "ci-deploy"),
+  infraTest("runbooks", "runbooks cite real names, commands and files", "runbooks"),
+  repo,
+];
+
 // WPU-D3: the audit items of the money and data path. The NID is removed from the billing profile
 // (migration 0019); the DNS zone gets its base price and the owner's 15 percent margin as a price book
 // entry (0020); one open KYC submission per customer by index (0020); one EPS transaction id per payment
@@ -2956,6 +2996,36 @@ TASKS["WPU-M6"] = [
   sweeperAll,
   web,
   admin,
+  repo,
+];
+
+// WPU-M7: merge reconciliation of WPU-D1 (invoice PDF engine, invoice-renderer in workers.ts) with WPU-D2
+// (deploy readiness: sst pin, probe sources, ledger-check alarms, migrator checks): both sets of infra
+// rules hold together on one stack declaration, the renderer and the migrator tests still pass. No AWS call.
+TASKS["WPU-M7"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  invoiceRenderer,
+  glueTest(
+    "migrator",
+    "functions/migrator: five roles, TLS check, applied-hash check, system accounts after the migrations",
+    "@tc/fn-migrator",
+  ),
+  infraLib,
+  infraTest(
+    "infra-org",
+    "infra/org: trust names the SST roles, pool and DNS templates",
+    "infra-org",
+  ),
+  infraTest(
+    "infra-ci-oidc",
+    "infra/org: GitHub OIDC provider and the CI roles (boundary, name prefix, minimal plan role)",
+    "infra-ci-oidc",
+  ),
+  infraTest("infra-rules", "infra/stacks: static rules of the SST declarations", "infra-rules"),
   repo,
 ];
 

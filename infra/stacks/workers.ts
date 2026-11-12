@@ -10,7 +10,15 @@
 //
 // NOT TYPE-CHECKED, see network.ts.
 import { PROVISIONING_QUEUE } from "../../packages/core/operations/queue-config";
-import { DB_PASSWORD_SECRET, DB_ROLES, FUNCTIONS, type FunctionSpec } from "../lib/functions";
+import {
+  DB_PASSWORD_SECRET,
+  DB_ROLES,
+  FUNCTIONS,
+  LEDGER_CHECK_FUNCTION,
+  LEDGER_CHECK_SCHEDULE,
+  provisionerNetworkEnvironment,
+  type FunctionSpec,
+} from "../lib/functions";
 import { assumableRoleArns, roleName, type StageConfig } from "../lib/stage";
 import type { Database } from "./database";
 import type { Messaging } from "./messaging";
@@ -76,6 +84,10 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
   if (spec.dir === "invoice-renderer") {
     // The one bucket the renderer writes to (PutObject on invoices/* only, permissionsOf).
     env.INVOICES_BUCKET = storage.invoices.name;
+  }
+  if (spec.dir === "provisioner") {
+    // C.5: required stack configuration on staging and production (infra/lib/stage.ts).
+    Object.assign(env, provisionerNetworkEnvironment(config));
   }
   if (spec.dir === "notifier") {
     // Links in a message go only to the panel's own domain (16.14); the sender is the verified identity.
@@ -167,7 +179,7 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
       role: (args: { name?: string }) => {
         // VERIFY: the docs do not say that transform.role may set the IAM role name; the Pulumi
         // aws.iam.Role `name` argument is what is set here.
-        args.name = roleName(inputs.config.stage, spec.dir);
+        args.name = roleName(inputs.config.stage, spec.name ?? spec.dir);
       },
     },
   };
@@ -235,6 +247,13 @@ export function workers(inputs: WorkerInputs) {
       ];
     }),
   );
+
+  // C.13: the daily ledger check at 02:00 Asia/Dhaka (20:00 UTC), next to the hourly reconciler.
+  crons["ledger-check"] = new sst.aws.CronV2(LEDGER_CHECK_FUNCTION.component, {
+    schedule: LEDGER_CHECK_SCHEDULE,
+    function: functionArgs(LEDGER_CHECK_FUNCTION, inputs),
+    retries: 0,
+  });
 
   // Deploy time: the migrator creates the roles and runs the migrations with the master user.
   // VERIFY: aws.lambda.Invocation re-runs when `triggers` change; a changing value runs it on every

@@ -1,0 +1,319 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud CI role TcCiDeployStaging (R3, B.1 of docs/analysis/pending-audit.md) and the permissions
+  boundary TcCiRoleBoundary that every role it creates must carry. Assumed by the job `deploy` of
+  .github/workflows/deploy-staging.yml through GitHub OIDC, in the STAGING account only. The trust is the
+  three conditions that workflow documents: aud, sub = the GitHub environment `staging`, and
+  job_workflow_ref = that workflow on the protected branch. A pull request, a fork or any other workflow
+  cannot assume it. Deploy with the DevOps admin role after ci-oidc-provider.yaml. The organisation and
+  repository names are parameters; no account id or name is written here.
+  PRIVILEGE ESCALATION GUARD: the role can create, change and pass only roles named tc-* (the function
+  and platform roles of infra/lib/stage.ts roleName) and ticon-cloud-* (the roles SST names itself), and
+  only when the role carries the boundary below; it can attach only the listed AWS managed policies; it
+  can pass a role only to the listed services; it can never remove or replace the boundary, change the
+  boundary policy, touch the CI roles, mint users or keys, or change CloudTrail, GuardDuty or the
+  organization. A compromised deploy job therefore cannot make itself or any role an administrator.
+# VERIFY: IAM evaluates the GitHub claim `job_workflow_ref` as the condition key
+# token.actions.githubusercontent.com:job_workflow_ref (current IAM documentation, "Configure a role for
+# GitHub OIDC identity provider"). Its value has NO "repo:" prefix: <org>/<repo>/.github/workflows/<file>@<ref>.
+# If the key is not evaluated the condition never matches and the role fails closed (R16).
+# VERIFY: the `sub` claim of a job that uses `environment: staging` is
+# repo:<org>/<repo>:environment:staging (GitHub documentation, "OpenID Connect reference").
+# VERIFY: the boundary may be too tight for the first staging deploy (SST creates roles for the Next.js
+# server and image functions, the RDS proxy, the Cron scheduler and the CloudFront edge function). Run the
+# first staging deploy, read the AccessDenied in the role's CloudTrail, widen the boundary by pull request
+# (never remove the Deny statements) and record it in JOURNEY.md.
+# VERIFY: that SST names its own roles ticon-cloud-<stage>-* (app name `ticon-cloud` in infra/sst.config.ts).
+# Check the role names after the first deploy and correct the prefixes below if they differ.
+# VERIFY: iam:PermissionsBoundary is evaluated for CreateRole, PutRolePolicy, AttachRolePolicy,
+# DetachRolePolicy, DeleteRolePolicy and PutRolePermissionsBoundary (IAM documentation "Delegate
+# permissions management to others by using permissions boundaries"); UpdateAssumeRolePolicy is
+# included here as a precaution, and is checked by the same condition key only if AWS evaluates it.
+# VERIFY: the AWS managed policies and the PassedToService values are what SST attaches and passes today.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
+    Description: GitHub organisation or user that owns the repository. Entered by DevOps; not in the repository.
+  GitHubRepo:
+    Type: String
+    AllowedPattern: "^[A-Za-z0-9._-]{1,100}$"
+    Description: GitHub repository name. Entered by DevOps; not in the repository.
+  ProtectedBranch:
+    Type: String
+    Default: main
+    AllowedPattern: "^[A-Za-z0-9._-]{1,100}$"
+    Description: >-
+      The protected branch deploy-staging.yml runs from (A.26 of the audit decides the name). The role
+      is assumed only by that workflow at that ref.
+  MaxSessionSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 3600
+    MaxValue: 3600
+    Description: One hour, as role-duration-seconds in the workflow.
+
+Resources:
+  TcCiRoleBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: TcCiRoleBoundary
+      Description: >-
+        The most a role created by the TiCON CI deploy role may ever do. No IAM, no organization, no
+        CloudTrail change, no assume of a role other than the pool and DNS roles (Tc*).
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: RuntimeOfTheStackFunctions
+            Effect: Allow
+            Action:
+              - cloudfront:CreateInvalidation
+              - cloudwatch:PutMetricData
+              - cognito-idp:Admin*
+              - cognito-idp:ListUsers
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:DeleteItem
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:UpdateItem
+              - ec2:AssignPrivateIpAddresses
+              - ec2:CreateNetworkInterface
+              - ec2:DeleteNetworkInterface
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeVpcs
+              - ec2:UnassignPrivateIpAddresses
+              - events:PutEvents
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:GenerateDataKey
+              - lambda:InvokeFunction
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - rds-db:connect
+              - s3:DeleteObject
+              - s3:GetBucketLocation
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:PutObject
+              - secretsmanager:GetSecretValue
+              - ses:SendEmail
+              - ses:SendRawEmail
+              - sns:Publish
+              - sqs:ChangeMessageVisibility
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:ReceiveMessage
+              - sqs:SendMessage
+              - ssm:GetParameter
+              - ssm:GetParameters
+            Resource: "*"
+          - Sid: AssumeOnlyThePoolAndDnsRoles
+            Effect: Allow
+            Action: sts:AssumeRole
+            Resource: "arn:aws:iam::*:role/Tc*"
+          - Sid: NeverIdentityOrganisationOrTheAuditTrail
+            Effect: Deny
+            Action:
+              - iam:*
+              - organizations:*
+              - account:*
+              - cloudtrail:*
+              - guardduty:*
+            Resource: "*"
+  TcCiDeployStaging:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TcCiDeployStaging
+      Description: Deploys the staging stage of the SST app. Assumed by GitHub Actions through OIDC only.
+      MaxSessionDuration:
+        Ref: MaxSessionSeconds
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: GitHubStagingEnvironmentOnly
+            Effect: Allow
+            Principal:
+              Federated:
+                Fn::Sub: "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  Fn::Sub: "repo:${GitHubOrg}/${GitHubRepo}:environment:staging"
+                token.actions.githubusercontent.com:job_workflow_ref:
+                  Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-staging.yml@refs/heads/${ProtectedBranch}"
+      Policies:
+        - PolicyName: SstDeployOfTheStack
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ServicesOfTheStack
+                Effect: Allow
+                Action:
+                  - acm:*
+                  - cloudfront:*
+                  - cloudwatch:*
+                  - cognito-idp:*
+                  - dynamodb:*
+                  - ec2:*
+                  - events:*
+                  - kms:*
+                  - lambda:*
+                  - logs:*
+                  - rds:*
+                  - route53:ChangeResourceRecordSets
+                  - route53:Get*
+                  - route53:List*
+                  - s3:*
+                  - scheduler:*
+                  - secretsmanager:*
+                  - ses:*
+                  - sns:*
+                  - sqs:*
+                  - ssm:*
+                  - wafv2:*
+                Resource: "*"
+              - Sid: ReadRolesOfTheStack
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListInstanceProfilesForRole
+                  - iam:ListRolePolicies
+                  - iam:ListRoleTags
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-*"
+              - Sid: CreateAndChangeRolesOnlyWithTheBoundary
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePermissionsBoundary
+                  - iam:PutRolePolicy
+                  - iam:UpdateAssumeRolePolicy
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary:
+                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary"
+              - Sid: AttachOnlyTheListedManagedPolicies
+                Effect: Allow
+                Action: iam:AttachRolePolicy
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary:
+                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary"
+                    iam:PolicyARN:
+                      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+                      - arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole
+                      - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+              - Sid: ChangeAndDeleteTheirOwnRoles
+                Effect: Allow
+                Action:
+                  - iam:DeleteRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateRole
+                  - iam:UpdateRoleDescription
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-*"
+              - Sid: PassOnlyToTheServicesThatRunTheStack
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-*"
+                Condition:
+                  StringEquals:
+                    iam:PassedToService:
+                      - edgelambda.amazonaws.com
+                      - events.amazonaws.com
+                      - lambda.amazonaws.com
+                      - rds.amazonaws.com
+                      - scheduler.amazonaws.com
+              - Sid: ServiceLinkedRolesOnly
+                Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource:
+                  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/*"
+              - Sid: NeverRemoveOrReplaceTheBoundary
+                Effect: Deny
+                Action:
+                  - iam:DeleteRolePermissionsBoundary
+                  - iam:DeleteUserPermissionsBoundary
+                  - iam:PutUserPermissionsBoundary
+                Resource: "*"
+              - Sid: NeverAnotherBoundary
+                Effect: Deny
+                Action: iam:PutRolePermissionsBoundary
+                Resource: "*"
+                Condition:
+                  StringNotEquals:
+                    iam:PermissionsBoundary:
+                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary"
+              - Sid: NeverChangeTheBoundaryPolicyItself
+                Effect: Deny
+                Action:
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicy
+                  - iam:DeletePolicyVersion
+                  - iam:SetDefaultPolicyVersion
+                Resource:
+                  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary"
+              - Sid: NeverTheCiRolesNorTheProviderNorUsers
+                Effect: Deny
+                Action: iam:*
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/TcCi*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:oidc-provider/*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:user/*"
+              - Sid: NoLongLivedKeysNoOrganisationNoAuditChange
+                Effect: Deny
+                Action:
+                  - iam:AttachUserPolicy
+                  - iam:CreateAccessKey
+                  - iam:CreateLoginProfile
+                  - iam:CreateUser
+                  - iam:PutUserPolicy
+                  - iam:UpdateAccessKey
+                  - iam:UpdateLoginProfile
+                  - organizations:*
+                  - account:*
+                  - cloudtrail:AddTags
+                  - cloudtrail:CreateTrail
+                  - cloudtrail:DeleteTrail
+                  - cloudtrail:PutEventSelectors
+                  - cloudtrail:PutInsightSelectors
+                  - cloudtrail:RemoveTags
+                  - cloudtrail:StartLogging
+                  - cloudtrail:StopLogging
+                  - cloudtrail:UpdateTrail
+                  - guardduty:Delete*
+                  - guardduty:Disable*
+                  - guardduty:Disassociate*
+                  - guardduty:Stop*
+                  - guardduty:Update*
+                Resource: "*"
+              - Sid: NeverAssumeAPoolOrDnsRole
+                Effect: Deny
+                Action: sts:AssumeRole
+                Resource: "arn:aws:iam::*:role/Tc*"

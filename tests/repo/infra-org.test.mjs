@@ -2,6 +2,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { FUNCTIONS } from "../../infra/lib/functions.ts";
+import { roleName as sstRole } from "../../infra/lib/stage.ts";
 import { describe, expect, it } from "vitest";
 
 // WP0-T5: static proof of the templates in infra/org. Nothing here talks to AWS and nothing proves that
@@ -225,6 +227,7 @@ describe("trust policies", () => {
     const params = {
       ...defaultsOf(t),
       ControlPlaneAccountId: STG,
+      ControlPlaneStage: "staging",
       ExternalId: EXTERNAL_ID,
     };
     const fn = (account, name) => `arn:aws:iam::${account}:role/${name}`;
@@ -232,11 +235,18 @@ describe("trust policies", () => {
       mayAssume(roleByName(t, roleName), params, { callerArn, externalId });
 
     it("the staging provisioner function role can assume TcProvisioner with the ExternalId", () => {
-      expect(asks("TcProvisioner", fn(STG, params.ProvisionerFunctionRoleName))).toBe(true);
+      expect(asks("TcProvisioner", fn(STG, sstRole("staging", "provisioner")))).toBe(true);
     });
 
     it("the staging web role cannot assume TcProvisioner, nor any other Tc role", () => {
-      for (const webName of ["tc-fn-web", "tc-web", "tc-fn-admin", "tc-admin"]) {
+      for (const webName of [
+        sstRole("staging", "web"),
+        sstRole("staging", "admin"),
+        "tc-fn-web",
+        "tc-web",
+        "tc-fn-admin",
+        "tc-admin",
+      ]) {
         for (const r of ["TcProvisioner", "TcReader", "TcAccessDetails", "TcBillingReader"]) {
           expect(asks(r, fn(STG, webName)), `${webName} -> ${r}`).toBe(false);
         }
@@ -246,10 +256,10 @@ describe("trust policies", () => {
     });
 
     it("the right function role fails without the ExternalId, with a wrong one, and from another account", () => {
-      const caller = fn(STG, params.ProvisionerFunctionRoleName);
+      const caller = fn(STG, sstRole("staging", "provisioner"));
       expect(asks("TcProvisioner", caller, null)).toBe(false);
       expect(asks("TcProvisioner", caller, "wrong")).toBe(false);
-      expect(asks("TcProvisioner", fn(PROD, params.ProvisionerFunctionRoleName))).toBe(false);
+      expect(asks("TcProvisioner", fn(PROD, sstRole("staging", "provisioner")))).toBe(false);
     });
 
     it("each function role reaches only its own roles", () => {
@@ -257,11 +267,11 @@ describe("trust policies", () => {
         ["TcProvisioner", "TcReader", "TcAccessDetails", "TcBillingReader"].filter((r) =>
           asks(r, fn(STG, name)),
         );
-      expect(reach(params.ProvisionerFunctionRoleName)).toEqual(["TcProvisioner"]);
-      expect(reach(params.ReaderFunctionRoleName)).toEqual(["TcReader"]);
-      expect(reach(params.CatalogSyncFunctionRoleName)).toEqual(["TcReader"]);
-      expect(reach(params.ReconcilerFunctionRoleName)).toEqual(["TcReader", "TcBillingReader"]);
-      expect(reach(params.AccessDetailsFunctionRoleName)).toEqual(["TcAccessDetails"]);
+      expect(reach(sstRole("staging", "provisioner"))).toEqual(["TcProvisioner"]);
+      expect(reach(sstRole("staging", "reader"))).toEqual(["TcReader"]);
+      expect(reach(sstRole("staging", "catalog-sync"))).toEqual(["TcReader"]);
+      expect(reach(sstRole("staging", "reconciler"))).toEqual(["TcReader", "TcBillingReader"]);
+      expect(reach(sstRole("staging", "access-details"))).toEqual(["TcAccessDetails"]);
     });
   });
 
@@ -275,10 +285,76 @@ describe("trust policies", () => {
           callerArn: fn(account, name),
           externalId: EXTERNAL_ID,
         });
-      expect(may("tc-fn-provisioner")).toBe(true);
-      expect(may("tc-fn-web")).toBe(false);
-      expect(may("tc-fn-admin")).toBe(false);
-      expect(may("tc-fn-provisioner", STG)).toBe(false);
+      expect(may("tc-production-provisioner-role")).toBe(true);
+      expect(may("tc-production-web-role")).toBe(false);
+      expect(may("tc-production-admin-role")).toBe(false);
+      expect(may("tc-production-provisioner-role", STG)).toBe(false);
+    });
+  });
+
+  // C.3: the trust names the roles that SST really creates (infra/lib/stage.ts roleName is what
+  // infra/stacks/workers.ts passes to transform.role), for every function of the function table.
+  describe("the role names of SST (tc-<stage>-<function>-role) are the ones the trust names", () => {
+    const pool = tpl["pool-roles.yaml"];
+    const dns = tpl["dns-account.yaml"];
+    const arn = (account, name) => `arn:aws:iam::${account}:role/${name}`;
+    const reachable = (stage, dir) => {
+      const base = {
+        ControlPlaneAccountId: PROD,
+        ExternalId: EXTERNAL_ID,
+        ControlPlaneStage: stage,
+      };
+      const callerArn = arn(PROD, sstRole(stage, dir));
+      const names = [];
+      for (const t of [pool, dns]) {
+        for (const role of resourcesOf(t, "AWS::IAM::Role")) {
+          const params = { ...defaultsOf(t), ...base };
+          if (mayAssume(role, params, { callerArn, externalId: EXTERNAL_ID })) {
+            names.push(`${role.Properties.RoleName}`);
+          }
+        }
+      }
+      return names.sort();
+    };
+
+    it("each function reaches exactly the roles of the function table, for staging and production", () => {
+      for (const stage of ["staging", "production"]) {
+        for (const spec of FUNCTIONS) {
+          const wanted = [...new Set(spec.poolRoles)].sort();
+          const got = reachable(stage, spec.dir);
+          // TcBillingReader exists in the pool template and in tc-dns: one name, two accounts
+          expect([...new Set(got)], `${stage} ${spec.dir}`).toEqual(wanted);
+        }
+      }
+    });
+
+    it("web and admin reach nothing, and a role of the other stage reaches nothing", () => {
+      for (const stage of ["staging", "production"]) {
+        expect(reachable(stage, "web"), stage).toEqual([]);
+        expect(reachable(stage, "admin"), stage).toEqual([]);
+      }
+      const other = {
+        ControlPlaneAccountId: PROD,
+        ExternalId: EXTERNAL_ID,
+        ControlPlaneStage: "staging",
+      };
+      const role = roleByName(pool, "TcProvisioner");
+      expect(
+        mayAssume(
+          role,
+          { ...other },
+          {
+            callerArn: arn(PROD, sstRole("production", "provisioner")),
+            externalId: EXTERNAL_ID,
+          },
+        ),
+      ).toBe(false);
+    });
+
+    it("no template keeps the old tc-fn-* names or their parameters", () => {
+      for (const name of ["pool-roles.yaml", "dns-account.yaml"]) {
+        expect(read(join(orgDir, name)), name).not.toMatch(/tc-fn-|FunctionRoleName/);
+      }
     });
   });
 });

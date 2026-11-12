@@ -78,6 +78,14 @@ export function web(inputs: WebInputs) {
   const { config, net, db, secrets, queues, storage, auth, waf, workers } = inputs;
   const stage = config.stage;
   const vpc = { privateSubnets: net.vpc.privateSubnets, securityGroups: [net.appSecurityGroup.id] };
+  // C.2: the permission lists of the web and admin roles, kept as IAM policy documents for the stack
+  // output `webRolePolicies` that scripts/post-deploy-check.mjs reads (R1: none allows sts:AssumeRole).
+  // They are built from the same lists the Nextjs components receive, so they cannot drift apart.
+  const recorded: { actions: string[]; resources: unknown[] }[][] = [];
+  const record = <T extends { actions: string[]; resources: unknown[] }>(permissions: T[]): T[] => {
+    recorded.push(permissions);
+    return permissions;
+  };
   const invoke = (...dirs: string[]) => dirs.map((dir) => workers.invoked[dir]?.arn);
   // WPU-S6: each tier may invoke only its own alias of the reader (customerId on "web", adminId on
   // "admin"); the handler reads the tier from the alias in the invoked ARN.
@@ -115,7 +123,7 @@ export function web(inputs: WebInputs) {
     // Least privilege of web (3.2): enqueue, presign KYC uploads (PutObject only), read its own
     // invoices and exports, invoke reader, access-details and invoice-renderer, sign out its own
     // pool's users. No sts:AssumeRole, no kms:Decrypt on the kyc key, no s3:GetObject on kyc.
-    permissions: [
+    permissions: record([
       { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
@@ -135,7 +143,7 @@ export function web(inputs: WebInputs) {
       },
       { actions: ["kms:Decrypt"], resources: [storage.filesKey.arn] },
       { actions: ["cognito-idp:AdminUserGlobalSignOut"], resources: [auth.customers.arn] },
-    ],
+    ]),
     transform: {
       server: fixedServerRole(roleName(stage, "web")),
       cdn: cdnTransform(waf.customerAclArn, waf.securityHeadersPolicyId),
@@ -165,7 +173,7 @@ export function web(inputs: WebInputs) {
     // API of the admin pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
     // invoice-renderer (WPU-S8): an invoice PDF holds the buyer's BIN or NID and address; the renderer
     // function writes it and the customer's own web path reads it.
-    permissions: [
+    permissions: record([
       { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
@@ -194,14 +202,26 @@ export function web(inputs: WebInputs) {
         ],
         resources: [auth.admins.arn],
       },
-    ],
+    ]),
     transform: {
       server: fixedServerRole(roleName(stage, "admin")),
       cdn: cdnTransform(waf.adminAclArn, waf.securityHeadersPolicyId),
     },
   });
 
-  return { customer, admin, dbPasswordSecretNames: DB_PASSWORD_SECRET };
+  // VERIFY: $jsonStringify exists in the SST global scope and resolves Output values inside the object.
+  const webRolePolicies = recorded.map((permissions) =>
+    $jsonStringify({
+      Version: "2012-10-17",
+      Statement: permissions.map((p) => ({
+        Effect: "Allow",
+        Action: p.actions,
+        Resource: p.resources,
+      })),
+    }),
+  );
+
+  return { customer, admin, webRolePolicies, dbPasswordSecretNames: DB_PASSWORD_SECRET };
 }
 
 export type Web = ReturnType<typeof web>;

@@ -6,8 +6,8 @@
 // Exit codes: 0 all assertions hold, 1 an assertion failed, 2 BLOCKED (the input to decide is missing).
 // R16: a check that cannot complete is a failure, never a pass.
 //
-// Input keys the SST app must output (names only, never a secret value). infra/sst.config.ts does not
-// output them yet, so today this check ends BLOCKED; JOURNEY.md (WP0-T6) lists the stack change.
+// Input keys the SST app must output (names only, never a secret value). infra/sst.config.ts has to
+// output them since WPU-D2 (infra/sst.config.ts: featureFlagDefaults, webRolePolicies from infra/stacks/web.ts).
 //   stage                string, must equal --stage
 //   featureFlagDefaults  object, flag key -> boolean. R12: every default is false in production.
 //   webRolePolicies      array of IAM policy documents (objects or JSON strings) attached to the web role
@@ -18,6 +18,23 @@ import { fileURLToPath } from "node:url";
 export const EXIT_OK = 0;
 export const EXIT_FAILED = 1;
 export const EXIT_BLOCKED = 2;
+
+// The twelve product-family flags (FEATURE_FLAG_KEYS of packages/db). This script imports nothing but
+// node:fs and node:url, so the list is a copy; tests/repo/infra-lib.test.mjs compares it with the source.
+export const FEATURE_FLAG_KEYS = [
+  "linux_instance",
+  "static_ip",
+  "backup",
+  "disk",
+  "windows_instance",
+  "database",
+  "load_balancer",
+  "bucket",
+  "container_service",
+  "cdn",
+  "dns_zone",
+  "domain",
+];
 
 const STS_ASSUME = /^(\*|sts:\*|sts:assume[a-z]*)$/i;
 
@@ -74,9 +91,16 @@ export function flagProblems(defaults) {
   }
   const keys = Object.keys(defaults);
   if (keys.length === 0) return ["featureFlagDefaults is empty"];
-  return keys
-    .filter((key) => defaults[key] !== false)
-    .map((key) => `feature flag ${key} is not false`);
+  // R16: an output that leaves a product family out cannot show that it is off.
+  const missing = FEATURE_FLAG_KEYS.filter((key) => !keys.includes(key)).map(
+    (key) => `feature flag ${key} is missing from featureFlagDefaults`,
+  );
+  return [
+    ...missing,
+    ...keys
+      .filter((key) => defaults[key] !== false)
+      .map((key) => `feature flag ${key} is not false`),
+  ];
 }
 
 // result: { code, lines } and no side effect, so a test can call it.
@@ -108,8 +132,9 @@ export function checkOutputs({ stage, outputsText }) {
   if (outputs.stage !== stage)
     problems.push(`outputs are for stage ${String(outputs.stage)}, not ${stage}`);
   problems.push(...flagProblems(outputs.featureFlagDefaults));
-  if (!Array.isArray(outputs.webRolePolicies) || outputs.webRolePolicies.length === 0) {
-    problems.push("webRolePolicies is not a non-empty array");
+  // The web role and the admin role: one policy document each at least (infra/stacks/web.ts).
+  if (!Array.isArray(outputs.webRolePolicies) || outputs.webRolePolicies.length < 2) {
+    problems.push("webRolePolicies is not an array of at least two policy documents");
   } else {
     problems.push(...assumeRoleProblems(outputs.webRolePolicies));
   }

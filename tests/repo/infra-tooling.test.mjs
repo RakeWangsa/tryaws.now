@@ -50,9 +50,11 @@ describe("tooling", () => {
     expect(readFileSync(resolve(root, ".gitignore"), "utf8")).toMatch(/^\.sst\/?$/m);
   });
 
-  it("does not add sst to package.json (it cannot be locked offline)", () => {
-    const manifest = readFileSync(resolve(root, "package.json"), "utf8");
-    expect(manifest).not.toMatch(/"sst"|"@pulumi/);
+  it("pins sst exactly in the root devDependencies (WPU-D2, C.1) and adds no @pulumi package of its own", () => {
+    const manifest = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+    expect(manifest.devDependencies.sst).toBe("4.17.2");
+    expect(manifest.dependencies?.sst).toBeUndefined();
+    expect(JSON.stringify(manifest)).not.toMatch(/@pulumi/);
   });
 
   it("leaves infra/org alone", () => {
