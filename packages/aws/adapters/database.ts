@@ -5,24 +5,32 @@ import {
   DeleteRelationalDatabaseCommand,
   DeleteRelationalDatabaseSnapshotCommand,
   GetRelationalDatabaseCommand,
+  GetRelationalDatabaseParametersCommand,
   GetRelationalDatabaseSnapshotCommand,
+  RebootRelationalDatabaseCommand,
   StartRelationalDatabaseCommand,
   StopRelationalDatabaseCommand,
   UpdateRelationalDatabaseCommand,
+  UpdateRelationalDatabaseParametersCommand,
   type LightsailClient,
 } from "@aws-sdk/client-lightsail";
 import {
   awsResourceName,
   checkedBackupWindow,
+  checkedDbParameterChanges,
   checkedMaintenanceWindow,
+  dbEngineFrom,
   parseDatabaseConfig,
   pointInTimeWindow,
   windowsOverlap,
   resourceTags,
+  safeDbParameterList,
   stepDone,
   stepNext,
   stepWait,
   type DatabaseConfig,
+  type DbEngine,
+  type LiveDbParameter,
   type OperationKind,
   type StepResult,
 } from "@tc/core";
@@ -177,6 +185,65 @@ async function readDatabase(ctx: Ctx) {
     ),
   );
   return got?.relationalDatabase ?? null;
+}
+
+const MAX_PARAMETER_PAGES = 20;
+
+/** The live database of this resource with its engine word; anything unexpected refuses (R16). */
+async function activeDatabase(ctx: Ctx): Promise<{ engine: DbEngine; rebootPending: boolean }> {
+  if (ctx.resource.state !== "active") throw fail("conflict");
+  const found = await readDatabase(ctx);
+  if (found === null) throw fail("upstream_unavailable");
+  if (!hasTag(found.tags, ctx.resource.id)) throw fail("conflict");
+  const engine = dbEngineFrom(found.engine);
+  if (engine === null) throw fail("validation");
+  return { engine, rebootPending: found.parameterApplyStatus === "pending-reboot" };
+}
+
+interface LiveParameter extends LiveDbParameter {
+  readonly name: string;
+}
+
+/** All parameters of the parameter group of the database (every page), reduced to four fields. */
+async function readParameters(ctx: Ctx): Promise<LiveParameter[]> {
+  const out: LiveParameter[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < MAX_PARAMETER_PAGES; page += 1) {
+    const got = await client(ctx).send(
+      new GetRelationalDatabaseParametersCommand({
+        relationalDatabaseName: names(ctx.resource.id).database,
+        ...(pageToken !== undefined ? { pageToken } : {}),
+      }),
+    );
+    for (const p of got.parameters ?? []) {
+      if (typeof p.parameterName !== "string") continue;
+      out.push({
+        name: p.parameterName,
+        value: p.parameterValue,
+        applyType: p.applyType,
+        modifiable: p.isModifiable,
+      });
+    }
+    pageToken = got.nextPageToken;
+    if (pageToken === undefined || pageToken === "") return out;
+  }
+  // A list that never ends is not read (R16).
+  throw fail("upstream_unavailable");
+}
+
+/** What is kept in resources.config: the whitelisted parameters only (R11, R14). */
+function parametersFact(
+  ctx: Ctx,
+  engine: DbEngine,
+  live: readonly LiveParameter[],
+  rebootPending: boolean,
+) {
+  return {
+    engine,
+    rebootPending,
+    readAt: ctx.clock.now().toISOString(),
+    items: safeDbParameterList(engine, live),
+  };
 }
 
 // A snapshot of this resource's backup child. A payload id is never turned into a name unless
@@ -449,6 +516,64 @@ export function createDatabaseAdapter(deps: DatabaseDeps): ProductAdapter<Databa
             ...(maintenance !== undefined ? { maintenanceWindow: maintenance } : {}),
           },
         });
+      }
+      case "read_db_parameters": {
+        const { engine, rebootPending } = await activeDatabase(ctx);
+        const live = await readParameters(ctx);
+        return stepDone({
+          configMerge: { parameters: parametersFact(ctx, engine, live, rebootPending) },
+        });
+      }
+      case "set_db_parameters": {
+        const p = ctx.operation.payload;
+        const raw = typeof p === "object" && p !== null ? (p as Record<string, unknown>) : {};
+        const { engine, rebootPending } = await activeDatabase(ctx);
+        // Names and values pass the whitelist of the live engine, never the payload's own idea (R11).
+        const checked = checkedDbParameterChanges(engine, raw.parameters);
+        if (!checked.ok) throw fail("validation");
+        const before = await readParameters(ctx);
+        const parameters = checked.value.map((change) => {
+          const found = before.find((x) => x.name === change.name);
+          // The parameter must exist, be modifiable and say how it applies (dynamic or static).
+          if (found === undefined || found.modifiable !== true) throw fail("validation");
+          if (found.applyType !== "dynamic" && found.applyType !== "static") {
+            throw fail("validation");
+          }
+          return {
+            parameterName: change.name,
+            parameterValue: change.value,
+            applyMethod:
+              found.applyType === "dynamic" ? ("immediate" as const) : ("pending-reboot" as const),
+          };
+        });
+        await client(ctx).send(
+          new UpdateRelationalDatabaseParametersCommand({
+            relationalDatabaseName: names(ctx.resource.id).database,
+            parameters,
+          }),
+        );
+        // The list is read again, so that the page shows what Lightsail holds (last known).
+        const after = await readParameters(ctx);
+        const pending = rebootPending || parameters.some((x) => x.applyMethod === "pending-reboot");
+        return stepDone({
+          configMerge: { parameters: parametersFact(ctx, engine, after, pending) },
+        });
+      }
+      case "reboot": {
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await client(ctx).send(
+          new RebootRelationalDatabaseCommand({
+            relationalDatabaseName: names(ctx.resource.id).database,
+          }),
+        );
+        // A reboot applies every pending parameter: the saved list stays, the flag goes (if any).
+        const saved =
+          typeof ctx.resource.config === "object" && ctx.resource.config !== null
+            ? (ctx.resource.config as Record<string, unknown>).parameters
+            : undefined;
+        return typeof saved === "object" && saved !== null && !Array.isArray(saved)
+          ? stepDone({ configMerge: { parameters: { ...saved, rebootPending: false } } })
+          : stepDone();
       }
       default:
         // Anything else is not built for this family: refuse (R16).

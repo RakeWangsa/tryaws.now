@@ -48,6 +48,12 @@ export const OPERATION_KINDS = [
   "change_cdn_bundle",
   "set_cache_behaviors",
   "set_cdn_origin",
+  // WPU-G11: take a certificate off a resource and delete it, or replace it by one for new domains;
+  // the parameters of a database (set the whitelisted ones, read the list again).
+  "remove_certificate",
+  "replace_certificate",
+  "set_db_parameters",
+  "read_db_parameters",
   "reject_operation",
 ] as const;
 
@@ -114,6 +120,12 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   change_cdn_bundle: info("action", false, false),
   set_cache_behaviors: info("action", false, true),
   set_cdn_origin: info("action", false, true),
+  // No resource and no data is destroyed (a certificate is free and is requested again at will), so
+  // there is no admin approval; the web tier asks a fresh sign-in and the typed domain (U10).
+  remove_certificate: info("action", false, true),
+  replace_certificate: info("action", false, true),
+  set_db_parameters: info("action", false, true),
+  read_db_parameters: info("action", false, true),
   reject_operation: info("engine", false, false),
 };
 

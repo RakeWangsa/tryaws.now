@@ -2,6 +2,7 @@ import {
   AttachCertificateToDistributionCommand,
   CreateDistributionCommand,
   DeleteDistributionCommand,
+  DetachCertificateFromDistributionCommand,
   GetBucketsCommand,
   GetDistributionsCommand,
   GetInstanceCommand,
@@ -33,7 +34,13 @@ import {
   type StepResult,
 } from "@tc/core";
 import { AwsError } from "../errors";
-import { certificateTags, ensureCertificate, readCertificate } from "./certificate";
+import {
+  certificateTags,
+  deleteCertificate,
+  ensureCertificate,
+  readCertificate,
+  requireCertificateGone,
+} from "./certificate";
 import { LIGHTSAIL_REGIONS, type LightsailRegion } from "../roles";
 import type { LiveState, OpCtx, ProductAdapter, ResourceView } from "./types";
 
@@ -283,6 +290,23 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
   }
 
   // setCdnEnabled (16.10): stop turns the distribution off, start turns it on again.
+  /**
+   * Takes the certificate off the distribution (Lightsail refuses to delete an attached one) and
+   * deletes it. Every step is safe to repeat (R7). A distribution that cannot be read refuses (R16).
+   */
+  async function dropCertificate(ctx: Ctx): Promise<void> {
+    const lightsail = client(ctx);
+    const name = certificateName(ctx);
+    const dist = await findDistribution(lightsail, distributionName(ctx));
+    if (dist === null) throw fail("upstream_unavailable");
+    if (dist.certificateName === name) {
+      await lightsail.send(
+        new DetachCertificateFromDistributionCommand({ distributionName: distributionName(ctx) }),
+      );
+    }
+    await deleteCertificate(lightsail, name);
+  }
+
   async function action(kind: OperationKind, ctx: Ctx): Promise<StepResult> {
     const payload = ctx.operation.payload as Record<string, unknown> | null;
     switch (kind) {
@@ -435,6 +459,33 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
               attached,
               records: found.records,
             },
+          },
+        });
+      }
+      case "remove_certificate": {
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await dropCertificate(ctx);
+        return stepDone({ configMerge: { certificate: null } });
+      }
+      case "replace_certificate": {
+        // The new domain is checked before anything is touched (R11, R16).
+        const domain = checkedContainerCertificateDomain(payload?.domain);
+        if (domain === null) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await dropCertificate(ctx);
+        await requireCertificateGone(client(ctx), certificateName(ctx));
+        await ensureCertificate(client(ctx), {
+          name: certificateName(ctx),
+          domain,
+          tags: certificateTags({
+            env: ctx.env,
+            customerId: ctx.resource.customerId,
+            resourceId: ctx.resource.id,
+          }),
+        });
+        return stepDone({
+          configMerge: {
+            certificate: { domain, status: "PENDING_VALIDATION", attached: false, records: [] },
           },
         });
       }

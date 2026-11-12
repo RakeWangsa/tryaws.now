@@ -11,7 +11,7 @@ import {
 
 it("every kind has one row of info and nothing else has", () => {
   expect(Object.keys(OPERATION_KIND_INFO).sort()).toEqual([...OPERATION_KINDS].sort());
-  expect(OPERATION_KINDS).toHaveLength(36);
+  expect(OPERATION_KINDS).toHaveLength(40);
   expect(OPERATION_KINDS).toContain("rename");
   expect(OPERATION_KINDS).toContain("reject_operation");
 });
@@ -53,9 +53,12 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
     "destroy",
     "detach_disk",
     "detach_static_ip",
+    "read_db_parameters",
     "reboot",
     "refresh_certificate",
+    "remove_certificate",
     "rename",
+    "replace_certificate",
     "request_certificate",
     "reset_cache",
     "schedule_plan_change",
@@ -66,6 +69,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
     "set_cache_behaviors",
     "set_cdn_origin",
     "set_db_options",
+    "set_db_parameters",
     "set_lb_attributes",
     "set_ports",
     "set_targets",
@@ -149,5 +153,23 @@ it("a plan change is only scheduled by a customer and applied by the lifecycle, 
     "set_cdn_origin",
   ] as const) {
     expect(isDestructive(kind), kind).toBe(false);
+  }
+});
+
+it("removing or replacing a certificate and the database parameters are customer kinds that are not destructive in the sense of R13 (WPU-G11)", () => {
+  // No resource, subscription or data is destroyed: a certificate is free and requested again at will.
+  // The confirmation is a typed name and a fresh sign-in on the web side, not an admin approval.
+  for (const kind of [
+    "remove_certificate",
+    "replace_certificate",
+    "set_db_parameters",
+    "read_db_parameters",
+  ] as const) {
+    expect(OPERATION_KIND_INFO[kind].customerRequestable, kind).toBe(true);
+    expect(OPERATION_KIND_INFO[kind].method, kind).toBe("action");
+    expect(isDestructive(kind), kind).toBe(false);
+    expect(
+      requiresApproval(kind, new Date("2026-11-15T00:00:00Z"), new Date("2026-12-01T18:00:00Z")),
+    ).toBe(false);
   }
 });

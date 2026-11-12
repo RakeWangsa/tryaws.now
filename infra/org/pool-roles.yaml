@@ -159,6 +159,7 @@ Resources:
                   - lightsail:CreateRelationalDatabaseSnapshot
                   - lightsail:DeleteBucket
                   - lightsail:DeleteBucketAccessKey
+                  - lightsail:DeleteCertificate
                   - lightsail:DeleteContainerService
                   - lightsail:DeleteDisk
                   - lightsail:DeleteDiskSnapshot
@@ -166,6 +167,7 @@ Resources:
                   - lightsail:DeleteInstance
                   - lightsail:DeleteInstanceSnapshot
                   - lightsail:DeleteLoadBalancer
+                  - lightsail:DeleteLoadBalancerTlsCertificate
                   - lightsail:DeleteRelationalDatabase
                   - lightsail:DeleteRelationalDatabaseSnapshot
                   - lightsail:DetachDisk
@@ -187,11 +189,13 @@ Resources:
                   - lightsail:GetLoadBalancer
                   - lightsail:GetLoadBalancerTlsCertificates
                   - lightsail:GetRelationalDatabase
+                  - lightsail:GetRelationalDatabaseParameters
                   - lightsail:GetRelationalDatabaseSnapshot
                   - lightsail:GetStaticIp
                   - lightsail:ImportKeyPair
                   - lightsail:PutInstancePublicPorts
                   - lightsail:RebootInstance
+                  - lightsail:RebootRelationalDatabase
                   - lightsail:ReleaseStaticIp
                   - lightsail:ResetDistributionCache
                   - lightsail:SetResourceAccessForBucket
@@ -203,6 +207,7 @@ Resources:
                   - lightsail:UpdateContainerService
                   - lightsail:UpdateLoadBalancerAttribute
                   - lightsail:UpdateRelationalDatabase
+                  - lightsail:UpdateRelationalDatabaseParameters
                 Resource: "*"
                 Condition:
                   StringEquals:
@@ -214,6 +219,7 @@ Resources:
                 Effect: Allow
                 Action:
                   - lightsail:AttachCertificateToDistribution
+                  - lightsail:DetachCertificateFromDistribution
                   - lightsail:UpdateBucket
                   - lightsail:UpdateDistribution
                   - lightsail:UpdateDistributionBundle

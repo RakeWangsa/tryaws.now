@@ -134,6 +134,19 @@ export {
   windowsOverlap,
 } from "./console";
 export {
+  DB_PARAMETER_RULES,
+  MAX_DB_PARAMETER_CHANGES,
+  checkedDbParameterChanges,
+  dbEngineFrom,
+  safeDbParameterList,
+  type DbEngine,
+  type DbParameterApply,
+  type DbParameterChange,
+  type DbParameterFact,
+  type DbParameterRule,
+  type LiveDbParameter,
+} from "./db-parameters";
+export {
   CACHE_ALLOWED_METHODS,
   CACHE_CACHED_METHODS,
   MAX_CACHE_PATHS,

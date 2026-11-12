@@ -4,6 +4,7 @@ import {
   CreateLoadBalancerCommand,
   CreateLoadBalancerTlsCertificateCommand,
   DeleteLoadBalancerCommand,
+  DeleteLoadBalancerTlsCertificateCommand,
   DetachInstancesFromLoadBalancerCommand,
   GetInstanceCommand,
   GetLoadBalancerCommand,
@@ -246,6 +247,47 @@ export function createLoadBalancerAdapter(): ProductAdapter<LoadBalancerConfig> 
     return { state: got?.loadBalancer?.state ?? "missing" };
   }
 
+  async function certificateListed(ctx: Ctx): Promise<boolean> {
+    const listed = await client(ctx).send(
+      new GetLoadBalancerTlsCertificatesCommand({ loadBalancerName: lbName(ctx) }),
+    );
+    return (listed.tlsCertificates ?? []).some((c) => c.name === certName(ctx));
+  }
+
+  /**
+   * Deletes the certificate of the balancer. If the saved settings say that the HTTPS redirect is on,
+   * it is turned off first, so that the site is not left redirecting to a port with no certificate.
+   * Safe to repeat (R7).
+   */
+  async function dropCertificate(ctx: Ctx): Promise<Record<string, unknown>> {
+    const lightsail = client(ctx);
+    const merge: Record<string, unknown> = { certificate: null };
+    if (!(await certificateListed(ctx))) return merge;
+    const saved =
+      typeof ctx.resource.config === "object" && ctx.resource.config !== null
+        ? (ctx.resource.config as Record<string, unknown>)
+        : {};
+    if (saved.httpsRedirect === true) {
+      await lightsail.send(
+        new UpdateLoadBalancerAttributeCommand({
+          loadBalancerName: lbName(ctx),
+          attributeName: "HttpsRedirectionEnabled",
+          attributeValue: "false",
+        }),
+      );
+      merge.httpsRedirect = false;
+    }
+    // force: Lightsail refuses to delete a certificate that is attached otherwise (VERIFY).
+    await lightsail.send(
+      new DeleteLoadBalancerTlsCertificateCommand({
+        loadBalancerName: lbName(ctx),
+        certificateName: certName(ctx),
+        force: true,
+      }),
+    );
+    return merge;
+  }
+
   // The console actions (WPU-G7). The payload is written by the web tier, so it is input (R9, R16).
   async function action(kind: OperationKind, ctx: Ctx): Promise<StepResult> {
     const payload = payloadOf(ctx);
@@ -370,6 +412,34 @@ export function createLoadBalancerAdapter(): ProductAdapter<LoadBalancerConfig> 
         return stepDone({
           configMerge: {
             certificate: { domain: found.domainName ?? "", status, attached, records },
+          },
+        });
+      }
+      case "remove_certificate": {
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        return stepDone({ configMerge: await dropCertificate(ctx) });
+      }
+      case "replace_certificate": {
+        // The new domain is checked before anything is touched (R11, R16).
+        const domain = checkedDomainName(payload.domain);
+        if (domain === null) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const merge = await dropCertificate(ctx);
+        // The old name must be gone before the new one is requested under it; else try again later.
+        if (await certificateListed(ctx)) {
+          throw new AwsError({ code: "upstream_unavailable", retryable: true });
+        }
+        await lightsail.send(
+          new CreateLoadBalancerTlsCertificateCommand({
+            loadBalancerName: lbName(ctx),
+            certificateName: certName(ctx),
+            certificateDomainName: domain,
+          }),
+        );
+        return stepDone({
+          configMerge: {
+            ...merge,
+            certificate: { domain, status: "PENDING_VALIDATION", attached: false, records: [] },
           },
         });
       }
