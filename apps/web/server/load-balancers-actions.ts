@@ -142,10 +142,14 @@ export async function setLoadBalancerTargetsCore(
   }
   return frame(
     deps,
-    { destructive: false, limits: FAMILY_WRITE_LIMIT(LOAD_BALANCER_SPEC.prefix) },
+    {
+      destructive: false,
+      limits: FAMILY_WRITE_LIMIT(LOAD_BALANCER_SPEC.prefix),
+      own: { family: "load_balancer", id: loadBalancerId },
+    },
     parseOf(bad),
-    async (repos, session) => {
-      const balancer = await ownResource(repos, "load_balancer", loadBalancerId);
+    async (repos, session, owned) => {
+      const balancer = owned ?? (await ownResource(repos, "load_balancer", loadBalancerId));
       if (balancer.state !== "active" || balancer.region === null) throw new Refusal("not_allowed");
       const ids = requested as string[];
       // Every id is read through the scoped repository: another customer's server is a missing one.

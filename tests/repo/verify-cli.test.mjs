@@ -184,6 +184,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-M5",
     "WPU-M6",
     "WPU-M7",
+    "WPU-N1",
     "WPU-S1",
     "WPU-S2",
     "WPU-S3",
@@ -2920,6 +2921,31 @@ it("a gate with a manual proof and no record fails (BLOCKED is a failure, never 
       2,
     );
   }
+});
+
+it("task WPU-N1 is proven by lint, types, format, the web and ui tests and the repository tests", () => {
+  expect(TASKS["WPU-N1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-N1 exists: the files of the task are in place", () => {
+  for (const file of [
+    "apps/web/server/invoice-pdf.ts",
+    "apps/web/server/renewal-wait.ts",
+    "apps/web/server/resource-history.ts",
+    "apps/web/server/public/signed-in.ts",
+  ]) {
+    expect(readFileSync(file, "utf8").length, file).toBeGreaterThan(0);
+  }
+  expect(readFileSync("apps/web/server/family-actions.ts", "utf8")).toContain("own: {");
 });
 
 it("task WPU-M7 is proven by the renderer and migrator tests and the infra tests of both merged sides", () => {

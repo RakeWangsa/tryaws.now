@@ -3075,6 +3075,11 @@ TASKS["WPU-F1"] = [
   repo,
 ];
 
+// WPU-N1: the customer-facing gaps of audit 2 section D: CI variables, the invoice PDF download, the
+// next-path allow-list, the signed-in public menu, /faq and Support links, `own` before the rate limit,
+// the History tab and the renewal-waits line. No AWS call.
+TASKS["WPU-N1"] = [specSync, baselineSync, lint, typecheck, format, web, ui, repo];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {
