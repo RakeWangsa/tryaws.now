@@ -72,6 +72,12 @@ for (const path of PAGES[APP]) {
       nodes: v.nodes.length,
       help: v.help,
       targets: v.nodes.slice(0, 3).map((n) => n.target.join(" ")),
+      // color-contrast only: what axe measured for each node (text, background, ratio, size), so a fix
+      // can be chosen from numbers.
+      measured: v.nodes.slice(0, 3).map((n) => {
+        const d = (n.any[0]?.data ?? {}) as Record<string, unknown>;
+        return `${String(d["fgColor"])} on ${String(d["bgColor"])} = ${String(d["contrastRatio"])} (needs ${String(d["expectedContrastRatio"])}, ${String(d["fontSize"])} ${String(d["fontWeight"])})`;
+      }),
     }));
     const out = process.env["A11Y_OUT"];
     if (out !== undefined && out !== "") {

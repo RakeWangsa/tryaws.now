@@ -129,7 +129,7 @@ function violationLines(file) {
     const row = JSON.parse(raw);
     for (const v of row.found) {
       lines.push(
-        `violation ${row.app} ${row.project} ${row.path}: ${v.id} (${v.impact}, ${v.nodes} nodes) ${v.targets.join(" | ")}`,
+        `violation ${row.app} ${row.project} ${row.path}: ${v.id} (${v.impact}, ${v.nodes} nodes) ${v.targets.join(" | ")}${v.id === "color-contrast" && Array.isArray(v.measured) ? ` [${v.measured.join(" | ")}]` : ""}`,
       );
     }
   }
