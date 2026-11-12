@@ -50,7 +50,7 @@ export function DomainDetailContent({
     <>
       <div className="row g-3 mb-4">
         <div className="col-12 col-md-4">
-          <StatTile value={<DomainState state={domain.state} />} description={t("detail.state")} />
+          <StatTile value={t(`state.${domain.state}` as never)} description={t("detail.state")} />
         </div>
         <div className="col-12 col-md-4">
           <StatTile
@@ -67,6 +67,9 @@ export function DomainDetailContent({
       </div>
       <Card className="mb-4">
         <h2 className="h5 mergecolor">{t("detail.verification.title")}</h2>
+        <p className="mb-2">
+          <DomainState state={domain.state} />
+        </p>
         <p className="mb-0">{t(`detail.verification.${domain.reachability}`)}</p>
       </Card>
       <Card className="mb-4">

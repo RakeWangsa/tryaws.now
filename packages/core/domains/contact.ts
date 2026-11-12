@@ -28,8 +28,9 @@ const MAX_TEXT = 255;
 const PHONE = /^\+\d{1,3}\.\d{4,15}$/;
 const COUNTRY = /^[A-Z]{2}$/;
 // Plain text only: no control characters, no markup (the value reaches a registry and a WHOIS record).
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f<>]/;
+const CONTROL = /[<>]/;
+const hasControl = (s: string): boolean =>
+  [...s].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -38,7 +39,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function text(value: unknown, max = MAX_TEXT): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim().replace(/\s+/g, " ");
-  return trimmed.length >= 1 && trimmed.length <= max && !CONTROL.test(trimmed) ? trimmed : null;
+  return trimmed.length >= 1 &&
+    trimmed.length <= max &&
+    !CONTROL.test(trimmed) &&
+    !hasControl(trimmed)
+    ? trimmed
+    : null;
 }
 
 export function parseRegistrantContact(raw: unknown): Result<RegistrantContact> {

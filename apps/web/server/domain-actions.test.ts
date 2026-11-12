@@ -32,7 +32,7 @@ function draftDeps(over: Partial<DomainDraftDeps> = {}) {
     ok: true as const,
     value: { token: "signed.token", quote: {} as never, expiresAt: new Date() },
   }));
-  const seal = vi.fn(async (_plain: string) => new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9]));
+  const seal = vi.fn(async () => new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9]));
   const rateLimit = vi.fn(async () => ({ allowed: true }));
   const deps: DomainDraftDeps = {
     authenticate: async () => SESSION as never,

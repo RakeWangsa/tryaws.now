@@ -68,7 +68,12 @@ describe("the domain screens follow the shared mockup", () => {
         expect(STATE_RENDERERS[`${screen}.${state}`], `${screen}.${state}`).toBeDefined();
       }
     }
-    for (const id of ["domains.empty", "domains.flag_off", "domain_new.flag_off", "domain_detail.not_found"]) {
+    for (const id of [
+      "domains.empty",
+      "domains.flag_off",
+      "domain_new.flag_off",
+      "domain_detail.not_found",
+    ]) {
       expect(STATE_RENDERERS[id], id).toBeDefined();
     }
   });

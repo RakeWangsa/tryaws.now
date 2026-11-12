@@ -22,8 +22,9 @@ export interface DomainName {
 
 const LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 // Anything that is a URL, a path, an address or markup is refused before the host parser sees it.
-// eslint-disable-next-line no-control-regex
-const FORBIDDEN = /[\s/\\:@?#%*_,;=+<>"'`()[\]{}|^~!$&\u0000-\u001f\u007f]/;
+const FORBIDDEN = /[\s/\\:@?#%*_,;=+<>"'`()[\]{}|^~!$&]/;
+const hasControl = (s: string): boolean =>
+  [...s].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
 const ASCII = /^[\x20-\x7e]*$/;
 
 const bad = (code: string): Result<never> => ({
@@ -51,7 +52,7 @@ export function normalizeDomainName(
   if (typeof raw !== "string") return bad("invalid");
   const trimmed = raw.trim();
   if (trimmed.length === 0 || trimmed.length > MAX_INPUT) return bad("invalid");
-  if (FORBIDDEN.test(trimmed)) return bad("invalid");
+  if (FORBIDDEN.test(trimmed) || hasControl(trimmed)) return bad("invalid");
   const unicode = !ASCII.test(trimmed);
   const withoutDot = trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
   if (withoutDot.length === 0 || withoutDot.startsWith(".") || withoutDot.includes("..")) {
