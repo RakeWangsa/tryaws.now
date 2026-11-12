@@ -3,10 +3,14 @@ import type { Tx } from "@tc/db";
 import type { EpsGateway } from "./gateway";
 import type { StoredPayment } from "./state";
 
-/** What finance is told when a payment goes to review (open point 10). Never a name, phone or e-mail (R14). */
+/**
+ * What finance is told (open point 10): a payment goes to review (`payment_review`), or a verified success
+ * cannot be credited because the customer has no wallet and none can be opened (`credit_blocked`, WPU-D3).
+ * Never a name, phone or e-mail (R14).
+ */
 export interface PaymentAlert {
   raise(event: {
-    kind: "payment_review";
+    kind: "payment_review" | "credit_blocked";
     paymentId: string;
     reason: string;
     expectedMinor: bigint;
@@ -28,6 +32,10 @@ export interface EpsDeps {
   urls: { successUrl: string; failUrl: string; cancelUrl: string };
   alert: PaymentAlert;
   log: (event: string, fields: Record<string, string | number | boolean>) => void;
-  /** Runs in the credit transaction (open point 11); the default does nothing. */
-  onCredited?: (tx: Tx, payment: StoredPayment) => Promise<void>;
+  /**
+   * Runs AFTER the credit transaction has committed (WPU-D3, audit C.8; it ran inside it before). The
+   * credit is final by then: a hook that throws is logged and never undoes or hides it. Not retried here.
+   * The default does nothing.
+   */
+  onCredited?: (payment: StoredPayment) => Promise<void>;
 }

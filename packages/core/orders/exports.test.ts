@@ -509,7 +509,6 @@ const BILLING = [
   "BILLING_NAME_MIN",
   "buyerSnapshotFrom",
   // WPU-S8: the stored NID as the screen shows it (last 4 digits only).
-  "maskNid",
   "parseBillingProfile",
   "parseBuyerSnapshot",
   // WPU-I4: reads the buyer of an invoice about to be issued, in the transaction of the issue.

@@ -310,6 +310,7 @@ export function createLinuxInstanceAdapter(
     const lightsail = client(ctx);
     const got = await lightsail.send(new GetStaticIpCommand({ staticIpName: n.staticIp }));
     const attached = got.staticIp?.attachedTo;
+    let address = ipOf(got.staticIp?.ipAddress);
     if (got.staticIp?.isAttached === true) {
       // Attached to our own instance: done. To anything else: not ours to touch (R16).
       if (attached !== n.instance) throw fail("conflict");
@@ -317,8 +318,16 @@ export function createLinuxInstanceAdapter(
       await lightsail.send(
         new AttachStaticIpCommand({ staticIpName: n.staticIp, instanceName: n.instance }),
       );
+      // WPU-D3 (audit C.12): the address of the static IP is the one the customer connects to; it is
+      // read again after the attach and written to the resource config, as the attach action does.
+      const now = await orNull(() =>
+        lightsail.send(new GetStaticIpCommand({ staticIpName: n.staticIp })),
+      );
+      address = ipOf(now?.staticIp?.ipAddress) ?? address;
     }
-    return stepNext("open_ports");
+    return stepNext("open_ports", {
+      configMerge: { staticIpAttached: true, ...(address === null ? {} : { publicIpv4: address }) },
+    });
   }
 
   async function openPorts(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {

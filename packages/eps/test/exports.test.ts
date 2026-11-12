@@ -9,6 +9,7 @@ describe("the entry of @tc/eps", () => {
       [
         "EPS_REDIRECT_HOSTS",
         "EPS_RETURN_PATHS",
+        "EPS_TEST_REDIRECT_HOSTS",
         "InMemoryEps",
         "PAYMENT_STATES",
         "checkGatewayRedirect",

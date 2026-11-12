@@ -88,7 +88,7 @@ function buildDeps(gateway: EpsGateway, limitKey: string, urls: EpsDeps["urls"])
     alert: {
       async raise(event) {
         writeLog({
-          event: "payment_review",
+          event: event.kind,
           severity: "alert",
           paymentId: event.paymentId,
           reason: event.reason,

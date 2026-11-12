@@ -367,19 +367,44 @@ describe("create: key import, instance, static IP, ports", () => {
     expect(b.calls()).toEqual(["GetStaticIp", "AllocateStaticIp"]);
 
     const c = setup();
-    c.aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { isAttached: false } }));
+    c.aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({ staticIp: { isAttached: false, ipAddress: "203.0.113.7" } }),
+    );
     c.aws.on("lightsail", "AttachStaticIp", lightsailOk({}));
-    await c.adapter.aws.create(c.ctx("attach_ip"));
-    expect(c.calls()).toEqual(["GetStaticIp", "AttachStaticIp"]);
+    const attachedNow = await c.adapter.aws.create(c.ctx("attach_ip"));
+    expect(c.calls()).toEqual(["GetStaticIp", "AttachStaticIp", "GetStaticIp"]);
+    // WPU-D3 (C.12): the address of the static IP is written to the resource config at create
+    expect(attachedNow).toMatchObject({
+      kind: "next",
+      step: "open_ports",
+      patch: { configMerge: { staticIpAttached: true, publicIpv4: "203.0.113.7" } },
+    });
 
     const d = setup();
     d.aws.on(
       "lightsail",
       "GetStaticIp",
-      lightsailOk({ staticIp: { isAttached: true, attachedTo: INSTANCE } }),
+      lightsailOk({
+        staticIp: { isAttached: true, attachedTo: INSTANCE, ipAddress: "203.0.113.8" },
+      }),
     );
-    await d.adapter.aws.create(d.ctx("attach_ip"));
+    const already = await d.adapter.aws.create(d.ctx("attach_ip"));
     expect(d.calls()).toEqual(["GetStaticIp"]);
+    expect(already).toMatchObject({
+      kind: "next",
+      step: "open_ports",
+      patch: { configMerge: { publicIpv4: "203.0.113.8" } },
+    });
+
+    // an address that is not a plain IPv4 is not written; the step still moves on
+    const f = setup();
+    f.aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { isAttached: false } }));
+    f.aws.on("lightsail", "AttachStaticIp", lightsailOk({}));
+    const noAddress = await f.adapter.aws.create(f.ctx("attach_ip"));
+    expect(noAddress).toMatchObject({ kind: "next", step: "open_ports" });
+    expect(JSON.stringify(noAddress)).not.toContain("publicIpv4");
 
     const e = setup();
     e.aws.on(

@@ -186,6 +186,53 @@ describe("create", () => {
     expect(calls()).not.toContain("CreateContainerServiceRegistryLogin");
   });
 
+  // WPU-D3 (audit C.36)
+  it("stores the public host in the resource config when the service becomes active", async () => {
+    const URL_OF = "https://my-svc.abc123.ap-southeast-1.cs.amazonlightsail.com/";
+    const { aws, adapter, ctx, service } = setup();
+    aws.on("lightsail", "GetContainerServices", service("RUNNING", { url: URL_OF }));
+    expect(await adapter.aws.create(ctx("wait_deploy"))).toMatchObject({
+      kind: "done",
+      patch: {
+        state: "active",
+        awsName: SERVICE,
+        configMerge: { publicUrl: "my-svc.abc123.ap-southeast-1.cs.amazonlightsail.com" },
+      },
+    });
+    // nothing to deploy: active at once, with the address too
+    const bare = setup();
+    bare.aws.on("lightsail", "GetContainerServices", bare.service("READY", { url: URL_OF }));
+    expect(await bare.adapter.aws.create(bare.ctx("deploy"))).toMatchObject({
+      kind: "done",
+      patch: { state: "active", configMerge: { publicUrl: expect.stringContaining("my-svc") } },
+    });
+  });
+
+  it("keeps no public address when AWS gives none or a URL that is not a plain https host", async () => {
+    for (const url of [
+      undefined,
+      "",
+      "http://svc.example.com/",
+      "https://user:pw@svc.example.com/",
+      "https://svc.example.com:8443/",
+      "https://svc.example.com/path?x=1",
+      "https://svc.example.com/#frag",
+      "https://localhost/",
+      "javascript:alert(1)",
+      42,
+    ]) {
+      const t = setup();
+      t.aws.on(
+        "lightsail",
+        "GetContainerServices",
+        t.service("RUNNING", url === undefined ? {} : { url }),
+      );
+      const done = await t.adapter.aws.create(t.ctx("wait_deploy"));
+      expect(done, String(url)).toMatchObject({ kind: "done", patch: { state: "active" } });
+      expect(JSON.stringify(done), String(url)).not.toContain("publicUrl");
+    }
+  });
+
   it("a service with nothing to deploy is active at once; a deployed one is not deployed again", async () => {
     const { aws, adapter, ctx, calls, service } = setup();
     aws.on("lightsail", "GetContainerServices", service("READY"));

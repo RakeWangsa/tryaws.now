@@ -61,9 +61,9 @@ it("parseBuyerSnapshot reads a stored snapshot and refuses anything malformed (R
   // WPU-D3: a snapshot issued before the NID was removed is still accepted, but the number is never returned.
   const old = parseBuyerSnapshot({ ...stored, taxId: { kind: "nid", value: "1234567890" } });
   expect(old).toEqual({ name: "A B", address: "House 5, Dhaka", taxId: null });
-  expect(JSON.stringify(old)).not.toContain("1234567890");
-  expect(JSON.stringify(parseBuyerSnapshot({ ...stored, nid: "1234567890" }))).not.toContain(
-    "1234567890",
+  expect(JSON.stringify(old)).not.toMatch(/1234567890(?!\d)/);
+  expect(JSON.stringify(parseBuyerSnapshot({ ...stored, nid: "1990123456" }))).not.toContain(
+    "1990123456",
   );
   expect(
     parseBuyerSnapshot({ ...stored, taxId: { kind: "tin", value: "1234567890123" } }),

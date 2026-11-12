@@ -189,7 +189,12 @@ it("approveKyc again is a replay and changes nothing; the opposite decision is a
 it("rejectKyc rejects with the note; only the newest submission of a customer can be decided", async () => {
   const a = await actorOf("superadmin");
   const c = await newCustomer(t.pool, { kyc_status: "pending" });
+  // WPU-D3: one pending submission per customer (index), so the older one was decided earlier.
   const older = await submission(c);
+  await t.pool.query(
+    "update kyc_submissions set status = 'rejected', reviewer_id = $2, reviewed_at = now() where id = $1",
+    [older, a.adminId],
+  );
   const newer = await submission(c);
   expect(
     await asAdmin(a, (r) => r.customers.rejectKyc({ submissionId: older, at: AT }, "old")),
@@ -208,7 +213,7 @@ it("rejectKyc rejects with the note; only the newest submission of a customer ca
     "blurred image",
   );
   expect((await row("select status from kyc_submissions where id = $1", [older])).status).toBe(
-    "pending",
+    "rejected",
   );
 });
 

@@ -166,7 +166,7 @@ it.each(ROLES)(
     const verifiedAt = new Date("2026-11-11T10:00:00.000Z");
     const ok = await as(role, (tx) =>
       systemPayments.applyOutcome(tx, id, ["initiated", "redirected"], "failed", {
-        gatewayTransactionId: "EPS-GW-9",
+        gatewayTransactionId: `EPS-GW-9-${role}`,
         verifyPayload: { status: "Failed" },
         verifiedAt,
       }),
@@ -174,7 +174,7 @@ it.each(ROLES)(
     expect(ok).toBe(true);
     expect(await rowOf(id)).toEqual({
       status: "failed",
-      gateway_transaction_id: "EPS-GW-9",
+      gateway_transaction_id: `EPS-GW-9-${role}`,
       verify_payload: { status: "Failed" },
       verified_at: verifiedAt,
       ledger_transaction_id: null,

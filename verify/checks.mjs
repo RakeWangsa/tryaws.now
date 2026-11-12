@@ -2893,6 +2893,29 @@ TASKS["WPU-I5"] = [
   repo,
 ];
 
+// WPU-D3: the audit items of the money and data path. The NID is removed from the billing profile
+// (migration 0019); the DNS zone gets its base price and the owner's 15 percent margin as a price book
+// entry (0020); one open KYC submission per customer by index (0020); one EPS transaction id per payment
+// and a credited payment that cannot change (0021); the EPS test host is out of the production redirect
+// list; a missing wallet raises an alert and the credited hook runs after the commit (eps); the address
+// of the static IP at create (aws); the public host of a container service (aws, web). Core, db (local
+// PostgreSQL), aws, eps, the sweeper, web and admin tests. No AWS call.
+TASKS["WPU-D3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  epsAll,
+  sweeperAll,
+  web,
+  admin,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {
