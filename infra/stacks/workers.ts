@@ -73,6 +73,11 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
   if (spec.dir === "provisioner" || spec.dir === "scheduler") {
     env.PROVISIONING_QUEUE_URL = queues.provisioning.url;
   }
+  if (spec.dir === "notifier") {
+    // Links in a message go only to the panel's own domain (16.14); the sender is the verified identity.
+    env.PANEL_ORIGIN = `https://${config.webDomain}`;
+    env.SES_FROM = config.sesFromAddress;
+  }
   if (spec.dir === "migrator") {
     // copyFiles (functionArgs) puts packages/db/migrations here, next to the bundle.
     env.MIGRATIONS_DIR = "/var/task/migrations";

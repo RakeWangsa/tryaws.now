@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tc/core": "workspace:*",
+    "@tc/db": "workspace:*",
     "@tc/notify": "workspace:*"
   }
 }

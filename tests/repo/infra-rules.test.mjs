@@ -339,6 +339,11 @@ describe("WP0-T3: database, proxy and roles", () => {
     expect(workers).toContain('env.MIGRATIONS_DIR = "/var/task/migrations"');
   });
 
+  it("gives the notifier the panel origin and the verified sender, not a key", () => {
+    expect(workers).toContain("env.PANEL_ORIGIN = `https://${config.webDomain}`");
+    expect(workers).toContain("env.SES_FROM = config.sesFromAddress");
+  });
+
   it("runs the migrator at deploy time, in the VPC", () => {
     expect(workers).toContain('new sst.aws.Function("Migrator"');
     expect(workers).toContain('new aws.lambda.Invocation("MigratorRun"');

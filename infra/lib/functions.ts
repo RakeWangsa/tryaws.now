@@ -211,9 +211,8 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
   {
     dir: "notifier",
     component: "Notifier",
-    // functions/notifier/index.ts exports createNotifierHandler only; the process entry is WP5-T5.
     handlerExport: "handler",
-    exportExists: false,
+    exportExists: true,
     placement: "app",
     dbRole: "worker_rw",
     secrets: ["SmsApiKey"],
