@@ -11,6 +11,16 @@ const doc: InvoiceDocument = {
   number: "TC-2026-000042",
   issuedAt: new Date("2026-11-11T05:00:00Z"),
   company: { name: "TiCON Cloud", address: ["Dhaka"] },
+  // A test fixture only: these are not the owner's details. A tax invoice is refused without a seller.
+  seller: {
+    legalNameBn: "পরীক্ষা বিক্রেতা",
+    legalNameEn: "Test Seller",
+    bin: "0000000000000",
+    addressBn: "ঢাকা",
+    addressEn: "Dhaka",
+    signatoryName: "Test Signatory",
+    signatoryDesignation: "Test Designation",
+  },
   customer: { name: "Rahim", address: null },
   lines: [
     {
