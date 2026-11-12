@@ -1,5 +1,5 @@
 import { currentCustomer } from "@tc/auth";
-import { customerRepos, readFeatureFlag, withTx } from "@tc/db";
+import { customerRepos, readCatalogProduct, readFeatureFlag, withTx } from "@tc/db";
 import type { FamilyActionDeps } from "./family-actions.ts";
 
 // The real ports of the family cores (database, load balancer). Only the thin "use server" files
@@ -22,6 +22,7 @@ export function familyActionDeps(flag: string): FamilyActionDeps {
           operations: repos.operations,
           audit: repos.audit,
           rateLimits: repos.rateLimits,
+          catalogProduct: (id) => readCatalogProduct(tx, id),
           // R12, R16: a flag that is off or unreadable is off.
           flagOn: async () => {
             const profile = await repos.profile.get();

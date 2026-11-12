@@ -3,6 +3,7 @@ import type { CustomerSession } from "@tc/auth";
 import { decideDestructive } from "@tc/core";
 import type {
   AuditRepo,
+  CatalogProduct,
   CustomerLimit,
   OperationsRepo,
   RateLimitsRepo,
@@ -26,6 +27,11 @@ export interface FamilyRepos {
   rateLimits: RateLimitsRepo;
   /** R12, R16: the flag of the family for the customer's market; false when it cannot be read. */
   flagOn(): Promise<boolean>;
+  /**
+   * One catalog row by id (WPU-G8, a plan change). The catalog is not tenant data. Absent in a test
+   * world that does not need it; an action that needs it refuses when it is missing (R16).
+   */
+  catalogProduct?(id: string): Promise<CatalogProduct | null>;
 }
 
 export interface FamilyActionDeps {

@@ -1,4 +1,4 @@
-import { decideDestructive, parseContainerConfig, parseDeployment } from "@tc/core";
+import { decideDestructive, parseContainerConfig, parseDeployment, parsePortList } from "@tc/core";
 import {
   audit,
   displayNameOf,
@@ -70,8 +70,9 @@ export async function createContainerDraftCore(
 }
 
 const PROTOCOLS = ["HTTP", "HTTPS", "TCP", "UDP"] as const;
-type Protocol = (typeof PROTOCOLS)[number];
 const SAMPLE_IMAGE = "nginx";
+/** The deploy form offers three containers; the first is required, the others are optional. */
+export const FORM_CONTAINERS = 3;
 
 type FormDeployment =
   { ok: true; value: Record<string, unknown> } | { ok: false; fields: Record<string, string> };
@@ -88,68 +89,140 @@ function envOf(textValue: string): Record<string, string> | null {
   return out;
 }
 
+/** One argument per line; an empty line is dropped. The parser of the core checks every argument. */
+function commandOf(textValue: string): string[] {
+  return textValue
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+$/, ""))
+    .filter((line) => line.trim() !== "");
+}
+
+const str = (input: Record<string, unknown>, key: string): string => {
+  const v = input[key];
+  return typeof v === "string" ? v : "";
+};
+
+const digits = (value: string): number | null =>
+  /^\d{1,5}$/.test(value.trim()) ? Number(value.trim()) : null;
+
 /**
- * The fields of the deploy form (one container: image, one port with its protocol, environment lines
- * `KEY=VALUE`, the public endpoint and its health check path) in the shape that `parseDeployment`
- * takes. The core parser has the last word; this function only finds which field is wrong, by asking
- * the same parser about each part. No field is a container name: those are generated (R11).
+ * The fields of the deploy form in the shape that `parseDeployment` takes: up to three containers
+ * (`image`, `port`, `protocol`, `environment`, `command`, and the same names with 2 or 3 after them),
+ * the public endpoint (which container, which port, a health check path). A `port` field holds one or
+ * more ports, `80` or `80, 8080/TCP`; a number alone takes the chosen protocol. The core parser has
+ * the last word; this function only finds which field is wrong, by asking the same parser about each
+ * part. No field is a container name: those are generated (R11).
  */
 export function deploymentFromForm(raw: unknown): FormDeployment {
   const input = record(raw);
-  const image = text(input, "image");
-  const portText = text(input, "port");
-  const protocol = text(input, "protocol");
-  const environmentText = typeof input["environment"] === "string" ? input["environment"] : "";
-  const healthCheckPath = text(input, "healthCheckPath");
-  const endpoint = input["publicEndpoint"] === "on";
   const fields: Record<string, string> = {};
+  const endpoint = input["publicEndpoint"] === "on";
+  const healthCheckPath = str(input, "healthCheckPath").trim();
 
-  if (!parseDeployment({ containers: [{ image }] }).ok) fields["image"] = "invalid";
+  const containers: Record<string, unknown>[] = [];
+  const declared: number[][] = [];
+  const formNumber: number[] = [];
+  const brokenPorts: boolean[] = [];
+  for (let n = 1; n <= FORM_CONTAINERS; n++) {
+    const s = n === 1 ? "" : String(n);
+    const image = str(input, `image${s}`).trim();
+    const portText = str(input, `port${s}`);
+    const protocol = str(input, `protocol${s}`).trim() || "HTTP";
+    const environmentText = str(input, `environment${s}`);
+    const commandText = str(input, `command${s}`);
+    const touched =
+      image !== "" ||
+      portText.trim() !== "" ||
+      environmentText.trim() !== "" ||
+      commandText.trim() !== "";
+    // The optional containers are left out when nothing was typed for them.
+    if (n > 1 && !touched) continue;
 
-  let port: number | null = null;
-  if (typeof portText === "string" && portText !== "") {
-    port = /^\d{1,5}$/.test(portText) ? Number(portText) : -1;
-    if (port < 1 || port > 65535) fields["port"] = "invalid";
-    if (!(PROTOCOLS as readonly unknown[]).includes(protocol)) fields["protocol"] = "invalid";
-  } else if (endpoint) {
-    // A public endpoint points at a port of the container.
-    fields["port"] = "invalid";
+    if (!parseDeployment({ containers: [{ image }] }).ok) fields[`image${s}`] = "invalid";
+
+    let ports: { port: number; protocol: string }[] = [];
+    let broken = false;
+    if (portText.trim() !== "") {
+      if (!(PROTOCOLS as readonly string[]).includes(protocol)) {
+        fields[`protocol${s}`] = "invalid";
+        broken = true;
+      } else {
+        const parsed = parsePortList(portText, protocol);
+        if (parsed === null) {
+          fields[`port${s}`] = "invalid";
+          broken = true;
+        } else ports = parsed;
+      }
+    }
+
+    const environment = envOf(environmentText);
+    if (
+      environment === null ||
+      !parseDeployment({ containers: [{ image: SAMPLE_IMAGE, environment }] }).ok
+    ) {
+      fields[`environment${s}`] = "invalid";
+    }
+
+    const command = commandOf(commandText);
+    if (
+      command.length > 0 &&
+      !parseDeployment({ containers: [{ image: SAMPLE_IMAGE, command }] }).ok
+    ) {
+      fields[`command${s}`] = "invalid";
+    }
+
+    const container: Record<string, unknown> = { image };
+    if (ports.length > 0) container["ports"] = ports;
+    if (environment !== null && Object.keys(environment).length > 0) {
+      container["environment"] = environment;
+    }
+    if (command.length > 0) container["command"] = command;
+    containers.push(container);
+    declared.push(ports.map((p) => p.port));
+    formNumber.push(n);
+    brokenPorts.push(broken);
   }
 
-  const environment = envOf(environmentText);
-  if (
-    environment === null ||
-    !parseDeployment({ containers: [{ image: SAMPLE_IMAGE, environment }] }).ok
-  ) {
-    fields["environment"] = "invalid";
-  }
-
-  const hasPath = typeof healthCheckPath === "string" && healthCheckPath !== "";
-  if (
-    endpoint &&
-    hasPath &&
-    !parseDeployment({
-      containers: [{ image: SAMPLE_IMAGE, ports: [{ port: 80, protocol: "HTTP" }] }],
-      publicEndpoint: { container: 0, port: 80, healthCheckPath },
-    }).ok
-  ) {
-    fields["healthCheckPath"] = "invalid";
+  let publicEndpoint: Record<string, unknown> | undefined;
+  if (endpoint) {
+    const choice = str(input, "endpointContainer").trim();
+    const wanted = choice === "" ? 1 : digits(choice);
+    const index = wanted === null ? -1 : formNumber.indexOf(wanted);
+    if (index < 0) fields["endpointContainer"] = "invalid";
+    else {
+      const ports = declared[index] as number[];
+      const portField = `port${wanted === 1 ? "" : String(wanted)}`;
+      const given = str(input, "endpointPort").trim();
+      const port = given === "" ? ports[0] : digits(given);
+      if (brokenPorts[index] === true) {
+        // the port field of that container was already named
+      } else if (port === undefined || port === null) {
+        // A public endpoint points at a port of the container.
+        fields[portField] = "invalid";
+      } else if (!ports.includes(port)) {
+        fields[given === "" ? portField : "endpointPort"] = "invalid";
+      } else {
+        publicEndpoint = {
+          container: index,
+          port,
+          ...(healthCheckPath !== "" ? { healthCheckPath } : {}),
+        };
+      }
+    }
+    if (
+      healthCheckPath !== "" &&
+      !parseDeployment({
+        containers: [{ image: SAMPLE_IMAGE, ports: [{ port: 80, protocol: "HTTP" }] }],
+        publicEndpoint: { container: 0, port: 80, healthCheckPath },
+      }).ok
+    ) {
+      fields["healthCheckPath"] = "invalid";
+    }
   }
   if (Object.keys(fields).length > 0) return { ok: false, fields };
 
-  const container: Record<string, unknown> = { image };
-  if (port !== null) container["ports"] = [{ port, protocol: protocol as Protocol }];
-  if (environment !== null && Object.keys(environment).length > 0) {
-    container["environment"] = environment;
-  }
-  const value: Record<string, unknown> = { containers: [container] };
-  if (endpoint && port !== null) {
-    value["publicEndpoint"] = {
-      container: 0,
-      port,
-      ...(hasPath ? { healthCheckPath } : {}),
-    };
-  }
+  const value: Record<string, unknown> = { containers };
+  if (publicEndpoint !== undefined) value["publicEndpoint"] = publicEndpoint;
   // The parser of the adapter has the last word (R16).
   if (!parseDeployment(value).ok) return { ok: false, fields: { deployment: "invalid" } };
   return { ok: true, value };
