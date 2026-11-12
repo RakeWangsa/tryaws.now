@@ -28,9 +28,21 @@ const KEY = /^[A-Za-z0-9_-]{8,128}$/;
 export const SUBJECT_MAX = 120;
 export const MESSAGE_MAX = 5000;
 
-// Control characters other than tab and newline are refused, not stripped (R16).
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+// Refused, never stripped (R16). A single-line field (subject; any name or contact field added later)
+// takes no control character (CR, LF, TAB, VT, FF, NEL U+0085 and the rest of Cc), no format character
+// (Cf: zero-width, bidi marks) and no line or paragraph separator (U+2028, U+2029), so a subject can
+// never split a header, a log line or a notification subject. Text is NFC-normalised before the check.
+export const SINGLE_LINE_FORBIDDEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+// The message keeps only "\n" and tab; CR, NEL, LS, PS and every other control character are refused.
+export const MESSAGE_FORBIDDEN = /[^\P{Cc}\n\t]|[\p{Zl}\p{Zp}]/u;
+
+/** The one rule for a single-line field; returns the NFC text or null (also for empty or too long). */
+export function cleanSingleLine(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.normalize("NFC").trim();
+  if (text.length < 1 || text.length > max || SINGLE_LINE_FORBIDDEN.test(text)) return null;
+  return text;
+}
 
 export function parseSupportRequest(raw: unknown): SupportParse {
   const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
@@ -44,18 +56,12 @@ export function parseSupportRequest(raw: unknown): SupportParse {
     fields["category"] = "invalid";
   }
 
-  const subject = typeof input["subject"] === "string" ? input["subject"].trim() : "";
-  if (
-    subject.length < 1 ||
-    subject.length > SUBJECT_MAX ||
-    CONTROL.test(subject) ||
-    subject.includes("\n")
-  ) {
-    fields["subject"] = "invalid";
-  }
+  const cleanSubject = cleanSingleLine(input["subject"], SUBJECT_MAX);
+  const subject = cleanSubject ?? "";
+  if (cleanSubject === null) fields["subject"] = "invalid";
 
-  const message = typeof input["message"] === "string" ? input["message"].trim() : "";
-  if (message.length < 1 || message.length > MESSAGE_MAX || CONTROL.test(message)) {
+  const message = typeof input["message"] === "string" ? input["message"].normalize("NFC").trim() : "";
+  if (message.length < 1 || message.length > MESSAGE_MAX || MESSAGE_FORBIDDEN.test(message)) {
     fields["message"] = "invalid";
   }
 

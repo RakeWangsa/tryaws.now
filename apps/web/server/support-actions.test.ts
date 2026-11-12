@@ -125,6 +125,67 @@ describe("createSupportRequestCore", () => {
   });
 });
 
+describe("single-line and message text rules", () => {
+  const chr = (code: number) => String.fromCharCode(code);
+  const BREAKERS: Array<[string, string]> = [
+    ["bare CR", chr(0x0d)],
+    ["LF", chr(0x0a)],
+    ["CRLF", chr(0x0d) + chr(0x0a)],
+    ["TAB", chr(0x09)],
+    ["VT", chr(0x0b)],
+    ["FF", chr(0x0c)],
+    ["NEL", chr(0x85)],
+    ["LS", chr(0x2028)],
+    ["PS", chr(0x2029)],
+    ["NUL", chr(0)],
+    ["DEL", chr(0x7f)],
+    ["zero-width joiner", chr(0x200d)],
+    ["zero-width space", chr(0x200b)],
+    ["right-to-left override", chr(0x202e)],
+  ];
+
+  it.each(BREAKERS)("refuses %s in the subject, in the middle and at the end", (_n, c) => {
+    expect(parseSupportRequest({ ...good, subject: `a${c}b` })).toMatchObject({
+      ok: false,
+      fields: { subject: "invalid" },
+    });
+    expect(parseSupportRequest({ ...good, subject: `abc${c}x` })).toMatchObject({ ok: false });
+  });
+
+  it("an injected header never reaches the writer: the stored subject has none of them", async () => {
+    for (const [, c] of BREAKERS) {
+      const w = world();
+      const r = await createSupportRequestCore(w.deps, { ...good, subject: `Hi${c}Bcc: x@y.z` });
+      expect(r).toMatchObject({ ok: false, error: "validation" });
+      expect(w.calls.some((x) => x.startsWith("create:"))).toBe(false);
+    }
+    const ok = parseSupportRequest({ ...good, subject: "  caf" + chr(0x65) + chr(0x301) + "  " });
+    expect(ok).toMatchObject({ ok: true });
+    if (ok.ok) {
+      expect(ok.value.subject).toBe("caf" + chr(0xe9)); // NFC, trimmed
+      expect(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(ok.value.subject)).toBe(false);
+    }
+  });
+
+  it("counts the length after NFC", () => {
+    const decomposed = ("e" + chr(0x301)).repeat(120); // 240 code units, 120 after NFC
+    expect(parseSupportRequest({ ...good, subject: decomposed })).toMatchObject({ ok: true });
+    expect(parseSupportRequest({ ...good, subject: "a".repeat(121) })).toMatchObject({ ok: false });
+  });
+
+  it("the message keeps LF and TAB but refuses CR, NEL, LS, PS, VT, FF and NUL", () => {
+    expect(parseSupportRequest({ ...good, message: "line 1\n\tline 2" })).toMatchObject({
+      ok: true,
+    });
+    for (const code of [0x0d, 0x85, 0x2028, 0x2029, 0x0b, 0x0c, 0]) {
+      expect(parseSupportRequest({ ...good, message: `a${chr(code)}b` })).toMatchObject({
+        ok: false,
+        fields: { message: "invalid" },
+      });
+    }
+  });
+});
+
 describe("parseSupportRequest", () => {
   it("trims, accepts an optional resource id and refuses control characters and long text", () => {
     expect(parseSupportRequest({ ...good, subject: "  hi  " })).toMatchObject({
