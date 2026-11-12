@@ -1,9 +1,8 @@
+import { z } from "zod";
 import { sendAfterCommit, type OperationQueue } from "@tc/core";
 import { ABUSE_SOURCES, type AbuseSource, type AdminActor, type AdminRole } from "@tc/db";
+import { optionalText, reason as reasonSchema, text, uuid } from "./schemas.ts";
 import {
-  cleanReason,
-  cleanText,
-  cleanUuid,
   failureCode,
   type CaseActionAnswer,
   type CaseFlowDeps,
@@ -14,19 +13,32 @@ import {
 // suspendResource and restoreResource (WPU-B5, lifts an admin suspension) are for ops and superadmin. It writes an operation row only (R1); the queue message
 // goes out after the commit and a lost send is found again by the scheduler (3.4).
 
-export type AbuseActionKind =
-  "openAbuseCase" | "addNote" | "closeAbuseCase" | "suspendResource" | "restoreResource";
-export const ABUSE_ACTION_KINDS: readonly AbuseActionKind[] = [
+export const ABUSE_ACTION_KINDS = [
   "openAbuseCase",
   "addNote",
   "closeAbuseCase",
   "suspendResource",
   "restoreResource",
-];
+] as const;
+export type AbuseActionKind = (typeof ABUSE_ACTION_KINDS)[number];
 export const ABUSE_ROLES: readonly AdminRole[] = ["ops", "support", "superadmin"];
 export const SUSPEND_ROLES: readonly AdminRole[] = ["ops", "superadmin"];
 export const MAX_NOTES = 2000;
 export const MAX_NOTE_LINE = 1000;
+
+// Step 3 of R9 (WPU-X1): every field of an abuse action goes through zod. The envelope is checked for
+// every kind; the extra fields only for the kind that uses them. A failure is the fixed `invalid` code.
+export const abuseActionSchema = z.object({
+  kind: z.enum(ABUSE_ACTION_KINDS),
+  id: uuid,
+  reason: reasonSchema,
+});
+const openCaseSchema = z.object({
+  resourceId: uuid,
+  source: z.enum(ABUSE_SOURCES),
+  notes: optionalText(MAX_NOTES),
+});
+const addNoteSchema = z.object({ noteId: uuid, note: text(MAX_NOTE_LINE) });
 
 export interface AbuseActionRequest {
   readonly kind: AbuseActionKind;
@@ -60,36 +72,23 @@ export function makeAbuseAction(
       return { ok: false, code: "denied" };
     }
     try {
-      // 3. Validate.
-      if (typeof kind !== "string" || !ABUSE_ACTION_KINDS.includes(kind)) {
-        return { ok: false, code: "invalid" };
-      }
-      const caseId = cleanUuid(id);
-      const why = cleanReason(reason);
-      if (caseId === null || why === null) return { ok: false, code: "invalid" };
+      // 3. Validate (zod).
+      const base = abuseActionSchema.safeParse({ kind, id, reason });
+      if (!base.success) return { ok: false, code: "invalid" };
+      const caseId = base.data.id;
+      const why = base.data.reason;
       let open: { resourceId: string; source: AbuseSource; notes?: string } | null = null;
       let line: { noteId: string; note: string } | null = null;
       if (kind === "openAbuseCase") {
-        const res = cleanUuid(resourceId);
-        const src = typeof source === "string" ? source : "";
-        const extra =
-          notes === undefined || notes === null || notes === ""
-            ? undefined
-            : cleanText(notes, MAX_NOTES);
-        if (res === null || !(ABUSE_SOURCES as readonly string[]).includes(src) || extra === null) {
-          return { ok: false, code: "invalid" };
-        }
-        open = {
-          resourceId: res,
-          source: src as AbuseSource,
-          ...(extra === undefined ? {} : { notes: extra }),
-        };
+        const parsed = openCaseSchema.safeParse({ resourceId, source, notes });
+        if (!parsed.success) return { ok: false, code: "invalid" };
+        const { notes: extra, ...rest } = parsed.data;
+        open = { ...rest, ...(extra === undefined ? {} : { notes: extra }) };
       }
       if (kind === "addNote") {
-        const nid = cleanUuid(noteId);
-        const text = cleanText(note, MAX_NOTE_LINE);
-        if (nid === null || text === null) return { ok: false, code: "invalid" };
-        line = { noteId: nid, note: text };
+        const parsed = addNoteSchema.safeParse({ noteId, note });
+        if (!parsed.success) return { ok: false, code: "invalid" };
+        line = parsed.data;
       }
       const at = deps.clock.now();
       // 4. Rate limit.

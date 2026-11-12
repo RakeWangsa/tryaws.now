@@ -24,7 +24,8 @@ export type SecretName =
   | "OrderDraftSecret"
   | "AuthLimitKey"
   | "OtpHashKey"
-  | "SmsApiKey";
+  | "SmsApiKey"
+  | "AdminIpLimitKey";
 
 export const ALL_SECRETS: readonly SecretName[] = [
   "EpsMerchantId",
@@ -37,6 +38,7 @@ export const ALL_SECRETS: readonly SecretName[] = [
   "AuthLimitKey",
   "OtpHashKey",
   "SmsApiKey",
+  "AdminIpLimitKey",
 ];
 
 // The nine names of apps/web/server/secrets.ts (SecretName) are the web's. SmsApiKey belongs to the
@@ -52,6 +54,10 @@ export const WEB_SECRETS: readonly SecretName[] = [
   "AuthLimitKey",
   "OtpHashKey",
 ];
+
+// The admin app's own secret (WPU-X1): the HMAC key of its IP rate-limit subject. Linked to the admin
+// app only.
+export const ADMIN_SECRETS: readonly SecretName[] = ["AdminIpLimitKey"];
 
 // Per-role database password secrets (sst.Secret). Each function gets only the secret of its own
 // role. The migrator reads all five to create the roles; nothing else holds them.
