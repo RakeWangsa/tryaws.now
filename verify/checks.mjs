@@ -817,6 +817,12 @@ TASKS["WPU-G1"] = [
   repo,
 ];
 
+// WPU-G2: the customer panel feels like the Lightsail console. Reboot, stop, start and rename, the
+// firewall rules editor and the static IP attach and detach on the server page, and the Connect help
+// with the real login user. The pure rules and the adapter actions are proven in core and aws, the
+// Server Actions, the cross-tenant sweep, the messages and the render states in web.
+TASKS["WPU-G2"] = [specSync, baselineSync, lint, typecheck, format, core, aws, web, repo];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

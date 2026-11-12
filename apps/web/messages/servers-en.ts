@@ -128,7 +128,13 @@ export const serversEn: Same<typeof serversBn> = {
       access: {
         ssh: "SSH command",
         sshHint:
-          "Replace <user> with the user name of your image. Never give your private key to anyone.",
+          "Run it in a terminal on your computer, in the folder that holds your private key file. Never give your private key to anyone.",
+        user: "Login user",
+        userUnknown:
+          "We could not tell the login user of this image. Use the user name from the image notes.",
+        keyFile: "Key file",
+        keyFileHint:
+          "This is the private key you saved when you created the key. On macOS or Linux run chmod 400 {file} once so that SSH accepts it. We never hold your private key.",
         keyName: "Attached key",
         noKey: "No SSH key was attached to this server.",
         pendingIp: "The command shows here once the IP address is known.",
@@ -141,7 +147,79 @@ export const serversEn: Same<typeof serversBn> = {
         staticIp: "Static IP",
         staticIpHint: "Every server comes with one static IP.",
         rulesTitle: "Firewall rules",
-        rulesSoon: "Editing rules is coming soon. The platform default rules are active now.",
+        rulesIntro:
+          "The rules decide which traffic from the internet reaches your server. They apply to IPv4. IPv6 is not switched on for these servers yet.",
+      },
+      manage: {
+        flagOff: "Managing this server is not open for you yet.",
+        busy: "A change to this server is being applied. The buttons come back when it is done.",
+        power: {
+          label: "Power",
+          reboot: "Reboot",
+          stop: "Stop",
+          start: "Start",
+          stopNote: "A stopped server is still billed for its plan.",
+        },
+        rename: {
+          title: "Rename",
+          name: "Server name",
+          hint: "Letters, digits, space, dot, dash and underscore, up to 60.",
+          submit: "Save name",
+        },
+        firewall: {
+          caption: "Firewall rules of this server",
+          application: "Application",
+          protocol: "Protocol",
+          ports: "Port range",
+          source: "Restricted to",
+          action: "Action",
+          remove: "Remove",
+          anyIpv4: "Any IPv4 address",
+          presets: {
+            ssh: "SSH",
+            http: "HTTP",
+            https: "HTTPS",
+            rdp: "RDP",
+            ping: "Ping (ICMP)",
+            custom: "Custom",
+          },
+          empty: {
+            title: "No rules",
+            body: "All traffic from the internet to this server is blocked.",
+          },
+          unreadable: "The rules of this server cannot be shown now. Please try again shortly.",
+          sshWarning:
+            "SSH (port 22) is open to every address. Restrict it to your own IP address to keep your server safe.",
+          addTitle: "Add a rule",
+          preset: "Application",
+          protocolField: "Protocol",
+          fromPort: "Port, or first port of the range",
+          toPort: "Last port (optional)",
+          sourceMode: "Source",
+          sourceAny: "Any IPv4 address",
+          sourceRestrict: "Only these IP addresses",
+          sources: "IP addresses or CIDR blocks",
+          sourcesHint: "Separate them with commas or new lines. Example: 203.0.113.7, 10.0.0.0/8",
+          submit: "Add rule",
+          fieldError: {
+            invalid: "This is not valid.",
+            ipv6: "IPv6 addresses are not supported for these servers.",
+            too_many: "Use at most 20 addresses.",
+          },
+        },
+        staticIp: {
+          title: "Static IP",
+          attached:
+            "The static IP is attached. The address stays the same when the server restarts.",
+          detached:
+            "No static IP is attached. The server has an address of its own that changes when the server is stopped.",
+          address: "Current address",
+          detachWarn:
+            "After you detach it, the server gets a new address. Anything that uses the current address, such as DNS records, stops working.",
+          acknowledge: "I understand that the address will change",
+          detach: "Detach static IP",
+          attach: "Attach static IP",
+        },
       },
     },
     state: {

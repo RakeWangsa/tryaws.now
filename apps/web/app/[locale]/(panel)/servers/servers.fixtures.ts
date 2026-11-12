@@ -7,6 +7,7 @@ import type {
   ServerRow,
 } from "../../../../server/servers-view.ts";
 import type { ReviewScreen } from "../../../../server/review-view.ts";
+import type { ServerManage } from "../../../../server/server-manage-view.ts";
 
 // Rows for the render tests of the server screens (never imported by a page).
 
@@ -71,6 +72,20 @@ export function detail(over: Partial<ServerDetail> = {}): ServerDetail {
     family: "linux_instance",
     keyName: "Laptop",
     createdAt: new Date("2026-11-10T06:00:00Z"),
+    ...over,
+  };
+}
+
+export function manage(over: Partial<ServerManage> = {}): ServerManage {
+  return {
+    flagOn: true,
+    requestId: "0190aaaa-0000-7000-8000-0000000000f1",
+    state: "active",
+    rules: [{ protocol: "tcp", fromPort: 22, toPort: 22, cidrs: ["0.0.0.0/0"] }],
+    sshOpenToWorld: true,
+    staticIpAttached: true,
+    loginUser: "ubuntu",
+    busy: false,
     ...over,
   };
 }

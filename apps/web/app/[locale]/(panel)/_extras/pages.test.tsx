@@ -87,6 +87,18 @@ vi.mock("../servers/[id]/actions.ts", () => ({
   restoreToNewServerAction: async () => ({}),
   addDiskAction: async () => ({}),
 }));
+// WPU-G2: the header buttons and the Networking tab have their own tests in ../servers/.
+vi.mock("../../../../server/server-manage-view.ts", () => ({ loadServerManage: async () => null }));
+vi.mock("../servers/[id]/manage-actions.ts", () => ({
+  rebootServerAction: async () => ({}),
+  stopServerAction: async () => ({}),
+  startServerAction: async () => ({}),
+  renameServerAction: async () => ({}),
+  addFirewallRuleAction: async () => ({}),
+  removeFirewallRuleAction: async () => ({}),
+  attachStaticIpAction: async () => ({}),
+  detachStaticIpAction: async () => ({}),
+}));
 vi.mock("../notifications/actions.ts", () => ({ markNotificationsReadAction: async () => ({}) }));
 
 const { default: DetailPage } = await import("../servers/[id]/page.tsx");

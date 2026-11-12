@@ -38,6 +38,7 @@ vi.mock("@tc/db", async (original) => {
 
 const { loadServerDetail, loadOrder } = await import("./servers-view.ts");
 const { loadServerExtras } = await import("./extras-view.ts");
+const { loadServerManage } = await import("./server-manage-view.ts");
 const { loadCdnDetail } = await import("./cdn-view.ts");
 const { loadBucketDetail } = await import("./bucket-view.ts");
 const { loadContainerDetail } = await import("./container-view.ts");
@@ -62,6 +63,11 @@ const CASES: Array<[string, () => Promise<unknown>, unknown]> = [
     "servers/[id]  loadServerExtras",
     () => loadServerExtras(session, THEIRS, "0190aaaa-0000-7000-8000-0000000000f1"),
     { state: "ready", extras: null },
+  ],
+  [
+    "servers/[id]  loadServerManage",
+    () => loadServerManage(session, THEIRS, "0190aaaa-0000-7000-8000-0000000000f1"),
+    null,
   ],
   ["cdn/[id]  loadCdnDetail", () => loadCdnDetail(session, THEIRS), null],
   ["storage/[id]  loadBucketDetail", () => loadBucketDetail(session, THEIRS), null],

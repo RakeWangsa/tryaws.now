@@ -166,6 +166,7 @@ Resources:
                   - lightsail:DeleteRelationalDatabaseSnapshot
                   - lightsail:DetachDisk
                   - lightsail:DetachInstancesFromLoadBalancer
+                  - lightsail:DetachStaticIp
                   - lightsail:DisableAddOn
                   - lightsail:EnableAddOn
                   - lightsail:GetBucketAccessKeys

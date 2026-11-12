@@ -1,3 +1,4 @@
+import { readLaunchInputs, withTx } from "@tc/db";
 import {
   createBeaconMarker,
   createLinuxInstanceAdapter,
@@ -5,13 +6,14 @@ import {
   withBackups,
   type LinuxInstanceDeps,
 } from "@tc/aws";
-import { readLaunchInputs, withTx } from "@tc/db";
+import { DEFAULT_BLUEPRINT_ID } from "@tc/core";
 import type { ProductAdapter } from "@tc/aws";
 import { backupDeps } from "./backup";
 
 // Not in the catalog row (WP4-T5 open point 1): one blueprint for every Linux instance until the
-// catalog or the config carries it. VERIFY the id with GetBlueprints in tc-pool-dev.
-export const DEFAULT_BLUEPRINT_ID = "ubuntu_24_04";
+// catalog or the config carries it. VERIFY the id with GetBlueprints in tc-pool-dev. The constant
+// lives in @tc/core so that the Connect tab names the login user of the same image (WPU-G13).
+export { DEFAULT_BLUEPRINT_ID };
 
 export interface LinuxWiring {
   readonly vpcCidr?: string | null;

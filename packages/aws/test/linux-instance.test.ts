@@ -498,19 +498,152 @@ describe("suspend, resume, snapshot, destroy, actions", () => {
     const ok = { ports: [{ fromPort: 443, toPort: 443, protocol: "tcp", cidrs: ["10.0.0.0/8"] }] };
     expect(await adapter.aws.action("set_ports", ctx(null, { payload: ok }))).toMatchObject({
       kind: "done",
+      // The saved list is what the Networking tab shows (WPU-G17).
+      patch: { configMerge: { firewallRules: ok.ports } },
     });
     for (const bad of [
       { ports: [{ fromPort: 70000, toPort: 70000, protocol: "tcp", cidrs: ["0.0.0.0/0"] }] },
       { ports: [{ fromPort: 22, toPort: 22, protocol: "gre", cidrs: ["0.0.0.0/0"] }] },
       { ports: [{ fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["$(id)"] }] },
+      { ports: [{ fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["999.1.1.1/8"] }] },
       { ports: "all" },
     ]) {
       await expect(
         adapter.aws.action("set_ports", ctx(null, { payload: bad })),
       ).rejects.toMatchObject({ code: "validation" });
     }
-    await expect(adapter.aws.action("rename" as OperationKind, ctx(null))).rejects.toMatchObject({
+    await expect(adapter.aws.action("snapshot" as OperationKind, ctx(null))).rejects.toMatchObject({
       code: "validation",
+    });
+  });
+
+  it("set_ports sends ping as an ICMP rule and an empty list closes everything", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "PutInstancePublicPorts", lightsailOk({}));
+    const ping = { fromPort: 8, toPort: -1, protocol: "icmp", cidrs: ["0.0.0.0/0"] };
+    await adapter.aws.action("set_ports", ctx(null, { payload: { ports: [ping] } }));
+    await adapter.aws.action("set_ports", ctx(null, { payload: { ports: [] } }));
+    const puts = aws.seen.filter((x) => x.action === "PutInstancePublicPorts");
+    expect(JSON.parse(puts[0]!.body).portInfos).toEqual([ping]);
+    expect(JSON.parse(puts[1]!.body).portInfos).toEqual([]);
+  });
+
+  it("rename changes the display name only: no call to AWS, and the name is checked again", async () => {
+    const { adapter, ctx, calls } = setup();
+    const done = await adapter.aws.action(
+      "rename",
+      ctx(null, { payload: { displayName: " web-2 " } }),
+    );
+    expect(done).toMatchObject({ kind: "done", patch: { configMerge: { displayName: "web-2" } } });
+    expect(calls()).toEqual([]);
+    for (const bad of [
+      {},
+      { displayName: "" },
+      { displayName: "a<b>" },
+      { displayName: 7 },
+      null,
+    ]) {
+      await expect(adapter.aws.action("rename", ctx(null, { payload: bad }))).rejects.toMatchObject(
+        { code: "validation" },
+      );
+    }
+  });
+
+  it("attach_static_ip attaches the server's own static IP and records its address", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { isAttached: false } }));
+    aws.on("lightsail", "AttachStaticIp", lightsailOk({}));
+    const done = await adapter.aws.action("attach_static_ip", ctx(null));
+    expect(done).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { staticIpAttached: true } },
+    });
+    expect(calls()).toEqual(["GetStaticIp", "AttachStaticIp", "GetStaticIp"]);
+    const attach = JSON.parse(aws.seen.find((x) => x.action === "AttachStaticIp")!.body);
+    expect(attach).toEqual({
+      staticIpName: awsResourceName("staticip", RID),
+      instanceName: INSTANCE,
+    });
+  });
+
+  it("attach_static_ip records the address of the IP and is a no-op when already attached", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({
+        staticIp: { isAttached: true, attachedTo: INSTANCE, ipAddress: "203.0.113.9" },
+      }),
+    );
+    const done = await adapter.aws.action("attach_static_ip", ctx(null));
+    expect(done).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { staticIpAttached: true, publicIpv4: "203.0.113.9" } },
+    });
+    expect(calls()).toEqual(["GetStaticIp"]);
+  });
+
+  it("attach_static_ip never touches an IP that is attached to another instance (R16)", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({ staticIp: { isAttached: true, attachedTo: "tc-instance-other" } }),
+    );
+    await expect(adapter.aws.action("attach_static_ip", ctx(null))).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+
+  it("attach_static_ip allocates the IP again if it is gone", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "GetStaticIp", notFound());
+    aws.on("lightsail", "AllocateStaticIp", lightsailOk({}));
+    aws.on("lightsail", "AttachStaticIp", lightsailOk({}));
+    await adapter.aws.action("attach_static_ip", ctx(null));
+    expect(calls()).toEqual(["GetStaticIp", "AllocateStaticIp", "AttachStaticIp", "GetStaticIp"]);
+  });
+
+  it("detach_static_ip detaches only an IP attached to this instance; not-found is done", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({ staticIp: { isAttached: true, attachedTo: INSTANCE } }),
+    );
+    aws.on("lightsail", "DetachStaticIp", lightsailOk({}));
+    aws.on(
+      "lightsail",
+      "GetInstance",
+      lightsailOk({ instance: { publicIpAddress: "198.51.100.4" } }),
+    );
+    const done = await adapter.aws.action("detach_static_ip", ctx(null));
+    // The instance has its own address again: the tab must not keep showing the static one.
+    expect(done).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { staticIpAttached: false, publicIpv4: "198.51.100.4" } },
+    });
+    expect(calls()).toEqual(["GetStaticIp", "DetachStaticIp", "GetInstance"]);
+
+    const again = setup();
+    again.aws.on("lightsail", "GetStaticIp", lightsailOk({ staticIp: { isAttached: false } }));
+    again.aws.on("lightsail", "GetInstance", lightsailOk({ instance: {} }));
+    expect(await again.adapter.aws.action("detach_static_ip", again.ctx(null))).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { staticIpAttached: false, publicIpv4: null } },
+    });
+    expect(again.calls()).toEqual(["GetStaticIp", "GetInstance"]);
+
+    const other = setup();
+    other.aws.on(
+      "lightsail",
+      "GetStaticIp",
+      lightsailOk({ staticIp: { isAttached: true, attachedTo: "tc-instance-other" } }),
+    );
+    await expect(
+      other.adapter.aws.action("detach_static_ip", other.ctx(null)),
+    ).rejects.toMatchObject({
+      code: "conflict",
     });
   });
 });

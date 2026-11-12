@@ -10,6 +10,7 @@ import {
   configurator,
   detail,
   key,
+  manage,
   order,
   server,
 } from "./servers.fixtures.ts";
@@ -22,6 +23,7 @@ const state = vi.hoisted(() => ({
   servers: null as unknown,
   configurator: null as unknown,
   detail: null as unknown,
+  manage: null as unknown,
   order: null as unknown,
   keys: null as unknown,
   runtime: null as unknown,
@@ -85,6 +87,20 @@ vi.mock("../../../../server/extras-view.ts", async (importActual) => {
   const actual = await importActual<typeof import("../../../../server/extras-view.ts")>();
   return { ...actual, loadServerExtras: async () => ({ state: "flag_off" }) };
 });
+// WPU-G2: the header buttons and the Networking tab read their own loader and actions.
+vi.mock("../../../../server/server-manage-view.ts", () => ({
+  loadServerManage: async () => state.manage,
+}));
+vi.mock("./[id]/manage-actions.ts", () => ({
+  rebootServerAction: async () => ({}),
+  stopServerAction: async () => ({}),
+  startServerAction: async () => ({}),
+  renameServerAction: async () => ({}),
+  addFirewallRuleAction: async () => ({}),
+  removeFirewallRuleAction: async () => ({}),
+  attachStaticIpAction: async () => ({}),
+  detachStaticIpAction: async () => ({}),
+}));
 vi.mock("./[id]/actions.ts", () => ({
   attachDiskAction: async () => ({}),
   createBackupAction: async () => ({}),
@@ -158,6 +174,7 @@ beforeEach(() => {
   state.servers = { state: "ready", servers: [server()] };
   state.configurator = configurator();
   state.detail = detail();
+  state.manage = manage();
   state.order = order();
   state.keys = { state: "ready", keys: [key()] };
   state.runtime = {
@@ -248,7 +265,7 @@ describe("/servers/[id]", () => {
     expect(bn).toContain("সারাংশ");
     expect(bn).toContain("অ্যাক্সেস");
     expect(bn).toContain("নেটওয়ার্কিং");
-    expect(bn).toContain("ssh &lt;user&gt;@203.0.113.10");
+    expect(bn).toContain("ssh -i Laptop.pem ubuntu@203.0.113.10");
     expect(bn).toContain("Laptop");
     expect(state.loaderCalls[0]?.[2]).toBe(SERVER_ID);
   });
@@ -266,6 +283,102 @@ describe("/servers/[id]", () => {
   it("never shows an account id, an ARN or a generated AWS name", async () => {
     const html = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
     expect(html).not.toMatch(/arn:aws|\b\d{12}\b|tc-instance/);
+  });
+});
+
+describe("/servers/[id] management (WPU-G2)", () => {
+  it("a running server has Reboot and Stop in the header, in Bengali first and in English", async () => {
+    const bn = await renderPage(ServerDetailPage as never, "bn", { id: SERVER_ID });
+    expect(bn).toContain("রিবুট");
+    expect(bn).toContain("বন্ধ করুন");
+    expect(bn).not.toContain("চালু করুন");
+    expect(bn).toContain('name="requestId"');
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("Reboot");
+    expect(en).toContain("A stopped server is still billed for its plan.");
+  });
+  it("a stopped server has Start, not Reboot", async () => {
+    state.detail = detail({ state: "stopped" });
+    state.manage = manage({ state: "stopped" });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("Start");
+    expect(en).not.toContain("Reboot");
+  });
+  it("a server being created has no power buttons", async () => {
+    state.detail = detail({ state: "creating" });
+    state.manage = manage({ state: "creating" });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).not.toContain("Reboot");
+  });
+  it("the Connect tab shows the real login user, the key file of the customer's key and a correct command", async () => {
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("ssh -i Laptop.pem ubuntu@203.0.113.10");
+    expect(en).toContain("Login user");
+    expect(en).toContain("chmod 400 Laptop.pem");
+    expect(en).not.toContain("&lt;user&gt;");
+  });
+  it("an unknown image gets no guessed user", async () => {
+    state.manage = manage({ loginUser: null });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).not.toContain("ssh -i Laptop.pem");
+    expect(en).toContain("We could not tell the login user");
+  });
+  it("the Networking tab lists the rules with the SSH warning, an add form and the static IP panel", async () => {
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("Firewall rules of this server");
+    expect(en).toContain("Any IPv4 address");
+    expect(en).toContain("SSH (port 22) is open to every address");
+    expect(en).toContain("Add a rule");
+    expect(en).toContain("Detach static IP");
+    expect(en).toContain("IPv6 is not switched on for these servers yet.");
+    const bn = await renderPage(ServerDetailPage as never, "bn", { id: SERVER_ID });
+    expect(bn).toContain("ফায়ারওয়াল নিয়ম");
+    expect(bn).toContain("নিয়ম যোগ করুন");
+  });
+  it("a restricted SSH rule shows no warning; an empty list shows the empty state", async () => {
+    state.manage = manage({
+      rules: [{ protocol: "tcp", fromPort: 22, toPort: 22, cidrs: ["203.0.113.7/32"] }],
+      sshOpenToWorld: false,
+    });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("203.0.113.7/32");
+    expect(en).not.toContain("SSH (port 22) is open to every address");
+    state.manage = manage({ rules: [], sshOpenToWorld: false });
+    expect(await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID })).toContain(
+      "All traffic from the internet to this server is blocked.",
+    );
+  });
+  it("an unreadable list is an error, not an empty table", async () => {
+    state.manage = manage({ rules: null, sshOpenToWorld: false });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("cannot be shown now");
+    expect(en).not.toContain("Add a rule");
+  });
+  it("with an operation on its way the forms are inert and say why", async () => {
+    state.manage = manage({ busy: true });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("A change to this server is being applied");
+    expect(en).not.toMatch(
+      /<button[^>]*type="submit"(?![^>]*disabled)[^>]*>\s*(<[^>]+>\s*)*Reboot/,
+    );
+  });
+  it("a detached static IP offers Attach and no acknowledgement box", async () => {
+    state.manage = manage({ staticIpAttached: false });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("Attach static IP");
+    expect(en).not.toContain("I understand that the address will change");
+  });
+  it("with the flag off nothing can be changed and the page says so", async () => {
+    state.manage = manage({ flagOn: false });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("Managing this server is not open for you yet.");
+    expect(en).not.toContain("Reboot");
+    expect(en).not.toContain("Add a rule");
+  });
+  it("no inline style and no AWS names in the management markup", async () => {
+    const html = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(html).not.toMatch(/ style=/);
+    expect(html).not.toMatch(/arn:aws|tc-instance|tc-staticip/);
   });
 });
 
