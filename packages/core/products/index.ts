@@ -131,6 +131,24 @@ export {
   windowsOverlap,
 } from "./console";
 export {
+  CACHE_ALLOWED_METHODS,
+  CACHE_CACHED_METHODS,
+  MAX_CACHE_PATHS,
+  MAX_TTL_SECONDS,
+  checkCachePolicy,
+  parseCachePolicy,
+  type CacheBehavior,
+  type CachePolicy,
+  type ForwardChoice,
+} from "./cdn-cache";
+export {
+  checkedContainerCertificateDomain,
+  deploymentHistoryEntry,
+  parsePortList,
+  withPublicEndpoint,
+  type DeploymentHistoryEntry,
+} from "./container-console";
+export {
   priceCatalog,
   priceRows,
   type CatalogRowForPricing,

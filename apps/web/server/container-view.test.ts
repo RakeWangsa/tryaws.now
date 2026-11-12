@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { containerConfigOf, deploymentFactsOf, runsOf } from "./container-view.ts";
+import {
+  containerConfigOf,
+  deploymentFactsOf,
+  endpointContainerOf,
+  runsOf,
+} from "./container-view.ts";
 
 describe("deploymentFactsOf", () => {
   const saved = {
@@ -81,5 +86,22 @@ describe("runsOf", () => {
       "needsApproval",
       "state",
     ]);
+  });
+});
+
+describe("endpointContainerOf (WPU-G8)", () => {
+  it("counts the container of the saved endpoint from 1 and is null for none or anything odd", () => {
+    expect(
+      endpointContainerOf({ publicEndpoint: { containerName: "c2", containerPort: 80 } }),
+    ).toBe(2);
+    for (const odd of [
+      null,
+      5,
+      {},
+      { publicEndpoint: null },
+      { publicEndpoint: { containerName: "web" } },
+    ]) {
+      expect(endpointContainerOf(odd)).toBeNull();
+    }
   });
 });

@@ -113,7 +113,7 @@ export const containerEn: Same<typeof containerBn> = {
         metricsUnavailable: "The amount used cannot be shown here yet.",
         created: "Created",
         scaleNote:
-          "Power and scale are chosen when you buy. There is no button here to change them later, because the price changes too.",
+          "Power and scale are chosen when you buy. To change them later, set a new plan in the “Capacity and plan” tab; the term is prepaid, so the change starts at your next renewal.",
       },
       deployments: {
         title: "Current deployment",

@@ -8,7 +8,14 @@ import { loadContainerDetail } from "../../../../../server/container-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { ContainerDetailContent } from "./ContainerDetailContent.tsx";
-import { deployContainersAction, destroyContainerServiceAction } from "./actions.ts";
+import {
+  deployContainersAction,
+  destroyContainerServiceAction,
+  refreshContainerCertificateAction,
+  requestContainerCertificateAction,
+  scheduleContainerPlanAction,
+  setContainerEndpointAction,
+} from "./actions.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +52,18 @@ export default async function ContainerDetailPage({ params, searchParams }: Prop
         requestId={newUuidV7()}
         deployAction={deployContainersAction}
         destroyAction={destroyContainerServiceAction}
+        planAction={scheduleContainerPlanAction}
+        certRequestAction={requestContainerCertificateAction}
+        certRefreshAction={refreshContainerCertificateAction}
+        endpointAction={setContainerEndpointAction}
+        ids={{
+          plan: newUuidV7(),
+          planCancel: newUuidV7(),
+          cert: newUuidV7(),
+          certRefresh: newUuidV7(),
+          endpoint: newUuidV7(),
+          endpointRemove: newUuidV7(),
+        }}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />
     </PanelFrame>

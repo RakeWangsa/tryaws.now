@@ -97,6 +97,55 @@ describe("/cdn/[id]", () => {
     expect(html).toMatch(/<button[^>]*disabled[^>]*>/);
   });
 
+  it("has tabs for the cache behaviour, the origin, the plan and the domain (WPU-G8)", () => {
+    const html = render("cdn_detail.ready");
+    for (const tab of [
+      "Cache behaviour",
+      "Origin",
+      "Capacity and plan",
+      "Domain and certificate",
+    ]) {
+      expect(html).toContain(tab);
+    }
+  });
+
+  it("the plan tab changes at the next renewal: a plan is a catalog product, nothing is charged now, a pending change shows its price and a cancel", () => {
+    const html = render("cdn_detail.pending_plan");
+    expect(html).toContain("nothing is charged now");
+    expect(html).toContain("Next renewal: Dec 10, 2026");
+    expect(html).toContain("Starts at the next renewal: Medium, renewal price ৳1,390.00.");
+    expect(html).toMatch(/name="cancel" value="yes"/);
+    expect(html).toMatch(/name="productId"/);
+    expect(html).not.toMatch(/name="(bundle|bundleId|price|amount)"/);
+  });
+
+  it("the cache tab shows the saved policy with closed lists and one text box for the path rules", () => {
+    const html = render("cdn_detail.cache_saved");
+    expect(html).toContain("images/*=cache");
+    expect(html).toContain('name="allowedMethods"');
+    expect(html).toContain("GET,HEAD,OPTIONS,PUT,PATCH,POST,DELETE");
+    expect(html).toContain("Now: default Cache, default TTL 3600 seconds.");
+  });
+
+  it("the origin tab offers the customer's own resources by id and no free text; with none it says so", () => {
+    const html = render("cdn_detail.ready");
+    expect(html).toMatch(/name="originId"/);
+    expect(html).not.toMatch(/<input[^>]*name="originId"/);
+    expect(html).toContain("Bucket: assets");
+    expect(render("cdn_detail.no_other_origin")).toContain(
+      "There is no other running server, load balancer or bucket to change to.",
+    );
+  });
+
+  it("the domain tab shows the validation records of a pending certificate and the check button", () => {
+    const html = render("cdn_detail.domain_pending");
+    expect(html).toContain("cdn.example.com");
+    expect(html).toContain("_a.cdn.example.com.");
+    expect(html).toContain("Waiting for validation");
+    expect(html).toContain("Check status and attach");
+    expect(html).not.toContain("Request certificate");
+  });
+
   it("another customer's CDN and a missing one show the same not-found state", () => {
     const html = render("cdn_detail.not_found");
     expect(html).toContain("CDN not found");

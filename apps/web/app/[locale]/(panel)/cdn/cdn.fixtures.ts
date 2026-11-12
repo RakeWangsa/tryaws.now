@@ -63,6 +63,17 @@ export function detail(over: Partial<CdnDetail> = {}): CdnDetail {
     ...row(),
     region: "us-east-1",
     createdAt: new Date("2026-11-10T08:00:00Z"),
+    cachePolicy: null,
+    origins: [
+      origin(),
+      origin({ id: "0190aaaa-0000-7000-8000-0000000000a2", kind: "bucket", name: "assets" }),
+    ],
+    originId: ORIGIN_ID,
+    certificate: null,
+    currentProductId: PLAN_SMALL,
+    pendingProductId: null,
+    plans: [plan(), plan({ id: PLAN_MEDIUM, bundle: "medium_1_0", priceMinor: 139000n })],
+    renewsAt: new Date("2026-12-10T08:00:00Z"),
     ...over,
   };
 }

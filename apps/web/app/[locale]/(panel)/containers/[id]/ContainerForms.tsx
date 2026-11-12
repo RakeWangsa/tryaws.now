@@ -44,7 +44,90 @@ export function ContainerNotice({ state }: { state: FormState }) {
   return null;
 }
 
-/** deployContainers: image, one port, environment lines, the public endpoint and its health path. */
+/** One container block of the deploy form: image, ports, environment lines and a command. */
+function ContainerFields({
+  n,
+  state,
+  allowed,
+}: {
+  n: 1 | 2 | 3;
+  state: FormState;
+  allowed: boolean;
+}) {
+  const t = useTranslations("Containers.detail.deploy");
+  const tn = useTranslations("Console.deploy");
+  const s = n === 1 ? "" : String(n);
+  const err = (name: string, text: string) =>
+    state.fields?.[`${name}${s}`] !== undefined ? { error: text } : {};
+  return (
+    <fieldset className="mb-3">
+      <legend className="mergecolor h5">{tn("containerTitle", { n })}</legend>
+      {n === 1 ? null : <p className="seccolor small">{tn("optionalContainer")}</p>}
+      <Field
+        name={`image${s}`}
+        label={t("image")}
+        hint={t("imageHint")}
+        placeholder={t("imagePlaceholder")}
+        maxLength={255}
+        required={n === 1}
+        optional={n !== 1}
+        autoComplete="off"
+        disabled={!allowed}
+        {...err("image", t("imageHint"))}
+      />
+      <div className="row">
+        <div className="col-md-6">
+          <Field
+            name={`port${s}`}
+            label={t("port")}
+            hint={tn("portsHint")}
+            maxLength={120}
+            autoComplete="off"
+            optional
+            disabled={!allowed}
+            {...err("port", tn("portsHint"))}
+          />
+        </div>
+        <div className="col-md-6">
+          <OptionGroup
+            kind="select"
+            name={`protocol${s}`}
+            legend={t("protocol")}
+            options={["HTTP", "HTTPS", "TCP", "UDP"].map((value) => ({ value, label: value }))}
+            defaultValue="HTTP"
+          />
+        </div>
+      </div>
+      <Field
+        name={`environment${s}`}
+        label={t("environment")}
+        hint={`${t("environmentHint")} ${tn("valuesNote")}`}
+        multiline
+        rows={4}
+        autoComplete="off"
+        optional
+        disabled={!allowed}
+        {...err("environment", t("environmentHint"))}
+      />
+      <Field
+        name={`command${s}`}
+        label={tn("command")}
+        hint={tn("commandHint")}
+        multiline
+        rows={2}
+        autoComplete="off"
+        optional
+        disabled={!allowed}
+        {...err("command", tn("commandHint"))}
+      />
+    </fieldset>
+  );
+}
+
+/**
+ * deployContainers: up to three containers (image, ports, environment lines, command), the public
+ * endpoint (which container, which port) and its health check path.
+ */
 export function DeployForm({
   action,
   containerId,
@@ -58,7 +141,10 @@ export function DeployForm({
   allowed: boolean;
 }) {
   const t = useTranslations("Containers.detail.deploy");
+  const tn = useTranslations("Console.deploy");
   const [state, formAction] = useActionState(action, INITIAL_FORM_STATE);
+  const endpointError = (name: string, text: string) =>
+    state.fields?.[name] !== undefined ? { error: text } : {};
   return (
     <form action={formAction} noValidate>
       <input type="hidden" name="containerId" value={containerId} />
@@ -70,56 +156,44 @@ export function DeployForm({
       </div>
       {allowed ? null : <p className="seccolor">{t("notActive")}</p>}
 
-      <Field
-        name="image"
-        label={t("image")}
-        hint={t("imageHint")}
-        placeholder={t("imagePlaceholder")}
-        maxLength={255}
-        required
-        autoComplete="off"
-        disabled={!allowed}
-        {...(state.fields?.["image"] !== undefined ? { error: t("imageHint") } : {})}
-      />
-      <div className="row">
-        <div className="col-md-6">
-          <Field
-            name="port"
-            label={t("port")}
-            hint={t("portHint")}
-            inputMode="numeric"
-            maxLength={5}
-            autoComplete="off"
-            disabled={!allowed}
-            {...(state.fields?.["port"] !== undefined ? { error: t("portHint") } : {})}
-          />
-        </div>
-        <div className="col-md-6">
-          <OptionGroup
-            kind="select"
-            name="protocol"
-            legend={t("protocol")}
-            options={["HTTP", "HTTPS", "TCP", "UDP"].map((value) => ({ value, label: value }))}
-            defaultValue="HTTP"
-          />
-        </div>
-      </div>
-      <Field
-        name="environment"
-        label={t("environment")}
-        hint={t("environmentHint")}
-        multiline
-        rows={4}
-        autoComplete="off"
-        disabled={!allowed}
-        {...(state.fields?.["environment"] !== undefined ? { error: t("environmentHint") } : {})}
-      />
+      <ContainerFields n={1} state={state} allowed={allowed} />
+      <ContainerFields n={2} state={state} allowed={allowed} />
+      <ContainerFields n={3} state={state} allowed={allowed} />
+
       <OptionGroup
         kind="checkbox"
         name="publicEndpoint"
         legend={t("publicEndpoint")}
         options={[{ value: "on", label: t("publicEndpoint"), hint: t("publicEndpointHint") }]}
       />
+      <div className="row">
+        <div className="col-md-6">
+          <Field
+            name="endpointContainer"
+            label={tn("endpointContainer")}
+            inputMode="numeric"
+            maxLength={1}
+            optional
+            autoComplete="off"
+            defaultValue="1"
+            disabled={!allowed}
+            {...endpointError("endpointContainer", tn("endpointPortHint"))}
+          />
+        </div>
+        <div className="col-md-6">
+          <Field
+            name="endpointPort"
+            label={tn("endpointPort")}
+            hint={tn("endpointPortHint")}
+            inputMode="numeric"
+            maxLength={5}
+            optional
+            autoComplete="off"
+            disabled={!allowed}
+            {...endpointError("endpointPort", tn("endpointPortHint"))}
+          />
+        </div>
+      </div>
       <Field
         name="healthCheckPath"
         label={t("health")}

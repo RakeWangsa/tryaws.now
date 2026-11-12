@@ -847,6 +847,25 @@ TASKS["WPU-G7"] = [
   repo,
 ];
 
+// WPU-G8: container service and CDN console: the plan change that takes effect at the next renewal (the
+// renewal quote and the apply operation, core with the database), four operation kinds (db), the adapter
+// actions for plan, certificates, cache behaviours and origin (aws), the cache and container rules (core),
+// the specs, views, forms and messages (web), the operation names (admin) and the role allow-list (repo).
+// No migration. The core and db suites need the local PostgreSQL (pnpm db:up).
+TASKS["WPU-G8"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  web,
+  admin,
+  repo,
+];
+
 // WPU-G9: database snapshots, restore to a new database (snapshot and point in time), connection facts and
 // maintenance window; bucket access mode read-back and access for a server (with the suspend revoke);
 // the default snapshot price (migration 0014). Rules (core), kinds and migration (db), adapters (aws),

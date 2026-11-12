@@ -1,4 +1,5 @@
 import {
+  AttachCertificateToDistributionCommand,
   CreateDistributionCommand,
   DeleteDistributionCommand,
   GetBucketsCommand,
@@ -6,6 +7,7 @@ import {
   GetInstanceCommand,
   GetLoadBalancerCommand,
   ResetDistributionCacheCommand,
+  UpdateDistributionBundleCommand,
   UpdateDistributionCommand,
   type LightsailClient,
   type LightsailDistribution,
@@ -14,7 +16,9 @@ import {
 import {
   awsResourceName,
   cdnDefaultDomain,
+  checkCachePolicy,
   checkCdnOrigin,
+  checkedContainerCertificateDomain,
   parseCdnConfig,
   resourceTags,
   stepDone,
@@ -28,6 +32,7 @@ import {
   type StepResult,
 } from "@tc/core";
 import { AwsError } from "../errors";
+import { certificateTags, ensureCertificate, readCertificate } from "./certificate";
 import { LIGHTSAIL_REGIONS, type LightsailRegion } from "../roles";
 import type { LiveState, OpCtx, ProductAdapter, ResourceView } from "./types";
 
@@ -53,6 +58,9 @@ const BUSY_STATUS = new Set(["creating", "inprogress", "in-progress", "deploying
 
 type Ctx = OpCtx<CdnConfig>;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const LIVE = ["active", "stopped", "suspended"];
+
 function fail(code: "validation" | "conflict" | "upstream_unavailable" | "internal"): AwsError {
   return new AwsError({ code, retryable: false });
 }
@@ -73,6 +81,7 @@ async function orNull<T>(call: () => Promise<T>): Promise<T | null> {
 const client = (ctx: Ctx): LightsailClient =>
   ctx.access.lightsail(ctx.account, ctx.region, "TcProvisioner");
 const distributionName = (ctx: Ctx): string => awsResourceName("cdn", ctx.resource.id);
+const certificateName = (ctx: Ctx): string => awsResourceName("cert", ctx.resource.id);
 const pollAt = (ctx: Ctx): Date => new Date(ctx.clock.now().getTime() + POLL_SECONDS * 1000);
 
 function budget(ctx: Ctx): void {
@@ -113,11 +122,13 @@ const NAME_TYPE: Readonly<Record<string, AwsNameType>> = {
  * account share one account, so an origin that the account of the distribution does not know (another
  * pool account) is refused. Any failure is `validation` and nothing is created.
  */
-async function checkedOrigin(ctx: Ctx): Promise<OriginFacts> {
-  const row: ResourceView | null = await ctx.owned(ctx.config.originId);
+async function checkedOrigin(ctx: Ctx, originId: string): Promise<OriginFacts> {
+  // A value that is not a resource id never reaches the lookup (R11).
+  if (!UUID.test(originId)) throw fail("validation");
+  const row: ResourceView | null = await ctx.owned(originId);
   const checked = checkCdnOrigin({
     customerId: ctx.resource.customerId,
-    requested: ctx.config.originId,
+    requested: originId,
     candidate:
       row === null
         ? null
@@ -181,7 +192,7 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
           if (!ours) throw fail("conflict");
           return stepNext("wait_ready", { awsName: name });
         }
-        const origin = await checkedOrigin(ctx);
+        const origin = await checkedOrigin(ctx, ctx.config.originId);
         const originClient = ctx.access.lightsail(ctx.account, origin.region, "TcProvisioner");
         if (!(await origin.lookup(originClient))) throw fail("validation");
         const orderId = (ctx.operation.payload as { orderId?: unknown } | null)?.orderId;
@@ -272,6 +283,7 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
 
   // setCdnEnabled (16.10): stop turns the distribution off, start turns it on again.
   async function action(kind: OperationKind, ctx: Ctx): Promise<StepResult> {
+    const payload = ctx.operation.payload as Record<string, unknown> | null;
     switch (kind) {
       case "stop":
         if (ctx.resource.state !== "active") throw fail("conflict");
@@ -288,6 +300,135 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
           new ResetDistributionCacheCommand({ distributionName: distributionName(ctx) }),
         );
         return stepDone();
+      case "schedule_plan_change": {
+        // WPU-G8: no proration in a prepaid term. The choice is stored and the renewal applies it;
+        // nothing is called in AWS. null cancels a pending change.
+        if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
+        const productId = payload?.productId;
+        if (productId === null) return stepDone({ configMerge: { pendingPlan: null } });
+        if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
+        if (productId === ctx.config.productId) throw fail("validation");
+        const bundle = await deps.loadBundle({ customerId: ctx.resource.customerId, productId });
+        if (bundle === null) throw fail("validation");
+        return stepDone({ configMerge: { pendingPlan: { productId } } });
+      }
+      case "change_cdn_bundle": {
+        // Queued by the renewal, never by a customer. The bundle comes from the catalog product the
+        // renewal charged for, never from a name in the payload.
+        const productId = payload?.productId;
+        if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const bundle = await deps.loadBundle({ customerId: ctx.resource.customerId, productId });
+        if (bundle === null) throw fail("validation");
+        await client(ctx).send(
+          new UpdateDistributionBundleCommand({
+            distributionName: distributionName(ctx),
+            bundleId: bundle,
+          }),
+        );
+        return stepDone({
+          configMerge: { productId, appliedPlan: { productId }, pendingPlan: null },
+        });
+      }
+      case "set_cache_behaviors": {
+        // The web tier wrote the payload: it is checked again by the one policy rule (R9, R16).
+        const parsed = checkCachePolicy(payload);
+        if (!parsed.ok) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const policy = parsed.value;
+        await client(ctx).send(
+          new UpdateDistributionCommand({
+            distributionName: distributionName(ctx),
+            defaultCacheBehavior: { behavior: policy.defaultBehavior },
+            cacheBehaviorSettings: {
+              defaultTTL: policy.settings.defaultTtl,
+              minimumTTL: policy.settings.minimumTtl,
+              maximumTTL: policy.settings.maximumTtl,
+              allowedHTTPMethods: policy.settings.allowedHttpMethods,
+              cachedHTTPMethods: policy.settings.cachedHttpMethods,
+              forwardedCookies: { option: policy.settings.cookies },
+              forwardedHeaders: { option: policy.settings.headers },
+              forwardedQueryStrings: { option: policy.settings.queryStrings },
+            },
+            cacheBehaviors: policy.paths.map((p) => ({ path: p.path, behavior: p.behavior })),
+          }),
+        );
+        return stepDone({
+          configMerge: { cachePolicy: policy, cacheBehavior: policy.defaultBehavior },
+        });
+      }
+      case "set_cdn_origin": {
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const originId = payload?.originId;
+        if (typeof originId !== "string") throw fail("validation");
+        const origin = await checkedOrigin(ctx, originId);
+        const originClient = ctx.access.lightsail(ctx.account, origin.region, "TcProvisioner");
+        if (!(await origin.lookup(originClient))) throw fail("validation");
+        await client(ctx).send(
+          new UpdateDistributionCommand({
+            distributionName: distributionName(ctx),
+            origin: {
+              name: origin.name,
+              regionName: origin.region as RegionName,
+              ...(origin.protocolPolicy !== undefined
+                ? { protocolPolicy: origin.protocolPolicy }
+                : {}),
+            },
+          }),
+        );
+        return stepDone({ configMerge: { originId } });
+      }
+      case "request_certificate": {
+        const domain = checkedContainerCertificateDomain(payload?.domain);
+        if (domain === null) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await ensureCertificate(client(ctx), {
+          name: certificateName(ctx),
+          domain,
+          tags: certificateTags({
+            env: ctx.env,
+            customerId: ctx.resource.customerId,
+            resourceId: ctx.resource.id,
+          }),
+        });
+        return stepDone({
+          configMerge: {
+            certificate: { domain, status: "PENDING_VALIDATION", attached: false, records: [] },
+          },
+        });
+      }
+      case "refresh_certificate": {
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const lightsail = client(ctx);
+        const name = certificateName(ctx);
+        const found = await readCertificate(lightsail, name);
+        if (found === null) throw fail("validation");
+        let attached = false;
+        if (found.status === "ISSUED") {
+          const dist = await findDistribution(lightsail, distributionName(ctx));
+          if (dist === null) throw fail("upstream_unavailable");
+          attached = dist.certificateName === name;
+          if (!attached) {
+            await lightsail.send(
+              new AttachCertificateToDistributionCommand({
+                distributionName: distributionName(ctx),
+                certificateName: name,
+              }),
+            );
+            attached = true;
+          }
+        }
+        return stepDone({
+          configMerge: {
+            certificate: {
+              domain: found.domain,
+              status: found.status,
+              attached,
+              records: found.records,
+            },
+          },
+        });
+      }
       default:
         throw fail("validation");
     }

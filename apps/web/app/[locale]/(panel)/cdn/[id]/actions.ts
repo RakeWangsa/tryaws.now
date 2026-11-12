@@ -6,7 +6,16 @@ import type { FormState } from "../../../../../server/action-state.ts";
 import { destroyCdnCore, setCdnEnabledCore } from "../../../../../server/cdn-actions.ts";
 import type { CdnResult } from "../../../../../server/cdn-actions.ts";
 import { cdnActionDeps } from "../../../../../server/cdn-deps.ts";
-import { CDN_RESET_CACHE, consoleCore } from "../../../../../server/console-actions.ts";
+import {
+  CDN_CACHE_BEHAVIORS,
+  CDN_ORIGIN,
+  CDN_PLAN,
+  CDN_REFRESH_CERTIFICATE,
+  CDN_REQUEST_CERTIFICATE,
+  CDN_RESET_CACHE,
+  consoleCore,
+  type ConsoleSpec,
+} from "../../../../../server/console-actions.ts";
 import { familyActionDeps } from "../../../../../server/family-deps.ts";
 
 // The thin Server Actions of the CDN page (16.10). Each one checks the origin, calls its core (which
@@ -41,3 +50,34 @@ export async function resetCdnCacheAction(
     await consoleCore(CDN_RESET_CACHE)(familyActionDeps("cdn"), pick(form, ["cdnId", "requestId"])),
   );
 }
+
+// WPU-G8: cache behaviour, origin, plan at the next renewal, custom domain and certificate. Each action
+// names the fields it reads and no others (R11).
+const consoleAction =
+  (spec: ConsoleSpec, names: readonly string[]) =>
+  async (_previous: FormState, form: FormData): Promise<FormState> => {
+    if (!(await guardAction())) return { error: "unauthenticated" };
+    return stateOf(
+      await consoleCore(spec)(
+        familyActionDeps("cdn"),
+        pick(form, ["cdnId", "requestId", ...names]),
+      ),
+    );
+  };
+
+export const setCdnCacheBehaviorsAction = consoleAction(CDN_CACHE_BEHAVIORS, [
+  "defaultBehavior",
+  "defaultTtl",
+  "minTtl",
+  "maxTtl",
+  "allowedMethods",
+  "cachedMethods",
+  "cookies",
+  "headers",
+  "queryStrings",
+  "paths",
+]);
+export const setCdnOriginAction = consoleAction(CDN_ORIGIN, ["originId"]);
+export const scheduleCdnPlanAction = consoleAction(CDN_PLAN, ["productId", "cancel"]);
+export const requestCdnCertificateAction = consoleAction(CDN_REQUEST_CERTIFICATE, ["domain"]);
+export const refreshCdnCertificateAction = consoleAction(CDN_REFRESH_CERTIFICATE, []);

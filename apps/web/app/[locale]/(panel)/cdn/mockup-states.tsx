@@ -8,7 +8,15 @@ import ScreenLoading from "../ScreenLoading.tsx";
 import { CdnDetailContent } from "./[id]/CdnDetailContent.tsx";
 import { CdnContent } from "./CdnContent.tsx";
 import { CdnConfiguratorContent } from "./new/CdnConfiguratorContent.tsx";
-import { REQUEST_ID, configurator, detail, noopAction, row } from "./cdn.fixtures.ts";
+import {
+  PLAN_MEDIUM,
+  REQUEST_ID,
+  configurator,
+  detail,
+  noopAction,
+  origin,
+  row,
+} from "./cdn.fixtures.ts";
 
 // The renderers behind the rows of mockup-anchors.ts: one function for each state id of every CDN
 // screen, in the five states of U11 (loading, empty, error, flag off, ready) and the states that
@@ -85,6 +93,34 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "cdn_detail.ready": detailOf(detail()),
   "cdn_detail.pending_domain": detailOf(detail({ state: "creating", defaultDomain: null })),
   "cdn_detail.stopped": detailOf(detail({ state: "stopped" })),
+  "cdn_detail.pending_plan": detailOf(detail({ pendingProductId: PLAN_MEDIUM })),
+  "cdn_detail.cache_saved": detailOf(
+    detail({
+      cachePolicy: {
+        defaultBehavior: "cache",
+        defaultTtl: 3600,
+        minimumTtl: 0,
+        maximumTtl: 86400,
+        allowedHttpMethods: "GET,HEAD",
+        cachedHttpMethods: "GET,HEAD",
+        cookies: "none",
+        headers: "none",
+        queryStrings: false,
+        paths: [{ path: "images/*", behavior: "cache" }],
+      },
+    }),
+  ),
+  "cdn_detail.domain_pending": detailOf(
+    detail({
+      certificate: {
+        domain: "cdn.example.com",
+        status: "PENDING_VALIDATION",
+        attached: false,
+        records: [{ name: "_a.cdn.example.com.", type: "CNAME", value: "_b.acm.example." }],
+      },
+    }),
+  ),
+  "cdn_detail.no_other_origin": detailOf(detail({ origins: [origin()], plans: null })),
   "cdn_detail.not_found": detailOf(null),
   "cdn_detail.loading": fixed(() => <ScreenLoading lines={[2, 6]} />),
   "cdn_detail.error": fixed(errorNode),

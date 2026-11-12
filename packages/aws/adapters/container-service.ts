@@ -9,6 +9,8 @@ import {
 } from "@aws-sdk/client-lightsail";
 import {
   awsResourceName,
+  checkedContainerCertificateDomain,
+  deploymentHistoryEntry,
   parseContainerConfig,
   parseDeployment,
   resourceTags,
@@ -22,6 +24,7 @@ import {
   type StepResult,
 } from "@tc/core";
 import { AwsError } from "../errors";
+import { certificateTags, ensureCertificate, readCertificate } from "./certificate";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 
 /**
@@ -237,8 +240,19 @@ export function createContainerServiceAdapter(
     return { state: service === null ? "missing" : (service.state ?? "unknown").toLowerCase() };
   }
 
+  const LIVE = ["active", "stopped", "suspended"];
+
+  // The last ten deployments the web tier asked for: date, images, whether there is an endpoint. The
+  // environment values never leave the saved deployment (R14).
+  function historyOf(ctx: OpCtx<ContainerConfig>, deployment: Deployment) {
+    const raw = (ctx.resource.config as Record<string, unknown> | null)?.deployments;
+    const before = Array.isArray(raw) ? raw.slice(-9) : [];
+    return [...before, deploymentHistoryEntry(deployment, ctx.clock.now())];
+  }
+
   async function action(kind: OperationKind, ctx: OpCtx<ContainerConfig>): Promise<StepResult> {
     const name = serviceName(ctx);
+    const certName = awsResourceName("cert", ctx.resource.id);
     const lightsail = client(ctx);
     const payload = ctx.operation.payload as Record<string, unknown> | null;
     switch (kind) {
@@ -250,11 +264,28 @@ export function createContainerServiceAdapter(
         await lightsail.send(
           new CreateContainerServiceDeploymentCommand(awsDeployment(name, parsed.value)),
         );
-        return stepDone({ configMerge: { deployment: parsed.value } });
+        return stepDone({
+          configMerge: {
+            deployment: parsed.value,
+            deployments: historyOf(ctx, parsed.value),
+          },
+        });
+      }
+      case "schedule_plan_change": {
+        // WPU-G8: no proration in a prepaid term. The choice is stored and the renewal applies it;
+        // nothing is called in AWS and nothing is charged now. null cancels a pending change.
+        if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
+        const productId = payload?.productId;
+        if (productId === null) return stepDone({ configMerge: { pendingPlan: null } });
+        if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
+        if (productId === ctx.config.productId) throw fail("validation");
+        const plan = await deps.loadPlan({ customerId: ctx.resource.customerId, productId });
+        if (plan === null) throw fail("validation");
+        return stepDone({ configMerge: { pendingPlan: { productId } } });
       }
       case "scale_container": {
-        // Power and scale come from a catalog product that the order flow charged for, never from
-        // numbers in the payload.
+        // Queued by the renewal, never by a customer: the power and scale come from the catalog
+        // product that the renewal charged for, never from numbers in the payload.
         const productId = payload?.productId;
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (ctx.resource.state !== "active") throw fail("conflict");
@@ -267,7 +298,59 @@ export function createContainerServiceAdapter(
             scale: plan.scale,
           }),
         );
-        return stepDone({ configMerge: { productId } });
+        // The applied plan keeps pricing the later renewals (core lifecycle/plan-change).
+        return stepDone({
+          configMerge: { productId, appliedPlan: { productId }, pendingPlan: null },
+        });
+      }
+      case "request_certificate": {
+        const domain = checkedContainerCertificateDomain(payload?.domain);
+        if (domain === null) throw fail("validation");
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        await ensureCertificate(lightsail, {
+          name: certName,
+          domain,
+          tags: certificateTags({
+            env: ctx.env,
+            customerId: ctx.resource.customerId,
+            resourceId: ctx.resource.id,
+          }),
+        });
+        return stepDone({
+          configMerge: {
+            certificate: { domain, status: "PENDING_VALIDATION", attached: false, records: [] },
+          },
+        });
+      }
+      case "refresh_certificate": {
+        if (ctx.resource.state !== "active") throw fail("conflict");
+        const found = await readCertificate(lightsail, certName);
+        if (found === null) throw fail("validation");
+        let attached = false;
+        if (found.status === "ISSUED") {
+          const service = await findService(lightsail, name);
+          if (service === null) throw fail("upstream_unavailable");
+          attached = Object.hasOwn(service.publicDomainNames ?? {}, certName);
+          if (!attached) {
+            await lightsail.send(
+              new UpdateContainerServiceCommand({
+                serviceName: name,
+                publicDomainNames: { [certName]: [found.domain] },
+              }),
+            );
+            attached = true;
+          }
+        }
+        return stepDone({
+          configMerge: {
+            certificate: {
+              domain: found.domain,
+              status: found.status,
+              attached,
+              records: found.records,
+            },
+          },
+        });
       }
       default:
         throw fail("validation");

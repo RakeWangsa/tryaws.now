@@ -1,10 +1,19 @@
+import type { CustomerSession } from "@tc/auth";
 import {
+  cdnBundleFrom,
+  checkCdnOrigin,
   checkedBackupWindow,
+  checkedContainerCertificateDomain,
   checkedDomainName,
   checkedHealthPath,
   checkedMaintenanceWindow,
+  containerPlanFrom,
+  parseCachePolicy,
+  withPublicEndpoint,
 } from "@tc/core";
 import type { OperationKind } from "@tc/core";
+import type { ResourceSummary } from "@tc/db";
+import { certificateFactsOf } from "./console-view.ts";
 import {
   FAMILY_WRITE_LIMIT,
   Refusal,
@@ -16,7 +25,7 @@ import {
   record,
   uuidField,
 } from "./family-actions.ts";
-import type { FamilyActionDeps, FamilyResult } from "./family-actions.ts";
+import type { FamilyActionDeps, FamilyRepos, FamilyResult } from "./family-actions.ts";
 
 // The cores of the console actions of the customer panel (WPU-G7): load balancer settings and
 // certificate, database backup window and public mode, bucket versioning, CDN cache flush. One generic
@@ -40,6 +49,8 @@ export interface ConsoleSpec {
   audit: string;
   /** The fixed result key shown to the customer (U6). */
   done: string;
+  /** A result key that depends on the final payload (a cancelled plan change says so); default `done`. */
+  doneFor?(payload: Record<string, unknown>): string;
   /** The states in which the action may run (R13/R16: the lifecycle owns every other state). */
   states: readonly string[];
   /** The rate limit bucket. */
@@ -51,6 +62,17 @@ export interface ConsoleSpec {
    */
   alsoOwns?: { field: string; families: readonly string[]; states: readonly string[] };
   payload(input: Record<string, unknown>): ConsolePayload;
+  /**
+   * After the row of the customer was read and its state checked: the checks that need the row or a
+   * second read (the plan is in the catalog, the origin is the customer's own, the saved deployment
+   * has that port), and the final payload. Throws a `Refusal` (WPU-G8).
+   */
+  finalize?(input: {
+    payload: Record<string, unknown>;
+    row: ResourceSummary;
+    repos: FamilyRepos;
+    session: CustomerSession;
+  }): Promise<Record<string, unknown>>;
 }
 
 const clean = (v: unknown): string | undefined =>
@@ -209,6 +231,271 @@ export const CDN_RESET_CACHE: ConsoleSpec = {
   payload: () => ({ ok: true, payload: {} }),
 };
 
+// ---------------------------------------------------------------------------------------------
+// WPU-G8: container service and CDN distribution.
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const LIVE = ["active", "stopped", "suspended"] as const;
+const configOf = (row: ResourceSummary): Record<string, unknown> =>
+  typeof row.config === "object" && row.config !== null && !Array.isArray(row.config)
+    ? (row.config as Record<string, unknown>)
+    : {};
+
+function digits(value: unknown, max: number): number | null {
+  return typeof value === "string" && new RegExp(`^[0-9]{1,${max}}$`).test(value.trim())
+    ? Number(value.trim())
+    : null;
+}
+
+/** A plan change is chosen by catalog product id; "cancel" removes a pending one. Nothing is charged now. */
+function planPayload(input: Record<string, unknown>): ConsolePayload {
+  if (clean(input["cancel"]) === "yes") return { ok: true, payload: { productId: null } };
+  const id = clean(input["productId"]);
+  return id !== undefined && UUID.test(id)
+    ? { ok: true, payload: { productId: id } }
+    : { ok: false, fields: { productId: "invalid" } };
+}
+
+const planDone = (payload: Record<string, unknown>): string =>
+  payload["productId"] === null ? "planCancelled" : "planScheduled";
+
+/**
+ * The product must be on sale, of this family, in the Region of the resource, a plan of its own kind,
+ * and another plan than the current one.
+ */
+function planFinalize(
+  shaped: (awsId: unknown, specs: unknown) => boolean,
+): NonNullable<ConsoleSpec["finalize"]> {
+  return async ({ payload, row, repos }) => {
+    if (payload["productId"] === null) return payload;
+    if (repos.catalogProduct === undefined) throw new Refusal("unavailable");
+    const config = configOf(row);
+    const id = payload["productId"] as string;
+    const product = await repos.catalogProduct(id);
+    const current = typeof config["productId"] === "string" ? config["productId"] : row.productId;
+    if (
+      product === null ||
+      !product.active ||
+      product.family !== row.family ||
+      typeof config["region"] !== "string" ||
+      product.region !== config["region"] ||
+      !shaped(product.awsId, product.specs) ||
+      id === current
+    ) {
+      throw new Refusal("validation", { productId: "invalid" });
+    }
+    return payload;
+  };
+}
+
+export const CONTAINER_PLAN: ConsoleSpec = {
+  family: "container_service",
+  idField: "containerId",
+  kind: "schedule_plan_change",
+  keyPrefix: "container-plan",
+  audit: "container.schedule_plan",
+  done: "planScheduled",
+  states: LIVE,
+  limitKey: "container.plan",
+  doneFor: planDone,
+  payload: planPayload,
+  finalize: planFinalize((awsId, specs) => containerPlanFrom(awsId, specs) !== null),
+};
+
+export const CDN_PLAN: ConsoleSpec = {
+  family: "cdn",
+  idField: "cdnId",
+  kind: "schedule_plan_change",
+  keyPrefix: "cdn-plan",
+  audit: "cdn.schedule_plan",
+  done: "planScheduled",
+  states: LIVE,
+  limitKey: "cdn.plan",
+  doneFor: planDone,
+  payload: planPayload,
+  finalize: planFinalize((awsId) => cdnBundleFrom(awsId) !== null),
+};
+
+/** One certificate per resource: a second request is refused (the adapter names it by the resource). */
+const noCertificateYet: NonNullable<ConsoleSpec["finalize"]> = async ({ payload, row }) => {
+  if (certificateFactsOf(configOf(row)["certificate"]) !== null) throw new Refusal("not_allowed");
+  return payload;
+};
+
+const domainPayload = (input: Record<string, unknown>): ConsolePayload => {
+  const domain = checkedContainerCertificateDomain(input["domain"]);
+  return domain === null
+    ? { ok: false, fields: { domain: "invalid" } }
+    : { ok: true, payload: { domain } };
+};
+
+export const CONTAINER_REQUEST_CERTIFICATE: ConsoleSpec = {
+  family: "container_service",
+  idField: "containerId",
+  kind: "request_certificate",
+  keyPrefix: "container-cert",
+  audit: "container.request_certificate",
+  done: "certificateQueued",
+  states: ["active"],
+  limitKey: "container.cert",
+  payload: domainPayload,
+  finalize: noCertificateYet,
+};
+
+export const CONTAINER_REFRESH_CERTIFICATE: ConsoleSpec = {
+  family: "container_service",
+  idField: "containerId",
+  kind: "refresh_certificate",
+  keyPrefix: "container-cert-refresh",
+  audit: "container.refresh_certificate",
+  done: "certificateRefreshQueued",
+  states: ["active"],
+  limitKey: "container.cert",
+  payload: () => ({ ok: true, payload: {} }),
+};
+
+export const CDN_REQUEST_CERTIFICATE: ConsoleSpec = {
+  family: "cdn",
+  idField: "cdnId",
+  kind: "request_certificate",
+  keyPrefix: "cdn-cert",
+  audit: "cdn.request_certificate",
+  done: "certificateQueued",
+  states: ["active"],
+  limitKey: "cdn.cert",
+  payload: domainPayload,
+  finalize: noCertificateYet,
+};
+
+export const CDN_REFRESH_CERTIFICATE: ConsoleSpec = {
+  family: "cdn",
+  idField: "cdnId",
+  kind: "refresh_certificate",
+  keyPrefix: "cdn-cert-refresh",
+  audit: "cdn.refresh_certificate",
+  done: "certificateRefreshQueued",
+  states: ["active"],
+  limitKey: "cdn.cert",
+  payload: () => ({ ok: true, payload: {} }),
+};
+
+/** Cache behaviour: the whole policy, default plus per-path rules, from closed lists and bounded numbers. */
+export const CDN_CACHE_BEHAVIORS: ConsoleSpec = {
+  family: "cdn",
+  idField: "cdnId",
+  kind: "set_cache_behaviors",
+  keyPrefix: "cdn-cache",
+  audit: "cdn.set_cache_behaviors",
+  done: "cacheQueued",
+  states: ["active"],
+  limitKey: "cdn.cache",
+  payload(input) {
+    const parsed = parseCachePolicy({
+      defaultBehavior: clean(input["defaultBehavior"]),
+      defaultTtl: input["defaultTtl"],
+      minTtl: input["minTtl"],
+      maxTtl: input["maxTtl"],
+      allowedMethods: clean(input["allowedMethods"]),
+      cachedMethods: clean(input["cachedMethods"]),
+      cookies: clean(input["cookies"]),
+      headers: clean(input["headers"]),
+      queryStrings: clean(input["queryStrings"]),
+      paths: typeof input["paths"] === "string" ? input["paths"] : "",
+    });
+    return parsed.ok
+      ? { ok: true, payload: { ...parsed.value } as unknown as Record<string, unknown> }
+      : { ok: false, fields: parsed.fields ?? { cache: "invalid" } };
+  },
+};
+
+/** Origin change: only a server, load balancer or bucket of the SAME customer, by id (R8, R11). */
+export const CDN_ORIGIN: ConsoleSpec = {
+  family: "cdn",
+  idField: "cdnId",
+  kind: "set_cdn_origin",
+  keyPrefix: "cdn-origin",
+  audit: "cdn.set_origin",
+  done: "originQueued",
+  states: ["active"],
+  limitKey: "cdn.origin",
+  payload(input) {
+    const id = clean(input["originId"]);
+    return id !== undefined && UUID.test(id)
+      ? { ok: true, payload: { originId: id } }
+      : { ok: false, fields: { originId: "invalid" } };
+  },
+  async finalize({ payload, row, repos, session }) {
+    const id = payload["originId"] as string;
+    // The scoped repository answers for the customer's own rows only; another customer's id is null.
+    const candidate = await repos.resources.get(id);
+    const checked = checkCdnOrigin({
+      customerId: session.customerId,
+      requested: id,
+      candidate:
+        candidate === null
+          ? null
+          : {
+              id: candidate.id,
+              customerId: session.customerId,
+              family: candidate.family,
+              state: candidate.state,
+            },
+    });
+    if (!checked.ok || id === configOf(row)["originId"]) {
+      throw new Refusal("validation", { originId: "invalid" });
+    }
+    return payload;
+  },
+};
+
+/**
+ * The public endpoint of a container service: which container, which port, which health check path
+ * (or none at all). A public endpoint is part of a deployment in Lightsail, so this makes a new
+ * deployment of the SAME containers (read from the saved deployment, with their environment kept on
+ * the server) with the changed endpoint.
+ */
+export const CONTAINER_ENDPOINT: ConsoleSpec = {
+  family: "container_service",
+  idField: "containerId",
+  kind: "deploy_containers",
+  keyPrefix: "container-endpoint",
+  audit: "container.set_endpoint",
+  done: "endpointQueued",
+  states: ["active"],
+  limitKey: "container.write",
+  payload(input) {
+    if (clean(input["remove"]) === "yes") return { ok: true, payload: { remove: true } };
+    const fields: Record<string, string> = {};
+    const container = digits(clean(input["container"]) ?? "1", 2);
+    const port = digits(clean(input["port"]), 5);
+    if (container === null || container < 1) fields["container"] = "invalid";
+    if (port === null) fields["port"] = "invalid";
+    if (Object.keys(fields).length > 0) return { ok: false, fields };
+    const path = clean(input["healthCheckPath"]);
+    return {
+      ok: true,
+      payload: { container, port, ...(path !== undefined ? { healthCheckPath: path } : {}) },
+    };
+  },
+  async finalize({ payload, row }) {
+    const saved = configOf(row)["deployment"];
+    const built = withPublicEndpoint(
+      saved,
+      payload["remove"] === true
+        ? null
+        : {
+            container: payload["container"] as number,
+            port: payload["port"] as number,
+            ...(typeof payload["healthCheckPath"] === "string"
+              ? { healthCheckPath: payload["healthCheckPath"] }
+              : {}),
+          },
+    );
+    if (!built.ok) throw new Refusal("validation", built.fields ?? { endpoint: "invalid" });
+    return built.value;
+  },
+};
+
 /** The core of one console action. */
 export function consoleCore(
   spec: ConsoleSpec,
@@ -224,7 +511,7 @@ export function consoleCore(
       deps,
       { destructive: false, limits: FAMILY_WRITE_LIMIT(spec.limitKey) },
       parseOf(bad),
-      async (repos) => {
+      async (repos, session) => {
         const row = await ownResource(repos, spec.family, id);
         if (!spec.states.includes(row.state)) throw new Refusal("not_allowed");
         if (spec.alsoOwns !== undefined) {
@@ -241,11 +528,16 @@ export function consoleCore(
             throw new Refusal("not_found");
           }
         }
+        const checked = (built as { ok: true; payload: Record<string, unknown> }).payload;
+        const payload =
+          spec.finalize === undefined
+            ? checked
+            : await spec.finalize({ payload: checked, row, repos, session });
         const written = await repos.operations.request({
           resourceId: row.id,
           kind: spec.kind,
           idempotencyKey: `${spec.keyPrefix}:${requestId}`,
-          payload: (built as { ok: true; payload: Record<string, unknown> }).payload,
+          payload,
         });
         if (!written.ok) {
           throw new Refusal(
@@ -257,7 +549,7 @@ export function consoleCore(
           );
         }
         await audit(repos, spec.audit, row.id);
-        return { ok: true, done: spec.done };
+        return { ok: true, done: spec.doneFor?.(payload) ?? spec.done };
       },
     );
   };

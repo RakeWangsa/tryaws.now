@@ -77,6 +77,13 @@ export function detail(over: Partial<ContainerDetail> = {}): ContainerDetail {
     ],
     createdAt: new Date("2026-11-10T08:00:00Z"),
     destroyOpen: true,
+    endpointContainer: 1,
+    currentProductId: PLAN_NANO,
+    pendingProductId: null,
+    plans: [plan(), plan({ id: PLAN_MICRO, power: "micro", scale: 2, priceMinor: 250000n })],
+    renewsAt: new Date("2026-12-10T08:00:00Z"),
+    certificate: null,
+    history: [{ at: new Date("2026-11-11T08:00:00Z"), images: ["nginx:1.27"], endpoint: true }],
     ...over,
   };
 }

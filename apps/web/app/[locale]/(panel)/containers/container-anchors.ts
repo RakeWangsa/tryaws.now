@@ -143,6 +143,18 @@ export const CONTAINER_ANCHORS: readonly MockupAnchor[] = [
     classes: ["bg-seccolorstyle", "noshadow", "wrapper", "title"],
   },
   {
+    state: "containers_detail.ready_pending",
+    mockupFile: "template/cart.html",
+    why: "the plan tab with a change set for the next renewal keeps the card and tile classes",
+    classes: ["bg-seccolorstyle", "noshadow", "wrapper", "title"],
+  },
+  {
+    state: "containers_detail.domain_issued",
+    mockupFile: "template/cart.html",
+    why: "the domain tab with the validation records keeps the card and table classes",
+    classes: ["bg-seccolorstyle", "noshadow", "table", "compare"],
+  },
+  {
     state: "containers_detail.deploy",
     mockupFile: "template/configurator.html",
     why: "the deploy form uses the option groups of the configurator: a select and a checkbox",

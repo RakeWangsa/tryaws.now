@@ -349,6 +349,32 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  // WPU-G8: container service and CDN console actions. One proof for all: the table of console-g8-actions.test.ts
+  // runs every spec with a foreign id and a missing id and shows one answer and nothing queued.
+  ...Object.fromEntries(
+    [
+      "containers/[id]/actions.ts#scheduleContainerPlanAction",
+      "containers/[id]/actions.ts#requestContainerCertificateAction",
+      "containers/[id]/actions.ts#refreshContainerCertificateAction",
+      "containers/[id]/actions.ts#setContainerEndpointAction",
+      "cdn/[id]/actions.ts#setCdnCacheBehaviorsAction",
+      "cdn/[id]/actions.ts#setCdnOriginAction",
+      "cdn/[id]/actions.ts#scheduleCdnPlanAction",
+      "cdn/[id]/actions.ts#requestCdnCertificateAction",
+      "cdn/[id]/actions.ts#refreshCdnCertificateAction",
+    ].map((name): [string, EndpointEntry] => [
+      `app/[locale]/(panel)/${name}`,
+      {
+        kind: "id",
+        proof: [
+          proof(
+            `${W}console-g8-actions.test.ts`,
+            "another customer's row and a missing one give one answer, and nothing is queued (R8)",
+          ),
+        ],
+      },
+    ]),
+  ),
   "app/[locale]/(panel)/load-balancers/[id]/actions.ts#setLoadBalancerTargetsAction": {
     kind: "id",
     proof: [

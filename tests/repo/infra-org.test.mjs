@@ -893,7 +893,12 @@ describe("security review rules (WP0-T5 review)", () => {
     const role = roleByName(tpl["pool-roles.yaml"], "TcProvisioner");
     const [doc] = rolePolicyDocs(role);
     const s = statementsOf(doc).find((x) => actionsOf(x).includes("lightsail:UpdateBucket"));
-    expect(actionsOf(s).sort()).toEqual(["lightsail:UpdateBucket", "lightsail:UpdateDistribution"]);
+    expect(actionsOf(s).sort()).toEqual([
+      "lightsail:AttachCertificateToDistribution",
+      "lightsail:UpdateBucket",
+      "lightsail:UpdateDistribution",
+      "lightsail:UpdateDistributionBundle",
+    ]);
     expect(s.Condition.Null).toEqual({ "aws:ResourceTag/tc:resource": "false" });
     expect(s.Resource).not.toContain("*");
     const text = read(join(orgDir, "pool-roles.yaml"));

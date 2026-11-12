@@ -167,6 +167,102 @@ describe("deploymentFromForm (what the fields of the form become)", () => {
   });
 });
 
+describe("deploymentFromForm: several containers, several ports and a command (WPU-G8)", () => {
+  const base = { image: "nginx:1.27", port: "80, 8080/TCP", protocol: "HTTP", environment: "" };
+
+  it("reads a port list with an optional protocol each, and a command with one argument per line", () => {
+    expect(deploymentFromForm({ ...base, command: "nginx\n-g\ndaemon off;\n\n" })).toEqual({
+      ok: true,
+      value: {
+        containers: [
+          {
+            image: "nginx:1.27",
+            ports: [
+              { port: 80, protocol: "HTTP" },
+              { port: 8080, protocol: "TCP" },
+            ],
+            command: ["nginx", "-g", "daemon off;"],
+          },
+        ],
+      },
+    });
+  });
+
+  it("adds a second and a third container only when something was typed for them", () => {
+    const r = deploymentFromForm({
+      ...base,
+      image2: "redis:7",
+      port2: "6379",
+      protocol2: "TCP",
+      environment2: "MAXMEM=64mb",
+      publicEndpoint: "on",
+      endpointContainer: "1",
+      endpointPort: "8080",
+    });
+    expect(r).toEqual({
+      ok: true,
+      value: {
+        containers: [
+          {
+            image: "nginx:1.27",
+            ports: [
+              { port: 80, protocol: "HTTP" },
+              { port: 8080, protocol: "TCP" },
+            ],
+          },
+          {
+            image: "redis:7",
+            ports: [{ port: 6379, protocol: "TCP" }],
+            environment: { MAXMEM: "64mb" },
+          },
+        ],
+        publicEndpoint: { container: 0, port: 8080 },
+      },
+    });
+    const only = deploymentFromForm({ ...base, image3: "", port3: "" });
+    expect(only.ok && (only.value["containers"] as unknown[]).length).toBe(1);
+  });
+
+  it("points the endpoint at the chosen container and its first port when no port is given", () => {
+    const r = deploymentFromForm({
+      ...base,
+      image2: "api:1",
+      port2: "3000",
+      publicEndpoint: "on",
+      endpointContainer: "2",
+      healthCheckPath: "/up",
+    });
+    expect(r.ok && r.value["publicEndpoint"]).toEqual({
+      container: 1,
+      port: 3000,
+      healthCheckPath: "/up",
+    });
+  });
+
+  it("names the field of the container that is wrong", () => {
+    const field = (over: Record<string, string>) => {
+      const r = deploymentFromForm({ ...base, ...over });
+      return r.ok ? null : r.fields;
+    };
+    expect(field({ image2: "", port2: "80" })).toEqual({ image2: "invalid" });
+    expect(field({ image2: "x", environment2: "bad" })).toEqual({ environment2: "invalid" });
+    expect(field({ image2: "x", port2: "99999" })).toEqual({ port2: "invalid" });
+    expect(field({ port: "80, 80" })).toEqual({ port: "invalid" });
+    expect(field({ command: "a\u0007b" })).toEqual({ command: "invalid" });
+    expect(field({ command2: "x", image2: "x", port2: "1" })).toBeNull();
+    // the endpoint names a container that was not filled in, or a port it does not declare
+    expect(field({ publicEndpoint: "on", endpointContainer: "3" })).toEqual({
+      endpointContainer: "invalid",
+    });
+    expect(field({ publicEndpoint: "on", endpointPort: "9" })).toEqual({ endpointPort: "invalid" });
+  });
+
+  it("never carries an environment value into an error", () => {
+    const r = deploymentFromForm({ ...base, environment: "TOKEN=hunter2\nbad line" });
+    expect(JSON.stringify(r)).not.toContain("hunter2");
+  });
+});
+
 describe("deployContainersCore", () => {
   it("authenticates, rates, writes deploy_containers with a stable key and audits, in order (R9, R7)", async () => {
     const { deps, calls, payloads } = world();

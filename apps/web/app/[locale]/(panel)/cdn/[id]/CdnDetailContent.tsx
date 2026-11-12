@@ -1,11 +1,26 @@
 import type { ReactNode } from "react";
-import { Button, Card, CopyField, EmptyState, StatTile, Tabs, formatDate } from "@tc/ui";
+import {
+  Button,
+  Card,
+  CopyField,
+  EmptyState,
+  StatTile,
+  Tabs,
+  formatDate,
+  formatMoney,
+} from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { FormState } from "../../../../../server/action-state.ts";
 import type { CdnDetail } from "../../../../../server/cdn-view.ts";
 import { CdnState, useOriginLabel } from "../CdnParts.tsx";
+import {
+  CacheBehaviorForm,
+  CertificatePanel,
+  OriginForm,
+  PlanChangeForm,
+} from "../../_console/PlanAndCertForms.tsx";
 import { DestroyPanel, EnabledForm } from "./CdnForms.tsx";
 
 // The content of /cdn/[id] (16.10): a header and the tabs Overview, Settings and Delete. A
@@ -15,6 +30,16 @@ import { DestroyPanel, EnabledForm } from "./CdnForms.tsx";
 
 type Numerals = "beng" | "latn";
 type Action = (previous: FormState, form: FormData) => Promise<FormState>;
+
+/** One request id for each form of the page (R7): two forms never share an idempotency key. */
+export interface CdnFormIds {
+  cache: string;
+  origin: string;
+  plan: string;
+  planCancel: string;
+  cert: string;
+  certRefresh: string;
+}
 
 // Used when no Server Action is passed (the static mockup states): the form refuses (R16).
 const refuse: Action = async () => ({ error: "unavailable" });
@@ -26,6 +51,12 @@ export function CdnDetailContent({
   requestId,
   enabledAction = refuse,
   destroyAction = refuse,
+  cacheAction = refuse,
+  originAction = refuse,
+  planAction = refuse,
+  certRequestAction = refuse,
+  certRefreshAction = refuse,
+  ids,
   defaultTab,
   extra = null,
 }: {
@@ -36,11 +67,19 @@ export function CdnDetailContent({
   requestId: string;
   enabledAction?: Action;
   destroyAction?: Action;
+  /** WPU-G8: cache behaviour, origin, plan at the next renewal, custom domain and certificate. */
+  cacheAction?: Action;
+  originAction?: Action;
+  planAction?: Action;
+  certRequestAction?: Action;
+  certRefreshAction?: Action;
+  ids?: CdnFormIds;
   defaultTab?: string;
   /** The cache flush form (WPU-G7), built by the page. */
   extra?: ReactNode;
 }) {
   const t = useTranslations("Cdn");
+  const tc = useTranslations("Console");
   const originLabel = useOriginLabel();
   const listHref = localePath(locale, "/cdn");
 
@@ -114,7 +153,87 @@ export function CdnDetailContent({
     </>
   );
 
+  const money = (minor: bigint) => formatMoney(minor, { locale, numerals });
+  const bundleName = (bundle: string): string =>
+    t(`plan.${bundle === "small_1_0" ? "small" : bundle === "medium_1_0" ? "medium" : "large"}`);
+  const planNameOf = (id: string | null): string | null => {
+    const found = id === null ? undefined : cdn.plans?.find((p) => p.id === id);
+    return found === undefined ? null : bundleName(found.bundle);
+  };
+  const pending = cdn.pendingProductId;
+  const pendingPlan = pending === null ? undefined : cdn.plans?.find((p) => p.id === pending);
   const live = cdn.state === "active" || cdn.state === "stopped" || cdn.state === "suspended";
+
+  const cache = (
+    <CacheBehaviorForm
+      action={cacheAction}
+      cdnId={cdn.id}
+      requestId={ids?.cache ?? requestId}
+      policy={cdn.cachePolicy}
+      allowed={cdn.state === "active"}
+    />
+  );
+  const origin = (
+    <OriginForm
+      action={originAction}
+      cdnId={cdn.id}
+      requestId={ids?.origin ?? requestId}
+      currentName={originLabel(cdn.originName, cdn.originKind)}
+      allowed={cdn.state === "active"}
+      choices={cdn.origins
+        .filter((o) => o.id !== cdn.originId)
+        .map((o) => ({
+          id: o.id,
+          label: `${tc(`origin.${o.kind}`)}${o.name === "" ? "" : `: ${o.name}`}`,
+        }))}
+    />
+  );
+  const plan = (
+    <PlanChangeForm
+      action={planAction}
+      idField="cdnId"
+      resourceId={cdn.id}
+      requestId={ids?.plan ?? requestId}
+      cancelRequestId={ids?.planCancel ?? requestId}
+      kind="cdn"
+      currentName={planNameOf(cdn.currentProductId)}
+      renewsText={
+        cdn.renewsAt === null
+          ? null
+          : tc("plan.renews", { date: formatDate(cdn.renewsAt, { locale, numerals }) })
+      }
+      pendingText={
+        pending === null
+          ? null
+          : pendingPlan === undefined
+            ? tc("plan.pendingGone")
+            : tc("plan.pending", {
+                name: bundleName(pendingPlan.bundle),
+                price: money(pendingPlan.priceMinor),
+              })
+      }
+      hasPending={pending !== null}
+      state={!live ? "inactive" : cdn.plans === null ? "unpriced" : "ready"}
+      choices={(cdn.plans ?? [])
+        .filter((p) => p.id !== cdn.currentProductId)
+        .map((p) => ({
+          id: p.id,
+          label: tc("plan.option", { name: bundleName(p.bundle), price: money(p.priceMinor) }),
+        }))}
+    />
+  );
+  const domain = (
+    <CertificatePanel
+      requestAction={certRequestAction}
+      refreshAction={certRefreshAction}
+      idField="cdnId"
+      resourceId={cdn.id}
+      requestId={ids?.cert ?? requestId}
+      refreshRequestId={ids?.certRefresh ?? requestId}
+      certificate={cdn.certificate}
+      allowed={cdn.state === "active"}
+    />
+  );
   const destroy = (
     <>
       <h3 className="mergecolor h4">{t("detail.destroy.title")}</h3>
@@ -150,9 +269,14 @@ export function CdnDetailContent({
           tabs={[
             { id: "overview", title: t("detail.tab.overview"), content: overview },
             { id: "settings", title: t("detail.tab.settings"), content: settings },
+            { id: "cache", title: tc("tab.cache"), content: cache },
+            { id: "origin", title: tc("tab.origin"), content: origin },
+            { id: "plan", title: tc("tab.plan"), content: plan },
+            { id: "domain", title: tc("tab.domain"), content: domain },
             { id: "destroy", title: t("detail.tab.destroy"), content: destroy },
           ]}
-          {...(defaultTab !== undefined && ["settings", "destroy"].includes(defaultTab)
+          {...(defaultTab !== undefined &&
+          ["settings", "cache", "origin", "plan", "domain", "destroy"].includes(defaultTab)
             ? { defaultId: defaultTab }
             : {})}
         />

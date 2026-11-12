@@ -4,6 +4,7 @@ import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
 import type { Posting } from "../ledger/types";
 import { accountFor } from "../pricing/index";
+import { planPriceFor } from "./plan-change";
 import { parseSnapshot, type PriceSnapshot } from "../pricing/snapshot";
 import { quoteInForce } from "../rates/in-force";
 import type { Clock, Result } from "../types";
@@ -25,12 +26,17 @@ export async function renewalQuote(
   } catch {
     return { ok: false, error: "internal", fields: { priceSnapshot: "invalid" } };
   }
+  // WPU-G8: a pending or applied plan change is priced from its catalog row, by the same engine.
+  const plan = await planPriceFor(tx, row);
+  if (plan.state === "unreadable") {
+    return { ok: false, error: "internal", fields: { plan: "unreadable" } };
+  }
   const priced = await quoteInForce(
     tx,
     {
       market: row.market,
       productFamily: row.resource.family,
-      awsPriceUsd: stored.awsPriceUsd,
+      awsPriceUsd: plan.state === "snapshot" ? stored.awsPriceUsd : plan.awsPriceUsd,
       quantity: stored.quantity,
     },
     clock,
