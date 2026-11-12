@@ -142,7 +142,14 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
 
-  functions/migrator: {}
+  functions/migrator:
+    dependencies:
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@tc/db':
+        specifier: workspace:*
+        version: link:../../packages/db
 
   functions/notifier:
     dependencies:

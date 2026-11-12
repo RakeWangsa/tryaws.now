@@ -225,9 +225,8 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
   {
     dir: "migrator",
     component: "Migrator",
-    // functions/migrator/index.ts is empty today (`export {}`); the handler comes with the migrations task.
     handlerExport: "handler",
-    exportExists: false,
+    exportExists: true,
     placement: "app",
     dbRole: "migrator",
     secrets: [],

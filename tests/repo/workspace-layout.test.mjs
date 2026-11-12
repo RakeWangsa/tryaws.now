@@ -51,7 +51,11 @@ const tsconfigExtras = {
 
 // @tc/db also publishes its test helpers to the test files of other packages (WP1-T2).
 const EXPORTS = {
-  "packages/db": { ".": "./index.ts", "./testing": "./testing/index.ts" },
+  "packages/db": {
+    ".": "./index.ts",
+    "./migrate": "./migrate.ts",
+    "./testing": "./testing/index.ts",
+  },
   "packages/eps": { ".": "./index.ts", "./redirect": "./redirect.ts" },
   // "./admin-ip": the pure allowlist functions, light enough for the proxy of the admin app (WP8-T1).
   // "./proxy": the session refresh and the pool config for proxy.ts of the customer app, which must

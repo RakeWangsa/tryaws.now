@@ -334,6 +334,11 @@ describe("WP0-T3: database, proxy and roles", () => {
     expect(admin).toContain("link: [secrets.db.admin_rw]");
   });
 
+  it("ships the migrations folder with the migrator and tells it where it is", () => {
+    expect(workers).toContain('copyFiles: [{ from: "packages/db/migrations", to: "migrations" }]');
+    expect(workers).toContain('env.MIGRATIONS_DIR = "/var/task/migrations"');
+  });
+
   it("runs the migrator at deploy time, in the VPC", () => {
     expect(workers).toContain('new sst.aws.Function("Migrator"');
     expect(workers).toContain('new aws.lambda.Invocation("MigratorRun"');

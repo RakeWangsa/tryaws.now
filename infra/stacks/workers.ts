@@ -73,6 +73,10 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
   if (spec.dir === "provisioner" || spec.dir === "scheduler") {
     env.PROVISIONING_QUEUE_URL = queues.provisioning.url;
   }
+  if (spec.dir === "migrator") {
+    // copyFiles (functionArgs) puts packages/db/migrations here, next to the bundle.
+    env.MIGRATIONS_DIR = "/var/task/migrations";
+  }
   if (spec.dir === "payments-sweeper") {
     env.EPS_MODE = config.tcStage === "production" ? "production" : "sandbox";
     env.PUBLIC_BASE_URL = `https://${config.webDomain}`;
@@ -115,6 +119,11 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
     handler: `functions/${spec.dir}/index.${spec.handlerExport}`,
     timeout: `${spec.timeoutSeconds} seconds`,
     memory: `${spec.memoryMb} MB`,
+    // VERIFY: `copyFiles` of sst.aws.Function copies the folder into the deployment package; the
+    // migrator reads the SQL files at run time (they are not bundled).
+    ...(spec.dir === "migrator"
+      ? { copyFiles: [{ from: "packages/db/migrations", to: "migrations" }] }
+      : {}),
     vpc: vpcOf(spec, inputs.net),
     link: linksOf(spec, inputs),
     permissions: permissionsOf(spec, inputs),

@@ -16,7 +16,11 @@ it("@tc/db has its migration scripts, its entry and its testing entry", () => {
     migrate: "drizzle-kit migrate",
     generate: "drizzle-kit generate",
   });
-  expect(dbPkg.exports).toEqual({ ".": "./index.ts", "./testing": "./testing/index.ts" });
+  expect(dbPkg.exports).toEqual({
+    ".": "./index.ts",
+    "./migrate": "./migrate.ts",
+    "./testing": "./testing/index.ts",
+  });
 });
 
 it("docker-compose.yml runs PostgreSQL 16 on the loopback address only", () => {
