@@ -1,0 +1,186 @@
+// WP0-T3/T4: the Lambda functions of functions/ (3.2), each with the least privilege its row allows.
+//
+// - Only provisioner, reader, access-details, catalog-sync and reconciler may assume roles in pool or
+//   DNS accounts (infra/lib/functions.ts, POOL_ROLE_FUNCTIONS). The role ARNs are built from the
+//   environment of the deploy (assumableRoleArns); no account id is written in the repository.
+// - Each function links only the secrets it uses, and only the database password of its own role.
+//   Only the migrator links the Postgres component (the master user) and all five role passwords.
+// - Role names are fixed (roleName), so the trust policies of the pool accounts can name them with an
+//   aws:PrincipalArn condition (6.3).
+//
+// NOT TYPE-CHECKED, see network.ts.
+import { PROVISIONING_QUEUE } from "../../packages/core/operations/queue-config";
+import { DB_ROLES, FUNCTIONS, type FunctionSpec } from "../lib/functions";
+import { assumableRoleArns, roleName, type StageConfig } from "../lib/stage";
+import type { Database } from "./database";
+import type { Messaging } from "./messaging";
+import type { Network } from "./network";
+import type { Secrets } from "./secrets";
+import type { Storage } from "./storage";
+
+export interface WorkerInputs {
+  readonly config: StageConfig;
+  readonly net: Network;
+  readonly db: Database;
+  readonly secrets: Secrets;
+  readonly queues: Messaging;
+  readonly storage: Storage;
+}
+
+function permissionsOf(spec: FunctionSpec, inputs: WorkerInputs) {
+  const { config, queues, storage } = inputs;
+  const permissions: { actions: string[]; resources: unknown[] }[] = [];
+  const roles = [...new Set(spec.poolRoles)];
+  if (roles.length > 0) {
+    permissions.push({
+      actions: ["sts:AssumeRole"],
+      resources: roles.flatMap((role) => assumableRoleArns(role, config)),
+    });
+  }
+  if (spec.dir === "provisioner" || spec.dir === "scheduler") {
+    permissions.push({ actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] });
+  }
+  if (spec.dir === "notifier") {
+    permissions.push({ actions: ["ses:SendEmail"], resources: [config.sesIdentityArn] });
+  }
+  if (spec.dir === "invoice-renderer") {
+    permissions.push(
+      { actions: ["s3:PutObject"], resources: [$interpolate`${storage.invoices.arn}/*`] },
+      { actions: ["kms:GenerateDataKey"], resources: [storage.filesKey.arn] },
+    );
+  }
+  return permissions;
+}
+
+function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string, unknown> {
+  const { config, db, queues } = inputs;
+  const env: Record<string, unknown> = {
+    TC_STAGE: config.tcStage,
+    TC_ENV: config.tcStage,
+  };
+  if (spec.dbRole !== "none") {
+    // R2: through the proxy, TLS only. The password comes from the linked secret of this role.
+    // HAND-OFF: packages/db reads DATABASE_URL (packages/db/env.ts). A task of packages/db must
+    // build the URL at run time from these variables and the linked password (JOURNEY.md).
+    env.DB_HOST = db.connection.host;
+    env.DB_PORT = db.connection.port;
+    env.DB_NAME = db.connection.name;
+    env.DB_USER = spec.dbRole;
+    env.DB_SSLMODE = "verify-full";
+  }
+  if (spec.dir === "provisioner" || spec.dir === "scheduler") {
+    env.PROVISIONING_QUEUE_URL = queues.provisioning.url;
+  }
+  if (spec.dir === "payments-sweeper") {
+    env.EPS_MODE = config.tcStage === "production" ? "production" : "sandbox";
+    env.PUBLIC_BASE_URL = `https://${config.webDomain}`;
+  }
+  if (spec.dir === "catalog-sync") {
+    env.CATALOG_POOL_ACCOUNT_ID = config.poolAccountIds[0];
+    env.CATALOG_REGIONS = "ap-southeast-1";
+    env.CATALOG_DNS_ACCOUNT_ID = config.dnsAccountId;
+    env.CATALOG_DNS_EXTERNAL_ID = config.dnsExternalId;
+  }
+  return env;
+}
+
+function linksOf(spec: FunctionSpec, inputs: WorkerInputs): unknown[] {
+  const { secrets, db } = inputs;
+  const links: unknown[] = spec.secrets.map((name) => secrets.app[name]);
+  if (spec.dbRole === "worker_rw") links.push(secrets.db.worker_rw);
+  if (spec.dbRole === "migrator") {
+    // Alone among the functions: the master user (to create the roles) and the five passwords.
+    links.push(db.postgres, ...DB_ROLES.map((role) => secrets.db[role]));
+  }
+  return links;
+}
+
+function vpcOf(spec: FunctionSpec, net: Network) {
+  if (spec.placement === "app") {
+    return { privateSubnets: net.vpc.privateSubnets, securityGroups: [net.appSecurityGroup.id] };
+  }
+  if (spec.placement === "isolated") {
+    return {
+      privateSubnets: net.isolatedSubnetIds,
+      securityGroups: [net.isolatedSecurityGroup.id],
+    };
+  }
+  return undefined;
+}
+
+export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
+  return {
+    handler: `functions/${spec.dir}/index.${spec.handlerExport}`,
+    timeout: `${spec.timeoutSeconds} seconds`,
+    memory: `${spec.memoryMb} MB`,
+    vpc: vpcOf(spec, inputs.net),
+    link: linksOf(spec, inputs),
+    permissions: permissionsOf(spec, inputs),
+    environment: environmentOf(spec, inputs),
+    transform: {
+      role: (args: { name?: string }) => {
+        // VERIFY: the docs do not say that transform.role may set the IAM role name; the Pulumi
+        // aws.iam.Role `name` argument is what is set here.
+        args.name = roleName(inputs.config.stage, spec.dir);
+      },
+    },
+  };
+}
+
+function specOf(dir: string): FunctionSpec {
+  const spec = FUNCTIONS.find((f) => f.dir === dir);
+  if (spec === undefined) throw new Error(`no function spec for ${dir}`);
+  return spec;
+}
+
+export function workers(inputs: WorkerInputs) {
+  const { queues } = inputs;
+
+  // provisioner: SQS FIFO, one message per invocation, partial batch responses (queue-config.ts).
+  // VERIFY: queue.subscribe takes function args here and applies `batch` to the event source mapping.
+  const provisionerSpec = specOf("provisioner");
+  queues.provisioning.subscribe(functionArgs(provisionerSpec, inputs), {
+    batch: {
+      size: PROVISIONING_QUEUE.batchSize,
+      partialResponses: PROVISIONING_QUEUE.reportBatchItemFailures,
+    },
+  });
+
+  // Invoked by web and admin: plain functions, no URL (no function URL at all).
+  const invoked = Object.fromEntries(
+    FUNCTIONS.filter((f) => f.trigger.kind === "invoke").map((f) => [
+      f.dir,
+      new sst.aws.Function(f.component, functionArgs(f, inputs)),
+    ]),
+  );
+
+  // Scheduled: EventBridge Scheduler (sst.aws.CronV2), retry policy 0 (the functions are idempotent
+  // and the next run repeats the work). VERIFY: CronV2 args `schedule`, `function`, `retries`.
+  const crons = Object.fromEntries(
+    FUNCTIONS.filter((f) => f.trigger.kind === "cron").map((f) => {
+      const trigger = f.trigger as { schedule: string };
+      return [
+        f.dir,
+        new sst.aws.CronV2(f.component, {
+          schedule: trigger.schedule,
+          function: functionArgs(f, inputs),
+          retries: 0,
+        }),
+      ];
+    }),
+  );
+
+  // Deploy time: the migrator creates the roles and runs the migrations with the master user.
+  // VERIFY: aws.lambda.Invocation re-runs when `triggers` change; a changing value runs it on every
+  // deploy, which is safe because migrations are forward-only and idempotent (R15).
+  const migrator = new sst.aws.Function("Migrator", functionArgs(specOf("migrator"), inputs));
+  const migration = new aws.lambda.Invocation("MigratorRun", {
+    functionName: migrator.name,
+    input: JSON.stringify({ action: "migrate" }),
+    triggers: { run: String(Date.now()) },
+  });
+
+  return { invoked, crons, migrator, migration };
+}
+
+export type Workers = ReturnType<typeof workers>;
