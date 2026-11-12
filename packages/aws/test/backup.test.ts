@@ -315,7 +315,13 @@ describe("restore to a new server (WP5-T1 proof)", () => {
     aws.on(
       "lightsail",
       "GetInstance",
-      lightsailOk({ instance: { name: NEW_INSTANCE, state: { name: "running" } } }),
+      lightsailOk({
+        instance: {
+          name: NEW_INSTANCE,
+          publicIpAddress: "52.220.10.20",
+          state: { name: "running" },
+        },
+      }),
     );
     const r2 = await adapter.aws.create(ctxFor(newRow, config, "wait_restored", "create", payload));
     expect(r2).toMatchObject({ kind: "next", step: "verify_bootstrap" });

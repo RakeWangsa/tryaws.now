@@ -75,10 +75,18 @@ export async function decide(
   // 5. The cells of the needs: the home account only, or every active account of the tier.
   const cellKeys = resolved.needs.map((n) => ({ region: n.region, quotaCode: n.quotaCode }));
   const capacity = capacityRepo(tx);
+  // The single-account rule (WPU-G1, runbook lightsail-parity-gap P1): when exactly ONE pool account
+  // is active, it serves every risk tier, because a tier only separates accounts and there is
+  // nothing to separate. With none, or two or more, the tier match is exact as before, and an
+  // answer that cannot be given is a refusal (R16). It only widens the first choice of a customer
+  // without a home; a home account is always kept.
+  const sole = home === null ? await capacity.soleActiveAccount() : null;
   const selector =
-    home === null
-      ? { tiers: [profile.riskTier], cells: cellKeys }
-      : { accountId: home.poolAccountId, cells: cellKeys };
+    home !== null
+      ? { accountId: home.poolAccountId, cells: cellKeys }
+      : sole !== null
+        ? { accountId: sole, cells: cellKeys }
+        : { tiers: [profile.riskTier], cells: cellKeys };
   const rows =
     mode === "lock" ? await capacity.lockCells(selector) : await capacity.readCells(selector);
 

@@ -40,7 +40,7 @@ export function homesRepo(scope: TenantScope): HomesRepo {
     assign: async (region, poolAccountId) => {
       if (!REGION_PATTERN.test(region)) return refused("validation");
       if (!isUuid(poolAccountId)) return refused("not_found");
-      // The row is written only for an active account of the tier of the customer, read under the
+      // The row is written only for an active account of the tier of the customer (or the only active account, WPU-G1), read under the
       // session's customer id: a home never changes, so a wrong tier would be permanent. ON CONFLICT
       // DO NOTHING, never a caught 23505 (it would abort the caller's transaction).
       const { rows } = await scope.tx.execute<RawHome>(sql`
@@ -48,7 +48,9 @@ export function homesRepo(scope: TenantScope): HomesRepo {
         select ${uuidv7()}, ${scope.customerId}, ${region}, a.id
           from pool_accounts a
          where a.id = ${poolAccountId} and a.status = 'active'
-           and a.tier = (select c.risk_tier from customers c where c.id = ${scope.customerId})
+           and (a.tier = (select c.risk_tier from customers c where c.id = ${scope.customerId})
+                -- WPU-G1 (P1): the only active account serves every tier
+                or (select count(*) from pool_accounts x where x.status = 'active') = 1)
         on conflict (customer_id, region) do nothing
         returning id, region, pool_account_id as "poolAccountId", created_at as "createdAt"`);
       const [row] = rows;

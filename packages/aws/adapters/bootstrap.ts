@@ -15,6 +15,14 @@ export const BOOTSTRAP_FAIL_CLOSED_CIDRS = Object.freeze([
 /** Printed by the script, and written to the file, only after the unit started (rules loaded and checked). */
 export const BOOTSTRAP_OK_MARKER = "TC_BOOTSTRAP_OK";
 export const BOOTSTRAP_MARKER_FILE = "/var/lib/tc-isolation.ok";
+/**
+ * WPU-G1. Lightsail has no console-output API, so the instance reports its marker itself: a small
+ * unit answers every TCP connection on this port with the content of the marker file (empty until
+ * the file exists) and closes. Only the platform probe reaches it: the Lightsail firewall opens the
+ * port to the probe sources during create and the final port set removes the rule; from the private
+ * network the isolation rules drop the connection. VERIFY in tc-pool-dev (python3 on every blueprint).
+ */
+export const BOOTSTRAP_BEACON_PORT = 52022;
 
 export interface BootstrapOptions {
   /**
@@ -92,6 +100,44 @@ ExecStart=/usr/local/sbin/tc-isolation.sh
 WantedBy=sysinit.target
 `;
 
+// The beacon: answers with the marker file and nothing else. Standard library only.
+const BEACON_PY = `import socket
+PORT = ${BOOTSTRAP_BEACON_PORT}
+MARKER = "${BOOTSTRAP_MARKER_FILE}"
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind(("0.0.0.0", PORT))
+server.listen(8)
+while True:
+    conn, _ = server.accept()
+    try:
+        conn.settimeout(2)
+        try:
+            with open(MARKER, "rb") as handle:
+                data = handle.read(64)
+        except OSError:
+            data = b""
+        conn.sendall(data)
+    except OSError:
+        pass
+    finally:
+        conn.close()
+`;
+
+const BEACON_UNIT = `[Unit]
+Description=TiCON bootstrap beacon
+After=tc-isolation.service
+Requires=tc-isolation.service
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/sbin/tc-beacon.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+`;
+
 /**
  * The user data of every Linux instance. Any failure exits non-zero and writes no marker. The marker
  * is a separate last step: if it cannot be written the instance is still isolated, and the control
@@ -119,6 +165,16 @@ ${UNIT}TC_UNIT_EOF
 systemctl daemon-reload
 systemctl enable tc-isolation.service
 systemctl start tc-isolation.service
+cat > /usr/local/sbin/tc-beacon.py <<'TC_BEACON_EOF'
+${BEACON_PY}TC_BEACON_EOF
+chmod 0755 /usr/local/sbin/tc-beacon.py
+cat > /etc/systemd/system/tc-beacon.service <<'TC_BEACON_UNIT_EOF'
+${BEACON_UNIT}TC_BEACON_UNIT_EOF
+systemctl daemon-reload
+systemctl enable tc-beacon.service
+systemctl start tc-beacon.service
+sleep 1
+systemctl is-active --quiet tc-beacon.service
 install -d /var/lib
 echo ${BOOTSTRAP_OK_MARKER} > ${BOOTSTRAP_MARKER_FILE}
 echo ${BOOTSTRAP_OK_MARKER}

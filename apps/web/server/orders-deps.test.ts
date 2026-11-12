@@ -40,6 +40,31 @@ describe("assembleOrdersDeps", () => {
     ).rejects.toThrow();
   });
 
+  it("keeps the refusing fallback queue when the queue URL is malformed (G2: sweep fallback)", async () => {
+    const deps = assembleOrdersDeps(
+      config({}),
+      { ...envWith(SECRET), PROVISIONING_QUEUE_URL: "https://evil.example.com/x" },
+      { run, clock },
+    );
+    await expect(
+      deps?.queue.send({ operationId: "a", resourceId: "b", enqueueSeq: 0 }),
+    ).rejects.toThrow("no queue client");
+  });
+
+  it("uses the SQS port when a FIFO queue URL is configured, without building a client at assembly", () => {
+    const deps = assembleOrdersDeps(
+      config({}),
+      {
+        ...envWith(SECRET),
+        PROVISIONING_QUEUE_URL:
+          "https://sqs.ap-southeast-1.amazonaws.com/123456789012/provisioning.fifo",
+      },
+      { run, clock },
+    );
+    expect(deps).not.toBeNull();
+    expect(deps?.queue.send).toBeTypeOf("function");
+  });
+
   it("uses a random secret and a memory queue only when the configuration says fakes", async () => {
     const deps = assembleOrdersDeps(
       config({ stage: "local", appOrigin: "http://localhost:3000", fakes: true }),

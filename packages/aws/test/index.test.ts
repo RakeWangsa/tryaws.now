@@ -4,6 +4,7 @@ import * as aws from "../index";
 it("exports exactly the public API and no credentials function", () => {
   expect(Object.keys(aws).sort()).toEqual([
     "AwsError",
+    "BOOTSTRAP_BEACON_PORT",
     "BOOTSTRAP_EXPECTED_VPC_CIDR",
     "BOOTSTRAP_MARKER_FILE",
     "BOOTSTRAP_OK_MARKER",
@@ -19,6 +20,7 @@ it("exports exactly the public API and no credentials function", () => {
     "bootstrapScript",
     "createAwsAccess",
     "createBackupAdapter",
+    "createBeaconMarker",
     "createBucketAccessKey",
     "createBucketAdapter",
     "createCatalogSource",
@@ -38,6 +40,7 @@ it("exports exactly the public API and no credentials function", () => {
     "listZoneRecords",
     "parseDiskConfig",
     "parsePortRules",
+    "parseProbeSources",
     "renewDomainOnce",
     "resendVerification",
     "toAwsError",

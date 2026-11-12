@@ -39,6 +39,9 @@ export interface CapacityRepo {
   // The same rows in the same order, with no lock.
   readCells(selector: CellSelector): Promise<CapacityCellRow[]>;
   readReserves(market: string): Promise<ReadonlyMap<QuotaCode, number>>;
+  // WPU-G1: the id of the pool account when exactly ONE account is active (any tier), else null.
+  // Two or more active accounts, none, or only disabled ones: null (fail closed, R16).
+  soleActiveAccount(): Promise<string | null>;
   // Compare-and-set of used; throws when a row is not as it was read.
   setUsed(changes: readonly UsedChange[]): Promise<void>;
 }
@@ -120,6 +123,14 @@ export function capacityRepo(tx: Tx): CapacityRepo {
   return {
     lockCells: (selector) => run(selector, true),
     readCells: (selector) => run(selector, false),
+
+    soleActiveAccount: async () => {
+      // limit 2 is enough to tell one from many; no tier column is read (worker_rw may not).
+      const { rows } = await tx.execute<{ id: string }>(
+        sql`select id from pool_accounts where status = 'active' order by id limit 2`,
+      );
+      return rows.length === 1 ? (rows[0] as { id: string }).id : null;
+    },
 
     readReserves: async (market) => {
       const { rows } = await tx.execute<{ key: string; value: unknown }>(sql`

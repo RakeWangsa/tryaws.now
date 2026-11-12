@@ -2,6 +2,7 @@ import { createMemoryQueue } from "@tc/core";
 import type { OperationQueue, OrdersDeps } from "@tc/core";
 import type { WebConfig } from "./config.ts";
 import { writeLog } from "./log.ts";
+import { queuePortFromEnv } from "./queue-port.ts";
 import { resourceSecrets } from "./secrets.ts";
 
 // The composition of the order functions of F for apps/web. `productionDeps()` of @tc/core stays
@@ -12,7 +13,7 @@ import { resourceSecrets } from "./secrets.ts";
 
 const MIN_SECRET_BYTES = 32;
 
-/** The web tier has no queue client of its own (R1: it does not import packages/aws). */
+/** The fallback when no queue URL is configured (R1: the web tier does not import packages/aws). */
 const SCHEDULER_ONLY_QUEUE: OperationQueue = {
   async send() {
     // Refuses on purpose: sendAfterCommit catches this and logs, and the scheduler sends the
@@ -55,5 +56,8 @@ export function assembleOrdersDeps(
   if (text === undefined) return null;
   const bytes = new TextEncoder().encode(text);
   if (bytes.length < MIN_SECRET_BYTES) return null;
-  return { ...ports, secrets: [bytes], queue: SCHEDULER_ONLY_QUEUE, log };
+  // WPU-G2: the SQS port when the queue URL is configured (the function role holds sqs:SendMessage
+  // only); otherwise the sweep carries every operation. A failed send never fails the order.
+  const queue = queuePortFromEnv(env) ?? SCHEDULER_ONLY_QUEUE;
+  return { ...ports, secrets: [bytes], queue, log };
 }

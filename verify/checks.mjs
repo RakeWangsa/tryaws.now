@@ -800,6 +800,23 @@ TASKS["WPU-T4"] = [
   appsSmoke,
 ];
 
+// WPU-G1: the first Linux server finishes (bootstrap marker through the beacon), the web tier enqueues
+// through its own SQS port, and one pool account serves every tier (seed script, disk anchor for us-east-1).
+// The db suite needs the local PostgreSQL (pnpm db:up).
+TASKS["WPU-G1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  aws,
+  core,
+  db,
+  provisioner,
+  web,
+  repo,
+];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

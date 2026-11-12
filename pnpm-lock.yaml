@@ -69,6 +69,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@aws-sdk/client-sqs':
+        specifier: 3.1166.0
+        version: 3.1166.0
       '@tc/auth':
         specifier: workspace:*
         version: link:../../packages/auth

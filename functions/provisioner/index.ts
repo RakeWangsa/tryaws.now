@@ -119,7 +119,10 @@ function buildDeps(): StepDeps {
     // WP5-T5: until then every operation ends in needs_attention (R16). The failed hook of a create
     // is the automatic reversal of WP4-T4; a rejected create runs it too (reject.ts).
     adapters: createAdapterRegistry([
-      linuxInstanceAdapter({ vpcCidr: process.env.TC_VPC_CIDR }),
+      linuxInstanceAdapter({
+        vpcCidr: process.env.TC_VPC_CIDR,
+        probeSources: process.env.TC_PROBE_SOURCES,
+      }),
       // WP6-T1: behind the flag windows_instance (R12), which the order flow checks.
       windowsInstanceAdapter({
         vpcCidr: process.env.TC_VPC_CIDR,

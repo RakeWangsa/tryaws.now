@@ -114,7 +114,7 @@ describe("reserveCapacity", () => {
       { region: REGION, pool_account_id: P1 },
     ]);
   });
-  it("homes a first purchase by the tier in the customers row, and refuses it when only a pool of the other tier exists", async () => {
+  it("homes a first purchase by the tier in the customers row, and refuses it when only pools of the other tier exist (two or more accounts)", async () => {
     await seedPool(t.pool, { id: P1, tier: "trusted", cells: cells(4, 0, 5, 0) });
     await seedPool(t.pool, { id: P2, tier: "new", cells: cells(4, 0, 5, 0) });
     const trusted = await newCustomer(t.pool, { risk_tier: "trusted" });
@@ -123,14 +123,56 @@ describe("reserveCapacity", () => {
       value: { poolAccountId: P2 },
     });
     await resetCapacity(t.pool);
-    const only = await seedPool(t.pool, { id: P1, tier: "trusted", cells: cells(4, 0, 5, 0) });
+    // Two active accounts, both of the other tier: the tier rule holds and the order is refused (R16).
+    const first = await seedPool(t.pool, { id: P1, tier: "trusted", cells: cells(4, 0, 5, 0) });
+    const second = await seedPool(t.pool, { id: P2, tier: "trusted", cells: cells(4, 0, 5, 0) });
     const fresh = await newCustomer(t.pool); // risk_tier new: no field of the call can say otherwise
     expect(await reserve(order(fresh))).toMatchObject({
       error: "capacity_full",
       data: { reason: "not_configured" },
     });
     expect(await homes(fresh)).toEqual([]);
-    expect(await readUsed(t.pool, only.poolAccountId)).toEqual(used(0, 0));
+    expect(await readUsed(t.pool, first.poolAccountId)).toEqual(used(0, 0));
+    expect(await readUsed(t.pool, second.poolAccountId)).toEqual(used(0, 0));
+  });
+  it("WPU-G1 (P1): with exactly one active account, that account serves every risk tier", async () => {
+    const only = await seedPool(t.pool, { id: P1, tier: "trusted", cells: cells(4, 0, 5, 0) });
+    const fresh = await newCustomer(t.pool); // risk_tier new, the account is trusted
+    expect(await reserve(order(fresh))).toMatchObject({ ok: true, value: { poolAccountId: P1 } });
+    expect(await homes(fresh)).toEqual([{ region: REGION, pool_account_id: P1 }]);
+    expect(await readUsed(t.pool, only.poolAccountId)).toEqual(used(2, 1));
+    await resetCapacity(t.pool);
+    const newOnly = await seedPool(t.pool, { id: P2, tier: "new", cells: cells(4, 0, 5, 0) });
+    const trusted = await newCustomer(t.pool, { risk_tier: "trusted" });
+    expect(await reserve(order(trusted))).toMatchObject({ ok: true, value: { poolAccountId: P2 } });
+    expect(await readUsed(t.pool, newOnly.poolAccountId)).toEqual(used(2, 1));
+  });
+  it("WPU-G1 (P1): a disabled second account does not break the rule, an active second account does", async () => {
+    await seedPool(t.pool, { id: P1, tier: "trusted", cells: cells(4, 0, 5, 0) });
+    await seedPool(t.pool, {
+      id: P2,
+      tier: "new",
+      status: "disabled",
+      cells: cells(40, 0, 50, 0),
+    });
+    const a = await newCustomer(t.pool);
+    expect(await reserve(order(a))).toMatchObject({ ok: true, value: { poolAccountId: P1 } });
+    await resetCapacity(t.pool);
+    await seedPool(t.pool, { id: P1, tier: "trusted", cells: cells(4, 0, 5, 0) });
+    await seedPool(t.pool, { id: P2, tier: "trusted", cells: cells(4, 0, 5, 0) });
+    const b = await newCustomer(t.pool);
+    expect(await reserve(order(b))).toMatchObject({
+      error: "capacity_full",
+      data: { reason: "not_configured" },
+    });
+  });
+  it("WPU-G1 (P1): a full sole account is full (waitlist offered), not 'not configured'", async () => {
+    await seedPool(t.pool, { id: P1, tier: "trusted", cells: cells(2, 2, 5, 0) });
+    const a = await newCustomer(t.pool);
+    expect(await reserve(order(a))).toMatchObject({
+      error: "capacity_full",
+      data: { reason: "full" },
+    });
   });
   it("is all or nothing, and a refused first order leaves no home, no used unit and no waitlist entry", async () => {
     const p1 = await seedPool(t.pool, { id: P1, cells: cells(4, 0, 5, 5) });

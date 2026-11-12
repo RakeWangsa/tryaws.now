@@ -74,7 +74,7 @@ async function place(o: Owner, over: Record<string, unknown> = {}) {
 }
 
 describe("addDisk", () => {
-  it("the anchor row is seeded once per launch Region and is priced per GB-month", async () => {
+  it("the anchor row is seeded once per launch Region (three) and is priced per GB-month", async () => {
     const rows = await t.pool.query(
       "select region, aws_price_usd::text as price, billing_unit, feature_flag, active from catalog_products where family = 'disk' order by region",
     );
@@ -88,6 +88,14 @@ describe("addDisk", () => {
       },
       {
         region: "ap-southeast-1",
+        price: "0.1000",
+        billing_unit: "gb_month",
+        feature_flag: "disk",
+        active: true,
+      },
+      // WPU-G1 (P9): migration 0009
+      {
+        region: "us-east-1",
         price: "0.1000",
         billing_unit: "gb_month",
         feature_flag: "disk",
