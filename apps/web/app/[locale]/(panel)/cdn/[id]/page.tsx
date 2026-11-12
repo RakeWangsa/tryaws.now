@@ -9,7 +9,16 @@ import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { CdnResetForm } from "../../_console/ConsoleForms.tsx";
 import { CdnDetailContent } from "./CdnDetailContent.tsx";
-import { destroyCdnAction, resetCdnCacheAction, setCdnEnabledAction } from "./actions.ts";
+import {
+  destroyCdnAction,
+  refreshCdnCertificateAction,
+  requestCdnCertificateAction,
+  resetCdnCacheAction,
+  scheduleCdnPlanAction,
+  setCdnCacheBehaviorsAction,
+  setCdnEnabledAction,
+  setCdnOriginAction,
+} from "./actions.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +55,19 @@ export default async function CdnDetailPage({ params, searchParams }: Props) {
         requestId={newUuidV7()}
         enabledAction={setCdnEnabledAction}
         destroyAction={destroyCdnAction}
+        cacheAction={setCdnCacheBehaviorsAction}
+        originAction={setCdnOriginAction}
+        planAction={scheduleCdnPlanAction}
+        certRequestAction={requestCdnCertificateAction}
+        certRefreshAction={refreshCdnCertificateAction}
+        ids={{
+          cache: newUuidV7(),
+          origin: newUuidV7(),
+          plan: newUuidV7(),
+          planCancel: newUuidV7(),
+          cert: newUuidV7(),
+          certRefresh: newUuidV7(),
+        }}
         {...(cdn !== null && cdn.state === "active"
           ? {
               extra: (

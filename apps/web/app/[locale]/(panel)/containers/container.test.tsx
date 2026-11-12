@@ -121,10 +121,24 @@ describe("/containers/[id]", () => {
     expect(out).toMatch(/<button[^>]*disabled[^>]*>/);
   });
 
-  it("there is no button to change the power or the scale; the page says why", () => {
+  it("the power and the scale change only at the next renewal: no field for a number, a plan is chosen from the catalog, and the page says nothing is charged now (WPU-G8)", () => {
     const out = render("containers_detail.ready");
-    expect(out).toContain("There is no button here to change them later");
-    expect(out).not.toMatch(/name="(power|scale|productId)"/);
+    expect(out).toContain("set a new plan in the “Capacity and plan” tab");
+    // a plan is a catalog product id: there is no field for a power or a scale number
+    expect(out).not.toMatch(/name="(power|scale)"/);
+    expect(out).toMatch(/name="productId"/);
+    expect(out).toContain("nothing is charged now");
+    expect(out).toContain("Next renewal: Dec 10, 2026");
+  });
+
+  it("shows a pending plan with the renewal price, a cancel button, and the deployment history without any environment value", () => {
+    const out = render("containers_detail.ready_pending");
+    expect(out).toContain(
+      "Starts at the next renewal: Micro · 2 container instances, renewal price ৳2,500.00.",
+    );
+    expect(out).toMatch(/name="cancel" value="yes"/);
+    expect(out).toContain("Deployment history");
+    expect(out).not.toContain("super-secret-env-value");
   });
 
   it("another customer's service and a missing one show the same not-found state", () => {

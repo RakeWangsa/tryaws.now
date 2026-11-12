@@ -161,6 +161,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-G5",
     "WPU-G6",
     "WPU-G7",
+    "WPU-G8",
     "WPU-H1",
     "WPU-S1",
     "WPU-T1",
@@ -295,6 +296,22 @@ it("task WPU-S1 is proven by lint, types, format, the core, db and repository te
 
 it("task WPU-G7 is proven by lint, types, format, the core, db, aws, web, admin and repository tests", () => {
   expect(TASKS["WPU-G7"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-G8 is proven by lint, types, format, the core, db, aws, web, admin and repository tests", () => {
+  expect(TASKS["WPU-G8"].map((c) => [c.id, c.command.join(" ")])).toEqual([
     ["spec-sync", "pnpm spec:check"],
     ["baseline-sync", "pnpm baseline:check"],
     ["lint", "pnpm lint"],

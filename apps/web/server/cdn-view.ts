@@ -1,7 +1,14 @@
 import type { CustomerSession } from "@tc/auth";
 import { CDN_ORIGIN_FAMILIES, cdnBundleFrom, cdnDefaultDomain, priceCatalog } from "@tc/core";
 import { customerRepos, listCatalogProducts, readFeatureFlag, withTx } from "@tc/db";
-import type { ResourceSummary } from "@tc/db";
+import type { ResourceSummary, Tx } from "@tc/db";
+import {
+  cachePolicyFactsOf,
+  certificateFactsOf,
+  planFactsOf,
+  type CachePolicyFacts,
+  type CertificateFacts,
+} from "./console-view.ts";
 
 // What the CDN screens show, read through the repositories of the session's customer (R8). A database
 // error is thrown, never answered with an empty list (R16). Nothing here returns an AWS account id, an
@@ -67,6 +74,40 @@ export interface CdnPlanOption {
   transferGb?: number;
 }
 
+/**
+ * The distribution bundles on sale, priced by the pricing engine (the amount is never computed here,
+ * R4). null when no rate or rule is in force (R16).
+ */
+export async function loadCdnPlans(
+  tx: Tx,
+  market: string,
+  now: () => Date,
+): Promise<CdnPlanOption[] | null> {
+  const rows = await listCatalogProducts(tx, FAMILY);
+  const priced = await priceCatalog(tx, rows, { market }, { now });
+  if (!priced.ok) return null;
+  const awsIdOf = new Map(rows.map((row) => [row.id, row.awsId]));
+  const plans: CdnPlanOption[] = [];
+  for (const row of priced.value) {
+    const bundle = cdnBundleFrom(awsIdOf.get(row.id));
+    if (bundle === null) continue;
+    const transfer =
+      typeof row.specs === "object" && row.specs !== null
+        ? (row.specs as Record<string, unknown>)["transferGb"]
+        : undefined;
+    plans.push({
+      id: row.id,
+      region: row.region,
+      bundle,
+      priceMinor: row.priceBdt.totalMinor,
+      ...(typeof transfer === "number" && Number.isSafeInteger(transfer) && transfer >= 0
+        ? { transferGb: transfer }
+        : {}),
+    });
+  }
+  return plans;
+}
+
 export type CdnConfiguratorScreen =
   | { state: "flag_off" }
   | { state: "kyc_required" }
@@ -84,29 +125,9 @@ export async function loadCdnConfigurator(
     if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return { state: "flag_off" };
     if (profile.kycStatus !== "verified") return { state: "kyc_required" };
 
-    const rows = await listCatalogProducts(tx, FAMILY);
-    const priced = await priceCatalog(tx, rows, { market: profile.market }, { now });
+    const plans = await loadCdnPlans(tx, profile.market, now);
     // No rate or rule in force: nothing is priced and nothing is offered (R16).
-    if (!priced.ok) throw new Error("cdn: the catalog could not be priced");
-    const awsIdOf = new Map(rows.map((row) => [row.id, row.awsId]));
-    const plans: CdnPlanOption[] = [];
-    for (const row of priced.value) {
-      const bundle = cdnBundleFrom(awsIdOf.get(row.id));
-      if (bundle === null) continue;
-      const transfer =
-        typeof row.specs === "object" && row.specs !== null
-          ? (row.specs as Record<string, unknown>)["transferGb"]
-          : undefined;
-      plans.push({
-        id: row.id,
-        region: row.region,
-        bundle,
-        priceMinor: row.priceBdt.totalMinor,
-        ...(typeof transfer === "number" && Number.isSafeInteger(transfer) && transfer >= 0
-          ? { transferGb: transfer }
-          : {}),
-      });
-    }
+    if (plans === null) throw new Error("cdn: the catalog could not be priced");
     const resources = await repos.resources.list();
     const origins: OriginOption[] = [];
     for (const r of resources) {
@@ -162,6 +183,18 @@ export async function loadCdnList(session: CustomerSession): Promise<CdnListScre
 export interface CdnDetail extends CdnRow {
   region: string | null;
   createdAt: Date;
+  /** The cache policy the customer saved, or null while the defaults of the create are in force. */
+  cachePolicy: CachePolicyFacts | null;
+  /** The customer's own servers, load balancers and buckets that can be the origin (WPU-G8). */
+  origins: OriginOption[];
+  originId: string | null;
+  certificate: CertificateFacts | null;
+  currentProductId: string | null;
+  pendingProductId: string | null;
+  /** Bundles on sale in the Region of the distribution, priced by the engine; null if nothing can be priced. */
+  plans: CdnPlanOption[] | null;
+  /** The end of the paid term: a bundle change takes effect then. */
+  renewsAt: Date | null;
 }
 
 export async function loadCdnDetail(
@@ -179,7 +212,30 @@ export async function loadCdnDetail(
     if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return null;
     const facts = cdnConfigOf(resource.config);
     const origin = facts.originId === null ? null : await repos.resources.get(facts.originId);
+    const planFacts = planFactsOf(resource.config, resource.productId);
+    const subscription = await repos.subscriptions.get(resource.id);
+    const config =
+      typeof resource.config === "object" && resource.config !== null
+        ? (resource.config as Record<string, unknown>)
+        : {};
+    const all = await loadCdnPlans(tx, profile.market, () => new Date());
+    const origins: OriginOption[] = [];
+    for (const r of await repos.resources.list()) {
+      const kind = KIND_OF_FAMILY[r.family];
+      if (kind === undefined || r.state !== "active" || !CDN_ORIGIN_FAMILIES.includes(r.family)) {
+        continue;
+      }
+      origins.push({ id: r.id, kind, name: displayNameOf(r) });
+    }
     return {
+      cachePolicy: cachePolicyFactsOf(config),
+      origins,
+      originId: facts.originId,
+      certificate: certificateFactsOf(config["certificate"]),
+      currentProductId: planFacts.currentProductId,
+      pendingProductId: planFacts.pendingProductId,
+      plans: all === null ? null : all.filter((p) => p.region === config["region"]),
+      renewsAt: subscription?.periodEnd ?? null,
       id: resource.id,
       name: facts.name,
       state: resource.state,

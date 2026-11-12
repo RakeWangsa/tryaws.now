@@ -8,7 +8,14 @@ import ScreenLoading from "../ScreenLoading.tsx";
 import { ContainerDetailContent } from "./[id]/ContainerDetailContent.tsx";
 import { ContainersContent } from "./ContainersContent.tsx";
 import { ContainerConfiguratorContent } from "./new/ContainerConfiguratorContent.tsx";
-import { REQUEST_ID, configurator, detail, noopAction, row } from "./container.fixtures.ts";
+import {
+  PLAN_MICRO,
+  REQUEST_ID,
+  configurator,
+  detail,
+  noopAction,
+  row,
+} from "./container.fixtures.ts";
 
 // The renderers behind the rows of container-anchors.ts: one function for each state id of every
 // container service screen, in the five states of U11 (loading, empty, error, flag off, ready) and the
@@ -88,6 +95,21 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "containers_detail.no_deployment": detailOf(
     detail({ deployment: null, runs: [], publicUrl: null, state: "creating" }),
     "deployments",
+  ),
+  "containers_detail.ready_pending": detailOf(
+    detail({ pendingProductId: PLAN_MICRO, endpointContainer: 1 }),
+    "plan",
+  ),
+  "containers_detail.domain_issued": detailOf(
+    detail({
+      certificate: {
+        domain: "app.example.com",
+        status: "PENDING_VALIDATION",
+        attached: false,
+        records: [{ name: "_x.app.example.com.", type: "CNAME", value: "_y.acm.example." }],
+      },
+    }),
+    "domain",
   ),
   "containers_detail.deploy": detailOf(detail(), "deploy"),
   "containers_detail.suspended": detailOf(detail({ state: "suspended" }), "deploy"),

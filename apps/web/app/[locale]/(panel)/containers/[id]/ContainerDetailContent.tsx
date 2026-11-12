@@ -1,10 +1,26 @@
-import { Button, Card, CopyField, DataTable, EmptyState, StatTile, Tabs, formatDate } from "@tc/ui";
+import {
+  Button,
+  Card,
+  CopyField,
+  DataTable,
+  EmptyState,
+  StatTile,
+  Tabs,
+  formatDate,
+  formatMoney,
+} from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { FormState } from "../../../../../server/action-state.ts";
+import type { DeploymentHistoryFacts } from "../../../../../server/console-view.ts";
 import type { ContainerDetail, DeploymentRun } from "../../../../../server/container-view.ts";
 import { ContainerState, useRegionLabel } from "../ContainerParts.tsx";
+import {
+  CertificatePanel,
+  EndpointForm,
+  PlanChangeForm,
+} from "../../_console/PlanAndCertForms.tsx";
 import { DeployForm, DestroyPanel } from "./ContainerForms.tsx";
 
 // The content of /containers/[id] (16.10): a header and the tabs Overview, Deployments, New
@@ -16,6 +32,16 @@ import { DeployForm, DestroyPanel } from "./ContainerForms.tsx";
 type Numerals = "beng" | "latn";
 type Action = (previous: FormState, form: FormData) => Promise<FormState>;
 
+/** One request id for each form of the page (R7): two forms never share an idempotency key. */
+export interface FormIds {
+  plan: string;
+  planCancel: string;
+  cert: string;
+  certRefresh: string;
+  endpoint: string;
+  endpointRemove: string;
+}
+
 // Used when no Server Action is passed (the static mockup states): the form refuses (R16).
 const refuse: Action = async () => ({ error: "unavailable" });
 
@@ -26,6 +52,11 @@ export function ContainerDetailContent({
   requestId,
   deployAction = refuse,
   destroyAction = refuse,
+  planAction = refuse,
+  certRequestAction = refuse,
+  certRefreshAction = refuse,
+  endpointAction = refuse,
+  ids,
   defaultTab,
 }: {
   locale: Locale;
@@ -35,9 +66,16 @@ export function ContainerDetailContent({
   requestId: string;
   deployAction?: Action;
   destroyAction?: Action;
+  /** WPU-G8: plan at the next renewal, custom domain and certificate, public endpoint. */
+  planAction?: Action;
+  certRequestAction?: Action;
+  certRefreshAction?: Action;
+  endpointAction?: Action;
+  ids?: FormIds;
   defaultTab?: string;
 }) {
   const t = useTranslations("Containers");
+  const tc = useTranslations("Console");
   const regionLabel = useRegionLabel();
   const listHref = localePath(locale, "/containers");
 
@@ -179,7 +217,36 @@ export function ContainerDetailContent({
           </div>
         </>
       )}
-      <h3 className="mergecolor h4">{t("detail.deployments.historyTitle")}</h3>
+      <h3 className="mergecolor h4">{tc("history.title")}</h3>
+      {service.history.length === 0 ? (
+        <p className="seccolor">{tc("history.none")}</p>
+      ) : (
+        <DataTable
+          caption={tc("history.caption")}
+          columns={[
+            {
+              key: "date",
+              header: tc("history.date"),
+              cell: (row: DeploymentHistoryFacts) => formatDate(row.at, { locale, numerals }),
+            },
+            {
+              key: "images",
+              header: tc("history.images"),
+              cell: (row: DeploymentHistoryFacts) => row.images.join(", "),
+            },
+            {
+              key: "endpoint",
+              header: tc("history.endpoint"),
+              cell: (row: DeploymentHistoryFacts) =>
+                row.endpoint ? tc("history.yes") : tc("history.no"),
+            },
+          ]}
+          rows={service.history}
+          rowKey={(row) => row.at.toISOString()}
+        />
+      )}
+      <p className="seccolor mt-2">{tc("history.logs")}</p>
+      <h3 className="mergecolor h4 mt-4">{t("detail.deployments.historyTitle")}</h3>
       {service.runs.length === 0 ? (
         <p className="seccolor">{t("detail.deployments.historyNone")}</p>
       ) : (
@@ -203,6 +270,100 @@ export function ContainerDetailContent({
         allowed={service.state === "active"}
       />
     </>
+  );
+
+  const ep = service.deployment?.publicEndpoint ?? null;
+  const endpoint = (
+    <EndpointForm
+      action={endpointAction}
+      containerId={service.id}
+      requestId={ids?.endpoint ?? requestId}
+      removeRequestId={ids?.endpointRemove ?? requestId}
+      current={{
+        container: service.endpointContainer,
+        port: ep?.port ?? null,
+        healthCheckPath: ep?.healthCheckPath ?? null,
+      }}
+      hasDeployment={service.deployment !== null}
+      allowed={service.state === "active"}
+    />
+  );
+
+  const planName = (id: string): string | null => {
+    const found = service.plans?.find((p) => p.id === id);
+    return found === undefined
+      ? null
+      : `${t(`power.${found.power}`)} · ${t("plan.scale", { count: found.scale })}`;
+  };
+  const priceOf = (id: string): string | null => {
+    const found = service.plans?.find((p) => p.id === id);
+    return found === undefined ? null : formatMoney(found.priceMinor, { locale, numerals });
+  };
+  const pendingName = service.pendingProductId === null ? null : planName(service.pendingProductId);
+  const planTab = (
+    <PlanChangeForm
+      action={planAction}
+      idField="containerId"
+      resourceId={service.id}
+      requestId={ids?.plan ?? requestId}
+      cancelRequestId={ids?.planCancel ?? requestId}
+      kind="container"
+      currentName={
+        service.currentProductId === null
+          ? service.power === null
+            ? null
+            : `${t(`power.${service.power}`)} · ${t("plan.scale", { count: service.scale ?? 1 })}`
+          : (planName(service.currentProductId) ??
+            (service.power === null
+              ? null
+              : `${t(`power.${service.power}`)} · ${t("plan.scale", { count: service.scale ?? 1 })}`))
+      }
+      renewsText={
+        service.renewsAt === null
+          ? null
+          : tc("plan.renews", { date: formatDate(service.renewsAt, { locale, numerals }) })
+      }
+      pendingText={
+        service.pendingProductId === null
+          ? null
+          : pendingName === null
+            ? tc("plan.pendingGone")
+            : tc("plan.pending", {
+                name: pendingName,
+                price: priceOf(service.pendingProductId) ?? "",
+              })
+      }
+      hasPending={service.pendingProductId !== null}
+      state={
+        service.state !== "active" && service.state !== "stopped" && service.state !== "suspended"
+          ? "inactive"
+          : service.plans === null
+            ? "unpriced"
+            : "ready"
+      }
+      choices={(service.plans ?? [])
+        .filter((p) => p.id !== service.currentProductId)
+        .map((p) => ({
+          id: p.id,
+          label: tc("plan.option", {
+            name: `${t(`power.${p.power}`)} · ${t("plan.scale", { count: p.scale })}`,
+            price: formatMoney(p.priceMinor, { locale, numerals }),
+          }),
+        }))}
+    />
+  );
+
+  const domainTab = (
+    <CertificatePanel
+      requestAction={certRequestAction}
+      refreshAction={certRefreshAction}
+      idField="containerId"
+      resourceId={service.id}
+      requestId={ids?.cert ?? requestId}
+      refreshRequestId={ids?.certRefresh ?? requestId}
+      certificate={service.certificate}
+      allowed={service.state === "active"}
+    />
   );
 
   const live =
@@ -244,9 +405,13 @@ export function ContainerDetailContent({
             { id: "overview", title: t("detail.tab.overview"), content: overview },
             { id: "deployments", title: t("detail.tab.deployments"), content: deployments },
             { id: "deploy", title: t("detail.tab.deploy"), content: deploy },
+            { id: "endpoint", title: tc("tab.endpoint"), content: endpoint },
+            { id: "plan", title: tc("tab.plan"), content: planTab },
+            { id: "domain", title: tc("tab.domain"), content: domainTab },
             { id: "destroy", title: t("detail.tab.destroy"), content: destroy },
           ]}
-          {...(defaultTab !== undefined && ["deployments", "deploy", "destroy"].includes(defaultTab)
+          {...(defaultTab !== undefined &&
+          ["deployments", "deploy", "endpoint", "plan", "domain", "destroy"].includes(defaultTab)
             ? { defaultId: defaultTab }
             : {})}
         />

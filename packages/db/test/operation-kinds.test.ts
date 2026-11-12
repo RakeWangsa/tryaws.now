@@ -141,7 +141,12 @@ it("a plan change is only scheduled by a customer and applied by the lifecycle, 
   expect(OPERATION_KIND_INFO.schedule_plan_change.customerRequestable).toBe(true);
   expect(OPERATION_KIND_INFO.scale_container.customerRequestable).toBe(false);
   expect(OPERATION_KIND_INFO.change_cdn_bundle.customerRequestable).toBe(false);
-  for (const kind of ["schedule_plan_change", "change_cdn_bundle", "set_cache_behaviors", "set_cdn_origin"] as const) {
+  for (const kind of [
+    "schedule_plan_change",
+    "change_cdn_bundle",
+    "set_cache_behaviors",
+    "set_cdn_origin",
+  ] as const) {
     expect(isDestructive(kind), kind).toBe(false);
   }
 });

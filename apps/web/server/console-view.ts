@@ -91,8 +91,7 @@ export function planFactsOf(config: unknown, rowProductId: string | null): PlanF
   };
   const current = raw["productId"];
   return {
-    currentProductId:
-      typeof current === "string" && UUID.test(current) ? current : rowProductId,
+    currentProductId: typeof current === "string" && UUID.test(current) ? current : rowProductId,
     pendingProductId: read(raw["pendingPlan"]),
   };
 }
@@ -148,7 +147,10 @@ export function deploymentHistoryOf(config: unknown): DeploymentHistoryFacts[] {
     if (at === null || Number.isNaN(at.getTime()) || !Array.isArray(e["images"])) continue;
     out.push({
       at,
-      images: e["images"].filter((i): i is string => typeof i === "string").map((i) => i.slice(0, 255)).slice(0, 10),
+      images: e["images"]
+        .filter((i): i is string => typeof i === "string")
+        .map((i) => i.slice(0, 255))
+        .slice(0, 10),
       endpoint: e["endpoint"] === true,
     });
   }

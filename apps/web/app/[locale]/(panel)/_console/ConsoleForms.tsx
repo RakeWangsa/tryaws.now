@@ -45,7 +45,15 @@ export function ConsoleNotice({ state }: { state: FormState }) {
   return null;
 }
 
-function Hidden({ idField, id, requestId }: { idField: string; id: string; requestId: string }) {
+export function Hidden({
+  idField,
+  id,
+  requestId,
+}: {
+  idField: string;
+  id: string;
+  requestId: string;
+}) {
   return (
     <>
       <input type="hidden" name={idField} value={id} />
@@ -54,22 +62,28 @@ function Hidden({ idField, id, requestId }: { idField: string; id: string; reque
   );
 }
 
-function fieldError(state: FormState, name: string, text: string): { error: string } | object {
+export function fieldError(
+  state: FormState,
+  name: string,
+  text: string,
+): { error: string } | object {
   return state.fields?.[name] !== undefined ? { error: text } : {};
 }
 
-function Choice({
+export function Choice({
   name,
   label,
   hint,
   options,
   error,
+  defaultValue,
 }: {
   name: string;
   label: string;
   hint?: string;
   options: { value: string; label: string }[];
   error?: string;
+  defaultValue?: string;
 }) {
   const id = useId();
   return (
@@ -81,7 +95,7 @@ function Choice({
         className="form-select"
         id={id}
         name={name}
-        defaultValue={options[0]?.value}
+        defaultValue={defaultValue ?? options[0]?.value}
         aria-invalid={error !== undefined ? true : undefined}
         aria-describedby={hint !== undefined ? `${id}-hint` : undefined}
       >

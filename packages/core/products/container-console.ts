@@ -119,7 +119,7 @@ export function deploymentHistoryEntry(deployment: Deployment, at: Date): Deploy
   };
 }
 
-/** The domain of a custom domain certificate: the plain-name rule of the console. */
+/** The domain of a custom domain certificate: the plain-name rule shared with the load balancer. */
 export function checkedContainerCertificateDomain(value: unknown): string | null {
   return checkedDomainName(value);
 }

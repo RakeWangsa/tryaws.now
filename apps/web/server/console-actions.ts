@@ -47,6 +47,8 @@ export interface ConsoleSpec {
   audit: string;
   /** The fixed result key shown to the customer (U6). */
   done: string;
+  /** A result key that depends on the final payload (a cancelled plan change says so); default `done`. */
+  doneFor?(payload: Record<string, unknown>): string;
   /** The states in which the action may run (R13/R16: the lifecycle owns every other state). */
   states: readonly string[];
   /** The rate limit bucket. */
@@ -213,6 +215,9 @@ function planPayload(input: Record<string, unknown>): ConsolePayload {
     : { ok: false, fields: { productId: "invalid" } };
 }
 
+const planDone = (payload: Record<string, unknown>): string =>
+  payload["productId"] === null ? "planCancelled" : "planScheduled";
+
 /**
  * The product must be on sale, of this family, in the Region of the resource, a plan of its own kind,
  * and another plan than the current one.
@@ -251,6 +256,7 @@ export const CONTAINER_PLAN: ConsoleSpec = {
   done: "planScheduled",
   states: LIVE,
   limitKey: "container.plan",
+  doneFor: planDone,
   payload: planPayload,
   finalize: planFinalize((awsId, specs) => containerPlanFrom(awsId, specs) !== null),
 };
@@ -264,6 +270,7 @@ export const CDN_PLAN: ConsoleSpec = {
   done: "planScheduled",
   states: LIVE,
   limitKey: "cdn.plan",
+  doneFor: planDone,
   payload: planPayload,
   finalize: planFinalize((awsId) => cdnBundleFrom(awsId) !== null),
 };
@@ -487,7 +494,7 @@ export function consoleCore(
           );
         }
         await audit(repos, spec.audit, row.id);
-        return { ok: true, done: spec.done };
+        return { ok: true, done: spec.doneFor?.(payload) ?? spec.done };
       },
     );
   };

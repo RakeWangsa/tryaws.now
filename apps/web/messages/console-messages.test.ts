@@ -25,6 +25,20 @@ describe("console form messages (WPU-G7)", () => {
     expect(JSON.stringify(consoleBn.Console.db)).toMatch(/[ঀ-৿]/);
   });
 
+  it("has a Bengali text for the plan, domain, cache and origin forms of WPU-G8", () => {
+    for (const key of ["plan", "cert", "cache", "origin", "endpoint", "deploy", "history", "tab"]) {
+      expect(JSON.stringify((consoleBn.Console as Record<string, unknown>)[key]), key).toMatch(
+        /[ঀ-৿]/,
+      );
+    }
+  });
+
+  it("says that nothing is charged at the time of a plan change (the renewal charges it)", () => {
+    expect(consoleEn.Console.plan.introContainer).toContain("nothing is charged now");
+    expect(consoleEn.Console.plan.introCdn).toContain("nothing is charged now");
+    expect(consoleEn.Console.done.planScheduled).toContain("Nothing has been charged now");
+  });
+
   it("shows no account id or ARN (U6)", () => {
     for (const tree of [consoleBn, consoleEn]) {
       expect(JSON.stringify(tree)).not.toMatch(/arn:aws|\b\d{12}\b/);
@@ -52,6 +66,11 @@ describe("console form messages (WPU-G7)", () => {
       "optionsQueued",
       "versioningQueued",
       "cacheResetQueued",
+      "planScheduled",
+      "planCancelled",
+      "endpointQueued",
+      "cacheQueued",
+      "originQueued",
     ]) {
       expect(consoleEn.Console.done).toHaveProperty(key);
     }

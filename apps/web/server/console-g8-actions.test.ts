@@ -169,7 +169,10 @@ describe("plan change at the next renewal", () => {
 
     it("cancels a pending change with no catalog read", async () => {
       const x = w();
-      expect(await run(spec, x, { [idField]: ID, cancel: "yes" })).toMatchObject({ ok: true });
+      expect(await run(spec, x, { [idField]: ID, cancel: "yes" })).toEqual({
+        ok: true,
+        done: "planCancelled",
+      });
       expect(x.requests[0]?.payload).toEqual({ productId: null });
       expect(x.calls).not.toContain("catalog");
     });
@@ -447,7 +450,7 @@ describe("public endpoint of a container service", () => {
     });
   });
 
-  it("another customer's service is a missing one (R8)", async () => {
+  it("another customer's service is a missing one, as the sweep proof says (R8)", async () => {
     expect(
       await run(CONTAINER_ENDPOINT, world(row("container_service", config)), {
         ...form,
@@ -458,4 +461,104 @@ describe("public endpoint of a container service", () => {
       error: "not_found",
     });
   });
+});
+
+describe("every spec of WPU-G8 (R7, R8, R9)", () => {
+  const CACHE_FORM = {
+    defaultBehavior: "cache",
+    defaultTtl: "60",
+    minTtl: "0",
+    maxTtl: "120",
+    allowedMethods: "GET,HEAD",
+    cachedMethods: "GET,HEAD",
+    cookies: "none",
+    headers: "none",
+    queryStrings: "off",
+    paths: "",
+  };
+  const ALL: {
+    spec: ConsoleSpec;
+    family: string;
+    idField: string;
+    form: Record<string, unknown>;
+  }[] = [
+    {
+      spec: CONTAINER_PLAN,
+      family: "container_service",
+      idField: "containerId",
+      form: { productId: NEXT },
+    },
+    {
+      spec: CONTAINER_REQUEST_CERTIFICATE,
+      family: "container_service",
+      idField: "containerId",
+      form: { domain: "a.example.com" },
+    },
+    {
+      spec: CONTAINER_REFRESH_CERTIFICATE,
+      family: "container_service",
+      idField: "containerId",
+      form: {},
+    },
+    {
+      spec: CONTAINER_ENDPOINT,
+      family: "container_service",
+      idField: "containerId",
+      form: { container: "1", port: "80" },
+    },
+    { spec: CDN_PLAN, family: "cdn", idField: "cdnId", form: { productId: NEXT } },
+    {
+      spec: CDN_REQUEST_CERTIFICATE,
+      family: "cdn",
+      idField: "cdnId",
+      form: { domain: "a.example.com" },
+    },
+    { spec: CDN_REFRESH_CERTIFICATE, family: "cdn", idField: "cdnId", form: {} },
+    { spec: CDN_CACHE_BEHAVIORS, family: "cdn", idField: "cdnId", form: CACHE_FORM },
+    { spec: CDN_ORIGIN, family: "cdn", idField: "cdnId", form: { originId: ORIGIN_B } },
+  ];
+
+  it.each(ALL)(
+    "$spec.kind of $family: another customer's row and a missing one give one answer, and nothing is queued (R8)",
+    async ({ spec, family, idField, form }) => {
+      const mine = row(family, { deployment: SAVED, region: "ap-southeast-1" });
+      const a = world(mine, [row("linux_instance", {}, { id: ORIGIN_B })], {
+        catalog: { [NEXT]: product() },
+      });
+      const foreign = await run(spec, a, { ...form, [idField]: FOREIGN });
+      const b = world(mine);
+      const missing = await run(spec, b, { ...form, [idField]: OTHERS });
+      expect(foreign).toEqual({ ok: false, error: "not_found" });
+      expect(missing).toEqual(foreign);
+      expect(a.requests).toEqual([]);
+      expect(b.requests).toEqual([]);
+    },
+  );
+
+  it.each(ALL)(
+    "$spec.kind of $family: a key of the request id, and the audit entry after the operation (R7, R9)",
+    async ({ spec, family, idField, form }) => {
+      const config = {
+        region: "ap-southeast-1",
+        productId: CURRENT,
+        originId: ORIGIN_A,
+        deployment: SAVED,
+      };
+      const w = world(row(family, config), [row("linux_instance", {}, { id: ORIGIN_B })], {
+        catalog: {
+          [NEXT]: product({
+            family,
+            awsId: family === "cdn" ? "large_1_0" : "large",
+            specs: family === "cdn" ? {} : { scale: 2 },
+          }),
+        },
+      });
+      const r = await run(spec, w, { ...form, [idField]: ID });
+      expect(r, spec.kind).toMatchObject({ ok: true });
+      expect(w.requests).toHaveLength(1);
+      expect(w.requests[0]?.idempotencyKey).toBe(`${spec.keyPrefix}:${REQ}`);
+      expect(w.calls.at(-1)).toBe(`audit:${spec.audit}`);
+      expect(w.calls.indexOf("request")).toBeLessThan(w.calls.indexOf(`audit:${spec.audit}`));
+    },
+  );
 });

@@ -417,8 +417,9 @@ describe("deployment history (WPU-G8)", () => {
       }),
     );
     expect(r.kind).toBe("done");
-    const merge = (r as { patch: { configMerge: { deployments: { images: string[] }[] } } }).patch
-      .configMerge;
+    const merge = (
+      r as unknown as { patch: { configMerge: { deployments: { images: string[] }[] } } }
+    ).patch.configMerge;
     expect(merge.deployments).toHaveLength(10);
     expect(merge.deployments[9]).toMatchObject({ images: ["nginx"], endpoint: false });
     expect(merge.deployments[0]).toMatchObject({ images: ["img1"] });

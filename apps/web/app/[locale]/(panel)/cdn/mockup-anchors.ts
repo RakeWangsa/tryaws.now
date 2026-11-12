@@ -155,6 +155,30 @@ export const CDN_ANCHORS: readonly MockupAnchor[] = [
     classes: ["tabs", "tabs-item", "badge"],
   },
   {
+    state: "cdn_detail.pending_plan",
+    mockupFile: "template/checkout.html",
+    why: "the plan tab keeps the tabs and the form classes",
+    classes: ["tabs", "tabs-item"],
+  },
+  {
+    state: "cdn_detail.cache_saved",
+    mockupFile: "template/checkout.html",
+    why: "the cache tab keeps the tabs and the form classes",
+    classes: ["tabs", "tabs-item"],
+  },
+  {
+    state: "cdn_detail.domain_pending",
+    mockupFile: "template/checkout.html",
+    why: "the domain tab keeps the tabs and the table classes",
+    classes: ["tabs", "tabs-item", "compare"],
+  },
+  {
+    state: "cdn_detail.no_other_origin",
+    mockupFile: "template/checkout.html",
+    why: "the origin tab with nothing to choose keeps the tabs",
+    classes: ["tabs", "tabs-item"],
+  },
+  {
     state: "cdn_detail.not_found",
     mockupFile: "template/404.html",
     why: CENTRED + ", back to the list",
