@@ -131,7 +131,6 @@ describe.each(LOCALES)("PublicShell (%s)", (locale) => {
     const all = hrefs(container.querySelector("footer") as HTMLElement);
     for (const path of [
       "/pricing",
-      "/payments",
       "/help",
       "/support",
       "/legal/terms",
@@ -139,6 +138,8 @@ describe.each(LOCALES)("PublicShell (%s)", (locale) => {
     ]) {
       expect(all).toContain(`${prefix}${path}`);
     }
+    // WPU-N1: there is no public /payments page, so the footer does not link to one.
+    expect(all).not.toContain(`${prefix}/payments`);
   });
 
   it("holds Aws.short and the trademark line unchanged in the footer", () => {

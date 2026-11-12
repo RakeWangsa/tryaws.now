@@ -14,6 +14,7 @@ export function PublicFrame({
   path,
   openFamilies,
   domainsOpen,
+  signedIn = false,
   children,
 }: {
   locale: Locale;
@@ -21,13 +22,15 @@ export function PublicFrame({
   path: string;
   openFamilies: readonly ProductFamily[];
   domainsOpen: boolean;
+  /** WPU-N1: a valid customer session exists; the menu then says "Console". A boolean only. */
+  signedIn?: boolean;
   children: ReactNode;
 }) {
   return (
     <PublicShell
       locale={locale}
       localeHrefs={localeHrefs(path)}
-      signedIn={false}
+      signedIn={signedIn}
       openFamilies={openFamilies}
       domainsOpen={domainsOpen}
       announcement={null}
