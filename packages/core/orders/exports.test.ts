@@ -323,6 +323,14 @@ const SERVER_CONTROLS = [
   "sshCommandOf",
 ];
 
+// WPU-G5: the first-use guide, the usage summary and the snapshot grouping (packages/core/products).
+const ACCOUNT_OVERVIEW = [
+  "ONBOARDING_STEP_KEYS",
+  "groupSnapshots",
+  "onboardingSteps",
+  "usageSummary",
+];
+
 // WP7-T4: the pure domain rules (packages/core/domains).
 const DOMAINS = [
   "CONTACT_TYPES",
@@ -402,6 +410,7 @@ describe("the public surface of the order flow", () => {
           ...RECONCILE,
           ...DOMAINS,
           ...SERVER_CONTROLS,
+          ...ACCOUNT_OVERVIEW,
           ...PRICE_BOOK,
         ]),
       ].sort(),
