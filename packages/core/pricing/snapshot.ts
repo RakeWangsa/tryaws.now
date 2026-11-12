@@ -16,7 +16,7 @@ export interface PriceSnapshot {
   fxRate: string;
   ruleVersion: string;
   baseMinor: string;
-  steps: { code: string; amountMinor: string }[];
+  steps: { code: string; amountMinor: string; rate?: string }[];
   totalMinor: string;
 }
 
@@ -43,6 +43,8 @@ const KEYS = [
   "totalMinor",
 ] as const;
 const STEP_KEYS = ["code", "amountMinor"] as const;
+// `rate` (WPU-I2) is optional: a snapshot stored before has none.
+const STEP_OPTIONAL_KEYS = ["rate"] as const;
 const MINOR_TEXT = /^(?:0|[1-9]\d*)$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -63,20 +65,27 @@ function nonEmptyText(value: unknown, field: string): string {
   return value;
 }
 
-function parseStep(raw: unknown, i: number): { code: string; amountMinor: string } {
+function parseStep(raw: unknown, i: number): { code: string; amountMinor: string; rate?: string } {
   const at = `steps[${i}]`;
   if (!isRecord(raw)) throw new SnapshotError(at, "must be an object");
   for (const key of Object.keys(raw)) {
-    if (!(STEP_KEYS as readonly string[]).includes(key)) {
-      throw new SnapshotError(at, "has a field other than code and amountMinor");
+    if (
+      !(STEP_KEYS as readonly string[]).includes(key) &&
+      !(STEP_OPTIONAL_KEYS as readonly string[]).includes(key)
+    ) {
+      throw new SnapshotError(at, "has a field other than code, amountMinor and rate");
     }
   }
   for (const key of STEP_KEYS) {
     if (!Object.hasOwn(raw, key)) throw new SnapshotError(`${at}.${key}`, "is missing");
   }
+  if (Object.hasOwn(raw, "rate") && !isPlainDecimal(raw.rate)) {
+    throw new SnapshotError(`${at}.rate`, "must be plain decimal text");
+  }
   return {
     code: nonEmptyText(raw.code, `${at}.code`),
     amountMinor: minorText(raw.amountMinor, `${at}.amountMinor`),
+    ...(typeof raw.rate === "string" ? { rate: raw.rate } : {}),
   };
 }
 
@@ -153,7 +162,11 @@ export function toSnapshot(
     fxRate: quote.fxRate,
     ruleVersion: quote.ruleVersion,
     baseMinor: quote.baseMinor.toString(),
-    steps: quote.steps.map((s) => ({ code: s.code, amountMinor: s.amountMinor.toString() })),
+    steps: quote.steps.map((s) => ({
+      code: s.code,
+      amountMinor: s.amountMinor.toString(),
+      ...(s.rate === undefined ? {} : { rate: s.rate }),
+    })),
     totalMinor: quote.totalMinor.toString(),
   });
 }
@@ -166,7 +179,11 @@ export function snapshotToQuote(snapshot: PriceSnapshot): PriceQuote {
     fxRate: s.fxRate,
     ruleVersion: s.ruleVersion,
     baseMinor: BigInt(s.baseMinor),
-    steps: s.steps.map((x) => ({ code: x.code, amountMinor: BigInt(x.amountMinor) })),
+    steps: s.steps.map((x) => ({
+      code: x.code,
+      amountMinor: BigInt(x.amountMinor),
+      ...(x.rate === undefined ? {} : { rate: x.rate }),
+    })),
     totalMinor: BigInt(s.totalMinor),
   };
 }

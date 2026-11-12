@@ -36,6 +36,13 @@ export const invoiceSellerEn: Same<typeof invoiceSellerBn> = {
       invalid:
         "The saved details cannot be read or are incomplete. Until they are fixed, no invoice is issued or printed.",
     },
+    backlog: {
+      waiting:
+        "{count} invoices for payments or renewals are waiting for the seller details. They are issued in the order of the charge as soon as the details are complete; no customer payment or renewal was held back.",
+      ready:
+        "{count} invoices are not issued yet. The next scheduled run issues them in the order of the charge. If they stay for long, tell the technical team.",
+      since: "Oldest:",
+    },
     current: { title: "Saved details", empty: "-" },
     form: {
       legalNameBn: "Legal name (Bengali)",

@@ -81,6 +81,7 @@ const screen = (over: Record<string, unknown> = {}) => ({
     state: "ready",
     seller: SELLER,
     version: 2,
+    backlog: { count: 0, oldest: null },
     history: [
       {
         row: {
@@ -147,6 +148,27 @@ describe("/pricing/seller", () => {
       expect(html).toContain(m.history.empty);
       // nothing is prefilled
       expect(html).not.toMatch(/name="bin"[^>]*value="[^"]/);
+    },
+  );
+
+  it.each(LOCALES)(
+    "WPU-I2: the invoices that wait for the seller details are counted in %s",
+    async (locale) => {
+      state.screen = screen({
+        state: "missing",
+        seller: null,
+        version: null,
+        history: [],
+        backlog: { count: 7, oldest: NOW },
+      });
+      const html = inProvider(await SellerPage(params(locale)), locale);
+      const m = msgs(locale).AdminInvoiceSeller;
+      expect(html).toContain(m.backlog.waiting.replace("{count}", "7"));
+      expect(html).toContain(m.backlog.since);
+      // nothing waits: no line at all
+      state.screen = screen();
+      const quiet = inProvider(await SellerPage(params(locale)), locale);
+      expect(quiet).not.toContain(m.backlog.since);
     },
   );
 

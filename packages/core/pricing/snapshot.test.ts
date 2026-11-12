@@ -31,10 +31,10 @@ const SNAP5: PriceSnapshot = {
   ruleVersion: "rule-1",
   baseMinor: "63500",
   steps: [
-    { code: "korea_vat", amountMinor: "6350" },
-    { code: "bd_vat", amountMinor: "3175" },
-    { code: "processing_fee", amountMinor: "1270" },
-    { code: "markup", amountMinor: "0" },
+    { code: "korea_vat", amountMinor: "6350", rate: "0.10" },
+    { code: "bd_vat", amountMinor: "3175", rate: "0.05" },
+    { code: "processing_fee", amountMinor: "1270", rate: "0.02" },
+    { code: "markup", amountMinor: "0", rate: "0" },
   ],
   totalMinor: "74295",
 };
@@ -117,4 +117,26 @@ it("toSnapshot refuses an invalid instant and a price that is not plain decimal 
 
 it("snapshotToQuote checks a snapshot that was forged in memory", () => {
   expect(() => snapshotToQuote({ ...SNAP5, totalMinor: "1" })).toThrow(SnapshotError);
+});
+
+// WPU-I2: the rate of a step is stored with it; a snapshot stored before has none and still parses.
+it("WPU-I2: a step rate is optional, plain decimal text, and survives the round trip", () => {
+  const old: PriceSnapshot = {
+    ...SNAP5,
+    steps: SNAP5.steps.map(({ code, amountMinor }) => ({ code, amountMinor })),
+  };
+  expect(parseSnapshot(old)).toEqual(old);
+  expect(parseSnapshot(SNAP5).steps[1]).toEqual({
+    code: "bd_vat",
+    amountMinor: "3175",
+    rate: "0.05",
+  });
+  for (const bad of ["5%", "-0.05", "0,05", "", 0.05, null]) {
+    expect(() => parseSnapshot({ ...SNAP5, steps: step(1, { rate: bad }) })).toThrow(SnapshotError);
+  }
+  expect(snapshotToQuote(parseSnapshot(SNAP5)).steps[1]).toEqual({
+    code: "bd_vat",
+    amountMinor: 3175n,
+    rate: "0.05",
+  });
 });

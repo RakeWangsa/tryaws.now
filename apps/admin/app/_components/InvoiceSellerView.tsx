@@ -82,6 +82,19 @@ function Status({ screen }: { screen: InvoiceSellerScreen }) {
         )}
       </p>
       {screen.state === "ready" ? null : <p role="alert">{t(`notice.${screen.state}`)}</p>}
+      {screen.backlog.count === 0 ? null : (
+        <p role="alert" className="mb-0">
+          {t(screen.state === "ready" ? "backlog.ready" : "backlog.waiting", {
+            count: screen.backlog.count,
+          })}
+          {screen.backlog.oldest === null ? null : (
+            <>
+              {" "}
+              {t("backlog.since")} <DateText value={screen.backlog.oldest} variant="datetime" />
+            </>
+          )}
+        </p>
+      )}
     </Card>
   );
 }

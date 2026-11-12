@@ -65,10 +65,10 @@ it("the staging seed prices the 5 USD plan at 74295 and builds the snapshot that
     ruleVersion: inForce.rule.id,
     baseMinor: "63500",
     steps: [
-      { code: "korea_vat", amountMinor: "6350" },
-      { code: "bd_vat", amountMinor: "3175" },
-      { code: "processing_fee", amountMinor: "1270" },
-      { code: "markup", amountMinor: "0" },
+      { code: "korea_vat", amountMinor: "6350", rate: "0.10" },
+      { code: "bd_vat", amountMinor: "3175", rate: "0.05" },
+      { code: "processing_fee", amountMinor: "1270", rate: "0.02" },
+      { code: "markup", amountMinor: "0", rate: "0" },
     ],
     totalMinor: "74295",
   });

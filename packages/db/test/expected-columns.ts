@@ -172,6 +172,8 @@ export const EXPECTED_COLUMNS: Record<string, string[]> = {
     "total_minor int8 NOT NULL",
     "issued_at timestamptz NOT NULL",
     "pdf_key text NULL",
+    "seller jsonb NULL",
+    "ledger_transaction_id uuid NULL",
   ],
   pool_accounts: [
     "aws_account_id text NOT NULL",

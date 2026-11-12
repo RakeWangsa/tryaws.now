@@ -482,6 +482,7 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "configPrices.read",
   "tierLimits.read",
   "invoiceSeller.read",
+  "invoiceSeller.backlog",
   "waitlist.counts",
   "waitlist.list",
   "wallets.detail",

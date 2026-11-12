@@ -1,7 +1,7 @@
 import Big from "big.js";
 import { expect, it } from "vitest";
 import { PricingInputError } from "./errors";
-import { quote } from "./quote";
+import { quote, quoteWithMarkup } from "./quote";
 import type { PricingRule, PricingStep } from "./types";
 
 const label = { bn: "ক", en: "a" };
@@ -44,12 +44,12 @@ it.each(vectors)("section 8 vector: $aws_usd USD", (v) => {
     fxRate: fx,
     ruleVersion: "bd-1",
     baseMinor: BigInt(v.base),
-    steps: [
-      { code: "korea_vat", amountMinor: BigInt(v.korea_vat) },
-      { code: "bd_vat", amountMinor: BigInt(v.bd_vat) },
-      { code: "processing_fee", amountMinor: BigInt(v.processing_fee) },
-      { code: "markup", amountMinor: 0n },
-    ],
+    steps: LAUNCH.steps.map((step) => ({
+      code: step.code,
+      amountMinor: BigInt(v[step.code as "korea_vat" | "bd_vat" | "processing_fee"] ?? 0),
+      // WPU-I2: the step carries the rate that priced it; no amount depends on it.
+      rate: step.rate,
+    })),
     totalMinor: BigInt(v.total),
   });
 });
@@ -174,7 +174,7 @@ it("prices a rate above 1", () => {
   };
   const result = quote({ awsPriceUsd: "5", fxRate: "127", rule });
   expect(result.baseMinor).toBe(63500n);
-  expect(result.steps).toEqual([{ code: "markup", amountMinor: 95250n }]);
+  expect(result.steps).toEqual([{ code: "markup", amountMinor: 95250n, rate: "1.5" }]);
   expect(result.totalMinor).toBe(158750n);
 });
 
@@ -255,10 +255,29 @@ it("ignores global Big settings set by other code", () => {
     Big.RM = Big.roundDown;
     Big.DP = 0;
     const q = quote({ awsPriceUsd: "9.50", fxRate: "127", rule: LAUNCH });
-    expect(q.steps[1]).toEqual({ code: "bd_vat", amountMinor: 6033n });
+    expect(q.steps[1]).toEqual({ code: "bd_vat", amountMinor: 6033n, rate: "0.05" });
     expect(q.totalMinor).toBe(141161n);
   } finally {
     Big.RM = RM;
     Big.DP = DP;
   }
+});
+
+// WPU-I2: each step reports the rate that priced it, as the text of the rule (the Mushak 6.3 VAT
+// rate cell reads it). The amounts are the ones of the vectors above: a rate is only reported.
+it("WPU-I2: every step carries its rate; a price book markup rate is reported for the markup step", () => {
+  const q = quote({ awsPriceUsd: "5", fxRate: fx, rule: LAUNCH });
+  expect(q.steps.map((s) => [s.code, s.rate])).toEqual([
+    ["korea_vat", "0.10"],
+    ["bd_vat", "0.05"],
+    ["processing_fee", "0.02"],
+    ["markup", "0"],
+  ]);
+  const booked = quoteWithMarkup({ awsPriceUsd: "5", fxRate: fx, rule: LAUNCH }, { rate: "0.15" });
+  expect(booked.steps.find((s) => s.code === "markup")?.rate).toBe("0.15");
+  expect(booked.steps.find((s) => s.code === "bd_vat")?.rate).toBe("0.05");
+  // The amounts are the same with or without the report.
+  expect(q.steps.map((s) => s.amountMinor)).toEqual(
+    quote({ awsPriceUsd: "5", fxRate: fx, rule: LAUNCH }).steps.map((s) => s.amountMinor),
+  );
 });

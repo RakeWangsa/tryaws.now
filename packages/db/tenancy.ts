@@ -46,7 +46,8 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   wallet_adjustments: OWN_OR_LEDGER_TRANSACTION,
   payments: OWN_OR_LEDGER_TRANSACTION,
   orders: OWN_OR_LEDGER_TRANSACTION,
-  invoices: OWN_OR_ORDER,
+  // WPU-I2: an invoice also points at the ledger transaction of its charge.
+  invoices: `${OWN_OR_ORDER} or exists (select 1 from ledger_entries e join ledger_accounts a on a.id = e.account_id where e.transaction_id = t.ledger_transaction_id and a.customer_id = $1::uuid)`,
   customer_homes: OWN,
   resources: OWN_OR_PARENT_RESOURCE,
   subscriptions: OWN_OR_RESOURCE,

@@ -62,8 +62,16 @@ export type {
   InvoicePage,
   InvoiceRow,
   InvoicesRepo,
+  NewBacklogEntry,
+  NewChargeInvoice,
   NewInvoice,
 } from "./repositories/customer/invoices";
+export { invoiceBacklogRepo } from "./repositories/system/invoice-backlog";
+export type {
+  InvoiceBacklogRepo,
+  PendingInvoice,
+  PendingInvoices,
+} from "./repositories/system/invoice-backlog";
 export type {
   StatementLine,
   StatementPage,
@@ -222,6 +230,7 @@ export {
   type ConfigPriceUnit,
 } from "./repositories/config/config-price";
 export type {
+  InvoiceBacklogState,
   InvoiceSellerAdminRepo,
   InvoiceSellerInput,
   InvoiceSellerSaved,
@@ -235,6 +244,7 @@ export {
   type SellerRow,
 } from "./repositories/config/invoice-seller";
 export type { IssueResult } from "./repositories/customer/invoices";
+export { INVOICE_BACKLOG_SOURCE } from "./repositories/customer/invoices";
 export type {
   StoredTierLimits,
   TierLimitsAdminRepo,

@@ -20,6 +20,8 @@ export interface InvoiceSellerScreen {
   readonly seller: SellerRow | null;
   readonly version: number | null;
   readonly history: readonly SellerHistoryLine[];
+  /** WPU-I2: charges that wait for an invoice because the seller details were missing. */
+  readonly backlog: { readonly count: number; readonly oldest: Date | null };
 }
 
 const DEFAULT_MARKET = "BD";
@@ -59,6 +61,10 @@ export async function loadInvoiceSeller(
       // A refused read (a role the repository does not serve) is an unavailable screen, not an empty one.
       const stored = await repos.invoiceSeller.read(market);
       if (!stored.ok) throw new Error("invoice seller: the read was refused");
+      // A refused or failed count is an unavailable screen, not "nothing waits" (R16).
+      const waiting = await repos.invoiceSeller.backlog(market);
+      if (!waiting.ok) throw new Error("invoice seller: the backlog read was refused");
+      const backlog = { count: waiting.value.count, oldest: waiting.value.oldest };
       const found = await repos.audit.search({
         action: "invoice_seller.save",
         targetType: "invoice_seller",
@@ -72,12 +78,20 @@ export async function loadInvoiceSeller(
         : [];
       const s = stored.value;
       if (s.state === "none") {
-        return { markets, market, state: "missing", seller: null, version: null, history };
+        return { markets, market, state: "missing", seller: null, version: null, history, backlog };
       }
       if (s.state === "invalid") {
-        return { markets, market, state: "invalid", seller: null, version: null, history };
+        return { markets, market, state: "invalid", seller: null, version: null, history, backlog };
       }
-      return { markets, market, state: "ready", seller: s.seller, version: s.version, history };
+      return {
+        markets,
+        market,
+        state: "ready",
+        seller: s.seller,
+        version: s.version,
+        history,
+        backlog,
+      };
     });
     return { kind: "ok", value };
   } catch {

@@ -219,6 +219,7 @@ const GATE_CASES: Record<string, GateCase> = {
     deny: "support",
   },
   "invoiceSeller.read": { call: (r) => r.invoiceSeller.read("BD"), deny: "ops" },
+  "invoiceSeller.backlog": { call: (r) => r.invoiceSeller.backlog("BD"), deny: "ops" },
   "invoiceSeller.save": {
     call: (r) =>
       r.invoiceSeller.save(

@@ -36,12 +36,21 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
   expect(report.lifecycle).toMatchObject({ examined: 0, failed: 0 });
   expect(report.metering).toMatchObject({ charged: 0, failed: 0, priceMissing: true });
   expect(report.staticIps).toMatchObject({ charged: 0, failed: 0, priceMissing: false });
+  expect(report.invoices).toEqual({
+    issued: 0,
+    replayed: 0,
+    sellerMissing: false,
+    failed: 0,
+    unreadable: 0,
+    remaining: 0,
+  });
   expect(report.rateLimitsPurged).toBe(1);
   expect(logged.map((e) => e.event)).toEqual([
     "sweep",
     "lifecycle_run",
     "metering_run",
     "static_ip_metering_run",
+    "invoice_backlog_run",
     "rate_limits_purged",
   ]);
   // The second run purges nothing more.
@@ -69,6 +78,7 @@ it("a failing job does not stop the others; the run then rejects (R16)", async (
     "lifecycle_run",
     "metering_run",
     "static_ip_metering_run",
+    "invoice_backlog_run",
     "rate_limits_purged",
   ]);
   expect(JSON.stringify(logged)).not.toContain("secret");
@@ -145,4 +155,29 @@ it("WPU-S2: an apply of a pending plan that the sweep escalates marks the plan a
     period: null,
   });
   expect(config.pendingPlan).toBeTruthy();
+});
+
+it("WPU-I2: an owed invoice that cannot be read fails the invoice job and no other job (R16)", async () => {
+  await t.pool.query(
+    `insert into discrepancies (id, kind, details)
+     values (gen_random_uuid(), 'missing', '{"source":"invoice_seller_missing","v":1}'::jsonb)`,
+  );
+  const clock = createManualClock(new Date("2026-11-11T01:00:00Z"));
+  const logged: LogEvent[] = [];
+  const handler = createHandler({
+    runTx: (fn) => runTransaction(t.db, fn, { role: "worker_rw" }),
+    clock,
+    queue: createMemoryQueue({ clock }),
+    log: (e) => logged.push(e),
+  });
+  try {
+    await expect(handler()).rejects.toThrow("scheduler: invoice_backlog failed");
+    expect(logged.find((e) => e.event === "invoice_backlog_run")).toMatchObject({ unreadable: 1 });
+    // the other jobs ran: the purge came after the invoice job
+    expect(logged.map((e) => e.event)).toContain("rate_limits_purged");
+  } finally {
+    await t.pool.query(
+      "delete from discrepancies where details->>'source' = 'invoice_seller_missing'",
+    );
+  }
 });

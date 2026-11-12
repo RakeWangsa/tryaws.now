@@ -7,13 +7,14 @@ const state = vi.hoisted(() => ({
   rows: [] as unknown[],
   calls: [] as unknown[][],
   throwOnRead: false,
-  // WPU-I1: what readInvoiceSeller answers for the market of the customer.
+  // WPU-I1/I2: the seller written on the invoice (see snapshotOf below).
   seller: { state: "none" } as unknown,
 }));
 
-vi.mock("@tc/db", () => ({
+vi.mock("@tc/db", async () => ({
+  parseSellerRowValue: (await vi.importActual<typeof import("@tc/db")>("@tc/db"))
+    .parseSellerRowValue,
   withTx: async (fn: (tx: unknown) => unknown) => fn({}),
-  readInvoiceSeller: async () => state.seller,
   customerRepos: (_tx: unknown, customerId: string) => ({
     profile: { get: async () => ({ id: customerId, market: "BD", name: "Rahim" }) },
     invoices: {
@@ -28,15 +29,24 @@ vi.mock("@tc/db", () => ({
       get: async (id: string) => {
         state.calls.push(["get", customerId, id]);
         if (state.throwOnRead) throw new Error("db down");
-        return (
-          (state.rows as { id: string; customerId: string }[]).find(
-            (r) => r.id === id && r.customerId === customerId,
-          ) ?? null
+        const found = (state.rows as { id: string; customerId: string }[]).find(
+          (r) => r.id === id && r.customerId === customerId,
         );
+        return found === undefined ? null : { seller: snapshotOf(state.seller), ...found };
       },
     },
   }),
 }));
+
+// WPU-I2: the seller is read from the invoice (the snapshot of the day of issue), never from the
+// settings. `state.seller` keeps its old shape for the existing cases; it is turned into the stored
+// value here. A row that carries its own `seller` key wins.
+const snapshotOf = (stored: unknown): unknown => {
+  const s = stored as { state: string; seller?: unknown; version?: number };
+  if (s.state === "ok") return { v: 1, version: s.version ?? 1, ...(s.seller as object) };
+  if (s.state === "invalid") return { v: 1 };
+  return null;
+};
 
 const { loadInvoice, loadInvoiceList, parseInvoiceCursor, formatInvoiceCursor, parseStoredLines } =
   await import("./invoice-view.ts");
@@ -187,6 +197,35 @@ describe("loadInvoice", () => {
         state: "seller_missing",
       });
     }
+  });
+  it("WPU-I2: prints the seller of the day of issue; a different current setting does not matter", async () => {
+    // Two invoices of one customer, issued under two sellers: each shows its own.
+    const old = { v: 1, version: 1, ...SELLER, legalNameEn: "Old Name Ltd", addressEn: "Old Road" };
+    const next = {
+      v: 1,
+      version: 2,
+      ...SELLER,
+      legalNameEn: "New Name Ltd",
+      addressEn: "New Road",
+    };
+    state.rows = [
+      row({ seller: old }),
+      row({ id: "0190aaaa-0000-7000-8000-0000000000e2", number: 13, seller: next }),
+    ];
+    // The "setting" now says something else again: it is not read.
+    state.seller = { state: "ok", seller: { ...SELLER, legalNameEn: "Third Ltd" }, version: 3 };
+    expect(await loadInvoice(session(A), INV)).toMatchObject({
+      state: "ready",
+      seller: { legalNameEn: "Old Name Ltd", addressEn: "Old Road" },
+    });
+    expect(await loadInvoice(session(A), "0190aaaa-0000-7000-8000-0000000000e2")).toMatchObject({
+      state: "ready",
+      seller: { legalNameEn: "New Name Ltd", addressEn: "New Road" },
+    });
+  });
+  it("WPU-I2: an invoice with no snapshot is not printed, whatever the current setting says (R16)", async () => {
+    state.rows = [row({ seller: null })];
+    expect(await loadInvoice(session(A), INV)).toEqual({ state: "seller_missing" });
   });
   it("another customer's invoice is still null even when the seller is missing (R8)", async () => {
     state.rows = [row()];
