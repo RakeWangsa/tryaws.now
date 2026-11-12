@@ -60,6 +60,8 @@ export interface InvoiceBacklogReport {
   readonly creditNotes: number;
   /** WPU-C1: credit notes (Mushak-6.7) issued in this run. */
   readonly creditNotesIssued: number;
+  /** WPU-B3: credit notes refused for longer than CREDIT_NOTE_STUCK_HOURS (alerted in this run). */
+  readonly creditNotesStuck: number;
   /** How many were left in the page after the run (not yet issued). */
   readonly remaining: number;
 }
@@ -140,6 +142,7 @@ export async function runInvoiceBacklog(deps: InvoiceBacklogDeps): Promise<Invoi
     noted: recon.noted,
     creditNotes: recon.creditNotes,
     creditNotesIssued: credit.issued,
+    creditNotesStuck: credit.stuck,
     remaining: Math.max(0, pending.items.length - handled - failed),
   };
   return report;

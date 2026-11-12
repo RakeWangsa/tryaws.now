@@ -203,6 +203,11 @@ export const extrasEn: Same<typeof extrasBn> = {
       },
     },
     billing: {
+      renewalWait: {
+        stopped:
+          "A plan change or renewal step is waiting: your server is stopped. Start it and the step continues.",
+        busy: "A plan change or renewal step is waiting: another change to this server is still being applied. It continues when that is done.",
+      },
       title: "Billing",
       status: "Subscription",
       statusValue: {

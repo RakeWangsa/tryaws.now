@@ -5,11 +5,16 @@ import {
   runInvoiceBacklog,
   runLifecycle,
   runMetering,
+  runPolling,
   runStaticIpMetering,
   sweepOperations,
+  runDnsDelegation,
+  type DnsDelegationReport,
+  type NsLookup,
   type InvoiceBacklogReport,
   type LifecycleReport,
   type MeteringReport,
+  type PollingReport,
   type StaticIpReport,
   type LogEvent,
   type Logger,
@@ -18,6 +23,12 @@ import {
   type SweepReport,
 } from "@tc/core";
 import { purgeRateLimits, withTx } from "@tc/db";
+import {
+  createDelegationStore,
+  createNsLookup,
+  dnsDelegationDue,
+  nodeNsResolver,
+} from "./dns-delegation";
 
 // Longest rate-limit window is 86400 s (packages/db rate-limit): a window that started two days ago is over.
 export const RATE_LIMIT_RETENTION_MS = 2 * 86_400_000;
@@ -26,25 +37,36 @@ export const RATE_LIMIT_RETENTION_MS = 2 * 86_400_000;
 // the sweep; the plan is then marked failed so that the renewal stops quoting its price.
 export const planChangeAttention: AttentionHook = markPlanChangeFailed;
 
+export interface SchedulerDnsDeps {
+  /** WPU-D4: the NS lookup of the delegation job. Without it the job does not run. */
+  readonly dnsLookup?: (name: string) => Promise<NsLookup>;
+}
+
 export interface SchedulerReport {
+  readonly dnsDelegation: DnsDelegationReport | null;
   readonly sweep: SweepReport | null;
   readonly lifecycle: LifecycleReport | null;
   readonly metering: MeteringReport | null;
   readonly staticIps: StaticIpReport | null;
   readonly invoices: InvoiceBacklogReport | null;
+  readonly polling: PollingReport | null;
   readonly rateLimitsPurged: number | null;
 }
 
 // Every run does the jobs of 3.2 in order: the operations sweep, the lifecycle pass (section
 // 11), the metering pass (WP7-T5), the unattached static IP pass (WPU-M1), the owed invoices (WPU-I2) and the purge of old rate-limit windows. One failing job does not stop the others; the run
 // then rejects, so the error metric of the function moves (R16).
-export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<SchedulerReport> {
+export function createHandler(
+  deps: SweepDeps & { log: Logger } & SchedulerDnsDeps,
+): () => Promise<SchedulerReport> {
   return async () => {
+    let dnsDelegation: DnsDelegationReport | null = null;
     let sweep: SweepReport | null = null;
     let lifecycle: LifecycleReport | null = null;
     let metering: MeteringReport | null = null;
     let staticIps: StaticIpReport | null = null;
     let invoices: InvoiceBacklogReport | null = null;
+    let polling: PollingReport | null = null;
     let rateLimitsPurged: number | null = null;
     const failed: string[] = [];
     const job = async (name: string, fn: () => Promise<void>): Promise<void> => {
@@ -98,13 +120,50 @@ export function createHandler(deps: SweepDeps & { log: Logger }): () => Promise<
         throw new Error("scheduler: invoice backlog rows failed");
       }
     });
+    // WPU-B3: the parameter list of each database once a day and the waiting certificates once an hour, as
+    // operation rows (R1). A list that cannot be read, or an operation that cannot be written, fails the job.
+    await job("polling", async () => {
+      polling = await runPolling({
+        runTx: deps.runTx,
+        clock: deps.clock,
+        queue: deps.queue,
+        log: deps.log,
+      });
+      deps.log({ event: "polling_run", ...polling });
+      if (polling.failed > 0) throw new Error("scheduler: polling rows failed");
+    });
+    // WPU-D4 (audit C.24): zones that wait for delegation. A lookup that fails is not a failure of the
+    // job; a write that fails is. Runs in one run out of ten.
+    const lookup = deps.dnsLookup;
+    if (lookup !== undefined && dnsDelegationDue(deps.clock.now())) {
+      await job("dns_delegation", async () => {
+        dnsDelegation = await runDnsDelegation({
+          store: createDelegationStore(deps.runTx),
+          lookup,
+          clock: deps.clock,
+          log: deps.log,
+          queue: deps.queue,
+        });
+        deps.log({ event: "dns_delegation_run", ...dnsDelegation });
+        if (dnsDelegation.failed > 0) throw new Error("scheduler: dns delegation rows failed");
+      });
+    }
     await job("rate_limits", async () => {
       const before = new Date(deps.clock.now().getTime() - RATE_LIMIT_RETENTION_MS);
       rateLimitsPurged = await deps.runTx((tx) => purgeRateLimits(tx, before));
       deps.log({ event: "rate_limits_purged", count: rateLimitsPurged });
     });
     if (failed.length > 0) throw new Error(`scheduler: ${failed.join(", ")} failed`);
-    return { sweep, lifecycle, metering, staticIps, invoices, rateLimitsPurged };
+    return {
+      sweep,
+      lifecycle,
+      metering,
+      staticIps,
+      invoices,
+      polling,
+      dnsDelegation,
+      rateLimitsPurged,
+    };
   };
 }
 
@@ -134,6 +193,7 @@ export const handler = async (): Promise<SchedulerReport> => {
       clock: { now: () => new Date() },
       queue: createFifoQueue(createSqsSend(createSqsClient(config.region), config.queueUrl)),
       onAttention: planChangeAttention,
+      dnsLookup: createNsLookup(nodeNsResolver()),
       log: (e: LogEvent) => console.log(JSON.stringify(e)),
     });
   }

@@ -138,3 +138,24 @@ describe("/orders/review goes back to the form the draft came from", () => {
     expect(out).toContain(`href="${href}"`);
   });
 });
+
+// WPU-B3: a failed order whose reversal is posted says so with the amount; before that it only promises.
+describe("/orders/[id] failed: the refund line", () => {
+  const failed = (refunded: boolean) => ({
+    ...order("linux_instance"),
+    progress: "failed" as const,
+    resourceId: null,
+    refunded,
+  });
+  it("shows the returned amount once the reversal is posted (en and bn)", () => {
+    const en = html(<OrderStatusContent locale="en" order={failed(true)} />, "en");
+    expect(en).toContain("Returned to your wallet:");
+    const bn = html(<OrderStatusContent locale="bn" order={failed(true)} />, "bn");
+    expect(bn).toContain("আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে:");
+  });
+  it("shows only the promise while the order is not reversed", () => {
+    const en = html(<OrderStatusContent locale="en" order={failed(false)} />, "en");
+    expect(en).not.toContain("Returned to your wallet:");
+    expect(en).toContain("returned to your wallet automatically");
+  });
+});

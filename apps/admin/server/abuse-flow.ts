@@ -11,15 +11,17 @@ import {
 
 // The actions of /abuse (16.12) in the order of R9: authorize, validate, rate limit, execute (one
 // transaction, every write through `audited`), answer. ops, support and superadmin work cases;
-// suspendResource is for ops and superadmin. It writes an operation row only (R1); the queue message
+// suspendResource and restoreResource (WPU-B5, lifts an admin suspension) are for ops and superadmin. It writes an operation row only (R1); the queue message
 // goes out after the commit and a lost send is found again by the scheduler (3.4).
 
-export type AbuseActionKind = "openAbuseCase" | "addNote" | "closeAbuseCase" | "suspendResource";
+export type AbuseActionKind =
+  "openAbuseCase" | "addNote" | "closeAbuseCase" | "suspendResource" | "restoreResource";
 export const ABUSE_ACTION_KINDS: readonly AbuseActionKind[] = [
   "openAbuseCase",
   "addNote",
   "closeAbuseCase",
   "suspendResource",
+  "restoreResource",
 ];
 export const ABUSE_ROLES: readonly AdminRole[] = ["ops", "support", "superadmin"];
 export const SUSPEND_ROLES: readonly AdminRole[] = ["ops", "superadmin"];
@@ -51,7 +53,9 @@ export function makeAbuseAction(
     // 1 and 2. Authenticate and authorize (a bad kind is asked as the wider role list and refused below).
     let actor: AdminActor;
     try {
-      actor = await deps.authorize(kind === "suspendResource" ? SUSPEND_ROLES : ABUSE_ROLES);
+      actor = await deps.authorize(
+        kind === "suspendResource" || kind === "restoreResource" ? SUSPEND_ROLES : ABUSE_ROLES,
+      );
     } catch {
       return { ok: false, code: "denied" };
     }
@@ -102,6 +106,10 @@ export function makeAbuseAction(
             };
           case "closeAbuseCase":
             return { written: await repos.abuse.close({ caseId, at }, why), message: null };
+          case "restoreResource": {
+            const written = await repos.abuse.restoreResource({ caseId, at }, why);
+            return { written, message: written.ok ? written.value.message : null };
+          }
           case "suspendResource": {
             const written = await repos.abuse.suspendResource({ caseId, at }, why);
             return { written, message: written.ok ? written.value.message : null };

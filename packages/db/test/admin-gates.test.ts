@@ -79,6 +79,10 @@ const GATE_CASES: Record<string, GateCase> = {
     call: (r) => r.abuse.suspendResource({ caseId: ID(), at: AT }, "r"),
     deny: "support",
   },
+  "abuse.restoreResource": {
+    call: (r) => r.abuse.restoreResource({ caseId: ID(), at: AT }, "r"),
+    deny: "support",
+  },
   "reconciliation.overview": { call: (r) => r.reconciliation.overview(), deny: "support" },
   "reconciliation.list": {
     call: (r) => r.reconciliation.list({} as never),

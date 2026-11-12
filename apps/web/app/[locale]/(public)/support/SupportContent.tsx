@@ -7,7 +7,7 @@ import { PublicSupportForm } from "./PublicSupportForm.tsx";
 import { JsonLds } from "../_components/JsonLd.tsx";
 import type { Tr } from "../_components/offers.tsx";
 
-// `/support` (contact.html, without the map and the newsletter box): how to reach TiCON Cloud. The
+// `/support` (contact.html, without the map and the newsletter box): how to reach MeghVPS. The
 // ticket form of a signed-in customer is a separate task (WP9); this page links to it through the
 // sign-in. The phone number and the support address are not decided yet (JOURNEY.md, Needs
 // decision), so the page says they are coming instead of showing a made-up value.

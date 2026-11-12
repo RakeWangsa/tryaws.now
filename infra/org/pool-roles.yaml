@@ -139,6 +139,7 @@ Resources:
                   - lightsail:CreateContainerService
                   - lightsail:CreateContainerServiceDeployment
                   - lightsail:CreateDisk
+                  - lightsail:CreateDiskFromSnapshot
                   - lightsail:CreateDiskSnapshot
                   - lightsail:CreateDistribution
                   - lightsail:CreateInstanceSnapshot

@@ -39,6 +39,8 @@ export function domainActionDeps(): DomainActionDeps {
         return fn({
           domains: repos.domains,
           subscriptions: repos.subscriptions,
+          resources: repos.resources,
+          operations: repos.operations,
           audit: repos.audit,
           rateLimits: repos.rateLimits,
           // R12, R16: a flag that is off or unreadable is off.

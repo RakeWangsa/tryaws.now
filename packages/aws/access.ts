@@ -1,11 +1,15 @@
 import { LightsailClient } from "@aws-sdk/client-lightsail";
+import { Route53Client } from "@aws-sdk/client-route-53";
 import type { Clock } from "@tc/core";
 import { createCredentialCache, createStsClient } from "./credentials";
 import { AwsError, mapErrors } from "./errors";
 import {
   CALLER_ROLES,
+  DNS_ROLES,
   LIGHTSAIL_REGIONS,
   LIGHTSAIL_ROLES,
+  ROUTE53_REGION,
+  type DnsRole,
   assertRoleAllowed,
   checkedAccountRef,
   type AccountRef,
@@ -34,6 +38,8 @@ export interface AwsAccess<C extends Caller> {
     region: LightsailRegion,
     role: Extract<RoleOf<C>, LightsailRole>,
   ): LightsailClient;
+  /** The tc-dns account (WPU-D4): Route 53, with TcDnsProvisioner or TcDnsReader. */
+  route53(account: AccountRef, role: Extract<RoleOf<C>, DnsRole>): Route53Client;
 }
 
 function roleNotAllowed(): AwsError {
@@ -99,5 +105,36 @@ export function createAwsAccessInternal<C extends Caller>(
     return client;
   }
 
-  return Object.freeze({ caller, lightsail });
+  const dnsClients = new Map<string, Route53Client>();
+
+  // WPU-D4: the Route 53 client of the tc-dns account. One global endpoint (us-east-1); the role is
+  // assumed with the ExternalId of tc-dns like a pool role (R3).
+  function route53(account: AccountRef, role: Extract<RoleOf<C>, DnsRole>): Route53Client {
+    assertRoleAllowed(caller, role);
+    if (!(DNS_ROLES as readonly string[]).includes(role)) throw roleNotAllowed();
+    const checked = checkedAccountRef(account);
+
+    const key = JSON.stringify([checked.awsAccountId, checked.externalId, role]);
+    const existing = dnsClients.get(key);
+    if (existing) return existing;
+
+    const client = new Route53Client({
+      region: ROUTE53_REGION,
+      credentials: Object.assign(() => cache.get(checked, role), { memoized: true }),
+      ...clientSettings(role),
+      ...(requestHandler ? { requestHandler } : {}),
+    });
+    mapErrors(client, (error) => {
+      if (
+        (error.code === "unauthenticated" || error.code === "forbidden") &&
+        error.operation !== "AssumeRole"
+      ) {
+        cache.invalidate(checked, role);
+      }
+    });
+    dnsClients.set(key, client);
+    return client;
+  }
+
+  return Object.freeze({ caller, lightsail, route53 });
 }

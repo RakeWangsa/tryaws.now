@@ -117,8 +117,8 @@ describe("setLoadBalancerTargetsCore", () => {
     });
     expect(calls).toEqual([
       `store:${CUSTOMER}`,
+      `get:${LB}`, // the frame reads the balancer before the rate limit (R9, WPU-N1)
       "rate",
-      `get:${LB}`,
       `get:${S1}`,
       `get:${S2}`,
       `change:${LB}:${S1},${S2}:${REQ}`,
@@ -140,6 +140,15 @@ describe("setLoadBalancerTargetsCore", () => {
     expect(a).toEqual({ ok: false, error: "validation", fields: { targetIds: "invalid" } });
     expect(b).toEqual(a);
     expect(foreign.calls.some((c) => c.startsWith("change"))).toBe(false);
+  });
+
+  it("a balancer of another customer or a missing one answers not_found and spends no rate limit (R8, R9)", async () => {
+    const w = world({ rows: [] });
+    expect(await setLoadBalancerTargetsCore(w.deps, input)).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+    expect(w.calls).not.toContain("rate");
   });
 
   it("refuses a target of another Region, one that is not active, one that is not a server, and a duplicate", async () => {

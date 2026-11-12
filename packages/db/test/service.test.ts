@@ -112,7 +112,7 @@ it("a domain needs a known TLD; a hosted zone belongs to one DNS zone", async ()
       resource_id: await newResource(t.pool, c, { family: "domain" }),
       name: "example.nope",
       tld: "nope",
-      status: "registering",
+      status: "pending",
     }),
     "23503",
   );
@@ -121,7 +121,7 @@ it("a domain needs a known TLD; a hosted zone belongs to one DNS zone", async ()
     resource_id: await newResource(t.pool, c, { family: "domain" }),
     name: "example.xyz",
     tld: "xyz",
-    status: "registering",
+    status: "pending",
   });
   const zone = {
     customer_id: c,

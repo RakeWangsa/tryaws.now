@@ -46,8 +46,8 @@ const env = {
   TC_POOL_ACCOUNT_IDS: "222222222222,333333333333",
   TC_DNS_ACCOUNT_ID: "444444444444",
   TC_DNS_EXTERNAL_ID: "external-id-value",
-  TC_DOMAIN_WEB: "app.example.com",
-  TC_DOMAIN_ADMIN: "ops.example.com",
+  TC_DOMAIN_WEB: "meghvps.com",
+  TC_DOMAIN_ADMIN: "admin.example-ops.test",
   TC_ADMIN_ALLOWLIST: "203.0.113.0/24",
   TC_PROBE_SOURCES: "198.51.100.10/32, 198.51.100.11/32",
   TC_VPC_CIDR: "172.26.0.0/16",
@@ -342,7 +342,8 @@ describe("ledger check schedule and alarms", () => {
     const alarms = readFileSync(resolve(root, "infra/stacks/alarms.ts"), "utf8");
     expect(alarms).toContain('resourceName(stage, "ledger-mismatch")');
     expect(alarms).toContain('resourceName(stage, "ledger-check-silent")');
-    expect(alarms.match(/alarmActions: \[topic\.arn\]/g)).toHaveLength(4);
+    // WPU-B3 added three more declarations: the shared alertAlarm helper, ReconcileSilentAlarm and the function error alarms.
+    expect(alarms.match(/alarmActions: \[topic\.arn\]/g)).toHaveLength(7);
     expect(alarms).toContain("LEDGER_LOG_MESSAGES.mismatch");
     expect(alarms).toContain("LEDGER_LOG_MESSAGES.failed");
     expect(alarms).toContain('treatMissingData: "breaching"');

@@ -356,3 +356,20 @@ describe("CODEOWNERS", () => {
     }
   });
 });
+
+// WPU-N1 (audit D.1): infra/lib/stage.ts refuses a staging or production synth without these two, so
+// every job that runs sst must pass them from GitHub environment variables.
+describe("TC_PROBE_SOURCES and TC_VPC_CIDR reach every sst job", () => {
+  for (const [name, { workflow }] of deployWorkflows) {
+    it(`${name} passes both from vars.* in each job that runs sst`, () => {
+      const sstJobs = Object.entries(workflow.jobs).filter(([, job]) =>
+        stepsOf(job).some((s) => /\bsst (diff|deploy)\b/.test(runText(s))),
+      );
+      expect(sstJobs.length).toBeGreaterThan(0);
+      for (const [id, job] of sstJobs) {
+        expect(job.env?.TC_PROBE_SOURCES, `${name} ${id}`).toBe("${{ vars.TC_PROBE_SOURCES }}");
+        expect(job.env?.TC_VPC_CIDR, `${name} ${id}`).toBe("${{ vars.TC_VPC_CIDR }}");
+      }
+    });
+  }
+});

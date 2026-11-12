@@ -134,8 +134,19 @@ export const bucketEn: Same<typeof bucketBn> = {
         secret: "Secret key",
         gone: "The secret key is no longer shown. Make a new key if you need one.",
         notReady: "A key cannot be made unless the bucket is on.",
+        confirmLabel: "Type the name of the bucket to confirm",
+        confirmHint: "Type the name of the bucket exactly as shown at the top of this page.",
+        listTitle: "Keys of this bucket",
+        listEmpty: "This bucket has no access key yet.",
         listUnavailable:
-          "The list of keys of the bucket cannot be shown here yet. The key ID is shown once when you make the key, so write it down.",
+          "The list of keys cannot be shown now. Reload the page in a moment. The key ID is shown once when you make the key, so write it down.",
+        listKeyId: "Key ID",
+        listStatus: "Status",
+        listCreated: "Created",
+        status: { active: "In use", inactive: "Off" },
+        deleteNameLabel: "Type the name of the bucket to confirm",
+        deleteNameHint: "Type the name of the bucket exactly as shown at the top of this page.",
+        deleteStale: "A key can be deleted only after you sign in again.",
         deleteTitle: "Delete a key",
         deleteBody:
           "Once deleted, any app that uses that key stops reading and writing files at once.",
@@ -170,6 +181,8 @@ export const bucketEn: Same<typeof bucketBn> = {
       not_allowed: "This cannot be done in the current state.",
       not_ready: "The bucket is not on right now.",
       limit_reached: "The bucket already has two keys. Delete one first.",
+      already_created:
+        "This key was already made, and its secret key cannot be shown again. Delete it and make a new key if you lost the secret.",
       unavailable: "We could not finish this now. Please try again shortly.",
     },
     done: {

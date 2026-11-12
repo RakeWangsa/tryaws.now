@@ -297,6 +297,8 @@ export function makeHarness(): Harness {
     kyc: null,
     account: null,
     reader: null,
+    access: null,
+    renderer: null,
   };
 
   const otpDeps = {

@@ -10,6 +10,7 @@ import {
   isOperationKind,
   POOLLESS_FAMILIES,
   sendAfterCommit,
+  stepDone,
   transitionOperation,
   type AwsNameType,
   type FailureDecision,
@@ -174,6 +175,27 @@ function factsOf(error: unknown): FailureFacts {
   return { code: "internal", retryable: true, poolFull: false, awsErrorName: null };
 }
 
+// WPU-B5 item 22 (JOURNEY T7-3, section 11): an admin suspension carries `adminSuspended: true` in its
+// payload and an admin restore carries `adminSuspended: false`. When that operation finishes, the mark
+// goes into `resources.config` in the same record as the state, so a renewal never lifts an admin's
+// suspension and only the restore clears it. A lifecycle suspend or resume has no marker and leaves
+// the config as it is. Only a boolean counts (R16).
+export function withAdminMark(kind: string, payload: unknown, result: StepResult): StepResult {
+  if (result.kind !== "done") return result;
+  if (kind !== "suspend" && kind !== "resume") return result;
+  const marker =
+    typeof payload === "object" && payload !== null && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>).adminSuspended
+      : undefined;
+  if (typeof marker !== "boolean") return result;
+  // A suspend sets it, a resume clears it; the other combination is not an admin action.
+  if ((kind === "suspend") !== marker) return result;
+  return stepDone({
+    ...result.patch,
+    configMerge: { ...result.patch?.configMerge, adminSuspended: marker },
+  });
+}
+
 // The adapter call and the checks of what it returned. Every way for the step to fail is a Plan.
 async function plan(
   deps: StepDeps,
@@ -223,7 +245,7 @@ async function plan(
     }
     throw error;
   }
-  return { kind: "step", result };
+  return { kind: "step", result: withAdminMark(operation.kind, operation.payload, result) };
 }
 
 // One run of one step: claim, the adapter call outside any transaction, the record under the fence

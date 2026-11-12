@@ -7,7 +7,7 @@ export const supportEn: Same<typeof supportBn> = {
     meta: { title: "Contact support" },
     heading: "Contact support",
     intro:
-      "Write down your problem or question. The TiCON Cloud support team answers by email to the address of your account.",
+      "Write down your problem or question. The MeghVPS support team answers by email to the address of your account.",
     form: {
       title: "New request",
       category: {

@@ -1,8 +1,10 @@
-import { compensationRepo, type Tx } from "@tc/db";
+import { compensationRepo, insertOperation, lifecycleRepo, type Tx } from "@tc/db";
 import { releaseCapacity } from "../capacity/release";
-import { lockWallet } from "../ledger/balance";
+import { lockWallet, walletBalance } from "../ledger/balance";
 import { reverseTransaction } from "../ledger/reverse";
+import type { Logger } from "../operations/types";
 import type { Clock } from "../types";
+import { cleanupOperationFor, refundNotificationsFor } from "./failed-create-follow-up";
 
 export interface Compensated {
   /** The order is reversed after the call: the refund exists, posted now or earlier. */
@@ -35,7 +37,7 @@ const safeCode = (code: string): string =>
  */
 export async function compensateFailedCreate(
   tx: Tx,
-  deps: { readonly clock: Clock },
+  deps: { readonly clock: Clock; readonly log?: Logger },
   event: { readonly resourceId: string; readonly customerId: string; readonly code: string },
 ): Promise<Compensated> {
   await lockWallet(tx, event.customerId);
@@ -74,8 +76,24 @@ export async function compensateFailedCreate(
   const released = await releaseCapacity(tx, {
     resourceId: event.resourceId,
     clock: deps.clock,
+    ...(deps.log !== undefined && { log: deps.log }),
   });
   if (!released.ok) throw new Error("orders: the capacity release failed");
+
+  // WPU-B3 (10.1): queue the removal of what the create already made in AWS (one operation for each
+  // resource, keyed; it waits for an admin until the end date of R13) and tell the customer. Both are
+  // replays when this key was written before. No AWS call is made here (R1).
+  await insertOperation(tx, cleanupOperationFor(event.resourceId), deps.clock.now());
+  const balanceMinor = await walletBalance(tx, event.customerId);
+  for (const notice of refundNotificationsFor({
+    customerId: event.customerId,
+    orderId: order.orderId,
+    family: order.family,
+    refundMinor: order.totalMinor,
+    balanceMinor,
+  })) {
+    await lifecycleRepo(tx).insertNotification(notice);
+  }
 
   return { reversed: true, released: released.value.released, replayed: !flipped };
 }

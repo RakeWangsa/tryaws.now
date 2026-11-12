@@ -335,6 +335,19 @@ describe("/abuse", () => {
     expect(html).not.toMatch(/arn:aws|\b\d{12}\b|AccessDenied|Exception/);
   });
 
+  it("a suspended resource shows the restore form to ops (also on a closed case) and not to support", async () => {
+    state.repos["abuse"] = {
+      detail: async () => ok(caseDetail({ status: "closed", resourceState: "suspended" })),
+    };
+    as("ops");
+    const html = inProvider(await AbuseDetail(one("en", CASE_ID)), "en");
+    expect(html).toContain('name="kind" value="restoreResource"');
+    expect(html).toContain(msgs("en").abuse.restore.title);
+    as("support");
+    const other = inProvider(await AbuseDetail(one("en", CASE_ID)), "en");
+    expect(other).not.toContain('value="restoreResource"');
+  });
+
   it("a refusal by the guard, a bad id and a missing case show no data", async () => {
     state.page = { kind: "denied" };
     expect(inProvider(await AbuseDetail(one("en", CASE_ID)), "en")).not.toContain("linux_instance");

@@ -19,6 +19,7 @@ import { isFeatureFlag } from "../flags/keys";
 import { checkCdnOrigin, parseCdnConfig, resolveCdn } from "../products/cdn";
 import { withConfigPrice } from "../products/config-price-source";
 import { checkDiskServer, parseDiskConfig, resolveDisk } from "../products/disk";
+import { checkDiskSnapshotRestore } from "../products/disk-restore";
 import { resolveProduct, type ResolvedProduct } from "../products/instance";
 import {
   EMPTY_ALLOW_LIST,
@@ -218,6 +219,33 @@ async function checkRestoreSource(
 }
 
 /**
+ * WPU-B5 item 26. A disk started from a snapshot of another disk of the customer. The snapshot (a
+ * backup row) and the disk it belongs to are read through the tenant-scoped repository (another
+ * customer's row is `null`, like a missing one, R8); the size of the source disk is the one in its
+ * config (a disk's size cannot change); checkDiskSnapshotRestore decides.
+ */
+async function checkDiskRestoreSource(
+  repos: CustomerRepos,
+  requested: string,
+  region: string,
+  sizeGb: number,
+): Promise<Result<true>> {
+  const backup = candidateOf(await repos.resources.get(requested));
+  const sourceRow =
+    backup?.parentResourceId == null ? null : await repos.resources.get(backup.parentResourceId);
+  const sourceSize = (sourceRow?.config as { sizeGb?: unknown } | null | undefined)?.sizeGb;
+  const checked = checkDiskSnapshotRestore({
+    requested,
+    backup,
+    source: candidateOf(sourceRow),
+    sourceSizeGb: typeof sourceSize === "number" ? sourceSize : Number.NaN,
+    sizeGb,
+    region,
+  });
+  return checked.ok ? { ok: true, value: true } : checked;
+}
+
+/**
  * WPU-G9. A database started from a snapshot or from a point in time of another database of the
  * customer. Rows are read through the tenant-scoped repository (R8); the disk sizes come from the
  * catalog rows of the two plans; db-restore.ts decides.
@@ -376,22 +404,34 @@ export async function resolveOrderProduct(
     if (anchor === null) {
       return { ok: false, error: "validation", fields: { productId: "unavailable" } };
     }
-    const row = await repos.resources.get(config.value.serverId);
-    const cfgRegion = (row?.config as { region?: unknown } | null | undefined)?.region;
-    const checked = checkDiskServer({
-      requested: config.value.serverId,
-      region: config.value.region,
-      server:
-        row === null
-          ? null
-          : {
-              id: row.id,
-              family: row.family,
-              state: row.state,
-              region: row.region ?? (typeof cfgRegion === "string" ? cfgRegion : ""),
-            },
-    });
-    if (!checked.ok) return checked;
+    if (config.value.restoreFromBackupId !== undefined) {
+      // WPU-B5: a disk from a snapshot is not made for a server; the snapshot is checked instead.
+      const restored = await checkDiskRestoreSource(
+        repos,
+        config.value.restoreFromBackupId,
+        config.value.region,
+        config.value.sizeGb,
+      );
+      if (!restored.ok) return restored;
+    } else {
+      const serverId = config.value.serverId ?? "";
+      const row = await repos.resources.get(serverId);
+      const cfgRegion = (row?.config as { region?: unknown } | null | undefined)?.region;
+      const checked = checkDiskServer({
+        requested: serverId,
+        region: config.value.region,
+        server:
+          row === null
+            ? null
+            : {
+                id: row.id,
+                family: row.family,
+                state: row.state,
+                region: row.region ?? (typeof cfgRegion === "string" ? cfgRegion : ""),
+              },
+      });
+      if (!checked.ok) return checked;
+    }
     const disk = resolveDisk(config.value, anchor);
     if (!disk.ok) return disk;
     return configPriced(

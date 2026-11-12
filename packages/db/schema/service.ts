@@ -32,6 +32,15 @@ export const DNS_ZONE_STATUSES = [
   "removed",
   "failed",
 ] as const;
+// WPU-B2: the words of domains.status; the same list is DOMAIN_STATES of packages/core/domains.
+export const DOMAIN_STATUSES = [
+  "pending",
+  "review",
+  "awaiting_verification",
+  "registered",
+  "failed",
+  "expired",
+] as const;
 export const CASE_STATUSES = ["open", "closed"] as const;
 export const DISCREPANCY_KINDS = ["orphan", "missing", "cost", "payment"] as const;
 // 16.12: resolveDiscrepancy.
@@ -66,6 +75,12 @@ export const domains = pgTable(
     unique("domains_resource_id_unique").on(t.resourceId),
     index("domains_customer_id_idx").on(t.customerId),
     index("domains_name_idx").on(t.name),
+    // WPU-B2: one ACTIVE order for a name on the whole platform. A failed order (reversed) gives the
+    // name back; every other status holds it, an expired name included (the registry keeps it).
+    uniqueIndex("domains_name_active_unique")
+      .on(t.name)
+      .where(sql`${t.status} <> 'failed'`),
+    check("domains_status_check", inList(t.status, DOMAIN_STATUSES)),
   ],
 );
 

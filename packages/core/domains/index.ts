@@ -39,3 +39,10 @@ export {
   type ResolvedDomain,
   type TldProduct,
 } from "./resolve";
+export { planDomainSync, type DomainPlan } from "./sync";
+export {
+  NAME_SERVERS_MAX,
+  NAME_SERVERS_MIN,
+  parseNameServers,
+  splitNameServers,
+} from "./nameservers";

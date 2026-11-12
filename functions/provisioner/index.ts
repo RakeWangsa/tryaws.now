@@ -17,8 +17,8 @@ import { bucketAdapter } from "./bucket";
 import { cdnAdapter } from "./cdn";
 import { containerServiceAdapter } from "./container";
 import { databaseAdapter } from "./database";
-import { dnsZoneAdapter, dnsZoneHooks } from "./dns-zone";
-import { domainAdapter } from "./domain";
+import { dnsZoneAdapter, dnsZoneHooks, dnsZonePortsFromEnv } from "./dns-zone";
+import { domainAdapter, domainHooks } from "./domain";
 import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
@@ -112,6 +112,8 @@ export function readConfig(env: Record<string, string | undefined>): Provisioner
 function buildDeps(): StepDeps {
   const config = readConfig(process.env);
   const clock = { now: () => new Date() };
+  const access = createAwsAccess({ caller: "provisioner" });
+  const log = (e: LogEvent) => console.log(JSON.stringify(e));
   return {
     runTx: withTx,
     clock,
@@ -138,18 +140,24 @@ function buildDeps(): StepDeps {
       cdnAdapter(),
       // WP7-T4: behind the flag domain (R12); its ports are not built yet (JOURNEY), so it fails closed.
       domainAdapter(),
-      // WPU-G6: behind the flag dns_zone (R12); its Route 53 client is not built yet (JOURNEY), so it fails closed.
-      dnsZoneAdapter(),
+      // WPU-G6, WPU-D4: behind the flag dns_zone (R12); Route 53 of tc-dns, and it fails closed without
+      // TC_DNS_ACCOUNT_ID and TC_DNS_EXTERNAL_ID.
+      dnsZoneAdapter(dnsZonePortsFromEnv(process.env, access)),
       // WP6-T2 and WP6-T3.
       databaseAdapter(),
       loadBalancerAdapter(),
     ]),
     // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
     destructiveGuard,
-    hooks: composeHooks(orderHooks({ clock }), lifecycleHooks({ clock }), dnsZoneHooks()),
-    access: createAwsAccess({ caller: "provisioner" }),
+    hooks: composeHooks(
+      orderHooks({ clock, log }),
+      lifecycleHooks({ clock, log }),
+      dnsZoneHooks(),
+      domainHooks(),
+    ),
+    access,
     env: config.env,
-    log: (e: LogEvent) => console.log(JSON.stringify(e)),
+    log,
   };
 }
 

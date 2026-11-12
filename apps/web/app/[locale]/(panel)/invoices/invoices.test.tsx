@@ -107,6 +107,21 @@ describe("/invoices/[id]", () => {
     expect(out).toContain('target="_blank"');
     expect(out).toContain('rel="noopener noreferrer"');
   });
+  it("offers 'Download PDF' next to print, as a plain link to the pdf route (WPU-N1)", () => {
+    const en = render("invoice.ready");
+    expect(en).toContain('href="/en/invoices/0190aaaa-0000-7000-8000-0000000000e1/pdf"');
+    expect(en).toContain("Download PDF");
+    expect(en).toContain("Print or save as PDF");
+    expect(en).not.toContain('role="alert"');
+    const bn = render("invoice.ready", "bn");
+    expect(bn).toContain("PDF ডাউনলোড করুন");
+  });
+  it("says why there is no PDF, in both languages, without any error text (WPU-N1)", () => {
+    expect(render("invoice.pdf_unavailable")).toContain("could not be made now");
+    expect(render("invoice.pdf_busy")).toContain("Too many PDF requests");
+    expect(render("invoice.pdf_unavailable", "bn")).toContain("তৈরি করা যায়নি");
+    expect(render("invoice.pdf_unavailable")).toContain('role="alert"');
+  });
   it("says 'no name given' for a customer without a name", () => {
     expect(render("invoice.no_name")).toContain("No name given");
   });

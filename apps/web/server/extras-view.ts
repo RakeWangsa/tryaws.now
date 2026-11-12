@@ -20,6 +20,8 @@ import type { CatalogProduct, InvoiceRow, NotificationRow, SubscriptionRow } fro
 import { TEMPLATE_IDS, parseTemplateData, renderInApp } from "@tc/notify";
 import type { RenderContext, TemplateId } from "@tc/notify";
 import { resourceFacts } from "./extras-actions.ts";
+import { renewalWaitOf } from "./renewal-wait.ts";
+import type { RenewalWait } from "./renewal-wait.ts";
 import { planSpecsOf, serverConfigOf } from "./servers-view.ts";
 import type { PlanOption } from "./servers-view.ts";
 
@@ -143,6 +145,8 @@ export interface ServerExtras {
     autoRenew: boolean;
     lines: PriceLines | null;
     invoices: InvoiceItem[];
+    /** WPU-N1: a plan change or renewal step waits for the server (stopped or busy); null = no line. */
+    renewalWait: RenewalWait;
   };
   destroy: {
     allowed: boolean;
@@ -241,11 +245,12 @@ export async function loadServerExtras(
     const server = await repos.resources.get(id);
     if (server === null || server.family !== FAMILY) return { state: "ready", extras: null };
 
-    const [children, disks, subscription, invoices] = await Promise.all([
+    const [children, disks, subscription, invoices, requests] = await Promise.all([
       repos.resources.listChildren(id, "backup"),
       repos.resources.list(),
       repos.subscriptions.get(id),
       repos.invoices.list({ limit: 5 }),
+      repos.operations.listForResource(id),
     ]);
     const backups = children.map((b): BackupItem => {
       const f = resourceFacts(b);
@@ -313,6 +318,11 @@ export async function loadServerExtras(
           autoRenew: subscription?.autoRenew ?? false,
           lines: subscription === null ? null : parsePriceLines(subscription.priceSnapshot),
           invoices: invoices.items.map(toInvoice),
+          renewalWait: renewalWaitOf(
+            subscription?.status ?? null,
+            server.state,
+            requests.some((o) => ["queued", "running", "waiting"].includes(o.state)),
+          ),
         },
         restorePlans,
         destroy: {

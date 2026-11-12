@@ -9,7 +9,7 @@ import {
   guardAction,
   orderActionDeps,
 } from "../../../../../server/action-deps.ts";
-import { addDiskDraftCore } from "../../../../../server/disk-actions.ts";
+import { addDiskDraftCore, restoreDiskDraftCore } from "../../../../../server/disk-actions.ts";
 import { createOrderDraftCore } from "../../../../../server/order-actions.ts";
 import { pick } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
@@ -97,6 +97,26 @@ export async function restoreToNewServerAction(
  * Region: the order code checks both against the customer's own rows (R8). The family is fixed in the
  * core, never a form field.
  */
+/**
+ * WPU-B5 item 26: a new disk from a snapshot of one of the customer's disks. The signed draft, then the
+ * review page where the price is shown; the purchase writes the create operation (R1). The family is
+ * fixed in the core and the snapshot is checked against the customer's own rows (R8).
+ */
+export async function restoreDiskAction(_previous: FormState, form: FormData): Promise<FormState> {
+  if (!(await guardAction())) return { error: "forbidden" };
+  const result = await restoreDiskDraftCore(
+    await orderActionDeps(),
+    pick(form, ["productId", "region", "displayName", "sizeGb", "restoreFromBackupId"]),
+  );
+  if (!result.ok) {
+    return { error: result.error, ...(result.fields ? { fields: result.fields } : {}) };
+  }
+  const found = await getLocale();
+  const locale: Locale = found === "en" ? "en" : "bn";
+  // redirect() throws on purpose; nothing may catch it. The token is signed and holds no secret.
+  redirect(`${localePath(locale, "/orders/review")}?d=${encodeURIComponent(result.token)}`);
+}
+
 export async function addDiskAction(_previous: FormState, form: FormData): Promise<FormState> {
   if (!(await guardAction())) return { error: "forbidden" };
   const result = await addDiskDraftCore(

@@ -9,7 +9,7 @@ export const publicEn: Same<typeof publicBn> = {
     crumb: { home: "Home" },
     meta: {
       home: {
-        title: "TiCON Cloud: Cloud Server, built on Amazon Lightsail",
+        title: "MeghVPS: Cloud Server, built on Amazon Lightsail",
         description:
           "Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in taka, top up with EPS.",
       },
@@ -26,15 +26,15 @@ export const publicEn: Same<typeof publicBn> = {
       help: {
         title: "Help and frequently asked questions",
         description:
-          "Answers about TiCON Cloud and Amazon Lightsail: AWS, billing, support and where your data is.",
+          "Answers about MeghVPS and Amazon Lightsail: AWS, billing, support and where your data is.",
       },
       support: {
         title: "Support and contact",
-        description: "How to reach the TiCON Cloud support team.",
+        description: "How to reach the MeghVPS support team.",
       },
       legal: {
         title: "Legal documents",
-        description: "TiCON Cloud terms, privacy, acceptable use and refund policy.",
+        description: "MeghVPS terms, privacy, acceptable use and refund policy.",
       },
       soon: {
         description:
@@ -84,7 +84,7 @@ export const publicEn: Same<typeof publicBn> = {
       plansTitle: "Popular Cloud Server plans",
       plansLead:
         "The lowest priced open plans right now. Every price comes straight from the price list.",
-      whyTitle: "Why TiCON Cloud",
+      whyTitle: "Why MeghVPS",
       why: {
         aws: {
           title: "100% AWS infrastructure",
@@ -96,11 +96,11 @@ export const publicEn: Same<typeof publicBn> = {
         },
         panel: {
           title: "One panel, no separate AWS account",
-          text: "Create, start, stop and back up servers from the TiCON Cloud panel. You do not need the AWS console.",
+          text: "Create, start, stop and back up servers from the MeghVPS panel. You do not need the AWS console.",
         },
         support: {
-          title: "TiCON Cloud bills and supports you",
-          text: "TiCON Cloud sells, bills and supports the service. Ask us directly.",
+          title: "MeghVPS bills and supports you",
+          text: "MeghVPS sells, bills and supports the service. Ask us directly.",
         },
       },
       locationsTitle: "Two locations",
@@ -186,7 +186,7 @@ export const publicEn: Same<typeof publicBn> = {
     },
     help: {
       heading: "Frequently asked questions",
-      lead: "The questions we hear most about TiCON Cloud and Amazon Lightsail.",
+      lead: "The questions we hear most about MeghVPS and Amazon Lightsail.",
       listTitle: "Questions and answers",
       stillTitle: "Did not find an answer?",
       stillText: "Tell us on the support page.",
@@ -197,11 +197,11 @@ export const publicEn: Same<typeof publicBn> = {
         },
         noAccount: {
           q: "Do I get an AWS account or the AWS console?",
-          a: "No. You run everything from the TiCON Cloud panel. You do not need a separate AWS account or the AWS console.",
+          a: "No. You run everything from the MeghVPS panel. You do not need a separate AWS account or the AWS console.",
         },
         billing: {
           q: "Who bills me and who supports me?",
-          a: "TiCON Cloud. We sell, bill and support the service.",
+          a: "MeghVPS. We sell, bill and support the service.",
         },
         dataLocation: {
           q: "Where is my data?",
@@ -243,7 +243,7 @@ export const publicEn: Same<typeof publicBn> = {
     },
     support: {
       heading: "Support and contact",
-      lead: "TiCON Cloud sells, bills and supports the service. Reach us in the ways below.",
+      lead: "MeghVPS sells, bills and supports the service. Reach us in the ways below.",
       signedInTitle: "If you have an account",
       signedInText:
         "Sign in to the panel and send a request from the support page. We then already have your servers and orders at hand.",
@@ -297,7 +297,7 @@ export const publicEn: Same<typeof publicBn> = {
         terms: {
           title: "Terms of use",
           sections: {
-            scope: "Scope: what TiCON Cloud provides and who does what. [legal text pending]",
+            scope: "Scope: what MeghVPS provides and who does what. [legal text pending]",
             payment: "Money, wallet and renewal. [legal text pending]",
             suspension: "The right to suspend and end the service. [legal text pending]",
           },
@@ -310,7 +310,7 @@ export const publicEn: Same<typeof publicBn> = {
             transfer:
               "Rules on using Amazon Lightsail to avoid the data fees of other AWS services, on video streaming or very high request volume through CDN, and on outbound port 25. [legal text pending]",
             suspend:
-              "TiCON Cloud may suspend a resource at once on a breach or an AWS notice. [legal text pending]",
+              "MeghVPS may suspend a resource at once on a breach or an AWS notice. [legal text pending]",
           },
         },
         privacy: {

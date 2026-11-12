@@ -155,6 +155,13 @@
       "when": 1794507778288,
       "tag": "0023_invoice_supply_date_and_credit_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794517595847,
+      "tag": "0024_domain_name_active_unique",
+      "breakpoints": true
     }
   ]
 }

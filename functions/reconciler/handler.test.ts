@@ -15,6 +15,9 @@ const ok: ReconcileResult = {
   capacitySkipped: 0,
   capacityOverLimit: 0,
   capacityFailed: 0,
+  usageWritten: 0,
+  usageSkipped: 0,
+  usageFailed: 0,
   staleOperations: 0,
   incomplete: false,
 };

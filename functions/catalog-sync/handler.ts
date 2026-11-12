@@ -8,11 +8,18 @@ import {
 } from "@tc/aws";
 import {
   BLUEPRINT_FAMILY,
+  CDN_FAMILY,
+  CDN_SYNC_REGION,
+  DB_BLUEPRINT_FAMILY,
   mapBlueprint,
+  mapDbBlueprint,
+  mapDistributionBundle,
   planIsSafe,
   planScopeSync,
   type BlueprintRow,
   type CatalogRowInput,
+  type CdnBundleRow,
+  type DbBlueprintRow,
   type Clock,
   type Logger,
 } from "@tc/core";
@@ -36,6 +43,14 @@ export interface ImageScopeWrite {
   readonly at: Date;
 }
 
+/** WPU-B5: the rows of one CDN or database scope, written like the images (never deleted). */
+export interface ExtraScopeWrite {
+  readonly region: string;
+  readonly rows: readonly (CdnBundleRow | DbBlueprintRow)[];
+  readonly deactivate: readonly { family: string; awsId: string; region: string }[];
+  readonly at: Date;
+}
+
 /**
  * What the handler needs of the database. Each method is its own short transaction in deps.ts, so no
  * connection is held during a network call. There is no delete: a plan AWS no longer lists is
@@ -52,6 +67,12 @@ export interface CatalogStore {
   applyImages(
     scope: ImageScopeWrite,
   ): Promise<{ inserted: number; updated: number; deactivated: number }>;
+  /** WPU-B5: CDN bundles (family `cdn`) and database blueprints (family `db_blueprint`). */
+  applyExtra(scope: ExtraScopeWrite): Promise<{
+    inserted: number;
+    updated: number;
+    deactivated: number;
+  }>;
   applyTlds(rows: readonly TldPrice[], at: Date): Promise<{ inserted: number; updated: number }>;
 }
 
@@ -66,6 +87,9 @@ export interface CatalogSyncDeps {
   readonly syncTlds: boolean;
   /** WPU-G3: also sync the images (GetBlueprints) of each Region. */
   readonly syncImages: boolean;
+  /** WPU-B5: also sync the CDN bundles (us-east-1 only) and the database engines and versions. */
+  readonly syncCdn?: boolean;
+  readonly syncDbBlueprints?: boolean;
   /** Time after which no new scope starts (open point 10). Default 240000. */
   readonly budgetMs?: number;
 }
@@ -99,6 +123,20 @@ export interface CatalogSyncReport {
     inserted: number;
     updated: number;
   } | null;
+  /** WPU-B5: present only when the CDN bundles are synced. */
+  readonly cdn?: ExtraEntry;
+  /** WPU-B5: present only when the database blueprints are synced; one entry per Region. */
+  readonly dbBlueprints?: readonly ExtraEntry[];
+}
+
+interface ExtraEntry {
+  region: string;
+  ok: boolean;
+  seen: number;
+  mapped: number;
+  inserted: number;
+  updated: number;
+  deactivated: number;
 }
 
 type FailReason = "failed" | "aws_error" | "unsafe_plan" | "budget";
@@ -264,18 +302,81 @@ export function createCatalogSyncHandler(
       }
     }
 
+    // WPU-B5. The CDN bundles and the database engines and versions, after the images. Same rules: a
+    // failed scope is logged with a fixed reason and its rows stay, an answer with nothing usable is
+    // refused before any write (it would switch every row off, R16), nothing is deleted.
+    const extra = async (
+      event: string,
+      region: string,
+      family: string,
+      read: () => Promise<{ seen: number; rows: (CdnBundleRow | DbBlueprintRow)[] }>,
+    ): Promise<ExtraEntry> => {
+      try {
+        if (overBudget()) throw new ScopeRefused("budget");
+        const { seen, rows } = await read();
+        if (rows.length === 0) throw new ScopeRefused("unsafe_plan");
+        const existing = await deps.store.existing({ region, families: [family] });
+        const kept = new Set(rows.map((r) => r.awsId));
+        const deactivate = existing
+          .filter((e) => e.active && !kept.has(e.awsId))
+          .map((e) => ({ family: e.family, awsId: e.awsId, region }));
+        const done = await deps.store.applyExtra({
+          region,
+          rows,
+          deactivate,
+          at: deps.clock.now(),
+        });
+        const entry = { region, ok: true, seen, mapped: rows.length, ...done };
+        deps.log({ event, ...entry });
+        return entry;
+      } catch (e) {
+        deps.log({ event, region, ok: false, ...failureFields(e) });
+        return { region, ok: false, seen: 0, mapped: 0, inserted: 0, updated: 0, deactivated: 0 };
+      }
+    };
+
+    const cdn = deps.syncCdn
+      ? await extra("catalog_sync_cdn", CDN_SYNC_REGION, CDN_FAMILY, async () => {
+          const raw = await deps.source.distributionBundles(account);
+          const rows: CdnBundleRow[] = [];
+          for (const item of raw) {
+            const row = mapDistributionBundle(item);
+            if (row !== null && !rows.some((r) => r.awsId === row.awsId)) rows.push(row);
+          }
+          return { seen: raw.length, rows };
+        })
+      : undefined;
+
+    const dbBlueprints: ExtraEntry[] = [];
+    for (const region of deps.syncDbBlueprints ? deps.regions : []) {
+      dbBlueprints.push(
+        await extra("catalog_sync_db_blueprints", region, DB_BLUEPRINT_FAMILY, async () => {
+          const raw = await deps.source.databaseBlueprints(account, region);
+          const rows: DbBlueprintRow[] = [];
+          for (const item of raw) {
+            const row = mapDbBlueprint(item, region);
+            if (row !== null && !rows.some((r) => r.awsId === row.awsId)) rows.push(row);
+          }
+          return { seen: raw.length, rows };
+        }),
+      );
+    }
+
     const tlds: CatalogSyncReport["tlds"] = deps.syncTlds ? await syncTldStep() : null;
 
     const failedScopes = regions.filter((r) => !r.ok).length;
     const tldFailed = tlds !== null && !tlds.ok && !tlds.skipped;
     const imagesFailed = images.filter((r) => !r.ok).length;
-    const ok = failedScopes === 0 && imagesFailed === 0 && !tldFailed;
+    const extraFailed =
+      (cdn !== undefined && !cdn.ok ? 1 : 0) + dbBlueprints.filter((r) => !r.ok).length;
+    const ok = failedScopes === 0 && imagesFailed === 0 && extraFailed === 0 && !tldFailed;
     deps.log({
       event: "catalog_sync",
       result: ok ? "ok" : "failed",
       regions: regions.length,
       regionsFailed: failedScopes,
       imagesFailed,
+      extraFailed,
       tldsFailed: tldFailed,
       tldsSkipped: tlds?.skipped === true,
       seen: regions.reduce((n, r) => n + r.seen, 0),
@@ -286,6 +387,12 @@ export function createCatalogSyncHandler(
       deactivated: regions.reduce((n, r) => n + r.deactivated, 0),
     });
     if (!ok) throw new Error(FIXED_FAILURE);
-    return { regions, images, tlds };
+    return {
+      regions,
+      images,
+      tlds,
+      ...(cdn === undefined ? {} : { cdn }),
+      ...(deps.syncDbBlueprints ? { dbBlueprints } : {}),
+    };
   };
 }

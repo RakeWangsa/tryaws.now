@@ -331,6 +331,11 @@ function BillingTab({
   if (billing.status === null) return <p className="seccolor">{t("noSubscription")}</p>;
   return (
     <>
+      {billing.renewalWait === null ? null : (
+        <p className="seccolor mb-3" role="status">
+          {t(`renewalWait.${billing.renewalWait}`)}
+        </p>
+      )}
       <div className="row g-3 mb-3">
         <div className="col-12 col-md-6">
           <p className="seccolor mb-1">{t("status")}</p>

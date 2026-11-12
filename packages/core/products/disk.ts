@@ -27,7 +27,13 @@ export interface DiskOrderConfig {
   readonly displayName: string;
   readonly sizeGb: number;
   /** The customer's Linux server the disk is added for; checked by checkDiskServer before it counts. */
-  readonly serverId: string;
+  readonly serverId?: string;
+  /**
+   * WPU-B5: start from a snapshot (a backup row) of a disk of the customer. A restored disk is made
+   * unattached and has no `serverId`; attaching it is the existing attach_disk action. Checked by
+   * checkDiskSnapshotRestore before it counts.
+   */
+  readonly restoreFromBackupId?: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -46,7 +52,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseDiskConfig(raw: unknown): Result<DiskOrderConfig> {
   const input = isRecord(raw) ? raw : {};
   const fields: Record<string, string> = {};
-  const { productId, region, displayName, sizeGb, serverId } = input;
+  const { productId, region, displayName, sizeGb, serverId, restoreFromBackupId } = input;
+  const restoring = restoreFromBackupId !== undefined && restoreFromBackupId !== null;
   if (typeof productId !== "string" || !UUID.test(productId)) fields.productId = "invalid";
   if (typeof region !== "string" || !REGION.test(region)) fields.region = "invalid";
   if (typeof displayName !== "string" || !DISPLAY_NAME.test(displayName)) {
@@ -60,7 +67,15 @@ export function parseDiskConfig(raw: unknown): Result<DiskOrderConfig> {
   ) {
     fields.sizeGb = "invalid";
   }
-  if (typeof serverId !== "string" || !UUID.test(serverId)) fields.serverId = "invalid";
+  if (restoring) {
+    // A restored disk is not made for a server: both at once is a mistake of the caller (R16).
+    if (typeof restoreFromBackupId !== "string" || !UUID.test(restoreFromBackupId)) {
+      fields.restoreFromBackupId = "invalid";
+    }
+    if (serverId !== undefined && serverId !== null) fields.serverId = "invalid";
+  } else if (typeof serverId !== "string" || !UUID.test(serverId)) {
+    fields.serverId = "invalid";
+  }
   if (Object.keys(fields).length > 0) return { ok: false, error: "validation", fields };
   return {
     ok: true,
@@ -69,7 +84,9 @@ export function parseDiskConfig(raw: unknown): Result<DiskOrderConfig> {
       region: region as string,
       displayName: displayName as string,
       sizeGb: sizeGb as number,
-      serverId: serverId as string,
+      ...(restoring
+        ? { restoreFromBackupId: restoreFromBackupId as string }
+        : { serverId: serverId as string }),
     },
   };
 }
@@ -81,6 +98,8 @@ function unavailable(): Result<never> {
 export interface ResolvedDisk extends ResolvedProduct {
   readonly family: "disk";
   readonly quantity: string;
+  /** Set for a disk from a snapshot; the `create` operation carries it to the adapter. */
+  readonly restoreFromBackupId?: string;
 }
 
 /**
@@ -121,8 +140,15 @@ export function resolveDisk(
         region: config.region,
         displayName: config.displayName,
         sizeGb: config.sizeGb,
-        serverId: config.serverId,
+        ...(config.serverId === undefined ? {} : { serverId: config.serverId }),
+        // The signed draft carries the resource config and the purchase parses it again.
+        ...(config.restoreFromBackupId === undefined
+          ? {}
+          : { restoreFromBackupId: config.restoreFromBackupId }),
       },
+      ...(config.restoreFromBackupId === undefined
+        ? {}
+        : { restoreFromBackupId: config.restoreFromBackupId }),
     },
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkWording, flatLeaves } from "../../../apps/web/messages/wording-check";
 import { otpSmsText } from "../sms/otp-text";
+import { COGNITO_TEXTS } from "../templates/cognito";
 import { BN, EN, SHARED } from "../templates/messages";
 
 // WP9-T5: the email and SMS texts follow the same wording rules as the screens (U5, U6, 16.13,
@@ -15,6 +16,18 @@ describe("notify wording (WP9-T5)", () => {
   it("template catalogs: same keys, placeholders and wording rules in bn and en", () => {
     expect(show(checkWording(tree({ t: BN }), tree({ t: EN })))).toEqual([]);
     expect(flatLeaves(tree({ t: BN })).size).toBeGreaterThan(100);
+  });
+
+  it("WPU-D4: the three Cognito messages follow the same wording rules in bn and en", () => {
+    const bn = tree({
+      c: Object.fromEntries(Object.entries(COGNITO_TEXTS).map(([k, v]) => [k, v.bn])),
+    });
+    const en = tree({
+      c: Object.fromEntries(Object.entries(COGNITO_TEXTS).map(([k, v]) => [k, v.en])),
+    });
+    // the code and the user name are Cognito's own placeholders, replaced by Cognito after our answer
+    expect(show(checkWording(bn, en))).toEqual([]);
+    expect(flatLeaves(bn).size).toBeGreaterThanOrEqual(15);
   });
 
   it("shared footer texts: same keys and rules; statements of 16.13 stay unchanged", () => {
