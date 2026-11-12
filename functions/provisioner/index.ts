@@ -17,6 +17,7 @@ import { bucketAdapter } from "./bucket";
 import { cdnAdapter } from "./cdn";
 import { containerServiceAdapter } from "./container";
 import { databaseAdapter } from "./database";
+import { dnsZoneAdapter, dnsZoneHooks } from "./dns-zone";
 import { domainAdapter } from "./domain";
 import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
@@ -137,13 +138,15 @@ function buildDeps(): StepDeps {
       cdnAdapter(),
       // WP7-T4: behind the flag domain (R12); its ports are not built yet (JOURNEY), so it fails closed.
       domainAdapter(),
+      // WPU-G6: behind the flag dns_zone (R12); its Route 53 client is not built yet (JOURNEY), so it fails closed.
+      dnsZoneAdapter(),
       // WP6-T2 and WP6-T3.
       databaseAdapter(),
       loadBalancerAdapter(),
     ]),
     // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
     destructiveGuard,
-    hooks: composeHooks(orderHooks({ clock }), lifecycleHooks({ clock })),
+    hooks: composeHooks(orderHooks({ clock }), lifecycleHooks({ clock }), dnsZoneHooks()),
     access: createAwsAccess({ caller: "provisioner" }),
     env: config.env,
     log: (e: LogEvent) => console.log(JSON.stringify(e)),

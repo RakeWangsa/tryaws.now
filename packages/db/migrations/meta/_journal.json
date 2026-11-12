@@ -78,6 +78,13 @@
       "when": 1794427700353,
       "tag": "0010_admin_price_book",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794469762824,
+      "tag": "0011_dns_zone_name_unique",
+      "breakpoints": true
     }
   ]
 }

@@ -20,6 +20,9 @@ export function orderIdFor(customerId: string, tokenHash: string): string {
 }
 
 /** The id of the resource or the subscription of an order. */
-export function childId(orderId: string, label: "resource" | "subscription" | "domain"): string {
+export function childId(
+  orderId: string,
+  label: "resource" | "subscription" | "domain" | "zone",
+): string {
   return uuidFrom(`${label}|${orderId}`);
 }

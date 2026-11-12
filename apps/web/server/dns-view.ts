@@ -1,5 +1,5 @@
 import type { CustomerSession } from "@tc/auth";
-import { editableValue, validateZoneName } from "@tc/core";
+import { editableValue, validateZoneName, zoneStatusWord, type DnsZoneState } from "@tc/core";
 import { customerRepos, readFeatureFlag, withTx } from "@tc/db";
 import { DNS_FAMILY } from "./dns-actions.ts";
 
@@ -17,6 +17,8 @@ export interface ZoneListItem {
   id: string;
   name: string;
   state: string;
+  /** The one word of the badge: pending, pending_delegation, delegated, removing (WPU-G6). */
+  status: DnsZoneState;
   /** The record sets the customer can change; null when the list is not known. */
   recordCount: number | null;
 }
@@ -42,6 +44,7 @@ export interface ZoneView {
   id: string;
   name: string;
   state: string;
+  status: DnsZoneState;
   nameServers: string[];
   /** null when the list is not known (stale or malformed). */
   records: RecordView[] | null;
@@ -51,6 +54,8 @@ export interface ZoneView {
   lastChange: ChangeWord | null;
   /** The zone is active, has its hosted zone, has a whole list and no change on its way. */
   canEdit: boolean;
+  /** The zone is live, no change and no removal is on its way (the delete is a destroy request). */
+  canDelete: boolean;
   /** One id per render of the page: the idempotency key of the forms on it (R7). */
   requestId: string;
 }
@@ -112,6 +117,11 @@ function nameServersOf(config: unknown): string[] {
     .slice(0, 8);
 }
 
+/** True while a destroy of the zone is queued, running, waiting or waiting for approval. */
+function destroyOnItsWay(operations: readonly { kind: string; state: string }[]): boolean {
+  return operations.some((o) => o.kind === "destroy" && IN_FLIGHT.includes(o.state));
+}
+
 export async function loadZoneList(session: CustomerSession): Promise<ZoneListScreen> {
   return withTx(async (tx) => {
     const repos = customerRepos(tx, session.customerId);
@@ -121,15 +131,25 @@ export async function loadZoneList(session: CustomerSession): Promise<ZoneListSc
       return { state: "flag_off" };
     }
     const zones: ZoneListItem[] = [];
+    const rowStatus = new Map(
+      (await repos.dnsZones.list()).map((z) => [z.resourceId, z.status] as const),
+    );
     for (const row of await repos.resources.list()) {
       if (row.family !== DNS_FAMILY || GONE.includes(row.state)) continue;
       const name = zoneNameOf(row.config);
       if (name === null) continue;
       const records = readRecords(row.config, name);
+      const destroying =
+        row.state === "active" && destroyOnItsWay(await repos.operations.listForResource(row.id));
       zones.push({
         id: row.id,
         name,
         state: row.state,
+        status: zoneStatusWord({
+          resourceState: row.state,
+          rowStatus: rowStatus.get(row.id) ?? null,
+          destroying,
+        }),
         recordCount: records === null ? null : records.filter((r) => !r.readOnly).length,
       });
     }
@@ -153,7 +173,8 @@ export async function loadZone(
     if (profile === null || (await readFeatureFlag(tx, DNS_FAMILY, profile.market)) !== true) {
       return { state: "flag_off" };
     }
-    const changes = (await repos.operations.listForResource(id))
+    const operations = await repos.operations.listForResource(id);
+    const changes = operations
       .filter((o) => o.kind === "change_dns_record")
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     const busy = changes.some((o) => IN_FLIGHT.includes(o.state));
@@ -168,13 +189,23 @@ export async function loadZone(
             : "failed";
     const config = record(row.config);
     const records = readRecords(row.config, name);
+    const stored = await repos.dnsZones.getByResource(row.id);
+    const destroying = destroyOnItsWay(operations);
+    // The row of the zone holds the name servers once the create step succeeded; the config is the
+    // fallback for a zone that was made before the row was kept in step.
+    const fromRow = (stored?.nameServers ?? []).filter((v) => /^[a-z0-9.-]{1,253}$/i.test(v));
     return {
       state: "ready",
       zone: {
         id: row.id,
         name,
         state: row.state,
-        nameServers: nameServersOf(row.config),
+        status: zoneStatusWord({
+          resourceState: row.state,
+          rowStatus: stored?.status ?? null,
+          destroying,
+        }),
+        nameServers: fromRow.length > 0 ? fromRow.slice(0, 8) : nameServersOf(row.config),
         records,
         recordsStale: config["recordsStale"] === true,
         busy,
@@ -183,7 +214,9 @@ export async function loadZone(
           row.state === "active" &&
           typeof config["hostedZoneId"] === "string" &&
           records !== null &&
-          !busy,
+          !busy &&
+          !destroying,
+        canDelete: row.state === "active" && !busy && !destroying,
         requestId,
       },
     };

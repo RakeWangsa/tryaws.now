@@ -78,8 +78,8 @@ export async function createDraft(
     if (!imaged.ok) return imaged;
 
     // "Available but not yet reserved": no lock, no unit taken, no waitlist entry.
-    // A domain lives in tc-dns and takes no capacity cell (WP7-T4).
-    if (product.family !== "domain") {
+    // A domain and a DNS zone live in tc-dns and take no capacity cell (WP7-T4, WPU-G6).
+    if (product.family !== "domain" && product.family !== "dns_zone") {
       const room = await checkCapacity(tx, {
         customerId: session.customerId,
         region: product.region,

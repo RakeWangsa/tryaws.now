@@ -3,13 +3,23 @@ import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useFormatter, useTranslations } from "next-intl";
 import type { ZoneListItem, ZoneListScreen } from "../../../../server/dns-view.ts";
-import { ZoneStateBadge } from "./[id]/ZoneContent.tsx";
+import { ZoneStatusBadge } from "./[id]/ZoneContent.tsx";
+import { CreateZoneForm, type CreateZoneAction } from "./CreateZoneForm.tsx";
 
-// The content of /dns (WPU-G4): the DNS zones of the customer and the way into the records of each.
-// States: flag off, empty, ready (loading and error are loading.tsx and error.tsx). Synchronous, so it
+// The content of /dns (WPU-G4, WPU-G6): the DNS zones of the customer, the way into the records of each
+// and the form that makes a new zone. States: flag off, empty, ready (loading and error are loading.tsx
+// and error.tsx); with the flag off nothing that could make or change a zone is shown (R12). Synchronous, so it
 // renders in a test without a request. Nothing here shows the hosted zone id or an account (U6).
 
-export function DnsContent({ locale, screen }: { locale: Locale; screen: ZoneListScreen }) {
+export function DnsContent({
+  locale,
+  screen,
+  createAction,
+}: {
+  locale: Locale;
+  screen: ZoneListScreen;
+  createAction: CreateZoneAction;
+}) {
   const t = useTranslations("Dns");
   const format = useFormatter();
 
@@ -18,15 +28,10 @@ export function DnsContent({ locale, screen }: { locale: Locale; screen: ZoneLis
   }
   if (screen.state === "empty") {
     return (
-      <EmptyState
-        title={t("empty.title")}
-        description={t("empty.body")}
-        action={
-          <Button variant="primary" href={localePath(locale, "/domains")}>
-            {t("empty.action")}
-          </Button>
-        }
-      />
+      <>
+        <EmptyState title={t("empty.title")} description={t("empty.body")} />
+        <CreateZoneForm action={createAction} />
+      </>
     );
   }
   return (
@@ -41,7 +46,7 @@ export function DnsContent({ locale, screen }: { locale: Locale; screen: ZoneLis
           {
             key: "state",
             header: t("list.state"),
-            cell: (zone: ZoneListItem) => <ZoneStateBadge state={zone.state} />,
+            cell: (zone: ZoneListItem) => <ZoneStatusBadge status={zone.status} />,
           },
           {
             key: "records",
@@ -66,6 +71,9 @@ export function DnsContent({ locale, screen }: { locale: Locale; screen: ZoneLis
           },
         ]}
       />
+      <div className="mt-4">
+        <CreateZoneForm action={createAction} />
+      </div>
     </>
   );
 }

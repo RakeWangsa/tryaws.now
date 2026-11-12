@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { adminUsers } from "./admins";
@@ -22,6 +23,15 @@ export const NOTIFICATION_CHANNELS = ["email", "sms", "in_app"] as const;
 export const NOTIFICATION_STATUSES = ["pending", "sent", "failed"] as const;
 export const WAITLIST_REASONS = ["capacity", "flag_off"] as const;
 // 16.12: replyByEmail and closeRequest; openAbuseCase and closeAbuseCase.
+// WPU-G6: the words of dns_zones.status; the same list is DNS_ZONE_STATES of packages/core/dns.
+export const DNS_ZONE_STATUSES = [
+  "pending",
+  "pending_delegation",
+  "delegated",
+  "removing",
+  "removed",
+  "failed",
+] as const;
 export const CASE_STATUSES = ["open", "closed"] as const;
 export const DISCREPANCY_KINDS = ["orphan", "missing", "cost", "payment"] as const;
 // 16.12: resolveDiscrepancy.
@@ -88,6 +98,11 @@ export const dnsZones = pgTable(
     unique("dns_zones_resource_id_unique").on(t.resourceId),
     unique("dns_zones_hosted_zone_id_unique").on(t.hostedZoneId),
     index("dns_zones_customer_id_idx").on(t.customerId),
+    // WPU-G6: one live zone for a name on the whole platform. A failed or removed zone gives it back.
+    uniqueIndex("dns_zones_name_live_unique")
+      .on(t.name)
+      .where(sql`${t.status} not in ('removed', 'failed')`),
+    check("dns_zones_status_check", inList(t.status, DNS_ZONE_STATUSES)),
   ],
 );
 

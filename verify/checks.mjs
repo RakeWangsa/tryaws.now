@@ -854,6 +854,26 @@ TASKS["WPU-G7"] = [
 // the boundary tests (repo) prove it. The db suite needs the local PostgreSQL (pnpm db:up).
 TASKS["WPU-G4"] = [specSync, baselineSync, lint, typecheck, format, core, db, aws, web, repo];
 
+// WPU-G6: the DNS zone create flow end to end. The zone rules and the order path (core, a zone is
+// poolless and priced from the market's config price), migration 0011 and the tenant-scoped dns_zones
+// repository (db), the zone adapter that saves the record list (aws), the provisioner that treats a zone
+// as poolless and keeps the dns_zones row in step (provisioner), and the /dns create form, the name server
+// display, the delete, the messages and the cross-tenant sweep (web). The db suite needs the local
+// PostgreSQL (pnpm db:up). No AWS call: the Route 53 client is a port with a fake.
+TASKS["WPU-G6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  web,
+  repo,
+];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

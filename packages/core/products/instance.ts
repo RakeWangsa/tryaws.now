@@ -36,7 +36,8 @@ export interface ResolvedProduct {
     | "bucket"
     | "container_service"
     | "disk"
-    | "domain";
+    | "domain"
+    | "dns_zone";
   readonly productId: string;
   readonly region: string;
   readonly featureFlag: string;

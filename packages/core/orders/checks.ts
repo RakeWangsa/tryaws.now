@@ -1,12 +1,15 @@
 import {
+  dnsZoneNameHolder,
   domainNameHolder,
   readCatalogProduct,
+  readConfigPrices,
   readImage,
   readImageSwitches,
   readTld,
   type CustomerRepos,
   type Tx,
 } from "@tc/db";
+import { parseDnsZoneConfig, resolveDnsZone } from "../dns/zone";
 import { parseDomainConfig, resolveDomain } from "../domains/resolve";
 import type { RiskTier } from "../capacity/types";
 import { isEnabledIn } from "../flags/is-enabled";
@@ -118,8 +121,8 @@ export async function gateProduct(
   }
   const limits = tierLimitsOf(customer.riskTier);
   if (!limits.ok) return limits;
-  // A domain is no server: it takes no instance of the tier limit (WP7-T4).
-  if (product.family === "domain") {
+  // A domain and a DNS zone are no server: they take no instance of the tier limit (WP7-T4, WPU-G6).
+  if (product.family === "domain" || product.family === "dns_zone") {
     return checkLimits(limits.value, { instances: 0 }, product.facts);
   }
   // Every instance family counts together toward the instance limit, so a customer at the Linux
@@ -221,6 +224,27 @@ export async function resolveOrderProduct(
     // RegisterDomain (R16).
     if ((await domainNameHolder(tx, config.value.name)) !== null) {
       return { ok: false, error: "conflict", fields: { name: "taken" } };
+    }
+    return resolved;
+  }
+  if (family === "dns_zone") {
+    const config = parseDnsZoneConfig(rawConfig);
+    if (!config.ok) return config;
+    // The zone is priced from the market's config price: the market is the customer's own row (R16).
+    const profile = await repos.profile.get();
+    if (profile === null) return { ok: false, error: "forbidden" };
+    const price = (await readConfigPrices(tx, profile.market))["config_price.dns_zone_month"];
+    const resolved = resolveDnsZone(config.value, price);
+    if (!resolved.ok) return resolved;
+    // A name registered here already has its hosted zone in tc-dns (spec 12): that zone is adopted, and
+    // CreateHostedZone is never called for it. Adoption is not built, so the order is refused (R16).
+    if ((await domainNameHolder(tx, config.value.zoneName)) !== null) {
+      return { ok: false, error: "validation", fields: { zoneName: "registered_here" } };
+    }
+    // One zone name is held once on the platform, here for the draft and again inside the purchase
+    // transaction; the unique index of migration 0011 is the last word.
+    if ((await dnsZoneNameHolder(tx, config.value.zoneName)) !== null) {
+      return { ok: false, error: "conflict", fields: { zoneName: "taken" } };
     }
     return resolved;
   }

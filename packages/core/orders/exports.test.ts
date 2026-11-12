@@ -394,6 +394,20 @@ const PRICE_BOOK = [
   "validateBookTerms",
 ];
 
+// WPU-G6: the DNS zone family (packages/core/dns/zone.ts) and the list of poolless families that the claim
+// and the step both read (operations/claim-rules.ts).
+const DNS_ZONE = [
+  "DNS_ZONE_FLAG",
+  "DNS_ZONE_PRODUCT",
+  "DNS_ZONE_REGION",
+  "DNS_ZONE_STATES",
+  "DNS_ZONE_TERM_DAYS",
+  "POOLLESS_FAMILIES",
+  "parseDnsZoneConfig",
+  "resolveDnsZone",
+  "zoneStatusWord",
+];
+
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
     expect(Object.keys(orders).sort()).toEqual(ORDERS_VALUES);
@@ -429,6 +443,7 @@ describe("the public surface of the order flow", () => {
           ...SERVER_CONTROLS,
           ...ACCOUNT_OVERVIEW,
           ...PRICE_BOOK,
+          ...DNS_ZONE,
         ]),
       ].sort(),
     );

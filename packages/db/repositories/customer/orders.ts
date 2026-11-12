@@ -150,10 +150,10 @@ export function ordersRepo(scope: TenantScope): OrdersRepo {
       requireUuid(input.id, "id");
       if (input.productId !== null) requireUuid(input.productId, "productId");
       if (input.poolAccountId !== null) requireUuid(input.poolAccountId, "poolAccountId");
-      // Only a domain has neither (it lives in tc-dns); every other family has both (R16).
+      // Only a domain and a DNS zone have neither (they live in tc-dns); every other family has both (R16).
       const neither = input.productId === null && input.poolAccountId === null;
       const both = input.productId !== null && input.poolAccountId !== null;
-      if (input.family === "domain" ? !neither : !both) {
+      if (input.family === "domain" || input.family === "dns_zone" ? !neither : !both) {
         throw new TypeError("orders: the placement of the resource does not fit its family");
       }
       // The state is not inserted: the column default is creating, and the grant forbids it.

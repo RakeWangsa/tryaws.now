@@ -3,12 +3,13 @@ import { webMessages } from "../i18n/messages.ts";
 import { FAMILY_SCREENS, familyScreen } from "./family-screens.ts";
 
 describe("family screens of the order flow", () => {
-  it("knows the CDN, bucket, container, database, domain and load balancer screens, and nothing else (a server is the default)", () => {
+  it("knows the CDN, bucket, container, database, domain, DNS zone and load balancer screens, and nothing else (a server is the default)", () => {
     expect(Object.keys(FAMILY_SCREENS).sort()).toEqual([
       "bucket",
       "cdn",
       "container_service",
       "database",
+      "dns_zone",
       "domain",
       "load_balancer",
     ]);
@@ -17,6 +18,7 @@ describe("family screens of the order flow", () => {
       base: "/containers",
       nav: "containers",
     });
+    expect(familyScreen("dns_zone")).toMatchObject({ base: "/dns", nav: "domains", ns: "Dns" });
     expect(familyScreen("linux_instance")).toBeUndefined();
     expect(familyScreen(undefined)).toBeUndefined();
     // No prototype key slips through.

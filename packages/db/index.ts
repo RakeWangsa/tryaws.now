@@ -40,7 +40,13 @@ export type {
   NewSupportRequest,
   SupportRepo,
 } from "./repositories/customer/support";
-export { domainNameHolder, hostedZoneHeldByOther } from "./repositories/domain-names";
+export type { DnsZoneRow, DnsZonesRepo, NewDnsZone } from "./repositories/customer/dns-zones";
+export {
+  dnsZoneNameHolder,
+  domainNameHolder,
+  hostedZoneHeldByOther,
+} from "./repositories/domain-names";
+export { markDnsZone, recordDnsZoneCreated } from "./repositories/dns-zone-sync";
 export { customerOperationKey } from "./repositories/customer/operations";
 export { NOTIFICATIONS_SHOWN } from "./repositories/customer/notifications";
 export type { NotificationRow, NotificationsRepo } from "./repositories/customer/notifications";

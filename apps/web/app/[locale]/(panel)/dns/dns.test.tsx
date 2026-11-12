@@ -60,8 +60,9 @@ describe("/dns", () => {
   it("lists the zones with a state word, the number of records and a way in", () => {
     const out = render("dns.ready");
     expect(out).toContain("example.com");
-    expect(out).toContain("Running");
-    expect(out).toContain("Creating");
+    expect(out).toContain("Waiting for name servers");
+    expect(out).toContain("Being created");
+    expect(out).toContain("Name servers set");
     expect(out).toContain("Not known");
     expect(out).toContain('href="/en/dns/0190aaaa-0000-7000-8000-0000000000d1"');
     expect(out).toContain("Amazon Route 53");
@@ -72,10 +73,31 @@ describe("/dns", () => {
     expect(out).not.toContain("<form");
     expect(out).not.toContain("/dns/");
   });
-  it("has an empty state with one way forward", () => {
+  it("has an empty state with one way forward: the form that makes the first zone (WPU-G6)", () => {
     const out = render("dns.empty");
     expect(out).toContain("No DNS zones yet");
-    expect(out).toContain('href="/en/domains"');
+    expect(out).toContain('name="zoneName"');
+    expect(out).toContain('name="declaredControl"');
+    expect(out).toContain("Go to review");
+  });
+  it("offers the create form under the list, with the price on the next step and the 14-day notice", () => {
+    const out = render("dns.ready");
+    expect(out).toContain('name="zoneName"');
+    expect(out).toContain("The price is shown on the next step");
+    expect(out).toContain("within 14 days");
+    // The only inputs are the two of the form: nothing the customer could use to name an AWS resource.
+    expect([...out.matchAll(/<input[^>]*name="([^"]+)"/g)].map((m) => m[1])).toEqual([
+      "zoneName",
+      "declaredControl",
+    ]);
+  });
+  it("shows the create form in Bengali too, with no raw key (U8)", () => {
+    const out = render("dns.empty", "bn");
+    expect(out).toContain("নতুন ডিএনএস জোন");
+    expect(out).not.toMatch(/Dns\.create|undefined/);
+  });
+  it("does not show the create form with the flag off (R12)", () => {
+    expect(render("dns.flag_off")).not.toContain("zoneName");
   });
   it("is in Bengali in bn", () => {
     expect(render("dns.ready", "bn")).toMatch(/[ঀ-৿]/);
@@ -132,6 +154,38 @@ describe("/dns/[id]", () => {
     const out = render("zone.creating");
     expect(out).toContain("still being created");
     expect(out).toContain("not ready yet");
+    expect(out).toContain("Being created");
+    expect(out).not.toContain('name="values"');
+    // The delete is not offered either: the button is inert.
+    const button = out.match(/<button[^>]*>(?:(?!<\/button>).)*Delete the zone<\/button>/);
+    expect(button?.[0]).toContain("disabled");
+  });
+  it("tells the customer what to do at the registrar, with a copy field for each name server (WPU-G6)", () => {
+    const out = render("zone.ready");
+    expect(out).toContain("Set these name servers at the registrar");
+    expect(out).toContain("Sign in at the registrar of your domain");
+    expect(out).toContain("Waiting for name servers");
+    expect(out).toContain("within 14 days");
+    expect(out).toContain('value="ns-1.awsdns-01.org"');
+    expect(out).toContain('value="ns-2.awsdns-02.com"');
+    // No hosted zone id, no account id, no ARN (U6).
+    expect(out).not.toMatch(/arn:aws|\b\d{12}\b|\bZ0[0-9A-Z]{6,}/);
+  });
+  it("a freshly created zone has its read-only apex records and the editor to add the first record (WPU-G6)", () => {
+    const out = render("zone.fresh");
+    expect(out).toContain("none of your records yet");
+    expect(out).toContain('name="values"');
+    expect(out).toContain('name="mode" value="create"');
+  });
+  it("offers the delete with the typed name and says it needs approval (U10, R13)", () => {
+    const out = render("zone.ready");
+    expect(out).toContain("Delete the zone");
+    expect(out).toContain("our team approves the deletion");
+  });
+  it("says the zone is being deleted and offers neither edit nor delete while it is (WPU-G6)", () => {
+    const out = render("zone.removing");
+    expect(out).toContain("Being deleted");
+    expect(out).toContain("deleted after approval");
     expect(out).not.toContain('name="values"');
   });
   it("does not show a list it cannot trust, and does not offer the editor (R16)", () => {
