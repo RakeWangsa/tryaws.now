@@ -1,0 +1,229 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TiCON Cloud organization trail, part 1 of 2 (Sections 3.3 and 15 item 14): the KMS key and the S3
+  log bucket. Deploy in the LOG ARCHIVE account (tc-log-archive, proposed in accounts-and-ous.md) in
+  the Region of the trail (ap-southeast-1), BEFORE cloudtrail-trail.yaml. Nobody can delete a log
+  object: the bucket policy denies delete to everyone, versions are kept and Object Lock holds them.
+# VERIFY: CloudTrail delivery to a bucket with Object Lock, with SSE-KMS and with an organization
+# trail: the bucket policy and key policy below follow the documented forms (aws:SourceArn of the
+# trail; AWSLogs/<management account>/ and AWSLogs/<organization id>/ prefixes). Check with
+# `aws cloudtrail get-trail-status` after the trail exists, and look for the first log file.
+# VERIFY: Object Lock GOVERNANCE retention cannot be turned off for objects written before the change;
+# pick the retention days with the owner (the audit period is not in the plan).
+
+Parameters:
+  ManagementAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: Account that owns the organization trail. Entered by DevOps at deploy time.
+  OrganizationId:
+    Type: String
+    AllowedPattern: "^o-[a-z0-9]{10,32}$"
+    Description: Id of the AWS Organization (o-xxxx). Not an account id.
+  TrailName:
+    Type: String
+    Default: ticon-org-trail
+  LogBucketName:
+    Type: String
+    AllowedPattern: "^[a-z0-9][a-z0-9.-]{2,62}$"
+    Description: Globally unique bucket name chosen by DevOps.
+  RetentionDays:
+    Type: Number
+    Default: 365
+    MinValue: 90
+
+Resources:
+  TrailKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: Encrypts the CloudTrail log files of the TiCON organization trail.
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: KeyAdministrationByTheLogArchiveAccount
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: "arn:aws:iam::${AWS::AccountId}:root"
+            Action:
+              - kms:Describe*
+              - kms:Get*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Enable*
+              - kms:Disable*
+              - kms:Revoke*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:Decrypt
+            Resource: "*"
+          - Sid: CloudTrailEncrypts
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: kms:GenerateDataKey*
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:SourceArn:
+                  Fn::Sub: "arn:aws:cloudtrail:${AWS::Region}:${ManagementAccountId}:trail/${TrailName}"
+              StringLike:
+                kms:EncryptionContext:aws:cloudtrail:arn:
+                  Fn::Sub: "arn:aws:cloudtrail:*:${ManagementAccountId}:trail/${TrailName}"
+          - Sid: CloudTrailDescribesKey
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: kms:DescribeKey
+            Resource: "*"
+  TrailKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/ticon-org-trail
+      TargetKeyId:
+        Ref: TrailKey
+
+  LogBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName:
+        Ref: LogBucketName
+      ObjectLockEnabled: true
+      ObjectLockConfiguration:
+        ObjectLockEnabled: Enabled
+        Rule:
+          DefaultRetention:
+            Mode: GOVERNANCE
+            Days:
+              Ref: RetentionDays
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID:
+                Fn::GetAtt:
+                  - TrailKey
+                  - Arn
+            BucketKeyEnabled: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentVersionsAfterRetention
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays:
+                Ref: RetentionDays
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  LogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: LogBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CloudTrailChecksTheBucketAcl
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource:
+              Fn::GetAtt:
+                - LogBucket
+                - Arn
+            Condition:
+              StringEquals:
+                aws:SourceArn:
+                  Fn::Sub: "arn:aws:cloudtrail:${AWS::Region}:${ManagementAccountId}:trail/${TrailName}"
+          - Sid: CloudTrailWritesTheManagementAccountLogs
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource:
+              Fn::Sub: "${LogBucket.Arn}/AWSLogs/${ManagementAccountId}/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceArn:
+                  Fn::Sub: "arn:aws:cloudtrail:${AWS::Region}:${ManagementAccountId}:trail/${TrailName}"
+          - Sid: CloudTrailWritesTheMemberAccountLogs
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource:
+              Fn::Sub: "${LogBucket.Arn}/AWSLogs/${OrganizationId}/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceArn:
+                  Fn::Sub: "arn:aws:cloudtrail:${AWS::Region}:${ManagementAccountId}:trail/${TrailName}"
+          - Sid: DenyPolicyAndConfigurationChangesExceptTheAdminRole
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:DeleteBucket
+              - s3:DeleteBucketPolicy
+              - s3:PutBucketPolicy
+              - s3:PutLifecycleConfiguration
+              - s3:PutBucketVersioning
+              - s3:PutBucketObjectLockConfiguration
+            Resource:
+              - Fn::GetAtt:
+                  - LogBucket
+                  - Arn
+              - Fn::Sub: "${LogBucket.Arn}/*"
+            Condition:
+              ArnNotLike:
+                aws:PrincipalArn: "arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_TcOrgAdmin_*"
+          - Sid: DenyDeleteToEveryoneIncludingAdmins
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:DeleteObject
+              - s3:DeleteObjectVersion
+            Resource:
+              Fn::Sub: "${LogBucket.Arn}/*"
+          - Sid: DenyPlainHttp
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - Fn::GetAtt:
+                  - LogBucket
+                  - Arn
+              - Fn::Sub: "${LogBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+Outputs:
+  LogBucketName:
+    Value:
+      Ref: LogBucket
+  TrailKeyArn:
+    Description: Pass this to cloudtrail-trail.yaml (KmsKeyArn).
+    Value:
+      Fn::GetAtt:
+        - TrailKey
+        - Arn
