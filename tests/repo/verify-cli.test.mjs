@@ -91,6 +91,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP0-T1",
     "WP0-T2",
     "WP0-T3",
+    "WP0-T3b",
     "WP0-T4",
     "WP0-T5",
     "WP1-T1",
@@ -1545,6 +1546,29 @@ it("task WP9-T3 is proven by the order storm, the parallel top-up and the restor
     "scripts/restore-drill.mjs",
     "scripts/lib/restore-drill.test.mjs",
     "docs/runbooks/restore-drill.md",
+  ]) {
+    expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
+  }
+});
+
+it("task WP0-T3b is proven by the handler suites, the url test, the infra env test, and runs no deploy", () => {
+  const commands = TASKS["WP0-T3b"].map((c) => c.command.join(" "));
+  expect(commands).toEqual(
+    expect.arrayContaining([
+      "pnpm test --filter @tc/db test/database-url --no-passWithNoTests",
+      "pnpm test --filter @tc/fn-migrator --no-passWithNoTests",
+      "pnpm test --filter @tc/fn-notifier --no-passWithNoTests",
+      "pnpm test --filter @tc/fn-cognito-messages --no-passWithNoTests",
+      "pnpm test --filter @tc/notify test/cognito --no-passWithNoTests",
+      "pnpm test --filter repo infra-lib --no-passWithNoTests",
+      "pnpm test --filter repo infra-rules --no-passWithNoTests",
+    ]),
+  );
+  expect(commands.join("\n")).not.toMatch(/\bsst\b/);
+  // a filter that names a file must name one that exists (passWithNoTests could hide a typo)
+  for (const f of [
+    "packages/db/test/database-url.test.ts",
+    "packages/notify/test/cognito.test.ts",
   ]) {
     expect(existsSync(resolve(import.meta.dirname, "../..", f)), f).toBe(true);
   }

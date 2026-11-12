@@ -1430,6 +1430,57 @@ TASKS["WP0-T4"] = [
   repo,
 ];
 
+// WP0-T3b: the run-time glue that the SST stacks expect (handlers of migrator, notifier and
+// cognito-messages, and the database URL built at run time from DB_* and the linked password secret).
+// No check runs a deploy or calls AWS. The database test of the migrator (roles) uses temp databases
+// of the local PostgreSQL.
+const glueTest = (id, title, filter, ...files) => ({
+  id,
+  title,
+  command: ["pnpm", "test", "--filter", filter, ...files, "--no-passWithNoTests"],
+});
+TASKS["WP0-T3b"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "database-url",
+    "packages/db: databaseUrlFromEnv (R2, R3: TLS only, password from the linked secret, fixed error)",
+    "@tc/db",
+    "test/database-url",
+  ),
+  glueTest(
+    "migrator",
+    "functions/migrator: five roles with passwords from secrets, idempotent, TLS check, counts only",
+    "@tc/fn-migrator",
+  ),
+  glueTest(
+    "notifier",
+    "functions/notifier: handler over ports, fails closed without SES, SMS rows stay pending",
+    "@tc/fn-notifier",
+  ),
+  glueTest(
+    "cognito-messages",
+    "functions/cognito-messages: bn/en verification, reset and admin messages, locale, escaping",
+    "@tc/fn-cognito-messages",
+  ),
+  glueTest(
+    "cognito-templates",
+    "packages/notify: the Cognito message templates hold only Cognito's placeholders",
+    "@tc/notify",
+    "test/cognito",
+  ),
+  infraLib,
+  infraTest(
+    "infra-runtime-env",
+    "WP0-T3b: the environment names of the function table agree with the code (DB_PASSWORD_SECRET, MIGRATIONS_DIR, PANEL_ORIGIN, SES_FROM)",
+    "infra-rules",
+  ),
+  repo,
+];
+
 // WP4-T3: capacity. The race for the last slot (10.2) on its own line; the filter names a file, and
 // tests/repo/verify-cli.test.mjs asserts that the file exists, because passWithNoTests is on.
 const capacityRace = {
