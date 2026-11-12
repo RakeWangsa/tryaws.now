@@ -1,9 +1,14 @@
-import { lifecycleRepo, type Tx } from "@tc/db";
+import { lifecycleRepo, patchResource, type Tx } from "@tc/db";
 import { releaseCapacity } from "../capacity/release";
 import type { OperationKind } from "../operations/kinds";
 import type { Clock } from "../types";
 import { readLifecycleConfig } from "./config";
-import { markPlanChangeFailed } from "./plan-change";
+import {
+  PLAN_APPLY_KINDS,
+  markPlanChangeFailed,
+  planApplyStale,
+  readPlanApplyPayload,
+} from "./plan-change";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -52,6 +57,29 @@ export function lifecycleHooks(deps: { clock: Clock }): {
               dedupeKey: `lifecycle:destroyed:${event.resourceId}:${at.toISOString()}:${channel}`,
             });
           }
+          return;
+        }
+        case "scale_container":
+        case "change_cdn_bundle": {
+          // WPU-S7: an apply that really ran (the adapter did not skip it) for a period that has moved
+          // on was late: AWS has changed, the renewal had charged the other plan. The database cannot
+          // undo it; ops are told in the resource config (planApplyLate) and the customer is not
+          // charged or credited here (no refund rule exists, Needs decision).
+          if (!PLAN_APPLY_KINDS.includes(event.kind)) return;
+          const facts = await repo.planApplyPeriod(event.resourceId, event.operationId);
+          if (facts === null) return;
+          const skipped = facts.config.planApplySkipped as { operationId?: unknown } | undefined;
+          if (skipped?.operationId === event.operationId) return;
+          const queuedFor = readPlanApplyPayload(facts.payload).periodEnd;
+          if (!planApplyStale(queuedFor, facts.currentPeriodEnd)) return;
+          await patchResource(tx, event.resourceId, {
+            configMerge: {
+              planApplyLate: {
+                operationId: event.operationId,
+                periodEnd: queuedFor?.toISOString() ?? null,
+              },
+            },
+          });
           return;
         }
         case "purge_snapshots":

@@ -1,6 +1,7 @@
 import { customerRepos, insertOperation, lifecycleRepo, type Tx } from "@tc/db";
 import type { Clock, Result } from "../types";
 import { DEFAULT_LIFECYCLE_CONFIG } from "./config";
+import { planApplyWait } from "./plan-change";
 import { renewSubscription, type Renewed } from "./renew";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,6 +50,13 @@ export async function renewNow(tx: Tx, input: RenewNowInput): Promise<Result<Ren
     (row.status === "active" &&
       row.periodEnd.getTime() - now.getTime() <= RENEW_NOW_WINDOW_DAYS * DAY_MS);
   if (!due) return { ok: false, error: "conflict", fields: { subscription: "not_due" } };
+
+  // WPU-S7: while the apply of a pending plan for this period is queued or running, the charge would
+  // not follow the capacity the customer has: busy, nothing is charged, and the customer may press
+  // again. After the bounded wait the renewal charges the applied plan (the late apply is skipped).
+  if ((await planApplyWait(tx, row, now)).wait) {
+    return { ok: false, error: "conflict", fields: { subscription: "busy" } };
+  }
 
   const renewed = await renewSubscription(tx, row, input.clock);
   if (!renewed.ok) return renewed;

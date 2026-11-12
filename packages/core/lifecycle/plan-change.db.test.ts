@@ -14,8 +14,11 @@ import { lifecycleHooks } from "./hooks";
 import {
   PLAN_APPLY_LEAD_HOURS,
   PLAN_APPLY_STATES,
+  PLAN_APPLY_WAIT_HOURS,
+  planApplyStale,
   planPriceFor,
   queuePlanApply,
+  readPlanApplyPayload,
   readPlanChange,
 } from "./plan-change";
 import { renewalQuote } from "./renew";
@@ -68,7 +71,11 @@ interface Fresh {
 }
 
 /** A paid server, turned into a container service row so the family-specific price path runs. */
-async function fresh(family: string, config: Record<string, unknown>): Promise<Fresh> {
+async function fresh(
+  family: string,
+  config: Record<string, unknown>,
+  autoRenew = true,
+): Promise<Fresh> {
   kit.clock.set(START);
   const buyer = await kit.newBuyer({ balanceMinor: 50_000_000n });
   const { resourceId } = await placeOne(kit, buyer);
@@ -83,6 +90,9 @@ async function fresh(family: string, config: Record<string, unknown>): Promise<F
     JSON.stringify(config),
   ]);
   await q("update operations set state = 'succeeded' where resource_id = $1", [resourceId]);
+  // WPU-S7: an UPGRADE is applied only when autoRenew is on (and the wallet covers it); the fixtures
+  // of the earlier tests are renewing customers with a full wallet.
+  await q("update subscriptions set auto_renew = $2 where id = $1", [String(s.id), autoRenew]);
   return {
     customerId: buyer.customerId,
     resourceId,
@@ -519,14 +529,20 @@ describe("WPU-S3: the failure mark and the repeated cycle", () => {
         (await q(`select ${column} as d from subscriptions where id = $1`, [subscriptionId]))[0]!.d,
       ),
     );
-  const failApply = (f: Fresh, kind: string) =>
-    asWorker((tx) =>
+  const failApply = async (f: Fresh, kind: string) => {
+    // WPU-S7: a failed apply is over (needs_attention), so it no longer makes the renewal wait.
+    await q(
+      "update operations set state = 'needs_attention' where resource_id = $1 and kind = $2 and state in ('queued','running')",
+      [f.resourceId, kind],
+    );
+    await asWorker((tx) =>
       lifecycleHooks({ clock: kit.clock }).needsAttention(tx, {
         resourceId: f.resourceId,
         kind,
         code: "conflict",
       }),
     );
+  };
 
   it("the mark holds the code, the failed product and the period of the charge", async () => {
     const big = await product("container_service", "large", "40");
@@ -608,9 +624,18 @@ describe("WPU-S3: the failure mark and the repeated cycle", () => {
     };
     const f = await fresh("cdn", config);
     expect(await leadQueue(f)).not.toBeNull();
-    const { r, charged } = await renewTwoDaysBefore(f);
+    // WPU-S7: while the apply is queued the renewal is refused (busy); after the bounded wait it
+    // charges the applied plan and the late apply is skipped by its period.
+    const busy = await renewTwoDaysBefore(f);
+    expect(busy.r).toMatchObject({ ok: false, error: "conflict" });
+    expect(busy.charged).toBe(0n);
+    kit.clock.set(new Date(f.end.getTime() + (PLAN_APPLY_WAIT_HOURS + 1) * 3_600_000));
+    const before = await kit.balance(f.customerId);
+    const r = await asWeb((tx) =>
+      renewNow(tx, { customerId: f.customerId, resourceId: f.resourceId, clock: kit.clock }),
+    );
     expect(r.ok).toBe(true);
-    expect(charged).toBe(await total("cdn", "5"));
+    expect(before - (await kit.balance(f.customerId))).toBe(await total("cdn", "5"));
     expect(await applyOps(f.resourceId)).toHaveLength(1);
     expect(await configOf(f.resourceId)).not.toHaveProperty("pendingPlanFailed");
   });
@@ -632,8 +657,13 @@ describe("WPU-S5: the charge follows the delivered capacity", () => {
     });
     return { big, small, mid };
   };
-  const attention = (f: Fresh, extra: Record<string, unknown> = {}) =>
-    asWorker((tx) =>
+  const attention = async (f: Fresh, extra: Record<string, unknown> = {}) => {
+    // WPU-S7: a failed apply is over (needs_attention), so it no longer makes the renewal wait.
+    await q(
+      "update operations set state = 'needs_attention' where resource_id = $1 and kind = 'scale_container' and state in ('queued','running')",
+      [f.resourceId],
+    );
+    await asWorker((tx) =>
       lifecycleHooks({ clock: kit.clock }).needsAttention(tx, {
         resourceId: f.resourceId,
         kind: "scale_container",
@@ -641,6 +671,7 @@ describe("WPU-S5: the charge follows the delivered capacity", () => {
         ...extra,
       } as never),
     );
+  };
   /** What the adapter writes after the apply succeeded (scale_container). */
   const applied = async (f: Fresh, id: string) => {
     await q(
@@ -716,13 +747,22 @@ describe("WPU-S5: the charge follows the delivered capacity", () => {
     }
   });
 
-  it("an apply still queued at the renewal: the old price is charged and the pending plan is kept", async () => {
+  it("an apply still queued at the renewal: the renewal waits (WPU-S7), then charges the old price and keeps the pending plan", async () => {
     for (const make of [downgrade, upgrade]) {
       const { f } = await make();
       expect(await leadQueue(f)).not.toBeNull();
-      const step = await renewTwoDaysBefore(f); // the apply operation has not run
-      expect(step.r.ok).toBe(true);
-      expect(step.charged).toBe(await total("container_service", make === downgrade ? "40" : "5"));
+      const busy = await renewTwoDaysBefore(f); // the apply operation has not run
+      expect(busy.r).toMatchObject({ ok: false, error: "conflict" });
+      expect(busy.charged).toBe(0n);
+      kit.clock.set(new Date(f.end.getTime() + (PLAN_APPLY_WAIT_HOURS + 1) * 3_600_000));
+      const before = await kit.balance(f.customerId);
+      const r = await asWeb((tx) =>
+        renewNow(tx, { customerId: f.customerId, resourceId: f.resourceId, clock: kit.clock }),
+      );
+      expect(r.ok).toBe(true);
+      expect(before - (await kit.balance(f.customerId))).toBe(
+        await total("container_service", make === downgrade ? "40" : "5"),
+      );
       expect(await configOf(f.resourceId)).toHaveProperty("pendingPlan");
       expect(await applyOps(f.resourceId)).toHaveLength(1);
     }
@@ -863,5 +903,361 @@ describe("WPU-S5: the charge follows the delivered capacity", () => {
       productId: string;
     };
     expect(mark.productId).toBe(small);
+  });
+});
+// WPU-S7. Ruling: the apply is bound to its period and to the money — an apply that finishes after the
+// renewal charged the old plan is refused (period end in the payload, checked by both adapters); the
+// renewal waits (bounded) for an apply of the current period; an UPGRADE is queued only when the
+// renewal can be paid (autoRenew on, wallet covers the pending plan's price, a guard that is never
+// posted), a DOWNGRADE always — closes the late-apply and unpaid-capacity holes, no refund is needed —
+// if wrong, a renewal is delayed by at most PLAN_APPLY_WAIT_HOURS or an upgrade waits one more term.
+describe("WPU-S7: the apply is bound to its period and to the money", () => {
+  const plans = async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", {
+      region: reg(big),
+    });
+    return { big, small };
+  };
+  const make = async (kind: "downgrade" | "upgrade", autoRenew = true) => {
+    const { big, small } = await plans();
+    const f = await fresh(
+      "container_service",
+      {
+        region: reg(big),
+        appliedPlan: { productId: kind === "downgrade" ? big : small },
+        pendingPlan: { productId: kind === "downgrade" ? small : big },
+      },
+      autoRenew,
+    );
+    return { f, big, small };
+  };
+  const logs: Record<string, unknown>[] = [];
+  const run = () =>
+    runLifecycle({
+      runTx: asWorker,
+      clock: kit.clock,
+      log: (e) => void logs.push({ ...e }),
+    });
+  const at = (f: Fresh, ms: number) => kit.clock.set(new Date(f.end.getTime() + ms));
+  const HOUR = 3_600_000;
+  const finishApply = async (f: Fresh, id: string) => {
+    await q(
+      "update resources set config = (config || $2::jsonb) - 'pendingPlan' - 'pendingPlanFailed' where id = $1",
+      [f.resourceId, JSON.stringify({ appliedPlan: { productId: id } })],
+    );
+    await q("update operations set state = 'succeeded' where resource_id = $1", [f.resourceId]);
+  };
+  const setWallet = (f: Fresh, minor: bigint) =>
+    q("update wallets set balance_minor = $2 where customer_id = $1", [
+      f.customerId,
+      minor.toString(),
+    ]);
+  const periodEnd = async (f: Fresh) =>
+    new Date(
+      String(
+        (await q("select period_end as d from subscriptions where id = $1", [f.subscriptionId]))[0]!
+          .d,
+      ),
+    );
+  const charge = async (f: Fresh, action: () => Promise<unknown>) => {
+    const before = await kit.balance(f.customerId);
+    await action();
+    return before - (await kit.balance(f.customerId));
+  };
+
+  it("names the wait: 6 hours past the due time", () => {
+    expect(PLAN_APPLY_WAIT_HOURS).toBe(6);
+  });
+
+  it("the apply payload names the subscription, the product and the period end it was queued for", async () => {
+    const { f, small } = await make("downgrade");
+    const queued = await leadQueue(f);
+    expect(queued).not.toBeNull();
+    const [op] = await q("select payload, idempotency_key from operations where id = $1", [
+      queued!.operationId,
+    ]);
+    expect(op!.payload).toEqual({
+      subscriptionId: f.subscriptionId,
+      productId: small,
+      periodEnd: f.end.toISOString(),
+    });
+    expect(op!.idempotency_key).toBe(
+      `lifecycle:plan-change:${f.subscriptionId}:${f.end.toISOString()}`,
+    );
+    const read = readPlanApplyPayload(op!.payload);
+    expect(read.periodEnd?.getTime()).toBe(f.end.getTime());
+    expect(planApplyStale(read.periodEnd, f.end)).toBe(false);
+  });
+
+  it("an apply that would finish after the renewal is refused: the payload period is no longer the subscription's", async () => {
+    const { f, big } = await make("downgrade");
+    expect(await leadQueue(f)).not.toBeNull();
+    const [op] = await q(
+      "select id, payload from operations where resource_id = $1 and kind = 'scale_container'",
+      [f.resourceId],
+    );
+    // The apply is stuck; after the wait the renewal charges the applied plan and moves the period.
+    at(f, (PLAN_APPLY_WAIT_HOURS + 1) * HOUR);
+    const paid = await charge(f, run);
+    expect(paid).toBe(await total("container_service", "40"));
+    const now = await periodEnd(f);
+    expect(now.getTime()).toBeGreaterThan(f.end.getTime());
+    const queuedFor = readPlanApplyPayload(op!.payload).periodEnd;
+    expect(planApplyStale(queuedFor, now)).toBe(true);
+    // Ops are told once, in the config and in the log, with ids only (R14).
+    expect((await configOf(f.resourceId)).planApplyLate).toEqual({
+      operationId: String(op!.id),
+      periodEnd: f.end.toISOString(),
+    });
+    expect(
+      logs.filter((l) => l.action === "plan_apply_late" && l.subscriptionId === f.subscriptionId),
+    ).toEqual([
+      expect.objectContaining({
+        subscriptionId: f.subscriptionId,
+        operationId: String(op!.id),
+      }),
+    ]);
+    expect(await configOf(f.resourceId)).toMatchObject({
+      appliedPlan: { productId: big },
+    });
+  });
+
+  it("the success hook of an apply that ran for a moved period leaves a notice; a skipped or timely apply leaves none", async () => {
+    const { f, small } = await make("downgrade");
+    const queued = await leadQueue(f);
+    const id = queued!.operationId;
+    const succeeded = () =>
+      asWorker((tx) =>
+        lifecycleHooks({ clock: kit.clock }).succeeded(tx, {
+          operationId: id,
+          resourceId: f.resourceId,
+          customerId: f.customerId,
+          kind: "scale_container",
+        }),
+      );
+    await succeeded(); // the period has not moved: no notice
+    expect(await configOf(f.resourceId)).not.toHaveProperty("planApplyLate");
+    at(f, (PLAN_APPLY_WAIT_HOURS + 1) * HOUR);
+    await run(); // the renewal moved the period (the log and the notice come from the wait)
+    await q("update resources set config = config - 'planApplyLate' where id = $1", [f.resourceId]);
+    await q("update resources set config = config || $2::jsonb where id = $1", [
+      f.resourceId,
+      JSON.stringify({
+        planApplySkipped: { operationId: id, reason: "period_moved" },
+      }),
+    ]);
+    await succeeded(); // skipped by the adapter: no notice
+    expect(await configOf(f.resourceId)).not.toHaveProperty("planApplyLate");
+    await q("update resources set config = config - 'planApplySkipped' where id = $1", [
+      f.resourceId,
+    ]);
+    await succeeded(); // it really ran after the renewal: a notice
+    expect((await configOf(f.resourceId)).planApplyLate).toMatchObject({
+      operationId: id,
+    });
+    expect(small).toBeTruthy();
+  });
+
+  it("the renewal is deferred while the apply of this period is queued or running: no charge, no grace, no failure", async () => {
+    for (const kind of ["downgrade", "upgrade"] as const) {
+      const { f } = await make(kind);
+      expect(await leadQueue(f)).not.toBeNull();
+      for (const state of ["queued", "running"]) {
+        await q("update operations set state = $2 where resource_id = $1", [f.resourceId, state]);
+        for (const ms of [60_000, 3 * HOUR, (PLAN_APPLY_WAIT_HOURS - 1) * HOUR]) {
+          at(f, ms);
+          const before = await kit.balance(f.customerId);
+          await run();
+          expect(await kit.balance(f.customerId)).toBe(before);
+          expect((await periodEnd(f)).getTime()).toBe(f.end.getTime());
+          const [sub] = await q("select status from subscriptions where id = $1", [
+            f.subscriptionId,
+          ]);
+          expect(sub!.status).toBe("active");
+        }
+      }
+    }
+  });
+
+  it("after the bounded wait the renewal charges the applied plan once, however often the sweep runs", async () => {
+    for (const kind of ["downgrade", "upgrade"] as const) {
+      const { f } = await make(kind);
+      expect(await leadQueue(f)).not.toBeNull();
+      at(f, PLAN_APPLY_WAIT_HOURS * HOUR + 60_000);
+      const paid = await charge(f, async () => {
+        await run();
+        await run();
+        await run();
+      });
+      expect(paid).toBe(await total("container_service", kind === "downgrade" ? "40" : "5"));
+      expect(await configOf(f.resourceId)).toHaveProperty("pendingPlan");
+      expect(await applyOps(f.resourceId)).toHaveLength(1); // no second apply, no double charge
+    }
+  });
+
+  it("an apply that finished before the due time does not make the renewal wait: it charges the new plan at once", async () => {
+    const { f, small } = await make("downgrade");
+    expect(await leadQueue(f)).not.toBeNull();
+    await finishApply(f, small);
+    at(f, 60_000);
+    const paid = await charge(f, run);
+    expect(paid).toBe(await total("container_service", "5"));
+  });
+
+  it("an apply that failed (needs_attention) does not make the renewal wait", async () => {
+    const { f } = await make("downgrade");
+    expect(await leadQueue(f)).not.toBeNull();
+    await q("update operations set state = 'needs_attention' where resource_id = $1", [
+      f.resourceId,
+    ]);
+    at(f, 60_000);
+    expect(await charge(f, run)).toBe(await total("container_service", "40"));
+  });
+
+  it("renewNow follows the same rule: busy while the apply of this period runs, the applied plan after the wait", async () => {
+    const { f } = await make("upgrade");
+    expect(await leadQueue(f)).not.toBeNull();
+    at(f, -2 * HOUR);
+    const busy = await asWeb((tx) =>
+      renewNow(tx, {
+        customerId: f.customerId,
+        resourceId: f.resourceId,
+        clock: kit.clock,
+      }),
+    );
+    expect(busy).toMatchObject({
+      ok: false,
+      error: "conflict",
+      fields: { subscription: "busy" },
+    });
+    at(f, PLAN_APPLY_WAIT_HOURS * HOUR + 1);
+    const paid = await charge(f, async () => {
+      const r = await asWeb((tx) =>
+        renewNow(tx, {
+          customerId: f.customerId,
+          resourceId: f.resourceId,
+          clock: kit.clock,
+        }),
+      );
+      expect(r.ok).toBe(true);
+    });
+    expect(paid).toBe(await total("container_service", "5"));
+  });
+
+  it("a renewal that cannot be paid still goes to grace as before: at once without an apply, after the wait with a stuck one", async () => {
+    const { f } = await make("downgrade");
+    await setWallet(f, 0n);
+    at(f, 60_000);
+    await run();
+    const [free] = await q("select status from subscriptions where id = $1", [f.subscriptionId]);
+    expect(free!.status).toBe("grace");
+
+    const other = await make("downgrade");
+    await setWallet(other.f, 0n);
+    expect(await leadQueue(other.f)).not.toBeNull(); // a downgrade is queued whatever the wallet
+    at(other.f, 60_000);
+    await run();
+    const [held] = await q("select status from subscriptions where id = $1", [
+      other.f.subscriptionId,
+    ]);
+    expect(held!.status).toBe("active"); // deferred, not failed
+    at(other.f, (PLAN_APPLY_WAIT_HOURS + 1) * HOUR);
+    await run();
+    const [late] = await q("select status from subscriptions where id = $1", [
+      other.f.subscriptionId,
+    ]);
+    expect(late!.status).toBe("grace");
+  });
+
+  it("an upgrade is not applied with an empty wallet, with autoRenew off, or one paisa short; the pending plan stays", async () => {
+    const cost = await total("container_service", "40");
+    const empty = await make("upgrade");
+    await setWallet(empty.f, 0n);
+    expect(await leadQueue(empty.f)).toBeNull();
+    expect(await applyOps(empty.f.resourceId)).toHaveLength(0);
+    expect(await configOf(empty.f.resourceId)).toMatchObject({
+      pendingPlan: { productId: empty.big },
+      appliedPlan: { productId: empty.small },
+    });
+
+    const off = await make("upgrade", false);
+    expect(await leadQueue(off.f)).toBeNull();
+    expect(await applyOps(off.f.resourceId)).toHaveLength(0);
+
+    const short = await make("upgrade");
+    await setWallet(short.f, cost - 1n);
+    expect(await leadQueue(short.f)).toBeNull();
+
+    // The scheduler path asks the same: nothing is queued by a run in the lead window either.
+    kit.clock.set(new Date(short.f.end.getTime() - 12 * HOUR));
+    await run();
+    expect(await applyOps(short.f.resourceId)).toHaveLength(0);
+  });
+
+  it("an upgrade is applied when autoRenew is on and the wallet covers the new price exactly; the guard posts nothing", async () => {
+    const cost = await total("container_service", "40");
+    const { f } = await make("upgrade");
+    await setWallet(f, cost);
+    const before = await q("select count(*)::int as n from ledger_transactions", []);
+    expect(await leadQueue(f)).not.toBeNull();
+    const after = await q("select count(*)::int as n from ledger_transactions", []);
+    expect(after[0]!.n).toBe(before[0]!.n);
+    expect(await kit.balance(f.customerId)).toBe(cost);
+  });
+
+  it("a downgrade is always applied: autoRenew off and an empty wallet do not stop it", async () => {
+    const { f } = await make("downgrade", false);
+    await setWallet(f, 0n);
+    expect(await leadQueue(f)).not.toBeNull();
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+  });
+
+  it("a pending plan that costs the same is applied like a downgrade (no extra capacity charge)", async () => {
+    const big = await product("container_service", "large", "40");
+    const twin = await product("container_service", "medium", "40", {
+      region: reg(big),
+    });
+    const f = await fresh(
+      "container_service",
+      {
+        region: reg(big),
+        appliedPlan: { productId: big },
+        pendingPlan: { productId: twin },
+      },
+      false,
+    );
+    await setWallet(f, 0n);
+    expect(await leadQueue(f)).not.toBeNull();
+  });
+
+  it("the period the adapters read is the subscription's own, for this resource and this customer only", async () => {
+    const { f } = await make("downgrade");
+    const other = await make("downgrade");
+    const read = (customerId: string, resourceId: string, subscriptionId: string) =>
+      asWorker((tx) => lifecycleRepo(tx).periodEndOf({ customerId, resourceId, subscriptionId }));
+    expect((await read(f.customerId, f.resourceId, f.subscriptionId))?.getTime()).toBe(
+      f.end.getTime(),
+    );
+    expect(await read(other.f.customerId, f.resourceId, f.subscriptionId)).toBeNull();
+    expect(await read(f.customerId, other.f.resourceId, f.subscriptionId)).toBeNull();
+    expect(await read(f.customerId, f.resourceId, other.f.subscriptionId)).toBeNull();
+  });
+
+  it("is idempotent per period: one apply, then a new period gets its own", async () => {
+    const { f, small } = await make("downgrade");
+    expect(await leadQueue(f)).not.toBeNull();
+    expect(await leadQueue(f, 6)).toBeNull();
+    await run();
+    await run();
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+    await finishApply(f, small);
+    at(f, 60_000);
+    await run(); // renewed
+    // the plan is applied; nothing is pending, so the next period queues nothing
+    const end2 = await periodEnd(f);
+    kit.clock.set(new Date(end2.getTime() - 12 * HOUR));
+    await run();
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
   });
 });

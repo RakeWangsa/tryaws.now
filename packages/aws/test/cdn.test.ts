@@ -21,6 +21,8 @@ const PRODUCT = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const POOL = { awsAccountId: "210987654321", externalId: "tc-ext-7f3a9c" };
 const DIST = awsResourceName("cdn", RID);
 const NOW = Date.now();
+const PERIOD_END = new Date("2026-12-01T00:00:00.000Z");
+const APPLY = { subscriptionId: OID, periodEnd: PERIOD_END.toISOString() };
 const clock = { now: () => new Date(NOW) };
 const notFound = () => lightsailError(400, "NotFoundException", "raw aws text 210987654321");
 
@@ -56,6 +58,7 @@ function setup(
       bundleCalls.push(input);
       return "small_1_0";
     },
+    periodEndOf: async () => PERIOD_END,
     ...over.deps,
   };
   const adapter = createCdnAdapter(deps);
@@ -485,7 +488,11 @@ describe("plan change at the next renewal (WPU-G8)", () => {
     aws.on("lightsail", "UpdateDistributionBundle", lightsailOk({}));
     const r = await adapter.aws.action(
       "change_cdn_bundle",
-      ctx(null, { kind: "change_cdn_bundle", state: "active", payload: { productId: NEXT } }),
+      ctx(null, {
+        kind: "change_cdn_bundle",
+        state: "active",
+        payload: { productId: NEXT, ...APPLY },
+      }),
     );
     expect(r).toMatchObject({
       kind: "done",
@@ -508,6 +515,60 @@ describe("plan change at the next renewal (WPU-G8)", () => {
         ctx(null, { state: "active", payload: { productId: "x" } }),
       ),
     ).rejects.toMatchObject({ code: "validation" });
+  });
+
+  // WPU-S7: the apply is bound to the period it was queued for.
+  it("change_cdn_bundle whose period has moved is skipped: no AWS call, the pending plan stays, no failure", async () => {
+    const moved = new Date(PERIOD_END.getTime() + 30 * 86_400_000);
+    const { aws, adapter, ctx } = setup({
+      deps: { loadBundle: async () => "large_1_0", periodEndOf: async () => moved },
+    });
+    aws.on("lightsail", "UpdateDistributionBundle", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "change_cdn_bundle",
+      ctx(null, {
+        kind: "change_cdn_bundle",
+        state: "active",
+        payload: { productId: NEXT, ...APPLY },
+      }),
+    );
+    expect(r).toEqual({
+      kind: "done",
+      patch: {
+        configMerge: { planApplySkipped: { operationId: "op-1", reason: "period_moved" } },
+      },
+    });
+    expect(aws.seen.map((x) => x.action)).not.toContain("UpdateDistributionBundle");
+  });
+
+  it("change_cdn_bundle is skipped without a period in the payload and retried when the period cannot be read (R16)", async () => {
+    const { aws, adapter, ctx } = setup({ deps: { loadBundle: async () => "large_1_0" } });
+    aws.on("lightsail", "UpdateDistributionBundle", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "change_cdn_bundle",
+      ctx(null, { kind: "change_cdn_bundle", state: "active", payload: { productId: NEXT } }),
+    );
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { planApplySkipped: {} } } });
+    const down = setup({
+      deps: {
+        loadBundle: async () => "large_1_0",
+        periodEndOf: async () => {
+          throw new Error("db down");
+        },
+      },
+    });
+    down.aws.on("lightsail", "UpdateDistributionBundle", lightsailOk({}));
+    await expect(
+      down.adapter.aws.action(
+        "change_cdn_bundle",
+        down.ctx(null, {
+          kind: "change_cdn_bundle",
+          state: "active",
+          payload: { productId: NEXT, ...APPLY },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "upstream_unavailable", retryable: true });
+    expect(down.aws.seen.map((x) => x.action)).not.toContain("UpdateDistributionBundle");
   });
 
   // WPU-S2: core/lifecycle PLAN_APPLY_STATES says cdn applies in `active` only; this pins the adapter.

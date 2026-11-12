@@ -124,6 +124,78 @@ export function lifecycleRepo(tx: Tx) {
       return rows[0] === undefined ? null : toRow(rows[0]);
     },
 
+    // WPU-S7: the operations of one resource under one idempotency key (kind and state only; the
+    // columns web_rw may read, so renewNow can ask too). The key holds the subscription and period.
+    async operationsByKey(
+      resourceId: string,
+      idempotencyKey: string,
+    ): Promise<{ id: string; kind: string; state: string }[]> {
+      assertUuid(resourceId, "resource id");
+      const { rows } = await tx.execute<{ id: string; kind: string; state: string }>(sql`
+        select id, kind, state from operations
+        where resource_id = ${resourceId} and idempotency_key = ${idempotencyKey}`);
+      return rows.map((r) => ({ id: String(r.id), kind: String(r.kind), state: String(r.state) }));
+    },
+
+    // WPU-S7: the period end the apply operation was queued for (its payload) and the one its
+    // subscription has now. null when the operation is not of this resource.
+    async planApplyPeriod(
+      resourceId: string,
+      operationId: string,
+    ): Promise<{
+      config: Record<string, unknown>;
+      payload: unknown;
+      currentPeriodEnd: Date | null;
+    } | null> {
+      assertUuid(resourceId, "resource id");
+      assertUuid(operationId, "operation id");
+      const { rows } = await tx.execute<{
+        config: unknown;
+        payload: unknown;
+        period_end: unknown;
+      }>(sql`
+        select r.config as config, o.payload as payload, s.period_end as period_end
+        from operations o join resources r on r.id = o.resource_id
+          left join subscriptions s on s.resource_id = r.id
+        where o.id = ${operationId} and o.resource_id = ${resourceId}
+        limit 1`);
+      const row = rows[0];
+      if (row === undefined) return null;
+      const end = row.period_end;
+      return {
+        config:
+          typeof row.config === "object" && row.config !== null && !Array.isArray(row.config)
+            ? (row.config as Record<string, unknown>)
+            : {},
+        payload: row.payload,
+        currentPeriodEnd:
+          end === null || end === undefined
+            ? null
+            : end instanceof Date
+              ? end
+              : new Date(String(end)),
+      };
+    },
+
+    // WPU-S7: the period end a subscription has now, only when the subscription belongs to this
+    // resource AND this customer (the adapters of the plan apply); null otherwise.
+    async periodEndOf(input: {
+      customerId: string;
+      resourceId: string;
+      subscriptionId: string;
+    }): Promise<Date | null> {
+      assertUuid(input.customerId, "customer id");
+      assertUuid(input.resourceId, "resource id");
+      assertUuid(input.subscriptionId, "subscription id");
+      const { rows } = await tx.execute<{ period_end: unknown }>(sql`
+        select period_end from subscriptions
+        where id = ${input.subscriptionId} and resource_id = ${input.resourceId}
+          and customer_id = ${input.customerId}`);
+      const end = rows[0]?.period_end;
+      if (end === undefined || end === null) return null;
+      return end instanceof Date ? end : new Date(String(end));
+    },
+
     async setStatus(subscriptionId: string, status: SubscriptionStatus): Promise<void> {
       assertUuid(subscriptionId, "subscription id");
       await tx.execute(

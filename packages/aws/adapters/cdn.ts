@@ -21,7 +21,9 @@ import {
   checkCdnOrigin,
   checkedContainerCertificateDomain,
   parseCdnConfig,
+  planApplyStale,
   planFailedFor,
+  readPlanApplyPayload,
   resourceTags,
   stepDone,
   stepNext,
@@ -54,6 +56,18 @@ export interface CdnDeps {
     readonly customerId: string;
     readonly productId: string;
   }): Promise<CdnBundle | null>;
+
+  /**
+   * WPU-S7: the period end the subscription of this resource has NOW (the database, not the payload).
+   * The apply of a pending plan runs only for the period it was queued for; null (no subscription of
+   * this customer and resource) or a failed read refuses the apply (R16). The implementation must
+   * match the subscription id to the resource id and the customer id.
+   */
+  periodEndOf(input: {
+    readonly customerId: string;
+    readonly resourceId: string;
+    readonly subscriptionId: string;
+  }): Promise<Date | null>;
 }
 
 const POLL_SECONDS = 15;
@@ -68,6 +82,23 @@ type Ctx = OpCtx<CdnConfig>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const LIVE = ["active", "stopped", "suspended"];
+
+/** WPU-S7: true when the period end named by the payload is not the subscription's current one. */
+async function applyIsStale(ctx: Ctx, deps: CdnDeps): Promise<boolean> {
+  const named = readPlanApplyPayload(ctx.operation.payload);
+  if (named.subscriptionId === null || named.periodEnd === null) return true;
+  let current: Date | null;
+  try {
+    current = await deps.periodEndOf({
+      customerId: ctx.resource.customerId,
+      resourceId: ctx.resource.id,
+      subscriptionId: named.subscriptionId,
+    });
+  } catch {
+    throw new AwsError({ code: "upstream_unavailable", retryable: true });
+  }
+  return planApplyStale(named.periodEnd, current);
+}
 
 function fail(code: "validation" | "conflict" | "upstream_unavailable" | "internal"): AwsError {
   return new AwsError({ code, retryable: false });
@@ -351,6 +382,15 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
         const productId = payload?.productId;
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (ctx.resource.state !== "active") throw fail("conflict");
+        // WPU-S7: the apply belongs to the period it was queued for; after a renewal moved the period
+        // it is skipped (a done step that changes nothing but a marker) and the plan stays pending.
+        if (await applyIsStale(ctx, deps)) {
+          return stepDone({
+            configMerge: {
+              planApplySkipped: { operationId: ctx.operation.id, reason: "period_moved" },
+            },
+          });
+        }
         const bundle = await deps.loadBundle({ customerId: ctx.resource.customerId, productId });
         if (bundle === null) throw fail("validation");
         await client(ctx).send(

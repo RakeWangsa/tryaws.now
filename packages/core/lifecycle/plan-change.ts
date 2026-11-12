@@ -6,9 +6,13 @@ import {
   type LifecycleRow,
   type Tx,
 } from "@tc/db";
+import { walletBalance } from "../ledger/balance";
 import { cdnBundleFrom } from "../products/cdn";
 import { containerPlanFrom } from "../products/container";
+import { parseSnapshot } from "../pricing/snapshot";
+import { quoteInForce } from "../rates/in-force";
 import type { OperationKind } from "../operations/kinds";
+import type { Clock } from "../types";
 
 // WPU-G8. Ruling: a power, scale or bundle change takes effect at the NEXT renewal. A term is prepaid,
 // so there is no proration. The customer's choice is stored in the resource config as
@@ -46,6 +50,16 @@ import type { OperationKind } from "../operations/kinds";
 // (c) An apply that has not finished at the renewal, or failed, leaves the old plan at the old price;
 // the pending plan stays pending for the next period. (d) The apply states, the busy checks and the
 // failure mark stay as secondary defences.
+//
+// WPU-S7. Ruling: the apply is bound to its period and to the money. (a) The apply payload carries the
+// subscription id and the period end it was queued for; both adapters treat an apply whose period end
+// is not the subscription's current one as stale: nothing is changed in AWS and the pending plan stays
+// for the next period. (b) While an apply for the CURRENT period is queued or running, the renewal
+// (scheduler or renewNow) is deferred, at most PLAN_APPLY_WAIT_HOURS past the due time; after that the
+// renewal charges the applied plan, and the late apply is stale by (a). (c) An UPGRADE is queued only
+// when the renewal can be paid: autoRenew is on and the wallet covers the renewal price of the pending
+// plan (priced once through the pricing engine, a guard, never posted). A DOWNGRADE is always queued.
+// Anything unreadable queues nothing (R16).
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -249,6 +263,131 @@ export async function planPriceFor(tx: Tx, row: PlanRow): Promise<PlanPrice> {
   return { state: "applied", productId: applied, awsPriceUsd: price };
 }
 
+/** WPU-S7: the longest a renewal waits for an apply of the current period, counted from the due time. */
+export const PLAN_APPLY_WAIT_HOURS = 6;
+
+/** The idempotency key of the apply of one subscription and period (R7). */
+export function planApplyKey(subscriptionId: string, periodEnd: Date): string {
+  return `lifecycle:plan-change:${subscriptionId}:${periodEnd.toISOString()}`;
+}
+
+/** What an apply payload names: the product, the subscription and the period end it was queued for. */
+export function readPlanApplyPayload(payload: unknown): {
+  productId: string | null;
+  subscriptionId: string | null;
+  periodEnd: Date | null;
+} {
+  const raw =
+    typeof payload === "object" && payload !== null && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
+  const sub = raw.subscriptionId;
+  const end = typeof raw.periodEnd === "string" ? new Date(raw.periodEnd) : null;
+  return {
+    productId: idOf({ productId: raw.productId }),
+    subscriptionId: typeof sub === "string" && UUID.test(sub) ? sub : null,
+    periodEnd: end !== null && !Number.isNaN(end.getTime()) ? end : null,
+  };
+}
+
+/**
+ * WPU-S7. True unless the payload's period end IS the subscription's current period end. A payload
+ * without a period end (queued before WPU-S7), or a current period end that could not be read, is
+ * stale: the apply is skipped, never run (R16), and the pending plan waits for the next period.
+ */
+export function planApplyStale(
+  payloadPeriodEnd: Date | null,
+  currentPeriodEnd: Date | null,
+): boolean {
+  if (payloadPeriodEnd === null || currentPeriodEnd === null) return true;
+  return payloadPeriodEnd.getTime() !== currentPeriodEnd.getTime();
+}
+
+export type PlanApplyWait =
+  { readonly wait: true } | { readonly wait: false; readonly staleOperationId: string | null };
+
+/**
+ * WPU-S7. Whether a renewal of this row waits for the apply of the current period. It waits while that
+ * apply (the operation under the key of this period) is queued, running or waiting, and only until
+ * PLAN_APPLY_WAIT_HOURS after the period end. Past that the renewal goes on and the id of the
+ * unfinished apply is returned, so the caller can tell ops; the apply then finds the period moved and
+ * is skipped by the adapter. An apply that finished or failed does not make it wait.
+ */
+export async function planApplyWait(tx: Tx, row: LifecycleRow, now: Date): Promise<PlanApplyWait> {
+  if (PLAN_FAMILIES[row.resource.family] === undefined)
+    return { wait: false, staleOperationId: null };
+  const ops = await lifecycleRepo(tx).operationsByKey(
+    row.resourceId,
+    planApplyKey(row.id, row.periodEnd),
+  );
+  const open = ops.find(
+    (o) => PLAN_APPLY_KINDS.includes(o.kind) && IN_FLIGHT_STATES.includes(o.state),
+  );
+  if (open === undefined) return { wait: false, staleOperationId: null };
+  const limit = row.periodEnd.getTime() + PLAN_APPLY_WAIT_HOURS * 3_600_000;
+  if (Number.isNaN(now.getTime()) || now.getTime() < limit) return { wait: true };
+  return { wait: false, staleOperationId: open.id };
+}
+
+/** The renewal total of this row at an AWS price today (the pricing engine; nothing is posted). */
+async function renewalTotalAt(
+  tx: Tx,
+  row: LifecycleRow,
+  awsPriceUsd: string,
+  now: Date,
+): Promise<bigint | null> {
+  let quantity: string;
+  try {
+    quantity = parseSnapshot(row.priceSnapshot).quantity;
+  } catch {
+    return null;
+  }
+  const clock: Clock = { now: () => now };
+  const priced = await quoteInForce(
+    tx,
+    { market: row.market, productFamily: row.resource.family, awsPriceUsd, quantity },
+    clock,
+  );
+  return priced.ok ? BigInt(priced.value.snapshot.totalMinor) : null;
+}
+
+/**
+ * WPU-S7 (c). "allow" for a downgrade or an equal price; for an upgrade only when autoRenew is on and
+ * the wallet covers the renewal price of the pending plan. A price, a rate or a wallet that cannot be
+ * read refuses (R16). The prices come from the pricing engine; nothing is compared as text or float.
+ */
+async function upgradeGuard(
+  tx: Tx,
+  row: LifecycleRow,
+  pendingAwsPriceUsd: string,
+  now: Date,
+): Promise<"allow" | "refuse"> {
+  const spec = PLAN_FAMILIES[row.resource.family];
+  if (spec === undefined) return "refuse";
+  const current = await planPriceFor(tx, row);
+  if (current.state === "unreadable") return "refuse";
+  let currentAws: string;
+  if (current.state === "applied") {
+    currentAws = current.awsPriceUsd;
+  } else {
+    try {
+      currentAws = parseSnapshot(row.priceSnapshot).awsPriceUsd;
+    } catch {
+      return "refuse";
+    }
+  }
+  const currentTotal = await renewalTotalAt(tx, row, currentAws, now);
+  const pendingTotal = await renewalTotalAt(tx, row, pendingAwsPriceUsd, now);
+  if (currentTotal === null || pendingTotal === null) return "refuse";
+  if (pendingTotal <= currentTotal) return "allow";
+  if (!row.autoRenew) return "refuse";
+  try {
+    return (await walletBalance(tx, row.customerId)) >= pendingTotal ? "allow" : "refuse";
+  } catch {
+    return "refuse";
+  }
+}
+
 /** WPU-S5: how long before the renewal is due the apply of a pending plan is queued. */
 export const PLAN_APPLY_LEAD_HOURS = 24;
 
@@ -284,14 +423,24 @@ export async function queuePlanApply(
     return null;
   }
   if ((await planPriceFor(tx, row)).state === "unreadable") return null;
-  if ((await catalogPrice(tx, row, spec, pending, true)) === null) return null;
+  const pendingPrice = await catalogPrice(tx, row, spec, pending, true);
+  if (pendingPrice === null) return null;
+  // WPU-S7 (c): an UPGRADE is queued only when its renewal can be paid. The pending plan is priced
+  // once through the pricing engine as a guard; nothing is posted. A DOWNGRADE (not dearer than the
+  // current plan) is always queued: it lowers the capacity before a lower charge.
+  const guard = await upgradeGuard(tx, row, pendingPrice, now);
+  if (guard === "refuse") return null;
   const inserted = await insertOperation(
     tx,
     {
       resourceId: row.resourceId,
       kind: spec.apply,
-      payload: { subscriptionId: row.id, productId: pending },
-      idempotencyKey: `lifecycle:plan-change:${row.id}:${row.periodEnd.toISOString()}`,
+      payload: {
+        subscriptionId: row.id,
+        productId: pending,
+        periodEnd: row.periodEnd.toISOString(),
+      },
+      idempotencyKey: planApplyKey(row.id, row.periodEnd),
     },
     now,
   );

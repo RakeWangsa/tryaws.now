@@ -1015,6 +1015,25 @@ TASKS["WPU-S6"] = [
   repo,
 ];
 
+// WPU-S7: the apply of a pending plan is bound to its period and to the money. The apply payload names the
+// subscription and the period end and both adapters skip an apply for a period that has moved (aws); the
+// renewal waits a bounded time for an apply of the current period, scheduler and renewNow (core, db); an
+// upgrade is queued only when autoRenew is on and the wallet covers its price, a downgrade always (core,
+// db). No AWS call. The core and db suites need the local PostgreSQL (pnpm db:up).
+TASKS["WPU-S7"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  scheduler,
+  web,
+  repo,
+];
+
 // WPU-M1: an unattached static IP is charged as Amazon Lightsail does (free while attached, an hourly
 // price once unattached for more than one hour). Money path: the config price row and its migration (db),
 // the price through the pricing engine, the existing metered_charge posting once per IP and hour bucket,
