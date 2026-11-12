@@ -10,6 +10,7 @@ import {
   destroyDiskCore,
   destroyServerCore,
   detachDiskCore,
+  renewNowCore,
   setAutoBackupCore,
   setAutoRenewCore,
 } from "../../../../../server/extras-actions.ts";
@@ -51,4 +52,5 @@ export const attachDiskAction = run(attachDiskCore, [
 export const detachDiskAction = run(detachDiskCore, ["diskId", "requestId"]);
 export const destroyDiskAction = run(destroyDiskCore, ["diskId", "requestId", "confirmName"]);
 export const setAutoRenewAction = run(setAutoRenewCore, ["serverId", "autoRenew"]);
+export const renewNowAction = run(renewNowCore, ["serverId"]);
 export const destroyServerAction = run(destroyServerCore, ["serverId", "requestId", "confirmName"]);

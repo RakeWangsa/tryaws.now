@@ -83,6 +83,7 @@ vi.mock("../servers/[id]/actions.ts", () => ({
   detachDiskAction: async () => ({}),
   setAutoBackupAction: async () => ({}),
   setAutoRenewAction: async () => ({}),
+  renewNowAction: async () => ({}),
 }));
 vi.mock("../notifications/actions.ts", () => ({ markNotificationsReadAction: async () => ({}) }));
 

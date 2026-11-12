@@ -268,6 +268,19 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  "app/[locale]/(panel)/servers/[id]/actions.ts#renewNowAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}extras-actions.test.ts`,
+        "another customer's server, or none, is not_found and nothing is charged or audited (R8)",
+      ),
+      proof(
+        "packages/core/lifecycle/renew-now.db.test.ts",
+        "another customer's server answers not_found, like a missing one (R8)",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/servers/[id]/actions.ts#destroyServerAction": {
     kind: "id",
     proof: [EXTRAS],

@@ -28,7 +28,13 @@ export interface ExtrasRepos {
   notifications: NotificationsRepo;
   /** R12, R16: the flag of the server family for the customer's market; false when it cannot be read. */
   serversOn(): Promise<boolean>;
+  /** `renewNow` of @tc/core in this transaction (wallet, ledger, period); the customer comes from the scope. */
+  renewNow(resourceId: string): Promise<RenewAnswer>;
 }
+
+/** What the renewal answers, as far as the action needs it. Nothing else leaves the port. */
+export type RenewAnswer =
+  { ok: true; value: { periodEnd: Date } } | { ok: false; error: string; data?: unknown };
 
 export interface ExtrasDeps {
   authenticate(): Promise<CustomerSession | null>;
@@ -47,6 +53,8 @@ export type ExtrasError =
   | "name_mismatch"
   | "not_allowed"
   | "limit_reached"
+  | "insufficient_balance"
+  | "not_due"
   | "unavailable";
 
 export type ExtrasResult =
@@ -67,6 +75,7 @@ const limit = (action: string, count: number, windowSeconds: number): CustomerLi
 const WRITE_LIMIT = limit("server.extras", 30, 3600);
 const DESTROY_LIMIT = limit("server.destroy", 5, 3600);
 const READ_LIMIT = limit("notification.read", 60, 3600);
+const RENEW_LIMIT = limit("subscription.renew", 10, 3600);
 
 const SERVER_FAMILY = "linux_instance";
 const LIVE_STATES = ["active", "stopped", "suspended"];
@@ -432,6 +441,39 @@ export async function setAutoRenewCore(deps: ExtrasDeps, raw: unknown): Promise<
         serverId,
       );
       return { ok: true, done: on ? "autoRenewOn" : "autoRenewOff" };
+    },
+  );
+}
+
+/**
+ * 16.10 Billing: `renewNow`. Charges the next period from the wallet at today's rate. The money is
+ * moved by the one function of the lifecycle (idempotent by the ledger key of the period, R7); a
+ * repeat click is refused as `not_due`. Money is never typed in by the client (R4).
+ */
+export async function renewNowCore(deps: ExtrasDeps, raw: unknown): Promise<ExtrasResult> {
+  const input = record(raw);
+  const bad: Record<string, string> = {};
+  const serverId = uuid(input, "serverId", bad);
+  return frame(
+    deps,
+    { destructive: false, limits: RENEW_LIMIT },
+    () => (Object.keys(bad).length === 0 ? { ok: true } : { ok: false, fields: bad }),
+    async (repos) => {
+      await ownServer(repos, serverId);
+      const renewed = await repos.renewNow(serverId);
+      if (!renewed.ok) {
+        throw new Refusal(
+          renewed.error === "not_found"
+            ? "not_found"
+            : renewed.error === "conflict"
+              ? "not_due"
+              : renewed.error === "insufficient_balance"
+                ? "insufficient_balance"
+                : "unavailable",
+        );
+      }
+      await audit(repos, "subscription.renew_now", "resource", serverId);
+      return { ok: true, done: "renewed" };
     },
   );
 }

@@ -18,6 +18,7 @@ import {
   AttachDiskForm,
   AutoBackupForm,
   AutoRenewForm,
+  RenewNowForm,
   CreateBackupForm,
   DestroyButton,
   PostButton,
@@ -38,6 +39,7 @@ export interface ExtrasActions {
   detachDisk: ExtrasAction;
   destroyDisk: ExtrasAction;
   setAutoRenew: ExtrasAction;
+  renewNow: ExtrasAction;
   destroyServer: ExtrasAction;
 }
 
@@ -375,7 +377,11 @@ function BillingTab({
           ]}
         />
       )}
-      <p className="seccolor mt-3">{t("renewSoon")}</p>
+      <RenewNowForm
+        action={actions.renewNow}
+        serverId={data.id}
+        disabled={billing.status !== "active" && billing.status !== "grace"}
+      />
     </>
   );
 }

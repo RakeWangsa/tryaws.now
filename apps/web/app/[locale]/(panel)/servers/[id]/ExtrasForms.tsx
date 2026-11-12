@@ -284,6 +284,32 @@ export function AttachDiskForm({
   );
 }
 
+/** 16.10 Billing: `renewNow`. One button; the server decides whether a renewal is due and what it costs. */
+export function RenewNowForm({
+  action,
+  serverId,
+  disabled,
+}: {
+  action: ExtrasAction;
+  serverId: string;
+  disabled: boolean;
+}) {
+  const t = useTranslations("Extras.billing.renewNow");
+  const [state, formAction] = useActionState(action, INITIAL_FORM_STATE);
+  return (
+    <form action={formAction} noValidate>
+      <h3 className="mergecolor h4 mt-4">{t("title")}</h3>
+      <p className="seccolor">{t("body")}</p>
+      {disabled ? <p className="seccolor">{t("notNow")}</p> : null}
+      <ActionNotice state={state} />
+      <input type="hidden" name="serverId" value={serverId} />
+      <SubmitButton variant="primary" disabled={disabled}>
+        {t("submit")}
+      </SubmitButton>
+    </form>
+  );
+}
+
 export function AutoRenewForm({
   action,
   serverId,

@@ -21,6 +21,9 @@ export const extrasEn: Same<typeof extrasBn> = {
       name_mismatch: "The name does not match. Type exactly the same name.",
       not_allowed: "This cannot be done in the current state.",
       limit_reached: "This server has reached its limit of manual backups. Delete one first.",
+      insufficient_balance: "Your wallet does not have enough money. Add money to the wallet first.",
+      not_due:
+        "There is nothing to renew now. The next term is already paid, or the term ends in more than 7 days.",
       unavailable: "We could not finish this now. Please try again shortly.",
     },
     done: {
@@ -33,6 +36,7 @@ export const extrasEn: Same<typeof extrasBn> = {
       autoRenewOn: "Automatic renewal is on.",
       autoRenewOff: "Automatic renewal is off. The server is suspended when the term ends.",
       marked: "The notifications were marked as read.",
+      renewed: "Renewed. The money was taken from your wallet and the new term has started.",
     },
     approval: "This destroy waits for approval by our staff. Until then your server keeps running.",
     state: {
@@ -160,8 +164,12 @@ export const extrasEn: Same<typeof extrasBn> = {
         total: "Total",
         empty: "There are no invoices yet.",
       },
-      renewSoon:
-        "Renewing right now is coming soon. Keep automatic renewal on and your wallet funded.",
+      renewNow: {
+        title: "Renew now",
+        body: "Pay the next 30-day term from your wallet now, at today's price. The new term starts when the current one ends. You can do this from 7 days before the term ends.",
+        submit: "Renew from my wallet",
+        notNow: "You cannot renew right now in this state.",
+      },
     },
     destroy: {
       title: "Destroy server",

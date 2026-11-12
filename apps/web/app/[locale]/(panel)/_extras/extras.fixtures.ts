@@ -25,6 +25,7 @@ export const noopActions: ExtrasActions = {
   detachDisk: noop,
   destroyDisk: noop,
   setAutoRenew: noop,
+  renewNow: noop,
   destroyServer: noop,
 };
 
