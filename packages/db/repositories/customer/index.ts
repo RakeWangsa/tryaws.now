@@ -17,6 +17,7 @@ import { kycRepo, type KycRepo } from "./kyc";
 import { notificationsRepo, type NotificationsRepo } from "./notifications";
 import { subscriptionsRepo, type SubscriptionsRepo } from "./subscriptions";
 import { domainsRepo, type DomainsRepo } from "./domains";
+import { supportRepo, type SupportRepo } from "./support";
 
 // The repositories of one customer (R8). Tasks 7 to 9 add sshKeys, resources, operations, audit.
 export interface CustomerRepos {
@@ -37,6 +38,7 @@ export interface CustomerRepos {
   notifications: NotificationsRepo;
   subscriptions: SubscriptionsRepo;
   domains: DomainsRepo;
+  support: SupportRepo;
 }
 
 // Binds the customer once; every repository is built from that scope and no method takes a
@@ -61,6 +63,7 @@ export function customerRepos(tx: Tx, customerId: string): CustomerRepos {
     notifications: notificationsRepo(scope),
     subscriptions: subscriptionsRepo(scope),
     domains: domainsRepo(scope),
+    support: supportRepo(scope),
   };
 }
 

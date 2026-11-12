@@ -1906,6 +1906,47 @@ TASKS["WP9-T4"] = [
   supportFormCore,
   repo,
 ];
+// WP9-T4b: the signed-in support form. The repository writes with the columns web_rw may insert and
+// derives the row id from the customer and the idempotency key (R7); the cross-tenant case set and the
+// repository test prove it; the page states are cross-checked against the shared mockup (U1).
+const supportRepoDb = {
+  id: "support-repo-db",
+  title:
+    "WP9-T4b: customerRepos.support inserts only the granted columns, replays by key, and answers a foreign related resource like a missing one",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/db",
+    "support-repo",
+    "cross-tenant.test",
+    "--no-passWithNoTests",
+  ],
+};
+const supportFormWeb = {
+  id: "support-form-web",
+  title:
+    "WP9-T4b: the support page states follow the mockup in bn and en, its messages match, and the action is in the endpoint register",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "support",
+    "endpoint-sweep",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WP9-T4b"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  supportRepoDb,
+  supportFormWeb,
+  repo,
+];
 
 export const GATES = {
   M0: WP0_T1,

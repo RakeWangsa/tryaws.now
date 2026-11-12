@@ -35,6 +35,11 @@ export type {
   OrdersRepo,
 } from "./repositories/customer/orders";
 export type { DomainRow, DomainsRepo, NewDomain } from "./repositories/customer/domains";
+export type {
+  CustomerSupportRequestRow,
+  NewSupportRequest,
+  SupportRepo,
+} from "./repositories/customer/support";
 export { domainNameHolder, hostedZoneHeldByOther } from "./repositories/domain-names";
 export { customerOperationKey } from "./repositories/customer/operations";
 export { NOTIFICATIONS_SHOWN } from "./repositories/customer/notifications";

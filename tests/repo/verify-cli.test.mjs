@@ -138,6 +138,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP9-T2",
     "WP9-T3",
     "WP9-T4",
+    "WP9-T4b",
     "WPP-T1",
     "WPP-T2",
     "WPP-T3",

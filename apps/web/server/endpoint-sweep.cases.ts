@@ -243,6 +243,25 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     kind: "session",
     proof: [proof(`${W}kyc-actions.test.ts`, "never takes an object key from the request")],
   },
+  // WP9-T4b: the customer comes from the session; the optional related resource is checked against
+  // the customer's own rows by the repository (not_found for another customer's, packages/db proof).
+  "app/[locale]/(panel)/support/new/actions.ts#createSupportRequestAction": {
+    kind: "session",
+    proof: [
+      proof(
+        `${W}support-actions.test.ts`,
+        "authenticates, validates, rate limits, writes and audits, in that order (R9)",
+      ),
+      proof(
+        `${W}support-actions.test.ts`,
+        "takes the customer from the session, never from the input (R8)",
+      ),
+      proof(
+        "packages/db/test/support-repo.test.ts",
+        "a related resource of the customer is stored",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/notifications/actions.ts#markNotificationsReadAction": {
     kind: "id",
     proof: [
