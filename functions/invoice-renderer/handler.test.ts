@@ -102,6 +102,19 @@ describe("invoice-renderer handler", () => {
     "<style>@import 'a.css'</style>",
     "<style>p{background:url(a.png)}</style>",
     '<p style="color:red">x</p>',
+    // parser-differential defence (review of WPU-S8): a tag name must be on the allowlist, and a dangerous
+    // tag name is refused anywhere in the document
+    "<a>x</a>",
+    "<!-- x --><p>y</p>",
+    '<meta http-equiv="refresh" content="0;url=a">',
+    "<meta name=viewport content=x>",
+    "<p>x</p><template><p>y</p></template>",
+    "<noscript><p>y</p></noscript>",
+    "<xmp><p>y</p></xmp>",
+    "<math><mi>x</mi></math>",
+    "<p>x</p>< script>1</script>",
+    '<p>x</p><base href="https://evil.test/">',
+    "<form action=/x><input></form>",
   ])("refuses HTML that refers to a resource or runs code: %s (R16)", async (bad) => {
     const { handler, stored } = setup();
     expect(await handler({ customerId, invoiceId, locale: "en", html: bad })).toEqual({

@@ -41,7 +41,61 @@ const UNSAFE_TAG =
   /^<\s*\/?\s*(script|link|img|iframe|frame|frameset|object|embed|applet|base|svg|math|form|input|button|audio|video|source|track|meta\s+http-equiv)\b|https?:|\/\/|\b(?:javascript|vbscript|data)\s*:|[\s/"'](?:on[a-z]+|src|srcset|href|xlink:href|style|action|formaction|poster|background|data)\s*=/i;
 const UNSAFE_CSS = /https?:|\/\/|url\s*\(|@import|expression\s*\(|\\|<|javascript\s*:/i;
 
+// Defence in depth against a parser differential (security review of WPU-S8): the pattern scanner above
+// is not an HTML parser, so a tag is also accepted only if its NAME is on this list (the tags
+// renderInvoiceHtml emits), and a dangerous tag name anywhere in the document is refused. Escaped
+// customer text holds no "<", so neither rule can refuse ordinary text.
+const ALLOWED_TAGS = new Set([
+  "html",
+  "head",
+  "body",
+  "title",
+  "meta",
+  "style",
+  "div",
+  "span",
+  "p",
+  "table",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "th",
+  "td",
+  "caption",
+  "colgroup",
+  "col",
+  "h1",
+  "h2",
+  "h3",
+  "header",
+  "footer",
+  "section",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "small",
+  "br",
+  "hr",
+]);
+const DANGEROUS_ANYWHERE =
+  /<\s*\/?\s*(?:script|link|img|iframe|frame|frameset|object|embed|applet|base|svg|math|form|input|button|audio|video|source|track|template|noscript|xmp|plaintext)\b/i;
+const META_CHARSET = /^<meta\s+charset\s*=\s*["']?utf-8["']?\s*\/?>$/i;
+const DOCTYPE = /^<!doctype\s+html>$/i;
+
+function tagAllowed(tag: string): boolean {
+  if (DOCTYPE.test(tag)) return true;
+  const m = /^<\s*\/?\s*([a-zA-Z][a-zA-Z0-9]*)/.exec(tag);
+  if (m === null) return false; // a comment, a processing instruction or a stray "<"
+  const name = (m[1] ?? "").toLowerCase();
+  if (!ALLOWED_TAGS.has(name)) return false;
+  if (name === "meta") return META_CHARSET.test(tag);
+  return true;
+}
+
 function isSafeMarkup(html: string): boolean {
+  if (DANGEROUS_ANYWHERE.test(html)) return false;
   let css = "";
   const withoutStyle = html.replace(STYLE_BLOCK, (_all, open: string, body: string) => {
     css += body + "\n";
@@ -49,7 +103,7 @@ function isSafeMarkup(html: string): boolean {
   });
   if (UNSAFE_CSS.test(css)) return false;
   for (const tag of withoutStyle.match(TAG) ?? []) {
-    if (UNSAFE_TAG.test(tag)) return false;
+    if (UNSAFE_TAG.test(tag) || !tagAllowed(tag)) return false;
   }
   const text = withoutStyle.replace(TAG, "");
   return !text.includes("<");
