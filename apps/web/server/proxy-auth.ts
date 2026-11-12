@@ -25,10 +25,14 @@ async function build(env: Env): Promise<AuthRuntimeLike | null> {
   } catch {
     return null;
   }
-  if (!config.fake.idp) return { config: auth };
-  const identity = await import("./fakes/identity.ts");
-  const devAuth = await import("./fakes/dev-auth.ts");
-  return { config: auth, verifier: devAuth.devVerifier, port: identity.createFakeRefreshPort() };
+  // `process.env.NODE_ENV` is replaced by the bundler: in a production build the condition is the
+  // constant false and no fake reaches the bundle (the smoke check "no fake EPS and no dev verifier").
+  if (process.env.NODE_ENV !== "production" && config.fake.idp) {
+    const identity = await import("./fakes/identity.ts");
+    const devAuth = await import("./fakes/dev-auth.ts");
+    return { config: auth, verifier: devAuth.devVerifier, port: identity.createFakeRefreshPort() };
+  }
+  return { config: auth };
 }
 
 export function proxyAuthRuntime(env: Env): Promise<AuthRuntimeLike | null> {
