@@ -30,12 +30,18 @@ export {
   type RoleOf,
 } from "./roles";
 export {
+  BOOTSTRAP_BEACON_PORT,
   BOOTSTRAP_EXPECTED_VPC_CIDR,
   BOOTSTRAP_MARKER_FILE,
   BOOTSTRAP_OK_MARKER,
   bootstrapScript,
   type BootstrapOptions,
 } from "./adapters/bootstrap";
+export {
+  createBeaconMarker,
+  parseProbeSources,
+  type BeaconMarkerOptions,
+} from "./adapters/bootstrap-probe";
 export {
   WINDOWS_BOOTSTRAP_MARKER_FILE,
   windowsBootstrapScript,

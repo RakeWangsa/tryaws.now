@@ -1,7 +1,7 @@
 import { awsResourceName, type OperationKind } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { createAwsAccessInternal } from "../access";
-import { bootstrapScript } from "../adapters/bootstrap";
+import { BOOTSTRAP_BEACON_PORT, bootstrapScript } from "../adapters/bootstrap";
 import { createLinuxInstanceAdapter, type LinuxInstanceDeps } from "../adapters/linux-instance";
 import type { OpCtx } from "../adapters/types";
 import { AwsError } from "../errors";
@@ -191,22 +191,125 @@ describe("create: key import, instance, static IP, ports", () => {
     });
   });
 
+  const RUNNING = lightsailOk({
+    instance: { name: INSTANCE, publicIpAddress: "52.220.10.20", state: { name: "running" } },
+  });
+  const wired = (over: Partial<LinuxInstanceDeps> = {}) => {
+    const probes: unknown[] = [];
+    const s = setup({
+      beaconSources: async () => ["203.0.113.5/32"],
+      bootstrapMarker: async (input) => {
+        probes.push(input);
+        return "present";
+      },
+      ...over,
+    });
+    s.aws.on("lightsail", "GetInstance", RUNNING);
+    s.aws.on("lightsail", "PutInstancePublicPorts", lightsailOk({ operation: {} }));
+    return { ...s, probes };
+  };
+
   it("never hands over an instance whose bootstrap has no marker (no static IP is touched)", async () => {
-    const absent = setup({ bootstrapMarker: async () => "absent" });
+    const absent = wired({ bootstrapMarker: async () => "absent" });
     await expect(absent.adapter.aws.create(absent.ctx("verify_bootstrap"))).rejects.toMatchObject({
       code: "upstream_unavailable",
     });
-    expect(absent.calls()).toEqual([]);
-    const pending = setup({ bootstrapMarker: async () => "pending" });
+    expect(absent.calls()).not.toContain("AllocateStaticIp");
+    const pending = wired({ bootstrapMarker: async () => "pending" });
     expect(await pending.adapter.aws.create(pending.ctx("verify_bootstrap"))).toMatchObject({
       kind: "wait",
       step: "verify_bootstrap",
     });
-    const ok = setup();
+    const ok = wired();
     expect(await ok.adapter.aws.create(ok.ctx("verify_bootstrap"))).toMatchObject({
       kind: "next",
       step: "allocate_ip",
     });
+  });
+
+  it("WPU-G1: opens only the beacon port to the probe sources next to the default rules, then reads the marker from the public address", async () => {
+    const { aws, adapter, ctx, probes } = wired();
+    await adapter.aws.create(ctx("verify_bootstrap"));
+    const put = JSON.parse(aws.seen.find((r) => r.action === "PutInstancePublicPorts")!.body);
+    expect(put.instanceName).toBe(INSTANCE);
+    expect(put.portInfos).toEqual([
+      { fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["0.0.0.0/0"] },
+      {
+        fromPort: BOOTSTRAP_BEACON_PORT,
+        toPort: BOOTSTRAP_BEACON_PORT,
+        protocol: "tcp",
+        cidrs: ["203.0.113.5/32"],
+      },
+    ]);
+    expect(probes).toEqual([
+      { instanceName: INSTANCE, region: "ap-southeast-1", publicIp: "52.220.10.20" },
+    ]);
+  });
+
+  it("WPU-G1: the final port set drops the beacon rule again", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "PutInstancePublicPorts", lightsailOk({ operation: {} }));
+    await adapter.aws.create(ctx("open_ports"));
+    const put = JSON.parse(aws.seen.find((r) => r.action === "PutInstancePublicPorts")!.body);
+    expect(put.portInfos).toEqual([
+      { fromPort: 22, toPort: 22, protocol: "tcp", cidrs: ["0.0.0.0/0"] },
+    ]);
+  });
+
+  it("WPU-G1: waits while the instance has no public address, without touching the firewall", async () => {
+    const s = wired();
+    s.aws.on(
+      "lightsail",
+      "GetInstance",
+      lightsailOk({ instance: { name: INSTANCE, state: { name: "running" } } }),
+    );
+    expect(await s.adapter.aws.create(s.ctx("verify_bootstrap"))).toMatchObject({
+      kind: "wait",
+      step: "verify_bootstrap",
+    });
+    expect(s.calls()).toEqual(["GetInstance"]);
+    expect(s.probes).toEqual([]);
+  });
+
+  it("WPU-G1: fails closed when the probe sources are not configured, and opens nothing", async () => {
+    for (const none of [null, []] as const) {
+      const s = wired({ beaconSources: async () => none });
+      await expect(s.adapter.aws.create(s.ctx("verify_bootstrap"))).rejects.toMatchObject({
+        code: "internal",
+      });
+      expect(s.calls()).not.toContain("PutInstancePublicPorts");
+      expect(s.probes).toEqual([]);
+    }
+  });
+
+  it("WPU-G1: fails closed when the instance is stopped or gone while waiting for the marker", async () => {
+    const s = wired();
+    s.aws.on(
+      "lightsail",
+      "GetInstance",
+      lightsailOk({
+        instance: { name: INSTANCE, publicIpAddress: "52.220.10.20", state: { name: "stopped" } },
+      }),
+    );
+    await expect(s.adapter.aws.create(s.ctx("verify_bootstrap"))).rejects.toMatchObject({
+      code: "upstream_unavailable",
+    });
+    expect(s.probes).toEqual([]);
+  });
+
+  it("WPU-G1: a marker that never shows is bounded by the wait budget, then refused (R16)", async () => {
+    const s = wired({ bootstrapMarker: async () => "pending" });
+    await expect(
+      s.adapter.aws.create(s.ctx("verify_bootstrap", { createdAt: new Date(NOW - 3_600_000) })),
+    ).rejects.toMatchObject({ code: "upstream_unavailable" });
+  });
+
+  it("WPU-G1: a retry of the step repeats the same calls and changes nothing else (R7)", async () => {
+    const s = wired();
+    const a = await s.adapter.aws.create(s.ctx("verify_bootstrap"));
+    const b = await s.adapter.aws.create(s.ctx("verify_bootstrap"));
+    expect(b).toEqual(a);
+    expect(s.calls().filter((c) => c === "AllocateStaticIp")).toEqual([]);
   });
 
   it("allocates once, attaches to its own instance, refuses an address attached elsewhere", async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOOTSTRAP_BEACON_PORT,
   BOOTSTRAP_EXPECTED_VPC_CIDR,
   BOOTSTRAP_FAIL_CLOSED_CIDRS,
   BOOTSTRAP_MARKER_FILE,
@@ -110,6 +111,31 @@ describe("bootstrapScript (10.4)", () => {
     expect(at(script, "systemctl start tc-isolation.service")).toBeLessThan(
       at(script, `echo ${BOOTSTRAP_OK_MARKER} > ${BOOTSTRAP_MARKER_FILE}`),
     );
+  });
+
+  it("WPU-G1: a beacon unit serves the marker file, is started and checked before the marker is written, and the marker stays last", () => {
+    expect(script).toContain("tc-beacon.service");
+    expect(script).toContain(`PORT = ${BOOTSTRAP_BEACON_PORT}`);
+    const beacon = script.slice(at(script, "TC_BEACON_EOF'"), script.lastIndexOf("TC_BEACON_EOF"));
+    // the beacon sends the content of the marker file and nothing else, and never a customer value
+    expect(beacon).toContain(BOOTSTRAP_MARKER_FILE);
+    expect(beacon).not.toMatch(/environ|argv|os\.system|subprocess|eval|exec/);
+    expect(at(script, "systemctl start tc-isolation.service")).toBeLessThan(
+      at(script, "systemctl start tc-beacon.service"),
+    );
+    expect(at(script, "systemctl start tc-beacon.service")).toBeLessThan(
+      at(script, `echo ${BOOTSTRAP_OK_MARKER} > ${BOOTSTRAP_MARKER_FILE}`),
+    );
+    // the start of the beacon is checked: a dead beacon means no marker
+    expect(script).toContain("systemctl is-active --quiet tc-beacon.service");
+    expect(script.trimEnd().endsWith(`echo ${BOOTSTRAP_OK_MARKER}`)).toBe(true);
+    expect(script.match(/set -euo pipefail/g)?.length).toBe(2);
+    expect(script).not.toContain("|| true");
+  });
+
+  it("the beacon port is a fixed non-privileged TCP port", () => {
+    expect(BOOTSTRAP_BEACON_PORT).toBeGreaterThan(1024);
+    expect(BOOTSTRAP_BEACON_PORT).toBeLessThan(65536);
   });
 
   it("orders the unit before the network, after the mounts it needs", () => {

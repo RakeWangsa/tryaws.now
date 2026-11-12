@@ -22,6 +22,7 @@
     "db:up": "docker compose up -d --wait postgres",
     "db:migrate": "pnpm --filter @tc/db migrate",
     "seed:kyc-verified": "node scripts/seed-kyc-verified.mjs",
+    "seed:pool-account": "node scripts/seed-pool-account.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

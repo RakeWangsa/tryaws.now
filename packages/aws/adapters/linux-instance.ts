@@ -31,7 +31,7 @@ import {
   type StepResult,
 } from "@tc/core";
 import { AwsError } from "../errors";
-import { bootstrapScript } from "./bootstrap";
+import { BOOTSTRAP_BEACON_PORT, bootstrapScript } from "./bootstrap";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 
 /**
@@ -66,7 +66,16 @@ export interface LinuxInstanceDeps {
   bootstrapMarker(input: {
     readonly instanceName: string;
     readonly region: string;
+    /** WPU-G1: the public IPv4 address AWS reported for the instance, for the beacon probe. */
+    readonly publicIp?: string | null;
   }): Promise<"present" | "pending" | "absent">;
+  /**
+   * WPU-G1. The public addresses the beacon probe connects from (checked CIDRs, see
+   * parseProbeSources). The beacon port is opened to exactly these during `verify_bootstrap`; the
+   * final port set removes the rule. null or empty = not configured: the create fails closed (R16)
+   * and opens nothing. Absent = the dependency does not use the beacon (tests, the Windows adapter).
+   */
+  beaconSources?(input: { readonly region: string }): Promise<readonly string[] | null>;
 }
 
 const POLL_SECONDS = 10;
@@ -240,9 +249,43 @@ export function createLinuxInstanceAdapter(
   }
 
   async function verifyBootstrap(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const n = names(ctx.resource.id);
+    const lightsail = client(ctx);
+    const got = await lightsail.send(new GetInstanceCommand({ instanceName: n.instance }));
+    const state = got.instance?.state?.name;
+    // A stopped or vanished instance after the script ran is not a firewall we proved (R16).
+    if (state !== undefined && state !== "running" && state !== "pending") {
+      throw fail("upstream_unavailable");
+    }
+    const publicIp = got.instance?.publicIpAddress ?? null;
+    if (publicIp === null || state !== "running") {
+      checkWaitBudget(ctx);
+      return stepWait("verify_bootstrap", pollAt(ctx));
+    }
+    if (deps.beaconSources !== undefined) {
+      const sources = await deps.beaconSources({ region: ctx.region });
+      // Nothing is opened to an unknown source: the probe cannot work, so the create stops.
+      if (sources === null || sources.length === 0) throw fail("internal");
+      // Idempotent: the same full rule set on every poll (the default rules plus the beacon rule).
+      await lightsail.send(
+        new PutInstancePublicPortsCommand({
+          instanceName: n.instance,
+          portInfos: [
+            ...DEFAULT_PORTS,
+            {
+              fromPort: BOOTSTRAP_BEACON_PORT,
+              toPort: BOOTSTRAP_BEACON_PORT,
+              protocol: "tcp",
+              cidrs: [...sources],
+            },
+          ],
+        }),
+      );
+    }
     const seen = await deps.bootstrapMarker({
-      instanceName: names(ctx.resource.id).instance,
+      instanceName: n.instance,
       region: ctx.region,
+      publicIp,
     });
     if (seen === "present") return stepNext("allocate_ip");
     if (seen === "pending") {

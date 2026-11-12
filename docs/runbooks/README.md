@@ -19,6 +19,7 @@ Commands cited in these pages: `pnpm verify --task <id>`, `pnpm db:up`, `pnpm db
 | [capacity-full-and-quota.md](capacity-full-and-quota.md)                         | capacity full, quota request                 |
 | [lifecycle-approval.md](lifecycle-approval.md)                                   | lifecycle approval                           |
 | [pool-account-onboarding.md](pool-account-onboarding.md)                         | adding a pool account                        |
+| [pool-account-single.md](pool-account-single.md)                                 | launch on one pool account                   |
 | [domain-registration-problem.md](domain-registration-problem.md)                 | domain registration problem                  |
 | [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 | abuse notice                                 |
 | [kyc-review.md](kyc-review.md)                                                   | KYC review                                   |
@@ -42,6 +43,7 @@ Filled in by the owner when a person has read the page against the admin app and
 | [capacity-full-and-quota.md](capacity-full-and-quota.md)                         |                                |
 | [lifecycle-approval.md](lifecycle-approval.md)                                   |                                |
 | [pool-account-onboarding.md](pool-account-onboarding.md)                         |                                |
+| [pool-account-single.md](pool-account-single.md)                                 |                                |
 | [domain-registration-problem.md](domain-registration-problem.md)                 |                                |
 | [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 |                                |
 | [kyc-review.md](kyc-review.md)                                                   |                                |
