@@ -339,7 +339,11 @@ describe("WP0-T3: database, proxy and roles", () => {
     expect(customer).toContain("secrets.db.web_rw");
     expect(customer).not.toMatch(/secrets\.db\.(admin_rw|worker_rw|migrator|report_ro)/);
     const admin = between(web, 'new sst.aws.Nextjs("Admin"');
-    expect(admin).toContain("link: [secrets.db.admin_rw]");
+    // the admin app links its own role password and the admin-only app secrets (WPU-X1: AdminIpLimitKey)
+    expect(admin).toContain(
+      "link: [...ADMIN_SECRETS.map((name) => secrets.app[name]), secrets.db.admin_rw]",
+    );
+    expect(admin).not.toMatch(/secrets\.db\.(web_rw|worker_rw|migrator|report_ro)/);
   });
 
   it("ships the migrations folder with the migrator and tells it where it is", () => {
