@@ -637,6 +637,26 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     kind: "session",
     proof: [SETTINGS_ORDER],
   },
+  // WPU-I3: the billing details. The customer is the session's (R8): the store is opened for the id of the
+  // session, the body names no customer, and the repository writes the four columns of that row only.
+  "app/[locale]/(panel)/settings/profile/actions.ts#updateBillingAction": {
+    kind: "session",
+    proof: [
+      proof(
+        `${W}billing-actions.test.ts`,
+        "authenticates, validates, rate limits, writes and audits, in that order",
+      ),
+      proof(
+        `${W}billing-actions.test.ts`,
+        "a customer id, an e-mail or a role in the body reaches nothing",
+      ),
+      proof(
+        "packages/db/test/billing-profile.test.ts",
+        "one customer's write never touches another customer's row",
+      ),
+      CUSTOMER_REPOS,
+    ],
+  },
   "app/[locale]/(panel)/settings/profile/actions.ts#startEmailChangeAction": {
     kind: "session",
     proof: [

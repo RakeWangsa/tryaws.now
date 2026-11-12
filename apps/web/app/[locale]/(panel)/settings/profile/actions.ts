@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { guardAction, settingsActionDeps } from "../../../../../server/action-deps.ts";
 import { pick } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
+import { updateBillingCore } from "../../../../../server/billing-actions.ts";
 import {
   confirmEmailChangeCore,
   confirmPhoneChangeCore,
@@ -34,6 +35,21 @@ export async function updateProfileAction(
   if (!result.ok) return failed(result);
   revalidatePath("/[locale]/settings/profile", "page");
   return { done: "saved", fields: { locale: result.locale } };
+}
+
+/** The billing details of the invoice buyer (WPU-I3). The customer comes from the session only (R8). */
+export async function updateBillingAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  if (!(await guardAction())) return { error: "forbidden" };
+  const result = await updateBillingCore(
+    await settingsActionDeps(),
+    pick(form, ["billingName", "billingAddress", "customerBin", "customerNid"]),
+  );
+  if (!result.ok) return failed(result);
+  revalidatePath("/[locale]/settings/profile", "page");
+  return { done: "saved" };
 }
 
 export async function startEmailChangeAction(

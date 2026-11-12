@@ -282,6 +282,9 @@ export const invoices = pgTable(
     // WPU-I2: the money transaction that this invoice is for (a purchase or a renewal). Unique: one
     // invoice for each charge (R7).
     ledgerTransactionId: uuid("ledger_transaction_id").references(() => ledgerTransactions.id),
+    // WPU-I3: the buyer as the customer's billing profile read on the day of issue (name, address,
+    // tax id), or null when the customer had entered none. Parsed by parseBuyerSnapshot of the core.
+    buyer: jsonb("buyer"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -297,5 +300,6 @@ export const invoices = pgTable(
     check("invoices_number_check", sql`${t.number} > 0`),
     check("invoices_lines_check", sql`jsonb_typeof(${t.lines}) = 'array'`),
     check("invoices_total_minor_check", sql`${t.totalMinor} >= 0`),
+    check("invoices_buyer_check", sql`${t.buyer} is null or jsonb_typeof(${t.buyer}) = 'object'`),
   ],
 );

@@ -113,6 +113,13 @@
       "when": 1794482578288,
       "tag": "0016_invoice_seller_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794486178288,
+      "tag": "0017_customer_billing_profile",
+      "breakpoints": true
     }
   ]
 }

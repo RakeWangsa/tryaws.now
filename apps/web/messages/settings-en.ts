@@ -19,6 +19,49 @@ export const settingsEn: Same<typeof settingsBn> = {
         save: "Save",
         saved: "Your profile was saved.",
       },
+      billing: {
+        title: "Billing details",
+        intro:
+          "These details are printed as the buyer on the tax invoice (Mushak 6.3). Every field is optional. If you leave them out, the invoice shows “-” for the address and the number.",
+        summary: {
+          empty: "No billing details have been entered yet.",
+          filled:
+            "The details below are printed on new invoices. Invoices already issued do not change.",
+        },
+        name: "Name on the invoice",
+        nameHint: "If you leave it empty, the name of your profile is used. 2 to 120 characters.",
+        address: "Address",
+        addressHint: "In Bangla or English. 5 to 300 characters, in one paragraph.",
+        bin: "BIN",
+        binHint: "Only for a VAT-registered business. 13 digits.",
+        nid: "NID",
+        nidHint: "For a person. 10, 13 or 17 digits. Enter either the BIN or the NID, not both.",
+        privacy:
+          "Only you can see these numbers, and they are printed on your own invoices. We keep them out of logs and e-mails.",
+        save: "Save billing details",
+        saved: "Your billing details were saved. New invoices will show them.",
+        error: {
+          invalid: "The details in this field are not correct.",
+          billingName: {
+            invalid: "The name has a character that is not allowed.",
+            too_short: "The name must have at least 2 characters.",
+            too_long: "The name can have at most 120 characters.",
+          },
+          billingAddress: {
+            invalid: "The address has a character that is not allowed.",
+            too_short: "The address must have at least 5 characters.",
+            too_long: "The address can have at most 300 characters.",
+          },
+          customerBin: {
+            invalid: "A BIN has exactly 13 digits.",
+            conflict: "Enter either the BIN or the NID, not both.",
+          },
+          customerNid: {
+            invalid: "A NID has 10, 13 or 17 digits.",
+            conflict: "Enter either the BIN or the NID, not both.",
+          },
+        },
+      },
       email: {
         title: "E-mail",
         current: "Current e-mail",

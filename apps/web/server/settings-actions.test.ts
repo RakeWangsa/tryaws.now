@@ -49,6 +49,9 @@ function world(over: { signedInAt?: Date; limited?: boolean; noPorts?: boolean }
         return { ok: true, replayed: false, value: { ...profile, email } };
       },
       setVerifiedPhone: async () => ({ ok: false, error: "forbidden" }),
+      getBilling: async () => null,
+      getBuyerSource: async () => null,
+      setBilling: async () => ({ ok: false, error: "forbidden" }),
     } satisfies ProfileRepo,
     audit: {
       record: async (input) => {

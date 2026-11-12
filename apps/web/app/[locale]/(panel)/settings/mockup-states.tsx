@@ -16,6 +16,7 @@ const never = async (): Promise<never> => {
 };
 const actions = {
   updateProfile: never,
+  updateBilling: never,
   startEmail: never,
   confirmEmail: never,
   startPhone: never,
@@ -29,6 +30,12 @@ export const SCREEN: ProfileScreen = {
   phoneVerified: true,
   locale: "bn",
   open: true,
+  billing: {
+    billingName: "",
+    billingAddress: "",
+    customerBin: "",
+    customerNid: "",
+  },
 };
 
 const inProvider = (locale: Locale, node: React.ReactElement): string =>

@@ -69,6 +69,10 @@ export const EXPECTED_COLUMNS: Record<string, string[]> = {
     "market text NOT NULL",
     "locale text NOT NULL",
     "status text NOT NULL",
+    "billing_name text NULL",
+    "billing_address text NULL",
+    "customer_bin text NULL",
+    "customer_nid text NULL",
   ],
   kyc_submissions: [
     "customer_id uuid NOT NULL",
@@ -174,6 +178,7 @@ export const EXPECTED_COLUMNS: Record<string, string[]> = {
     "pdf_key text NULL",
     "seller jsonb NULL",
     "ledger_transaction_id uuid NULL",
+    "buyer jsonb NULL",
   ],
   pool_accounts: [
     "aws_account_id text NOT NULL",

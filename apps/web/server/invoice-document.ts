@@ -48,7 +48,7 @@ export async function invoiceDocument(
     return {
       status: 200,
       html: renderInvoiceHtml(
-        toInvoiceDocument(screen.invoice, name, numerals, screen.seller),
+        toInvoiceDocument(screen.invoice, name, numerals, screen.seller, screen.buyer),
         locale,
       ),
     };

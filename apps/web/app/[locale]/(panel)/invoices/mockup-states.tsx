@@ -56,6 +56,7 @@ export const DETAIL: InvoiceDetailScreen = {
     signatoryName: "Example Signatory",
     signatoryDesignation: "Director",
   },
+  buyer: null,
   invoice: {
     id: INVOICE_ID,
     number: "TC-2026-000012",

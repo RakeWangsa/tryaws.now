@@ -4,3 +4,4 @@ export * from "./charge";
 export * from "./render";
 export * from "./seller";
 export * from "./words";
+export * from "./buyer";

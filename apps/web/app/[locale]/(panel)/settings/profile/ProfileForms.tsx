@@ -62,6 +62,103 @@ export function DetailsForm({
   );
 }
 
+/**
+ * The billing details (WPU-I3): the buyer of the Mushak 6.3 invoice. Every field is optional. The BIN
+ * and the NID are the customer's own identifiers, shown only to the customer in this form; the page
+ * never logs them. Field errors come from the same check the server runs (U8).
+ */
+export function BillingForm({
+  action,
+  billing,
+  signInHref,
+}: {
+  action: Action;
+  billing: {
+    billingName: string;
+    billingAddress: string;
+    customerBin: string;
+    customerNid: string;
+  };
+  signInHref: string;
+}) {
+  const t = useTranslations("Settings.profile.billing");
+  const [state, formAction, pending] = useActionState(action, INITIAL_FORM_STATE);
+  // A billing code is worded for its own field ("a BIN has 13 digits"), not by the password texts.
+  const fieldError = (name: string): { error: string } | Record<string, never> => {
+    const code = state.error === undefined ? undefined : state.fields?.[name];
+    if (code === undefined) return {};
+    return {
+      error: t.has(`error.${name}.${code}`) ? t(`error.${name}.${code}`) : t("error.invalid"),
+    };
+  };
+  const empty =
+    billing.billingName === "" &&
+    billing.billingAddress === "" &&
+    billing.customerBin === "" &&
+    billing.customerNid === "";
+  return (
+    <form action={formAction} noValidate>
+      <p className="seccolor mb-3">{empty ? t("summary.empty") : t("summary.filled")}</p>
+      <SettingsNotice
+        state={state}
+        doneText={state.done === "saved" ? t("saved") : null}
+        signInHref={signInHref}
+      />
+      <Field
+        name="billingName"
+        label={t("name")}
+        hint={t("nameHint")}
+        defaultValue={billing.billingName}
+        maxLength={120}
+        optional
+        autoComplete="organization"
+        {...fieldError("billingName")}
+      />
+      <Field
+        name="billingAddress"
+        label={t("address")}
+        hint={t("addressHint")}
+        defaultValue={billing.billingAddress}
+        maxLength={300}
+        multiline
+        rows={3}
+        optional
+        autoComplete="street-address"
+        {...fieldError("billingAddress")}
+      />
+      <Field
+        name="customerBin"
+        label={t("bin")}
+        hint={t("binHint")}
+        defaultValue={billing.customerBin}
+        maxLength={20}
+        inputMode="numeric"
+        optional
+        autoComplete="off"
+        {...fieldError("customerBin")}
+      />
+      <Field
+        name="customerNid"
+        label={t("nid")}
+        hint={t("nidHint")}
+        defaultValue={billing.customerNid}
+        maxLength={24}
+        inputMode="numeric"
+        optional
+        autoComplete="off"
+        {...fieldError("customerNid")}
+      />
+      <p className="seccolor small mb-3">
+        <i className="fas fa-lock me-2" aria-hidden="true" />
+        {t("privacy")}
+      </p>
+      <SubmitButton variant="primary" pending={pending}>
+        {t("save")}
+      </SubmitButton>
+    </form>
+  );
+}
+
 export function EmailChange({
   currentEmail,
   startAction,

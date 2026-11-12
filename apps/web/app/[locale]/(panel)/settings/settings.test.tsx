@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { toProfileScreen } from "../../../../server/settings-view.ts";
+import { toBillingScreen, toProfileScreen } from "../../../../server/settings-view.ts";
 import { SCREEN, profile, security } from "./mockup-states.tsx";
+
+const base0 = {
+  name: null,
+  email: "a@example.test",
+  phone: null,
+  locale: "bn" as const,
+};
 
 describe("/settings/profile", () => {
   it("shows the name, the language choice, the masked phone and the current e-mail, never a full number", () => {
@@ -30,6 +37,63 @@ describe("/settings/profile", () => {
   it("explains the fresh sign-in rule in both languages, Bengali first", () => {
     expect(profile(SCREEN)("bn")).toMatch(/১০ মিনিট/);
     expect(profile(SCREEN)("en")).toContain("last 10 minutes");
+  });
+
+  it("has a Billing details section with the four optional fields, in both languages (WPU-I3)", () => {
+    const en = profile(SCREEN)("en");
+    expect(en).toContain("Billing details");
+    for (const name of ["billingName", "billingAddress", "customerBin", "customerNid"]) {
+      expect(en).toContain(`name="${name}"`);
+    }
+    expect(en).toContain("<textarea");
+    // empty state: says nothing has been entered; the form is not required
+    expect(en).toContain("No billing details have been entered yet.");
+    expect(en).not.toMatch(/name="customerBin"[^>]*required/);
+    const bn = profile(SCREEN)("bn");
+    expect(bn).toContain("বিলিং তথ্য");
+    expect(bn).toContain("এখনও কোনো বিলিং তথ্য দেওয়া নেই।");
+  });
+
+  it("shows the customer's own stored billing details in the form, and the 'filled' summary", () => {
+    const html = profile({
+      ...SCREEN,
+      billing: {
+        billingName: "Rahim & Sons",
+        billingAddress: "House 5, Dhaka",
+        customerBin: "1234567890123",
+        customerNid: "",
+      },
+    })("en");
+    expect(html).toContain("Rahim &amp; Sons");
+    expect(html).toContain("House 5, Dhaka");
+    expect(html).toContain('value="1234567890123"');
+    expect(html).toContain("Invoices already issued do not change.");
+    expect(html).not.toContain("No billing details have been entered yet.");
+  });
+
+  it("toBillingScreen turns a missing profile and null fields into empty strings", () => {
+    expect(toBillingScreen(null)).toEqual({
+      billingName: "",
+      billingAddress: "",
+      customerBin: "",
+      customerNid: "",
+    });
+    expect(
+      toBillingScreen({
+        billingName: null,
+        billingAddress: "House 5, Dhaka",
+        customerBin: null,
+        customerNid: "1234567890",
+      }),
+    ).toEqual({
+      billingName: "",
+      billingAddress: "House 5, Dhaka",
+      customerBin: "",
+      customerNid: "1234567890",
+    });
+    expect(toProfileScreen({ ...base0, phoneVerifiedAt: null }, true).billing).toEqual(
+      toBillingScreen(null),
+    );
   });
 
   it("toProfileScreen masks the phone and marks it verified only with a time", () => {

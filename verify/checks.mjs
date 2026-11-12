@@ -2832,6 +2832,31 @@ TASKS["WPU-I2"] = [
   repo,
 ];
 
+// WPU-I3: the customer billing profile (billing name, address, BIN or NID) that the Mushak 6.3 invoice
+// prints for the buyer. The validation and the buyer snapshot (core), migration 0017 with its column
+// grants, the tenant-scoped repository and the snapshot stored with the invoice (db, with the local
+// PostgreSQL), the Server Action, the settings section, the invoice view and the sweep entry (web).
+// No AWS call, no KYC document, no decryption.
+TASKS["WPU-I3"] = [specSync, baselineSync, lint, typecheck, format, core, db, web, admin, repo];
+
+// WPU-I4: the merge of the seller snapshot (0016) and the buyer snapshot (0017): an invoice carries both,
+// issued in one transaction, and the buyer is read from the billing profile at issue (purchase, renewal
+// and backlog). The grants matrix keeps the customer tax ids and invoices.buyer away from admin_rw.
+// Core, db (with the local PostgreSQL), scheduler, web and admin. No AWS call.
+TASKS["WPU-I4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  scheduler,
+  web,
+  admin,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

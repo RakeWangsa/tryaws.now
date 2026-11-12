@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
     lines: unknown;
     totalMinor: bigint;
     seller?: unknown;
+    buyer?: unknown;
   }[],
   seller: { state: "none" } as unknown,
 }));
@@ -144,6 +145,85 @@ describe("the printable invoice", () => {
     expect(html).toContain("Old Road");
     expect(html).not.toContain("New Name Ltd");
     expect(html).not.toContain("New Road");
+  });
+
+  it("prints the buyer's address and BIN from the snapshot stored on the invoice, escaped (WPU-I3)", async () => {
+    state.rows = [
+      {
+        id: INV,
+        customerId: A,
+        lines: LINES,
+        totalMinor: 69000n,
+        buyer: {
+          name: "Rahim & <Sons>",
+          address: "House 5, Road 3, Dhaka",
+          taxId: { kind: "bin", value: "1234567890123" },
+        },
+      },
+    ];
+    const html = (await invoiceDocument(deps(A, "Profile Name"), "en", INV)).html as string;
+    expect(html).toContain("Rahim &amp; &lt;Sons&gt;");
+    expect(html).not.toContain("Profile Name");
+    expect(html).toContain("<strong>Address:</strong> House 5, Road 3, Dhaka");
+    expect(html).toContain("<strong>BIN:</strong> 1234567890123");
+    const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
+    expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
+    // a NID prints with its own label
+    state.rows[0]!.buyer = {
+      name: null,
+      address: null,
+      taxId: { kind: "nid", value: "1234567890" },
+    };
+    const nid = (await invoiceDocument(deps(A, "Karim"), "en", INV)).html as string;
+    expect(nid).toContain("<strong>NID:</strong> 1234567890");
+    expect(nid).toContain("Karim");
+  });
+
+  it("WPU-I4: a reprint shows both snapshots of the day of issue, whatever the seller setting and the profile say now", async () => {
+    state.rows = [
+      {
+        id: INV,
+        customerId: A,
+        lines: LINES,
+        totalMinor: 69000n,
+        seller: { v: 1, version: 1, ...SELLER, legalNameEn: "Old Name Ltd" },
+        buyer: {
+          name: "Rahim Traders",
+          address: "House 5, Road 3, Dhaka",
+          taxId: { kind: "bin", value: "1234567890123" },
+        },
+      },
+    ];
+    state.seller = {
+      state: "ok",
+      seller: { ...SELLER, legalNameEn: "New Name Ltd" },
+      version: 2,
+    };
+    const first = (await invoiceDocument(deps(A, "Renamed Profile"), "en", INV)).html as string;
+    const second = (await invoiceDocument(deps(A, "Renamed Again"), "en", INV)).html as string;
+    for (const html of [first, second]) {
+      expect(html).toContain("Old Name Ltd");
+      expect(html).not.toContain("New Name Ltd");
+      expect(html).toContain("Rahim Traders");
+      expect(html).toContain("House 5, Road 3, Dhaka");
+      expect(html).toContain("<strong>BIN:</strong> 1234567890123");
+      expect(html).not.toContain("Renamed");
+    }
+  });
+
+  it("an invoice with no snapshot, or a snapshot that does not parse, prints '-' (R16)", async () => {
+    for (const buyer of [
+      undefined,
+      null,
+      "x",
+      { name: 1 },
+      { taxId: { kind: "bin", value: "12" } },
+    ]) {
+      state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n, buyer }];
+      const html = (await invoiceDocument(deps(A), "en", INV)).html as string;
+      expect(html, JSON.stringify(buyer)).toMatch(/Address:<\/strong> -</);
+      expect(html).toMatch(/BIN:<\/strong> -</);
+    }
   });
 
   it("answers 503 and prints nothing when the seller details are missing or unreadable (R16)", async () => {

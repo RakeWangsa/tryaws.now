@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { customerRepos, type Tx } from "@tc/db";
 import type { PriceSnapshot } from "../pricing/snapshot";
+import { buyerSnapshotFrom, type BuyerSnapshot } from "./buyer";
 import { buildInvoiceLines, fiscalYearOf, type InvoiceLine, type Text2 } from "./base";
 
 // WPU-I2: the tax invoice of a paid charge. Spec 9.3: each purchase and each renewal creates an invoice
@@ -71,6 +72,16 @@ export interface ChargeInvoiceInput {
   readonly now: Date;
 }
 
+/**
+ * WPU-I4: the buyer of an invoice about to be issued: the customer's billing profile read in the
+ * transaction of the issue, with the profile name as the fallback (buyerSnapshotFrom). null when the
+ * customer entered nothing, or the profile cannot be read: the invoice then prints "-" (R16).
+ */
+export async function readBuyerSnapshot(tx: Tx, customerId: string): Promise<BuyerSnapshot | null> {
+  const source = await customerRepos(tx, customerId).profile.getBuyerSource();
+  return source === null ? null : buyerSnapshotFrom(source.billing, source.name);
+}
+
 export type ChargeInvoiceOutcome = "issued" | "replayed" | "queued" | "failed";
 
 /**
@@ -97,6 +108,8 @@ export async function issueChargeInvoice(
   try {
     attempt = await tx.transaction(async (sp): Promise<Attempt> => {
       const invoices = customerRepos(sp, input.customerId).invoices;
+      // The billing profile as it is now, in this transaction: it is frozen on the invoice (WPU-I3).
+      const buyer = await readBuyerSnapshot(sp, input.customerId);
       const written =
         input.charge.kind === "order"
           ? await invoices.issue({
@@ -105,6 +118,7 @@ export async function issueChargeInvoice(
               fiscalYear,
               lines,
               totalMinor,
+              buyer,
             })
           : await invoices.issueForCharge({
               id,
@@ -112,6 +126,7 @@ export async function issueChargeInvoice(
               fiscalYear,
               lines,
               totalMinor,
+              buyer,
             });
       if (written.ok) return written.replayed ? "replayed" : "issued";
       return written.error === "seller_details_missing" ? "missing" : "refused";

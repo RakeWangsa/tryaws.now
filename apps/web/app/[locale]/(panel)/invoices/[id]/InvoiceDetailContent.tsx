@@ -68,7 +68,11 @@ export function InvoiceDetailContent({
     );
   }
 
-  const { invoice } = screen;
+  const { invoice, buyer } = screen;
+  // The name, address and tax id as stored on the invoice the day it was issued (WPU-I3), shown to
+  // the customer who owns the invoice; nothing is shown for what the customer did not enter.
+  const billedName = buyer?.name ?? customerName;
+  const taxId = buyer?.taxId ?? null;
   return (
     <>
       <p className="mb-3">
@@ -92,7 +96,13 @@ export function InvoiceDetailContent({
           </div>
           <div className="col-12 col-md-4">
             <p className="seccolor mb-1">{t("detail.billedTo")}</p>
-            <b className="mergecolor">{customerName === "" ? t("detail.noName") : customerName}</b>
+            <b className="mergecolor">{billedName === "" ? t("detail.noName") : billedName}</b>
+            {buyer?.address ? <p className="seccolor small mb-0">{buyer.address}</p> : null}
+            {taxId !== null ? (
+              <p className="seccolor small mb-0">
+                {taxId.kind === "bin" ? t("detail.taxIdBin") : t("detail.taxIdNid")}: {taxId.value}
+              </p>
+            ) : null}
           </div>
         </div>
       </Card>

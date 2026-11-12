@@ -1,8 +1,10 @@
 import type { CustomerSession } from "@tc/auth";
 import {
   formatInvoiceNumber,
+  parseBuyerSnapshot,
   parseLineAmount,
   parseSellerDetails,
+  type BuyerSnapshot,
   type InvoiceDocument,
   type InvoiceLine,
   type Numerals,
@@ -51,7 +53,14 @@ export interface InvoiceDetailView {
 // settings. The invoice is not printed without them (R16, WPU-I1); the customer sees "being prepared" and
 // the admin panel shows the notice on /pricing/seller.
 export type InvoiceDetailScreen =
-  | { state: "ready"; invoice: InvoiceDetailView; seller: SellerDetails }
+  // `buyer`: the billing profile as it was stored on the invoice the day it was issued (WPU-I3), or null
+  // (none entered, or unreadable): the buyer then prints as before, the profile name and "-".
+  | {
+      state: "ready";
+      invoice: InvoiceDetailView;
+      seller: SellerDetails;
+      buyer: BuyerSnapshot | null;
+    }
   | { state: "unavailable" }
   | { state: "seller_missing" };
 
@@ -157,6 +166,7 @@ export async function loadInvoice(
   return {
     state: "ready",
     seller,
+    buyer: parseBuyerSnapshot(row.buyer),
     invoice: {
       id: row.id,
       number: formatInvoiceNumber(row.fiscalYear, row.number),
@@ -169,15 +179,16 @@ export async function loadInvoice(
 
 /**
  * The document of the core for the printable page: the Mushak 6.3 tax invoice. The seller is the legal
- * entity written on the invoice at issue (WPU-I2). The buyer is the customer's name; the profile of a customer holds no
- * address and no BIN or NID yet (JOURNEY, WPU-I1, Needs decision), so those print as "-" and nothing is
- * invented. The VAT rate of a line, when stored, travels with the line (never recomputed).
+ * entity written on the invoice at issue (WPU-I2). The buyer is the snapshot of the customer's billing profile stored on
+ * the invoice at issue time (WPU-I3: name, address, BIN or NID); without one the buyer is the customer's
+ * name and the address and BIN or NID print as "-", nothing is invented. The VAT rate of a line, when stored, travels with the line (never recomputed).
  */
 export function toInvoiceDocument(
   invoice: InvoiceDetailView,
   customerName: string,
   numerals: Numerals,
   seller: SellerDetails,
+  buyer: BuyerSnapshot | null = null,
 ): InvoiceDocument {
   const lines: InvoiceLine[] = invoice.lines.map((l) => ({
     kind: l.kind,
@@ -192,7 +203,12 @@ export function toInvoiceDocument(
     issuedAt: invoice.issuedAt,
     company: { name: seller.legalNameEn, address: [] },
     seller,
-    customer: { name: customerName === "" ? null : customerName },
+    customer: {
+      // The stored snapshot, never the live profile: a reprint says what the invoice said that day.
+      name: buyer?.name ?? (customerName === "" ? null : customerName),
+      address: buyer?.address ?? null,
+      taxId: buyer?.taxId ?? null,
+    },
     lines,
     totalMinor: invoice.totalMinor,
     numerals,

@@ -189,21 +189,52 @@
         "phone",
         "phone_verified_at",
         "sessions_valid_after",
-        "type"
+        "type",
+        "billing_name",
+        "billing_address",
+        "customer_bin",
+        "customer_nid"
       ],
       "selectColumns": null
     },
     "admin_rw": {
-      "table": ["SELECT"],
+      "table": [],
       "insertColumns": null,
       "updateColumns": ["kyc_status", "risk_tier", "status", "sessions_valid_after"],
-      "selectColumns": null
+      "selectColumns": [
+        "id",
+        "cognito_sub",
+        "sessions_valid_after",
+        "email",
+        "phone",
+        "phone_verified_at",
+        "name",
+        "type",
+        "kyc_status",
+        "risk_tier",
+        "market",
+        "locale",
+        "status",
+        "created_at"
+      ]
     },
     "worker_rw": {
       "table": [],
       "insertColumns": null,
       "updateColumns": null,
-      "selectColumns": ["id", "email", "phone", "phone_verified_at", "locale", "market"]
+      "selectColumns": [
+        "id",
+        "email",
+        "phone",
+        "phone_verified_at",
+        "locale",
+        "market",
+        "name",
+        "billing_name",
+        "billing_address",
+        "customer_bin",
+        "customer_nid"
+      ]
     },
     "report_ro": {
       "table": [],
@@ -397,16 +428,30 @@
         "lines",
         "total_minor",
         "seller",
-        "ledger_transaction_id"
+        "ledger_transaction_id",
+        "buyer"
       ],
       "updateColumns": null,
       "selectColumns": null
     },
     "admin_rw": {
-      "table": ["SELECT"],
+      "table": [],
       "insertColumns": null,
       "updateColumns": null,
-      "selectColumns": null
+      "selectColumns": [
+        "id",
+        "fiscal_year",
+        "number",
+        "customer_id",
+        "order_id",
+        "lines",
+        "total_minor",
+        "issued_at",
+        "pdf_key",
+        "seller",
+        "ledger_transaction_id",
+        "created_at"
+      ]
     },
     "worker_rw": {
       "table": ["SELECT"],
@@ -419,7 +464,8 @@
         "lines",
         "total_minor",
         "seller",
-        "ledger_transaction_id"
+        "ledger_transaction_id",
+        "buyer"
       ],
       "updateColumns": null,
       "selectColumns": null

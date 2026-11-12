@@ -2,7 +2,7 @@ import { customerRepos, invoiceBacklogRepo, type PendingInvoice } from "@tc/db";
 import type { Logger, RunTx } from "../operations/types";
 import type { Clock } from "../types";
 import { fiscalYearOf } from "./base";
-import { invoiceIdFor } from "./charge";
+import { invoiceIdFor, readBuyerSnapshot } from "./charge";
 
 // WPU-I2: the invoices that were owed when the seller details were missing (charge.ts queued them).
 // Each run issues the oldest first, one transaction for each invoice, so the numbers follow the order of
@@ -10,7 +10,8 @@ import { invoiceIdFor } from "./charge";
 // refusal for the missing seller stops the run: the next ones would be refused as well and an invoice
 // must never overtake an older one (R16). A repeat of the run is a replay: one invoice for each ledger
 // transaction (R7). The date of issue of such an invoice is the day it is issued, not the day of the
-// charge: the invoice says when it was issued.
+// charge: the invoice says when it was issued. The same holds for the buyer: a backlog invoice carries the
+// buyer details (billing profile) current at issue, read in the transaction of the issue (WPU-I4).
 
 export const INVOICE_BACKLOG_PAGE = 100;
 
@@ -71,6 +72,9 @@ async function issueOne(
         fiscalYear: fiscalYearOf(deps.clock.now()),
         lines: entry.lines,
         totalMinor: entry.totalMinor,
+        // The buyer details current at ISSUE (the backlog run), not at the charge: the invoice says the
+        // day it is issued, and the profile is read in this same transaction.
+        buyer: await readBuyerSnapshot(tx, entry.customerId),
       };
       const written =
         entry.kind === "order" && entry.orderId !== null

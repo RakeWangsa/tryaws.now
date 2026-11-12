@@ -169,6 +169,8 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-H1",
     "WPU-I1",
     "WPU-I2",
+    "WPU-I3",
+    "WPU-I4",
     "WPU-M1",
     "WPU-M2",
     "WPU-M3",
@@ -335,6 +337,82 @@ it("task WPU-I1 is proven by lint, types, format, the core, db, web and admin te
     ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-I4 is proven by lint, types, format, the core, db, scheduler, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-I4"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-I4 exists: both snapshots, the buyer read at issue, the grants and the reprint", () => {
+  for (const [file, part] of [
+    ["packages/db/test/invoice-buyer-merge.test.ts", "admin_rw cannot read buyer"],
+    [
+      "packages/core/invoices/charge.db.test.ts",
+      "issued after the customer entered billing details carries both snapshots",
+    ],
+    [
+      "packages/core/invoices/charge.db.test.ts",
+      "a backlog invoice carries the buyer current at ISSUE",
+    ],
+    [
+      "packages/core/invoices/charge.db.test.ts",
+      "a purchase with no billing details stores no buyer",
+    ],
+    [
+      "apps/web/server/invoice-document.test.ts",
+      "a reprint shows both snapshots of the day of issue",
+    ],
+    [
+      "packages/db/migrations/0017_customer_billing_profile.sql",
+      "REVOKE SELECT ON invoices FROM admin_rw",
+    ],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-I3 is proven by lint, types, format, the core, db, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-I3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-I3 exists: the validation, the buyer snapshot, the repository, the action and the sweep entry", () => {
+  for (const [file, part] of [
+    ["packages/core/validation/billing-profile.test.ts", "a BIN is exactly 13 digits"],
+    ["packages/core/invoices/buyer.test.ts", "parseBuyerSnapshot reads a stored snapshot"],
+    ["packages/db/test/billing-profile.test.ts", "one customer's write never touches another"],
+    ["packages/db/migrations/0017_customer_billing_profile.sql", "WPU-I3"],
+    [
+      "apps/web/server/billing-actions.test.ts",
+      "keeps the name, the address and the tax ids out of the audit entry",
+    ],
+    ["apps/web/server/invoice-document.test.ts", "from the snapshot stored on the invoice"],
+    ["apps/web/server/endpoint-sweep.cases.ts", "updateBillingAction"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
 });
 
 it("the proof of WPU-I1 exists: the renderer, the seller rules, the refusal to issue and the admin page", () => {

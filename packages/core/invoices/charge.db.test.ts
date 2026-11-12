@@ -262,3 +262,94 @@ describe("the invoice of a renewal", () => {
     expect((await invoicesOf(f.customerId)).filter((i) => i.order_id === null)).toHaveLength(1);
   });
 });
+
+// WPU-I4: the invoice carries the seller AND the buyer of the day of issue (migrations 0016 and 0017).
+describe("the buyer on the invoice", () => {
+  const BILLING = {
+    name: "Rahim Traders Ltd",
+    address: "House 5, Road 3, Dhanmondi, Dhaka",
+    bin: "1234567890123",
+  };
+  const setBilling = (customerId: string, name: string, address: string) =>
+    q(
+      "update customers set billing_name = $2, billing_address = $3, customer_bin = $4 where id = $1",
+      [customerId, name, address, BILLING.bin],
+    );
+  const buyersOf = (customerId: string) =>
+    q("select buyer, seller from invoices where customer_id = $1 order by number", [customerId]);
+
+  it("an invoice issued after the customer entered billing details carries both snapshots", async () => {
+    await setSeller(SELLER);
+    kit.clock.set(START);
+    const buyer = await kit.newBuyer();
+    await setBilling(buyer.customerId, BILLING.name, BILLING.address);
+    await placeOne(kit, buyer);
+    const [row] = await buyersOf(buyer.customerId);
+    expect(row?.buyer).toEqual({
+      name: BILLING.name,
+      address: BILLING.address,
+      taxId: { kind: "bin", value: BILLING.bin },
+    });
+    expect(parseSellerRowValue(row?.seller)?.seller.legalNameEn).toBe("Test Limited");
+  });
+
+  it("a profile change after the issue does not change the stored buyer (a reprint)", async () => {
+    await setSeller(SELLER);
+    kit.clock.set(START);
+    const buyer = await kit.newBuyer();
+    await setBilling(buyer.customerId, BILLING.name, BILLING.address);
+    await placeOne(kit, buyer);
+    await setBilling(buyer.customerId, "Someone Else", "Another Road, Rajshahi");
+    const [row] = await buyersOf(buyer.customerId);
+    expect(row?.buyer).toMatchObject({ name: BILLING.name, address: BILLING.address });
+  });
+
+  it("a purchase with no billing details stores no buyer (the invoice prints '-')", async () => {
+    await setSeller(SELLER);
+    kit.clock.set(START);
+    const buyer = await kit.newBuyer();
+    await placeOne(kit, buyer);
+    const [row] = await buyersOf(buyer.customerId);
+    expect(row?.buyer).toBeNull();
+  });
+
+  it("a renewal carries the buyer of the day of the renewal", async () => {
+    await setSeller(SELLER);
+    kit.clock.set(START);
+    const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
+    const { resourceId } = await placeOne(kit, buyer);
+    const s = (
+      await q("select period_end from subscriptions where resource_id = $1", [resourceId])
+    )[0]!;
+    await q("update resources set state = 'active' where id = $1", [resourceId]);
+    await q("update operations set state = 'succeeded' where resource_id = $1", [resourceId]);
+    kit.clock.set(new Date((s.period_end as Date).getTime() - 2 * DAY));
+    await setBilling(buyer.customerId, BILLING.name, BILLING.address);
+    const done = await runTransaction(
+      t.db,
+      (tx) => renewNow(tx, { customerId: buyer.customerId, resourceId, clock: kit.clock }),
+      { role: "web_rw" },
+    );
+    expect(done.ok).toBe(true);
+    const rows = await q("select buyer from invoices where customer_id = $1 and order_id is null", [
+      buyer.customerId,
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.buyer).toMatchObject({ name: BILLING.name, address: BILLING.address });
+  });
+
+  it("a backlog invoice carries the buyer current at ISSUE, read by the worker", async () => {
+    await setSeller(null);
+    kit.clock.set(START);
+    const buyer = await kit.newBuyer();
+    await setBilling(buyer.customerId, "Name At Charge", "Road At Charge, Dhaka");
+    await placeOne(kit, buyer);
+    expect(await buyersOf(buyer.customerId)).toEqual([]);
+    // The customer changes the details while the invoice waits; the owner then enters the seller.
+    await setBilling(buyer.customerId, BILLING.name, BILLING.address);
+    await setSeller(SELLER);
+    expect(await sweep()).toMatchObject({ failed: 0 });
+    const [row] = await buyersOf(buyer.customerId);
+    expect(row?.buyer).toMatchObject({ name: BILLING.name, address: BILLING.address });
+  });
+});
