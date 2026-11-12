@@ -3,7 +3,7 @@ import type { TimelineStep } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
-import { familyScreen } from "../../../../../server/family-screens.ts";
+import { familyScreen, orderNoun } from "../../../../../server/family-screens.ts";
 import type { OrderProgress, OrderScreen } from "../../../../../server/servers-view.ts";
 import { AutoRefresh } from "./AutoRefresh.tsx";
 
@@ -29,6 +29,8 @@ export function OrderStatusContent({
   const t = useTranslations("Orders.status");
   const root = useTranslations();
   const own = familyScreen(order?.family);
+  const kind = orderNoun(order?.family);
+  const words = { noun: t(`noun.${kind}`), title: t(`title.${kind}`) };
 
   if (order === null) {
     return (
@@ -47,7 +49,7 @@ export function OrderStatusContent({
   const states = STEPS[order.progress];
   const steps: TimelineStep[] = (["paid", "creating", "ready"] as const).map((id, index) => ({
     id,
-    label: t(`step.${id}`),
+    label: t(`step.${id}`, words),
     state: states[index] ?? "pending",
   }));
   const refreshing = order.progress === "paid" || order.progress === "creating";
@@ -62,7 +64,7 @@ export function OrderStatusContent({
       {order.progress === "ready" ? (
         <div className="alert alert-info text-start" role="status">
           <i className="fas fa-check-circle me-2" aria-hidden="true" />
-          {order.family === "disk" ? t("readyDisk") : t("ready")}
+          {order.family === "disk" ? t("readyDisk") : t("ready", words)}
           {order.resourceId !== null ? (
             <div className="mt-3">
               {order.family === "disk" ? (
@@ -89,7 +91,7 @@ export function OrderStatusContent({
       {order.progress === "creating" || order.progress === "paid" ? (
         <div className="alert alert-info text-start" role="status">
           <i className="fas fa-hourglass-half me-2" aria-hidden="true" />
-          {t("creating")}
+          {t("creating", words)}
         </div>
       ) : null}
       {order.progress === "delayed" ? (
@@ -101,7 +103,7 @@ export function OrderStatusContent({
       {order.progress === "failed" ? (
         <div className="alert alert-danger text-start" role="alert">
           <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
-          {t("failed")}
+          {t("failed", words)}
           <div className="mt-3">
             <Button variant="primary" href={localePath(locale, "/wallet")}>
               {t("wallet")}

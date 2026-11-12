@@ -38,17 +38,39 @@ export interface TierLimits {
   readonly maxStaticIps: number;
 }
 
-/** The documented defaults of 10.2 (open point 10); WP8-T3 makes them admin-editable. */
+/**
+ * The limits table, a constant table that is the configuration (WPU-R1). The owner relaxed the
+ * count per resource family because the platform is an AWS partner: the mechanism stays, the
+ * defaults are generous. `maxInstances` is the count of live resources per family (instance
+ * families count together). The price, Windows and static IP limits are unchanged from 10.2;
+ * WP8-T3 makes the table admin-editable through the `settings` row of scope `tier`.
+ */
 export const DEFAULT_TIER_LIMITS: Readonly<Record<RiskTier, TierLimits>> = {
-  new: { maxInstances: 2, maxBundleUsd: "24", windows: false, containers: false, maxStaticIps: 1 },
+  new: { maxInstances: 50, maxBundleUsd: "24", windows: false, containers: false, maxStaticIps: 1 },
   trusted: {
-    maxInstances: 20,
+    maxInstances: 200,
     maxBundleUsd: "9999",
     windows: true,
     containers: false,
     maxStaticIps: 1,
   },
 };
+
+/**
+ * The limits of one tier, read from `table`. R16: an unknown tier, a missing row or a count that
+ * is not a positive whole number cannot be read, and the action is refused.
+ */
+export function tierLimitsOf(
+  tier: string,
+  table: Readonly<Record<string, TierLimits | undefined>> = DEFAULT_TIER_LIMITS,
+): Result<TierLimits> {
+  const row = Object.hasOwn(table, tier) ? table[tier] : undefined;
+  if (row === undefined) return { ok: false, error: "forbidden" };
+  if (!Number.isSafeInteger(row.maxInstances) || row.maxInstances < 1) {
+    return { ok: false, error: "forbidden" };
+  }
+  return { ok: true, value: row };
+}
 
 export interface ProductFacts {
   readonly bundleUsd: string;

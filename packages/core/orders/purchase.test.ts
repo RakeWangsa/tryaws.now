@@ -10,6 +10,7 @@ import {
   type Kit,
 } from "../test/orders-kit";
 import { compensateFailedCreate } from "./compensate";
+import { DEFAULT_TIER_LIMITS } from "./gates";
 import { childId, draftHash, orderIdFor } from "./ids";
 import { runPurchase, type Purchased } from "./purchase";
 import { signDraft, verifyDraft } from "./token";
@@ -41,15 +42,13 @@ const bought = async (kit: Kit, draft: OrderDraft, clientKey?: string): Promise<
 const rows = async (sql: string, params: unknown[] = []) =>
   (await t.pool.query(sql, params)).rows as Record<string, unknown>[];
 
-// Two live instances of the customer, written as the owner.
+// Live instances of the customer, written as the owner.
 async function liveInstances(kit: Kit, count: number): Promise<void> {
-  for (let i = 0; i < count; i += 1) {
-    await t.pool.query(
-      `insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)
-       values (gen_random_uuid(), $1, 'linux_instance', $2, $3, $4, '{}'::jsonb)`,
-      [kit.customerId, kit.productId, kit.poolAccountId, REGION],
-    );
-  }
+  await t.pool.query(
+    `insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)
+     select gen_random_uuid(), $1, 'linux_instance', $2, $3, $4, '{}'::jsonb from generate_series(1, $5::int)`,
+    [kit.customerId, kit.productId, kit.poolAccountId, REGION, count],
+  );
 }
 
 describe("runPurchase: the happy path", () => {
@@ -305,7 +304,7 @@ describe("runPurchase: a refusal returns before the reservation and writes nothi
   it("limit_reached: the limit is counted again at purchase time", async () => {
     const kit = await makeKit(t);
     const draft = await kit.draft();
-    await liveInstances(kit, 2);
+    await liveInstances(kit, DEFAULT_TIER_LIMITS.new.maxInstances);
     expect(await unchanged(() => purchase(kit, draft))).toMatchObject({
       ok: false,
       error: "limit_reached",

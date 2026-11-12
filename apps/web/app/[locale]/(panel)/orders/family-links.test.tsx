@@ -44,6 +44,67 @@ describe("/orders/[id] opens the new resource on its own page", () => {
   });
 });
 
+describe("/orders/[id] names the thing that was bought, not always a server", () => {
+  const withProgress = (family: string | undefined, progress: "creating" | "ready" | "failed") => ({
+    ...order(family),
+    progress,
+    resourceId: progress === "ready" ? RESOURCE : null,
+  });
+  const NOUNS: [string | undefined, string, string][] = [
+    ["linux_instance", "server", "Server"],
+    ["windows_instance", "server", "Server"],
+    [undefined, "server", "Server"],
+    ["something_new", "server", "Server"],
+    ["disk", "disk", "Disk"],
+    ["bucket", "bucket", "Bucket"],
+    ["database", "database", "Database"],
+    ["load_balancer", "load balancer", "Load balancer"],
+    ["container_service", "container service", "Container service"],
+    ["cdn", "CDN", "CDN"],
+    ["dns_zone", "DNS zone", "DNS zone"],
+    ["domain", "domain", "Domain"],
+    ["static_ip", "static IP", "Static IP"],
+    ["backup", "backup", "Backup"],
+  ];
+
+  it.each(NOUNS)("%s: the steps and the notes use its own noun (en)", (family, noun, title) => {
+    const creating = html(
+      <OrderStatusContent locale="en" order={withProgress(family, "creating")} />,
+      "en",
+    );
+    expect(creating).toContain(`Creating the ${noun}`);
+    expect(creating).toContain(`${title} ready`);
+    expect(creating).toContain(`Your ${noun} is being created`);
+    const failed = html(
+      <OrderStatusContent locale="en" order={withProgress(family, "failed")} />,
+      "en",
+    );
+    expect(failed).toContain(`The ${noun} could not be created`);
+    if (family !== "linux_instance" && family !== "windows_instance" && noun !== "server") {
+      expect(creating).not.toMatch(/\bserver\b/i);
+      expect(failed).not.toMatch(/\bserver\b/i);
+    }
+  });
+
+  it("a disk says disk in bn and never server", () => {
+    const out = html(
+      <OrderStatusContent locale="bn" order={withProgress("disk", "creating")} />,
+      "bn",
+    );
+    expect(out).toContain("ডিস্ক তৈরি হচ্ছে");
+    expect(out).not.toContain("সার্ভার");
+  });
+
+  it("a ready disk keeps its own note and button", () => {
+    const out = html(
+      <OrderStatusContent locale="en" order={withProgress("disk", "ready")} />,
+      "en",
+    );
+    expect(out).toContain("Disk ready");
+    expect(out).toContain("Your disk is ready.");
+  });
+});
+
 describe("/orders/review goes back to the form the draft came from", () => {
   const ready = (family: string | undefined) =>
     ({

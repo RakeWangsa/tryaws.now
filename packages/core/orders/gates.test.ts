@@ -3,6 +3,7 @@ import {
   DEFAULT_TIER_LIMITS,
   checkCustomer,
   checkLimits,
+  tierLimitsOf,
   type CustomerFacts,
   type ProductFacts,
 } from "./gates";
@@ -53,6 +54,27 @@ describe("checkCustomer", () => {
   });
 });
 
+describe("tierLimitsOf (R16: fail closed when a limit cannot be read)", () => {
+  it("reads the limits of a known tier from the table", () => {
+    expect(tierLimitsOf("new")).toEqual({ ok: true, value: DEFAULT_TIER_LIMITS.new });
+    expect(tierLimitsOf("trusted")).toEqual({ ok: true, value: DEFAULT_TIER_LIMITS.trusted });
+  });
+
+  it("refuses an unknown tier and a table without the tier", () => {
+    expect(tierLimitsOf("vip")).toEqual({ ok: false, error: "forbidden" });
+    expect(tierLimitsOf("new", {})).toEqual({ ok: false, error: "forbidden" });
+  });
+
+  it("refuses a row whose number cannot be trusted", () => {
+    const bad = (maxInstances: number) => ({
+      new: { ...DEFAULT_TIER_LIMITS.new, maxInstances },
+    });
+    for (const n of [Number.NaN, -1, 0, 1.5, Number.POSITIVE_INFINITY]) {
+      expect(tierLimitsOf("new", bad(n))).toEqual({ ok: false, error: "forbidden" });
+    }
+  });
+});
+
 describe("checkLimits", () => {
   const product = (over: Partial<ProductFacts> = {}): ProductFacts => ({
     bundleUsd: "5",
@@ -66,28 +88,31 @@ describe("checkLimits", () => {
     fields: { limit: error },
   });
 
-  it("holds the documented defaults of 10.2", () => {
+  it("holds the owner's relaxed defaults (WPU-R1): every tier allows at least 20 per resource family", () => {
     expect(DEFAULT_TIER_LIMITS.new).toEqual({
-      maxInstances: 2,
+      maxInstances: 50,
       maxBundleUsd: "24",
       windows: false,
       containers: false,
       maxStaticIps: 1,
     });
-    expect(DEFAULT_TIER_LIMITS.trusted.maxInstances).toBe(20);
+    expect(DEFAULT_TIER_LIMITS.trusted.maxInstances).toBe(200);
     expect(DEFAULT_TIER_LIMITS.trusted.windows).toBe(true);
+    for (const tier of ["new", "trusted"] as const) {
+      expect(DEFAULT_TIER_LIMITS[tier].maxInstances).toBeGreaterThanOrEqual(20);
+    }
   });
 
-  it("allows the 2nd instance and refuses the 3rd for the new tier", () => {
+  it("allows the 50th live resource and refuses the 51st for the new tier", () => {
     const l = DEFAULT_TIER_LIMITS.new;
-    expect(checkLimits(l, { instances: 1 }, product())).toEqual({ ok: true, value: true });
-    expect(checkLimits(l, { instances: 2 }, product())).toEqual(limit("instances"));
+    expect(checkLimits(l, { instances: 49 }, product())).toEqual({ ok: true, value: true });
+    expect(checkLimits(l, { instances: 50 }, product())).toEqual(limit("instances"));
   });
 
-  it("allows the 20th instance and refuses the 21st for the trusted tier", () => {
+  it("allows the 200th live resource and refuses the 201st for the trusted tier", () => {
     const l = DEFAULT_TIER_LIMITS.trusted;
-    expect(checkLimits(l, { instances: 19 }, product())).toEqual({ ok: true, value: true });
-    expect(checkLimits(l, { instances: 20 }, product())).toEqual(limit("instances"));
+    expect(checkLimits(l, { instances: 199 }, product())).toEqual({ ok: true, value: true });
+    expect(checkLimits(l, { instances: 200 }, product())).toEqual(limit("instances"));
   });
 
   it("compares the bundle price exactly", () => {

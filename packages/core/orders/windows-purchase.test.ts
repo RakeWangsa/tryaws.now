@@ -4,10 +4,12 @@ import { makeKit, REGION, type Kit } from "../test/orders-kit";
 import { childId } from "./ids";
 import { createDraft } from "./draft";
 import { makeOrders } from "./place";
+import { DEFAULT_TIER_LIMITS } from "./gates";
 
 const t = useTempDatabase();
 
 const WINDOWS = "windows_instance";
+const LIMIT = DEFAULT_TIER_LIMITS.trusted.maxInstances;
 
 async function windowsFlag(kit: Kit, enabled: boolean | "missing"): Promise<void> {
   if (enabled === "missing") {
@@ -85,15 +87,13 @@ describe("selling a Windows plan: the same single purchase transaction", () => {
   });
 });
 
-// The trusted tier allows 20 instances: Linux and Windows count together.
+// The trusted tier allows 200 instances: Linux and Windows count together.
 async function live(kit: Kit, family: string, count: number): Promise<void> {
-  for (let i = 0; i < count; i += 1) {
-    await t.pool.query(
-      `insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)
-       values (gen_random_uuid(), $1, $2, $3, $4, $5, '{}'::jsonb)`,
-      [kit.customerId, family, kit.productId, kit.poolAccountId, REGION],
-    );
-  }
+  await t.pool.query(
+    `insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)
+     select gen_random_uuid(), $1, $2, $3, $4, $5, '{}'::jsonb from generate_series(1, $6::int)`,
+    [kit.customerId, family, kit.productId, kit.poolAccountId, REGION, count],
+  );
 }
 
 describe("the instance limit counts every instance family together", () => {
@@ -101,23 +101,23 @@ describe("the instance limit counts every instance family together", () => {
     const kit = await makeKit(t, { riskTier: "trusted" });
     const win = await windowsProduct(kit);
     await windowsFlag(kit, true);
-    await live(kit, "linux_instance", 20);
+    await live(kit, "linux_instance", LIMIT);
     expect(await createDraft(kit.deps, kit.session, input(kit, win))).toMatchObject({
       ok: false,
       error: "limit_reached",
     });
     const other = await makeKit(t, { riskTier: "trusted" });
     const win2 = await windowsProduct(other);
-    await live(other, "windows_instance", 20);
+    await live(other, "windows_instance", LIMIT);
     expect((await createDraft(other.deps, other.session, other.input())).ok).toBe(false);
     expect((await createDraft(other.deps, other.session, input(other, win2))).ok).toBe(false);
   });
 
-  it("counts one of each as two: 19 live plus a Windows order is allowed, 20 is not", async () => {
+  it("counts one of each as two: one under the limit plus a Windows order is allowed, the limit is not", async () => {
     const kit = await makeKit(t, { riskTier: "trusted" });
     const win = await windowsProduct(kit);
     await windowsFlag(kit, true);
-    await live(kit, "linux_instance", 18);
+    await live(kit, "linux_instance", LIMIT - 2);
     await live(kit, "windows_instance", 1);
     expect((await createDraft(kit.deps, kit.session, input(kit, win))).ok).toBe(true);
     await live(kit, "linux_instance", 1);
@@ -128,7 +128,7 @@ describe("the instance limit counts every instance family together", () => {
     const kit = await makeKit(t, { riskTier: "trusted" });
     const win = await windowsProduct(kit);
     await windowsFlag(kit, true);
-    await live(kit, "linux_instance", 19);
+    await live(kit, "linux_instance", LIMIT - 1);
     const drafted = await createDraft(kit.deps, kit.session, input(kit, win));
     if (!drafted.ok) throw new Error("the draft was refused: " + drafted.error);
     await live(kit, "linux_instance", 1);

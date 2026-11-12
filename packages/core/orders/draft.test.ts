@@ -2,6 +2,7 @@ import { useTempDatabase } from "@tc/db/testing";
 import { describe, expect, it } from "vitest";
 import { makeKit, PLAN_TOTAL, REGION, snapshotRows } from "../test/orders-kit";
 import { createDraft } from "./draft";
+import { DEFAULT_TIER_LIMITS } from "./gates";
 import { verifyDraft } from "./token";
 import { DRAFT_TTL_SECONDS } from "./types";
 
@@ -71,9 +72,9 @@ describe("createDraft", () => {
     refused({ flag: "off" }, { ok: false, error: "flag_off" }));
   it("refuses with flag_off when the family flag has no row", () =>
     refused({ flag: "missing" }, { ok: false, error: "flag_off" }));
-  it("refuses a third instance of a new customer as limit_reached", () =>
+  it("refuses an instance over the limit of a new customer as limit_reached", () =>
     refused({}, { ok: false, error: "limit_reached", fields: { limit: "instances" } }, (kit) =>
-      seedLiveInstances(kit, 2),
+      seedLiveInstances(kit, DEFAULT_TIER_LIMITS.new.maxInstances),
     ));
   it("refuses with capacity_full and the waitlist offer when the pool is full", () =>
     refused(
@@ -141,16 +142,14 @@ describe("createDraft", () => {
   });
 });
 
-// Two live instances of the customer, as the owner (resources are written by the purchase only).
+// Live instances of the customer, as the owner (resources are written by the purchase only).
 async function seedLiveInstances(
   kit: Awaited<ReturnType<typeof makeKit>>,
   count: number,
 ): Promise<void> {
-  for (let i = 0; i < count; i += 1) {
-    await kit.t.pool.query(
-      `insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)
-       values (gen_random_uuid(), $1, 'linux_instance', $2, $3, $4, '{}'::jsonb)`,
-      [kit.customerId, kit.productId, kit.poolAccountId, REGION],
-    );
-  }
+  await kit.t.pool.query(
+    `insert into resources (id, customer_id, family, product_id, pool_account_id, region, config)
+     select gen_random_uuid(), $1, 'linux_instance', $2, $3, $4, '{}'::jsonb from generate_series(1, $5::int)`,
+    [kit.customerId, kit.productId, kit.poolAccountId, REGION, count],
+  );
 }
