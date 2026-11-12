@@ -106,7 +106,16 @@ describe("resolveDnsZone", () => {
   });
 
   it("sells nothing when the price is missing or is not a plain decimal (R16, R4)", () => {
-    for (const price of [undefined, { usd: "" }, { usd: "-1" }, { usd: "1e3" }, { usd: "0.5.1" }]) {
+    // WPU-M2: a price of zero is no price either (a free zone by accident).
+    const zeros = [{ usd: "0" }, { usd: "0.00" }, { usd: "0.0000" }];
+    for (const price of [
+      undefined,
+      { usd: "" },
+      { usd: "-1" },
+      { usd: "1e3" },
+      { usd: "0.5.1" },
+      ...zeros,
+    ]) {
       expect(resolveDnsZone(config, price as never)).toEqual({
         ok: false,
         error: "validation",

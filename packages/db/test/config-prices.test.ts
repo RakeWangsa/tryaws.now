@@ -75,3 +75,19 @@ it("a market with no rows has no price for any key, and the staging default hold
     "config_price.snapshot_gb_month",
   ]);
 });
+
+// WPU-M2: the seed refuses a price of zero, in any spelling (R16).
+it("the seed refuses a zero price", async () => {
+  await ensureMarket(t.pool, "BD");
+  for (const usd of ["0", "0.00", "0.0000"]) {
+    await expect(
+      as(undefined, (tx) =>
+        seedConfigPrices(tx, {
+          market: "BD",
+          at: AT,
+          prices: [{ key: "config_price.snapshot_gb_month", usd, unit: "gb_month" }],
+        }),
+      ),
+    ).rejects.toThrow(/usd is invalid/);
+  }
+});

@@ -12,6 +12,8 @@ export interface UsageRow {
   readonly id: string;
   readonly resourceId: string;
   readonly customerId: string;
+  /** The market of the customer's profile (`customers.market`), as stored; the caller checks it (R16). */
+  readonly market: string;
   /** Plain decimal text, GB. */
   readonly quantity: string;
 }
@@ -63,10 +65,12 @@ export function meteringRepo(tx: Tx) {
         id: string;
         resource_id: string;
         customer_id: string;
+        market: string;
         quantity: string;
       }>(sql`
-        select u.id, u.resource_id, r.customer_id, u.quantity::text as quantity
+        select u.id, u.resource_id, r.customer_id, c.market, u.quantity::text as quantity
         from usage_records u join resources r on r.id = u.resource_id
+          join customers c on c.id = r.customer_id
         where u.metric = ${metric} and u.period = ${period}
           and (${afterId}::uuid is null or u.id > ${afterId}::uuid)
         order by u.id limit ${limit}`);
@@ -74,6 +78,7 @@ export function meteringRepo(tx: Tx) {
         id: r.id,
         resourceId: r.resource_id,
         customerId: r.customer_id,
+        market: r.market,
         quantity: r.quantity,
       }));
     },

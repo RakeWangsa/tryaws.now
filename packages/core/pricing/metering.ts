@@ -37,3 +37,50 @@ export function allowanceLevel(usedGb: string, allowanceGb: string): AllowanceLe
   if (used.times(100).gte(allowance.times(80))) return 80;
   return 0;
 }
+
+/** The price of one unit of a metered item as the engine quoted it: the base and the steps add up to the total. */
+export interface MeteredUnitPrice {
+  readonly totalMinor: Minor;
+  readonly baseMinor: Minor;
+  readonly steps: readonly { readonly code: string; readonly amountMinor: Minor }[];
+}
+
+/**
+ * WPU-M2 (spec 9.1: a metered charge has "the same split as a purchase"). Shares `chargeMinor` between
+ * the base and the steps of the unit price in their proportions: each step is
+ * `charge x step / unit total`, half-up, and the base takes what is left, so the lines add up to the
+ * charge exactly. A charge of one whole unit gets the unit price itself. A unit whose lines do not add
+ * up to its total, a unit of 0 or a negative charge is refused (R16).
+ */
+export function splitMeteredChargeMinor(
+  chargeMinor: Minor,
+  unit: MeteredUnitPrice,
+): { baseMinor: Minor; steps: { code: string; amountMinor: Minor }[] } {
+  const fail = (path: string, message: string): never => {
+    throw new PricingInputError(message, [{ path, message }]);
+  };
+  if (typeof chargeMinor !== "bigint" || chargeMinor < 0n) {
+    fail("chargeMinor", "chargeMinor must be a bigint of 0 or more");
+  }
+  if (unit.totalMinor <= 0n) fail("unit", "the unit price must be above zero");
+  const parts = unit.steps.reduce((sum, s) => sum + s.amountMinor, unit.baseMinor);
+  if (
+    parts !== unit.totalMinor ||
+    unit.baseMinor < 0n ||
+    unit.steps.some((s) => s.amountMinor < 0n)
+  ) {
+    fail("unit", "the base and the steps of the unit price do not add up to its total");
+  }
+  if (chargeMinor === unit.totalMinor) {
+    return { baseMinor: unit.baseMinor, steps: unit.steps.map((s) => ({ ...s })) };
+  }
+  const steps = unit.steps.map((s) => ({
+    code: s.code,
+    amountMinor: toMinor(
+      new D(chargeMinor.toString()).times(s.amountMinor.toString()).div(unit.totalMinor.toString()),
+    ),
+  }));
+  const baseMinor = steps.reduce((left, s) => left - s.amountMinor, chargeMinor);
+  if (baseMinor < 0n) fail("unit", "the steps are more than the charge");
+  return { baseMinor, steps };
+}

@@ -21,7 +21,19 @@ const RES = (n: number): string => `0190a000-0000-7000-8000-${String(n).padStart
 const CUST = (n: number): string => `0190b000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 const D0 = new Date("2026-11-12T10:00:00.000Z"); // detached at 10:00Z, 16:00 in Dhaka
 const at = (hhmm: string): Date => new Date(`2026-11-12T${hhmm}:00.000Z`);
-const PRICE = 74n;
+// WPU-M2: USD 0.005 at FX 127 is 64 paisa of base (0.635 half-up); korea_vat 10% 6, bd_vat 5% 4, the
+// processing fee 3, no margin: 77 paisa an hour in all, split like a purchase.
+const PRICE = 77n;
+const BREAKDOWN = {
+  totalMinor: 77n,
+  baseMinor: 64n,
+  steps: [
+    { code: "korea_vat", amountMinor: 6n },
+    { code: "bd_vat", amountMinor: 4n },
+    { code: "processing_fee", amountMinor: 3n },
+    { code: "markup", amountMinor: 0n },
+  ],
+};
 
 function world(init: {
   rows?: DetachedIpRow[];
@@ -40,7 +52,12 @@ function world(init: {
         .slice(0, limit),
     price: async () => {
       state.priceCalls += 1;
-      return init.price ?? { ok: true, value: { unit: "hour", perHourMinor: PRICE } };
+      return (
+        init.price ?? {
+          ok: true,
+          value: { unit: "hour", perHourMinor: PRICE, breakdown: BREAKDOWN },
+        }
+      );
     },
     hasCharge: async (_tx, key) => posted.has(key),
     post: async (_tx, input): Promise<Result<{ transactionId: string }>> => {
@@ -72,7 +89,7 @@ function world(init: {
       log: (e) => logs.push(e as never),
       ops,
     });
-  return { run, posted, notices, state, logs };
+  return { run, posted, notices, state, logs, ops };
 }
 
 const row = (n: number, detachedAt: Date | null = D0, customer = 1): DetachedIpRow => ({
@@ -136,13 +153,53 @@ describe("charging an unattached static IP", () => {
     expect(input.reference).toEqual({ type: "resource", id: RES(1) });
     expect(input.actor).toEqual({ type: "system" });
     expect(input.memo).toBe("static_ip_unattached");
+    // WPU-M2: the same split as a purchase (spec 9.1). The VAT is payable to the tax authorities, the
+    // fee and the margin are income; only the base is revenue_aws_base. A margin of 0 posts no line.
     expect(input.postings).toEqual([
       {
         account: { type: "customer_wallet", customerId: CUST(1) },
         direction: "debit",
         amountMinor: PRICE,
       },
-      { account: { type: "revenue_aws_base" }, direction: "credit", amountMinor: PRICE },
+      { account: { type: "revenue_aws_base" }, direction: "credit", amountMinor: 64n },
+      { account: { type: "vat_korea_payable" }, direction: "credit", amountMinor: 6n },
+      { account: { type: "vat_bd_payable" }, direction: "credit", amountMinor: 4n },
+      { account: { type: "processing_fee_income" }, direction: "credit", amountMinor: 3n },
+    ]);
+    const credits = input.postings.filter((p) => p.direction === "credit");
+    expect(credits.reduce((a, p) => a + p.amountMinor, 0n)).toBe(PRICE); // balanced
+  });
+
+  it("a margin posts to markup_income, and the lines still add up to the debit", async () => {
+    const w = world({
+      rows: [row(1)],
+      price: {
+        ok: true,
+        value: {
+          unit: "hour",
+          perHourMinor: 100n,
+          breakdown: {
+            totalMinor: 100n,
+            baseMinor: 64n,
+            steps: [
+              { code: "korea_vat", amountMinor: 8n },
+              { code: "bd_vat", amountMinor: 5n },
+              { code: "processing_fee", amountMinor: 3n },
+              { code: "markup", amountMinor: 20n },
+            ],
+          },
+        },
+      },
+    });
+    await w.run(at("11:01"));
+    const input = [...w.posted.values()][0]!;
+    expect(input.postings.map((p) => [p.account.type, p.amountMinor])).toEqual([
+      ["customer_wallet", 100n],
+      ["revenue_aws_base", 64n],
+      ["vat_korea_payable", 8n],
+      ["vat_bd_payable", 5n],
+      ["processing_fee_income", 3n],
+      ["markup_income", 20n],
     ]);
   });
 
@@ -219,9 +276,45 @@ describe("charging an unattached static IP", () => {
   it("a price that rounds to zero paisa charges nothing", async () => {
     const w = world({
       rows: [row(1)],
-      price: { ok: true, value: { unit: "hour", perHourMinor: 0n } },
+      price: {
+        ok: true,
+        value: {
+          unit: "hour",
+          perHourMinor: 0n,
+          breakdown: { totalMinor: 0n, baseMinor: 0n, steps: [] },
+        },
+      },
     });
     expect(await w.run(at("12:00"))).toMatchObject({ charged: 0, skipped: 1 });
+  });
+
+  it("a price whose base and steps do not add up posts nothing and is counted failed (R16)", async () => {
+    const w = world({
+      rows: [row(1)],
+      price: {
+        ok: true,
+        value: {
+          unit: "hour",
+          perHourMinor: 77n,
+          breakdown: { ...BREAKDOWN, baseMinor: 65n },
+        },
+      },
+    });
+    const report = await w.run(at("12:00"));
+    expect(report.failed).toBeGreaterThan(0);
+    expect(w.posted.size).toBe(0);
+  });
+
+  it("the market of the row is the market that is priced", async () => {
+    const markets: string[] = [];
+    const w = world({ rows: [{ ...row(1), market: "KE" }] });
+    const original = w.ops.price;
+    w.ops.price = async (tx, market, clock) => {
+      markets.push(market);
+      return original(tx, market, clock);
+    };
+    await w.run(at("12:00"));
+    expect(markets).toEqual(["KE"]);
   });
 
   it("the price is read once for each market in a run", async () => {

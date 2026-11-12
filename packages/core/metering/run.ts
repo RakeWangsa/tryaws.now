@@ -8,10 +8,16 @@ import {
 } from "@tc/db";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
+import { salePostings } from "../ledger/sale-postings";
 import type { PostTransactionInput } from "../ledger/types";
 import type { Logger, RunTx } from "../operations/types";
 import { snapshotPrice } from "../products/snapshot-price";
-import { allowanceLevel, dailyMeteredChargeMinor } from "../pricing/metering";
+import {
+  allowanceLevel,
+  dailyMeteredChargeMinor,
+  splitMeteredChargeMinor,
+  type MeteredUnitPrice,
+} from "../pricing/metering";
 import type { Clock, Result } from "../types";
 
 // Spec 11, metered items. Snapshot storage is charged once a day, one metered_charge ledger transaction
@@ -21,14 +27,20 @@ import type { Clock, Result } from "../types";
 // does; nothing is sent from here). Days are Dhaka days (UTC+6, no daylight saving).
 
 export const METERING_SETTING_KEYS = Object.freeze({
-  // WPA-P2. The OLD price source, read only while no config price is usable: the customer price of one
-  // GB-month of snapshot storage in paisa (market BD, scope market). The price source now is the config
-  // row `config_price.snapshot_gb_month` through the pricing engine, the one the screens show.
+  // WPA-P2. The OLD price source: the customer price of one GB-month of snapshot storage in paisa
+  // (market BD, scope market). The price source is the config row `config_price.snapshot_gb_month`
+  // through the pricing engine, the one the screens show. WPU-M2: the old key is only reported (it is
+  // one number with no VAT, fee or margin steps, so it cannot be split and charges nothing).
   snapshotGbMonthMinor: "metering.snapshot_gb_month_minor",
 });
 
-/** The market whose snapshot price is charged: the launch market (the old key was read for BD too). */
-const METERING_MARKET = "BD";
+/**
+ * WPU-M2. The market of a usage row is the market of the customer's profile (`customers.market`). The
+ * launch market is only the market that is priced up front, so that a run with no usage rows still
+ * reports a missing price; a row never falls back to it (an unreadable market is a failed row, R16).
+ */
+const DEFAULT_MARKET = "BD";
+const MARKET_CODE = /^[A-Z]{2}$/;
 
 export const SNAPSHOT_METRIC = "snapshot_gb";
 export const TRANSFER_TEMPLATES = Object.freeze({
@@ -57,20 +69,20 @@ type RepoPart = Pick<MeteringRepo, "listUsage" | "listTransfer"> &
 /** The database and ledger calls, replaceable in a test. */
 export interface MeteringOps {
   /**
-   * The customer price of one GB-month of snapshot storage in paisa from the config row through the
-   * pricing engine, or null when the market has no usable one. Optional so a test world without a
-   * config price needs nothing; absent means null.
+   * The customer price of one GB-month of snapshot storage from the config row through the pricing
+   * engine, with its base and steps (so a charge can be split like a purchase), or null when the market
+   * has no usable one. Optional so a test world without a config price needs nothing; absent means null.
    */
-  configPrice?(tx: Tx, clock: Clock): Promise<bigint | null>;
+  configPrice?(tx: Tx, clock: Clock, market: string): Promise<MeteredUnitPrice | null>;
   repo(tx: Tx): RepoPart;
   hasCharge(tx: Tx, key: string): Promise<boolean>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
 }
 
 export const defaultMeteringOps: MeteringOps = {
-  configPrice: async (tx, clock) => {
-    const priced = await snapshotPrice(tx, METERING_MARKET, null, clock);
-    return priced.ok ? priced.value.perGbMonthMinor : null;
+  configPrice: async (tx, clock, market) => {
+    const priced = await snapshotPrice(tx, market, null, clock);
+    return priced.ok ? priced.value.breakdown : null;
   },
   repo: (tx) => {
     const m = meteringRepo(tx);
@@ -103,7 +115,11 @@ export interface MeteringReport {
   readonly notified100: number;
   readonly failed: number;
   readonly priceMissing: boolean;
-  /** WPA-P2. Where the price of this run came from: the config row, the old setting, or none. */
+  /**
+   * Where the price of this run came from: the config row, or, when no market had one, "legacy" if only
+   * the old setting is set (a number of paisa with no steps to split: it charges nothing, WPU-M2) or
+   * "none".
+   */
   readonly priceSource: "config" | "legacy" | "none";
 }
 
@@ -136,23 +152,26 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
     deps.log({ event: "metering_row_failed", what, error: errorName(error) });
   };
 
-  // The price: the config row through the engine first; the old key only while there is none (an
-  // absent or zero engine price is no price). Neither: nothing is charged (R16).
-  const found = await deps.runTx(async (tx) => {
-    const fromConfig = (await ops.configPrice?.(tx, deps.clock)) ?? null;
-    if (fromConfig !== null && fromConfig > 0n) {
-      return { price: fromConfig, source: "config" as const };
-    }
-    const settings = await ops.repo(tx).readSettings([METERING_SETTING_KEYS.snapshotGbMonthMinor]);
-    const legacy = readPrice(settings.get(METERING_SETTING_KEYS.snapshotGbMonthMinor));
-    return legacy === null
-      ? { price: null, source: "none" as const }
-      : { price: legacy, source: "legacy" as const };
-  });
-  const price = found.price;
+  // The price of a GB-month, with its base and steps, in the market of the customer's profile at the
+  // instant of the clock (WPU-M2). A market with no usable price charges nothing (R16). Read once per
+  // market and run.
+  const units = new Map<string, MeteredUnitPrice | null>();
+  const unitOf = async (market: string): Promise<MeteredUnitPrice | null> => {
+    if (units.has(market)) return units.get(market) ?? null;
+    const fromConfig: MeteredUnitPrice | null =
+      ops.configPrice === undefined
+        ? null
+        : await deps.runTx((tx) => ops.configPrice!(tx, deps.clock, market));
+    // A price of 0 paisa is no price: a free product by accident is the worse failure.
+    const unit = fromConfig !== null && fromConfig.totalMinor > 0n ? fromConfig : null;
+    units.set(market, unit);
+    return unit;
+  };
+  // The launch market is priced up front: a run without usage rows still reports a missing price.
+  await unitOf(DEFAULT_MARKET);
 
   // 1. snapshot storage: the days that ended, oldest first.
-  if (price !== null) {
+  {
     const lastEnded = new Date(now.getTime() + DHAKA_OFFSET_MS - DAY_MS);
     for (let back = CATCH_UP_DAYS; back >= 0; back -= 1) {
       const day = new Date(lastEnded.getTime() - back * DAY_MS).toISOString().slice(0, 10);
@@ -163,24 +182,28 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
         );
         for (const row of rows) {
           try {
+            // The profile's market, checked: an unreadable one is a failed row, never the default.
+            if (typeof row.market !== "string" || !MARKET_CODE.test(row.market)) {
+              throw new RangeError("metering: the market of the profile is not readable");
+            }
+            const unit = await unitOf(row.market);
+            if (unit === null) continue; // reported by priceMissing
             const outcome = await deps.runTx(async (tx) => {
               const key = ledgerKey.metered(row.resourceId, SNAPSHOT_METRIC, day);
               if (await ops.hasCharge(tx, key)) return "replayed" as const;
-              const amountMinor = dailyMeteredChargeMinor(row.quantity, price);
+              const amountMinor = dailyMeteredChargeMinor(row.quantity, unit.totalMinor);
               if (amountMinor === 0n) return "skipped" as const;
+              // WPU-M2 (spec 9.1: "same split as a purchase"): the base to revenue_aws_base, each VAT,
+              // fee and margin step above 0 to its own account. The lines add up to the debit.
               const posted = await ops.post(tx, {
                 kind: "metered_charge",
                 reference: { type: "resource", id: row.resourceId },
                 idempotencyKey: key,
                 actor: { type: "system" },
-                postings: [
-                  {
-                    account: { type: "customer_wallet", customerId: row.customerId },
-                    direction: "debit",
-                    amountMinor,
-                  },
-                  { account: { type: "revenue_aws_base" }, direction: "credit", amountMinor },
-                ],
+                postings: salePostings(row.customerId, {
+                  totalMinor: amountMinor,
+                  ...splitMeteredChargeMinor(amountMinor, unit),
+                }),
               });
               if (posted.ok) return "charged" as const;
               if (posted.error !== "insufficient_balance") return "failed" as const;
@@ -240,5 +263,19 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
     afterResource = rows[rows.length - 1]!.resourceId;
   }
 
-  return { ...count, priceMissing: price === null, priceSource: found.source };
+  const priced = [...units.values()];
+  const priceMissing = priced.some((u) => u === null);
+  let priceSource: MeteringReport["priceSource"] = "config";
+  if (!priced.some((u) => u !== null)) {
+    // No market had a usable config price. The old key alone cannot charge (it has no steps to split);
+    // the report only says whether it is still set, so the operator knows what to replace.
+    const settings = await deps.runTx((tx) =>
+      ops.repo(tx).readSettings([METERING_SETTING_KEYS.snapshotGbMonthMinor]),
+    );
+    priceSource =
+      readPrice(settings.get(METERING_SETTING_KEYS.snapshotGbMonthMinor)) === null
+        ? "none"
+        : "legacy";
+  }
+  return { ...count, priceMissing, priceSource };
 }

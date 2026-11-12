@@ -55,7 +55,10 @@ export async function seedConfigPrices(
   if (!isMarketCode(input.market)) bad("market");
   for (const price of input.prices) {
     if (!isKey(price.key)) bad("key");
-    if (typeof price.usd !== "string" || !PRICE_TEXT.test(price.usd)) bad("usd");
+    // A price of zero is no price (WPU-M2, R16): it needs a digit from 1 to 9.
+    if (typeof price.usd !== "string" || !PRICE_TEXT.test(price.usd) || !/[1-9]/.test(price.usd)) {
+      bad("usd");
+    }
     if (!isUnit(price.unit) || price.unit !== UNIT_OF[price.key]) bad("unit");
   }
   const added: string[] = [];

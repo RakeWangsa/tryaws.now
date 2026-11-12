@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PricingInputError } from "./errors";
-import { allowanceLevel, dailyMeteredChargeMinor } from "./metering";
+import { allowanceLevel, dailyMeteredChargeMinor, splitMeteredChargeMinor } from "./metering";
 
 describe("dailyMeteredChargeMinor: GB x price per GB-month / 30, half-up, paisa", () => {
   it.each([
@@ -72,5 +72,57 @@ describe("allowanceLevel", () => {
   it.each(["-1", "x", ""])("refuses %j", (bad) => {
     expect(() => allowanceLevel(bad, "100")).toThrow(PricingInputError);
     expect(() => allowanceLevel("1", bad)).toThrow(PricingInputError);
+  });
+});
+
+// WPU-M2. A metered charge is split like a purchase (spec 9.1): the amount of the charge is shared
+// between the base and the steps in the proportions of the unit price, half-up, and the base takes
+// what is left, so the lines always add up to the charge.
+describe("splitMeteredChargeMinor", () => {
+  // USD 0.005 x 127 = 0.635 -> base 64 paisa (half-up), korea_vat 10%, bd_vat 5%, fee, no margin.
+  const UNIT = {
+    totalMinor: 77n,
+    baseMinor: 64n,
+    steps: [
+      { code: "korea_vat", amountMinor: 6n },
+      { code: "bd_vat", amountMinor: 4n },
+      { code: "processing_fee", amountMinor: 3n },
+      { code: "markup", amountMinor: 0n },
+    ],
+  };
+
+  it("one unit is the unit price itself", () => {
+    expect(splitMeteredChargeMinor(77n, UNIT)).toEqual({
+      baseMinor: 64n,
+      steps: UNIT.steps,
+    });
+  });
+
+  it("a part of a unit is shared in proportion, half-up, and the lines add up to the charge", () => {
+    for (const charge of [1n, 2n, 3n, 10n, 33n, 100n, 7_700n, 123_457n]) {
+      const split = splitMeteredChargeMinor(charge, UNIT);
+      const sum = split.steps.reduce((a, s) => a + s.amountMinor, split.baseMinor);
+      expect(sum).toBe(charge);
+    }
+    // 100 x 6/77 = 7.79 -> 8; 100 x 4/77 = 5.19 -> 5; 100 x 3/77 = 3.9 -> 4; base 83.
+    expect(splitMeteredChargeMinor(100n, UNIT)).toEqual({
+      baseMinor: 83n,
+      steps: [
+        { code: "korea_vat", amountMinor: 8n },
+        { code: "bd_vat", amountMinor: 5n },
+        { code: "processing_fee", amountMinor: 4n },
+        { code: "markup", amountMinor: 0n },
+      ],
+    });
+  });
+
+  it("refuses a unit price whose lines do not add up, a zero unit and a negative charge (R16)", () => {
+    expect(() => splitMeteredChargeMinor(5n, { ...UNIT, baseMinor: 65n })).toThrow(
+      PricingInputError,
+    );
+    expect(() => splitMeteredChargeMinor(5n, { totalMinor: 0n, baseMinor: 0n, steps: [] })).toThrow(
+      PricingInputError,
+    );
+    expect(() => splitMeteredChargeMinor(-1n, UNIT)).toThrow(PricingInputError);
   });
 });
