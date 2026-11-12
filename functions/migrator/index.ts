@@ -7,7 +7,8 @@
 // that Node trusts the certificate chain of that host for sslmode verify-full, and that MIGRATIONS_DIR
 // (copyFiles of the Migrator function) holds the migrations folder next to the bundle.
 import { createDatabase } from "@tc/db";
-import { runMigrations } from "@tc/db/migrate";
+import { ensureSystemAccounts } from "@tc/core";
+import { readMigrationHashes, runMigrations } from "@tc/db/migrate";
 import { readMigratorConfig } from "./config";
 import { runMigrator, type MigratorReport, type MigratorDeps } from "./run";
 
@@ -31,6 +32,18 @@ export const handler = async (event?: unknown): Promise<MigratorReport> => {
       });
     },
     migrate: runMigrations,
+    fileHashes: readMigrationHashes,
+    ensureSystemAccounts: async (url) => {
+      // As the master user, which owns the tables: the platform accounts are written by no other role.
+      const { db, pool } = createDatabase(url, { max: 1 });
+      pool.on("error", () => {});
+      try {
+        const { created } = await db.transaction((tx) => ensureSystemAccounts(tx));
+        return { created: created.length };
+      } finally {
+        await pool.end();
+      }
+    },
     log: (e) => console.log(JSON.stringify(e)),
   };
   return runMigrator(deps, event);

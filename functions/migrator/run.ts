@@ -13,10 +13,19 @@ export interface MasterConnection extends Queryable {
   end(): Promise<void>;
 }
 
+export interface MigrationFileHash {
+  readonly folderMillis: number;
+  readonly hash: string;
+}
+
 export interface MigratorDeps {
   readonly config: MigratorConfig;
   readonly connect: (url: string) => Promise<MasterConnection>;
   readonly migrate: (url: string, migrationsDir: string) => Promise<void>;
+  /** The hash of every migration file of the folder (C.14): compared with the applied rows. */
+  readonly fileHashes: (migrationsDir: string) => readonly MigrationFileHash[];
+  /** C.10: creates the platform ledger accounts that do not exist yet, as the table owner. Idempotent. */
+  readonly ensureSystemAccounts: (url: string) => Promise<{ readonly created: number }>;
   readonly log: Logger;
 }
 
@@ -25,6 +34,33 @@ export interface MigratorReport {
   readonly rolesEnabled: number;
   readonly rolesUnchanged: number;
   readonly migrationsApplied: number;
+  readonly systemAccountsCreated: number;
+}
+
+const APPLIED_MIGRATIONS =
+  "select hash, created_at from drizzle.__drizzle_migrations order by created_at";
+
+/**
+ * C.14. drizzle stores the sha256 of each migration file it applied and never looks at it again. Here
+ * every applied row must match the file of the same journal time, byte for byte; an edited file, or an
+ * applied migration that has no file any more, stops the deploy before anything else is touched
+ * (R15: migrations are forward-only; R16: fail closed). Returns the count of mismatches (0 = fine).
+ */
+export async function changedMigrations(
+  client: Queryable,
+  files: readonly MigrationFileHash[],
+): Promise<number> {
+  const exists = await client.query(
+    "select to_regclass('drizzle.__drizzle_migrations') is not null as present",
+  );
+  if (exists.rows[0]?.present !== true) return 0;
+  const { rows } = await client.query(APPLIED_MIGRATIONS);
+  const byTime = new Map(files.map((f) => [f.folderMillis, f.hash]));
+  let changed = 0;
+  for (const row of rows) {
+    if (byTime.get(Number(row.created_at)) !== row.hash) changed += 1;
+  }
+  return changed;
 }
 
 const COUNT_MIGRATIONS =
@@ -45,9 +81,10 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       : undefined;
   if (action !== "migrate") throw new Error("migrator: unknown action");
 
-  let step: "connect" | "tls" | "roles" | "migrate" = "connect";
+  let step: "connect" | "tls" | "roles" | "verify" | "migrate" | "accounts" = "connect";
   let client: MasterConnection | undefined;
   let refused = false;
+  let changed = 0;
   try {
     client = await deps.connect(config.masterUrl);
 
@@ -64,16 +101,27 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     step = "roles";
     const roles = await ensureRoles(client, config.rolePasswords);
 
+    // C.14: before any migration runs, an applied migration whose file changed stops the deploy.
+    step = "verify";
+    changed = await changedMigrations(client, deps.fileHashes(config.migrationsDir));
+    if (changed > 0) throw new Error("migrator: an applied migration changed");
+
     step = "migrate";
     const before = await migrationCount(client);
     await deps.migrate(config.masterUrl, config.migrationsDir);
     const after = await migrationCount(client);
+
+    // C.10: the platform ledger accounts (postTransaction never creates one). Runs after the
+    // migrations, as the table owner, and is idempotent: a second run creates none.
+    step = "accounts";
+    const accounts = await deps.ensureSystemAccounts(config.masterUrl);
 
     const report: MigratorReport = {
       rolesCreated: roles.created,
       rolesEnabled: roles.enabled,
       rolesUnchanged: roles.unchanged,
       migrationsApplied: after - before,
+      systemAccountsCreated: accounts.created,
     };
     log({ event: "migrator_done", ...report });
     return report;
@@ -83,10 +131,16 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       log({ event: "migrator_refused", reason: "no_tls" });
       throw new Error("migrator: the connection is not encrypted");
     }
+    if (step === "verify" && changed > 0) {
+      log({ event: "migrator_refused", reason: "migration_changed", count: changed });
+      throw new Error("migrator: an applied migration changed");
+    }
     log({ event: "migrator_failed", step });
     if (step === "connect") throw new Error("migrator: could not connect");
     if (step === "tls") throw new Error("migrator: could not check the connection");
     if (step === "roles") throw new Error("migrator: could not prepare the roles");
+    if (step === "verify") throw new Error("migrator: could not check the applied migrations");
+    if (step === "accounts") throw new Error("migrator: could not prepare the ledger accounts");
     throw new Error("migrator: the migrations failed");
   } finally {
     await client?.end().catch(() => undefined);
