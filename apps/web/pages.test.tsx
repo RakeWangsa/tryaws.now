@@ -14,16 +14,28 @@ vi.mock("next-intl/server", async () => {
   return {
     getLocale: async () => state.locale,
     getMessages: async () => messages[state.locale],
-    getTranslations: async (options?: { locale?: "bn" | "en" }) =>
+    getTranslations: async (options?: { locale?: "bn" | "en"; namespace?: string }) =>
       createTranslator({
         locale: options?.locale ?? state.locale,
         messages: messages[options?.locale ?? state.locale],
-      }),
+        ...(options?.namespace !== undefined ? { namespace: options.namespace } : {}),
+      } as never),
   };
 });
 vi.mock("next/headers", () => ({
   headers: async () => new Headers(state.nonce === null ? {} : { "x-nonce": state.nonce }),
 }));
+// The public pages read the catalog and the origin through server/public/load.ts: a catalog that went
+// through the real pricing engine (public.fixtures.ts) and a fixed origin.
+vi.mock("./server/public/load.ts", async () => {
+  const fixtures = await import("./app/[locale]/(public)/public.fixtures.ts");
+  const catalog = await fixtures.openCatalog();
+  return {
+    publicCatalog: async () => catalog,
+    publicOrigin: () => fixtures.ORIGIN,
+    requestNonce: async () => state.nonce ?? undefined,
+  };
+});
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND");
@@ -54,32 +66,32 @@ beforeEach(() => {
 });
 
 describe("landing page", () => {
-  it("renders the Aws.short sentence in bn and en", async () => {
+  it("renders the Aws.short sentence and the trademark line in bn and en", async () => {
     for (const locale of ["bn", "en"] as const) {
       state.locale = locale;
       const html = intl(await HomePage({ params: Promise.resolve({ locale }) }), locale);
       expect(html, locale).toContain(shortSentence(locale));
+      expect(html, locale).toContain(
+        (webMessages[locale]["Aws"] as { trademark: string }).trademark,
+      );
     }
   });
 
-  it("has one h1 title and the announcement in the top line", async () => {
+  it("has one h1, the hero title of the public site", async () => {
     for (const locale of ["bn", "en"] as const) {
       state.locale = locale;
       const html = intl(await HomePage({ params: Promise.resolve({ locale }) }), locale);
-      const web = webMessages[locale]["Web"] as { announcement: string; home: { title: string } };
-      expect(html.match(/<h[1-6][ >]/g), locale).toEqual(["<h1 "]);
-      expect(html, locale).toContain(`<h1 class="h4 mergecolor">${web.home.title}</h1>`);
-      expect(html, locale).toContain(`<div class="col-6 col-md-7 news"><span>${web.announcement}`);
+      const home = (webMessages[locale]["Public"] as { home: { heroTitle: string } }).home;
+      expect(html.match(/<h1[ >]/g), locale).toHaveLength(1);
+      expect(html, locale).toContain(home.heroTitle);
+      expect(html, locale).toContain('<main id="main"');
     }
   });
 
-  it("follows the mockup: a section.sec-normal with a container, in the main landmark", async () => {
+  it("shows the plan cards of the catalog and no inline style", async () => {
     const html = intl(await HomePage({ params: Promise.resolve({ locale: "bn" }) }), "bn");
-    expect(html).toContain(
-      '<main id="main" class="bg-colorstyle"><section class="sec-normal notfound pt-150"><div class="container">',
-    );
-    expect(html).not.toContain("style=");
-    expect(html).not.toContain("<script");
+    expect(html).toContain('class="price seccolor"');
+    expect(html).not.toContain(' style="');
   });
 
   it("links the language switch to / and /en", async () => {
@@ -94,15 +106,25 @@ describe("landing page", () => {
     );
   });
 
-  it("gives the title, description and icon as metadata", async () => {
+  it("gives the title, description, canonical URL, hreflang and icon as metadata", async () => {
     state.locale = "en";
     const meta = await generateMetadata({ params: Promise.resolve({ locale: "en" }) });
-    const web = webMessages.en["Web"] as { meta: { title: string; description: string } };
-    expect(meta).toEqual({
-      title: web.meta.title,
-      description: web.meta.description,
-      icons: { icon: "/brand/symbol.svg" },
+    const pub = webMessages.en["Public"] as {
+      meta: { home: { title: string; description: string } };
+    };
+    expect(meta.title).toBe(pub.meta.home.title);
+    expect(meta.description).toBe(pub.meta.home.description);
+    expect(meta.title).toContain("Amazon Lightsail");
+    expect(meta.alternates).toEqual({
+      canonical: "https://cloud.example.test/en",
+      languages: {
+        bn: "https://cloud.example.test/",
+        en: "https://cloud.example.test/en",
+        "x-default": "https://cloud.example.test/",
+      },
     });
+    expect(meta.robots).toEqual({ index: true, follow: true });
+    expect(meta.icons).toEqual({ icon: "/brand/symbol.svg" });
   });
 });
 
@@ -140,6 +162,37 @@ describe("locale layout", () => {
     await expect(
       LocaleLayout({ children: <p>child</p>, params: Promise.resolve({ locale: "fr" }) }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("shows the maintenance page instead of the children when TC_MAINTENANCE is on, and only then", async () => {
+    const before = process.env["TC_MAINTENANCE"];
+    try {
+      for (const locale of ["bn", "en"] as const) {
+        state.locale = locale;
+        process.env["TC_MAINTENANCE"] = "on";
+        const element = await LocaleLayout({
+          children: <p>child</p>,
+          params: Promise.resolve({ locale }),
+        });
+        const html = intl(element, locale);
+        const pub = webMessages[locale]["Public"] as { system: { maintenanceTitle: string } };
+        expect(html, locale).toContain(pub.system.maintenanceTitle);
+        expect(html, locale).not.toContain("<p>child</p>");
+        expect(html, locale).toContain(shortSentence(locale));
+
+        for (const off of ["off", "1", "true", "ON", ""]) {
+          process.env["TC_MAINTENANCE"] = off;
+          const kept = await LocaleLayout({
+            children: <p>child</p>,
+            params: Promise.resolve({ locale }),
+          });
+          expect(renderToStaticMarkup(kept), off).toBe("<p>child</p>");
+        }
+      }
+    } finally {
+      if (before === undefined) delete process.env["TC_MAINTENANCE"];
+      else process.env["TC_MAINTENANCE"] = before;
+    }
   });
 });
 
