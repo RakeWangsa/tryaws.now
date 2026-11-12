@@ -1,6 +1,6 @@
 # Single pool account launch (WPU-G1)
 
-Rules: R3 (no long-lived keys, STS AssumeRole only), R7 (idempotent), R10 (admin actions are audited), R16 (fail closed), the management account is never touched. This page is for the stage where the whole platform runs on ONE AWS pool account. The general procedure for any account is [pool-account-onboarding.md](pool-account-onboarding.md); the gaps behind this page are P1, P2, P5 and P9 of [lightsail-parity-gap.md](lightsail-parity-gap.md).
+Rules: R3 (no long-lived keys, STS AssumeRole only), R7 (idempotent), R10 (admin actions are audited), R16 (fail closed), the management account is never touched. This page is for the stage where the whole platform runs on ONE AWS pool account. The general procedure for any account is [pool-account-onboarding.md](pool-account-onboarding.md); the gaps behind this page are P1, P2, P5 and P9 of [lightsail-parity-gap.md](../analysis/lightsail-parity-gap.md).
 
 ## Trigger
 
