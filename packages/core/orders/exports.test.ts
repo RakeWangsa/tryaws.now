@@ -295,9 +295,11 @@ const WP7 = [
   "defaultMeteringOps",
   "dhakaDay",
   "dhakaMonth",
+  "editableValue",
   "isIpv4",
   "runMetering",
   "validateRecord",
+  "validateRecordKey",
   "validateZoneName",
 ];
 
