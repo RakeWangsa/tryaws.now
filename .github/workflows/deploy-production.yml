@@ -16,8 +16,11 @@ name: deploy-production
 #   token.actions.githubusercontent.com:aud = sts.amazonaws.com
 #   deploy role:  token.actions.githubusercontent.com:sub = repo:<org>/<repo>:environment:production
 #   plan role:    token.actions.githubusercontent.com:sub = repo:<org>/<repo>:environment:production-plan
-# Also pin the repository ref in the role with the claim `job_workflow_ref`
-#   (repo:<org>/<repo>/.github/workflows/deploy-production.yml@refs/tags/v*) when the account supports it.
+# REQUIRED (not optional) on BOTH roles: a second condition on the claim `job_workflow_ref`,
+#   token.actions.githubusercontent.com:job_workflow_ref = repo:<org>/<repo>/.github/workflows/deploy-production.yml@refs/tags/v*
+# and on the GitHub side a deployment tag policy on BOTH environments (`production` and `production-plan`):
+# only `v*` tags may deploy to them. `production-plan` has no reviewers, so without the tag policy any
+# branch of the repository could reach the read-only plan role.
 # The plan role holds read and `sst diff` permissions only. The deploy role is the only production deploy role.
 # The production account is a different account from staging; its role cannot assume a pool role for
 # customers (R1): the control plane roles do that, not the CI role.
