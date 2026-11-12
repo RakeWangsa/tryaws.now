@@ -218,6 +218,26 @@ const GATE_CASES: Record<string, GateCase> = {
       ),
     deny: "support",
   },
+  "invoiceSeller.read": { call: (r) => r.invoiceSeller.read("BD"), deny: "ops" },
+  "invoiceSeller.save": {
+    call: (r) =>
+      r.invoiceSeller.save(
+        {
+          market: "BD",
+          seller: {
+            legalNameBn: "ক",
+            legalNameEn: "A",
+            bin: "0000000000000",
+            addressBn: "ক",
+            addressEn: "A",
+            signatoryName: "A",
+            signatoryDesignation: "A",
+          },
+        },
+        "r",
+      ),
+    deny: "ops",
+  },
   "tierLimits.read": { call: (r) => r.tierLimits.read("BD"), deny: "finance" },
   "tierLimits.save": {
     call: (r) =>

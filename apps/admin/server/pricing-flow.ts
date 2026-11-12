@@ -52,7 +52,10 @@ export interface PricingFlowDeps {
   readonly repos: (
     tx: Tx,
     actor: AdminActor,
-  ) => Pick<AdminRepos, "fxChanges" | "priceBook" | "blueprints" | "configPrices" | "tierLimits">;
+  ) => Pick<
+    AdminRepos,
+    "fxChanges" | "priceBook" | "blueprints" | "configPrices" | "tierLimits" | "invoiceSeller"
+  >;
   // requireAdmin(roles): rejects when there is no admin session or the role is wrong.
   readonly authorize: (roles: readonly AdminRole[]) => Promise<AdminActor>;
   // True when the hit was counted, false over the limit.

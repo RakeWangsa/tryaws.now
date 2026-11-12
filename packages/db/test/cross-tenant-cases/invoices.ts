@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
-import { newOrder } from "../fixtures";
+import { newOrder, seedSeller } from "../fixtures";
 import { insertRow } from "../sql";
 import { defineCaseSet, type CaseSet } from "./define";
 
@@ -16,6 +16,8 @@ interface Seed {
 export const invoicesCases: CaseSet = defineCaseSet<Seed>({
   repo: "invoices",
   seed: async (pool, customerId) => {
+    // WPU-I1: issue() needs the seller details of the customer's market (a shared market row).
+    await seedSeller(pool, "BD");
     const orderId = await newOrder(pool, customerId);
     const invoiceId = await insertRow(pool, "invoices", {
       fiscal_year: 2026,

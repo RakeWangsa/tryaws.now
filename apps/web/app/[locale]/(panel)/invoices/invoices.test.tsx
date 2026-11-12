@@ -120,6 +120,22 @@ describe("/invoices/[id]", () => {
     expect(out).toContain("cannot be shown now");
     expect(out).not.toMatch(/\d+\.\d{2}/);
   });
+  it("offers the print or save as PDF action and names the Mushak-6.3 form (WPU-I1)", () => {
+    const en = render("invoice.ready");
+    expect(en).toContain("Print or save as PDF");
+    expect(en).toContain("Mushak-6.3");
+    const bn = render("invoice.ready", "bn");
+    expect(bn).toContain("মূসক-৬.৩");
+  });
+  it("shows no invoice, no total and no number when the seller details are missing (R16)", () => {
+    for (const locale of ["en", "bn"] as const) {
+      const out = render("invoice.seller_missing", locale);
+      expect(out).not.toMatch(/\d+\.\d{2}|[০-৯]+\.[০-৯]{2}/);
+      expect(out).not.toContain("TC-");
+      expect(out).not.toContain("/document");
+    }
+    expect(render("invoice.seller_missing")).toContain("is being prepared");
+  });
   it("never shows an account id, an ARN or a bucket key (U6)", () => {
     for (const id of ["invoice.ready", "invoices.ready"]) {
       expect(render(id)).not.toMatch(/arn:aws|\b\d{12}\b|\.pdf|amazonaws|s3:/);

@@ -53,6 +53,12 @@ export const INVOICE_ANCHORS: readonly MockupAnchor[] = [
     classes: ["text-center"],
   },
   {
+    state: "invoice.seller_missing",
+    mockupFile: "template/404.html",
+    why: "the centred text of a state (the seller details of the tax invoice are not complete)",
+    classes: ["text-center"],
+  },
+  {
     state: "invoices.loading",
     mockupFile: "template/cart.html",
     why: "skeleton blocks inside the Card of the final layout",

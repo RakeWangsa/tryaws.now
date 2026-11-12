@@ -28,7 +28,7 @@ export interface DocumentDeps {
 }
 
 export type DocumentAnswer =
-  { status: 200; html: string } | { status: 401 | 404 | 500; html?: undefined };
+  { status: 200; html: string } | { status: 401 | 404 | 500 | 503; html?: undefined };
 
 export async function invoiceDocument(
   deps: DocumentDeps,
@@ -40,12 +40,17 @@ export async function invoiceDocument(
   try {
     const screen = await loadInvoice(session, id);
     if (screen === null) return { status: 404 };
+    // No seller details, no tax invoice (R16, WPU-I1): 503, not a half-filled document.
+    if (screen.state === "seller_missing") return { status: 503 };
     if (screen.state !== "ready") return { status: 500 };
     const name = await deps.customerName(session);
     const numerals = locale === "bn" ? "beng" : "latn";
     return {
       status: 200,
-      html: renderInvoiceHtml(toInvoiceDocument(screen.invoice, name, numerals), locale),
+      html: renderInvoiceHtml(
+        toInvoiceDocument(screen.invoice, name, numerals, screen.seller),
+        locale,
+      ),
     };
   } catch {
     return { status: 500 };

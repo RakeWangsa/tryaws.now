@@ -135,7 +135,8 @@ const roleOf = (name: string): AdminActor["role"] =>
       : (name.startsWith("wallets.") ||
             name.startsWith("payments.") ||
             name.startsWith("priceBook.") ||
-            name.startsWith("configPrices.")) &&
+            name.startsWith("configPrices.") ||
+            name.startsWith("invoiceSeller.")) &&
           name !== "payments.resolveDiscrepancy"
         ? "finance"
         : "ops";
@@ -328,6 +329,22 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       },
       "AWS price page",
     ),
+  "invoiceSeller.save": (r) =>
+    r.invoiceSeller.save(
+      {
+        market: "BD",
+        seller: {
+          legalNameBn: "ক",
+          legalNameEn: "A",
+          bin: "0000000000000",
+          addressBn: "ক",
+          addressEn: "A",
+          signatoryName: "A",
+          signatoryDesignation: "A",
+        },
+      },
+      "enter the seller",
+    ),
   "tierLimits.save": (r) =>
     r.tierLimits.save(
       {
@@ -464,6 +481,7 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "priceBook.read",
   "configPrices.read",
   "tierLimits.read",
+  "invoiceSeller.read",
   "waitlist.counts",
   "waitlist.list",
   "wallets.detail",

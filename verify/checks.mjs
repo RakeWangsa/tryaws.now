@@ -2790,6 +2790,13 @@ TASKS["WPU-H1"] = [
   repo,
 ];
 
+// WPU-I1: the customer invoice is the Bangladesh NBR Mushak 6.3 tax invoice with the seller's legal name,
+// BIN and address. The renderer, the seller rules and the amount in words (core), the `invoice_seller`
+// setting, its audited admin repository and the refusal to issue without it (db, with the local
+// PostgreSQL), the page and the printable document of the customer (web), and /pricing/seller with its
+// flow and sweep (admin). No AWS call.
+TASKS["WPU-I1"] = [specSync, baselineSync, lint, typecheck, format, core, db, web, admin, repo];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

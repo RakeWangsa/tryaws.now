@@ -53,6 +53,21 @@ export function InvoiceDetailContent({
     );
   }
 
+  // No complete seller details: no tax invoice is shown or printed (R16, WPU-I1).
+  if (screen.state === "seller_missing") {
+    return (
+      <EmptyState
+        title={t("detail.sellerMissing.title")}
+        description={t("detail.sellerMissing.body")}
+        action={
+          <Button variant="primary" href={localePath(locale, "/support")}>
+            {t("detail.sellerMissing.action")}
+          </Button>
+        }
+      />
+    );
+  }
+
   const { invoice } = screen;
   return (
     <>
@@ -117,7 +132,8 @@ export function InvoiceDetailContent({
           {t("detail.print")}
         </a>
       </p>
-      <p className="seccolor small">{t("detail.printHint")}</p>
+      <p className="seccolor small mb-1">{t("detail.printHint")}</p>
+      <p className="seccolor small">{t("detail.mushakHint")}</p>
     </>
   );
 }

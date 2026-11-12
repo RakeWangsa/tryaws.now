@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { DEFAULT_LOCALE, isLocale, localePath } from "@tc/ui/runtime";
 import { makeConfigPriceFlow } from "./config-price-flow.ts";
+import { makeInvoiceSellerFlow } from "./invoice-seller-flow.ts";
 import { makePriceBookFlow } from "./price-book-flow.ts";
 import { makeTierLimitsFlow } from "./tier-limits-flow.ts";
 import { readDraft } from "./pricing-draft.ts";
@@ -24,7 +25,13 @@ function text(value: FormDataEntryValue | null): string {
 
 function back(
   form: FormData,
-  path: "/pricing" | "/pricing/book" | "/pricing/config" | "/catalog" | "/catalog/limits",
+  path:
+    | "/pricing"
+    | "/pricing/book"
+    | "/pricing/config"
+    | "/pricing/seller"
+    | "/catalog"
+    | "/catalog/limits",
   answer: FlowAnswer<unknown>,
 ): never {
   const rawLocale = text(form.get("locale"));
@@ -145,6 +152,25 @@ export async function saveTierLimitsAction(form: FormData): Promise<void> {
     reason: text(form.get("reason")),
   });
   back(form, "/catalog/limits", answer);
+}
+
+// WPU-I1. The seller of the tax invoices (Mushak 6.3), on /pricing/seller. The form carries no actor.
+export async function saveInvoiceSellerAction(form: FormData): Promise<void> {
+  const answer = await makeInvoiceSellerFlow(pricingFlowDeps()).saveInvoiceSeller({
+    market: text(form.get("market")),
+    legalNameBn: text(form.get("legalNameBn")),
+    legalNameEn: text(form.get("legalNameEn")),
+    bin: text(form.get("bin")),
+    addressBn: text(form.get("addressBn")),
+    addressEn: text(form.get("addressEn")),
+    vatCircle: text(form.get("vatCircle")),
+    signatoryName: text(form.get("signatoryName")),
+    signatoryDesignation: text(form.get("signatoryDesignation")),
+    phone: text(form.get("phone")),
+    email: text(form.get("email")),
+    reason: text(form.get("reason")),
+  });
+  back(form, "/pricing/seller", answer);
 }
 
 // WPU-G10. A config price (load balancer, snapshot, block storage, hosted zone), on /pricing/config.

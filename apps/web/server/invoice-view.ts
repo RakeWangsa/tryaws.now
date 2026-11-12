@@ -2,11 +2,13 @@ import type { CustomerSession } from "@tc/auth";
 import {
   formatInvoiceNumber,
   parseLineAmount,
+  parseSellerDetails,
   type InvoiceDocument,
   type InvoiceLine,
   type Numerals,
+  type SellerDetails,
 } from "@tc/core";
-import { customerRepos, withTx } from "@tc/db";
+import { customerRepos, readInvoiceSeller, withTx } from "@tc/db";
 import type { InvoiceCursor } from "@tc/db";
 
 // What /invoices and /invoices/[id] show (WPU-G4), read through the repositories of the session's
@@ -33,6 +35,8 @@ export interface InvoiceLineView {
   code: string;
   label: { bn: string; en: string };
   amountMinor: bigint;
+  /** The rate of a VAT step as stored with the line ("0.05"). */
+  rate?: string;
 }
 
 export interface InvoiceDetailView {
@@ -43,8 +47,13 @@ export interface InvoiceDetailView {
   lines: InvoiceLineView[];
 }
 
+// `seller_missing`: the seller details (legal name, BIN, address) of the tax invoice are not complete in the
+// settings. The invoice is not printed without them (R16, WPU-I1); the customer sees "being prepared" and
+// the admin panel shows the notice on /pricing/seller.
 export type InvoiceDetailScreen =
-  { state: "ready"; invoice: InvoiceDetailView } | { state: "unavailable" };
+  | { state: "ready"; invoice: InvoiceDetailView; seller: SellerDetails }
+  | { state: "unavailable" }
+  | { state: "seller_missing" };
 
 const CURSOR = /^([0-9]{4})-([0-9]{1,6})$/;
 
@@ -89,11 +98,17 @@ export function parseStoredLines(lines: unknown, totalMinor: bigint): InvoiceLin
       return null;
     }
     sum += amount;
+    const rate = line["rate"];
+    // A rate that is stored must be decimal text; anything else makes the lines unreadable (R16).
+    if (rate !== undefined && (typeof rate !== "string" || !/^\d{1,3}(\.\d{1,6})?$/.test(rate))) {
+      return null;
+    }
     out.push({
       kind: line["kind"],
       code: line["code"],
       label: { bn: line["label"].bn, en: line["label"].en },
       amountMinor: amount,
+      ...(rate !== undefined ? { rate } : {}),
     });
   }
   return sum === totalMinor ? out : null;
@@ -128,12 +143,25 @@ export async function loadInvoice(
   session: CustomerSession,
   id: string,
 ): Promise<InvoiceDetailScreen | null> {
-  const row = await withTx((tx) => customerRepos(tx, session.customerId).invoices.get(id));
+  const { row, stored } = await withTx(async (tx) => {
+    const repos = customerRepos(tx, session.customerId);
+    const found = await repos.invoices.get(id);
+    if (found === null) return { row: null, stored: null };
+    // The market of the customer decides which seller details apply.
+    const profile = await repos.profile.get();
+    if (profile === null) return { row: found, stored: { state: "none" } as const };
+    return { row: found, stored: await readInvoiceSeller(tx, profile.market) };
+  });
   if (row === null) return null;
   const lines = parseStoredLines(row.lines, row.totalMinor);
   if (lines === null) return { state: "unavailable" };
+  // A tax invoice is never printed without complete seller details (R16): both a missing row and a row
+  // that does not parse give the same answer.
+  const seller = stored?.state === "ok" ? parseSellerDetails(stored.seller) : null;
+  if (seller === null) return { state: "seller_missing" };
   return {
     state: "ready",
+    seller,
     invoice: {
       id: row.id,
       number: formatInvoiceNumber(row.fiscalYear, row.number),
@@ -145,25 +173,30 @@ export async function loadInvoice(
 }
 
 /**
- * The document of the core for the printable page. The seller's legal name and address are not defined
- * yet (JOURNEY, WPU-G4, Needs decision): only the trade name is printed.
+ * The document of the core for the printable page: the Mushak 6.3 tax invoice. The seller is the legal
+ * entity of the settings (WPU-I1). The buyer is the customer's name; the profile of a customer holds no
+ * address and no BIN or NID yet (JOURNEY, WPU-I1, Needs decision), so those print as "-" and nothing is
+ * invented. The VAT rate of a line, when stored, travels with the line (never recomputed).
  */
 export function toInvoiceDocument(
   invoice: InvoiceDetailView,
   customerName: string,
   numerals: Numerals,
+  seller: SellerDetails,
 ): InvoiceDocument {
   const lines: InvoiceLine[] = invoice.lines.map((l) => ({
     kind: l.kind,
     code: l.code,
     label: l.label,
     amountMinor: l.amountMinor.toString(),
+    ...(l.rate !== undefined ? { rate: l.rate } : {}),
   }));
   return {
     kind: "invoice",
     number: invoice.number,
     issuedAt: invoice.issuedAt,
-    company: { name: "TiCON Cloud", address: [] },
+    company: { name: seller.legalNameEn, address: [] },
+    seller,
     customer: { name: customerName === "" ? null : customerName },
     lines,
     totalMinor: invoice.totalMinor,

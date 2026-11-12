@@ -287,6 +287,14 @@ const PRODUCTS = [
   "invoicePdfKey",
   "parseLineAmount",
   "renderInvoiceHtml",
+  // WPU-I1: Mushak 6.3 (seller details, amount in words)
+  "SELLER_SETTING_KEY",
+  "amountInWords",
+  "isValidBin",
+  "parseSellerDetails",
+  "percentText",
+  "sellerFieldErrors",
+  "sellerValueOf",
   // WP1-T5: catalog sync (the mapping, the active rule, the plan, the BDT price on read)
   "decideActive",
   "mapInstanceBundle",

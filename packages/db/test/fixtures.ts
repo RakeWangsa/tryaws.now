@@ -19,6 +19,34 @@ export async function ensureMarket(q: Queryable, code = "BD"): Promise<string> {
   return code;
 }
 
+// A complete, test-only seller row (WPU-I1: no invoice is issued without one). The values are
+// placeholders for tests; production data comes from the owner through the admin panel.
+export const TEST_SELLER = {
+  v: 1,
+  version: 1,
+  legalNameBn: "পরীক্ষা লিমিটেড",
+  legalNameEn: "Test Limited",
+  bin: "0000000000000",
+  addressBn: "ঢাকা",
+  addressEn: "Dhaka",
+  signatoryName: "Test Signatory",
+  signatoryDesignation: "Director",
+};
+
+export async function seedSeller(
+  q: Queryable,
+  market = "BD",
+  value: unknown = TEST_SELLER,
+): Promise<void> {
+  await ensureMarket(q, market);
+  await q.query(
+    `insert into settings (id, key, market, scope, value)
+     values ($1, 'invoice_seller', $2, 'market', $3::jsonb)
+     on conflict (key, market, scope, scope_id) do update set value = excluded.value`,
+    [uuidv7(), market, JSON.stringify(value)],
+  );
+}
+
 // Inserts an admin user with a cognito_sub that no other call shares. Returns the id.
 export async function newAdmin(q: Queryable, role = "finance"): Promise<string> {
   return insertRow(q, "admin_users", { cognito_sub: "admin-" + uniqueSuffix(), role });

@@ -1,7 +1,7 @@
 import type pg from "pg";
 import { v7 as uuidv7 } from "uuid";
 import { inTransaction, insertRow } from "./sql";
-import { newAdmin, newPoolAccount, systemAccount, uniqueSuffix } from "./fixtures";
+import { newAdmin, newPoolAccount, seedSeller, systemAccount, uniqueSuffix } from "./fixtures";
 
 // Seeds for test/tenancy*.test.ts: a row in every one of the 27 tenant tables for a customer, and the
 // rows of one customer that point at the rows of another. The seed reads like the Ownership map: a
@@ -250,6 +250,9 @@ export async function seedCustomer(
     message: "m",
   });
   await add("audit_log", { actor_type: "customer", actor_id: customerId, action: "x" });
+  // WPU-I1: the seller of the market, so that an invoice can be issued in the cross-tenant cases. The
+  // row is market data (scope 'market'), shared by all customers of BD; a second call leaves it alone.
+  await seedSeller(pool, "BD");
   await add("settings", {
     key: "limit." + uniqueSuffix(),
     market: "BD",

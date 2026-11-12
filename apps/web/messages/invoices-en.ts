@@ -46,6 +46,13 @@ export const invoicesEn: Same<typeof invoicesBn> = {
         body: "The lines did not add up to the total, so we stopped instead of showing a wrong amount. Write to support.",
         action: "Write to support",
       },
+      mushakHint:
+        "The invoice is printed in the Tax Invoice form (Mushak-6.3) of the National Board of Revenue, with the seller's legal name, BIN and address.",
+      sellerMissing: {
+        title: "Your invoice is being prepared",
+        body: "The seller details for the tax invoice are not complete yet, so we do not show the invoice now. Try again in a little while, or write to support.",
+        action: "Write to support",
+      },
     },
   },
 };

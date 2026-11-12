@@ -486,6 +486,11 @@ export function PricingView({ locale, admin, screen, result }: PricingViewProps)
           {t("configLink")}
         </Button>
       </form>
+      <form method="get" action={localePath(locale, "/pricing/seller")} className="mb-3">
+        <Button type="submit" variant="secondary" size="sm">
+          {t("sellerLink")}
+        </Button>
+      </form>
       <Banner code={resultOf(result)} />
       {screen.kind !== "ok" ? (
         <EmptyState title={t("unavailable.title")} description={t("unavailable.body")} />

@@ -3,7 +3,7 @@
 import type { Locale, Minor } from "../types";
 
 export type InvoiceErrorCode =
-  "invalid_number" | "invalid_date" | "invalid_amount" | "invalid_lines";
+  "invalid_number" | "invalid_date" | "invalid_amount" | "invalid_lines" | "seller_details_missing";
 
 // Fixed text: a message never holds the value it refused (R14).
 export class InvoiceError extends Error {
@@ -51,6 +51,8 @@ export interface InvoiceLine {
   code: string;
   label: Text2;
   amountMinor: string;
+  /** The rate of a VAT step as decimal text ("0.05"), stored with the line. Never computed here. */
+  rate?: string;
 }
 
 export function parseLineAmount(text: unknown): Minor {
@@ -62,7 +64,7 @@ export function parseLineAmount(text: unknown): Minor {
 
 export interface InvoiceLinesInput {
   baseMinor: Minor;
-  steps: readonly { code: string; amountMinor: Minor }[];
+  steps: readonly { code: string; amountMinor: Minor; rate?: string }[];
   totalMinor: Minor;
   labels: { aws: Text2; steps: Readonly<Record<string, Text2>> };
 }
@@ -89,6 +91,7 @@ export function buildInvoiceLines(input: InvoiceLinesInput): InvoiceLine[] {
       code: step.code,
       label,
       amountMinor: step.amountMinor.toString(),
+      ...(step.rate !== undefined ? { rate: step.rate } : {}),
     });
     sum += step.amountMinor;
   }
