@@ -157,6 +157,12 @@ async function freePort() {
 // it with this documentation range as the list and sends a CloudFront header from inside it.
 const SMOKE_VIEWER = "203.0.113.5:44321";
 const SMOKE_ALLOWLIST = "203.0.113.0/24";
+// Well-formed placeholders (no secret, no pool): an anonymous request never reaches Cognito, but the
+// sign-in guard reads the admin pool settings first and refuses to start without them (R16).
+const SMOKE_ADMIN_AUTH = {
+  COGNITO_ADMIN_POOL_ID: "ap-southeast-1_SMOKEPOOL1",
+  COGNITO_ADMIN_CLIENT_ID: "smokeclient1234567890",
+};
 
 async function get(base, path, init = {}) {
   const response = await globalThis.fetch(`${base}${path}`, {
@@ -410,7 +416,7 @@ async function smokeApp(app, { skipBuild }) {
     "next start: pages, headers, CSP report, redirect, 404",
     await withServer(
       app,
-      { TC_DEV_UI: "on", TC_STAGE: "", ADMIN_IP_ALLOWLIST: SMOKE_ALLOWLIST },
+      { TC_DEV_UI: "on", TC_STAGE: "", ADMIN_IP_ALLOWLIST: SMOKE_ALLOWLIST, ...SMOKE_ADMIN_AUTH },
       (base) => liveChecks(app, base),
     ),
   );
@@ -419,7 +425,12 @@ async function smokeApp(app, { skipBuild }) {
     "TC_STAGE=production: /dev/ui is 404",
     await withServer(
       app,
-      { TC_DEV_UI: "on", TC_STAGE: "production", ADMIN_IP_ALLOWLIST: SMOKE_ALLOWLIST },
+      {
+        TC_DEV_UI: "on",
+        TC_STAGE: "production",
+        ADMIN_IP_ALLOWLIST: SMOKE_ALLOWLIST,
+        ...SMOKE_ADMIN_AUTH,
+      },
       (base) => productionCheck(app, base),
     ),
   );
