@@ -113,6 +113,8 @@ jobs:
       TC_ALARM_EMAILS: ${{ vars.TC_ALARM_EMAILS }}
       TC_SES_IDENTITY_ARN: ${{ vars.TC_SES_IDENTITY_ARN }}
       TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
+      TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
+      TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -163,6 +165,8 @@ jobs:
       TC_ALARM_EMAILS: ${{ vars.TC_ALARM_EMAILS }}
       TC_SES_IDENTITY_ARN: ${{ vars.TC_SES_IDENTITY_ARN }}
       TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
+      TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
+      TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

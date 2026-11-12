@@ -68,7 +68,11 @@ export const opsBn = {
       replace_certificate: "সার্টিফিকেট বদল",
       set_db_parameters: "ডাটাবেস প্যারামিটার বদল",
       read_db_parameters: "ডাটাবেস প্যারামিটার পড়া",
+      renew_domain: "ডোমেইন নবায়ন",
+      resend_verification: "ডোমেইন যাচাইয়ের ইমেইল আবার পাঠানো",
+      set_name_servers: "ডোমেইনের নেম সার্ভার বদল",
       reject_operation: "অনুরোধ বাতিলের কাজ",
+      cleanup_failed_create: "ব্যর্থ তৈরির অবশিষ্ট মুছে ফেলা",
       other: "অন্য ধরন",
     },
     errors: {

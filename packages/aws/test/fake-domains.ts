@@ -13,7 +13,8 @@ import type { Route53Port } from "../adapters/route53-port";
 interface FakeOperation {
   readonly id: string;
   readonly name: string;
-  readonly kind: "register" | "renew";
+  readonly kind: "register" | "renew" | "nameservers";
+  readonly servers?: readonly string[];
   readonly years: number;
   status: DomainOperationStatus;
   polls: number;
@@ -71,6 +72,8 @@ export function createFakeDomains(options: FakeDomainsOptions = {}) {
           "ns-1.fake-dns.example",
         ],
       });
+    } else if (op.kind === "nameservers") {
+      if (current !== undefined && op.servers !== undefined) current.nameServers = [...op.servers];
     } else if (current !== undefined) {
       const expiresAt = new Date(current.expiresAt.getTime());
       expiresAt.setUTCFullYear(expiresAt.getUTCFullYear() + op.years);
@@ -159,6 +162,21 @@ export function createFakeDomains(options: FakeDomainsOptions = {}) {
         nameServers: found.nameServers,
         reachability: found.reachability,
       };
+    },
+    async updateNameServers(name, servers) {
+      calls.push({ op: "updateNameServers", name });
+      if (!domains.has(name)) throw new AwsError({ code: "not_found", retryable: false });
+      const id = `fake-op-${String(next++).padStart(4, "0")}`;
+      operations.set(id, {
+        id,
+        name,
+        kind: "nameservers",
+        years: 0,
+        servers: [...servers],
+        status: "in_progress",
+        polls: 0,
+      });
+      return { operationId: id };
     },
     async resendContactReachabilityEmail(name) {
       calls.push({ op: "resendContactReachabilityEmail", name });

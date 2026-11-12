@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, CopyField, SecretReveal } from "@tc/ui";
+import { Button, CopyField, Field, SecretReveal } from "@tc/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
@@ -33,6 +33,10 @@ export function BucketKeys({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [gone, setGone] = useState(false);
+  // One id per attempt (R7): it stays while the secret is on screen, and a new one is made when the
+  // secret is hidden or the attempt failed, so a deliberate second key is not taken for a double click.
+  const [rid, setRid] = useState(requestId);
+  const freshId = () => setRid(globalThis.crypto.randomUUID());
 
   async function create(form: FormData): Promise<void> {
     setPending(true);
@@ -44,6 +48,8 @@ export function BucketKeys({
         setGone(false);
       } else {
         setError(result.error);
+        // A failed attempt may be tried again; a repeat of a made key must not be (already_created).
+        if (result.error !== "already_created") freshId();
       }
     } catch {
       setError("unavailable");
@@ -61,7 +67,6 @@ export function BucketKeys({
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {t("warning")}
       </div>
-      <p className="seccolor">{t("listUnavailable")}</p>
       {error !== null ? (
         <div className="alert alert-danger text-start" role="alert">
           <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
@@ -77,6 +82,7 @@ export function BucketKeys({
             onHidden={() => {
               setSecret(null);
               setGone(true);
+              freshId();
             }}
           />
         </>
@@ -85,7 +91,14 @@ export function BucketKeys({
       ) : (
         <form action={create}>
           <input type="hidden" name="bucketId" value={bucketId} />
-          <input type="hidden" name="requestId" value={requestId} />
+          <input type="hidden" name="requestId" value={rid} />
+          <Field
+            name="confirmName"
+            label={t("confirmLabel")}
+            hint={t("confirmHint")}
+            maxLength={120}
+            autoComplete="off"
+          />
           {gone ? <p className="seccolor">{t("gone")}</p> : null}
           <Button type="submit" variant="primary" icon="fas fa-key" pending={pending}>
             {pending ? t("working") : t("create")}

@@ -2,14 +2,14 @@ import { expect, it } from "vitest";
 import { otpSmsText } from "../sms/otp-text";
 
 it("English: Latin digits whatever the numerals setting says", () => {
-  const text = "TiCON Cloud verification code: 000042. Valid for 5 minutes. Do not share it.";
+  const text = "MeghVPS verification code: 000042. Valid for 5 minutes. Do not share it.";
   expect(otpSmsText("en", "beng", "000042", 5)).toBe(text);
   expect(otpSmsText("en", "latn", "000042", 5)).toBe(text);
 });
 
 it("Bengali: the code in Latin digits, the minutes in Bengali digits for beng and in Latin digits for latn", () => {
   expect(otpSmsText("bn", "beng", "000042", 5)).toBe(
-    "TiCON Cloud যাচাই কোড: 000042। মেয়াদ ৫ মিনিট। কাউকে জানাবেন না।",
+    "MeghVPS যাচাই কোড: 000042। মেয়াদ ৫ মিনিট। কাউকে জানাবেন না।",
   );
   expect(otpSmsText("bn", "beng", "000042", 10)).toContain("মেয়াদ ১০ মিনিট");
   expect(otpSmsText("bn", "latn", "000042", 5)).toContain("মেয়াদ 5 মিনিট");

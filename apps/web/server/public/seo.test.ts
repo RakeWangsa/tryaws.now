@@ -64,7 +64,7 @@ describe("structured data", () => {
   });
 
   it("builds Organization, BreadcrumbList, FAQPage and Product with an Offer in BDT", () => {
-    expect(organizationLd(ORIGIN)).toMatchObject({ "@type": "Organization", name: "TiCON Cloud" });
+    expect(organizationLd(ORIGIN)).toMatchObject({ "@type": "Organization", name: "MeghVPS" });
     const crumbs = breadcrumbLd(ORIGIN, "en", [
       { name: "Home", path: "/" },
       { name: "Pricing", path: "/pricing" },

@@ -167,6 +167,31 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  // WPU-B2: the two domain actions that write an operation row for Route 53 Domains. The domain of another
+  // customer is one answer with a missing one and nothing is written (R8); the session is read first (R9).
+  "app/[locale]/(panel)/domains/[name]/actions.ts#resendVerificationAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}domain-ops.test.ts`,
+        "another customer's domain and a missing one are one answer; nothing is written (R8)",
+      ),
+      proof(`${W}domain-ops.test.ts`, "refuses without a session before anything is read"),
+    ],
+  },
+  "app/[locale]/(panel)/domains/[name]/actions.ts#setNameServersAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}domain-ops.test.ts`,
+        "another customer's domain, flag off, a busy domain and a domain that is not registered",
+      ),
+      proof(
+        `${W}domain-ops.test.ts`,
+        "needs the typed name (second confirmation) and a valid list, before the store",
+      ),
+    ],
+  },
   // WPU-G4: the DNS record editor. R9 order, the zone of another customer is one answer with a missing
   // one, the flag, the busy zone and the idempotency key are all in dns-actions.test.ts.
   "app/[locale]/(panel)/dns/[id]/actions.ts#saveRecordAction": {
@@ -903,6 +928,19 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
         "answers 404 for another customer's invoice, like for a missing one (R8)",
       ),
       proof(`${W}invoice-document.test.ts`, "answers 401 without a session and reads nothing (R9)"),
+      CUSTOMER_REPOS,
+    ],
+  },
+
+  // WPU-N1: "Download PDF". The invoice is read for the session's customer; the renderer gets that id.
+  "app/[locale]/(panel)/invoices/[id]/pdf/route.ts": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}invoice-pdf.test.ts`,
+        "cross-tenant: another customer's invoice answers 404 and the renderer is never called (R8)",
+      ),
+      proof(`${W}invoice-pdf.test.ts`, "answers 401 without a session and touches nothing (R9)"),
       CUSTOMER_REPOS,
     ],
   },

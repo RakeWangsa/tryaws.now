@@ -52,7 +52,7 @@ describe("APP_NAV", () => {
       ["domains", "/domains"],
       ["wallet", "/wallet"],
       ["invoices", "/invoices"],
-      ["support", "/support"],
+      ["support", "/support/new"],
       ["settings", "/settings/profile"],
     ]);
   });

@@ -30,6 +30,12 @@ export function decideDestructive(kind: string, facts: GuardFacts): boolean {
     if (SNAPSHOT_FAMILIES.includes(facts.family)) return facts.hasFinalSnapshot;
     return KEPT_CONFIG_FAMILIES.includes(facts.family);
   }
+  // WPU-B3: a create that failed never held customer data, so the final snapshot is not asked; the
+  // resource must be `failed` and its subscription `ended` (the automatic reversal set both).
+  if (kind === "cleanup_failed_create") {
+    if (facts.resourceState !== "failed" || facts.subscriptionStatus !== "ended") return false;
+    return SNAPSHOT_FAMILIES.includes(facts.family) || KEPT_CONFIG_FAMILIES.includes(facts.family);
+  }
   if (kind === "purge_snapshots") return facts.subscriptionStatus === "ended";
   // WP5-T6: a customer's manual backup. The row is a `backup` child, it has no subscription of its
   // own and outlives its server. A final backup is never deleted by this kind: destroy relies on it (R13).

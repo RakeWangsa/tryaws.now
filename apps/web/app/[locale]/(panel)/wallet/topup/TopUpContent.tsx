@@ -125,7 +125,7 @@ export function TopUpContent({
             icon: "fas fa-headset",
           },
           {
-            href: localePath(locale, "/faq"),
+            href: localePath(locale, "/help"),
             title: t("help.faq"),
             description: t("help.faqBody"),
             icon: "fas fa-question-circle",

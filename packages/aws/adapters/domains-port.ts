@@ -3,11 +3,10 @@ import type { TldPrice } from "../catalog";
 
 // The part of Amazon Route 53 Domains that the domain adapter needs, as a port (WP7-T4).
 //
-// Route 53 Domains client not built: `@aws-sdk/client-route-53-domains` is not installed and could not be
-// installed offline, and a new dependency needs a recorded reason (R17). The real client (a later task,
-// "Needs decision" in JOURNEY) wraps it behind this interface and reaches the tc-dns account through STS
+// WPU-B2: the real client is `createRoute53DomainsPort` of ../domains-client.ts (dependency
+// `@aws-sdk/client-route-53-domains`, reason in JOURNEY, R17). It reaches the tc-dns account through STS
 // AssumeRole (TcDnsProvisioner for writes, TcDnsReader for reads; R3) in us-east-1, the only endpoint of
-// Route 53 Domains. Until then the adapter is tested against test/fake-domains.ts.
+// Route 53 Domains; the credentials come from the caller. The adapter is tested against test/fake-domains.ts.
 //
 // Rules for an implementation (VERIFY each against the current Route 53 Domains API reference):
 // - `checkAvailability` is CheckDomainAvailability. `AVAILABLE` is "available"; `UNAVAILABLE_PREMIUM` is
@@ -21,6 +20,7 @@ import type { TldPrice } from "../catalog";
 //   `DuplicateRequest`, which an implementation maps to an AwsError with code "conflict".
 // - `getOperationDetail` maps Status SUBMITTED / IN_PROGRESS / SUCCESSFUL / ERROR / FAILED. The message
 //   of AWS never leaves the implementation (U6).
+// - `updateNameServers` is UpdateDomainNameservers; it answers an operation that `getOperationDetail` follows.
 // - `renewDomain` is RenewDomain with `CurrentExpiryYear` read from GetDomainDetail.
 // - `getDomainDetail` is GetDomainDetail plus GetContactReachabilityStatus. A domain that this account
 //   does not hold is `null` (DomainNotFound is not an error here).
@@ -57,4 +57,9 @@ export interface DomainsPort {
   }): Promise<{ readonly operationId: string }>;
   getDomainDetail(name: string): Promise<DomainDetail | null>;
   resendContactReachabilityEmail(name: string): Promise<void>;
+  /** UpdateDomainNameservers: the servers are plain host names, lower case, no trailing dot. */
+  updateNameServers(
+    name: string,
+    servers: readonly string[],
+  ): Promise<{ readonly operationId: string }>;
 }

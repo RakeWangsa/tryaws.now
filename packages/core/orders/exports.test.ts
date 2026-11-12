@@ -114,7 +114,6 @@ const BEFORE = [
   "parseOtpCode",
   "parseSnapshot",
   "parseTopUpAmount",
-  "planRelease",
   "postTransaction",
   "previewChange",
   "previewPricing",
@@ -126,7 +125,6 @@ const BEFORE = [
   "quoteInForce",
   "readApprovalUntil",
   "recomputeUsed",
-  "releaseCapacity",
   "requiresApproval",
   "reserveCapacity",
   "resolveNeeds",
@@ -149,6 +147,19 @@ const BEFORE = [
   "validateRule",
   "walletBalance",
   "walletEntriesSum",
+];
+
+// WPU-B3: the stuck credit note, the usage writer and the scheduled polls.
+const B3 = [
+  "CREDIT_NOTE_STUCK_EVENT",
+  "CREDIT_NOTE_STUCK_HOURS",
+  "DB_PARAMETERS_STALE_HOURS",
+  "POLL_MAX_PAGES",
+  "POLL_PAGE",
+  "USAGE_METRICS",
+  "creditNoteIsStuck",
+  "planUsageWrites",
+  "runPolling",
 ];
 
 // The products seam that Task 9 adds to @tc/core.
@@ -227,13 +238,6 @@ const PRODUCTS = [
   "mapDbBlueprint",
   "mapDistributionBundle",
   "checkDiskSnapshotRestore",
-  // WPU-F1 (was missing from this list): the digit one helper
-  "BENGALI_DIGIT_FONT",
-  "BENGALI_DIGIT_ONE",
-  "DIGIT_ONE_CLASS",
-  "splitDigitOne",
-  "unwrapDigitOneHtml",
-  "wrapDigitOneHtml",
   "SNAPSHOT_PRICE_FAMILY",
   "snapshotPrice",
   // WPU-M1: the price of an unattached static IP
@@ -476,6 +480,11 @@ const DOMAINS = [
   "normalizeDomainName",
   "parseDomainConfig",
   "parseRegistrantContact",
+  "planDomainSync",
+  "NAME_SERVERS_MAX",
+  "NAME_SERVERS_MIN",
+  "parseNameServers",
+  "splitNameServers",
   "redactContact",
   "resolveDomain",
   "tldPolicyOf",
@@ -504,9 +513,28 @@ const PRICE_BOOK = [
   "validateBookTerms",
 ];
 
+// WPU-F1: the digit-one helper of the Bengali invoice and mail text (packages/core/invoices/digit-one.ts).
+const DIGIT_ONE = [
+  "BENGALI_DIGIT_FONT",
+  "BENGALI_DIGIT_ONE",
+  "DIGIT_ONE_CLASS",
+  "splitDigitOne",
+  "unwrapDigitOneHtml",
+  "wrapDigitOneHtml",
+];
+
 // WPU-G6: the DNS zone family (packages/core/dns/zone.ts) and the list of poolless families that the claim
 // and the step both read (operations/claim-rules.ts).
 const DNS_ZONE = [
+  // WPU-D4: the delegation rules and the job (packages/core/dns/delegation*.ts).
+  "DELEGATION_GRACE_AFTER_NOTICE_MS",
+  "DELEGATION_NOTICE_DAYS",
+  "DELEGATION_REMOVE_DAY",
+  "DNS_DELEGATION_LIMIT",
+  "delegationRemovalAt",
+  "delegationStep",
+  "nameServersMatch",
+  "runDnsDelegation",
   "DNS_ZONE_FLAG",
   "DNS_ZONE_PRODUCT",
   "DNS_ZONE_REGION",
@@ -530,6 +558,13 @@ const BILLING = [
   "parseBuyerSnapshot",
   // WPU-I4: reads the buyer of an invoice about to be issued, in the transaction of the issue.
   "readBuyerSnapshot",
+  // WPU-F1 (the digit one of the Bengali font; its merge did not update this list, WPU-B2 does).
+  "BENGALI_DIGIT_FONT",
+  "BENGALI_DIGIT_ONE",
+  "DIGIT_ONE_CLASS",
+  "splitDigitOne",
+  "unwrapDigitOneHtml",
+  "wrapDigitOneHtml",
 ];
 
 describe("the public surface of the order flow", () => {
@@ -568,7 +603,9 @@ describe("the public surface of the order flow", () => {
           ...ACCOUNT_OVERVIEW,
           ...PRICE_BOOK,
           ...DNS_ZONE,
+          ...DIGIT_ONE,
           ...BILLING,
+          ...B3,
         ]),
       ].sort(),
     );
@@ -592,5 +629,21 @@ describe("the public surface of the order flow", () => {
     expect(orders.CLIENT_KEY.test("0123456789abcdef")).toBe(true);
     expect(orders.CLIENT_KEY.test("short")).toBe(false);
     expect(typeof orders.makeOrders).toBe("function");
+  });
+});
+
+// WPU-B3: the release of capacity is worker code. It left the barrel (web and admin import it) for the
+// subpath `@tc/core/capacity-worker`; the two names were removed from BEFORE on purpose.
+describe("the worker-only subpath of the capacity release", () => {
+  it("is not in the barrel of @tc/core", () => {
+    expect("releaseCapacity" in core).toBe(false);
+    expect("planRelease" in core).toBe(false);
+  });
+  it("is in the subpath, which package.json exports", async () => {
+    const worker = await import("../capacity/worker");
+    expect(typeof worker.releaseCapacity).toBe("function");
+    expect(typeof worker.planRelease).toBe("function");
+    const pkg = (await import("../package.json", { with: { type: "json" } })).default;
+    expect(pkg.exports["./capacity-worker"]).toBe("./capacity/worker.ts");
   });
 });

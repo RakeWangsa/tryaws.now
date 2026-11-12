@@ -21,6 +21,9 @@ export { AwsError, toAwsError, toLogFields, type AwsLogFields, type LocalReason 
 export { QUEUE_URL_PATTERN, createSqsClient, createSqsSend, type SqsLike } from "./queue";
 export {
   CALLER_ROLES,
+  DNS_ROLES,
+  ROUTE53_REGION,
+  type DnsRole,
   LIGHTSAIL_REGIONS,
   type AccountRef,
   type Caller,
@@ -57,9 +60,16 @@ export {
   type WindowsPassword,
   type WindowsPasswordInput,
 } from "./adapters/windows-access";
+export {
+  fetchDatabasePassword,
+  type DatabasePassword,
+  type DatabasePasswordInput,
+} from "./adapters/database-access";
 export { createBucketAdapter, type BucketDeps } from "./adapters/bucket";
 export {
   createBucketAccessKey,
+  listBucketAccessKeys,
+  type BucketAccessKeyListed,
   type BucketAccessKey,
   type BucketAccessKeyInput,
 } from "./adapters/bucket-access";
@@ -99,6 +109,7 @@ export {
   type ZoneRecordView,
 } from "./adapters/dns-zone";
 export type { R53Change, R53RecordSet, R53Zone, Route53Port } from "./adapters/route53-port";
+export { createRoute53Port, type Route53Like } from "./adapters/route53-client";
 export {
   createDomainAdapter,
   renewDomainOnce,
@@ -113,3 +124,9 @@ export type {
   DomainOperationStatus,
   DomainsPort,
 } from "./adapters/domains-port";
+export {
+  createRoute53DomainsClient,
+  createRoute53DomainsPort,
+  type DomainsClientOptions,
+  type DomainsSender,
+} from "./domains-client";

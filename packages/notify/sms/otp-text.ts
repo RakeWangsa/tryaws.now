@@ -28,8 +28,8 @@ export function otpSmsText(
     throw new TypeError("otpSmsText: minutes must be an integer from 1 to 60");
   }
   if (locale === "en") {
-    return `TiCON Cloud verification code: ${code}. Valid for ${minutes} minutes. Do not share it.`;
+    return `MeghVPS verification code: ${code}. Valid for ${minutes} minutes. Do not share it.`;
   }
   const shown = numerals === "beng" ? toBengali(minutes) : String(minutes);
-  return `TiCON Cloud যাচাই কোড: ${code}। মেয়াদ ${shown} মিনিট। কাউকে জানাবেন না।`;
+  return `MeghVPS যাচাই কোড: ${code}। মেয়াদ ${shown} মিনিট। কাউকে জানাবেন না।`;
 }

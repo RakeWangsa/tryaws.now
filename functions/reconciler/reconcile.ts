@@ -3,6 +3,7 @@ import {
   dayKeyOf,
   findingId,
   planCapacityChecks,
+  planUsageWrites,
   recomputeUsed,
   staleOperations,
   type Clock,
@@ -10,7 +11,7 @@ import {
   type Logger,
   type RunTx,
 } from "@tc/core";
-import { currentDatabaseUser, reconcileRepo, type PoolAccountRef } from "@tc/db";
+import { currentDatabaseUser, meteringRepo, reconcileRepo, type PoolAccountRef } from "@tc/db";
 import type { InventoryFailure, InventoryPort } from "./inventory";
 
 // The nightly run (WP7-T6, spec 3, 10.2). It compares, reports and corrects nothing in AWS or in the
@@ -43,6 +44,10 @@ export interface ReconcileResult {
   readonly capacitySkipped: number;
   readonly capacityOverLimit: number;
   readonly capacityFailed: number;
+  /** WPU-B3: usage rows written (snapshot GB, transfer GB), samples dropped, accounts whose write failed. */
+  readonly usageWritten: number;
+  readonly usageSkipped: number;
+  readonly usageFailed: number;
   readonly staleOperations: number;
   /** True when something could not be read or checked: the answer is not "all clear". */
   readonly incomplete: boolean;
@@ -96,6 +101,9 @@ export async function runReconcile(deps: ReconcileDeps): Promise<ReconcileResult
     capacitySkipped: 0,
     capacityOverLimit: 0,
     capacityFailed: 0,
+    usageWritten: 0,
+    usageSkipped: 0,
+    usageFailed: 0,
   };
   const unreachable: ReconcileResult["unreachable"] = [];
 
@@ -116,7 +124,7 @@ export async function runReconcile(deps: ReconcileDeps): Promise<ReconcileResult
       unreachable.push({ poolAccountId: account.id, reason: read.reason });
       return;
     }
-    const { items, live } = read.value;
+    const { items, live, usage } = read.value;
 
     // The rows are read after AWS: a resource found in AWS has its row committed already.
     await runTx(async (tx) => {
@@ -138,6 +146,40 @@ export async function runReconcile(deps: ReconcileDeps): Promise<ReconcileResult
         else out.replayedFindings += 1;
       }
     });
+
+    // WPU-B3: the usage that AWS reported goes into usage_records, one transaction for the account. A
+    // failure leaves the account's usage as it was and makes the run incomplete (R16).
+    if (usage !== undefined && usage.length > 0) {
+      try {
+        const written = await runTx(async (tx) => {
+          const rows = await reconcileRepo(tx).resourcesOfAccount(account.id);
+          const plan = planUsageWrites(usage, rows, now);
+          const metering = meteringRepo(tx);
+          for (const w of plan.writes) {
+            await metering.upsertUsage(w.resourceId, w.metric, w.period, w.quantity);
+          }
+          return {
+            count: plan.writes.length,
+            skipped: Object.values(plan.skipped).reduce((a, b) => a + (b ?? 0), 0),
+            reasons: Object.keys(plan.skipped).sort().join(","),
+          };
+        });
+        out.usageWritten += written.count;
+        out.usageSkipped += written.skipped;
+        if (written.skipped > 0) {
+          log({
+            event: "reconcile_usage_skipped",
+            severity: "warn",
+            poolAccountId: account.id,
+            skipped: written.skipped,
+            reasons: written.reasons,
+          });
+        }
+      } catch {
+        out.usageFailed += 1;
+        log({ event: "reconcile_usage_failed", severity: "alert", poolAccountId: account.id });
+      }
+    }
 
     const capacityRows = await runTx((tx) => reconcileRepo(tx).capacityRows(account.id));
     const plan = planCapacityChecks(capacityRows, live);
@@ -201,7 +243,11 @@ export async function runReconcile(deps: ReconcileDeps): Promise<ReconcileResult
     });
   }
 
-  const incomplete = unreachable.length > 0 || out.capacitySkipped > 0 || out.capacityFailed > 0;
+  const incomplete =
+    unreachable.length > 0 ||
+    out.capacitySkipped > 0 ||
+    out.capacityFailed > 0 ||
+    out.usageFailed > 0;
   if (out.orphans + out.missing > 0) {
     log({
       event: "reconcile_findings",
@@ -221,6 +267,7 @@ export async function runReconcile(deps: ReconcileDeps): Promise<ReconcileResult
       reasons: [...new Set(unreachable.map((u) => u.reason))].sort().join(","),
       capacitySkipped: out.capacitySkipped,
       capacityFailed: out.capacityFailed,
+      usageFailed: out.usageFailed,
     });
   } else {
     log({ event: "reconcile_ok", severity: "info", dayKey, accounts: accounts.length });

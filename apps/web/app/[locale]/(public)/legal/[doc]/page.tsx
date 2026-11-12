@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isLegalDoc } from "../../../../../server/public/indexing.ts";
 import { publicCatalog, publicOrigin, requestNonce } from "../../../../../server/public/load.ts";
+import { publicSignedIn } from "../../../../../server/public/signed-in.ts";
 import { pageMetadata } from "../../../../../server/public/seo.ts";
 import { PublicFrame } from "../../_components/PublicFrame.tsx";
 import { localeOf, menuOf } from "../../_components/page.ts";
@@ -29,9 +30,13 @@ export default async function LegalPage({ params }: Props) {
   const { doc } = await params;
   if (!isLegalDoc(doc)) notFound();
   const locale = await localeOf(params);
-  const [catalog, nonce] = await Promise.all([publicCatalog(), requestNonce()]);
+  const [catalog, nonce, signedIn] = await Promise.all([
+    publicCatalog(),
+    requestNonce(),
+    publicSignedIn(),
+  ]);
   return (
-    <PublicFrame locale={locale} path={`/legal/${doc}`} {...menuOf(catalog)}>
+    <PublicFrame signedIn={signedIn} locale={locale} path={`/legal/${doc}`} {...menuOf(catalog)}>
       <LegalContent locale={locale} doc={doc} origin={publicOrigin()} nonce={nonce} />
     </PublicFrame>
   );

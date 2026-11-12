@@ -201,10 +201,14 @@ export async function setRunningCore(
   const start = run === "start";
   return frame(
     deps,
-    { destructive: false, limits: FAMILY_WRITE_LIMIT(spec.prefix) },
+    {
+      destructive: false,
+      limits: FAMILY_WRITE_LIMIT(spec.prefix),
+      own: { family: spec.family, id },
+    },
     parseOf(bad),
-    async (repos) => {
-      const row = await ownResource(repos, spec.family, id);
+    async (repos, _session, owned) => {
+      const row = owned ?? (await ownResource(repos, spec.family, id));
       if (row.state !== (start ? "stopped" : "active")) throw new Refusal("not_allowed");
       const written = await repos.operations.request({
         resourceId: row.id,
@@ -236,10 +240,14 @@ export async function destroyFamilyCore(
   const typed = typeof input["confirmName"] === "string" ? input["confirmName"] : "";
   return frame(
     deps,
-    { destructive: true, limits: FAMILY_DESTROY_LIMIT(spec.prefix) },
+    {
+      destructive: true,
+      limits: FAMILY_DESTROY_LIMIT(spec.prefix),
+      own: { family: spec.family, id },
+    },
     parseOf(bad),
-    async (repos) => {
-      const row = await ownResource(repos, spec.family, id);
+    async (repos, _session, owned) => {
+      const row = owned ?? (await ownResource(repos, spec.family, id));
       if (!LIVE_STATES.includes(row.state)) throw new Refusal("not_allowed");
       const name = nameOf(row.config, spec.nameKey);
       if (name === "" || typed !== name) throw new Refusal("name_mismatch");

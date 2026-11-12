@@ -2,7 +2,7 @@ import type { TemplateId } from "../queue/types";
 
 // The texts of the 22 messages, Bengali first. Two typed catalogs: a missing key is a type error,
 // and test/templates.test.ts checks every placeholder, the SMS length and the forbidden forms
-// (16.16: "AWS Lightsail"). Placeholders are plain `{name}`. Wording: TiCON Cloud sells, bills and
+// (16.16: "AWS Lightsail"). Placeholders are plain `{name}`. Wording: MeghVPS sells, bills and
 // supports; AWS is named only in the footer statements of 16.13, which are used unchanged.
 
 export interface TemplateText {
@@ -36,11 +36,11 @@ const ADDRESS =
 
 export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
   bn: {
-    wordmark: "TiCON Cloud",
+    wordmark: "MeghVPS",
     awsShort: "১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
     trademark: TRADEMARK,
     address: ADDRESS,
-    footerNote: "এই বার্তাটি আপনার TiCON Cloud অ্যাকাউন্টের জন্য পাঠানো হয়েছে।",
+    footerNote: "এই বার্তাটি আপনার MeghVPS অ্যাকাউন্টের জন্য পাঠানো হয়েছে।",
     cta: {
       open_panel: "প্যানেল খুলুন",
       kyc: "KYC দেখুন",
@@ -54,6 +54,9 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       top_up: "টপ আপ করুন",
       security: "নিরাপত্তা সেটিং",
       open_domain: "ডোমেইন দেখুন",
+      open_support: "সাপোর্ট পেজ খুলুন",
+      open_dns: "ডিএনএস পেজ খুলুন",
+      order_now: "এখনই অর্ডার করুন",
     },
     products: {
       instance: "ক্লাউড সার্ভার",
@@ -75,11 +78,11 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
     },
   },
   en: {
-    wordmark: "TiCON Cloud",
+    wordmark: "MeghVPS",
     awsShort: "100% AWS infrastructure. Built on Amazon Lightsail.",
     trademark: TRADEMARK,
     address: ADDRESS,
-    footerNote: "This message was sent for your TiCON Cloud account.",
+    footerNote: "This message was sent for your MeghVPS account.",
     cta: {
       open_panel: "Open the panel",
       kyc: "View KYC",
@@ -93,6 +96,9 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       top_up: "Top up",
       security: "Security settings",
       open_domain: "View domain",
+      open_support: "Open the support page",
+      open_dns: "Open the DNS page",
+      order_now: "Order now",
     },
     products: {
       instance: "Cloud Server",
@@ -128,7 +134,7 @@ const SECURITY_BN = (what: string, sms: string): TemplateText => ({
 
 export const BN: Catalog = {
   welcome: {
-    subject: "TiCON Cloud-এ স্বাগতম",
+    subject: "MeghVPS-এ স্বাগতম",
     headline: "স্বাগতম",
     body: [
       "আপনার অ্যাকাউন্ট প্রস্তুত।",
@@ -144,7 +150,7 @@ export const BN: Catalog = {
     subject: "আপনার KYC অনুমোদিত হয়েছে",
     headline: "KYC অনুমোদিত",
     body: ["আপনার KYC যাচাই সম্পন্ন হয়েছে। এখন আপনি রিসোর্স কিনতে পারবেন।"],
-    sms: "TiCON Cloud: আপনার KYC অনুমোদিত হয়েছে। এখন রিসোর্স কিনতে পারবেন।",
+    sms: "MeghVPS: আপনার KYC অনুমোদিত হয়েছে। এখন রিসোর্স কিনতে পারবেন।",
   },
   kyc_rejected: {
     subject: "আপনার KYC গ্রহণ করা যায়নি",
@@ -188,7 +194,7 @@ export const BN: Catalog = {
     subject: "আপনার {product} প্রস্তুত",
     headline: "রিসোর্স প্রস্তুত",
     body: ["{name} ({product}) প্রস্তুত।", "লোকেশন: {region}", "ঠিকানা: {address}"],
-    sms: "TiCON Cloud: আপনার {product} প্রস্তুত। ঠিকানা: {address}",
+    sms: "MeghVPS: আপনার {product} প্রস্তুত। ঠিকানা: {address}",
   },
   renewal_reminder: {
     subject: "{days} দিন পর রিনিউ",
@@ -198,7 +204,7 @@ export const BN: Catalog = {
       "রিনিউয়ের পরিমাণ: {amount}। ওয়ালেট ব্যালেন্স: {balance}।",
       "{note}",
     ],
-    sms: "TiCON Cloud: {name} কাল ({date}) শেষ হচ্ছে। রিনিউ {amount}, ব্যালেন্স {balance}।",
+    sms: "MeghVPS: {name} কাল ({date}) শেষ হচ্ছে। রিনিউ {amount}, ব্যালেন্স {balance}।",
     extra: {
       auto_on: "স্বয়ংক্রিয় রিনিউ চালু আছে। ওয়ালেটে যথেষ্ট টাকা রাখুন।",
       auto_off: "স্বয়ংক্রিয় রিনিউ বন্ধ আছে। মেয়াদের মধ্যে নিজে রিনিউ করুন।",
@@ -220,7 +226,7 @@ export const BN: Catalog = {
       "{until} পর্যন্ত রিনিউ করলে সব আগের মতো চলবে। এরপর রিসোর্স মুছে যাবে।",
       "রিনিউয়ের পরিমাণ: {amount}। ওয়ালেট ব্যালেন্স: {balance}।",
     ],
-    sms: "TiCON Cloud: {name} স্থগিত। {until} এর মধ্যে রিনিউ ({amount}) না করলে মুছে যাবে।",
+    sms: "MeghVPS: {name} স্থগিত। {until} এর মধ্যে রিনিউ ({amount}) না করলে মুছে যাবে।",
   },
   resource_destroyed: {
     subject: "রিসোর্স মুছে গেছে, {kept} রাখা আছে",
@@ -229,7 +235,7 @@ export const BN: Catalog = {
       "{name} মুছে ফেলা হয়েছে। আপনার {kept} {until} পর্যন্ত রাখা হবে।",
       "এর মধ্যে রিস্টোর করতে পারবেন।",
     ],
-    sms: "TiCON Cloud: {name} মুছে গেছে। {kept} {until} পর্যন্ত রিস্টোর করতে পারবেন।",
+    sms: "MeghVPS: {name} মুছে গেছে। {kept} {until} পর্যন্ত রিস্টোর করতে পারবেন।",
     extra: { backup: "ব্যাকআপ", settings: "সেটিং" },
   },
   backups_purged: {
@@ -256,23 +262,23 @@ export const BN: Catalog = {
   },
   security_new_sign_in: SECURITY_BN(
     "নতুন সাইন-ইন",
-    "TiCON Cloud: আপনার অ্যাকাউন্টে নতুন সাইন-ইন হয়েছে। আপনি না হলে এখনই পাসওয়ার্ড বদলান।",
+    "MeghVPS: আপনার অ্যাকাউন্টে নতুন সাইন-ইন হয়েছে। আপনি না হলে এখনই পাসওয়ার্ড বদলান।",
   ),
   security_password_changed: SECURITY_BN(
     "পাসওয়ার্ড পরিবর্তন",
-    "TiCON Cloud: আপনার পাসওয়ার্ড বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
+    "MeghVPS: আপনার পাসওয়ার্ড বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
   security_totp_changed: SECURITY_BN(
     "TOTP সেটিং পরিবর্তন",
-    "TiCON Cloud: আপনার TOTP সেটিং বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
+    "MeghVPS: আপনার TOTP সেটিং বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
   security_email_changed: SECURITY_BN(
     "ইমেইল ঠিকানা পরিবর্তন",
-    "TiCON Cloud: আপনার ইমেইল ঠিকানা বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
+    "MeghVPS: আপনার ইমেইল ঠিকানা বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
   security_phone_changed: SECURITY_BN(
     "ফোন নম্বর পরিবর্তন",
-    "TiCON Cloud: আপনার ফোন নম্বর বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
+    "MeghVPS: আপনার ফোন নম্বর বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
   domain_contact_pending: {
     subject: "ডোমেইন {domain}: যোগাযোগ যাচাই বাকি",
@@ -289,7 +295,33 @@ export const BN: Catalog = {
       "{domain} এর মেয়াদ {date} তারিখে শেষ হবে ({days} দিন বাকি)।",
       "রিনিউ না করলে ডোমেইনটি হারাতে পারেন।",
     ],
-    sms: "TiCON Cloud: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। রিনিউ করুন।",
+    sms: "MeghVPS: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। রিনিউ করুন।",
+  },
+  support_reply: {
+    subject: "আপনার সাপোর্ট অনুরোধের উত্তর",
+    headline: "সাপোর্টের উত্তর",
+    body: [
+      "MeghVPS সাপোর্ট আপনার অনুরোধের উত্তর দিয়েছে:",
+      "{message}",
+      "আরও সাহায্য লাগলে প্যানেলের সাপোর্ট পেজে জানান।",
+    ],
+  },
+  dns_delegation_notice: {
+    subject: "ডিএনএস জোন {domain}: নেমসার্ভার এখনো বদলানো হয়নি",
+    headline: "ডিএনএস জোন কাজ করছে না",
+    body: [
+      "{domain} এর ডিএনএস জোন তৈরি হয়েছে {days} দিন হলো, কিন্তু ডোমেইনের নেমসার্ভার এখনো এই জোনে পয়েন্ট করা নেই।",
+      "ডোমেইনের রেজিস্ট্রারের প্যানেলে গিয়ে {domain} এর নেমসার্ভার বদলে ডিএনএস পেজে দেখানো নেমসার্ভারগুলো দিন।",
+      "{date} তারিখের মধ্যে বদলানো না হলে জোনটি মুছে ফেলা হবে।",
+    ],
+  },
+  waitlist_capacity_available: {
+    subject: "{product}: এখন জায়গা আছে",
+    headline: "অপেক্ষার তালিকা: জায়গা খালি হয়েছে",
+    body: [
+      "আপনি {product} এর জন্য অপেক্ষায় ছিলেন। {region} লোকেশনে এখন জায়গা খালি হয়েছে।",
+      "এই জায়গা আপনার জন্য আলাদা করে রাখা হয়নি। অন্য কেউ আগে অর্ডার করলে ভরে যেতে পারে, তাই দেরি না করে অর্ডার করুন।",
+    ],
   },
 };
 
@@ -306,7 +338,7 @@ const SECURITY_EN = (what: string, subject: string, sms: string): TemplateText =
 
 export const EN: Catalog = {
   welcome: {
-    subject: "Welcome to TiCON Cloud",
+    subject: "Welcome to MeghVPS",
     headline: "Welcome",
     body: [
       "Your account is ready.",
@@ -322,7 +354,7 @@ export const EN: Catalog = {
     subject: "Your KYC is approved",
     headline: "KYC approved",
     body: ["Your KYC check is complete. You can now buy resources."],
-    sms: "TiCON Cloud: your KYC is approved. You can now buy resources.",
+    sms: "MeghVPS: your KYC is approved. You can now buy resources.",
   },
   kyc_rejected: {
     subject: "Your KYC could not be accepted",
@@ -366,7 +398,7 @@ export const EN: Catalog = {
     subject: "Your {product} is ready",
     headline: "Resource ready",
     body: ["{name} ({product}) is ready.", "Location: {region}", "Address: {address}"],
-    sms: "TiCON Cloud: your {product} is ready. Address: {address}",
+    sms: "MeghVPS: your {product} is ready. Address: {address}",
   },
   renewal_reminder: {
     subject: "Renews in {days} days",
@@ -376,7 +408,7 @@ export const EN: Catalog = {
       "Renewal amount: {amount}. Wallet balance: {balance}.",
       "{note}",
     ],
-    sms: "TiCON Cloud: {name} ends tomorrow ({date}). Renewal {amount}, balance {balance}.",
+    sms: "MeghVPS: {name} ends tomorrow ({date}). Renewal {amount}, balance {balance}.",
     extra: {
       auto_on: "Automatic renewal is on. Keep enough money in your wallet.",
       auto_off: "Automatic renewal is off. Renew yourself before it ends.",
@@ -398,7 +430,7 @@ export const EN: Catalog = {
       "Renew by {until} and everything runs as before. After that the resource is deleted.",
       "Renewal amount: {amount}. Wallet balance: {balance}.",
     ],
-    sms: "TiCON Cloud: {name} is suspended. Renew ({amount}) by {until} or it is deleted.",
+    sms: "MeghVPS: {name} is suspended. Renew ({amount}) by {until} or it is deleted.",
   },
   resource_destroyed: {
     subject: "Resource deleted, {kept} kept",
@@ -407,7 +439,7 @@ export const EN: Catalog = {
       "{name} was deleted. Your {kept} is kept until {until}.",
       "You can restore it until then.",
     ],
-    sms: "TiCON Cloud: {name} was deleted. You can restore the {kept} until {until}.",
+    sms: "MeghVPS: {name} was deleted. You can restore the {kept} until {until}.",
     extra: { backup: "backup", settings: "settings" },
   },
   backups_purged: {
@@ -435,27 +467,27 @@ export const EN: Catalog = {
   security_new_sign_in: SECURITY_EN(
     "A new sign-in to your account was seen",
     "new sign-in",
-    "TiCON Cloud: a new sign-in to your account. If it was not you, change your password now.",
+    "MeghVPS: a new sign-in to your account. If it was not you, change your password now.",
   ),
   security_password_changed: SECURITY_EN(
     "Your password was changed",
     "password changed",
-    "TiCON Cloud: your password was changed. If it was not you, tell support now.",
+    "MeghVPS: your password was changed. If it was not you, tell support now.",
   ),
   security_totp_changed: SECURITY_EN(
     "Your TOTP setting was changed",
     "TOTP changed",
-    "TiCON Cloud: your TOTP setting was changed. If it was not you, tell support now.",
+    "MeghVPS: your TOTP setting was changed. If it was not you, tell support now.",
   ),
   security_email_changed: SECURITY_EN(
     "Your email address was changed",
     "email changed",
-    "TiCON Cloud: your email address was changed. If it was not you, tell support now.",
+    "MeghVPS: your email address was changed. If it was not you, tell support now.",
   ),
   security_phone_changed: SECURITY_EN(
     "Your phone number was changed",
     "phone changed",
-    "TiCON Cloud: your phone number was changed. If it was not you, tell support now.",
+    "MeghVPS: your phone number was changed. If it was not you, tell support now.",
   ),
   domain_contact_pending: {
     subject: "Domain {domain}: contact verification pending",
@@ -472,6 +504,32 @@ export const EN: Catalog = {
       "{domain} ends on {date} ({days} days left).",
       "If you do not renew, you can lose the domain.",
     ],
-    sms: "TiCON Cloud: {domain} ends in {days} days ({date}). Renew it.",
+    sms: "MeghVPS: {domain} ends in {days} days ({date}). Renew it.",
+  },
+  support_reply: {
+    subject: "Reply to your support request",
+    headline: "Reply from support",
+    body: [
+      "MeghVPS support has answered your request:",
+      "{message}",
+      "If you need more help, tell us on the support page of the panel.",
+    ],
+  },
+  dns_delegation_notice: {
+    subject: "DNS zone {domain}: name servers not changed yet",
+    headline: "Your DNS zone is not in use",
+    body: [
+      "The DNS zone for {domain} was created {days} days ago, but the name servers of the domain still do not point to it.",
+      "At the registrar of the domain, change the name servers of {domain} to the name servers shown on the DNS page.",
+      "If this is not done by {date}, the zone will be removed.",
+    ],
+  },
+  waitlist_capacity_available: {
+    subject: "{product}: space is available now",
+    headline: "Waitlist: space is available",
+    body: [
+      "You were waiting for a {product}. There is space in {region} now.",
+      "This space is not held for you. It can fill up if someone else orders first, so order soon.",
+    ],
   },
 };

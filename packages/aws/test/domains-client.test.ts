@@ -1,0 +1,335 @@
+import { describe, expect, it } from "vitest";
+import { AwsError } from "../errors";
+import { createRoute53DomainsPort, type DomainsSender } from "../domains-client";
+
+// WPU-B2: the Route 53 Domains client behind DomainsPort. No AWS call is made: a fake sender answers by the
+// name of the command. The field names are those of @aws-sdk/client-route-53-domains 3.1166.0 (VERIFY
+// against the first real answer in tc-dns, JOURNEY).
+
+type Handler = (input: Record<string, unknown>) => unknown;
+
+function sender(handlers: Record<string, Handler>) {
+  const calls: { name: string; input: Record<string, unknown> }[] = [];
+  const fake: DomainsSender = {
+    async send(command) {
+      const name = (command as { constructor: { name: string } }).constructor.name;
+      const input = (command as { input: Record<string, unknown> }).input;
+      calls.push({ name, input });
+      const handler = handlers[name];
+      if (handler === undefined) throw new Error(`no handler for ${name}`);
+      return handler(input);
+    },
+  };
+  return { fake, calls };
+}
+
+function awsFailure(name: string, status = 400, message = "secret detail 123456789012") {
+  return Object.assign(new Error(message), { name, $metadata: { httpStatusCode: status } });
+}
+
+const CONTACT = {
+  contactType: "PERSON" as const,
+  firstName: "Rahim",
+  lastName: "Uddin",
+  email: "rahim@example.com",
+  phoneNumber: "+880.1712345678",
+  addressLine1: "House 1, Road 2",
+  city: "Dhaka",
+  state: "Dhaka",
+  countryCode: "BD",
+  zipCode: "1212",
+};
+
+describe("checkAvailability", () => {
+  const words: [string | undefined, string][] = [
+    ["AVAILABLE", "available"],
+    ["UNAVAILABLE_PREMIUM", "premium"],
+    ["UNAVAILABLE", "unavailable"],
+    ["RESERVED", "unavailable"],
+    ["UNAVAILABLE_RESTRICTED", "unavailable"],
+    ["AVAILABLE_RESERVED", "unavailable"],
+    ["AVAILABLE_PREORDER", "unavailable"],
+    ["DONT_KNOW", "unknown"],
+    ["SOMETHING_NEW", "unknown"],
+    [undefined, "unknown"],
+  ];
+  for (const [aws, ours] of words) {
+    it(`${String(aws)} is ${ours}`, async () => {
+      const { fake, calls } = sender({
+        CheckDomainAvailabilityCommand: () => ({ Availability: aws }),
+      });
+      expect(await createRoute53DomainsPort(fake).checkAvailability("shop.com")).toBe(ours);
+      expect(calls[0]?.input).toEqual({ DomainName: "shop.com" });
+    });
+  }
+});
+
+describe("listPrices", () => {
+  it("follows NextPageMarker to the end and parses every page", async () => {
+    const pages = [
+      {
+        Prices: [
+          {
+            Name: "com",
+            RegistrationPrice: { Price: 15, Currency: "USD" },
+            RenewalPrice: { Price: 15, Currency: "USD" },
+          },
+        ],
+        NextPageMarker: "m1",
+      },
+      { Prices: [{ Name: "net", RegistrationPrice: { Price: 18, Currency: "USD" } }] },
+    ];
+    let i = 0;
+    const { fake, calls } = sender({ ListPricesCommand: () => pages[i++] });
+    const prices = await createRoute53DomainsPort(fake).listPrices();
+    expect(prices.map((p) => p.tld)).toEqual(["com", "net"]);
+    expect(calls.map((c) => c.input["Marker"])).toEqual([undefined, "m1"]);
+  });
+
+  it("stops a marker that never ends (R16)", async () => {
+    const { fake } = sender({
+      ListPricesCommand: () => ({ Prices: [], NextPageMarker: "again" }),
+    });
+    await expect(createRoute53DomainsPort(fake).listPrices()).rejects.toMatchObject({
+      reason: "catalog_pages_exceeded",
+    });
+  });
+
+  it("refuses an answer that is not a page", async () => {
+    const { fake } = sender({ ListPricesCommand: () => ({}) });
+    await expect(createRoute53DomainsPort(fake).listPrices()).rejects.toBeInstanceOf(AwsError);
+  });
+});
+
+describe("registerDomain", () => {
+  it("sends the same contact three times, privacy on, no auto renew, and returns the operation id", async () => {
+    const { fake, calls } = sender({ RegisterDomainCommand: () => ({ OperationId: "op-123" }) });
+    const result = await createRoute53DomainsPort(fake).registerDomain({
+      name: "shop.com",
+      years: 1,
+      contact: CONTACT,
+    });
+    expect(result).toEqual({ operationId: "op-123" });
+    const input = calls[0]?.input ?? {};
+    expect(input).toMatchObject({
+      DomainName: "shop.com",
+      DurationInYears: 1,
+      AutoRenew: false,
+      PrivacyProtectAdminContact: true,
+      PrivacyProtectRegistrantContact: true,
+      PrivacyProtectTechContact: true,
+    });
+    expect(input["AdminContact"]).toEqual(input["RegistrantContact"]);
+    expect(input["TechContact"]).toEqual(input["RegistrantContact"]);
+    expect(input["RegistrantContact"]).toMatchObject({
+      ContactType: "PERSON",
+      FirstName: "Rahim",
+      Email: "rahim@example.com",
+      PhoneNumber: "+880.1712345678",
+      CountryCode: "BD",
+    });
+  });
+
+  it("maps DuplicateRequest to a conflict that carries no AWS text", async () => {
+    const { fake } = sender({
+      RegisterDomainCommand: () => {
+        throw awsFailure("DuplicateRequest");
+      },
+    });
+    const error = await createRoute53DomainsPort(fake)
+      .registerDomain({ name: "shop.com", years: 1, contact: CONTACT })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AwsError);
+    expect(error).toMatchObject({ code: "conflict", operation: "RegisterDomain" });
+    expect(JSON.stringify(error)).not.toContain("secret detail");
+    expect((error as Error).message).not.toContain("secret detail");
+  });
+
+  it("refuses an answer without an operation id", async () => {
+    const { fake } = sender({ RegisterDomainCommand: () => ({}) });
+    await expect(
+      createRoute53DomainsPort(fake).registerDomain({
+        name: "shop.com",
+        years: 1,
+        contact: CONTACT,
+      }),
+    ).rejects.toBeInstanceOf(AwsError);
+  });
+});
+
+describe("getOperationDetail", () => {
+  const words: [string, string][] = [
+    ["SUBMITTED", "in_progress"],
+    ["IN_PROGRESS", "in_progress"],
+    ["SUCCESSFUL", "successful"],
+    ["ERROR", "failed"],
+    ["FAILED", "failed"],
+  ];
+  for (const [aws, ours] of words) {
+    it(`${aws} is ${ours}, and the message of AWS is dropped`, async () => {
+      const { fake } = sender({
+        GetOperationDetailCommand: () => ({ Status: aws, Message: "private text" }),
+      });
+      const detail = await createRoute53DomainsPort(fake).getOperationDetail("op-1");
+      expect(detail).toEqual({ status: ours });
+    });
+  }
+
+  it("an unknown or missing status fails closed", async () => {
+    for (const body of [{ Status: "NEW_WORD" }, {}]) {
+      const { fake } = sender({ GetOperationDetailCommand: () => body });
+      await expect(createRoute53DomainsPort(fake).getOperationDetail("op-1")).rejects.toMatchObject(
+        {
+          code: "upstream_unavailable",
+        },
+      );
+    }
+  });
+});
+
+describe("renewDomain", () => {
+  it("sends the expiry year the caller read, so a repeat after a success is refused by Route 53", async () => {
+    const { fake, calls } = sender({ RenewDomainCommand: () => ({ OperationId: "op-9" }) });
+    expect(
+      await createRoute53DomainsPort(fake).renewDomain({
+        name: "shop.com",
+        years: 1,
+        currentExpiryYear: 2031,
+      }),
+    ).toEqual({ operationId: "op-9" });
+    expect(calls[0]?.input).toEqual({
+      DomainName: "shop.com",
+      DurationInYears: 1,
+      CurrentExpiryYear: 2031,
+    });
+  });
+});
+
+describe("getDomainDetail", () => {
+  const detail = {
+    DomainName: "Shop.com",
+    ExpirationDate: new Date("2031-01-01T00:00:00.000Z"),
+    Nameservers: [{ Name: "NS-1.awsdns-01.org." }, { Name: "ns-2.awsdns-02.net" }],
+  };
+
+  it("joins GetDomainDetail and GetContactReachabilityStatus, in plain form", async () => {
+    const { fake, calls } = sender({
+      GetDomainDetailCommand: () => detail,
+      GetContactReachabilityStatusCommand: () => ({ status: "PENDING" }),
+    });
+    expect(await createRoute53DomainsPort(fake).getDomainDetail("shop.com")).toEqual({
+      name: "shop.com",
+      expiresAt: new Date("2031-01-01T00:00:00.000Z"),
+      nameServers: ["ns-1.awsdns-01.org", "ns-2.awsdns-02.net"],
+      reachability: "pending",
+    });
+    expect(calls.map((c) => c.name)).toEqual([
+      "GetDomainDetailCommand",
+      "GetContactReachabilityStatusCommand",
+    ]);
+  });
+
+  it("maps DONE, EXPIRED and everything else", async () => {
+    for (const [aws, ours] of [
+      ["DONE", "done"],
+      ["EXPIRED", "expired"],
+      ["WHAT", "unknown"],
+    ] as const) {
+      const { fake } = sender({
+        GetDomainDetailCommand: () => detail,
+        GetContactReachabilityStatusCommand: () => ({ status: aws }),
+      });
+      expect((await createRoute53DomainsPort(fake).getDomainDetail("shop.com"))?.reachability).toBe(
+        ours,
+      );
+    }
+  });
+
+  it("a status call that fails leaves the reachability unknown, never done (R16)", async () => {
+    const { fake } = sender({
+      GetDomainDetailCommand: () => detail,
+      GetContactReachabilityStatusCommand: () => {
+        throw awsFailure("InvalidInput");
+      },
+    });
+    expect((await createRoute53DomainsPort(fake).getDomainDetail("shop.com"))?.reachability).toBe(
+      "unknown",
+    );
+  });
+
+  it("a domain that this account does not hold is null (InvalidInput), another failure is thrown", async () => {
+    const missing = sender({
+      GetDomainDetailCommand: () => {
+        throw awsFailure("InvalidInput");
+      },
+    });
+    expect(await createRoute53DomainsPort(missing.fake).getDomainDetail("none.com")).toBeNull();
+    const down = sender({
+      GetDomainDetailCommand: () => {
+        throw awsFailure("ServiceUnavailable", 503);
+      },
+    });
+    await expect(
+      createRoute53DomainsPort(down.fake).getDomainDetail("none.com"),
+    ).rejects.toMatchObject({ code: "upstream_unavailable" });
+  });
+
+  it("an answer without name servers or with a malformed one is refused", async () => {
+    for (const bad of [
+      { ...detail, Nameservers: [{ Name: "bad host" }] },
+      { ...detail, Nameservers: undefined },
+      { ...detail, ExpirationDate: "tomorrow" },
+    ]) {
+      const { fake } = sender({
+        GetDomainDetailCommand: () => bad,
+        GetContactReachabilityStatusCommand: () => ({ status: "DONE" }),
+      });
+      await expect(
+        createRoute53DomainsPort(fake).getDomainDetail("shop.com"),
+      ).rejects.toBeInstanceOf(AwsError);
+    }
+  });
+});
+
+describe("resendContactReachabilityEmail and updateNameServers", () => {
+  it("resends for the name", async () => {
+    const { fake, calls } = sender({ ResendContactReachabilityEmailCommand: () => ({}) });
+    await createRoute53DomainsPort(fake).resendContactReachabilityEmail("shop.com");
+    expect(calls[0]?.input).toEqual({ domainName: "shop.com" });
+  });
+
+  it("sends the name servers as {Name} and returns the operation id", async () => {
+    const { fake, calls } = sender({
+      UpdateDomainNameserversCommand: () => ({ OperationId: "op-5" }),
+    });
+    expect(
+      await createRoute53DomainsPort(fake).updateNameServers("shop.com", [
+        "ns1.example.net",
+        "ns2.example.net",
+      ]),
+    ).toEqual({ operationId: "op-5" });
+    expect(calls[0]?.input).toEqual({
+      DomainName: "shop.com",
+      Nameservers: [{ Name: "ns1.example.net" }, { Name: "ns2.example.net" }],
+    });
+  });
+
+  it("maps a refused change to a conflict and a domain that is not ours to not_found", async () => {
+    const conflict = sender({
+      UpdateDomainNameserversCommand: () => {
+        throw awsFailure("OperationLimitExceeded");
+      },
+    });
+    await expect(
+      createRoute53DomainsPort(conflict.fake).updateNameServers("shop.com", ["a.example.net"]),
+    ).rejects.toMatchObject({ code: "conflict" });
+    const gone = sender({
+      ResendContactReachabilityEmailCommand: () => {
+        throw awsFailure("InvalidInput");
+      },
+    });
+    await expect(
+      createRoute53DomainsPort(gone.fake).resendContactReachabilityEmail("shop.com"),
+    ).rejects.toMatchObject({ code: "not_found" });
+  });
+});

@@ -59,6 +59,18 @@ export const f = {
       const t = v.trim();
       return t.length >= 1 && t.length <= max && !hasForbiddenChar(t) ? t : bad(n);
     }),
+  // WPU-D4: text written by an admin for a customer (a support reply). Line breaks are kept (CRLF
+  // becomes LF); every other control, zero-width and bidirectional-override character is refused.
+  multiline: (max: number): Field =>
+    make((v, n) => {
+      if (typeof v !== "string") return bad(n);
+      const t = v.replaceAll("\r\n", "\n").trim();
+      return t.length >= 1 && t.length <= max && !hasForbiddenChar(t.replaceAll("\n", ""))
+        ? t
+        : bad(n);
+    }),
+  // WPU-D4: a plain machine key such as a product family ("linux_instance").
+  key: matching(/^[a-z][a-z0-9_]{0,39}$/, 40),
   // 16.13: 1 to 40 characters, letters, digits, hyphen. Bengali needs the marks (vowel signs).
   label: matching(/^[\p{L}\p{M}\p{N}-]{1,40}$/u, 40),
   bool: make((v, n) => (typeof v === "boolean" ? v : bad(n))),

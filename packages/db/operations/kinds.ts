@@ -57,7 +57,18 @@ export const OPERATION_KINDS = [
   "replace_certificate",
   "set_db_parameters",
   "read_db_parameters",
+  // WPU-B2: the domain actions. `renew_domain` is enqueued by the lifecycle only (money; the renewal price rule
+  // is open); the other two change no money and delete nothing.
+  "renew_domain",
+  "resend_verification",
+  "set_name_servers",
   "reject_operation",
+  // WPU-B3 (10.1): the removal of what a failed create already made in AWS. Queued by the automatic
+  // reversal, never requested by a customer. It runs the destroy method of the adapter (a name that
+  // is not found is success), but the guard asks for a failed resource with an ended subscription
+  // instead of a final snapshot: nothing of the customer's was ever there. Destructive: admin approval
+  // until the end date of R13.
+  "cleanup_failed_create",
 ] as const;
 
 export type OperationKind = (typeof OPERATION_KINDS)[number];
@@ -130,7 +141,11 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   replace_certificate: info("action", false, true),
   set_db_parameters: info("action", false, true),
   read_db_parameters: info("action", false, true),
+  renew_domain: info("action", false, false),
+  resend_verification: info("action", false, true),
+  set_name_servers: info("action", false, true),
   reject_operation: info("engine", false, false),
+  cleanup_failed_create: info("destroy", true, false),
 };
 
 export function isOperationKind(value: unknown): value is OperationKind {

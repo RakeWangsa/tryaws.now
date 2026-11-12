@@ -388,6 +388,7 @@ export const serversEn: Same<typeof serversBn> = {
       delayed: "Your order is delayed. Support is looking into it. You do not need to do anything.",
       failed:
         "The {noun} could not be created. The amount you paid is returned to your wallet automatically. The refund line shows in your wallet transactions.",
+      refunded: "Returned to your wallet:",
       wallet: "View wallet",
       notFound: {
         title: "Order not found",

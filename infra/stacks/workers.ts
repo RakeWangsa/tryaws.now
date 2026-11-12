@@ -88,11 +88,16 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
   if (spec.dir === "provisioner") {
     // C.5: required stack configuration on staging and production (infra/lib/stage.ts).
     Object.assign(env, provisionerNetworkEnvironment(config));
+    // WPU-D4: the tc-dns account of the Route 53 client; plain values (6.3), the same as catalog-sync.
+    env.TC_DNS_ACCOUNT_ID = config.dnsAccountId;
+    env.TC_DNS_EXTERNAL_ID = config.dnsExternalId;
   }
   if (spec.dir === "notifier") {
     // Links in a message go only to the panel's own domain (16.14); the sender is the verified identity.
     env.PANEL_ORIGIN = `https://${config.webDomain}`;
     env.SES_FROM = config.sesFromAddress;
+    // WPU-D4: the same identity ARN that the IAM statement allows; no configuration set is defined yet.
+    env.SES_IDENTITY_ARN = config.sesIdentityArn;
   }
   if (spec.dir === "migrator") {
     // copyFiles (functionArgs) puts packages/db/migrations here, next to the bundle.
@@ -197,7 +202,8 @@ export function workers(inputs: WorkerInputs) {
   // provisioner: SQS FIFO, one message per invocation, partial batch responses (queue-config.ts).
   // VERIFY: queue.subscribe takes function args here and applies `batch` to the event source mapping.
   const provisionerSpec = specOf("provisioner");
-  queues.provisioning.subscribe(functionArgs(provisionerSpec, inputs), {
+  // WPU-B3: kept, so that the alarms can name its log group and its error metric.
+  const provisioner = queues.provisioning.subscribe(functionArgs(provisionerSpec, inputs), {
     batch: {
       size: PROVISIONING_QUEUE.batchSize,
       partialResponses: PROVISIONING_QUEUE.reportBatchItemFailures,
@@ -232,6 +238,34 @@ export function workers(inputs: WorkerInputs) {
     ]),
   ) as Record<"web" | "admin", { arn: unknown }>;
 
+  // WPU-N2: access-details has one alias, "web". The function accepts customerId only on it
+  // (functions/access-details/invoke.ts) and web.ts grants the web role lambda:InvokeFunction on
+  // this alias ARN and on nothing else, so the unaliased function cannot be invoked by web.
+  // VERIFY: same alias mechanics as the reader above.
+  const accessDetails = invoked["access-details"] as {
+    nodes: { function: { version: unknown } };
+    name: unknown;
+  };
+  const accessAliases = {
+    web: new aws.lambda.Alias("AccessAliasWeb", {
+      name: "web",
+      functionName: accessDetails.name as string,
+      functionVersion: accessDetails.nodes.function.version as string,
+    }),
+  } as Record<"web", { arn: unknown }>;
+  // WPU-N1: the invoice renderer has one alias, "web". The customer role may invoke that alias and no
+  // other form of the function; the admin role has no grant on the renderer at all (WPU-S8).
+  // VERIFY: same as the reader aliases above (the published version, `nodes.function.version`).
+  const renderer = invoked["invoice-renderer"] as {
+    nodes: { function: { version: unknown } };
+    name: unknown;
+  };
+  const rendererAliasWeb = new aws.lambda.Alias("InvoiceRendererAliasWeb", {
+    name: "web",
+    functionName: renderer.name as string,
+    functionVersion: renderer.nodes.function.version as string,
+  }) as { arn: unknown };
+
   // Scheduled: EventBridge Scheduler (sst.aws.CronV2), retry policy 0 (the functions are idempotent
   // and the next run repeats the work). VERIFY: CronV2 args `schedule`, `function`, `retries`.
   const crons = Object.fromEntries(
@@ -265,7 +299,16 @@ export function workers(inputs: WorkerInputs) {
     triggers: { run: String(Date.now()) },
   });
 
-  return { invoked, readerAliases, crons, migrator, migration };
+  return {
+    invoked,
+    readerAliases,
+    accessAliases,
+    rendererAliasWeb,
+    crons,
+    provisioner,
+    migrator,
+    migration,
+  };
 }
 
 export type Workers = ReturnType<typeof workers>;

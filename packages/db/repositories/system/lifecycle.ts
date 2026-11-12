@@ -35,11 +35,14 @@ export interface GuardFacts {
   // true when the row itself is a final backup (config.final = true). The guard never lets a
   // customer's delete_backup remove it: the destroy guard relies on it (R13).
   readonly isFinalBackup: boolean;
+  // WPU-B3: `resources.state`. Optional so a caller that builds facts by hand need not know it; the
+  // guard refuses cleanup_failed_create without it (R16).
+  readonly resourceState?: string;
 }
 
 export interface NewLifecycleNotification {
   readonly customerId: string;
-  readonly channel: "email" | "sms";
+  readonly channel: "email" | "sms" | "in_app";
   readonly template: string;
   readonly payload: Record<string, unknown>;
   readonly dedupeKey: string;
@@ -248,10 +251,11 @@ export function lifecycleRepo(tx: Tx) {
       const { rows } = await tx.execute<{
         status: SubscriptionStatus | null;
         family: string;
+        resource_state: string;
         has_final: boolean;
         is_final: boolean;
       }>(sql`
-        select s.status as status, r.family as family,
+        select s.status as status, r.family as family, r.state as resource_state,
           exists (select 1 from resources b
             where b.parent_resource_id = r.id and b.family = 'backup' and b.state = 'active'
               and b.deleted_at is null and b.config ->> 'final' = 'true'
@@ -267,6 +271,7 @@ export function lifecycleRepo(tx: Tx) {
         family: row.family,
         hasFinalSnapshot: row.has_final === true,
         isFinalBackup: row.is_final === true,
+        resourceState: row.resource_state,
       };
     },
 

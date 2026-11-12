@@ -17,11 +17,14 @@ export function InvoiceDetailContent({
   numerals,
   screen,
   customerName,
+  pdfNotice = null,
 }: {
   locale: Locale;
   numerals: Numerals;
   screen: InvoiceDetailScreen | null;
   customerName: string;
+  /** Why the last "Download PDF" gave no file (the route redirects here with it); null = none. */
+  pdfNotice?: "unavailable" | "not_ready" | "busy" | null;
 }) {
   const t = useTranslations("Invoices");
   const listHref = localePath(locale, "/invoices");
@@ -174,6 +177,22 @@ export function InvoiceDetailContent({
         </a>
       </p>
       <p className="seccolor small mb-1">{t("detail.printHint")}</p>
+      {pdfNotice !== null ? (
+        <div className="alert alert-warning text-start" role="alert">
+          {t(`detail.pdfNotice.${pdfNotice}`)}
+        </div>
+      ) : null}
+      <p className="mb-1">
+        <a
+          className="btn btn-default-yellow-fill"
+          href={localePath(locale, `/invoices/${encodeURIComponent(invoice.id)}/pdf`)}
+          download
+        >
+          <i className="fas fa-download me-2" aria-hidden="true" />
+          {t("detail.downloadPdf")}
+        </a>
+      </p>
+      <p className="seccolor small mb-1">{t("detail.downloadHint")}</p>
       <p className="seccolor small">
         {t(credit === undefined ? "detail.mushakHint" : "detail.creditHint")}
       </p>
