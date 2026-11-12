@@ -1,6 +1,5 @@
 import { unwrapDigitOneHtml } from "@tc/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { unwrapDigitOneHtml } from "@tc/core";
 
 // WPU-G4: the printable invoice. Cross-tenant proof for the route (R8), the headers, the fail-closed
 // answers (R16).
