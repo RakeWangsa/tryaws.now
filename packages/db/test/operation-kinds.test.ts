@@ -11,7 +11,7 @@ import {
 
 it("every kind has one row of info and nothing else has", () => {
   expect(Object.keys(OPERATION_KIND_INFO).sort()).toEqual([...OPERATION_KINDS].sort());
-  expect(OPERATION_KINDS).toHaveLength(31);
+  expect(OPERATION_KINDS).toHaveLength(35);
   expect(OPERATION_KINDS).toContain("rename");
   expect(OPERATION_KINDS).toContain("reject_operation");
 });
@@ -58,10 +58,12 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
     "rename",
     "request_certificate",
     "reset_cache",
-    "scale_container",
+    "schedule_plan_change",
     "set_auto_backup",
     "set_bucket_access",
     "set_bucket_versioning",
+    "set_cache_behaviors",
+    "set_cdn_origin",
     "set_db_options",
     "set_lb_attributes",
     "set_ports",
@@ -70,11 +72,20 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
     "stop",
   ]);
   expect(OPERATION_KINDS.filter((k) => !OPERATION_KIND_INFO[k].customerRequestable).sort()).toEqual(
-    ["create", "final_snapshot", "purge_snapshots", "reject_operation", "resume", "suspend"],
+    [
+      "change_cdn_bundle",
+      "create",
+      "final_snapshot",
+      "purge_snapshots",
+      "reject_operation",
+      "resume",
+      "scale_container",
+      "suspend",
+    ],
   );
 });
 
-it("isOperationKind accepts the 31 kinds and nothing else, prototype names included", () => {
+it("isOperationKind accepts the 35 kinds and nothing else, prototype names included", () => {
   for (const kind of OPERATION_KINDS) expect(isOperationKind(kind)).toBe(true);
   for (const x of [
     "__proto__",
@@ -124,4 +135,13 @@ it("a missing or invalid end date, or an invalid time, fails closed for a destru
 
 it("the states that block a younger operation of the same resource", () => {
   expect([...SIBLING_BLOCKING_STATES]).toEqual(["queued", "running", "waiting"]);
+});
+
+it("a plan change is only scheduled by a customer and applied by the lifecycle, never requested at once (no proration, WPU-G8)", () => {
+  expect(OPERATION_KIND_INFO.schedule_plan_change.customerRequestable).toBe(true);
+  expect(OPERATION_KIND_INFO.scale_container.customerRequestable).toBe(false);
+  expect(OPERATION_KIND_INFO.change_cdn_bundle.customerRequestable).toBe(false);
+  for (const kind of ["schedule_plan_change", "change_cdn_bundle", "set_cache_behaviors", "set_cdn_origin"] as const) {
+    expect(isDestructive(kind), kind).toBe(false);
+  }
 });

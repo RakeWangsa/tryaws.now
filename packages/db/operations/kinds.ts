@@ -39,6 +39,13 @@ export const OPERATION_KINDS = [
   "set_db_options",
   "set_bucket_versioning",
   "reset_cache",
+  // WPU-G8: container service and CDN. A plan change is scheduled by the customer and applied by the
+  // lifecycle at the next renewal (no proration in a prepaid term); the two apply kinds are never
+  // requested by a customer.
+  "schedule_plan_change",
+  "change_cdn_bundle",
+  "set_cache_behaviors",
+  "set_cdn_origin",
   "reject_operation",
 ] as const;
 
@@ -90,7 +97,8 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   set_bucket_access: info("action", false, true),
   delete_access_key: info("action", false, true),
   deploy_containers: info("action", false, true),
-  scale_container: info("action", false, true),
+  // Applies a new power and scale at once: only the lifecycle at a renewal enqueues it (WPU-G8).
+  scale_container: info("action", false, false),
   change_dns_record: info("action", false, true),
   set_targets: info("action", false, true),
   set_lb_attributes: info("action", false, true),
@@ -99,6 +107,10 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   set_db_options: info("action", false, true),
   set_bucket_versioning: info("action", false, true),
   reset_cache: info("action", false, true),
+  schedule_plan_change: info("action", false, true),
+  change_cdn_bundle: info("action", false, false),
+  set_cache_behaviors: info("action", false, true),
+  set_cdn_origin: info("action", false, true),
   reject_operation: info("engine", false, false),
 };
 
