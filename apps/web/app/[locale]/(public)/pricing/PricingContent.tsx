@@ -1,0 +1,121 @@
+import { EmptyState, Tabs } from "@tc/ui";
+import type { Locale } from "@tc/ui/runtime";
+import { useTranslations } from "next-intl";
+import type { PublicCatalog } from "../../../../server/public/catalog.ts";
+import { breadcrumbLd, productLd } from "../../../../server/public/seo.ts";
+import { localePath } from "@tc/ui/runtime";
+import { JsonLd } from "../_components/JsonLd.tsx";
+import { OfferCard, OfferTable, offerName, orderHref } from "../_components/offers.tsx";
+import type { Tr } from "../_components/offers.tsx";
+
+// `/pricing` (pricing.html): one tab for each open family with plan boxes and the comparison table
+// (`table.table.compare`). Not used: the carousel and the slider demos. Every price is an offer of
+// the live catalog, as the pricing engine priced it.
+
+export function PricingContent({
+  locale,
+  catalog,
+  origin,
+  nonce,
+}: {
+  locale: Locale;
+  catalog: PublicCatalog;
+  origin: string;
+  nonce: string | undefined;
+}) {
+  const t = useTranslations("Public") as unknown as Tr;
+  const families =
+    catalog.state === "ok" ? catalog.families.filter((f) => f.offers.length > 0) : [];
+  const offers = families.flatMap((family) => family.offers);
+
+  return (
+    <>
+      <JsonLd
+        data={breadcrumbLd(origin, locale, [
+          { name: t("crumb.home"), path: "/" },
+          { name: t("pricing.heading"), path: "/pricing" },
+        ])}
+        nonce={nonce}
+      />
+      {offers.length > 0 ? (
+        <JsonLd
+          data={productLd({
+            name: t("pricing.heading"),
+            description: t("meta.pricing.description"),
+            url: origin + localePath(locale, "/pricing"),
+            offers: offers.map((offer) => ({
+              name: offerName(t, offer),
+              priceMinor: offer.priceMinor,
+              url: origin + orderHref(locale),
+            })),
+          })}
+          nonce={nonce}
+        />
+      ) : null}
+      <div className="top-header item1 overlay">
+        <div className="container">
+          <div className="row">
+            <div className="col-lg-12">
+              <div className="wrapper">
+                <h1 className="heading">{t("pricing.heading")}</h1>
+                <p className="seccolor">{t("pricing.lead")}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <section className="pricing special sec-normal motpath bg-colorstyle">
+        <div className="container">
+          {catalog.state === "unavailable" ? (
+            <EmptyState
+              title={t("common.unavailableTitle")}
+              description={t("common.unavailableText")}
+            />
+          ) : families.length === 0 ? (
+            <EmptyState title={t("common.noPlansTitle")} description={t("common.noPlansText")} />
+          ) : (
+            <Tabs
+              label={t("pricing.tabsLabel")}
+              tabs={families.map((family) => ({
+                id: family.family,
+                title: t(`product.${family.family}`),
+                content: (
+                  <>
+                    <h2 className="section-heading mergecolor text-center">
+                      {t("pricing.tableTitle")}
+                    </h2>
+                    <div className="row">
+                      {family.offers.slice(0, 3).map((offer, index) => (
+                        <div key={offer.id} className="col-md-12 col-lg-4">
+                          <OfferCard
+                            t={t}
+                            locale={locale}
+                            offer={offer}
+                            recommended={index === 0}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <OfferTable
+                      t={t}
+                      locale={locale}
+                      offers={family.offers}
+                      caption={t("pricing.tableCaption")}
+                    />
+                  </>
+                ),
+              }))}
+            />
+          )}
+          <p className="small seccolor text-center mt-3">{t("common.priceNote")}</p>
+        </div>
+      </section>
+      <section className="sec-normal bg-colorstyle">
+        <div className="container text-center">
+          <h2 className="section-heading mergecolor">{t("pricing.otherFamilies")}</h2>
+          <p className="seccolor">{t("pricing.otherFamiliesText")}</p>
+        </div>
+      </section>
+    </>
+  );
+}

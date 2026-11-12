@@ -60,6 +60,11 @@ export const publicEn: Same<typeof publicBn> = {
       "ap-southeast-1": "Singapore",
       "ap-south-1": "Mumbai",
     },
+    product: {
+      linux_instance: "Cloud Server",
+      windows_instance: "Cloud Server (Windows)",
+      database: "Managed Database",
+    },
     spec: {
       cpu: "vCPU",
       ram: "Memory",
@@ -67,7 +72,9 @@ export const publicEn: Same<typeof publicBn> = {
       transfer: "Data transfer",
       cpuValue: "{count} vCPU",
       gb: "{count} GB",
-      planName: "Cloud Server {ram} GB",
+      planOf: "{product} {ram} GB",
+      nameAt: "{name} · {location}",
+      none: "–",
       perLocation: "{location}: {value}",
     },
     home: {

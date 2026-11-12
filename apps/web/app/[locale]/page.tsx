@@ -1,40 +1,21 @@
-import { hasLocale } from "next-intl";
-import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { EmptyState, PublicShell } from "@tc/ui";
-import { localeHrefs } from "@tc/ui/runtime";
-import { routing } from "../../i18n/routing.ts";
+import { publicCatalog, publicOrigin, requestNonce } from "../../server/public/load.ts";
+import { PublicFrame } from "./(public)/_components/PublicFrame.tsx";
+import { localeOf, menuOf, metadataOf } from "./(public)/_components/page.ts";
+import type { LocaleParams } from "./(public)/_components/page.ts";
+import { HomeContent } from "./(public)/HomeContent.tsx";
 
-type Props = { params: Promise<{ locale: string }> };
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { locale } = await params;
-  if (!hasLocale(routing.locales, locale)) notFound();
-  const t = await getTranslations({ locale });
-  return {
-    title: t("Web.meta.title"),
-    description: t("Web.meta.description"),
-    icons: { icon: "/brand/symbol.svg" },
-  };
+export function generateMetadata({ params }: LocaleParams): Promise<Metadata> {
+  return metadataOf(params, "/", "home");
 }
 
-/** The coming-soon page: the public frame around one sentence (the structure of 404.html). */
-export default async function HomePage({ params }: Props) {
-  const { locale } = await params;
-  if (!hasLocale(routing.locales, locale)) notFound();
-  const t = await getTranslations({ locale });
+/** `/`: the landing page of the public site (WPP-T1, 16.8). */
+export default async function HomePage({ params }: LocaleParams) {
+  const locale = await localeOf(params);
+  const [catalog, nonce] = await Promise.all([publicCatalog(), requestNonce()]);
   return (
-    <PublicShell
-      locale={locale}
-      localeHrefs={localeHrefs("/")}
-      signedIn={false}
-      openFamilies={[]}
-      domainsOpen={false}
-      announcement={t("Web.announcement")}
-      supportPhone={null}
-    >
-      <EmptyState fullPage title={t("Web.home.title")} description={t("Aws.short")} />
-    </PublicShell>
+    <PublicFrame locale={locale} path="/" {...menuOf(catalog)}>
+      <HomeContent locale={locale} catalog={catalog} origin={publicOrigin()} nonce={nonce} />
+    </PublicFrame>
   );
 }

@@ -93,9 +93,9 @@ describe("loadPublicCatalog", () => {
     const linux = result.families.find((f) => f.family === "linux_instance");
     expect(linux).toBeDefined();
     // Linux rows only: the windows row inside the linux family is not an offer.
-    const ids = (linux as { offers: { id: string }[] }).offers.map((o) => o.id);
-    expect(ids).toEqual(["l-mum-1", "l-sg-1", "l-sg-4"]);
-    for (const offer of (linux as { offers: PricedLike[] }).offers) {
+    const offers = linux?.offers ?? [];
+    expect(offers.map((o) => o.id)).toEqual(["l-mum-1", "l-sg-1", "l-sg-4"]);
+    for (const offer of offers satisfies readonly PricedLike[]) {
       const source = ROWS["linux_instance"]!.find((r) => r.id === offer.id)!;
       const expected = quote({ awsPriceUsd: source.awsPriceUsd, fxRate: FX, rule: RULE });
       expect(offer.priceMinor).toBe(expected.totalMinor);

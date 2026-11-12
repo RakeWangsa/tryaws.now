@@ -57,6 +57,11 @@ export const publicBn = {
       "ap-southeast-1": "Singapore",
       "ap-south-1": "Mumbai",
     },
+    product: {
+      linux_instance: "ক্লাউড সার্ভার",
+      windows_instance: "ক্লাউড সার্ভার (Windows)",
+      database: "ম্যানেজড ডেটাবেস",
+    },
     spec: {
       cpu: "vCPU",
       ram: "মেমরি",
@@ -64,7 +69,9 @@ export const publicBn = {
       transfer: "ডেটা ট্রান্সফার",
       cpuValue: "{count} vCPU",
       gb: "{count} GB",
-      planName: "ক্লাউড সার্ভার {ram} GB",
+      planOf: "{product} {ram} GB",
+      nameAt: "{name} · {location}",
+      none: "–",
       perLocation: "{location}: {value}",
     },
     home: {
