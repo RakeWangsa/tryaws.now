@@ -129,7 +129,7 @@ export async function runPurchase(
   if (!customer.ok) return customer;
 
   // 5. Family, product, flag and limits, a second time.
-  const resolved = await resolveOrderProduct(tx, repos, customerId, claims.fam, claims.cfg);
+  const resolved = await resolveOrderProduct(tx, repos, customerId, claims.fam, claims.cfg, now);
   if (!resolved.ok) return resolved;
   const product = resolved.value;
   if (product.productId !== claims.pid || product.region !== claims.region) {
@@ -314,6 +314,9 @@ export async function runPurchase(
           ...(product.restoreFromBackupId === undefined
             ? {}
             : { restoreFromBackupId: product.restoreFromBackupId }),
+          ...(product.restoreSourceId === undefined || product.restoreTime === undefined
+            ? {}
+            : { restoreSourceId: product.restoreSourceId, restoreTime: product.restoreTime }),
         },
         idempotencyKey: `order-create:${orderId}`,
         ...(review ? { needsApproval: true } : {}),

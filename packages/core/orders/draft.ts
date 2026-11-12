@@ -61,6 +61,7 @@ export async function createDraft(
       session.customerId,
       parsed.value.family,
       parsed.value.config,
+      now,
     );
     if (!resolved.ok) return resolved;
     const product = resolved.value;

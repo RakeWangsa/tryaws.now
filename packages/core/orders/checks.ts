@@ -20,6 +20,7 @@ import { checkDiskServer, parseDiskConfig, resolveDisk } from "../products/disk"
 import { resolveProduct, type ResolvedProduct } from "../products/instance";
 import { isImageOn, optionOf } from "../products/blueprints";
 import { checkRestore, type RestoreCandidate } from "../products/restore";
+import { checkDbPointInTime, checkDbSnapshotRestore } from "../products/db-restore";
 import {
   checkLbTargets,
   parseLoadBalancerConfig,
@@ -192,6 +193,51 @@ async function checkRestoreSource(
 }
 
 /**
+ * WPU-G9. A database started from a snapshot or from a point in time of another database of the
+ * customer. Rows are read through the tenant-scoped repository (R8); the disk sizes come from the
+ * catalog rows of the two plans; db-restore.ts decides.
+ */
+async function checkDbRestoreSource(
+  tx: Tx,
+  repos: CustomerRepos,
+  product: ResolvedProduct,
+  now: Date,
+): Promise<Result<true>> {
+  const plan = await readCatalogProduct(tx, product.productId);
+  if (product.restoreFromBackupId !== undefined) {
+    const requested = product.restoreFromBackupId;
+    const backup = candidateOf(await repos.resources.get(requested));
+    const sourceRow =
+      backup?.parentResourceId == null ? null : await repos.resources.get(backup.parentResourceId);
+    const sourceProduct =
+      sourceRow?.productId == null ? null : await readCatalogProduct(tx, sourceRow.productId);
+    const checked = checkDbSnapshotRestore({
+      requested,
+      backup,
+      source: candidateOf(sourceRow),
+      sourceDiskGb: diskGbOf(sourceProduct?.specs),
+      planDiskGb: diskGbOf(plan?.specs),
+      planRegion: product.region,
+    });
+    return checked.ok ? { ok: true, value: true } : checked;
+  }
+  const requested = product.restoreSourceId ?? "";
+  const sourceRow = await repos.resources.get(requested);
+  const sourceProduct =
+    sourceRow?.productId == null ? null : await readCatalogProduct(tx, sourceRow.productId);
+  const checked = checkDbPointInTime({
+    requested,
+    source: candidateOf(sourceRow),
+    sourceDiskGb: diskGbOf(sourceProduct?.specs),
+    planDiskGb: diskGbOf(plan?.specs),
+    planRegion: product.region,
+    at: product.restoreTime ?? "",
+    now,
+  });
+  return checked.ok ? { ok: true, value: true } : checked;
+}
+
+/**
  * The product of an order. Every family but the load balancer, the CDN and the disk is resolved by
  * `resolveProduct`. A disk names the server it is added for: the customer's own Linux server in the
  * Region of the disk (checkDiskServer). A distribution names an origin: the customer's own active server, load balancer
@@ -209,6 +255,7 @@ export async function resolveOrderProduct(
   customerId: string,
   family: string,
   rawConfig: unknown,
+  now: Date = new Date(),
 ): Promise<Result<ResolvedProduct>> {
   if (family === "domain") {
     const config = parseDomainConfig(rawConfig);
@@ -304,7 +351,18 @@ export async function resolveOrderProduct(
   }
   if (family !== "load_balancer") {
     const resolved = await resolveProduct(family, rawConfig, (id) => readCatalogProduct(tx, id));
-    if (!resolved.ok || resolved.value.restoreFromBackupId === undefined) return resolved;
+    if (!resolved.ok) return resolved;
+    if (family === "database") {
+      if (
+        resolved.value.restoreFromBackupId === undefined &&
+        resolved.value.restoreSourceId === undefined
+      ) {
+        return resolved;
+      }
+      const checkedDb = await checkDbRestoreSource(tx, repos, resolved.value, now);
+      return checkedDb.ok ? resolved : checkedDb;
+    }
+    if (resolved.value.restoreFromBackupId === undefined) return resolved;
     const restored = await checkRestoreSource(tx, repos, resolved.value);
     return restored.ok ? resolved : restored;
   }

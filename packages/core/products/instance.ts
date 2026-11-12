@@ -48,6 +48,9 @@ export interface ResolvedProduct {
   readonly resourceConfig: Readonly<Record<string, unknown>>;
   /** Set for a restore from a backup; the `create` operation carries it to the adapter. */
   readonly restoreFromBackupId?: string;
+  /** WPU-G9: a database started from a point in time of another database of the customer. */
+  readonly restoreSourceId?: string;
+  readonly restoreTime?: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

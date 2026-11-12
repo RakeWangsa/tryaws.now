@@ -8,6 +8,11 @@ export interface DatabaseConfig {
   readonly region: string;
   /** Stored and shown only. It never becomes an AWS name, a tag or markup (R11). */
   readonly displayName: string;
+  /** WPU-G9: start from a manual snapshot of the customer's own database (a new database). */
+  readonly restoreFromBackupId?: string;
+  /** WPU-G9: start from a point in time of the customer's own database; both fields or none. */
+  readonly restoreSourceId?: string;
+  readonly restoreTime?: string;
 }
 
 export interface ResolvedDatabase {
@@ -19,6 +24,9 @@ export interface ResolvedDatabase {
   readonly facts: ProductFacts;
   readonly needs: readonly CapacityNeed[];
   readonly resourceConfig: Readonly<Record<string, unknown>>;
+  readonly restoreFromBackupId?: string;
+  readonly restoreSourceId?: string;
+  readonly restoreTime?: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -43,6 +51,22 @@ export function parseDatabaseConfig(raw: unknown): Result<DatabaseConfig> {
   if (typeof displayName !== "string" || !DISPLAY_NAME.test(displayName)) {
     fields.displayName = "invalid";
   }
+  const { restoreFromBackupId, restoreSourceId, restoreTime } = input;
+  const hasSnapshot = restoreFromBackupId !== undefined && restoreFromBackupId !== null;
+  const hasSource = restoreSourceId !== undefined && restoreSourceId !== null;
+  const hasTime = restoreTime !== undefined && restoreTime !== null;
+  if (hasSnapshot && (typeof restoreFromBackupId !== "string" || !UUID.test(restoreFromBackupId))) {
+    fields.restoreFromBackupId = "invalid";
+  }
+  if (hasSource && (typeof restoreSourceId !== "string" || !UUID.test(restoreSourceId))) {
+    fields.restoreSourceId = "invalid";
+  }
+  if (hasTime && (typeof restoreTime !== "string" || Number.isNaN(Date.parse(restoreTime)))) {
+    fields.restoreTime = "invalid";
+  }
+  // A point in time needs both fields; a snapshot and a point in time exclude each other.
+  if (hasSource !== hasTime) fields[hasSource ? "restoreTime" : "restoreSourceId"] = "invalid";
+  if (hasSnapshot && hasSource) fields.restoreFromBackupId = "invalid";
   if (Object.keys(fields).length > 0) return { ok: false, error: "validation", fields };
   return {
     ok: true,
@@ -50,6 +74,9 @@ export function parseDatabaseConfig(raw: unknown): Result<DatabaseConfig> {
       productId: productId as string,
       region: region as string,
       displayName: displayName as string,
+      ...(hasSnapshot ? { restoreFromBackupId: restoreFromBackupId as string } : {}),
+      ...(hasSource ? { restoreSourceId: restoreSourceId as string } : {}),
+      ...(hasTime ? { restoreTime: restoreTime as string } : {}),
     },
   };
 }
@@ -70,6 +97,13 @@ export function resolveDatabase(
   ) {
     return unavailable();
   }
+  const restore = {
+    ...(config.restoreFromBackupId === undefined
+      ? {}
+      : { restoreFromBackupId: config.restoreFromBackupId }),
+    ...(config.restoreSourceId === undefined ? {} : { restoreSourceId: config.restoreSourceId }),
+    ...(config.restoreTime === undefined ? {} : { restoreTime: config.restoreTime }),
+  };
   return {
     ok: true,
     value: {
@@ -84,7 +118,9 @@ export function resolveDatabase(
         productId: config.productId,
         region: config.region,
         displayName: config.displayName,
+        ...restore,
       },
+      ...restore,
     },
   };
 }

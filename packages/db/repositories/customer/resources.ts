@@ -30,7 +30,7 @@ export interface ResourcesRepo {
   // The customer's child resources of one family under a parent (the backups and the disks of a
   // server), newest first, destroyed ones left out. [] for a parent that is not the customer's.
   listChildren(parentId: string, family: string): Promise<ResourceSummary[]>;
-  // The row of a manual backup of the customer's own server or disk (the web tier writes it, the
+  // The row of a manual backup of the customer's own server, disk or database (WPU-G9) (the web tier writes it, the
   // create_backup operation fills it in: WP5-T1). The pool and the Region come from the parent in the
   // same statement. `id` is the idempotency key (R7): a repeat answers with the stored row.
   // not_found for a parent that is not the customer's and for an id that belongs to anyone else.
@@ -120,7 +120,7 @@ export function resourcesRepo(scope: TenantScope): ResourcesRepo {
         select ${input.id}, p.customer_id, 'backup', p.pool_account_id, p.region, p.id, ${config}::jsonb
         from resources p
         where p.id = ${input.parentId} and p.customer_id = ${scope.customerId}
-          and p.family in ('linux_instance', 'disk') and p.deleted_at is null
+          and p.family in ('linux_instance', 'disk', 'database') and p.deleted_at is null
         on conflict (id) do nothing`);
       const [row] = await scope.tx
         .select(RESOURCE_COLUMNS)

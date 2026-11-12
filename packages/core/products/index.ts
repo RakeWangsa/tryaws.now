@@ -113,6 +113,16 @@ export {
   type ResolvedLoadBalancer,
   type TargetCandidate,
 } from "./load-balancer";
+export {
+  DB_BACKUP_RETENTION_DAYS,
+  PITR_LAG_MINUTES,
+  checkDbPointInTime,
+  checkDbSnapshotRestore,
+  pointInTimeWindow,
+  type DbPointInTimeCheck,
+  type DbSnapshotRestoreCheck,
+} from "./db-restore";
+export { SNAPSHOT_PRICE_FAMILY, snapshotPrice, type SnapshotPrice } from "./snapshot-price";
 export { checkedBackupWindow, checkedDomainName, checkedHealthPath } from "./console";
 export {
   priceCatalog,
