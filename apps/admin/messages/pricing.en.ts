@@ -6,6 +6,7 @@ export const pricingEn: Same<typeof pricingBn> = {
   AdminPricing: {
     title: "Pricing and exchange rate",
     bookLink: "Price list: margin, commission and product prices",
+    configLink: "Prices AWS does not publish: load balancer, snapshot, DNS zone",
     market: { label: "Market", submit: "Show" },
     unavailable: {
       title: "The data could not be loaded",
@@ -112,6 +113,7 @@ export const pricingEn: Same<typeof pricingBn> = {
   },
   AdminCatalog: {
     title: "Catalog and feature flags",
+    limitsLink: "Risk tier limits (resource count, bundle price, Windows)",
     market: { label: "Market", submit: "Show" },
     unavailable: {
       title: "The data could not be loaded",
@@ -186,6 +188,12 @@ export const pricingEn: Same<typeof pricingBn> = {
       turnOn: "Switch on",
       turnOff: "Switch off",
       reasonHint: "Give a reason",
+      minPower: "Minimum plan power",
+      minPowerBy: { admin: "Set by an admin", aws: "Value from AWS", default: "Default value" },
+      minPowerLabel: "New minimum power",
+      minPowerHint:
+        "AWS unit: 500 is the 512 MB plan, 1000 the 1 GB plan, 0 every plan. Leave empty to remove the admin's value and use the AWS value or the default. A smaller plan is shown disabled to the customer and is refused on the order.",
+      minPowerSave: "Save value",
       empty: "No image has been synced yet. It appears here after the catalog sync runs.",
       invalid:
         "The stored list cannot be read, so no image is offered. Saving one switch repairs the list.",

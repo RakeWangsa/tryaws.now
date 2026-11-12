@@ -1,12 +1,19 @@
 import type {
   previewBook as PreviewBook,
   previewChange as PreviewChange,
+  previewConfigPrice as PreviewConfigPrice,
   savePricingRule as SavePricingRule,
   setFeatureFlag as SetFeatureFlag,
   setFxRate as SetFxRate,
 } from "@tc/core";
 import { isFeatureFlag, isFxRateText } from "@tc/core";
-import type { AdminActor, AdminRepos, AdminRole, Tx } from "@tc/db";
+import {
+  IMAGE_MIN_POWER_MAX,
+  type AdminActor,
+  type AdminRepos,
+  type AdminRole,
+  type Tx,
+} from "@tc/db";
 import { MAX_DRAFT_STEPS, startOf } from "./pricing-draft.ts";
 
 // The actions of /pricing and /catalog in the order of R9: authenticate and authorize (the roles of the
@@ -26,6 +33,8 @@ export interface CorePorts {
   readonly previewChange: typeof PreviewChange;
   // The live preview of the price list (WPA-P1).
   readonly previewBook: typeof PreviewBook;
+  // The live preview of a config price (WPU-G10).
+  readonly previewConfigPrice: typeof PreviewConfigPrice;
   readonly savePricingRule: typeof SavePricingRule;
   readonly setFxRate: typeof SetFxRate;
   readonly setFeatureFlag: typeof SetFeatureFlag;
@@ -43,7 +52,7 @@ export interface PricingFlowDeps {
   readonly repos: (
     tx: Tx,
     actor: AdminActor,
-  ) => Pick<AdminRepos, "fxChanges" | "priceBook" | "blueprints">;
+  ) => Pick<AdminRepos, "fxChanges" | "priceBook" | "blueprints" | "configPrices" | "tierLimits">;
   // requireAdmin(roles): rejects when there is no admin session or the role is wrong.
   readonly authorize: (roles: readonly AdminRole[]) => Promise<AdminActor>;
   // True when the hit was counted, false over the limit.
@@ -113,6 +122,14 @@ export interface SetImageRequest {
   readonly blueprintId: unknown;
   readonly market: unknown;
   readonly enabled: unknown;
+  readonly reason: unknown;
+}
+
+// WPU-G10. The admin's minimum bundle power for one image, typed as digits; "" removes the override.
+export interface SetImageMinPowerRequest {
+  readonly blueprintId: unknown;
+  readonly market: unknown;
+  readonly minPower: unknown;
   readonly reason: unknown;
 }
 
@@ -198,6 +215,10 @@ export interface PricingFlow {
   setImage(
     request: SetImageRequest,
   ): Promise<FlowAnswer<{ blueprintId: string; enabled: boolean }>>;
+  // WPU-G10: the minimum plan power of an image (replaces what AWS reported).
+  setImageMinPower(
+    request: SetImageMinPowerRequest,
+  ): Promise<FlowAnswer<{ blueprintId: string; minPower: number | null }>>;
 }
 
 export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
@@ -473,6 +494,48 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
           ok: true,
           replayed: saved.replayed,
           value: { blueprintId: saved.value.blueprintId, enabled: saved.value.enabled },
+        };
+      });
+    },
+
+    async setImageMinPower(request) {
+      const { blueprintId, market, minPower, reason } = request;
+      const auth = await authorize(FLAG_ROLES);
+      if (!auth.ok) return auth.answer;
+      const bad: string[] = [];
+      if (typeof blueprintId !== "string" || !BLUEPRINT_ID.test(blueprintId)) {
+        bad.push("blueprintId");
+      }
+      if (typeof market !== "string" || !MARKET.test(market)) bad.push("market");
+      // Plain digits only (a sign, a point, an exponent or a unit is refused); "" removes the override.
+      const typed = typeof minPower === "string" ? minPower.trim() : null;
+      const power =
+        typed === ""
+          ? null
+          : typed !== null && /^[0-9]{1,6}$/.test(typed) && Number(typed) <= IMAGE_MIN_POWER_MAX
+            ? Number(typed)
+            : undefined;
+      if (power === undefined) bad.push("minPower");
+      const why = readReason(reason);
+      if (!why.ok) bad.push("reason");
+      if (
+        bad.length > 0 ||
+        typeof blueprintId !== "string" ||
+        typeof market !== "string" ||
+        power === undefined
+      ) {
+        return fail("invalid", bad);
+      }
+      const actor = auth.actor;
+      return execute<{ blueprintId: string; minPower: number | null }>(actor, async (tx) => {
+        const saved = await deps
+          .repos(tx, actor)
+          .blueprints.setMinPower({ market, blueprintId, minPower: power }, why.text);
+        if (!saved.ok) return repoRefusal(saved.error);
+        return {
+          ok: true,
+          replayed: saved.replayed,
+          value: { blueprintId: saved.value.blueprintId, minPower: saved.value.minPower },
         };
       });
     },

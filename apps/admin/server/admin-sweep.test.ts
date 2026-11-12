@@ -157,6 +157,7 @@ describe("flows: authorize with roles is the first step, before the limiter, the
       "server/abuse-flow.ts",
       "server/admins-flow.ts",
       "server/capacity-flow.ts",
+      "server/config-price-flow.ts",
       "server/customer-flow.ts",
       "server/money-flow.ts",
       "server/ops-flow.ts",
@@ -164,6 +165,7 @@ describe("flows: authorize with roles is the first step, before the limiter, the
       "server/pricing-flow.ts",
       "server/reconciliation-flow.ts",
       "server/support-flow.ts",
+      "server/tier-limits-flow.ts",
     ]);
   });
 
@@ -200,9 +202,43 @@ describe("flows: authorize with roles is the first step, before the limiter, the
     }
   });
 
-  it("the pricing flow authorizes in each of its five writes (the fifth is WPU-G3, the image allow-list)", () => {
+  it("the pricing flow authorizes in each of its six writes (the fifth is WPU-G3, the image allow-list; the sixth is WPU-G10, the minimum plan power of an image)", () => {
     const code = read(join(ROOT, "server/pricing-flow.ts")).replace(/\/\/.*$/gm, "");
-    expect([...code.matchAll(/await authorize\(/g)].length).toBe(5);
+    expect([...code.matchAll(/await authorize\(/g)].length).toBe(6);
+    // the flag and both image writes are for the roles of the catalog area
+    expect([...code.matchAll(/await authorize\(FLAG_ROLES\)/g)].length).toBe(3);
+  });
+
+  // WPU-G10. The config prices: one write, finance and superadmin (the pricing area). Market configuration
+  // only; no customer's data is read or written, so there is no tenant to cross.
+  it("the config-price flow authorizes in its one write, with the roles of the pricing area", () => {
+    const code = read(join(ROOT, "server/config-price-flow.ts")).replace(/\/\/.*$/gm, "");
+    expect([...code.matchAll(/await authorize\(PRICING_ROLES\)/g)].length).toBe(1);
+    expect([...code.matchAll(/await authorize\(/g)].length).toBe(1);
+    expect(code).not.toMatch(/customerId|customerRepos|\bsession\b/);
+  });
+
+  // WPU-G10. The tier limits: one write, ops and superadmin (the catalog area).
+  it("the tier-limits flow authorizes in its one write, with the roles of the catalog area", () => {
+    const code = read(join(ROOT, "server/tier-limits-flow.ts")).replace(/\/\/.*$/gm, "");
+    expect([...code.matchAll(/await authorize\(FLAG_ROLES\)/g)].length).toBe(1);
+    expect([...code.matchAll(/await authorize\(/g)].length).toBe(1);
+    expect(code).not.toMatch(/customerId|customerRepos|\bsession\b/);
+  });
+
+  it("the three actions of WPU-G10 are Server Actions of pricing-actions.ts that use a flow with the session check and carry no actor", () => {
+    const source = read(join(ROOT, "server/pricing-actions.ts"));
+    for (const [name, flow] of [
+      ["saveConfigPriceAction", "makeConfigPriceFlow(pricingFlowDeps())"],
+      ["saveTierLimitsAction", "makeTierLimitsFlow(pricingFlowDeps())"],
+      ["setImageMinPowerAction", "makePricingFlow(pricingFlowDeps())"],
+    ] as const) {
+      const head = source.indexOf(`export async function ${name}(`);
+      expect(head, name).toBeGreaterThanOrEqual(0);
+      const body = source.slice(head, source.indexOf("\n}\n", head));
+      expect(body).toContain(flow);
+      expect(body).not.toMatch(/adminId|role|approver|actor/i);
+    }
   });
 });
 

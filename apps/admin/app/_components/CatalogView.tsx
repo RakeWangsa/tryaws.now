@@ -14,7 +14,11 @@ import {
 import type { FlagState } from "@tc/core";
 import { localePath, type Locale } from "@tc/ui/runtime";
 import { dependenciesOf, missingDependencies } from "../../server/flag-dependencies.ts";
-import { setFlagAction, setImageAction } from "../../server/pricing-actions.ts";
+import {
+  setFlagAction,
+  setImageAction,
+  setImageMinPowerAction,
+} from "../../server/pricing-actions.ts";
 import type {
   CatalogFamily,
   CatalogScreen,
@@ -155,6 +159,47 @@ function ImagesCard({ locale, screen }: { locale: Locale; screen: CatalogScreen 
       ),
     },
     {
+      // WPU-G10. The least bundle power a plan needs (500 is the 512 MB plan). The value in force and its
+      // source are shown; the form sets the admin's own value, or removes it when the field is empty.
+      key: "minPower",
+      header: t("minPower"),
+      cell: (row) => (
+        <>
+          <p className="mb-1">
+            <strong>{row.minPower}</strong>{" "}
+            <span className="form-text seccolor">{t(`minPowerBy.${row.minPowerBy}`)}</span>
+          </p>
+          <form action={setImageMinPowerAction}>
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="market" value={screen.market} />
+            <input type="hidden" name="image" value={row.id} />
+            <Field
+              name="minPower"
+              id={`image-power-${row.id}`}
+              label={t("minPowerLabel")}
+              hint={t("minPowerHint")}
+              optional
+              defaultValue={row.minPowerAdmin === null ? "" : String(row.minPowerAdmin)}
+              maxLength={6}
+              autoComplete="off"
+              inputMode="numeric"
+            />
+            <Field
+              name="powerReason"
+              id={`image-power-reason-${row.id}`}
+              label={t("reasonHint")}
+              required
+              maxLength={500}
+              autoComplete="off"
+            />
+            <SubmitButton variant="secondary" size="sm">
+              {t("minPowerSave")}
+            </SubmitButton>
+          </form>
+        </>
+      ),
+    },
+    {
       key: "act",
       header: "",
       cell: (row) => (
@@ -275,6 +320,11 @@ export function CatalogView({ locale, screen, result }: CatalogViewProps) {
   return (
     <>
       <h2 className="h4 mergecolor">{t("title")}</h2>
+      <form method="get" action={localePath(locale, "/catalog/limits")} className="mb-3">
+        <Button type="submit" variant="secondary" size="sm">
+          {t("limitsLink")}
+        </Button>
+      </form>
       {code === null ? null : (
         <p
           role={code === "ok" || code === "replayed" ? "status" : "alert"}

@@ -2,6 +2,7 @@ import {
   BLUEPRINT_FAMILY,
   isImageOn,
   listFeatureFlags,
+  minPowerOf,
   optionOf,
   pricingInForce,
   previewChange,
@@ -175,6 +176,14 @@ export interface ImageAdminRow {
   readonly on: boolean;
   /** True when an admin has switched it; false when it follows the default list. */
   readonly explicit: boolean;
+  /**
+   * WPU-G10. The least bundle power a plan needs to run it (500 is the 512 MB plan): the value in force,
+   * where it comes from (the admin's override, what AWS reported, or the default of the core), and the
+   * admin's own value when there is one.
+   */
+  readonly minPower: number;
+  readonly minPowerBy: "admin" | "aws" | "default";
+  readonly minPowerAdmin: number | null;
 }
 
 export interface CatalogScreen {
@@ -219,6 +228,14 @@ export async function loadCatalog(
           regions,
           on: stored.state !== "invalid" && isImageOn(switches, option.id),
           explicit: switches.on.includes(option.id) || switches.off.includes(option.id),
+          minPower: minPowerOf(option, switches),
+          minPowerBy:
+            switches.minPower?.[option.id] !== undefined
+              ? "admin"
+              : option.minPower !== null
+                ? "aws"
+                : "default",
+          minPowerAdmin: switches.minPower?.[option.id] ?? null,
         });
       }
       const images = [...byImage.values()].sort((a, b) =>
