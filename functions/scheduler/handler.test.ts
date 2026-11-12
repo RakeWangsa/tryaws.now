@@ -156,3 +156,28 @@ it("WPU-S2: an apply of a pending plan that the sweep escalates marks the plan a
   });
   expect(config.pendingPlan).toBeTruthy();
 });
+
+it("WPU-I2: an owed invoice that cannot be read fails the invoice job and no other job (R16)", async () => {
+  await t.pool.query(
+    `insert into discrepancies (id, kind, details)
+     values (gen_random_uuid(), 'missing', '{"source":"invoice_seller_missing","v":1}'::jsonb)`,
+  );
+  const clock = createManualClock(new Date("2026-11-11T01:00:00Z"));
+  const logged: LogEvent[] = [];
+  const handler = createHandler({
+    runTx: (fn) => runTransaction(t.db, fn, { role: "worker_rw" }),
+    clock,
+    queue: createMemoryQueue({ clock }),
+    log: (e) => logged.push(e),
+  });
+  try {
+    await expect(handler()).rejects.toThrow("scheduler: invoice_backlog failed");
+    expect(logged.find((e) => e.event === "invoice_backlog_run")).toMatchObject({ unreadable: 1 });
+    // the other jobs ran: the purge came after the invoice job
+    expect(logged.map((e) => e.event)).toContain("rate_limits_purged");
+  } finally {
+    await t.pool.query(
+      "delete from discrepancies where details->>'source' = 'invoice_seller_missing'",
+    );
+  }
+});

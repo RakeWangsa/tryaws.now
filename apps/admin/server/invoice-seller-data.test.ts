@@ -9,6 +9,7 @@ const world = vi.hoisted(() => ({
   seller: { ok: true, value: { state: "none" } } as unknown,
   audit: { ok: true, value: { rows: [] as unknown[] } } as unknown,
   readThrows: false,
+  backlog: { ok: true, value: { count: 0, oldest: null } } as unknown,
 }));
 vi.mock("./pricing-runtime.ts", () => ({
   readTx: async (fn: (tx: unknown) => unknown) => {
@@ -19,7 +20,7 @@ vi.mock("./pricing-runtime.ts", () => ({
 vi.mock("@tc/db", async (importActual) => ({
   ...(await importActual<typeof import("@tc/db")>()),
   adminRepos: () => ({
-    invoiceSeller: { read: async () => world.seller },
+    invoiceSeller: { read: async () => world.seller, backlog: async () => world.backlog },
     audit: { search: async () => world.audit },
   }),
   readMarkets: async () => [{ code: "BD" }, { code: "KE" }],
@@ -43,6 +44,7 @@ const SELLER = {
 
 beforeEach(() => {
   world.readThrows = false;
+  world.backlog = { ok: true, value: { count: 0, oldest: null } };
   world.seller = { ok: true, value: { state: "none" } };
   world.audit = { ok: true, value: { rows: [] } };
 });
@@ -53,6 +55,16 @@ describe("loadInvoiceSeller", () => {
       kind: "ok",
       value: { market: "BD", state: "missing", seller: null, version: null, history: [] },
     });
+  });
+  it("WPU-I2: carries the count of invoices that wait for the seller details; a refused count is unavailable (R16)", async () => {
+    const oldest = new Date("2026-11-12T01:00:00Z");
+    world.backlog = { ok: true, value: { count: 4, oldest } };
+    expect(await loadInvoiceSeller(ADMIN, {})).toMatchObject({
+      kind: "ok",
+      value: { backlog: { count: 4, oldest } },
+    });
+    world.backlog = { ok: false, error: "forbidden" };
+    expect(await loadInvoiceSeller(ADMIN, {})).toEqual({ kind: "unavailable" });
   });
   it("an unreadable row is invalid", async () => {
     world.seller = { ok: true, value: { state: "invalid" } };

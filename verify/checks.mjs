@@ -2797,6 +2797,25 @@ TASKS["WPU-H1"] = [
 // flow and sweep (admin). No AWS call.
 TASKS["WPU-I1"] = [specSync, baselineSync, lint, typecheck, format, core, db, web, admin, repo];
 
+// WPU-I2: the invoice is issued with every purchase and renewal and never blocks the money. The
+// pricing step carries its rate (core pricing vectors), the issue and the queue of owed invoices with
+// the seller snapshot of migration 0016 (db, with the local PostgreSQL), the job that issues the owed
+// invoices in order (core and scheduler), the printable invoice that reads the snapshot (web) and the
+// count on /pricing/seller (admin). No AWS call.
+TASKS["WPU-I2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  scheduler,
+  web,
+  admin,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

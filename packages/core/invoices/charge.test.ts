@@ -81,7 +81,15 @@ describe("invoiceLinesOf", () => {
     expect(html).toContain("31.75");
     // the same document with the rate taken off prints no rate, and the same amounts
     const without = renderInvoiceHtml(
-      { ...doc, lines: doc.lines.map(({ rate: _rate, ...rest }) => rest) },
+      {
+        ...doc,
+        lines: doc.lines.map((l) => ({
+          kind: l.kind,
+          code: l.code,
+          label: l.label,
+          amountMinor: l.amountMinor,
+        })),
+      },
       "en",
     );
     expect(without).not.toContain('<td class="num">5%</td>');

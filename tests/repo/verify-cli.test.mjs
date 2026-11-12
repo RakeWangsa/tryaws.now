@@ -168,6 +168,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-G9",
     "WPU-H1",
     "WPU-I1",
+    "WPU-I2",
     "WPU-M1",
     "WPU-M2",
     "WPU-M3",
@@ -343,6 +344,37 @@ it("the proof of WPU-I1 exists: the renderer, the seller rules, the refusal to i
     ["packages/db/test/admin-invoice-seller.test.ts", "nothing is seeded"],
     ["apps/web/server/invoice-document.test.ts", "503"],
     ["apps/admin/server/invoice-seller-flow.test.ts", "denied"],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
+});
+
+it("task WPU-I2 is proven by lint, types, format, the core, db, scheduler, web and admin tests and the repository tests", () => {
+  expect(TASKS["WPU-I2"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-I2 exists: the rate, the seller snapshot, the invoice of a charge and the queue", () => {
+  for (const [file, part] of [
+    ["packages/core/pricing/quote.test.ts", "every step carries its rate"],
+    ["packages/core/invoices/charge.test.ts", "the VAT rate prints in the rate cell"],
+    ["packages/core/invoices/charge.db.test.ts", "never fails the charge"],
+    ["packages/core/invoices/charge.db.test.ts", "a backlog is issued in the order of the charge"],
+    ["packages/db/test/invoice-snapshot-backlog.test.ts", "keeps the seller of the day of issue"],
+    ["apps/web/server/invoice-document.test.ts", "a reprint shows the seller of the day of issue"],
+    ["apps/admin/server/invoice-seller-data.test.ts", "wait for the seller details"],
+    ["functions/scheduler/handler.test.ts", "invoice_backlog_run"],
   ]) {
     expect(readFileSync(file, "utf8"), file).toContain(part);
   }
