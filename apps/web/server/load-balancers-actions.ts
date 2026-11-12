@@ -25,8 +25,8 @@ import type { DraftActionResult, OrderActionDeps } from "./order-actions.ts";
 // customer-scoped repository and the same pure rule (checkLbTargets), because the adapter would
 // check it later, but a refusal on the spot is what the customer sees.
 //
-// Not built here: the HTTPS certificate (`requestCertificate`: the adapter does not create one) and
-// the health read (needs the reader). The page says so (JOURNEY.md, Needs decision).
+// The HTTPS certificate, the health check path and the redirect are in console-actions.ts (WPU-G7).
+// Not built: the per-target health read (needs the reader; WPU-G24).
 
 export const LOAD_BALANCER_SPEC: FamilySpec = {
   family: "load_balancer",
@@ -102,6 +102,21 @@ export type ChangeTargetsPort = (
   repos: FamilyRepos,
   input: { loadBalancerId: string; targets: CheckedTargets; requestId: string },
 ) => Promise<"queued" | "conflict" | "not_found">;
+
+/**
+ * The real port (WPU-G7): one `set_targets` operation with the checked ids as its payload. A repeat of
+ * the same request id is the same operation (R7); a sibling that is still running is a conflict.
+ */
+export const queueTargets: ChangeTargetsPort = async (repos, input) => {
+  const written = await repos.operations.request({
+    resourceId: input.loadBalancerId,
+    kind: "set_targets",
+    idempotencyKey: `lb-targets:${input.requestId}`,
+    payload: { targetIds: [...input.targets] },
+  });
+  if (written.ok) return "queued";
+  return written.error === "not_found" ? "not_found" : "conflict";
+};
 
 export interface LoadBalancerTargetsDeps extends FamilyActionDeps {
   changeTargets: ChangeTargetsPort | null;

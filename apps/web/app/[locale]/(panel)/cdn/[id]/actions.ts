@@ -6,6 +6,8 @@ import type { FormState } from "../../../../../server/action-state.ts";
 import { destroyCdnCore, setCdnEnabledCore } from "../../../../../server/cdn-actions.ts";
 import type { CdnResult } from "../../../../../server/cdn-actions.ts";
 import { cdnActionDeps } from "../../../../../server/cdn-deps.ts";
+import { CDN_RESET_CACHE, consoleCore } from "../../../../../server/console-actions.ts";
+import { familyActionDeps } from "../../../../../server/family-deps.ts";
 
 // The thin Server Actions of the CDN page (16.10). Each one checks the origin, calls its core (which
 // follows R9) and turns the result into a FormState with a fixed key (U6).
@@ -28,3 +30,14 @@ const run =
 
 export const setCdnEnabledAction = run(setCdnEnabledCore, ["cdnId", "requestId", "enabled"]);
 export const destroyCdnAction = run(destroyCdnCore, ["cdnId", "requestId", "confirmName"]);
+
+// WPU-G7: flush the cache. The generic console core uses the flag-reading deps of family-deps.ts.
+export async function resetCdnCacheAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  if (!(await guardAction())) return { error: "unauthenticated" };
+  return stateOf(
+    await consoleCore(CDN_RESET_CACHE)(familyActionDeps("cdn"), pick(form, ["cdnId", "requestId"])),
+  );
+}
