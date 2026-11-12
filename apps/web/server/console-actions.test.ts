@@ -190,9 +190,9 @@ describe.each(CASES)("console action $spec.kind", (c) => {
         payload: c.payload,
       },
     ]);
-    // R9: the store opens, the flag is read, the rate limit is counted, the row is read, then the
-    // operation is written and the audit entry follows.
-    expect(w.calls).toEqual(["store", "flag", "rate", "get", "request", `audit:${c.spec.audit}`]);
+    // R9: the store opens, the flag is read, the ownership of the row is checked (authorize), the rate
+    // limit is counted, then the operation is written and the audit entry follows (WPU-S6).
+    expect(w.calls).toEqual(["store", "flag", "get", "rate", "request", `audit:${c.spec.audit}`]);
   });
 
   it("another customer's row and a missing one give one answer, and nothing is queued (R8)", async () => {
@@ -202,6 +202,8 @@ describe.each(CASES)("console action $spec.kind", (c) => {
     expect(a).toEqual({ ok: false, error: "not_found" });
     expect(b).toEqual(a);
     expect(foreign.requests).toEqual([]);
+    // WPU-S6 (R9): the ownership is checked before the limit, so a foreign id consumes nothing.
+    expect(foreign.calls).not.toContain("rate");
   });
 
   it("refuses a row of another family as a missing one (R8)", async () => {

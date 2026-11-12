@@ -173,6 +173,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-S3",
     "WPU-S4",
     "WPU-S5",
+    "WPU-S6",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -402,6 +403,21 @@ it("task WPU-M1 is proven by lint, types, format, the core, db, aws, scheduler, 
     ["scheduler", "pnpm test --filter @tc/fn-scheduler --no-passWithNoTests"],
     ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
     ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-S6 is proven by lint, types, format, the core, aws, reader, web and repository tests", () => {
+  expect(TASKS["WPU-S6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["aws", "pnpm test --filter @tc/aws --no-passWithNoTests"],
+    ["reader", "pnpm test --filter @tc/fn-reader --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
 });

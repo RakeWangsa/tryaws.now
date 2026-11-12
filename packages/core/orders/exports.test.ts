@@ -206,6 +206,8 @@ const PRODUCTS = [
   // WPU-G9: the maintenance window, the database restore rules and the snapshot price
   "checkedMaintenanceWindow",
   "windowsOverlap",
+  // WPU-S6: the cap of instances a bucket remembers
+  "MAX_ACCESS_INSTANCES",
   // WPU-G11: the whitelist of database parameters
   "DB_PARAMETER_RULES",
   "MAX_DB_PARAMETER_CHANGES",

@@ -16,7 +16,7 @@ export interface ReaderEnv {
 // check runs in its own short transaction, and AWS is never called inside a transaction.
 export function buildReaderDeps(env: ReaderEnv): {
   reader: Reader;
-  handler: (event: unknown) => ReturnType<ReturnType<typeof createInvoke>>;
+  handler: ReturnType<typeof createInvoke>;
 } {
   const access = createAwsAccess({ caller: "reader", clock: env.clock });
   const reader = createReader({

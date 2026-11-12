@@ -29,8 +29,39 @@ function rebuildCaller(value: unknown): ReadCaller | null {
   return out as ReadCaller;
 }
 
-export function createInvoke(reader: Reader): (event: unknown) => Promise<ReaderOutput> {
-  return async (event) => {
+// WPU-S6. Which tier invoked the function. The reader has one alias per tier ("web" and "admin"); the
+// infra grants lambda:InvokeFunction on the alias ARN of the tier to the role of that tier and on
+// nothing else, so the alias named in the ARN that Lambda hands to the handler (context.invokedFunctionArn)
+// cannot be chosen by the caller of the event. Anything but exactly those two aliases is no tier.
+export type ReaderTier = "web" | "admin";
+
+export function readerTierOf(invokedFunctionArn: unknown): ReaderTier | null {
+  if (typeof invokedFunctionArn !== "string") return null;
+  const parts = invokedFunctionArn.split(":");
+  if (
+    parts.length !== 8 ||
+    parts[0] !== "arn" ||
+    parts[2] !== "lambda" ||
+    parts[5] !== "function"
+  ) {
+    return null;
+  }
+  return parts[7] === "web" || parts[7] === "admin" ? parts[7] : null;
+}
+
+// `customerId` is accepted from the web tier only and `adminId` from the admin tier only. A caller of
+// the other kind, of both kinds, or an invocation of no known tier is refused the same way (R16).
+function callerFitsTier(caller: ReadCaller, tier: unknown): boolean {
+  const c = caller as { customerId?: unknown; adminId?: unknown };
+  if (tier === "web") return c.customerId !== undefined && c.adminId === undefined;
+  if (tier === "admin") return c.adminId !== undefined && c.customerId === undefined;
+  return false;
+}
+
+export function createInvoke(
+  reader: Reader,
+): (event: unknown, tier: ReaderTier | null) => Promise<ReaderOutput> {
+  return async (event, tier) => {
     if (typeof event !== "object" || event === null) return refused("validation");
     const e = event as Record<string, unknown>;
     const action = e["action"];
@@ -38,7 +69,7 @@ export function createInvoke(reader: Reader): (event: unknown) => Promise<Reader
     if (action !== "describe" && action !== "metrics") return refused("validation");
     if (typeof resourceId !== "string") return refused("validation");
     const caller = rebuildCaller(e["caller"]);
-    if (caller === null) return refused("unauthenticated");
+    if (caller === null || !callerFitsTier(caller, tier)) return refused("unauthenticated");
     if (action === "describe") return reader.describe(resourceId, caller);
     const range = e["range"];
     if (typeof range !== "string") return refused("validation");

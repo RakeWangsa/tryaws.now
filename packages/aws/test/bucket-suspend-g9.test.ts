@@ -175,3 +175,25 @@ describe("suspend closes the access of instances", () => {
     expect(aws.seen.some((q) => q.action === "SetResourceAccessForBucket")).toBe(false);
   });
 });
+
+describe("suspend with a full list (WPU-S6)", () => {
+  it("denies all 20 remembered instances", async () => {
+    const list = Array.from(
+      { length: 20 },
+      (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+    );
+    const { aws, adapter, ctx, denies } = setup({ accessInstances: list });
+    aws.on(
+      "lightsail",
+      "GetBuckets",
+      bucketWith(list.map((id) => awsResourceName("instance", id))),
+    );
+    aws.on("lightsail", "SetResourceAccessForBucket", lightsailOk({}));
+    await adapter.aws.suspend(ctx("revoke_access"));
+    expect(
+      denies()
+        .map((d) => d.resourceName)
+        .sort(),
+    ).toEqual(list.map((id) => awsResourceName("instance", id)).sort());
+  });
+});

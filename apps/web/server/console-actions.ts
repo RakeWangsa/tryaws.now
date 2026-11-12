@@ -1,5 +1,6 @@
 import type { CustomerSession } from "@tc/auth";
 import {
+  MAX_ACCESS_INSTANCES,
   cdnBundleFrom,
   checkCdnOrigin,
   checkedBackupWindow,
@@ -218,6 +219,18 @@ export const BUCKET_INSTANCE_ACCESS: ConsoleSpec = {
     field: "instanceId",
     families: ["linux_instance", "windows_instance"],
     states: ["active", "stopped"],
+  },
+  finalize({ payload, row }) {
+    // WPU-S6: the bucket remembers 20 instances at most. A 21st allow is refused here with a message
+    // (fields.instanceId = "limit"), before an operation is queued; a listed instance and deny pass.
+    if (payload["access"] === "allow") {
+      const listed = configOf(row)["accessInstances"];
+      const list = Array.isArray(listed) ? listed.filter((id) => typeof id === "string") : [];
+      if (!list.includes(String(payload["instanceId"])) && list.length >= MAX_ACCESS_INSTANCES) {
+        throw new Refusal("not_allowed", { instanceId: "limit" });
+      }
+    }
+    return Promise.resolve(payload);
   },
   payload(input) {
     const fields: Record<string, string> = {};
@@ -718,10 +731,15 @@ export function consoleCore(
     if (!built.ok) Object.assign(bad, built.fields);
     return frame(
       deps,
-      { destructive: spec.confirm !== undefined, limits: FAMILY_WRITE_LIMIT(spec.limitKey) },
+      {
+        destructive: spec.confirm !== undefined,
+        limits: FAMILY_WRITE_LIMIT(spec.limitKey),
+        own: { family: spec.family, id },
+      },
       parseOf(bad),
-      async (repos, session) => {
-        const row = await ownResource(repos, spec.family, id);
+      async (repos, session, owned) => {
+        // Read and checked by the frame before the rate limit (R9, WPU-S6).
+        const row = owned ?? (await ownResource(repos, spec.family, id));
         if (!spec.states.includes(row.state)) throw new Refusal("not_allowed");
         if (spec.confirm !== undefined) {
           const expected = spec.confirm.typed(row);

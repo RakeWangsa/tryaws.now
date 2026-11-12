@@ -10,6 +10,7 @@ import {
   type LightsailClient,
 } from "@aws-sdk/client-lightsail";
 import {
+  MAX_ACCESS_INSTANCES,
   awsResourceName,
   parseBucketAccess,
   parseBucketConfig,
@@ -299,6 +300,17 @@ export function createBucketAdapter(deps: BucketDeps): ProductAdapter<BucketConf
           throw fail("validation");
         }
         if (ctx.resource.state !== "active") throw fail("conflict");
+        const raw = (ctx.resource.config as Record<string, unknown> | null)?.accessInstances;
+        const current = Array.isArray(raw) ? raw.filter(isUuid) : [];
+        if (access === "allow") {
+          // Already listed: nothing to ask AWS and nothing to change.
+          if (current.includes(instanceId)) {
+            return stepDone({ configMerge: { accessInstances: current } });
+          }
+          // WPU-S6: the list is what suspend revokes from, so an instance AWS has granted must always
+          // be in it. At the cap the grant is refused BEFORE AWS is asked, never cut off afterwards.
+          if (current.length >= MAX_ACCESS_INSTANCES) throw fail("conflict");
+        }
         await lightsail.send(
           new SetResourceAccessForBucketCommand({
             resourceName: awsResourceName("instance", instanceId),
@@ -306,12 +318,8 @@ export function createBucketAdapter(deps: BucketDeps): ProductAdapter<BucketConf
             access,
           }),
         );
-        const raw = (ctx.resource.config as Record<string, unknown> | null)?.accessInstances;
-        const current = Array.isArray(raw) ? raw.filter(isUuid) : [];
         const next =
-          access === "allow"
-            ? [...new Set([...current, instanceId])].slice(0, 20)
-            : current.filter((id) => id !== instanceId);
+          access === "allow" ? [...current, instanceId] : current.filter((id) => id !== instanceId);
         return stepDone({ configMerge: { accessInstances: next } });
       }
       case "set_bucket_versioning": {

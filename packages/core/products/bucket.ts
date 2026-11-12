@@ -3,6 +3,12 @@ import type { CapacityNeed } from "../capacity/types";
 import type { ProductFacts } from "../orders/gates";
 import type { Result } from "../types";
 
+/**
+ * WPU-S6. How many instances a bucket remembers as granted (config.accessInstances). Suspend revokes
+ * from that list, so an allow past the cap is refused before AWS is asked, never cut off afterwards.
+ */
+export const MAX_ACCESS_INSTANCES = 20;
+
 export interface BucketConfig {
   readonly productId: string;
   readonly region: string;

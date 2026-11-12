@@ -21,6 +21,14 @@ function Notice({ state }: { state: FormState }) {
   useEffect(() => {
     if (state.done !== undefined) router.refresh();
   }, [state.done, router]);
+  if (state.error === "not_allowed" && state.fields?.["instanceId"] === "limit") {
+    return (
+      <div className="alert alert-danger text-start" role="alert">
+        <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
+        {t("instances.limit")}
+      </div>
+    );
+  }
   if (state.error !== undefined) {
     return (
       <div className="alert alert-danger text-start" role="alert">
