@@ -6,7 +6,7 @@ import { buyerSnapshotFrom, parseBuyerSnapshot } from "./buyer";
 // and 300 for the address. The profile name (sign-up allows 200) is the FALLBACK of the snapshot and is cut
 // to the limit when the snapshot is made; a name the customer typed in the billing details is validated on
 // input and is never cut here.
-const none = { billingName: null, billingAddress: null, customerBin: null, customerNid: null };
+const none = { billingName: null, billingAddress: null, customerBin: null };
 const astral = "\u{1F600}"; // one code point, two UTF-16 units
 
 it("counts code points, not UTF-16 units", () => {
@@ -63,5 +63,5 @@ it("parseBuyerSnapshot counts code points: 120 astral characters are valid, 121 
 });
 
 it("a null or missing fallback stays null", () => {
-  expect(buyerSnapshotFrom({ ...none, customerNid: "1234567890" }, null)?.name).toBeNull();
+  expect(buyerSnapshotFrom({ ...none, customerBin: "1234567890123" }, null)?.name).toBeNull();
 });

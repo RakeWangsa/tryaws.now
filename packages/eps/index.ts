@@ -10,7 +10,12 @@ export { handleEpsReturn, epsReturnUrls, EPS_RETURN_PATHS } from "./returns";
 export type { ReturnInput, ReturnOutcome, ReturnResult } from "./returns";
 export { recheckPayment } from "./recheck";
 export type { RecheckOutcome } from "./recheck";
-export { checkGatewayRedirect, gatewayFormOrigins, EPS_REDIRECT_HOSTS } from "./redirect";
+export {
+  checkGatewayRedirect,
+  gatewayFormOrigins,
+  EPS_REDIRECT_HOSTS,
+  EPS_TEST_REDIRECT_HOSTS,
+} from "./redirect";
 export { sweepPayments } from "./sweep";
 export type { SweepCounts } from "./sweep";
 export { createEpsGateway } from "./http";

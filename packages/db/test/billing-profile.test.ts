@@ -6,7 +6,7 @@ import { newCustomer, newOrder, seedSeller } from "./fixtures";
 import { useTempDatabase } from "./temp-db";
 
 // WPU-I3: the customer billing profile (migration 0017). The repository writes only the session
-// customer's four columns; the values are personal or business identifiers.
+// customer's three columns; the values are personal or business identifiers.
 
 const t = useTempDatabase();
 beforeAll(async () => {
@@ -15,12 +15,11 @@ beforeAll(async () => {
 const as = <T>(customerId: string, fn: (r: CustomerRepos) => Promise<T>) =>
   withCustomerRepos(t.db, customerId, fn);
 
-const EMPTY = { billingName: null, billingAddress: null, customerBin: null, customerNid: null };
+const EMPTY = { billingName: null, billingAddress: null, customerBin: null };
 const FULL = {
   billingName: "Rahim & Sons Ltd.",
   billingAddress: "House 5, Road 3, Dhanmondi, Dhaka",
   customerBin: "1234567890123",
-  customerNid: null,
 };
 
 it("a new customer has an empty billing profile", async () => {
@@ -28,7 +27,7 @@ it("a new customer has an empty billing profile", async () => {
   expect(await as(id, (r) => r.profile.getBilling())).toEqual(EMPTY);
 });
 
-it("setBilling stores the four fields for the session customer and getBilling reads them back", async () => {
+it("setBilling stores the three fields for the session customer and getBilling reads them back", async () => {
   const id = await newCustomer(t.pool);
   const w = await as(id, (r) => r.profile.setBilling(FULL));
   expect(w).toMatchObject({ ok: true, value: FULL });
@@ -60,8 +59,6 @@ it("the repository refuses what the CHECKs would refuse, before any query", asyn
   const id = await newCustomer(t.pool);
   for (const bad of [
     { ...EMPTY, customerBin: "123" },
-    { ...EMPTY, customerNid: "12345" },
-    { ...EMPTY, customerBin: "1234567890123", customerNid: "1234567890" },
     { ...EMPTY, billingAddress: "x".repeat(301) },
     { ...EMPTY, billingAddress: "Road\u0000 5, Dhaka" },
     { ...EMPTY, billingName: "x" },
@@ -79,7 +76,6 @@ it("the database refuses the same values even if the repository is bypassed (CHE
   const id = await newCustomer(t.pool);
   for (const [column, value] of [
     ["customer_bin", "123"],
-    ["customer_nid", "12345"],
     ["billing_address", "bad\u0007address"],
     ["billing_name", "x"],
   ] as const) {
@@ -87,12 +83,15 @@ it("the database refuses the same values even if the repository is bypassed (CHE
       t.pool.query(`update customers set ${column} = $1 where id = $2`, [value, id]),
     ).rejects.toMatchObject({ code: "23514" });
   }
-  await expect(
-    t.pool.query(
-      "update customers set customer_bin = '1234567890123', customer_nid = '1234567890' where id = $1",
-      [id],
-    ),
-  ).rejects.toMatchObject({ code: "23514" });
+  // WPU-D3 (migration 0019): the NID column and its checks are gone.
+  const columns = await t.pool.query(
+    "select column_name from information_schema.columns where table_name = 'customers' and column_name like '%nid%'",
+  );
+  expect(columns.rows).toEqual([]);
+  const checks = await t.pool.query(
+    "select conname from pg_constraint where conrelid = 'customers'::regclass and conname in ('customers_customer_nid_check', 'customers_tax_id_one_check')",
+  );
+  expect(checks.rows).toEqual([]);
 });
 
 it("profile.get and update do not carry the billing fields (the profile screen has none)", async () => {
@@ -106,7 +105,7 @@ it("profile.get and update do not carry the billing fields (the profile screen h
   expect(await as(id, (r) => r.profile.getBilling())).toEqual(FULL);
 });
 
-it("roles: web_rw updates the four columns only; admin_rw cannot read them; worker_rw reads only them", async () => {
+it("roles: web_rw updates the three columns only; admin_rw cannot read them; worker_rw reads only them", async () => {
   const id = await newCustomer(t.pool);
   await as(id, (r) => r.profile.setBilling(FULL));
   const asRole = async (role: string, sql: string) => {
@@ -129,8 +128,11 @@ it("roles: web_rw updates the four columns only; admin_rw cannot read them; work
   await expect(
     asRole("admin_rw", `select id, email, name, kyc_status from customers`),
   ).resolves.toBeDefined();
-  await expect(asRole("worker_rw", `select customer_nid from customers`)).resolves.toBeDefined();
-  await expect(asRole("web_rw", `update customers set customer_nid = null`)).resolves.toBeDefined();
+  await expect(asRole("worker_rw", `select customer_bin from customers`)).resolves.toBeDefined();
+  await expect(asRole("worker_rw", `select customer_nid from customers`)).rejects.toMatchObject({
+    code: "42703",
+  });
+  await expect(asRole("web_rw", `update customers set customer_bin = null`)).resolves.toBeDefined();
   await expect(
     asRole(
       "web_rw",
@@ -193,6 +195,7 @@ it("a malformed buyer is refused before a number is taken", async () => {
     [],
     { name: 5, address: null, taxId: null },
     { name: null, address: null, taxId: { kind: "bin", value: "12" } },
+    { name: null, address: null, taxId: { kind: "nid", value: "1234567890" } },
     { name: null, address: "x".repeat(301), taxId: null },
   ]) {
     const w = await as(id, (r) =>

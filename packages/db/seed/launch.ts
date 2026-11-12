@@ -2,9 +2,10 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { Tx } from "../client";
 import { FEATURE_FLAG_KEYS, type FeatureFlagKey } from "../repositories/config/feature-flags";
 import { requireInstant } from "../repositories/config/args";
+import { priceBookValueOf } from "../repositories/config/price-book";
 import { seedConfigPrices } from "./config-prices";
 import type { MARKET_NUMERALS } from "../schema/index";
-import { featureFlags, fxRates, markets, pricingRules } from "../schema/index";
+import { featureFlags, fxRates, markets, pricingRules, settings } from "../schema/index";
 
 export type SeedEnvironment = "staging" | "production";
 
@@ -177,6 +178,30 @@ export async function seedLaunchData(
     at,
     prices: [{ key: "config_price.static_ip_unattached_hour", usd: "0.005", unit: "hour" }],
   });
+
+  // WPU-D3: the DNS zone. Base = AWS cost, USD 0.50 per hosted zone per month (Route 53 pricing), and the
+  // owner's default margin of 15 percent on top (owner instruction 2026-11-12) as a normal dated entry of
+  // the price book `price_book.dns_zone`, so /pricing/book shows it and an admin can change it (audited).
+  // Both are inserted only where missing: an edited price or book is never overwritten.
+  await seedConfigPrices(tx, {
+    market: code,
+    at,
+    prices: [{ key: "config_price.dns_zone_month", usd: "0.50", unit: "month" }],
+  });
+  await tx
+    .insert(settings)
+    .values({
+      key: "price_book.dns_zone",
+      market: code,
+      scope: "market",
+      scopeId: null,
+      value: priceBookValueOf([
+        { from: at, margin: { kind: "percent", value: "0.15" }, commission: null, by: null },
+      ]),
+      setBy: null,
+      createdAt: at,
+    })
+    .onConflictDoNothing();
 
   // R12: in production every flag is off.
   for (const key of FEATURE_FLAG_KEYS) {

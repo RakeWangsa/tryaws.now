@@ -36,15 +36,8 @@ export const settingsEn: Same<typeof settingsBn> = {
         binHint: "Only for a VAT-registered business. 13 digits.",
         binDisclaimer:
           "You are responsible for the BIN you enter; it appears on your tax invoices.",
-        nid: "NID",
-        nidStored: "Stored NID:",
-        nidReplace: "New NID",
-        nidReplaceHint:
-          "Leave empty to keep the stored NID. To replace it, enter the new 10, 13 or 17 digits.",
-        nidRemove: "Remove the stored NID",
         freshHint:
-          "To set, change or remove the BIN or the NID, you must have signed in within the last 10 minutes; if not, we ask you to sign in again first.",
-        nidHint: "For a person. 10, 13 or 17 digits. Enter either the BIN or the NID, not both.",
+          "To set, change or remove the BIN, you must have signed in within the last 10 minutes; if not, we ask you to sign in again first.",
         privacy:
           "Only you can see these numbers, and they are printed on your own invoices. We keep them out of logs and e-mails.",
         save: "Save billing details",
@@ -63,11 +56,6 @@ export const settingsEn: Same<typeof settingsBn> = {
           },
           customerBin: {
             invalid: "A BIN has exactly 13 digits.",
-            conflict: "Enter either the BIN or the NID, not both.",
-          },
-          customerNid: {
-            invalid: "A NID has 10, 13 or 17 digits.",
-            conflict: "Enter either the BIN or the NID, not both.",
           },
         },
       },

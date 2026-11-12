@@ -64,8 +64,8 @@ export function DetailsForm({
 
 /**
  * The billing details (WPU-I3): the buyer of the Mushak 6.3 invoice. Every field is optional. The BIN
- * and the NID are the customer's own identifiers, shown only to the customer in this form; the page
- * never logs them. Field errors come from the same check the server runs (U8).
+ * is the customer's own business identifier, shown only to the customer in this form; the page
+ * never logs it. Field errors come from the same check the server runs (U8).
  */
 export function BillingForm({
   action,
@@ -77,8 +77,6 @@ export function BillingForm({
     billingName: string;
     billingAddress: string;
     customerBin: string;
-    customerNidMasked: string;
-    hasNid: boolean;
   };
   signInHref: string;
 }) {
@@ -93,10 +91,7 @@ export function BillingForm({
     };
   };
   const empty =
-    billing.billingName === "" &&
-    billing.billingAddress === "" &&
-    billing.customerBin === "" &&
-    !billing.hasNid;
+    billing.billingName === "" && billing.billingAddress === "" && billing.customerBin === "";
   return (
     <form action={formAction} noValidate>
       <p className="seccolor mb-3">{empty ? t("summary.empty") : t("summary.filled")}</p>
@@ -139,35 +134,6 @@ export function BillingForm({
         {...fieldError("customerBin")}
       />
       <p className="seccolor small mb-3">{t("binDisclaimer")}</p>
-      {billing.hasNid ? (
-        <p className="mb-2">
-          <strong>{t("nidStored")}</strong> <code>{billing.customerNidMasked}</code>
-        </p>
-      ) : null}
-      <Field
-        name="customerNid"
-        label={billing.hasNid ? t("nidReplace") : t("nid")}
-        hint={billing.hasNid ? t("nidReplaceHint") : t("nidHint")}
-        defaultValue=""
-        maxLength={24}
-        inputMode="numeric"
-        optional
-        autoComplete="off"
-        {...fieldError("customerNid")}
-      />
-      {billing.hasNid ? (
-        <div className="form-check mb-3">
-          <input
-            className="form-check-input"
-            type="checkbox"
-            id="clearCustomerNid"
-            name="clearCustomerNid"
-          />
-          <label className="form-check-label" htmlFor="clearCustomerNid">
-            {t("nidRemove")}
-          </label>
-        </div>
-      ) : null}
       <p className="seccolor small mb-3">{t("freshHint")}</p>
       <p className="seccolor small mb-3">
         <i className="fas fa-lock me-2" aria-hidden="true" />

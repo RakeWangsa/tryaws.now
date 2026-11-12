@@ -10,27 +10,24 @@ import type {
 } from "./settings-actions.ts";
 
 // The Server Action core of the "Billing details" section of /settings/profile (WPU-I3): the name,
-// the address and the BIN or NID that the Mushak 6.3 invoice prints for the buyer. R9 order: authenticate,
-// authorize (the action acts on the row of the session's customer only, R8; a change to the BIN or the
-// NID, setting, changing or clearing, needs a fresh sign-in of the last 10 minutes, 6.1 and U10, WPU-S8;
-// the name and the address do not), validate with zod, rate limit, execute, audit. The stored NID is never
-// sent to the browser, so an empty NID field keeps it and `clearCustomerNid` removes it.
+// the address and the optional BIN that the Mushak 6.3 invoice prints for the buyer. R9 order: authenticate,
+// authorize (the action acts on the row of the session's customer only, R8; a change to the BIN, setting,
+// changing or clearing, needs a fresh sign-in of the last 10 minutes, 6.1 and U10, WPU-S8; the name and
+// the address do not), validate with zod, rate limit, execute, audit. There is no NID (WPU-D3).
 //
-// The BIN and the NID are personal or business identifiers (R14): they are never logged, never put in
-// an audit entry (the entry names the fields that are set, never a value) and never put in an error.
-// Idempotent by absolute assignment (R7, like updateProfileCore): the same form leaves the same state.
+// The BIN is a business identifier (R14): it is never logged, never put in an audit entry (the entry names
+// the fields that are set, never a value) and never put in an error. Idempotent by absolute assignment
+// (R7, like updateProfileCore): the same form leaves the same state.
 
 const BILLING_LIMITS: readonly CustomerLimit[] = Object.freeze([
   Object.freeze({ action: "settings.billing", limit: 20, windowSeconds: 3600 }),
 ]);
 
-// The shape layer: the four fields the form names, trimmed text; any other key is dropped (R11).
+// The shape layer: the three fields the form names, trimmed text; any other key is dropped (R11).
 const BillingForm = formObject({
   billingName: formText,
   billingAddress: formText,
   customerBin: formText,
-  customerNid: formText,
-  clearCustomerNid: formText,
 });
 
 const fail = (
@@ -59,26 +56,14 @@ export async function updateBillingCore(deps: SettingsDeps, raw: unknown): Promi
   const parsed = parseBillingProfile(form);
   if (!parsed.ok) return fail("validation", parsed.fields);
   const typed = parsed.value;
-  const clearNid = form.clearCustomerNid === "on" || form.clearCustomerNid === "true";
 
   try {
     return await deps.store(session.customerId, async (repos): Promise<SettingsResult> => {
       const stored = await repos.profile.getBilling();
-      // An empty NID field keeps the stored NID (it is not sent to the browser); only an explicit
-      // request clears it. The BIN is shown in full, so the form sends it back and it is assigned as is.
-      const keepNid = typed.customerNid === null && !clearNid;
-      const billing = {
-        ...typed,
-        customerNid: keepNid ? (stored?.customerNid ?? null) : typed.customerNid,
-      };
-      if (billing.customerBin !== null && billing.customerNid !== null) {
-        return fail("validation", { customerBin: "conflict", customerNid: "conflict" });
-      }
-      // Authorize: a change to either tax identifier needs a fresh sign-in (R9, R16). Nothing is spent or
-      // written before this answer.
-      const changed =
-        billing.customerBin !== (stored?.customerBin ?? null) ||
-        billing.customerNid !== (stored?.customerNid ?? null);
+      const billing = typed;
+      // Authorize: a change to the BIN needs a fresh sign-in (R9, R16). Nothing is spent or written
+      // before this answer.
+      const changed = billing.customerBin !== (stored?.customerBin ?? null);
       if (changed && !requireFreshSignIn(session, { now: deps.now }).ok) {
         return fail("fresh_sign_in_required");
       }

@@ -82,12 +82,9 @@ export function kycRepo(scope: TenantScope): KycRepo {
       ) {
         return refused("validation");
       }
-      // One open submission per customer. There is no partial unique index, so the customer's
-      // submits are serialised with a transaction lock before the check (the lock ends with the
-      // transaction). The check and the insert then see the same state.
-      await scope.tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${"kyc:" + scope.customerId}, 0))`,
-      );
+      // One open submission per customer: the partial unique index kyc_submissions_one_pending_idx
+      // (migration 0020) is the last word. It replaced the advisory lock. The insert below uses ON CONFLICT
+      // DO NOTHING, so a second pending submit (or a race) does not abort the transaction.
 
       // The same id again by this customer: the earlier result (R7). Another customer's id is a
       // conflict and tells nothing about the row.
@@ -119,12 +116,23 @@ export function kycRepo(scope: TenantScope): KycRepo {
           ${input.id}, ${scope.customerId}, ${input.documentType},
           ${Buffer.from(input.documentNumberEncrypted)}, ARRAY[${keys}]::text[]
         )
-        on conflict (id) do nothing
+        on conflict do nothing
         returning id, document_type as "documentType", status, reviewed_at as "reviewedAt",
           note, created_at as "createdAt"
       `);
       const [row] = rows;
-      if (row === undefined) return refused("conflict"); // the id belongs to another customer
+      if (row === undefined) {
+        // A unique violation (the id, or the one open submission of the customer). The same id of this
+        // customer, written a moment ago by a twin request, is a replay (R7); anything else is a conflict
+        // and tells nothing about another customer's row.
+        const [twin] = await scope.tx
+          .select(VIEW_COLUMNS)
+          .from(kycSubmissions)
+          .where(
+            and(eq(kycSubmissions.id, input.id), eq(kycSubmissions.customerId, scope.customerId)),
+          );
+        return twin !== undefined ? replayed(toView(twin)) : refused("conflict");
+      }
       return created({
         ...row,
         reviewedAt: row.reviewedAt === null ? null : new Date(row.reviewedAt),

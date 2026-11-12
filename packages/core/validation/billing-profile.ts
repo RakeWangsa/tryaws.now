@@ -1,10 +1,10 @@
 import { toAsciiDigits } from "./digits";
 
 // The billing profile of a customer (WPU-I3): the name, the address and the tax identifier that the
-// Mushak 6.3 invoice prints for the buyer. Pure. A BIN (13 digits, a registered business) and a NID
-// (10, 13 or 17 digits, a person) are personal or business identifiers: they are checked here and
-// stored through the customer's own repository, and are never logged (R14). Every field is optional;
-// an empty field is null. The invoice names one tax identifier, so both together are refused.
+// Mushak 6.3 invoice prints for the buyer. Pure. A BIN (13 digits, a registered business) is a business
+// identifier: it is checked here and stored through the customer's own repository, and is never logged
+// (R14). Every field is optional; an empty field is null. There is no NID (WPU-D3, owner decision:
+// the service is prepaid, an individual needs no national id, only a business may give a BIN).
 
 export const BILLING_NAME_MIN = 2;
 export const BILLING_NAME_MAX = 120;
@@ -13,13 +13,12 @@ export const BILLING_ADDRESS_MAX = 300;
 /** Longer raw input is refused before any work is done on it. */
 const RAW_MAX = 2000;
 
-export type BillingFieldCode = "invalid" | "too_short" | "too_long" | "conflict";
+export type BillingFieldCode = "invalid" | "too_short" | "too_long";
 
 export interface BillingProfileInput {
   billingName: string | null;
   billingAddress: string | null;
   customerBin: string | null;
-  customerNid: string | null;
 }
 
 export type BillingParsed =
@@ -31,7 +30,6 @@ const CONTROL_OR_FORMAT = /[\p{Cc}\p{Cf}]/u;
 const JOINERS = /[‌‍]/gu;
 const BAD_JOINER = /(^|\s)[‌‍]|[‌‍](\s|$)|[‌‍]{2}/u;
 const MARKUP = /[<>]/;
-const NID_LENGTHS: readonly number[] = [10, 13, 17];
 
 type Free = { ok: true; value: string | null } | { ok: false; code: BillingFieldCode };
 
@@ -74,7 +72,6 @@ export function parseBillingProfile(form: unknown): BillingParsed {
     billingName: null,
     billingAddress: null,
     customerBin: null,
-    customerNid: null,
   };
 
   const name = freeText(input["billingName"], BILLING_NAME_MIN, BILLING_NAME_MAX);
@@ -90,31 +87,5 @@ export function parseBillingProfile(form: unknown): BillingParsed {
   else if (bin.value !== null && bin.value.length !== 13) fields["customerBin"] = "invalid";
   else out.customerBin = bin.value;
 
-  const nid = digitsOf(input["customerNid"]);
-  if (!nid.ok) fields["customerNid"] = nid.code;
-  else if (nid.value !== null && !NID_LENGTHS.includes(nid.value.length)) {
-    fields["customerNid"] = "invalid";
-  } else out.customerNid = nid.value;
-
-  if (
-    out.customerBin !== null &&
-    out.customerNid !== null &&
-    fields["customerBin"] === undefined &&
-    fields["customerNid"] === undefined
-  ) {
-    fields["customerBin"] = "conflict";
-    fields["customerNid"] = "conflict";
-  }
-
   return Object.keys(fields).length > 0 ? { ok: false, fields } : { ok: true, value: out };
-}
-
-/**
- * A stored NID for the screen: the last 4 digits, every other digit an asterisk (WPU-S8). The full number
- * is never sent to the browser. Null or empty gives an empty string.
- */
-export function maskNid(nid: string | null): string {
-  if (nid === null || nid === "") return "";
-  const keep = nid.length > 4 ? nid.slice(-4) : "";
-  return "*".repeat(nid.length - keep.length) + keep;
 }

@@ -192,8 +192,7 @@
         "type",
         "billing_name",
         "billing_address",
-        "customer_bin",
-        "customer_nid"
+        "customer_bin"
       ],
       "selectColumns": null
     },
@@ -232,8 +231,7 @@
         "name",
         "billing_name",
         "billing_address",
-        "customer_bin",
-        "customer_nid"
+        "customer_bin"
       ]
     },
     "report_ro": {

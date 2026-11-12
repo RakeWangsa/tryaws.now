@@ -27,7 +27,6 @@ export const invoicesBn = {
       noName: "নাম দেওয়া নেই",
       address: "ঠিকানা",
       taxIdBin: "বিআইএন",
-      taxIdNid: "এনআইডি",
       notFound: {
         title: "ইনভয়েসটি পাওয়া যায়নি",
         body: "লিংকটি ঠিক আছে কিনা দেখুন, অথবা সব ইনভয়েসের তালিকায় ফিরে যান।",

@@ -168,14 +168,16 @@ describe("the printable invoice", () => {
     expect(html).toContain("<strong>BIN:</strong> 1234567890123");
     const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
     expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
-    // a NID prints with its own label
+    // WPU-D3: a snapshot issued before the NID was removed still prints, without the number
     state.rows[0]!.buyer = {
       name: null,
       address: null,
       taxId: { kind: "nid", value: "1234567890" },
     };
     const nid = (await invoiceDocument(deps(A, "Karim"), "en", INV)).html as string;
-    expect(nid).toContain("<strong>NID:</strong> 1234567890");
+    expect(nid).not.toMatch(/1234567890(?!\d)/);
+    expect(nid).not.toContain("NID");
+    expect(nid).toContain("<strong>BIN:</strong> -");
     expect(nid).toContain("Karim");
   });
 

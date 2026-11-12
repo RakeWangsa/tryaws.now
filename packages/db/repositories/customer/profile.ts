@@ -36,13 +36,12 @@ export interface ProfileUpdate {
 
 // WPU-I3: the billing profile of the customer, printed as the buyer of the Mushak 6.3 invoice. Kept
 // apart from CustomerProfile: the profile screen and every other reader of `get` never carry the tax
-// ids. BIN and NID are personal or business identifiers: never logged (R14), read only through the
+// ids. The BIN is a business identifier: never logged (R14), read only through the
 // session customer's scope.
 export interface BillingProfile {
   billingName: string | null;
   billingAddress: string | null;
   customerBin: string | null;
-  customerNid: string | null;
 }
 
 export interface ProfileRepo {
@@ -74,7 +73,6 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}$/;
 // The same rules as the CHECKs customers_billing_*_check, customers_customer_*_check and
 // customers_tax_id_one_check, and as parseBillingProfile of the core (which @tc/db cannot import).
 const CONTROL_OR_MARKUP = /[\p{Cc}<>]/u;
-const NID = /^([0-9]{10}|[0-9]{13}|[0-9]{17})$/;
 const BIN = /^[0-9]{13}$/;
 const textOk = (value: unknown, min: number, max: number): boolean =>
   value === null ||
@@ -84,23 +82,19 @@ const textOk = (value: unknown, min: number, max: number): boolean =>
     !CONTROL_OR_MARKUP.test(value));
 function billingValid(input: BillingProfile): boolean {
   if (typeof input !== "object" || input === null) return false;
-  const { billingName, billingAddress, customerBin, customerNid } = input;
+  const { billingName, billingAddress, customerBin } = input;
   if (!textOk(billingName, 2, 120) || !textOk(billingAddress, 5, 300)) return false;
   if (customerBin !== null && !(typeof customerBin === "string" && BIN.test(customerBin))) {
     return false;
   }
-  if (customerNid !== null && !(typeof customerNid === "string" && NID.test(customerNid))) {
-    return false;
-  }
-  return customerBin === null || customerNid === null;
+  return true;
 }
 
-// Only these four columns, named: the repository never reads or returns a column it did not list.
+// Only these three columns, named: the repository never reads or returns a column it did not list.
 const BILLING_COLUMNS = {
   billingName: customers.billingName,
   billingAddress: customers.billingAddress,
   customerBin: customers.customerBin,
-  customerNid: customers.customerNid,
 };
 
 // Selected and returned by name: the repository never reads or returns a column it did not list.
@@ -202,14 +196,13 @@ export function profileRepo(scope: TenantScope): ProfileRepo {
 
     setBilling: async (input) => {
       if (!billingValid(input)) return refused("validation");
-      // The four values are named one by one: nothing else of the input reaches the statement.
+      // The three values are named one by one: nothing else of the input reaches the statement.
       const [row] = await scope.tx
         .update(customers)
         .set({
           billingName: input.billingName,
           billingAddress: input.billingAddress,
           customerBin: input.customerBin,
-          customerNid: input.customerNid,
         })
         .where(eq(customers.id, scope.customerId))
         .returning(BILLING_COLUMNS);

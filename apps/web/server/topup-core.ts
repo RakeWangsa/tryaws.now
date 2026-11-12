@@ -220,7 +220,8 @@ function toGateway(
   requestId: string,
   error: (code: TopUpErrorCode, extra?: { retryAfterSeconds?: number }, fresh?: boolean) => Outcome,
 ): Outcome {
-  const checked = checkGatewayRedirect(value.redirectUrl);
+  // The .test host of the in-memory EPS is accepted only when the fakes are on (never in production).
+  const checked = checkGatewayRedirect(value.redirectUrl, { allowTestHosts: env.config.fakes });
   if (checked !== null) return { redirectTo: checked };
   if (env.config.fakes && value.redirectUrl.startsWith(`${DEV_CHECKOUT}?`)) {
     const query = value.redirectUrl.slice(DEV_CHECKOUT.length);

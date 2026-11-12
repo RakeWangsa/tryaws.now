@@ -157,3 +157,60 @@ it("the web role cannot read the keys or the number of a submission (42501)", as
     "42501",
   );
 });
+// WPU-D3 (audit C.18): the partial unique index kyc_submissions_one_pending_idx replaced the advisory lock.
+it("the database allows one pending submission per customer, even if the repository is bypassed", async () => {
+  const id = await newCustomer(t.pool);
+  await as(id, (r) => r.kyc.submit(submission()));
+  await expect(
+    t.pool.query(
+      `insert into kyc_submissions (id, customer_id, document_type, document_number_encrypted, s3_keys)
+       values (gen_random_uuid(), $1, 'nid', 'x'::bytea, ARRAY['k'])`,
+      [id],
+    ),
+  ).rejects.toMatchObject({
+    code: "23505",
+    constraint: "kyc_submissions_one_pending_idx",
+  });
+});
+
+it("two different submissions of one customer at the same time: one is stored, one is a conflict", async () => {
+  const id = await newCustomer(t.pool);
+  const results = await Promise.all([
+    as(id, (r) => r.kyc.submit(submission())),
+    as(id, (r) => r.kyc.submit(submission())),
+  ]);
+  expect(results.filter((x) => x.ok)).toHaveLength(1);
+  expect(results.filter((x) => !x.ok)).toEqual([{ ok: false, error: "conflict" }]);
+  const count = await t.pool.query(
+    "select count(*)::int as n from kyc_submissions where customer_id = $1",
+    [id],
+  );
+  expect(count.rows[0].n).toBe(1);
+});
+
+it("the same submission id twice at the same time: one row, the twin is a replay (R7)", async () => {
+  const id = await newCustomer(t.pool);
+  const input = submission();
+  const results = await Promise.all([
+    as(id, (r) => r.kyc.submit(input)),
+    as(id, (r) => r.kyc.submit(input)),
+  ]);
+  expect(results.every((x) => x.ok)).toBe(true);
+  expect(results.filter((x) => x.ok && x.replayed)).toHaveLength(1);
+  const count = await t.pool.query(
+    "select count(*)::int as n from kyc_submissions where customer_id = $1",
+    [id],
+  );
+  expect(count.rows[0].n).toBe(1);
+});
+
+it("another customer's submission id is a conflict and is not read back", async () => {
+  const a = await newCustomer(t.pool);
+  const b = await newCustomer(t.pool);
+  const input = submission();
+  await as(a, (r) => r.kyc.submit(input));
+  expect(await as(b, (r) => r.kyc.submit(input))).toEqual({
+    ok: false,
+    error: "conflict",
+  });
+});

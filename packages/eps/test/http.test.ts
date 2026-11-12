@@ -229,7 +229,7 @@ describe("initialize", () => {
     }
   });
 
-  it("accepts the two allowed hosts", async () => {
+  it("accepts the test host in sandbox mode, and the real host in both modes", async () => {
     const { gw } = setup([
       tokenOk(),
       json({ TransactionId: "T", RedirectURL: "https://pg.eps.test/PG?data=1", ErrorCode: null }),
@@ -237,6 +237,31 @@ describe("initialize", () => {
     expect(await gw.initialize(req())).toMatchObject({
       ok: true,
       redirectUrl: "https://pg.eps.test/PG?data=1",
+    });
+  });
+
+  it("refuses the test host in production mode (WPU-D3, C.7)", async () => {
+    const prod = epsCredentials({
+      mode: "production",
+      merchantId: "m",
+      storeId: "s",
+      username: "u",
+      password: "p",
+      hashKey: "h",
+    });
+    const s = scripted([
+      tokenOk(),
+      json({ TransactionId: "T", RedirectURL: "https://pg.eps.test/PG?data=1", ErrorCode: null }),
+      json({ TransactionId: "T", RedirectURL: "https://pg.eps.com.bd/PG?data=1", ErrorCode: null }),
+    ]);
+    const gw = createEpsGateway(prod, {
+      fetch: s.fetch,
+      clock: clockAt("2030-01-01T00:00:00Z").clock,
+    });
+    expect(await gw.initialize(req())).toEqual({ ok: false, reason: "unavailable" });
+    expect(await gw.initialize(req())).toMatchObject({
+      ok: true,
+      redirectUrl: "https://pg.eps.com.bd/PG?data=1",
     });
   });
 

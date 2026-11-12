@@ -19,7 +19,6 @@ export {
 export type { FieldCode, Parsed, SignUpInput } from "./auth-forms";
 export {
   parseBillingProfile,
-  maskNid,
   BILLING_NAME_MIN,
   BILLING_NAME_MAX,
   BILLING_ADDRESS_MIN,
