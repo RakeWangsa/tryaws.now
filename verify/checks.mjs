@@ -3260,6 +3260,15 @@ const b6Notify = {
     "--no-passWithNoTests",
   ],
 };
+// WPU-X6: axe-core over the signed-out pages of web and admin at 360 px and 1280 px. Like auth-smoke, a
+// missing database, browser, package or port prints BLOCKED and fails (exit 3): never a pass.
+const a11ySmoke = {
+  id: "a11y-smoke",
+  title: "WPU-X6: Playwright and axe-core find no WCAG A/AA violation on the signed-out pages",
+  command: ["node", "scripts/smoke-a11y.mjs"],
+  timeoutMs: 1_800_000,
+};
+TASKS["WPU-X6"] = [specSync, baselineSync, lint, typecheck, format, a11ySmoke, repo];
 TASKS["WPU-B6"] = [
   specSync,
   baselineSync,
