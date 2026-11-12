@@ -11,8 +11,8 @@ import { EDGE_REGION, resourceName, type StageConfig } from "../lib/stage";
 //
 // Server Actions are POSTs to the page URL that carry a `Next-Action` header. A path match alone is
 // weak (encoded paths, case), so every uriPath match applies URL_DECODE (priority 0) then LOWERCASE
-// (priority 1), and the rules for pages additionally require the Next-Action header. A catch-all
-// rule limits any POST that carries `Next-Action`, whatever the path.
+// (priority 1). The page rules need only POST + path (a client may leave the header out). A
+// catch-all rule limits any POST that carries `Next-Action` or a form content type, whatever the path.
 // VERIFY: the real path of each page once the routes are final (apps/web/app/[locale]/...); the
 // match is "contains", so /bn/... and /en/... both match. A double-encoded path still escapes one
 // URL_DECODE; the managed Common rule set and the app limits are the answer to that.
@@ -51,6 +51,20 @@ const hasNextAction = {
     textTransformations: [{ priority: 0, type: "NONE" }],
   },
 };
+// Content types of form posts. Header names are matched case-insensitively by WAF (singleHeader
+// name in lower case); the value is lower-cased so "Multipart/Form-Data" matches too.
+// VERIFY: WAF v2 singleHeader name is case-insensitive, and CONTAINS on the header value works with
+// the LOWERCASE transformation.
+const contentTypeContains = (value: string) => ({
+  byteMatchStatement: {
+    searchString: value,
+    fieldToMatch: { singleHeader: { name: "content-type" } },
+    positionalConstraint: "CONTAINS",
+    textTransformations: [{ priority: 0, type: "LOWERCASE" }],
+  },
+});
+const isMultipartForm = contentTypeContains("multipart/form-data");
+const isUrlEncodedForm = contentTypeContains("application/x-www-form-urlencoded");
 const pathContains = (contains: string) => ({
   byteMatchStatement: {
     searchString: contains,
@@ -96,15 +110,14 @@ function rateRule(name: string, priority: number, limit: number, statements: unk
 function rateRules(firstPriority: number) {
   return [
     ...PAGE_RATE_RULES.map((rule, index) =>
-      rateRule(rule.name, firstPriority + index, rule.limit, [
-        isPost,
-        hasNextAction,
-        pathContains(rule.contains),
-      ]),
+      // POST + path only: a client that leaves out the Next-Action header (a plain form POST) is
+      // still counted.
+      rateRule(rule.name, firstPriority + index, rule.limit, [isPost, pathContains(rule.contains)]),
     ),
+    // Catch-all, per IP: any POST that looks like a Server Action or a form submission.
     rateRule("server-actions", firstPriority + PAGE_RATE_RULES.length, SERVER_ACTION_LIMIT, [
       isPost,
-      hasNextAction,
+      { orStatement: { statements: [hasNextAction, isMultipartForm, isUrlEncodedForm] } },
     ]),
     rateRule(EPS_RETURN.name, firstPriority + PAGE_RATE_RULES.length + 1, EPS_RETURN.limit, [
       pathContains(EPS_RETURN.contains),

@@ -201,13 +201,26 @@ describe("R1: the web tier cannot assume pool roles", () => {
 });
 
 describe("WAF rate rules and Server Actions", () => {
-  it("scopes the page rules on the Next-Action header and adds a catch-all for it", () => {
+  it("keeps the page rules on POST + path, with no Next-Action requirement", () => {
+    expect(waf).toMatch(
+      /rateRule\(rule\.name, firstPriority \+ index, rule\.limit, \[isPost, pathContains\(rule\.contains\)\]\)/,
+    );
+    const pageRule = /rateRule\(rule\.name[^;]*?\]\)/.exec(waf)?.[0] ?? "";
+    expect(pageRule).not.toMatch(/hasNextAction|next-action/i);
+  });
+
+  it("limits, per IP, any POST with Next-Action or a form content type (OR of three conditions)", () => {
     expect(waf).toContain('fieldToMatch: { singleHeader: { name: "next-action" } }');
     expect(waf).toMatch(/comparisonOperator: "GT", size: 0/);
-    expect(waf).toContain('rateRule("server-actions"');
     expect(waf).toMatch(
-      /rateRule\(rule\.name, firstPriority \+ index, rule\.limit, \[ isPost, hasNextAction, pathContains\(rule\.contains\)/,
+      /rateRule\("server-actions", [^,]+, SERVER_ACTION_LIMIT, \[ isPost, \{ orStatement: \{ statements: \[hasNextAction, isMultipartForm, isUrlEncodedForm\] \} \}\]\)/,
     );
+    expect(waf).toContain('contentTypeContains("multipart/form-data")');
+    expect(waf).toContain('contentTypeContains("application/x-www-form-urlencoded")');
+    expect(waf).toMatch(
+      /fieldToMatch: \{ singleHeader: \{ name: "content-type" \} \}, positionalConstraint: "CONTAINS", textTransformations: \[\{ priority: 0, type: "LOWERCASE" \}\]/,
+    );
+    expect(waf).toContain('aggregateKeyType: "IP"');
   });
 
   it("decodes before lowercasing in every uriPath match", () => {
