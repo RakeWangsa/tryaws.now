@@ -143,6 +143,7 @@ Resources:
                   # the origin up by family", "fails closed, before any create, without ... an origin of the
                   # customer").
                   - lightsail:CreateBucket
+                  - lightsail:CreateCertificate
                   - lightsail:CreateContainerService
                   - lightsail:CreateContainerServiceDeployment
                   - lightsail:CreateDisk
@@ -173,6 +174,7 @@ Resources:
                   - lightsail:EnableAddOn
                   - lightsail:GetBucketAccessKeys
                   - lightsail:GetBuckets
+                  - lightsail:GetCertificates
                   - lightsail:GetContainerServices
                   - lightsail:GetDisk
                   - lightsail:GetDiskSnapshot
@@ -209,8 +211,10 @@ Resources:
               - Sid: ChangeOnlyResourcesTheDatabasePlatformTagged
                 Effect: Allow
                 Action:
+                  - lightsail:AttachCertificateToDistribution
                   - lightsail:UpdateBucket
                   - lightsail:UpdateDistribution
+                  - lightsail:UpdateDistributionBundle
                 Resource:
                   - Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:Bucket/*"
                   - Fn::Sub: "arn:aws:lightsail:*:${AWS::AccountId}:Distribution/*"

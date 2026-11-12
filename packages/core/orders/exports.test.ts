@@ -209,6 +209,7 @@ const PRODUCTS = [
   "MAX_CACHE_PATHS",
   "MAX_TTL_SECONDS",
   "PLAN_CHANGE_FAMILIES",
+  "checkCachePolicy",
   "checkedContainerCertificateDomain",
   "deploymentHistoryEntry",
   "parseCachePolicy",

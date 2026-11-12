@@ -73,6 +73,37 @@ function parsePaths(v: unknown): { path: string; behavior: CacheBehavior }[] | n
 }
 
 /**
+ * A stored or queued policy (the nested shape `parseCachePolicy` returns) checked again by the same
+ * rules: the adapter never trusts a payload the web tier wrote (R9, R16).
+ */
+export function checkCachePolicy(raw: unknown): Result<CachePolicy> {
+  const p = isRecord(raw) ? raw : {};
+  const s = isRecord(p.settings) ? p.settings : {};
+  return parseCachePolicy({
+    defaultBehavior: p.defaultBehavior,
+    defaultTtl: s.defaultTtl,
+    minTtl: s.minimumTtl,
+    maxTtl: s.maximumTtl,
+    allowedMethods: s.allowedHttpMethods,
+    cachedMethods: s.cachedHttpMethods,
+    cookies: s.cookies,
+    headers: s.headers,
+    queryStrings: s.queryStrings === true ? "on" : s.queryStrings === false ? "off" : undefined,
+    paths: Array.isArray(p.paths)
+      ? p.paths
+          .map((x) =>
+            isRecord(x) && typeof x.path === "string" && typeof x.behavior === "string"
+              ? `${x.path}=${x.behavior}`
+              : "x",
+          )
+          .join("\n")
+      : p.paths === undefined
+        ? ""
+        : "x",
+  });
+}
+
+/**
  * The cache policy from a form or a payload. The field names of the errors are the form's. A policy
  * that AWS would refuse is refused here: minimum <= default <= maximum, and forwarding all headers
  * needs a minimum TTL of 0.

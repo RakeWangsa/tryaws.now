@@ -64,6 +64,7 @@ function setup(
     step: string | null,
     extra: {
       kind?: OperationKind;
+      payload?: unknown;
       state?: string;
       createdAt?: Date;
       config?: Record<string, unknown>;
@@ -75,7 +76,7 @@ function setup(
       step,
       attempt: 1,
       createdAt: extra.createdAt ?? new Date(NOW),
-      payload: { orderId: OID },
+      payload: extra.payload ?? { orderId: OID },
     },
     stepKey: `op-1:${step ?? "start"}`,
     resource: {
@@ -429,5 +430,274 @@ describe("reset_cache (WPU-G7)", () => {
       adapter.aws.action("reset_cache", ctx(null, { kind: "reset_cache", state: "stopped" })),
     ).rejects.toMatchObject({ code: "conflict" });
     expect(aws.seen.length).toBe(0);
+  });
+});
+
+describe("plan change at the next renewal (WPU-G8)", () => {
+  const NEXT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  it("schedule_plan_change stores the pending bundle and calls AWS not at all", async () => {
+    const { adapter, ctx, calls, bundleCalls } = setup();
+    const r = await adapter.aws.action(
+      "schedule_plan_change",
+      ctx(null, { kind: "schedule_plan_change", state: "active", payload: { productId: NEXT } }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { pendingPlan: { productId: NEXT } } },
+    });
+    expect(bundleCalls).toEqual([{ customerId: CID, productId: NEXT }]);
+    expect(calls()).toEqual([]);
+    const cleared = await adapter.aws.action(
+      "schedule_plan_change",
+      ctx(null, { state: "stopped", payload: { productId: null } }),
+    );
+    expect(cleared).toMatchObject({ patch: { configMerge: { pendingPlan: null } } });
+  });
+
+  it("refuses the current bundle product, a bad id, an unknown bundle and a dead distribution", async () => {
+    const { adapter, ctx } = setup();
+    for (const productId of [PRODUCT, "nope", 7, undefined]) {
+      await expect(
+        adapter.aws.action(
+          "schedule_plan_change",
+          ctx(null, { state: "active", payload: { productId } }),
+        ),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+    const none = setup({ deps: { loadBundle: async () => null } });
+    await expect(
+      none.adapter.aws.action(
+        "schedule_plan_change",
+        none.ctx(null, { state: "active", payload: { productId: NEXT } }),
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+    await expect(
+      adapter.aws.action(
+        "schedule_plan_change",
+        ctx(null, { state: "destroyed", payload: { productId: NEXT } }),
+      ),
+    ).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("change_cdn_bundle (the renewal's apply) sets the bundle of the catalog product and keeps it as the applied plan", async () => {
+    const { aws, adapter, ctx, body } = setup({ deps: { loadBundle: async () => "large_1_0" } });
+    aws.on("lightsail", "UpdateDistributionBundle", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "change_cdn_bundle",
+      ctx(null, { kind: "change_cdn_bundle", state: "active", payload: { productId: NEXT } }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: { productId: NEXT, appliedPlan: { productId: NEXT }, pendingPlan: null },
+      },
+    });
+    expect(body("UpdateDistributionBundle")).toEqual({
+      distributionName: DIST,
+      bundleId: "large_1_0",
+    });
+    await expect(
+      adapter.aws.action(
+        "change_cdn_bundle",
+        ctx(null, { state: "active", payload: { productId: "x" } }),
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+  });
+});
+
+describe("set_cache_behaviors (WPU-G8)", () => {
+  const POLICY = {
+    defaultBehavior: "cache",
+    settings: {
+      defaultTtl: 3600,
+      minimumTtl: 0,
+      maximumTtl: 86400,
+      allowedHttpMethods: "GET,HEAD",
+      cachedHttpMethods: "GET,HEAD",
+      cookies: "none",
+      headers: "none",
+      queryStrings: false,
+    },
+    paths: [{ path: "images/*", behavior: "cache" }],
+  };
+
+  it("sends the whole policy of the checked payload to UpdateDistribution", async () => {
+    const { aws, adapter, ctx, body } = setup();
+    aws.on("lightsail", "UpdateDistribution", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "set_cache_behaviors",
+      ctx(null, { kind: "set_cache_behaviors", state: "active", payload: POLICY }),
+    );
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { cachePolicy: POLICY } } });
+    expect(body("UpdateDistribution")).toEqual({
+      distributionName: DIST,
+      defaultCacheBehavior: { behavior: "cache" },
+      cacheBehaviorSettings: {
+        defaultTTL: 3600,
+        minimumTTL: 0,
+        maximumTTL: 86400,
+        allowedHTTPMethods: "GET,HEAD",
+        cachedHTTPMethods: "GET,HEAD",
+        forwardedCookies: { option: "none" },
+        forwardedHeaders: { option: "none" },
+        forwardedQueryStrings: { option: false },
+      },
+      cacheBehaviors: [{ path: "images/*", behavior: "cache" }],
+    });
+  });
+
+  it("refuses a payload the policy parser refuses and a distribution that is not active (R16)", async () => {
+    const { aws, adapter, ctx } = setup();
+    await expect(
+      adapter.aws.action(
+        "set_cache_behaviors",
+        ctx(null, { state: "active", payload: { ...POLICY, defaultBehavior: "always" } }),
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+    await expect(
+      adapter.aws.action("set_cache_behaviors", ctx(null, { state: "stopped", payload: POLICY })),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(aws.seen.length).toBe(0);
+  });
+});
+
+describe("set_cdn_origin (WPU-G8)", () => {
+  const OTHER_ORIGIN = "77777777-8888-4777-8666-555555555555";
+
+  it("changes the origin to another resource of the same customer, by its generated name", async () => {
+    const { aws, adapter, ctx, body } = setup({
+      rows: { [OTHER_ORIGIN]: origin({ id: OTHER_ORIGIN, family: "bucket" }) },
+    });
+    aws.on(
+      "lightsail",
+      "GetBuckets",
+      lightsailOk({ buckets: [{ name: awsResourceName("bucket", OTHER_ORIGIN) }] }),
+    );
+    aws.on("lightsail", "UpdateDistribution", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "set_cdn_origin",
+      ctx(null, { kind: "set_cdn_origin", state: "active", payload: { originId: OTHER_ORIGIN } }),
+    );
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { originId: OTHER_ORIGIN } } });
+    expect(body("UpdateDistribution")).toEqual({
+      distributionName: DIST,
+      origin: { name: awsResourceName("bucket", OTHER_ORIGIN), regionName: "ap-southeast-1" },
+    });
+  });
+
+  it("refuses another customer's resource, a missing one, a wrong family, a bad id and free text (R8, R11)", async () => {
+    const rows = {
+      [OTHER_ORIGIN]: origin({ id: OTHER_ORIGIN, customerId: OTHER }),
+      "66666666-8888-4777-8666-555555555555": origin({
+        id: "66666666-8888-4777-8666-555555555555",
+        family: "database",
+      }),
+      "55555555-8888-4777-8666-555555555555": origin({
+        id: "55555555-8888-4777-8666-555555555555",
+        state: "suspended",
+      }),
+    };
+    const { aws, adapter, ctx } = setup({ rows });
+    for (const originId of [
+      OTHER_ORIGIN,
+      "66666666-8888-4777-8666-555555555555",
+      "55555555-8888-4777-8666-555555555555",
+      "44444444-8888-4777-8666-555555555555",
+      "tc-instance-0123456789abcdef",
+      "my-server",
+      7,
+    ]) {
+      await expect(
+        adapter.aws.action("set_cdn_origin", ctx(null, { state: "active", payload: { originId } })),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+    expect(aws.seen.length).toBe(0);
+  });
+});
+
+describe("custom domain and certificate (WPU-G8)", () => {
+  const CERT = awsResourceName("cert", RID);
+  const certs = (status: string) =>
+    lightsailOk({
+      certificates: [
+        {
+          certificateName: CERT,
+          certificateDetail: {
+            name: CERT,
+            domainName: "cdn.example.com",
+            status,
+            domainValidationRecords: [
+              { resourceRecord: { name: "_a.cdn.example.com.", type: "CNAME", value: "_b.acm." } },
+            ],
+          },
+        },
+      ],
+    });
+
+  it("request_certificate asks for one certificate under a generated name", async () => {
+    const { aws, adapter, ctx, body } = setup();
+    aws.on("lightsail", "GetCertificates", notFound());
+    aws.on("lightsail", "CreateCertificate", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "request_certificate",
+      ctx(null, { state: "active", payload: { domain: "CDN.Example.com" } }),
+    );
+    expect(r).toMatchObject({
+      patch: {
+        configMerge: { certificate: { domain: "cdn.example.com", status: "PENDING_VALIDATION" } },
+      },
+    });
+    expect(body("CreateCertificate")).toMatchObject({
+      certificateName: CERT,
+      domainName: "cdn.example.com",
+    });
+    await expect(
+      adapter.aws.action(
+        "request_certificate",
+        ctx(null, { state: "active", payload: { domain: "*.x.com" } }),
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+  });
+
+  it("refresh_certificate records the validation records and attaches an issued certificate to the distribution", async () => {
+    const { aws, adapter, ctx, body, distribution } = setup();
+    aws.on("lightsail", "GetCertificates", certs("ISSUED"));
+    aws.on("lightsail", "GetDistributions", distribution("Deployed"));
+    aws.on("lightsail", "AttachCertificateToDistribution", lightsailOk({}));
+    const r = await adapter.aws.action("refresh_certificate", ctx(null, { state: "active" }));
+    expect(r).toMatchObject({
+      patch: {
+        configMerge: {
+          certificate: {
+            domain: "cdn.example.com",
+            status: "ISSUED",
+            attached: true,
+            records: [{ name: "_a.cdn.example.com.", type: "CNAME", value: "_b.acm." }],
+          },
+        },
+      },
+    });
+    expect(body("AttachCertificateToDistribution")).toEqual({
+      distributionName: DIST,
+      certificateName: CERT,
+    });
+  });
+
+  it("a pending certificate is only recorded; one that is attached already is left alone", async () => {
+    const pending = setup();
+    pending.aws.on("lightsail", "GetCertificates", certs("PENDING_VALIDATION"));
+    await pending.adapter.aws.action("refresh_certificate", pending.ctx(null, { state: "active" }));
+    expect(pending.calls()).not.toContain("AttachCertificateToDistribution");
+
+    const done = setup();
+    done.aws.on("lightsail", "GetCertificates", certs("ISSUED"));
+    done.aws.on(
+      "lightsail",
+      "GetDistributions",
+      done.distribution("Deployed", { certificateName: CERT }),
+    );
+    await done.adapter.aws.action("refresh_certificate", done.ctx(null, { state: "active" }));
+    expect(done.calls()).not.toContain("AttachCertificateToDistribution");
   });
 });

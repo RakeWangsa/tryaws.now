@@ -336,6 +336,210 @@ describe("actions", () => {
   });
 });
 
+describe("plan change at the next renewal (WPU-G8)", () => {
+  const NEXT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const CURRENT = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+  it("schedule_plan_change stores the pending plan in the config and calls AWS not at all", async () => {
+    const { adapter, ctx, calls, planCalls } = setup();
+    const r = await adapter.aws.action(
+      "schedule_plan_change",
+      ctx(null, { payload: { productId: NEXT } }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: { configMerge: { pendingPlan: { productId: NEXT } } },
+    });
+    expect(planCalls).toEqual([{ customerId: CID, productId: NEXT }]);
+    expect(calls()).toEqual([]);
+  });
+
+  it("a null product cancels the pending plan; the current plan, a bad id and an unknown plan are refused", async () => {
+    const { adapter, ctx, calls } = setup();
+    const cleared = await adapter.aws.action(
+      "schedule_plan_change",
+      ctx(null, { payload: { productId: null } }),
+    );
+    expect(cleared).toMatchObject({ kind: "done", patch: { configMerge: { pendingPlan: null } } });
+    for (const productId of [CURRENT, "nope", 7, undefined]) {
+      await expect(
+        adapter.aws.action("schedule_plan_change", ctx(null, { payload: { productId } })),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+    const none = setup({ loadPlan: async () => null });
+    await expect(
+      none.adapter.aws.action(
+        "schedule_plan_change",
+        none.ctx(null, { payload: { productId: NEXT } }),
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+    await expect(
+      adapter.aws.action(
+        "schedule_plan_change",
+        ctx(null, { payload: { productId: NEXT }, state: "destroyed" }),
+      ),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(calls()).toEqual([]);
+  });
+
+  it("scale_container (the renewal's apply) moves the pending plan to the applied plan", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "scale_container",
+      ctx(null, { payload: { productId: NEXT, subscriptionId: OID } }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: { productId: NEXT, appliedPlan: { productId: NEXT }, pendingPlan: null },
+      },
+    });
+  });
+});
+
+describe("deployment history (WPU-G8)", () => {
+  it("keeps the last ten deployments as date, images and endpoint, never the environment", async () => {
+    const { aws, adapter, ctx } = setup();
+    aws.on("lightsail", "CreateContainerServiceDeployment", lightsailOk({}));
+    const old = Array.from({ length: 10 }, (_, i) => ({
+      at: `2026-11-0${(i % 9) + 1}T00:00:00.000Z`,
+      images: [`img${i}`],
+      endpoint: false,
+    }));
+    const r = await adapter.aws.action(
+      "deploy_containers",
+      ctx(null, {
+        config: { deployments: old },
+        payload: {
+          containers: [{ image: "nginx", environment: { TOKEN: "s3cr3t-value" } }],
+        },
+      }),
+    );
+    expect(r.kind).toBe("done");
+    const merge = (r as { patch: { configMerge: { deployments: { images: string[] }[] } } }).patch
+      .configMerge;
+    expect(merge.deployments).toHaveLength(10);
+    expect(merge.deployments[9]).toMatchObject({ images: ["nginx"], endpoint: false });
+    expect(merge.deployments[0]).toMatchObject({ images: ["img1"] });
+    expect(JSON.stringify(merge.deployments)).not.toContain("s3cr3t-value");
+  });
+});
+
+describe("custom domain and certificate (WPU-G8)", () => {
+  const CERT = awsResourceName("cert", RID);
+  const issued = (extra: Record<string, unknown> = {}) =>
+    lightsailOk({
+      certificates: [
+        {
+          certificateName: CERT,
+          certificateDetail: {
+            name: CERT,
+            domainName: "app.example.com",
+            status: "ISSUED",
+            domainValidationRecords: [
+              {
+                resourceRecord: {
+                  name: "_x.app.example.com.",
+                  type: "CNAME",
+                  value: "_y.acm.aws.",
+                },
+              },
+            ],
+            ...extra,
+          },
+        },
+      ],
+    });
+
+  it("request_certificate creates one certificate under a generated name for a checked domain", async () => {
+    const { aws, adapter, ctx, body } = setup();
+    aws.on("lightsail", "GetCertificates", notFound());
+    aws.on("lightsail", "CreateCertificate", lightsailOk({}));
+    const r = await adapter.aws.action(
+      "request_certificate",
+      ctx(null, { payload: { domain: "App.Example.com" } }),
+    );
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: {
+          certificate: { domain: "app.example.com", status: "PENDING_VALIDATION", attached: false },
+        },
+      },
+    });
+    const create = body("CreateCertificate");
+    expect(create).toMatchObject({ certificateName: CERT, domainName: "app.example.com" });
+    expect(JSON.stringify(create.tags)).not.toContain("Secret");
+    for (const bad of ["localhost", "*.example.com", 5, undefined]) {
+      await expect(
+        adapter.aws.action("request_certificate", ctx(null, { payload: { domain: bad } })),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+  });
+
+  it("a certificate that exists is not created again (R7)", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on("lightsail", "GetCertificates", issued());
+    await adapter.aws.action(
+      "request_certificate",
+      ctx(null, { payload: { domain: "app.example.com" } }),
+    );
+    expect(calls()).not.toContain("CreateCertificate");
+  });
+
+  it("refresh_certificate stores the validation records and attaches an issued certificate once", async () => {
+    const { aws, adapter, ctx, body, service } = setup();
+    aws.on("lightsail", "GetCertificates", issued());
+    aws.on("lightsail", "GetContainerServices", service("RUNNING"));
+    aws.on("lightsail", "UpdateContainerService", lightsailOk({}));
+    const r = await adapter.aws.action("refresh_certificate", ctx(null));
+    expect(r).toMatchObject({
+      kind: "done",
+      patch: {
+        configMerge: {
+          certificate: {
+            domain: "app.example.com",
+            status: "ISSUED",
+            attached: true,
+            records: [{ name: "_x.app.example.com.", type: "CNAME", value: "_y.acm.aws." }],
+          },
+        },
+      },
+    });
+    expect(body("UpdateContainerService")).toEqual({
+      serviceName: SERVICE,
+      publicDomainNames: { [CERT]: ["app.example.com"] },
+    });
+  });
+
+  it("a pending certificate is only recorded, an attached one is not attached again, none is refused", async () => {
+    const pending = setup();
+    pending.aws.on("lightsail", "GetCertificates", issued({ status: "PENDING_VALIDATION" }));
+    const r = await pending.adapter.aws.action("refresh_certificate", pending.ctx(null));
+    expect(r).toMatchObject({
+      patch: { configMerge: { certificate: { status: "PENDING_VALIDATION", attached: false } } },
+    });
+    expect(pending.calls()).not.toContain("UpdateContainerService");
+
+    const attached = setup();
+    attached.aws.on("lightsail", "GetCertificates", issued());
+    attached.aws.on(
+      "lightsail",
+      "GetContainerServices",
+      attached.service("RUNNING", { publicDomainNames: { [CERT]: ["app.example.com"] } }),
+    );
+    await attached.adapter.aws.action("refresh_certificate", attached.ctx(null));
+    expect(attached.calls()).not.toContain("UpdateContainerService");
+
+    const none = setup();
+    none.aws.on("lightsail", "GetCertificates", notFound());
+    await expect(
+      none.adapter.aws.action("refresh_certificate", none.ctx(null)),
+    ).rejects.toMatchObject({ code: "validation" });
+  });
+});
+
 describe("no registry login is ever issued", () => {
   it("no step of any method calls CreateContainerServiceRegistryLogin or sets private registry access", async () => {
     const { aws, adapter, ctx, service } = setup();

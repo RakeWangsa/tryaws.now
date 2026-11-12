@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCachePolicy } from "./cdn-cache";
+import { checkCachePolicy, parseCachePolicy } from "./cdn-cache";
 
 // WPU-G8: the cache behaviour of a distribution, default plus per-path. Every field is a closed list
 // or a bounded number; nothing the customer types becomes an AWS name or tag (R11).
@@ -120,5 +120,32 @@ describe("parseCachePolicy", () => {
   it("reads a non-object as empty and refuses it", () => {
     expect(parseCachePolicy(null).ok).toBe(false);
     expect(parseCachePolicy("x").ok).toBe(false);
+  });
+});
+
+describe("checkCachePolicy", () => {
+  it("accepts what parseCachePolicy returned, unchanged", () => {
+    const first = parseCachePolicy(good);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(checkCachePolicy(first.value)).toEqual(first);
+  });
+
+  it("refuses a queued policy that was edited into something odd", () => {
+    const first = parseCachePolicy(good);
+    if (!first.ok) throw new Error("fixture");
+    const p = first.value;
+    for (const bad of [
+      null,
+      {},
+      { ...p, defaultBehavior: "x" },
+      { ...p, settings: { ...p.settings, defaultTtl: -1 } },
+      { ...p, settings: { ...p.settings, queryStrings: "on" } },
+      { ...p, paths: "images/*" },
+      { ...p, paths: [{ path: "a b", behavior: "cache" }] },
+      { ...p, paths: [null] },
+    ]) {
+      expect(checkCachePolicy(bad).ok, JSON.stringify(bad)).toBe(false);
+    }
   });
 });

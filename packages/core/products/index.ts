@@ -119,6 +119,7 @@ export {
   CACHE_CACHED_METHODS,
   MAX_CACHE_PATHS,
   MAX_TTL_SECONDS,
+  checkCachePolicy,
   parseCachePolicy,
   type CacheBehavior,
   type CachePolicy,
