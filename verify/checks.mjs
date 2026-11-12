@@ -3075,6 +3075,42 @@ TASKS["WPU-F1"] = [
   repo,
 ];
 
+// WPU-N2: one-time secret transport. The web tier invokes the "web" alias of access-details (no
+// packages/aws import); the function reveals the Windows password, the database password and creates or
+// lists bucket keys. Tests of the aws adapters, the function, the web port, actions and bucket keys, and
+// the repository tests (infra rules). No AWS call.
+const secretsAws = {
+  id: "secrets-aws",
+  title: "packages/aws: database password and bucket key adapters (no network)",
+  command: ["pnpm", "test", "--filter", "@tc/aws", "access-n2", "--no-passWithNoTests"],
+};
+const secretsWeb = {
+  id: "secrets-web",
+  title: "apps/web: access port, reveal actions, bucket keys, tenant isolation",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "server/bucket-keys",
+    "server/bucket-actions",
+    "server/auth/context",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WPU-N2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  secretsAws,
+  accessDetailsFn,
+  secretsWeb,
+  web,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {

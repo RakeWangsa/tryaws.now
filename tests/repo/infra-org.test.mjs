@@ -565,7 +565,11 @@ describe("the allow-lists match the adapters of packages/aws", () => {
   const adapters = readdirSync(join(awsDir, "adapters"))
     .filter((n) => n.endsWith(".ts"))
     .map((n) => `adapters/${n}`);
-  const accessFiles = ["adapters/bucket-access.ts", "adapters/windows-access.ts"];
+  const accessFiles = [
+    "adapters/bucket-access.ts",
+    "adapters/database-access.ts",
+    "adapters/windows-access.ts",
+  ];
   const readFiles = ["reader-source.ts", "catalog.ts"];
 
   it("finds the adapters (the test would pass on an empty list otherwise)", () => {

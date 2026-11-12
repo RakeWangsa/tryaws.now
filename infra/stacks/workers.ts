@@ -232,6 +232,22 @@ export function workers(inputs: WorkerInputs) {
     ]),
   ) as Record<"web" | "admin", { arn: unknown }>;
 
+  // WPU-N2: access-details has one alias, "web". The function accepts customerId only on it
+  // (functions/access-details/invoke.ts) and web.ts grants the web role lambda:InvokeFunction on
+  // this alias ARN and on nothing else, so the unaliased function cannot be invoked by web.
+  // VERIFY: same alias mechanics as the reader above.
+  const accessDetails = invoked["access-details"] as {
+    nodes: { function: { version: unknown } };
+    name: unknown;
+  };
+  const accessAliases = {
+    web: new aws.lambda.Alias("AccessAliasWeb", {
+      name: "web",
+      functionName: accessDetails.name as string,
+      functionVersion: accessDetails.nodes.function.version as string,
+    }),
+  } as Record<"web", { arn: unknown }>;
+
   // Scheduled: EventBridge Scheduler (sst.aws.CronV2), retry policy 0 (the functions are idempotent
   // and the next run repeats the work). VERIFY: CronV2 args `schedule`, `function`, `retries`.
   const crons = Object.fromEntries(
@@ -265,7 +281,7 @@ export function workers(inputs: WorkerInputs) {
     triggers: { run: String(Date.now()) },
   });
 
-  return { invoked, readerAliases, crons, migrator, migration };
+  return { invoked, readerAliases, accessAliases, crons, migrator, migration };
 }
 
 export type Workers = ReturnType<typeof workers>;

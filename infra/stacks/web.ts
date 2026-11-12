@@ -116,6 +116,9 @@ export function web(inputs: WebInputs) {
       // WPU-G4: the function name (not the ARN) of the reader, for the Metrics tab. The role may
       // invoke it (permissions below); apps/web/server/reader-invoke.ts builds the client lazily.
       READER_FUNCTION_NAME: workers.invoked["reader"]?.name,
+      // WPU-N2: the function name of access-details (one-time secrets). The client invokes the "web"
+      // alias only (apps/web/server/access-invoke.ts) and the role may invoke that alias only.
+      ACCESS_DETAILS_FUNCTION_NAME: workers.invoked["access-details"]?.name,
       KYC_BUCKET: storage.kyc.name,
       INVOICES_BUCKET: storage.invoices.name,
       EXPORTS_BUCKET: storage.exports.name,
@@ -127,7 +130,11 @@ export function web(inputs: WebInputs) {
       { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
-        resources: [workers.readerAliases.web.arn, ...invoke("access-details", "invoice-renderer")],
+        resources: [
+          workers.readerAliases.web.arn,
+          workers.accessAliases.web.arn,
+          ...invoke("invoice-renderer"),
+        ],
       },
       {
         actions: ["s3:PutObject"],
