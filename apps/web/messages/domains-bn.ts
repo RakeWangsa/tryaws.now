@@ -4,6 +4,7 @@ export const domainsBn = {
   Domains: {
     meta: { title: "ডোমেইন" },
     heading: "ডোমেইন",
+    dnsLink: "ডিএনএস জোন ও রেকর্ড",
     awsNote:
       "প্রতিটি ডোমেইন Amazon Route 53 এর মাধ্যমে নিবন্ধিত হয়। নিবন্ধিত ডোমেইনের জন্য ফেরত দেওয়া হয় না।",
     flagOff: {

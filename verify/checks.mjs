@@ -823,6 +823,13 @@ TASKS["WPU-G1"] = [
 // Server Actions, the cross-tenant sweep, the messages and the render states in web.
 TASKS["WPU-G2"] = [specSync, baselineSync, lint, typecheck, format, core, aws, web, repo];
 
+// WPU-G4: the Metrics tab reads the reader function through an invoke port and draws console-style SVG
+// charts, /invoices and /invoices/[id] with a printable document, /dns and /dns/[id] with the record
+// editor (kind change_dns_record). The record rules (core), the operation kinds (db), the zone adapter
+// action (aws), the view models, Server Actions, cross-tenant sweep, messages and render states (web) and
+// the boundary tests (repo) prove it. The db suite needs the local PostgreSQL (pnpm db:up).
+TASKS["WPU-G4"] = [specSync, baselineSync, lint, typecheck, format, core, db, aws, web, repo];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {

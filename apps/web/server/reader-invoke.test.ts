@@ -149,7 +149,11 @@ describe("readerPortFromEnv", () => {
   });
 
   it("builds the client on the first call, never at import, with the region of the environment", async () => {
-    const build = vi.fn((_region: string, _name: string) => answering(good));
+    const build = vi.fn((region: string, name: string) => {
+      void region;
+      void name;
+      return answering(good);
+    });
     const port = readerPortFromEnv(
       { READER_FUNCTION_NAME: "tc-staging-reader", AWS_REGION: "ap-south-1" },
       build,

@@ -25,6 +25,10 @@ export const invoicesBn = {
       date: "তারিখ",
       billedTo: "গ্রাহক",
       noName: "নাম দেওয়া নেই",
+      notFound: {
+        title: "ইনভয়েসটি পাওয়া যায়নি",
+        body: "লিংকটি ঠিক আছে কিনা দেখুন, অথবা সব ইনভয়েসের তালিকায় ফিরে যান।",
+      },
       lines: {
         caption: "ইনভয়েসের লাইন",
         description: "বিবরণ",

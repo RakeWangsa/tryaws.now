@@ -1,4 +1,4 @@
-import { Button, Card, DataTable, DateText, EmptyState, MoneyText, PriceBreakdown } from "@tc/ui";
+import { Button, DataTable, DateText, EmptyState, MoneyText, PriceBreakdown } from "@tc/ui";
 import type { ReactNode } from "react";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
@@ -429,7 +429,9 @@ export function useExtraTabs(
     {
       id: "metrics",
       title: t("metrics"),
-      content: <MetricsTab serverId={data.id} metrics={metrics} locale={locale} numerals={numerals} />,
+      content: (
+        <MetricsTab serverId={data.id} metrics={metrics} locale={locale} numerals={numerals} />
+      ),
     },
     {
       id: "billing",
