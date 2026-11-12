@@ -308,6 +308,48 @@ describe("stack outputs featureFlagDefaults and webRolePolicies", () => {
   });
 });
 
+// C.13: the ledger check at 02:00 Asia/Dhaka and its alarms.
+describe("ledger check schedule and alarms", () => {
+  it("runs every day at 20:00 UTC, which is 02:00 in Dhaka (UTC+6, no daylight saving)", async () => {
+    const { LEDGER_CHECK_SCHEDULE, LEDGER_CHECK_FUNCTION } =
+      await import("../../infra/lib/functions.ts");
+    expect(LEDGER_CHECK_SCHEDULE).toBe("cron(0 20 * * ? *)");
+    const [minute, hour] = LEDGER_CHECK_SCHEDULE.slice(5, -1).split(" ");
+    expect(((Number(hour) + 6) % 24) * 60 + Number(minute)).toBe(2 * 60);
+    expect(LEDGER_CHECK_FUNCTION.dir).toBe("reconciler");
+    expect(LEDGER_CHECK_FUNCTION.handlerExport).toBe("ledgerCheckHandler");
+    expect(LEDGER_CHECK_FUNCTION.poolRoles).toEqual([]);
+    expect(LEDGER_CHECK_FUNCTION.name).toBe("ledger-check");
+    // the reconciler itself stays hourly
+    expect(FUNCTIONS.find((f) => f.dir === "reconciler").trigger.schedule).toBe("rate(1 hour)");
+    expect(FUNCTIONS.map((f) => f.dir)).not.toContain("ledger-check");
+  });
+
+  it("exports the handler the schedule names and logs the three messages the alarms match", () => {
+    const index = readFileSync(resolve(root, "functions/reconciler/index.ts"), "utf8");
+    expect(index).toContain("ledgerCheckHandler");
+    const source = readFileSync(resolve(root, "functions/reconciler/ledger-check.ts"), "utf8");
+    for (const msg of ["ledger_mismatch", "ledger_check_failed", "ledger_check_ok"]) {
+      expect(source, msg).toContain(`"${msg}"`);
+    }
+  });
+
+  it("wires a second cron with its own role name and the two alarms to the alarm topic", () => {
+    const workers = readFileSync(resolve(root, "infra/stacks/workers.ts"), "utf8");
+    expect(workers).toContain('crons["ledger-check"] = new sst.aws.CronV2(');
+    expect(workers).toContain("schedule: LEDGER_CHECK_SCHEDULE");
+    expect(workers).toContain("roleName(inputs.config.stage, spec.name ?? spec.dir)");
+    const alarms = readFileSync(resolve(root, "infra/stacks/alarms.ts"), "utf8");
+    expect(alarms).toContain('resourceName(stage, "ledger-mismatch")');
+    expect(alarms).toContain('resourceName(stage, "ledger-check-silent")');
+    expect(alarms.match(/alarmActions: \[topic\.arn\]/g)).toHaveLength(4);
+    expect(alarms).toContain("LEDGER_LOG_MESSAGES.mismatch");
+    expect(alarms).toContain("LEDGER_LOG_MESSAGES.failed");
+    expect(alarms).toContain('treatMissingData: "breaching"');
+    expect(alarms).toContain("aws.cloudwatch.LogMetricFilter");
+  });
+});
+
 describe("admin allowlist", () => {
   it("parses and normalises IPv4 and IPv6 entries", () => {
     expect(parseAllowlist("203.0.113.7, 198.51.100.0/24,203.0.113.7")).toEqual({

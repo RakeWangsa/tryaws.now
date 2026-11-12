@@ -6,6 +6,11 @@
 //
 // NOT TYPE-CHECKED, see network.ts.
 import { DEAD_LETTER_ALARM, SCHEDULER_ALARM } from "../../packages/core/operations/queue-config";
+import {
+  LEDGER_LOG_MESSAGES,
+  LEDGER_METRIC_NAMESPACE,
+  LEDGER_SILENCE_HOURS,
+} from "../lib/functions";
 import { resourceName, type StageConfig } from "../lib/stage";
 import type { Messaging } from "./messaging";
 import type { Workers } from "./workers";
@@ -57,7 +62,74 @@ export function alarms(config: StageConfig, queues: Messaging, workers: Workers)
     alarmDescription: "The scheduler ran less than once in 5 minutes",
   });
 
-  return { topic, deadLetterAlarm, schedulerAlarm };
+  // C.13: ledger alarms from the structured log lines of functions/reconciler/ledger-check.ts. Both
+  // functions that run the check (the daily ledger-check and the hourly reconciler) are filtered.
+  // ledger_mismatch and ledger_check_failed are errors (R16: a check that could not finish is not a pass);
+  // the silence of ledger_check_ok for 26 hours is an alarm too.
+  // VERIFY: the JSON filter pattern syntax of CloudWatch Logs metric filters and that an sst.aws.Function
+  // logs to /aws/lambda/<function name>.
+  const ledgerFunctions = [
+    workers.crons["ledger-check"]?.nodes.function,
+    workers.crons["reconciler"]?.nodes.function,
+  ];
+  const ledgerFilter = (
+    id: string,
+    fn: { name: unknown } | undefined,
+    pattern: string,
+    metric: string,
+  ) =>
+    new aws.cloudwatch.LogMetricFilter(id, {
+      name: resourceName(stage, id.toLowerCase()),
+      logGroupName: $interpolate`/aws/lambda/${fn?.name}`,
+      pattern,
+      metricTransformation: {
+        name: metric,
+        namespace: LEDGER_METRIC_NAMESPACE,
+        value: "1",
+        defaultValue: "0",
+      },
+    });
+  ledgerFunctions.forEach((fn, index) => {
+    ledgerFilter(
+      `LedgerBad${index}`,
+      fn,
+      `{ $.msg = "${LEDGER_LOG_MESSAGES.mismatch}" || $.msg = "${LEDGER_LOG_MESSAGES.failed}" }`,
+      "LedgerBad",
+    );
+    ledgerFilter(`LedgerOk${index}`, fn, `{ $.msg = "${LEDGER_LOG_MESSAGES.ok}" }`, "LedgerOk");
+  });
+
+  const ledgerMismatchAlarm = new aws.cloudwatch.MetricAlarm("LedgerMismatchAlarm", {
+    name: resourceName(stage, "ledger-mismatch"),
+    namespace: LEDGER_METRIC_NAMESPACE,
+    metricName: "LedgerBad",
+    statistic: "Sum",
+    period: 300,
+    evaluationPeriods: 1,
+    threshold: 1,
+    comparisonOperator: "GreaterThanOrEqualToThreshold",
+    treatMissingData: "notBreaching",
+    alarmActions: [topic.arn],
+    alarmDescription:
+      "The ledger check found a mismatch or could not finish (ledger_mismatch, ledger_check_failed)",
+  });
+
+  const ledgerSilentAlarm = new aws.cloudwatch.MetricAlarm("LedgerSilentAlarm", {
+    name: resourceName(stage, "ledger-check-silent"),
+    namespace: LEDGER_METRIC_NAMESPACE,
+    metricName: "LedgerOk",
+    statistic: "Sum",
+    period: 3600,
+    evaluationPeriods: LEDGER_SILENCE_HOURS,
+    datapointsToAlarm: LEDGER_SILENCE_HOURS,
+    threshold: 1,
+    comparisonOperator: "LessThanThreshold",
+    treatMissingData: "breaching",
+    alarmActions: [topic.arn],
+    alarmDescription: "No ledger_check_ok line for 26 hours: the ledger check did not run",
+  });
+
+  return { topic, deadLetterAlarm, schedulerAlarm, ledgerMismatchAlarm, ledgerSilentAlarm };
 }
 
 export type Alarms = ReturnType<typeof alarms>;

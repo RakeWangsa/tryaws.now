@@ -502,7 +502,7 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
   it("names the web role identically where it is created and where kyc denies it", () => {
     expect(web).toContain('server: fixedServerRole(roleName(stage, "web"))');
     expect(web).toContain('server: fixedServerRole(roleName(stage, "admin"))');
-    expect(workers).toContain("args.name = roleName(inputs.config.stage, spec.dir)");
+    expect(workers).toContain("args.name = roleName(inputs.config.stage, spec.name ?? spec.dir)");
   });
 
   it("links no EPS secret to the admin app", () => {

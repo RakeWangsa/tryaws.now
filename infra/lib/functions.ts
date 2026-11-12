@@ -72,6 +72,8 @@ export type Placement = "app" | "isolated" | "none";
 export interface FunctionSpec {
   // folder of functions/
   readonly dir: string;
+  // IAM role name part when it must differ from `dir` (a second function built from the same folder)
+  readonly name?: string;
   // SST component name
   readonly component: string;
   // name of the export in functions/<dir>/index.ts
@@ -248,6 +250,38 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     memoryMb: 256,
   },
 ];
+
+// C.13: the ledger check at 02:00 Asia/Dhaka. Dhaka is UTC+6 with no daylight saving, so the schedule is
+// 20:00 UTC every day. The reconciler (rate(1 hour)) also runs the ledger check at the end of each run
+// (functions/reconciler/handler.ts); this schedule is the guaranteed daily one, with its own function
+// and its own role (no pool role: the check reads only the database). Not in FUNCTIONS: it reuses the
+// folder of the reconciler, so the one-folder-one-row comparison of the table stays true.
+export const LEDGER_CHECK_SCHEDULE = "cron(0 20 * * ? *)";
+export const LEDGER_CHECK_FUNCTION: FunctionSpec = {
+  dir: "reconciler",
+  name: "ledger-check",
+  component: "LedgerCheck",
+  handlerExport: "ledgerCheckHandler",
+  exportExists: true,
+  placement: "app",
+  dbRole: "worker_rw",
+  secrets: [],
+  poolRoles: [],
+  trigger: { kind: "cron", schedule: LEDGER_CHECK_SCHEDULE },
+  timeoutSeconds: 300,
+  memoryMb: 512,
+};
+
+// The log messages of functions/reconciler/ledger-check.ts that the alarms match (structured JSON logs,
+// R14). `ledger_check_ok` is the healthy line: its silence is an alarm too.
+export const LEDGER_LOG_MESSAGES = {
+  mismatch: "ledger_mismatch",
+  failed: "ledger_check_failed",
+  ok: "ledger_check_ok",
+} as const;
+export const LEDGER_METRIC_NAMESPACE = "TiconCloud/Ledger";
+// 24 hours between runs of the daily check plus two hours of slack; the hourly reconciler also logs it.
+export const LEDGER_SILENCE_HOURS = 26;
 
 // C.2 and R12: the twelve product-family flags of FEATURE_FLAG_KEYS (packages/db), all off by default.
 // A copy, because infra must not import @tc/db at synth time; a repo test compares the two lists. The

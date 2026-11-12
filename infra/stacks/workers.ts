@@ -14,6 +14,8 @@ import {
   DB_PASSWORD_SECRET,
   DB_ROLES,
   FUNCTIONS,
+  LEDGER_CHECK_FUNCTION,
+  LEDGER_CHECK_SCHEDULE,
   provisionerNetworkEnvironment,
   type FunctionSpec,
 } from "../lib/functions";
@@ -155,7 +157,7 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
       role: (args: { name?: string }) => {
         // VERIFY: the docs do not say that transform.role may set the IAM role name; the Pulumi
         // aws.iam.Role `name` argument is what is set here.
-        args.name = roleName(inputs.config.stage, spec.dir);
+        args.name = roleName(inputs.config.stage, spec.name ?? spec.dir);
       },
     },
   };
@@ -223,6 +225,13 @@ export function workers(inputs: WorkerInputs) {
       ];
     }),
   );
+
+  // C.13: the daily ledger check at 02:00 Asia/Dhaka (20:00 UTC), next to the hourly reconciler.
+  crons["ledger-check"] = new sst.aws.CronV2(LEDGER_CHECK_FUNCTION.component, {
+    schedule: LEDGER_CHECK_SCHEDULE,
+    function: functionArgs(LEDGER_CHECK_FUNCTION, inputs),
+    retries: 0,
+  });
 
   // Deploy time: the migrator creates the roles and runs the migrations with the master user.
   // VERIFY: aws.lambda.Invocation re-runs when `triggers` change; a changing value runs it on every
