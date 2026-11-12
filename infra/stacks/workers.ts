@@ -10,7 +10,13 @@
 //
 // NOT TYPE-CHECKED, see network.ts.
 import { PROVISIONING_QUEUE } from "../../packages/core/operations/queue-config";
-import { DB_PASSWORD_SECRET, DB_ROLES, FUNCTIONS, type FunctionSpec } from "../lib/functions";
+import {
+  DB_PASSWORD_SECRET,
+  DB_ROLES,
+  FUNCTIONS,
+  provisionerNetworkEnvironment,
+  type FunctionSpec,
+} from "../lib/functions";
 import { assumableRoleArns, roleName, type StageConfig } from "../lib/stage";
 import type { Database } from "./database";
 import type { Messaging } from "./messaging";
@@ -72,6 +78,10 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
   }
   if (spec.dir === "provisioner" || spec.dir === "scheduler") {
     env.PROVISIONING_QUEUE_URL = queues.provisioning.url;
+  }
+  if (spec.dir === "provisioner") {
+    // C.5: required stack configuration on staging and production (infra/lib/stage.ts).
+    Object.assign(env, provisionerNetworkEnvironment(config));
   }
   if (spec.dir === "notifier") {
     // Links in a message go only to the panel's own domain (16.14); the sender is the verified identity.

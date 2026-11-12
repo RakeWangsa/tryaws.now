@@ -141,61 +141,265 @@ describe.each(ROLES)("$name", ({ file, name, environment, workflow }) => {
   });
 });
 
-describe("permissions", () => {
-  const statementsOf = (file) =>
-    rolesOf(file).flatMap((r) =>
-      list(r.Properties.Policies).flatMap((p) => list(p.PolicyDocument.Statement)),
-    );
-  const allowed = (file) =>
-    statementsOf(file)
-      .filter((s) => s.Effect === "Allow")
-      .flatMap((s) => list(s.Action));
-  const denied = (file) =>
-    statementsOf(file)
-      .filter((s) => s.Effect === "Deny")
-      .flatMap((s) => list(s.Action));
+// ---- permissions (security review of WPU-D2: no privilege escalation, no data-plane read) ----------------
 
-  it("the plan role is the managed read-only policy plus denies, and allows nothing itself", () => {
-    const [role] = rolesOf("ci-plan-production.yaml");
-    expect(role.Properties.ManagedPolicyArns).toEqual(["arn:aws:iam::aws:policy/ReadOnlyAccess"]);
-    expect(allowed("ci-plan-production.yaml")).toEqual([]);
-    expect(denied("ci-plan-production.yaml")).toEqual(
-      expect.arrayContaining(["iam:Create*", "iam:Put*", "organizations:*", "sts:AssumeRole"]),
+/** Statements of a policy document with the two branches of Fn::If kept (a test reads the worst case). */
+function expand(statements) {
+  return list(statements).flatMap((s) => {
+    if (s?.["Fn::If"] !== undefined) {
+      return expand(s["Fn::If"].slice(1).filter((b) => b?.Ref !== "AWS::NoValue"));
+    }
+    return [s];
+  });
+}
+const inlineStatements = (file) =>
+  rolesOf(file).flatMap((r) =>
+    list(r.Properties.Policies).flatMap((p) => expand(p.PolicyDocument.Statement)),
+  );
+const managedStatements = (file) =>
+  resources(tpl[file], "AWS::IAM::ManagedPolicy").flatMap((p) =>
+    expand(p.Properties.PolicyDocument.Statement),
+  );
+const actionsOf = (statements, effect) =>
+  statements.filter((s) => s.Effect === effect).flatMap((s) => list(s.Action));
+const resourceText = (s) => JSON.stringify(s.Resource ?? s.NotResource ?? "");
+const BOUNDARY_ARN = "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary";
+
+describe("deploy roles: no privilege escalation through IAM", () => {
+  const files = [
+    ["ci-deploy-staging.yaml", ["role/tc-*", "role/ticon-cloud-*"]],
+    ["ci-deploy-production.yaml", ["role/tc-production-*", "role/ticon-cloud-production-*"]],
+  ];
+
+  describe.each(files)("%s", (file, prefixes) => {
+    const statements = inlineStatements(file);
+    const allows = statements.filter((s) => s.Effect === "Allow");
+    const iamWrites = allows.filter((s) =>
+      list(s.Action).some(
+        (a) =>
+          /^iam:(Create|Put|Attach|Update|PassRole|Delete|Detach|Tag)/.test(a) &&
+          a !== "iam:CreateServiceLinkedRole",
+      ),
     );
+
+    it("never allows an IAM write on role/* or a bare *, and never grants iam:* or a wildcard action", () => {
+      for (const s of allows) {
+        for (const a of list(s.Action)) {
+          expect(a, file).not.toBe("*");
+          expect(a, file).not.toMatch(/^(iam|sts|organizations|account):\*$/);
+          expect(a, file).not.toMatch(/^sts:/);
+          if (a.startsWith("iam:")) expect(a, file).not.toMatch(/\*/);
+        }
+      }
+      for (const s of iamWrites) {
+        for (const r of list(s.Resource).map((x) => JSON.stringify(x))) {
+          expect(r, file).not.toMatch(/role\/\*"/);
+          expect(r, file).not.toBe('"*"');
+          expect(
+            prefixes.some((p) => r.includes(p)),
+            `${file} ${r}`,
+          ).toBe(true);
+        }
+      }
+    });
+
+    it("creates and changes roles only when the role carries the boundary", () => {
+      const create = allows.find((s) => list(s.Action).includes("iam:CreateRole"));
+      expect(create.Condition.StringEquals["iam:PermissionsBoundary"]).toEqual({
+        "Fn::Sub": BOUNDARY_ARN,
+      });
+      for (const a of [
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+      ]) {
+        const s = allows.find((x) => list(x.Action).includes(a));
+        expect(s, a).toBeDefined();
+        expect(s.Condition.StringEquals["iam:PermissionsBoundary"], a).toEqual({
+          "Fn::Sub": BOUNDARY_ARN,
+        });
+      }
+    });
+
+    it("attaches only listed AWS managed policies and passes roles only to listed services", () => {
+      const attach = allows.find((s) => s.Action === "iam:AttachRolePolicy");
+      const arns = list(attach.Condition.StringEquals["iam:PolicyARN"]);
+      expect(arns.length).toBeGreaterThan(0);
+      for (const arn of arns)
+        expect(arn).toMatch(/^arn:aws:iam::aws:policy\/service-role\/AWSLambda/);
+      const pass = allows.find((s) => s.Action === "iam:PassRole");
+      const services = list(pass.Condition.StringEquals["iam:PassedToService"]);
+      expect(services.sort()).toEqual(
+        [
+          "edgelambda.amazonaws.com",
+          "events.amazonaws.com",
+          "lambda.amazonaws.com",
+          "rds.amazonaws.com",
+          "scheduler.amazonaws.com",
+        ].sort(),
+      );
+    });
+
+    it("denies removing or replacing the boundary, changing the boundary policy, users, keys and the audit trail", () => {
+      const denied = actionsOf(statements, "Deny");
+      for (const a of [
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:PutRolePermissionsBoundary",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:DeletePolicyVersion",
+        "iam:SetDefaultPolicyVersion",
+        "iam:CreateUser",
+        "iam:CreateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:AttachUserPolicy",
+        "iam:*",
+        "organizations:*",
+        "account:*",
+        "cloudtrail:StopLogging",
+        "cloudtrail:DeleteTrail",
+        "cloudtrail:UpdateTrail",
+        "guardduty:Delete*",
+        "sts:AssumeRole",
+      ]) {
+        expect(denied, `${file} ${a}`).toContain(a);
+      }
+      const other = statements.find((s) => s.Sid === "NeverAnotherBoundary");
+      expect(other.Condition.StringNotEquals["iam:PermissionsBoundary"]).toEqual({
+        "Fn::Sub": BOUNDARY_ARN,
+      });
+      const policy = statements.find((s) => s.Sid === "NeverChangeTheBoundaryPolicyItself");
+      expect(resourceText(policy)).toContain("policy/TcCiRoleBoundary");
+    });
+
+    it("keeps the CI roles, the provider and users out of reach", () => {
+      const deny = statements.find((s) => s.Sid === "NeverTheCiRolesNorTheProviderNorUsers");
+      const text = resourceText(deny);
+      expect(text).toContain("role/TcCi*");
+      expect(text).toContain("oidc-provider/*");
+      expect(text).toContain("user/*");
+    });
   });
 
-  it("no CI role allows a wildcard action, iam:*, sts:* or an assume of a pool or DNS role (R1, R3)", () => {
-    for (const file of ["ci-deploy-staging.yaml", "ci-deploy-production.yaml"]) {
-      for (const action of allowed(file)) {
-        expect(action, file).not.toBe("*");
-        expect(action, file).not.toMatch(/^(iam|sts|organizations|account):\*$/);
-        expect(action, file).not.toMatch(/^sts:/);
+  it("the two deploy templates differ only by the role-name prefix, the trust and the comments", () => {
+    const strip = (file) =>
+      JSON.stringify(resources(tpl[file], "AWS::IAM::Role").map((r) => r.Properties.Policies))
+        .replaceAll("role/tc-production-*", "role/tc-*")
+        .replaceAll("role/ticon-cloud-production-*", "role/ticon-cloud-*");
+    expect(strip("ci-deploy-production.yaml")).toBe(strip("ci-deploy-staging.yaml"));
+    const boundary = (file) =>
+      JSON.stringify(resources(tpl[file], "AWS::IAM::ManagedPolicy").map((p) => p.Properties));
+    expect(boundary("ci-deploy-production.yaml")).toBe(boundary("ci-deploy-staging.yaml"));
+  });
+});
+
+describe("the permissions boundary TcCiRoleBoundary", () => {
+  describe.each(["ci-deploy-staging.yaml", "ci-deploy-production.yaml"])("%s", (file) => {
+    const [boundary] = resources(tpl[file], "AWS::IAM::ManagedPolicy");
+    const statements = expand(boundary.Properties.PolicyDocument.Statement);
+
+    it("is the managed policy named TcCiRoleBoundary, defined in the same template", () => {
+      expect(boundary.Properties.ManagedPolicyName).toBe("TcCiRoleBoundary");
+      expect(resources(tpl[file], "AWS::IAM::ManagedPolicy")).toHaveLength(1);
+    });
+
+    it("allows no IAM, organization, account or audit action, and assumes only the pool and DNS roles", () => {
+      for (const a of actionsOf(statements, "Allow")) {
+        expect(a, file).not.toMatch(/^(iam|organizations|account|cloudtrail|guardduty):/);
+        expect(a, file).not.toBe("*");
+        if (a.startsWith("sts:")) expect(a, file).toBe("sts:AssumeRole");
       }
-      expect(denied(file), file).toEqual(
-        expect.arrayContaining([
-          "iam:*",
-          "iam:CreateAccessKey",
-          "organizations:*",
-          "account:*",
-          "sts:AssumeRole",
-        ]),
+      const assume = statements.find((s) => s.Effect === "Allow" && s.Action === "sts:AssumeRole");
+      expect(assume.Resource).toBe("arn:aws:iam::*:role/Tc*");
+      const deny = actionsOf(statements, "Deny");
+      expect(deny).toEqual(
+        expect.arrayContaining(["iam:*", "organizations:*", "account:*", "cloudtrail:*"]),
+      );
+    });
+  });
+});
+
+describe("plan role: minimal customer-managed read policy, no data-plane reads", () => {
+  const file = "ci-plan-production.yaml";
+  const [role] = rolesOf(file);
+  const [policy] = resources(tpl[file], "AWS::IAM::ManagedPolicy");
+  const statements = expand(policy.Properties.PolicyDocument.Statement);
+  const allowed = actionsOf(statements, "Allow");
+  const denied = actionsOf(statements, "Deny");
+
+  it("attaches its own policy and no AWS managed policy (not ReadOnlyAccess)", () => {
+    expect(role.Properties.ManagedPolicyArns).toEqual([{ Ref: "TcCiPlanReadPolicy" }]);
+    expect(JSON.stringify(tpl[file].Resources)).not.toMatch(
+      /aws:policy\/ReadOnlyAccess|arn:aws:iam::aws:policy/,
+    );
+    expect(role.Properties.Policies).toBeUndefined();
+  });
+
+  it("allows no data-plane read, no wildcard get or list, and no write", () => {
+    for (const a of allowed) {
+      expect(a, a).not.toMatch(/^(secretsmanager|rds-data|rds-db):/);
+      expect(a, a).not.toMatch(/^logs:(GetLogEvents|FilterLogEvents|StartQuery|GetQueryResults)$/);
+      expect(a, a).not.toMatch(/^dynamodb:(GetItem|Query|Scan|BatchGetItem)$/);
+      expect(a, a).not.toBe("sqs:ReceiveMessage");
+      expect(a, a).not.toBe("*");
+      // only ec2:Describe* is a wildcard (network configuration of the VPC, no data)
+      if (a !== "ec2:Describe*") expect(a, a).not.toMatch(/\*/);
+      expect(a, a).not.toMatch(
+        /:(Create|Put|Update|Delete|Attach|Detach|Tag|Untag|Start|Stop|Invoke)/,
       );
     }
   });
 
-  it("the deploy roles may not touch the CI roles or the identity provider, and may not create users", () => {
-    for (const file of ["ci-deploy-staging.yaml", "ci-deploy-production.yaml"]) {
-      const deny = statementsOf(file).find((s) => s.Sid === "NeverTheCiRolesNorUsersNorKeys");
-      const resourceText = JSON.stringify(deny.Resource);
-      expect(resourceText).toContain("role/TcCi*");
-      expect(resourceText).toContain("oidc-provider/*");
-      expect(resourceText).toContain("user/*");
+  it("limits object reads to the SST state bucket and parameter reads to the SST passphrase", () => {
+    const objects = statements.find((s) => s.Sid === "TheSstStateBucketOnly");
+    expect(list(objects.Resource).every((r) => r.startsWith("arn:aws:s3:::sst-state-"))).toBe(true);
+    const params = statements.find((s) => s.Sid === "TheSstPassphraseAndBootstrapParameterOnly");
+    for (const r of list(params.Resource)) expect(JSON.stringify(r)).toContain("parameter/sst/");
+    expect(JSON.stringify(params.Resource)).not.toContain("parameter/*");
+    const noObject = statements.find((s) => s.Sid === "NoObjectReadOutsideTheStateBucket");
+    expect(noObject.NotResource).toBe("arn:aws:s3:::sst-state-*/*");
+    const noParam = statements.find((s) => s.Sid === "NoParameterReadOutsideSst");
+    expect(JSON.stringify(noParam.NotResource)).toContain("parameter/sst/*");
+  });
+
+  it("explicitly denies the data reads and every write that matters", () => {
+    for (const a of [
+      "s3:GetObject",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "secretsmanager:GetSecretValue",
+      "kms:Decrypt",
+      "logs:GetLogEvents",
+      "logs:FilterLogEvents",
+      "logs:StartQuery",
+      "dynamodb:GetItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:BatchGetItem",
+      "sqs:ReceiveMessage",
+      "rds-data:*",
+      "rds-db:connect",
+      "iam:Create*",
+      "iam:Put*",
+      "organizations:*",
+      "sts:AssumeRole",
+    ]) {
+      expect(denied, a).toContain(a);
     }
   });
 
-  it("the two deploy templates carry the same permission statements", () => {
-    expect(statementsOf("ci-deploy-staging.yaml")).toEqual(
-      statementsOf("ci-deploy-production.yaml"),
+  it("allows kms:Decrypt only on the state key, and denies it everywhere else", () => {
+    const decryptAllow = statements.filter(
+      (s) => s.Effect === "Allow" && list(s.Action).includes("kms:Decrypt"),
     );
+    expect(decryptAllow).toHaveLength(1);
+    expect(decryptAllow[0].Resource).toEqual({ Ref: "SstStateKeyArn" });
+    const decryptDeny = statements.filter((s) => s.Effect === "Deny" && s.Action === "kms:Decrypt");
+    expect(decryptDeny.some((s) => s.NotResource?.Ref === "SstStateKeyArn")).toBe(true);
+    expect(decryptDeny.some((s) => s.Resource === "*")).toBe(true);
   });
 });

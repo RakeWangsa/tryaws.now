@@ -249,6 +249,22 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
   },
 ];
 
+// C.5: the environment of the provisioner that opens the bootstrap beacon port of a new Linux server to
+// the NAT addresses only (functions/provisioner/index.ts reads both). The values are required stack
+// configuration on staging and production (readStageConfig refuses a deploy without them); a personal
+// stage without them sets neither variable, and every Linux create then stops before the static IP (R16).
+export const PROVISIONER_NETWORK_ENV = ["TC_PROBE_SOURCES", "TC_VPC_CIDR"] as const;
+
+export function provisionerNetworkEnvironment(config: {
+  readonly probeSources: readonly string[];
+  readonly vpcCidr: string | null;
+}): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (config.probeSources.length > 0) env["TC_PROBE_SOURCES"] = config.probeSources.join(",");
+  if (config.vpcCidr !== null) env["TC_VPC_CIDR"] = config.vpcCidr;
+  return env;
+}
+
 // Only these functions may assume roles in pool or DNS accounts (R1, 3.2). The web tier never does.
 export const POOL_ROLE_FUNCTIONS: readonly string[] = FUNCTIONS.filter(
   (f) => f.poolRoles.length > 0,

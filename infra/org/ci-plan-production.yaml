@@ -1,22 +1,29 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  TiCON Cloud CI role TcCiPlanProduction (R3, B.1 of docs/analysis/pending-audit.md): READ-ONLY. Assumed
-  by the job `plan` of .github/workflows/deploy-production.yml through GitHub OIDC, in the PRODUCTION
-  account only, to run `sst diff` so DevOps reads the plan before approving the deploy job. The trust is
-  the three conditions that workflow documents: aud, sub = the GitHub environment `production-plan`, and
-  job_workflow_ref = that workflow at a `v*` tag. The GitHub side must also set a deployment tag policy
-  (`v*`) on the environment `production-plan`, because it has no reviewers. The permissions are the
-  AWS managed ReadOnlyAccess policy and an explicit deny of every write that matters. Organisation and
-  repository are parameters; no account id or name is written here.
+  TiCON Cloud CI role TcCiPlanProduction (R3, B.1 of docs/analysis/pending-audit.md): READ-ONLY and
+  MINIMAL. Assumed by the job `plan` of .github/workflows/deploy-production.yml through GitHub OIDC, in
+  the PRODUCTION account only, to run `sst diff` so DevOps reads the plan before approving the deploy
+  job. The trust is the three conditions that workflow documents: aud, sub = the GitHub environment
+  `production-plan`, and job_workflow_ref = that workflow at a `v*` tag. The GitHub side must also set a
+  deployment tag policy (`v*`) on the environment `production-plan`, because it has no reviewers. The
+  permissions are a customer-managed policy: configuration reads of the services the stacks use, the SST
+  state bucket and the SST passphrase parameter, and nothing else. It does NOT use the AWS managed
+  ReadOnlyAccess policy, which reads data (objects, log events, queue messages, table items, secrets).
+  Organisation and repository are parameters; no account id or name is written here.
+# NOTE on the SST passphrase: `sst diff` decrypts the state, so the plan role must read the SSM
+# parameter /sst/passphrase/* (SecureString). That is the encryption passphrase of the SST secrets of the
+# production stage: this role can therefore read every sst.Secret value of production through the state.
+# It is granted because the plan cannot run without it; it is why the role is reachable only from a
+# `v*` tag of the one workflow, in an environment with a tag policy, and why the workflow must never print
+# state. Accepted risk, recorded in JOURNEY.md (WPU-D2 Rulings).
 # VERIFY: IAM evaluates the GitHub claim `job_workflow_ref` as the condition key
 # token.actions.githubusercontent.com:job_workflow_ref (current IAM documentation). Its value has NO
 # "repo:" prefix: <org>/<repo>/.github/workflows/<file>@<ref>. StringLike is needed for the `v*` tag.
-# VERIFY: `sst diff` of SST v4 reads the state in the sst-* S3 bucket and the passphrase in SSM
-# (/sst/passphrase/...), and may take a lock. ReadOnlyAccess reads both; if the diff needs one write
-# (a state lock), allow exactly that object path here and record it in JOURNEY.md, nothing wider.
-# VERIFY: ReadOnlyAccess can read some secret-bearing metadata (for example Lambda environment
-# variables). The stack puts no secret value into an environment variable (secrets are linked,
-# JOURNEY.md WP0-T2); check the first plan output before approving production.
+# VERIFY: the names of the SST state bucket (sst-state-*) and the passphrase path (/sst/passphrase/*,
+# /sst/bootstrap) in the current SST documentation; and whether `sst diff` needs one write (a state
+# lock). If it does, allow exactly that object path here, nothing wider, and record it in JOURNEY.md.
+# VERIFY: any Describe or Get action `sst diff` still needs after the first plan: add that action by
+# pull request, never a wildcard such as Get* or Describe* on a data service.
 
 Parameters:
   GitHubOrg:
@@ -27,6 +34,13 @@ Parameters:
     Type: String
     AllowedPattern: "^[A-Za-z0-9._-]{1,100}$"
     Description: GitHub repository name. Entered by DevOps; not in the repository.
+  SstStateKeyArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^(arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[A-Za-z0-9-]+)?$"
+    Description: >-
+      ARN of the KMS key that encrypts the SST state bucket, when it uses one (VERIFY: SST uses the bucket
+      default encryption today). Empty means no key: kms:Decrypt is then denied on every key.
   MaxSessionSeconds:
     Type: Number
     Default: 3600
@@ -34,7 +48,213 @@ Parameters:
     MaxValue: 3600
     Description: One hour, as role-duration-seconds in the workflow.
 
+Conditions:
+  HasStateKey:
+    Fn::Not:
+      - Fn::Equals:
+          - Ref: SstStateKeyArn
+          - ""
+
 Resources:
+  TcCiPlanReadPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: TcCiPlanReadPolicy
+      Description: Configuration reads for sst diff. No object, log, message, item or secret reads.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ConfigurationOfTheStackServices
+            Effect: Allow
+            Action:
+              - acm:DescribeCertificate
+              - acm:ListCertificates
+              - acm:ListTagsForCertificate
+              - cloudfront:GetCachePolicy
+              - cloudfront:GetDistribution
+              - cloudfront:GetDistributionConfig
+              - cloudfront:GetOriginAccessControl
+              - cloudfront:GetOriginRequestPolicy
+              - cloudfront:GetResponseHeadersPolicy
+              - cloudfront:ListDistributions
+              - cloudfront:ListTagsForResource
+              - cloudwatch:DescribeAlarms
+              - cloudwatch:ListTagsForResource
+              - cognito-idp:DescribeUserPool
+              - cognito-idp:DescribeUserPoolClient
+              - cognito-idp:DescribeUserPoolDomain
+              - cognito-idp:GetUserPoolMfaConfig
+              - cognito-idp:ListTagsForResource
+              - cognito-idp:ListUserPoolClients
+              - cognito-idp:ListUserPools
+              - dynamodb:DescribeContinuousBackups
+              - dynamodb:DescribeTable
+              - dynamodb:DescribeTimeToLive
+              - dynamodb:ListTagsOfResource
+              - ec2:Describe*
+              - events:DescribeRule
+              - events:ListRules
+              - events:ListTagsForResource
+              - events:ListTargetsByRule
+              - iam:GetOpenIDConnectProvider
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:ListAttachedRolePolicies
+              - iam:ListInstanceProfilesForRole
+              - iam:ListRolePolicies
+              - iam:ListRoleTags
+              - kms:DescribeKey
+              - kms:GetKeyPolicy
+              - kms:GetKeyRotationStatus
+              - kms:ListAliases
+              - kms:ListResourceTags
+              - lambda:GetAlias
+              - lambda:GetEventSourceMapping
+              - lambda:GetFunction
+              - lambda:GetFunctionConfiguration
+              - lambda:GetFunctionUrlConfig
+              - lambda:GetPolicy
+              - lambda:ListAliases
+              - lambda:ListEventSourceMappings
+              - lambda:ListFunctions
+              - lambda:ListTags
+              - lambda:ListVersionsByFunction
+              - logs:DescribeLogGroups
+              - logs:ListTagsForResource
+              - logs:ListTagsLogGroup
+              - rds:DescribeDBClusters
+              - rds:DescribeDBInstances
+              - rds:DescribeDBParameterGroups
+              - rds:DescribeDBParameters
+              - rds:DescribeDBProxies
+              - rds:DescribeDBProxyTargetGroups
+              - rds:DescribeDBProxyTargets
+              - rds:DescribeDBSubnetGroups
+              - rds:ListTagsForResource
+              - route53:GetHostedZone
+              - route53:ListHostedZones
+              - route53:ListResourceRecordSets
+              - route53:ListTagsForResource
+              - s3:GetAccelerateConfiguration
+              - s3:GetBucketAcl
+              - s3:GetBucketCORS
+              - s3:GetBucketLocation
+              - s3:GetBucketOwnershipControls
+              - s3:GetBucketPolicy
+              - s3:GetBucketPublicAccessBlock
+              - s3:GetBucketTagging
+              - s3:GetBucketVersioning
+              - s3:GetEncryptionConfiguration
+              - s3:GetLifecycleConfiguration
+              - s3:GetObjectLockConfiguration
+              - s3:ListAllMyBuckets
+              - scheduler:GetSchedule
+              - scheduler:GetScheduleGroup
+              - scheduler:ListScheduleGroups
+              - scheduler:ListSchedules
+              - scheduler:ListTagsForResource
+              - ses:GetEmailIdentity
+              - sns:GetSubscriptionAttributes
+              - sns:GetTopicAttributes
+              - sns:ListSubscriptionsByTopic
+              - sns:ListTagsForResource
+              - sns:ListTopics
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:ListQueues
+              - sqs:ListQueueTags
+              - ssm:DescribeParameters
+              - wafv2:GetIPSet
+              - wafv2:GetLoggingConfiguration
+              - wafv2:GetWebACL
+              - wafv2:GetWebACLForResource
+              - wafv2:ListIPSets
+              - wafv2:ListTagsForResource
+              - wafv2:ListWebACLs
+            Resource: "*"
+          - Sid: TheSstStateBucketOnly
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - arn:aws:s3:::sst-state-*
+              - arn:aws:s3:::sst-state-*/*
+          - Sid: TheSstPassphraseAndBootstrapParameterOnly
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+            Resource:
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/*"
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/bootstrap"
+          - Fn::If:
+              - HasStateKey
+              - Sid: TheStateKeyDecryptOnly
+                Effect: Allow
+                Action: kms:Decrypt
+                Resource:
+                  Ref: SstStateKeyArn
+              - Ref: AWS::NoValue
+          - Sid: NoObjectReadOutsideTheStateBucket
+            Effect: Deny
+            Action: s3:GetObject
+            NotResource: arn:aws:s3:::sst-state-*/*
+          - Sid: NoParameterReadOutsideSst
+            Effect: Deny
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:GetParametersByPath
+            NotResource:
+              Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/*"
+          - Sid: NoSecretValues
+            Effect: Deny
+            Action:
+              - secretsmanager:GetSecretValue
+              - secretsmanager:BatchGetSecretValue
+            Resource: "*"
+          - Fn::If:
+              - HasStateKey
+              - Sid: NoDecryptExceptTheStateKey
+                Effect: Deny
+                Action: kms:Decrypt
+                NotResource:
+                  Ref: SstStateKeyArn
+              - Sid: NoDecrypt
+                Effect: Deny
+                Action: kms:Decrypt
+                Resource: "*"
+          - Sid: NoLogsMessagesItemsOrDatabaseData
+            Effect: Deny
+            Action:
+              - logs:FilterLogEvents
+              - logs:GetLogEvents
+              - logs:GetQueryResults
+              - logs:StartQuery
+              - dynamodb:BatchGetItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - sqs:ReceiveMessage
+              - rds-data:*
+              - rds-db:connect
+            Resource: "*"
+          - Sid: NoWritesIdentityOrganisationOrAssume
+            Effect: Deny
+            Action:
+              - iam:Create*
+              - iam:Delete*
+              - iam:Put*
+              - iam:Attach*
+              - iam:Detach*
+              - iam:Update*
+              - organizations:*
+              - account:*
+              - sts:AssumeRole
+            Resource: "*"
   TcCiPlanProduction:
     Type: AWS::IAM::Role
     Properties:
@@ -43,7 +263,7 @@ Resources:
       MaxSessionDuration:
         Ref: MaxSessionSeconds
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/ReadOnlyAccess
+        - Ref: TcCiPlanReadPolicy
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -61,24 +281,3 @@ Resources:
               StringLike:
                 token.actions.githubusercontent.com:job_workflow_ref:
                   Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-production.yml@refs/tags/v*"
-      Policies:
-        - PolicyName: NoWritesAndNoAssume
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Sid: NoIdentityChanges
-                Effect: Deny
-                Action:
-                  - iam:Create*
-                  - iam:Delete*
-                  - iam:Put*
-                  - iam:Attach*
-                  - iam:Detach*
-                  - iam:Update*
-                  - organizations:*
-                  - account:*
-                Resource: "*"
-              - Sid: NeverAssumeAPoolOrDnsRole
-                Effect: Deny
-                Action: sts:AssumeRole
-                Resource: "arn:aws:iam::*:role/Tc*"

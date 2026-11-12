@@ -116,6 +116,86 @@ export interface StageConfig {
   readonly dnsAccountId: string;
   // sts:ExternalId of the tc-dns roles: a plain value, not a secret (6.3)
   readonly dnsExternalId: string;
+  // C.5: the public /32 addresses of the NAT gateways (TC_PROBE_SOURCES) that the bootstrap beacon port
+  // of a new Linux server is opened to during create, and the network of the Lightsail VPC of the pool
+  // account (TC_VPC_CIDR) that its firewall allows. Required on staging and production; a personal stage
+  // may leave both out and then every Linux create stops before the static IP (R16).
+  readonly probeSources: readonly string[];
+  readonly vpcCidr: string | null;
+}
+
+// ---- TC_PROBE_SOURCES and TC_VPC_CIDR -----------------------------------------------------------------
+// The same rules as parseProbeSources of packages/aws/adapters/bootstrap-probe.ts (infra must not import
+// packages/aws, R1; a repo test compares the two). They throw with a message that names the variable,
+// where the runtime parser answers null: a deploy that would leave every Linux create closed is refused
+// at synth time, not discovered by the first customer.
+const MAX_PROBE_SOURCES = 10;
+const MIN_PROBE_PREFIX = 16;
+const IPV4_CIDR = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/;
+
+function cidrParts(value: string): { octets: number[]; prefix: number } | null {
+  const m = IPV4_CIDR.exec(value);
+  if (m === null) return null;
+  const octets = m.slice(1, 5).map(Number);
+  const prefix = Number(m[5]);
+  if (octets.some((o) => o > 255) || prefix > 32) return null;
+  return { octets, prefix };
+}
+
+// A dotted IPv4 outside private, loopback, link-local, shared, multicast and reserved space.
+function isPublicAddress(octets: readonly number[]): boolean {
+  const [a = 0, b = 0] = octets;
+  if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 168) return false;
+  return true;
+}
+
+function isPrivateAddress(octets: readonly number[]): boolean {
+  const [a = 0, b = 0] = octets;
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+export function parseProbeSourcesConfig(raw: string): readonly string[] {
+  const parts = raw.split(",").map((part) => part.trim());
+  if (parts.length > MAX_PROBE_SOURCES) {
+    throw new InfraConfigError(`TC_PROBE_SOURCES lists more than ${MAX_PROBE_SOURCES} addresses`);
+  }
+  for (const part of parts) {
+    const cidr = cidrParts(part);
+    if (cidr === null) {
+      throw new InfraConfigError(`TC_PROBE_SOURCES entry is not an IPv4 CIDR: ${part}`);
+    }
+    if (cidr.prefix < MIN_PROBE_PREFIX) {
+      throw new InfraConfigError(
+        `TC_PROBE_SOURCES entry ${part} is wider than /${MIN_PROBE_PREFIX} (use the /32 of each NAT gateway)`,
+      );
+    }
+    if (!isPublicAddress(cidr.octets)) {
+      throw new InfraConfigError(`TC_PROBE_SOURCES entry ${part} is not a public address`);
+    }
+  }
+  return Object.freeze(parts);
+}
+
+export function parseVpcCidrConfig(raw: string): string {
+  const value = raw.trim();
+  const cidr = cidrParts(value);
+  if (cidr === null) throw new InfraConfigError("TC_VPC_CIDR is not an IPv4 CIDR");
+  if (!isPrivateAddress(cidr.octets)) {
+    throw new InfraConfigError("TC_VPC_CIDR must be a private (RFC 1918) network");
+  }
+  if (cidr.prefix < 16 || cidr.prefix > 28) {
+    throw new InfraConfigError("TC_VPC_CIDR prefix must be between /16 and /28");
+  }
+  return value;
+}
+
+function optional(env: Env, name: string): string | undefined {
+  const value = env[name];
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 
 const HOST = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
@@ -168,6 +248,10 @@ export function readStageConfig(stage: string, env: Env): StageConfig {
       "TC_POOL_ACCOUNT_IDS and TC_DNS_ACCOUNT_ID must be 12-digit account ids",
     );
   }
+  // C.5: required on the shared stages; a personal stage may omit both (and then no Linux create runs).
+  const probeRaw =
+    kind === "personal" ? optional(env, "TC_PROBE_SOURCES") : need(env, "TC_PROBE_SOURCES");
+  const vpcRaw = kind === "personal" ? optional(env, "TC_VPC_CIDR") : need(env, "TC_VPC_CIDR");
   return {
     stage,
     kind,
@@ -183,6 +267,8 @@ export function readStageConfig(stage: string, env: Env): StageConfig {
     poolAccountIds,
     dnsAccountId,
     dnsExternalId: need(env, "TC_DNS_EXTERNAL_ID"),
+    probeSources: probeRaw === undefined ? [] : parseProbeSourcesConfig(probeRaw),
+    vpcCidr: vpcRaw === undefined ? null : parseVpcCidrConfig(vpcRaw),
   };
 }
 
