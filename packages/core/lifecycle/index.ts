@@ -19,14 +19,16 @@ export {
 } from "./guard";
 export {
   PLAN_APPLY_KINDS,
+  PLAN_APPLY_LEAD_HOURS,
   PLAN_APPLY_STATES,
   PLAN_CHANGE_FAMILIES,
   markPlanChangeFailed,
   planApplyInFlight,
   planChangeFailed,
   planFailedFor,
+  planApplyDue,
   planPriceFor,
-  queuePlanChange,
+  queuePlanApply,
   readPlanChange,
   readPlanFailure,
   type PlanFailure,

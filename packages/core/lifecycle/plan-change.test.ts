@@ -1,7 +1,14 @@
 // WPU-S3: the pure rules that close the gaming path of a downgrade at the next renewal. Run without a
 // database; the proofs that need one are in plan-change.db.test.ts.
 import { describe, expect, it } from "vitest";
-import { PLAN_APPLY_KINDS, planApplyInFlight, planFailedFor, readPlanFailure } from "./plan-change";
+import {
+  PLAN_APPLY_KINDS,
+  PLAN_APPLY_LEAD_HOURS,
+  planApplyDue,
+  planApplyInFlight,
+  planFailedFor,
+  readPlanFailure,
+} from "./plan-change";
 
 const B = "0190aaaa-0000-7000-8000-0000000000b1";
 const C = "0190aaaa-0000-7000-8000-0000000000c1";
@@ -71,5 +78,25 @@ describe("the admin repository and the lifecycle agree on the plan-change famili
     const { ADMIN_PLAN_CHANGE_FAMILIES } = await import("@tc/db");
     const { PLAN_CHANGE_FAMILIES } = await import("./plan-change");
     expect([...ADMIN_PLAN_CHANGE_FAMILIES].sort()).toEqual([...PLAN_CHANGE_FAMILIES].sort());
+  });
+});
+
+// WPU-S5: the lead time of the apply (pure).
+describe("planApplyDue (WPU-S5)", () => {
+  const end = new Date("2026-12-10T00:00:00.000Z");
+  const at = (ms: number) => new Date(end.getTime() + ms);
+  it("is a named 24 hour lead", () => {
+    expect(PLAN_APPLY_LEAD_HOURS).toBe(24);
+  });
+  it("is due from exactly the lead time before the period end, and only until the period end", () => {
+    const lead = PLAN_APPLY_LEAD_HOURS * 3_600_000;
+    expect(planApplyDue(end, at(-lead - 1))).toBe(false);
+    expect(planApplyDue(end, at(-lead))).toBe(true);
+    expect(planApplyDue(end, at(-1))).toBe(true);
+    expect(planApplyDue(end, at(0))).toBe(false);
+    expect(planApplyDue(end, at(1))).toBe(false);
+  });
+  it("is false for a clock that is not a date", () => {
+    expect(planApplyDue(end, new Date(Number.NaN))).toBe(false);
   });
 });

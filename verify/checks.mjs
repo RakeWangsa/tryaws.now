@@ -978,6 +978,25 @@ TASKS["WPU-S4"] = [
   repo,
 ];
 
+// WPU-S5: the charge follows the delivered capacity. The scheduler queues the apply of a pending plan a
+// fixed lead time before the renewal (core, with the database), the renewal prices exactly the applied
+// plan and never the pending one, and renewNow queues no apply (core, db); the plan tab says the change
+// lands shortly before the renewal (web, bn and en). No AWS call. The core and db suites need the
+// local PostgreSQL (pnpm db:up).
+TASKS["WPU-S5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  scheduler,
+  web,
+  repo,
+];
+
 // WPU-M1: an unattached static IP is charged as Amazon Lightsail does (free while attached, an hourly
 // price once unattached for more than one hour). Money path: the config price row and its migration (db),
 // the price through the pricing engine, the existing metered_charge posting once per IP and hour bucket,

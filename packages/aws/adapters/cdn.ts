@@ -331,7 +331,7 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
         return stepDone({ configMerge: { pendingPlanFailed: null } });
       case "schedule_plan_change": {
-        // WPU-G8: no proration in a prepaid term. The choice is stored and the renewal applies it;
+        // WPU-G8: no proration in a prepaid term. The choice is stored and the scheduler applies it shortly before the renewal;
         // nothing is called in AWS. null cancels a pending change.
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
         const productId = payload?.productId;
@@ -346,8 +346,8 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
         return stepDone({ configMerge: { pendingPlan: { productId } } });
       }
       case "change_cdn_bundle": {
-        // Queued by the renewal, never by a customer. The bundle comes from the catalog product the
-        // renewal charged for, never from a name in the payload.
+        // Queued by the scheduler before the renewal (WPU-S5), never by a customer. The bundle comes
+        // from the catalog product named in the payload, never from a name in it.
         const productId = payload?.productId;
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (ctx.resource.state !== "active") throw fail("conflict");

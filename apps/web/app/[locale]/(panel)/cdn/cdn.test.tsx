@@ -113,9 +113,11 @@ describe("/cdn/[id]", () => {
     const html = render("cdn_detail.pending_plan");
     expect(html).toContain("nothing is charged now");
     expect(html).toContain("Next renewal: Dec 10, 2026");
-    expect(html).toContain("Starts at the next renewal: Medium, plan price ৳1,390.00.");
-    // WPU-S4: a lower price is not charged at the next renewal.
-    expect(html).toContain("the lower price starts from the following renewal");
+    expect(html).toContain("Planned for the next renewal: Medium, plan price ৳1,390.00.");
+    // WPU-S5: the change lands before the renewal and the renewal charges the plan then held.
+    expect(html).toContain(
+      "The change is applied shortly before the next renewal and the renewal is charged at the plan you then have. If the change cannot be applied, you stay on your current plan and price.",
+    );
     expect(html).toMatch(/name="cancel" value="yes"/);
     expect(html).toMatch(/name="productId"/);
     expect(html).not.toMatch(/name="(bundle|bundleId|price|amount)"/);
@@ -125,7 +127,7 @@ describe("/cdn/[id]", () => {
     for (const locale of ["en", "bn"] as const) {
       const html = render("cdn_detail.plan_failed", locale);
       expect(html).toContain("alert-warning");
-      expect(html).not.toContain("Starts at the next renewal");
+      expect(html).not.toContain("Planned for the next renewal");
       expect(html).toMatch(/name="cancel" value="yes"/);
     }
     const html = render("cdn_detail.plan_failed");

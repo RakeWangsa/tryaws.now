@@ -134,10 +134,12 @@ describe("/containers/[id]", () => {
   it("shows a pending plan with the renewal price, a cancel button, and the deployment history without any environment value", () => {
     const out = render("containers_detail.ready_pending");
     expect(out).toContain(
-      "Starts at the next renewal: Micro · 2 container instances, plan price ৳2,500.00.",
+      "Planned for the next renewal: Micro · 2 container instances, plan price ৳2,500.00.",
     );
-    // WPU-S4: a lower price is not charged at the next renewal.
-    expect(out).toContain("the lower price starts from the following renewal");
+    // WPU-S5: the change lands before the renewal and the renewal charges the plan then held.
+    expect(out).toContain(
+      "The change is applied shortly before the next renewal and the renewal is charged at the plan you then have. If the change cannot be applied, you stay on your current plan and price.",
+    );
     expect(out).toMatch(/name="cancel" value="yes"/);
     expect(out).toContain("Deployment history");
     expect(out).not.toContain("super-secret-env-value");
@@ -147,7 +149,7 @@ describe("/containers/[id]", () => {
     const out = render("containers_detail.plan_failed");
     expect(out).toContain("alert-warning");
     expect(out).toContain("The planned change could not be applied.");
-    expect(out).not.toContain("Starts at the next renewal");
+    expect(out).not.toContain("Planned for the next renewal");
     expect(out).toMatch(/name="cancel" value="yes"/);
     expect(render("containers_detail.plan_failed", "bn")).toMatch(/[ঀ-৿]/);
   });

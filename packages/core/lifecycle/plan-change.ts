@@ -12,10 +12,10 @@ import type { OperationKind } from "../operations/kinds";
 
 // WPU-G8. Ruling: a power, scale or bundle change takes effect at the NEXT renewal. A term is prepaid,
 // so there is no proration. The customer's choice is stored in the resource config as
-// `pendingPlan: { productId }` (written by the adapter action `schedule_plan_change`). The renewal
-// quote reads the price of that catalog product through the pricing engine (the amount is never
-// computed here, R4), the renewal queues the operation that applies it, and the adapter then moves
-// the plan to `appliedPlan: { productId }`, which keeps pricing the later renewals. The stored price
+// `pendingPlan: { productId }` (written by the adapter action `schedule_plan_change`). The scheduler
+// queues the operation that applies it shortly before the renewal (WPU-S5), and the adapter then moves
+// the plan to `appliedPlan: { productId }`. The renewal quote reads the price of the APPLIED catalog
+// product through the pricing engine (the amount is never computed here, R4). The stored price
 // snapshot is not touched: worker_rw has no grant on it.
 //
 // WPU-S2. Ruling: the pending price is quoted only when the apply operation can run for the state the
@@ -32,15 +32,20 @@ import type { OperationKind } from "../operations/kinds";
 // mark, and only a successful apply (or an admin, not built) removes it; (3) a mark for the pending
 // product keeps the renewal at the applied plan's price (planPriceFor), so the discount is not repeated.
 //
-// WPU-S4. Ruling: renewal never charges less than the plan the resource actually has — closes the whole
-// charge-before-apply bypass class — a downgrade lands one term later than the customer may expect.
-// The quote is the catalog price of max(applied plan, pending plan) through the pricing engine, where
-// the applied plan is `config.appliedPlan`, or the stored snapshot price when none was applied yet. An
-// upgrade is charged at the higher pending price (the capacity follows right after the charge); a
-// downgrade is charged at the current (higher) price for that term, the apply runs after the charge,
-// and the NEXT renewal quotes the lower applied plan. A failed, blocked or raced apply of a downgrade
-// can never give a discount; the apply states, the busy checks and the failure mark stay as secondary
-// defences, the billing does not depend on them.
+// WPU-S4 (replaced by WPU-S5, never owner-approved): the quote was max(applied, pending) and the apply
+// ran after the charge; the money review showed it overcharging a downgrade.
+//
+// WPU-S5. Ruling: the charge follows the delivered capacity (replaces the WPU-S4 max() rule, which the
+// money review showed overcharging a downgrade; S4 was NOT owner-approved) — closes both overcharge
+// paths and needs no refund — a plan change lands shortly before the renewal, or one term later if the
+// apply is late. (a) The scheduler queues the apply operation (scale_container, change_cdn_bundle)
+// PLAN_APPLY_LEAD_HOURS before the renewal is due, once per subscription and period (the key holds the
+// period end, R7), only while the resource is in an apply state and the pending plan has not failed.
+// (b) The renewal quote prices EXACTLY the plan the resource has: `config.appliedPlan`, else the
+// stored snapshot. The pending plan is never priced and the renewal queues nothing after the charge.
+// (c) An apply that has not finished at the renewal, or failed, leaves the old plan at the old price;
+// the pending plan stays pending for the next period. (d) The apply states, the busy checks and the
+// failure mark stay as secondary defences.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -201,95 +206,92 @@ export type PlanPrice =
       readonly productId: string;
       readonly awsPriceUsd: string;
     }
-  | {
-      /**
-       * A pending plan the apply can run for. `awsPriceUsd` is the price of the pending product;
-       * `floorAwsPriceUsd` is the price of the plan the resource has now (the applied product), or null
-       * when none was applied yet and the stored snapshot price is the floor. WPU-S4: the renewal
-       * charges the higher of the two.
-       */
-      readonly state: "pending";
-      readonly productId: string;
-      readonly awsPriceUsd: string;
-      readonly floorAwsPriceUsd: string | null;
-    }
   | { readonly state: "unreadable" };
 
 type PlanRow = Pick<LifecycleRow, "resource">;
 
+/** The usable catalog price of a product for this row, or null (gone, other family or Region, wrong shape). */
+async function catalogPrice(
+  tx: Tx,
+  row: PlanRow,
+  spec: PlanFamily,
+  id: string,
+  needActive: boolean,
+): Promise<string | null> {
+  const region = row.resource.config.region;
+  const product = await readCatalogProduct(tx, id);
+  if (
+    product === null ||
+    product.family !== row.resource.family ||
+    (needActive && !product.active) ||
+    typeof region !== "string" ||
+    product.region !== region ||
+    !spec.shaped(product.awsId, product.specs)
+  ) {
+    return null;
+  }
+  return product.awsPriceUsd;
+}
+
 /**
- * Which AWS price the next renewal of this row is quoted from. A valid pending plan wins (it is what
- * the customer will have) when the apply can run in the state the resource is in and has not failed
- * before (WPU-S2); else an applied plan; else the stored snapshot, as before. A pending plan that
- * cannot be used (product gone, off sale, another Region, wrong shape, resource state not
- * applicable, earlier apply failed) is ignored, so the customer is never charged for a plan that
- * will not be applied. An applied plan that cannot be read
- * makes the price unknown, and the caller refuses to charge (R16).
+ * Which AWS price the next renewal of this row is quoted from (WPU-S5): the plan the resource HAS, that
+ * is the applied plan, else the stored snapshot. The pending plan is never priced: it is charged only
+ * after the apply made it the applied plan. An applied plan that cannot be read makes the price
+ * unknown, and the caller refuses to charge (R16).
  */
 export async function planPriceFor(tx: Tx, row: PlanRow): Promise<PlanPrice> {
   const spec = PLAN_FAMILIES[row.resource.family];
   if (spec === undefined) return { state: "snapshot" };
-  const { pending, applied } = readPlanChange(row.resource.config);
-  const region = row.resource.config.region;
+  const { applied } = readPlanChange(row.resource.config);
+  if (applied === null) return { state: "snapshot" };
+  const price = await catalogPrice(tx, row, spec, applied, false);
+  if (price === null) return { state: "unreadable" };
+  return { state: "applied", productId: applied, awsPriceUsd: price };
+}
 
-  const usable = async (id: string, needActive: boolean): Promise<string | null> => {
-    const product = await readCatalogProduct(tx, id);
-    if (
-      product === null ||
-      product.family !== row.resource.family ||
-      (needActive && !product.active) ||
-      typeof region !== "string" ||
-      product.region !== region ||
-      !spec.shaped(product.awsId, product.specs)
-    ) {
-      return null;
-    }
-    return product.awsPriceUsd;
-  };
+/** WPU-S5: how long before the renewal is due the apply of a pending plan is queued. */
+export const PLAN_APPLY_LEAD_HOURS = 24;
 
-  // WPU-S4: the plan the resource has now must be readable whatever is pending (R16).
-  let floor: string | null = null;
-  if (applied !== null) {
-    floor = await usable(applied, false);
-    if (floor === null) return { state: "unreadable" };
-  }
-  const applicable =
-    spec.applyStates.includes(row.resource.state) &&
-    (pending === null || !planFailedFor(row.resource.config, pending));
-  if (pending !== null && applicable) {
-    const price = await usable(pending, true);
-    if (price !== null) {
-      return { state: "pending", productId: pending, awsPriceUsd: price, floorAwsPriceUsd: floor };
-    }
-  }
-  if (applied !== null && floor !== null) {
-    return { state: "applied", productId: applied, awsPriceUsd: floor };
-  }
-  return { state: "snapshot" };
+/** True from PLAN_APPLY_LEAD_HOURS before the period end until the period end (the lead window). */
+export function planApplyDue(periodEnd: Date, now: Date): boolean {
+  const at = now.getTime();
+  const end = periodEnd.getTime();
+  if (Number.isNaN(at) || Number.isNaN(end)) return false;
+  return at >= end - PLAN_APPLY_LEAD_HOURS * 3_600_000 && at < end;
 }
 
 /**
- * After a renewal was charged: queue the operation that applies a pending plan, once per period (the
- * key holds the new period start, R7). The product is the one the quote used, read again under the
- * same transaction. Returns the new operation when one was created.
+ * WPU-S5: in the lead window before a renewal, queue the operation that applies a pending plan, once
+ * per subscription and period (the key holds the period end, so a repeat of any scheduler run is a
+ * replay, R7). Nothing is queued unless the subscription is active, the resource is in a
+ * state the apply runs in (PLAN_APPLY_STATES), the pending plan has not failed, the pending product is
+ * still on sale and shaped for the family, and the applied plan can be read (R16). Returns the new
+ * operation when one was created. It never charges anything.
  */
-export async function queuePlanChange(
+export async function queuePlanApply(
   tx: Tx,
   row: LifecycleRow,
-  periodStart: Date,
   now: Date,
 ): Promise<{ operationId: string; ready: boolean } | null> {
-  const price = await planPriceFor(tx, row);
-  if (price.state !== "pending") return null;
   const spec = PLAN_FAMILIES[row.resource.family];
   if (spec === undefined) return null;
+  if (row.status !== "active") return null;
+  if (row.resource.deletedAt !== null || !spec.applyStates.includes(row.resource.state))
+    return null;
+  if (!planApplyDue(row.periodEnd, now)) return null;
+  const { pending, applied } = readPlanChange(row.resource.config);
+  if (pending === null || pending === applied || planFailedFor(row.resource.config, pending)) {
+    return null;
+  }
+  if ((await planPriceFor(tx, row)).state === "unreadable") return null;
+  if ((await catalogPrice(tx, row, spec, pending, true)) === null) return null;
   const inserted = await insertOperation(
     tx,
     {
       resourceId: row.resourceId,
       kind: spec.apply,
-      payload: { subscriptionId: row.id, productId: price.productId },
-      idempotencyKey: `lifecycle:plan-change:${row.id}:${periodStart.toISOString()}`,
+      payload: { subscriptionId: row.id, productId: pending },
+      idempotencyKey: `lifecycle:plan-change:${row.id}:${row.periodEnd.toISOString()}`,
     },
     now,
   );

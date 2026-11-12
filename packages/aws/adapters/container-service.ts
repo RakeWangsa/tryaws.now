@@ -305,7 +305,7 @@ export function createContainerServiceAdapter(
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
         return stepDone({ configMerge: { pendingPlanFailed: null } });
       case "schedule_plan_change": {
-        // WPU-G8: no proration in a prepaid term. The choice is stored and the renewal applies it;
+        // WPU-G8: no proration in a prepaid term. The choice is stored and the scheduler applies it shortly before the renewal;
         // nothing is called in AWS and nothing is charged now. null cancels a pending change.
         if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
         const productId = payload?.productId;
@@ -320,8 +320,8 @@ export function createContainerServiceAdapter(
         return stepDone({ configMerge: { pendingPlan: { productId } } });
       }
       case "scale_container": {
-        // Queued by the renewal, never by a customer: the power and scale come from the catalog
-        // product that the renewal charged for, never from numbers in the payload.
+        // Queued by the scheduler before the renewal (WPU-S5), never by a customer: the power and
+        // scale come from the catalog product named in the payload, never from numbers in it.
         const productId = payload?.productId;
         if (typeof productId !== "string" || !UUID.test(productId)) throw fail("validation");
         if (ctx.resource.state !== "active") throw fail("conflict");

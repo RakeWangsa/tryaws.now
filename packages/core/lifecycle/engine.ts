@@ -17,7 +17,7 @@ import type { Clock } from "../types";
 import { readLifecycleConfig, type LifecycleConfig } from "./config";
 import { decideSubscription, type LifecycleAction } from "./decide";
 import { SNAPSHOT_FAMILIES } from "./guard";
-import { queuePlanChange } from "./plan-change";
+import { queuePlanApply } from "./plan-change";
 import { renewalQuote, renewSubscription } from "./renew";
 
 const HOUR_MS = 3_600_000;
@@ -130,11 +130,6 @@ async function afterRenewal(
   ) {
     await work.enqueue("resume", renewed.periodStart);
   }
-  // WPU-G8: a pending power, scale or bundle change is applied once the new period is paid.
-  const plan = await queuePlanChange(work.tx, row, renewed.periodStart, work.now);
-  if (plan !== null && plan.ready) {
-    work.messages.push(firstMessage(plan.operationId, row.resourceId));
-  }
   await work.notify("lifecycle_renewed", renewed.periodStart.toISOString(), {
     subscriptionId: row.id,
     resourceId: row.resourceId,
@@ -231,6 +226,12 @@ async function process(
     now,
     config,
   );
+
+  // WPU-S5: a pending power, scale or bundle change is applied shortly BEFORE the renewal, so the
+  // renewal charges the plan the customer then has. Inside the lead window only, once per period.
+  const plan = await queuePlanApply(tx, row, now);
+  if (plan !== null && plan.ready)
+    work.messages.push(firstMessage(plan.operationId, row.resourceId));
 
   let step: Step = "none";
   switch (action.type) {

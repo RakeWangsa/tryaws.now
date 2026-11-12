@@ -1,7 +1,6 @@
 import { customerRepos, insertOperation, lifecycleRepo, type Tx } from "@tc/db";
 import type { Clock, Result } from "../types";
 import { DEFAULT_LIFECYCLE_CONFIG } from "./config";
-import { queuePlanChange } from "./plan-change";
 import { renewSubscription, type Renewed } from "./renew";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -73,8 +72,7 @@ export async function renewNow(tx: Tx, input: RenewNowInput): Promise<Result<Ren
     );
     resumeQueued = inserted.created;
   }
-  // WPU-G8: a pending power, scale or bundle change is applied by the operation this queues.
-  await queuePlanChange(tx, row, renewed.value.periodStart, now);
+  // WPU-S5: a pending plan is applied by the scheduler before the renewal; nothing is queued here.
   await repo.insertNotification({
     customerId: row.customerId,
     channel: "email",

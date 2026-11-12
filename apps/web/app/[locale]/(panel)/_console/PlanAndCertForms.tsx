@@ -43,7 +43,7 @@ export function PlanChangeForm({
   cancelRequestId: string;
   kind: "container" | "cdn";
   currentName: string | null;
-  /** "Starts at the next renewal: ..." or null when nothing is planned. */
+  /** "Planned for the next renewal: ..." or null when nothing is planned. */
   pendingText: string | null;
   renewsText: string | null;
   choices: PlanChoice[];
