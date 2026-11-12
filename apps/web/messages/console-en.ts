@@ -48,17 +48,18 @@ export const consoleEn: Same<typeof consoleBn> = {
     plan: {
       title: "Change plan",
       introContainer:
-        "To change power or scale, choose a new plan. The term is prepaid, so the change does not happen now and nothing is charged now. The new plan starts at your next renewal, and that renewal charges the price of the new plan.",
+        "To change power or scale, choose a new plan. The term is prepaid, so the change does not happen now and nothing is charged now. The new plan starts at your next renewal. If it costs more, that renewal charges the higher price. If it costs less, that renewal still charges the price of the plan you have now, and the lower price starts from the following renewal.",
       introCdn:
-        "To change the bundle, choose a new plan. The term is prepaid, so the change does not happen now and nothing is charged now. The new bundle starts at your next renewal, and that renewal charges its price.",
+        "To change the bundle, choose a new plan. The term is prepaid, so the change does not happen now and nothing is charged now. The new bundle starts at your next renewal. If it costs more, that renewal charges the higher price. If it costs less, that renewal still charges the price of the bundle you have now, and the lower price starts from the following renewal.",
       current: "Current plan: {name}",
       currentUnknown: "The current plan is not known.",
       renews: "Next renewal: {date}",
-      pending: "Starts at the next renewal: {name}, renewal price {price}.",
+      pending:
+        "Starts at the next renewal: {name}, plan price {price}. If this price is lower, the lower price starts from the following renewal; the next renewal still charges the plan you have now.",
       pendingGone: "The plan you chose is no longer for sale. Cancel it and choose again.",
       failedTitle: "The planned change could not be applied.",
       failed:
-        "The plan you chose was charged but could not be set up, so it is not scheduled. Your next renewal charges the plan you have now. Cancel this change and choose another plan, or contact support.",
+        "The plan you chose could not be set up, so it is not scheduled. Your next renewal charges the plan you have now. Cancel this change and choose another plan, or contact support.",
       none: "No change is set for the next renewal.",
       select: "New plan",
       option: "{name}: {price} (30 days)",

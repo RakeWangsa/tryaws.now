@@ -361,7 +361,7 @@ describe("WPU-S2: the pending price is charged only when the apply can run", () 
     });
   });
 
-  it("downgrade active: charged the new price, the apply is queued once per period (R7)", async () => {
+  it("downgrade active: charged the CURRENT price (WPU-S4), the apply is queued once per period (R7)", async () => {
     const big = await product("container_service", "large", "40");
     const small = await product("container_service", "small", "5", {
       region: reg(big),
@@ -374,7 +374,7 @@ describe("WPU-S2: the pending price is charged only when the apply can run", () 
     const f = await fresh("container_service", config);
     const { r, charged } = await renewTwoDaysBefore(f);
     expect(r.ok).toBe(true);
-    expect(charged).toBe(await total("container_service", "5"));
+    expect(charged).toBe(await total("container_service", "40"));
     expect(await applyOps(f.resourceId)).toHaveLength(1);
     const again = await asWeb((tx) =>
       renewNow(tx, {
@@ -560,7 +560,8 @@ describe("WPU-S3: the failure mark and the repeated cycle", () => {
     };
     const f = await fresh("container_service", config);
     const first = await renewTwoDaysBefore(f);
-    expect(first.charged).toBe(await total("container_service", "5"));
+    // WPU-S4: the downgrade is charged at the applied (current) plan before the apply has run.
+    expect(first.charged).toBe(await total("container_service", "40"));
     await failApply(f, "scale_container");
     const end2 = await dateOf("period_end", f.subscriptionId);
     const second = await renewTwoDaysBefore({ ...f, end: end2 });
@@ -604,5 +605,207 @@ describe("WPU-S3: the failure mark and the repeated cycle", () => {
     expect(charged).toBe(await total("cdn", "20"));
     expect(await applyOps(f.resourceId)).toHaveLength(1);
     expect(await configOf(f.resourceId)).not.toHaveProperty("pendingPlanFailed");
+  });
+});
+
+// WPU-S4. Ruling: renewal never charges less than the plan the resource actually has. The quote is the
+// catalog price of max(applied plan, pending plan) through the pricing engine; the applied plan is
+// `config.appliedPlan`, or the stored snapshot price when none was applied yet. An upgrade is charged at
+// the higher pending price (the capacity follows right after the charge); a downgrade is charged at the
+// current price for that term and the next renewal quotes the lower applied plan. A failed or blocked
+// apply of a downgrade therefore never gives a discount, whatever the state, the mark or the race.
+describe("WPU-S4: the renewal charges the higher of the applied and the pending plan", () => {
+  const plans = async () => {
+    const big = await product("container_service", "large", "40");
+    const small = await product("container_service", "small", "5", { region: reg(big) });
+    const mid = await product("container_service", "medium", "20", { region: reg(big) });
+    return { big, small, mid };
+  };
+  const attention = (f: Fresh, extra: Record<string, unknown> = {}) =>
+    asWorker((tx) =>
+      lifecycleHooks({ clock: kit.clock }).needsAttention(tx, {
+        resourceId: f.resourceId,
+        kind: "scale_container",
+        code: "conflict",
+        ...extra,
+      } as never),
+    );
+  /** What the adapter writes after the apply succeeded (scale_container). */
+  const applied = (f: Fresh, id: string) =>
+    q(
+      "update resources set config = (config || $2::jsonb) - 'pendingPlan' - 'pendingPlanFailed' where id = $1",
+      [f.resourceId, JSON.stringify({ appliedPlan: { productId: id } })],
+    );
+  const nextPeriod = async (f: Fresh): Promise<Fresh> => {
+    const rows = await q("select period_end as d from subscriptions where id = $1", [
+      f.subscriptionId,
+    ]);
+    return { ...f, end: new Date(String(rows[0]!.d)) };
+  };
+
+  it("a downgrade is charged at the current price and the next period at the lower price", async () => {
+    const { big, small } = await plans();
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    const first = await renewTwoDaysBefore(f);
+    expect(first.r.ok).toBe(true);
+    expect(first.charged).toBe(await total("container_service", "40"));
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+    await applied(f, small); // the apply succeeded
+    const second = await renewTwoDaysBefore(await nextPeriod(f));
+    expect(second.r.ok).toBe(true);
+    expect(second.charged).toBe(await total("container_service", "5"));
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+  });
+
+  it("an upgrade is charged at the higher pending price and applied once", async () => {
+    const { big, small } = await plans();
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: small },
+      pendingPlan: { productId: big },
+    };
+    const f = await fresh("container_service", config);
+    const first = await renewTwoDaysBefore(f);
+    expect(first.charged).toBe(await total("container_service", "40"));
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+  });
+
+  it("the same price on both sides is charged that price and the apply is still queued", async () => {
+    const { big } = await plans();
+    const twin = await product("container_service", "xlarge", "40", { region: reg(big) });
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: twin },
+    };
+    const f = await fresh("container_service", config);
+    const first = await renewTwoDaysBefore(f);
+    expect(first.charged).toBe(await total("container_service", "40"));
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+  });
+
+  it("stop after the charge of a downgrade gives no discount, now or when the resource is started again", async () => {
+    const { big, small } = await plans();
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    const first = await renewTwoDaysBefore(f);
+    expect(first.charged).toBe(await total("container_service", "40"));
+    // The race: the resource is stopped between the charge and the apply; the apply conflicts and
+    // ends in needs_attention (the web busy check is only a secondary defence).
+    await q("update resources set state = 'stopped' where id = $1", [f.resourceId]);
+    await attention(f);
+    const second = await renewTwoDaysBefore(await nextPeriod(f));
+    expect(second.charged).toBe(await total("container_service", "40"));
+    await q("update resources set state = 'active' where id = $1", [f.resourceId]);
+    // Even with the failure mark gone the correctness does not depend on it.
+    await q("update resources set config = config - 'pendingPlanFailed' where id = $1", [
+      f.resourceId,
+    ]);
+    const third = await renewTwoDaysBefore(await nextPeriod(f));
+    expect(third.charged).toBe(await total("container_service", "40"));
+  });
+
+  it("a downgrade whose apply failed is charged the applied price in every later period", async () => {
+    const { big, small } = await plans();
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    let at = f;
+    for (let i = 0; i < 3; i += 1) {
+      const step = await renewTwoDaysBefore(at);
+      expect(step.charged).toBe(await total("container_service", "40"));
+      await attention(f);
+      at = await nextPeriod(f);
+    }
+  });
+
+  it("without an applied plan the stored snapshot price is the floor of a pending downgrade", async () => {
+    const { big } = await plans();
+    const cheap = await product("container_service", "nano", "2", { region: reg(big) });
+    const config = { region: reg(big), pendingPlan: { productId: cheap } };
+    const f = await fresh("container_service", config);
+    // The snapshot of the paid server is priced at 5 (see the first case of this file).
+    const first = await renewTwoDaysBefore(f);
+    expect(first.r.ok).toBe(true);
+    expect(first.charged).toBe(await total("container_service", "5"));
+    expect(await applyOps(f.resourceId)).toHaveLength(1);
+  });
+
+  it("an applied plan that cannot be read refuses the renewal even when a pending plan is usable (R16)", async () => {
+    const { big, small } = await plans();
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: "0190aaaa-0000-7000-8000-0000000000fe" },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    expect(await asWeb((tx) => planPriceFor(tx, rowOf(f, "container_service", config)))).toEqual({
+      state: "unreadable",
+    });
+    const before = await kit.balance(f.customerId);
+    kit.clock.set(new Date(f.end.getTime() - 2 * DAY));
+    const r = await asWeb((tx) =>
+      renewNow(tx, { customerId: f.customerId, resourceId: f.resourceId, clock: kit.clock }),
+    );
+    expect(r.ok).toBe(false);
+    expect(await kit.balance(f.customerId)).toBe(before);
+    expect(await applyOps(f.resourceId)).toHaveLength(0);
+  });
+
+  it("the quote of a pending downgrade carries the floor and is priced at the floor", async () => {
+    const { big, small } = await plans();
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    expect(
+      await asWeb((tx) => planPriceFor(tx, rowOf(f, "container_service", config))),
+    ).toMatchObject({
+      state: "pending",
+      productId: small,
+      awsPriceUsd: "5.0000",
+      floorAwsPriceUsd: "40.0000",
+    });
+    const quoted = await asWeb((tx) =>
+      renewalQuote(tx, rowOf(f, "container_service", config), kit.clock),
+    );
+    expect(quoted.ok && quoted.value.awsPriceUsd).toBe("40.0000");
+  });
+
+  it("the failure mark takes the product from the failed operation, not from the live config", async () => {
+    const { big, small, mid } = await plans();
+    const config = {
+      region: reg(big),
+      appliedPlan: { productId: big },
+      pendingPlan: { productId: small },
+    };
+    const f = await fresh("container_service", config);
+    await renewTwoDaysBefore(f);
+    const [op] = await q(
+      "select id from operations where resource_id = $1 and kind = 'scale_container'",
+      [f.resourceId],
+    );
+    // The customer re-schedules another plan after the charge; the live config now says mid.
+    await q("update resources set config = config || $2::jsonb where id = $1", [
+      f.resourceId,
+      JSON.stringify({ pendingPlan: { productId: mid } }),
+    ]);
+    await attention(f, { operationId: String(op!.id) });
+    const mark = (await configOf(f.resourceId)).pendingPlanFailed as { productId: string };
+    expect(mark.productId).toBe(small);
   });
 });

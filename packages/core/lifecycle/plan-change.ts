@@ -31,6 +31,16 @@ import type { OperationKind } from "../operations/kinds";
 // customer: scheduling the same product is refused, another product is allowed, a cancel leaves the
 // mark, and only a successful apply (or an admin, not built) removes it; (3) a mark for the pending
 // product keeps the renewal at the applied plan's price (planPriceFor), so the discount is not repeated.
+//
+// WPU-S4. Ruling: renewal never charges less than the plan the resource actually has — closes the whole
+// charge-before-apply bypass class — a downgrade lands one term later than the customer may expect.
+// The quote is the catalog price of max(applied plan, pending plan) through the pricing engine, where
+// the applied plan is `config.appliedPlan`, or the stored snapshot price when none was applied yet. An
+// upgrade is charged at the higher pending price (the capacity follows right after the charge); a
+// downgrade is charged at the current (higher) price for that term, the apply runs after the charge,
+// and the NEXT renewal quotes the lower applied plan. A failed, blocked or raced apply of a downgrade
+// can never give a discount; the apply states, the busy checks and the failure mark stay as secondary
+// defences, the billing does not depend on them.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -160,12 +170,23 @@ const REASON_CODE = /^[A-Za-z][A-Za-z0-9_.:]{0,95}$/;
  */
 export async function markPlanChangeFailed(
   tx: Tx,
-  event: { readonly resourceId: string; readonly kind: string; readonly code: string },
+  event: {
+    readonly resourceId: string;
+    readonly kind: string;
+    readonly code: string;
+    readonly operationId?: string;
+  },
 ): Promise<void> {
   if (!PLAN_APPLY_KINDS.includes(event.kind)) return;
   const code = REASON_CODE.test(event.code) ? event.code : "unknown";
-  const facts = await lifecycleRepo(tx).planApplyFacts(event.resourceId);
-  const productId = facts === null ? null : readPlanChange(facts.config).pending;
+  const facts = await lifecycleRepo(tx).planApplyFacts(event.resourceId, event.operationId);
+  // WPU-S4: the failed product is the one in the payload of the failed operation (what the renewal
+  // charged and queued), not the live pending plan, which the customer may have changed since. A mark
+  // without an operation (an old caller) falls back to the live pending plan.
+  const productId =
+    facts === null
+      ? null
+      : (idOf({ productId: facts.operationProductId }) ?? readPlanChange(facts.config).pending);
   await patchResource(tx, event.resourceId, {
     configMerge: {
       pendingPlanFailed: { code, productId, period: facts?.periodStart?.toISOString() ?? null },
@@ -176,9 +197,21 @@ export async function markPlanChangeFailed(
 export type PlanPrice =
   | { readonly state: "snapshot" }
   | {
-      readonly state: "pending" | "applied";
+      readonly state: "applied";
       readonly productId: string;
       readonly awsPriceUsd: string;
+    }
+  | {
+      /**
+       * A pending plan the apply can run for. `awsPriceUsd` is the price of the pending product;
+       * `floorAwsPriceUsd` is the price of the plan the resource has now (the applied product), or null
+       * when none was applied yet and the stored snapshot price is the floor. WPU-S4: the renewal
+       * charges the higher of the two.
+       */
+      readonly state: "pending";
+      readonly productId: string;
+      readonly awsPriceUsd: string;
+      readonly floorAwsPriceUsd: string | null;
     }
   | { readonly state: "unreadable" };
 
@@ -214,18 +247,23 @@ export async function planPriceFor(tx: Tx, row: PlanRow): Promise<PlanPrice> {
     return product.awsPriceUsd;
   };
 
+  // WPU-S4: the plan the resource has now must be readable whatever is pending (R16).
+  let floor: string | null = null;
+  if (applied !== null) {
+    floor = await usable(applied, false);
+    if (floor === null) return { state: "unreadable" };
+  }
   const applicable =
     spec.applyStates.includes(row.resource.state) &&
     (pending === null || !planFailedFor(row.resource.config, pending));
   if (pending !== null && applicable) {
     const price = await usable(pending, true);
-    if (price !== null) return { state: "pending", productId: pending, awsPriceUsd: price };
+    if (price !== null) {
+      return { state: "pending", productId: pending, awsPriceUsd: price, floorAwsPriceUsd: floor };
+    }
   }
-  if (applied !== null) {
-    const price = await usable(applied, false);
-    return price === null
-      ? { state: "unreadable" }
-      : { state: "applied", productId: applied, awsPriceUsd: price };
+  if (applied !== null && floor !== null) {
+    return { state: "applied", productId: applied, awsPriceUsd: floor };
   }
   return { state: "snapshot" };
 }

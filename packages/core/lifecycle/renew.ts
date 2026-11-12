@@ -31,17 +31,37 @@ export async function renewalQuote(
   if (plan.state === "unreadable") {
     return { ok: false, error: "internal", fields: { plan: "unreadable" } };
   }
-  const priced = await quoteInForce(
-    tx,
-    {
-      market: row.market,
-      productFamily: row.resource.family,
-      awsPriceUsd: plan.state === "snapshot" ? stored.awsPriceUsd : plan.awsPriceUsd,
-      quantity: stored.quantity,
-    },
-    clock,
-  );
-  return priced.ok ? { ok: true, value: priced.value.snapshot } : priced;
+  const quoteAt = (awsPriceUsd: string) =>
+    quoteInForce(
+      tx,
+      {
+        market: row.market,
+        productFamily: row.resource.family,
+        awsPriceUsd,
+        quantity: stored.quantity,
+      },
+      clock,
+    );
+  if (plan.state !== "pending") {
+    const priced = await quoteAt(plan.state === "snapshot" ? stored.awsPriceUsd : plan.awsPriceUsd);
+    return priced.ok ? { ok: true, value: priced.value.snapshot } : priced;
+  }
+  // WPU-S4: a pending plan is charged at the higher of its own price and the price of the plan the
+  // resource has now (the applied product, else the stored snapshot). The comparison is on the amounts
+  // the pricing engine returns, so no decimal math happens here (R4). An upgrade pays the new price
+  // (the capacity follows the charge); a downgrade pays the current price for this term and the next
+  // renewal quotes the lower applied plan.
+  const pending = await quoteAt(plan.awsPriceUsd);
+  if (!pending.ok) return pending;
+  const current = await quoteAt(plan.floorAwsPriceUsd ?? stored.awsPriceUsd);
+  if (!current.ok) return current;
+  return {
+    ok: true,
+    value:
+      BigInt(pending.value.snapshot.totalMinor) > BigInt(current.value.snapshot.totalMinor)
+        ? pending.value.snapshot
+        : current.value.snapshot,
+  };
 }
 
 export type Renewed = {

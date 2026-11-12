@@ -199,13 +199,27 @@ export function lifecycleRepo(tx: Tx) {
     },
 
     // WPU-S3: the config of a resource and the start of the period its subscription is in, for the
-    // mark of a failed plan apply. null when the resource is unknown.
+    // mark of a failed plan apply. WPU-S4: and the product in the payload of the failed operation
+    // (null when no operation id was given, the operation is not of this resource or has no product).
+    // null when the resource is unknown.
     async planApplyFacts(
       resourceId: string,
-    ): Promise<{ config: Record<string, unknown>; periodStart: Date | null } | null> {
+      operationId?: string,
+    ): Promise<{
+      config: Record<string, unknown>;
+      periodStart: Date | null;
+      operationProductId: string | null;
+    } | null> {
       assertUuid(resourceId, "resource id");
-      const { rows } = await tx.execute<{ config: unknown; period_start: unknown }>(sql`
-        select r.config as config, s.period_start as period_start
+      if (operationId !== undefined) assertUuid(operationId, "operation id");
+      const { rows } = await tx.execute<{
+        config: unknown;
+        period_start: unknown;
+        product_id: unknown;
+      }>(sql`
+        select r.config as config, s.period_start as period_start,
+          (select o.payload ->> 'productId' from operations o
+            where o.id = ${operationId ?? null}::uuid and o.resource_id = r.id) as product_id
         from resources r left join subscriptions s on s.resource_id = r.id
         where r.id = ${resourceId}
         limit 1`);
@@ -224,6 +238,7 @@ export function lifecycleRepo(tx: Tx) {
             : start instanceof Date
               ? start
               : new Date(String(start)),
+        operationProductId: typeof row.product_id === "string" ? row.product_id : null,
       };
     },
 

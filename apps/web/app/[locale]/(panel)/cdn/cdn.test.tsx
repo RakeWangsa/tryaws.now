@@ -113,7 +113,9 @@ describe("/cdn/[id]", () => {
     const html = render("cdn_detail.pending_plan");
     expect(html).toContain("nothing is charged now");
     expect(html).toContain("Next renewal: Dec 10, 2026");
-    expect(html).toContain("Starts at the next renewal: Medium, renewal price ৳1,390.00.");
+    expect(html).toContain("Starts at the next renewal: Medium, plan price ৳1,390.00.");
+    // WPU-S4: a lower price is not charged at the next renewal.
+    expect(html).toContain("the lower price starts from the following renewal");
     expect(html).toMatch(/name="cancel" value="yes"/);
     expect(html).toMatch(/name="productId"/);
     expect(html).not.toMatch(/name="(bundle|bundleId|price|amount)"/);

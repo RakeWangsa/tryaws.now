@@ -134,8 +134,10 @@ describe("/containers/[id]", () => {
   it("shows a pending plan with the renewal price, a cancel button, and the deployment history without any environment value", () => {
     const out = render("containers_detail.ready_pending");
     expect(out).toContain(
-      "Starts at the next renewal: Micro · 2 container instances, renewal price ৳2,500.00.",
+      "Starts at the next renewal: Micro · 2 container instances, plan price ৳2,500.00.",
     );
+    // WPU-S4: a lower price is not charged at the next renewal.
+    expect(out).toContain("the lower price starts from the following renewal");
     expect(out).toMatch(/name="cancel" value="yes"/);
     expect(out).toContain("Deployment history");
     expect(out).not.toContain("super-secret-env-value");

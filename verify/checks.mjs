@@ -958,6 +958,26 @@ TASKS["WPU-S3"] = [
   repo,
 ];
 
+// WPU-S4: the renewal never charges less than the plan the resource has: the quote is the catalog price
+// of max(applied plan, pending plan) through the pricing engine (core, with the database), so a
+// downgrade is charged at the current price for its term and a failed, stopped or raced apply cannot
+// give a discount; the failure mark takes its product from the failed operation (core, db); the plan
+// tab says the lower price starts from the following renewal (web, bn and en). No AWS call. The core
+// and db suites need the local PostgreSQL (pnpm db:up).
+TASKS["WPU-S4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  scheduler,
+  web,
+  repo,
+];
+
 // WP2-T1: packages/auth. The identity lookup test and the whole db suite run in the db check;
 // `--no-passWithNoTests` makes a filter that selects no file fail.
 const auth = {
