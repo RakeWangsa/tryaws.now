@@ -183,6 +183,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-S5",
     "WPU-S6",
     "WPU-S7",
+    "WPU-S8",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -609,6 +610,35 @@ it("task WPU-M5 is proven by lint, types, format, the core, db, admin and reposi
     ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-S8 is proven by lint, types, format, the core, renderer, web and repository tests", () => {
+  expect(TASKS["WPU-S8"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["invoice-renderer", "pnpm test --filter @tc/fn-invoice-renderer --no-passWithNoTests"],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof of WPU-S8 exists: the admin grants, the fresh sign-in, the masked NID and the renderer check", () => {
+  for (const [file, part] of [
+    ["tests/repo/infra-rules.test.mjs", "away from the admin role (WPU-S8)"],
+    ["apps/web/server/billing-actions.test.ts", "tax identifiers need a fresh sign-in (WPU-S8)"],
+    ["apps/web/app/[locale]/(panel)/settings/settings.test.tsx", "never carries the full NID"],
+    ["packages/core/validation/billing-profile.test.ts", "maskNid shows the last 4 digits only"],
+    [
+      "functions/invoice-renderer/handler.test.ts",
+      "renders the customer's own text as escaped text",
+    ],
+  ]) {
+    expect(readFileSync(file, "utf8"), file).toContain(part);
+  }
 });
 
 it("task WPU-S7 is proven by lint, types, format, the core, db, aws, scheduler, web and repository tests", () => {

@@ -77,7 +77,8 @@ export function BillingForm({
     billingName: string;
     billingAddress: string;
     customerBin: string;
-    customerNid: string;
+    customerNidMasked: string;
+    hasNid: boolean;
   };
   signInHref: string;
 }) {
@@ -95,7 +96,7 @@ export function BillingForm({
     billing.billingName === "" &&
     billing.billingAddress === "" &&
     billing.customerBin === "" &&
-    billing.customerNid === "";
+    !billing.hasNid;
   return (
     <form action={formAction} noValidate>
       <p className="seccolor mb-3">{empty ? t("summary.empty") : t("summary.filled")}</p>
@@ -137,17 +138,37 @@ export function BillingForm({
         autoComplete="off"
         {...fieldError("customerBin")}
       />
+      <p className="seccolor small mb-3">{t("binDisclaimer")}</p>
+      {billing.hasNid ? (
+        <p className="mb-2">
+          <strong>{t("nidStored")}</strong> <code>{billing.customerNidMasked}</code>
+        </p>
+      ) : null}
       <Field
         name="customerNid"
-        label={t("nid")}
-        hint={t("nidHint")}
-        defaultValue={billing.customerNid}
+        label={billing.hasNid ? t("nidReplace") : t("nid")}
+        hint={billing.hasNid ? t("nidReplaceHint") : t("nidHint")}
+        defaultValue=""
         maxLength={24}
         inputMode="numeric"
         optional
         autoComplete="off"
         {...fieldError("customerNid")}
       />
+      {billing.hasNid ? (
+        <div className="form-check mb-3">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            id="clearCustomerNid"
+            name="clearCustomerNid"
+          />
+          <label className="form-check-label" htmlFor="clearCustomerNid">
+            {t("nidRemove")}
+          </label>
+        </div>
+      ) : null}
+      <p className="seccolor small mb-3">{t("freshHint")}</p>
       <p className="seccolor small mb-3">
         <i className="fas fa-lock me-2" aria-hidden="true" />
         {t("privacy")}

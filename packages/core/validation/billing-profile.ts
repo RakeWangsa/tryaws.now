@@ -108,3 +108,13 @@ export function parseBillingProfile(form: unknown): BillingParsed {
 
   return Object.keys(fields).length > 0 ? { ok: false, fields } : { ok: true, value: out };
 }
+
+/**
+ * A stored NID for the screen: the last 4 digits, every other digit an asterisk (WPU-S8). The full number
+ * is never sent to the browser. Null or empty gives an empty string.
+ */
+export function maskNid(nid: string | null): string {
+  if (nid === null || nid === "") return "";
+  const keep = nid.length > 4 ? nid.slice(-4) : "";
+  return "*".repeat(nid.length - keep.length) + keep;
+}

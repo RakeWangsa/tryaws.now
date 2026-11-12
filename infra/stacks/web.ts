@@ -159,25 +159,23 @@ export function web(inputs: WebInputs) {
       COGNITO_CLIENT_ID: auth.adminClient.id,
       PROVISIONING_QUEUE_URL: queues.provisioning.url,
       KYC_BUCKET: storage.kyc.name,
-      INVOICES_BUCKET: storage.invoices.name,
       EXPORTS_BUCKET: storage.exports.name,
     },
     // Admin reads KYC objects (the only role that may), invokes catalog-sync, calls the Cognito admin
-    // API of the admin pool only. No sts:AssumeRole.
+    // API of the admin pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
+    // invoice-renderer (WPU-S8): an invoice PDF holds the buyer's BIN or NID and address; the renderer
+    // function writes it and the customer's own web path reads it.
     permissions: [
       { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
         actions: ["lambda:InvokeFunction"],
-        resources: [workers.readerAliases.admin.arn, ...invoke("invoice-renderer", "catalog-sync")],
+        resources: [workers.readerAliases.admin.arn, ...invoke("catalog-sync")],
       },
       { actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/*`] },
       { actions: ["kms:Decrypt"], resources: [storage.kycKey.arn] },
       {
         actions: ["s3:GetObject", "s3:PutObject"],
-        resources: [
-          $interpolate`${storage.invoices.arn}/*`,
-          $interpolate`${storage.exports.arn}/*`,
-        ],
+        resources: [$interpolate`${storage.exports.arn}/*`],
       },
       { actions: ["kms:Decrypt", "kms:GenerateDataKey"], resources: [storage.filesKey.arn] },
       // Exactly what apps/admin/server/admin-directory.ts needs: invite (AdminCreateUser), describe

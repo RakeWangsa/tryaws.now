@@ -2,7 +2,8 @@
 // invoices bucket. The caller (web or admin) has already done its own tenant check and builds the HTML
 // with renderInvoiceHtml of @tc/core; this function has no database, no AWS provisioning and no network
 // except the store (R1). It trusts nothing it is given: the ids, the locale and the HTML are checked, and
-// HTML that could fetch a resource or run code is refused (R16).
+// HTML whose markup could fetch a resource or run code is refused (R16); the customer's text is checked by
+// its escaping, not by a pattern (WPU-S8).
 import { invoicePdfKey, type Locale, type Logger } from "@tc/core";
 
 export const MAX_HTML_BYTES = 512 * 1024;
@@ -23,9 +24,36 @@ export type RenderReport =
   { ok: true; key: string; bytes: number } | { ok: false; reason: "invalid_event" | "unsafe_html" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-// The template refers to no URL, loads nothing and has no script or style attribute.
-const UNSAFE =
-  /https?:|\/\/|url\s*\(|@import|<\s*(script|link|img|iframe|object|embed|base)\b|\bsrc\s*=|\bstyle\s*=|\bon[a-z]+\s*=/i;
+// The safety check looks at the MARKUP of the page and not at the customer's text (WPU-S8, L3). Every value
+// of the customer (name, address, tax number) is put into the page by escapeHtml of @tc/core, as a text
+// node: it holds no "<" and cannot open a tag or an attribute. So the page is cut into three parts:
+//  - the tags (with their attributes): no script, link, image, frame, object, embed, base, svg or math tag,
+//    no src, href, style, form-action or on...= attribute, no URL scheme, no "//";
+//  - the body of the style block: no URL, no @import, no url( and no CSS escape that could spell one;
+//  - the text between them: free, except that it can hold no "<" (a "<" left over means a tag that did
+//    not close, which is refused).
+// The text can say "House 12//B", "Burl (East)", "on=1" or "https://shop.example": it is only text and the
+// engine fetches nothing for it. Quoted attribute values are skipped as a unit, as a browser reads them, so
+// a ">" inside quotes cannot end a tag early and hide an attribute behind it.
+const TAG = /<(?:[^>"']|"[^"]*"|'[^']*')*>/g;
+const STYLE_BLOCK = /(<style\b(?:[^>"']|"[^"]*"|'[^']*')*>)([\s\S]*?)(<\/style\s*>)/gi;
+const UNSAFE_TAG =
+  /^<\s*\/?\s*(script|link|img|iframe|frame|frameset|object|embed|applet|base|svg|math|form|input|button|audio|video|source|track|meta\s+http-equiv)\b|https?:|\/\/|\b(?:javascript|vbscript|data)\s*:|[\s/"'](?:on[a-z]+|src|srcset|href|xlink:href|style|action|formaction|poster|background|data)\s*=/i;
+const UNSAFE_CSS = /https?:|\/\/|url\s*\(|@import|expression\s*\(|\\|<|javascript\s*:/i;
+
+function isSafeMarkup(html: string): boolean {
+  let css = "";
+  const withoutStyle = html.replace(STYLE_BLOCK, (_all, open: string, body: string) => {
+    css += body + "\n";
+    return open + "\u0000";
+  });
+  if (UNSAFE_CSS.test(css)) return false;
+  for (const tag of withoutStyle.match(TAG) ?? []) {
+    if (UNSAFE_TAG.test(tag)) return false;
+  }
+  const text = withoutStyle.replace(TAG, "");
+  return !text.includes("<");
+}
 
 function parse(
   event: unknown,
@@ -52,7 +80,7 @@ export function createInvoiceRendererHandler(
       deps.log({ event: "invoice_render_refused", reason: "invalid_event" });
       return { ok: false, reason: "invalid_event" };
     }
-    if (UNSAFE.test(input.html)) {
+    if (!isSafeMarkup(input.html)) {
       deps.log({ event: "invoice_render_refused", reason: "unsafe_html" });
       return { ok: false, reason: "unsafe_html" };
     }

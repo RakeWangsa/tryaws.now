@@ -1,5 +1,5 @@
 import type { CustomerSession } from "@tc/auth";
-import { maskPhone } from "@tc/core";
+import { maskNid, maskPhone } from "@tc/core";
 import { customerRepos, withTx } from "@tc/db";
 import type { BillingProfile, CustomerProfile } from "@tc/db";
 
@@ -9,21 +9,23 @@ import type { BillingProfile, CustomerProfile } from "@tc/db";
 
 /**
  * The billing details of the customer (WPU-I3), shown to the customer only, in their own form. The BIN
- * and the NID are personal or business identifiers: this screen goes to the customer's own browser and
- * nowhere else (R14: never logged).
+ * is a business identifier and is shown in full. The NID is a personal identifier: only its last 4 digits
+ * are sent to the browser (WPU-S8); the form can keep, replace or remove it, never read it (R14).
  */
 export interface BillingScreen {
   readonly billingName: string;
   readonly billingAddress: string;
   readonly customerBin: string;
-  readonly customerNid: string;
+  readonly customerNidMasked: string;
+  readonly hasNid: boolean;
 }
 
 export const EMPTY_BILLING: BillingScreen = Object.freeze({
   billingName: "",
   billingAddress: "",
   customerBin: "",
-  customerNid: "",
+  customerNidMasked: "",
+  hasNid: false,
 });
 
 export function toBillingScreen(billing: BillingProfile | null): BillingScreen {
@@ -32,7 +34,8 @@ export function toBillingScreen(billing: BillingProfile | null): BillingScreen {
     billingName: billing.billingName ?? "",
     billingAddress: billing.billingAddress ?? "",
     customerBin: billing.customerBin ?? "",
-    customerNid: billing.customerNid ?? "",
+    customerNidMasked: maskNid(billing.customerNid),
+    hasNid: billing.customerNid !== null && billing.customerNid !== "",
   };
 }
 

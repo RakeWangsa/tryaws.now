@@ -474,6 +474,31 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(admin).toContain('actions: ["kms:Decrypt"], resources: [storage.kycKey.arn]');
   });
 
+  // WPU-S8 (L1): an invoice PDF holds the buyer BIN or NID and the address. The admin role neither reads nor
+  // writes the invoices bucket and cannot invoke the renderer; the renderer function writes, web reads.
+  it("keeps the invoices bucket and the invoice renderer away from the admin role (WPU-S8)", () => {
+    const admin = between(web, 'new sst.aws.Nextjs("Admin"');
+    expect(admin).not.toContain("storage.invoices");
+    expect(admin).not.toContain("INVOICES_BUCKET");
+    expect(admin).not.toContain("invoice-renderer");
+    expect(admin).not.toMatch(/invoices\//);
+    // what admin keeps: the exports bucket with its key, and catalog-sync
+    expect(admin).toContain("$interpolate`${storage.exports.arn}/*`");
+    expect(admin).toContain('...invoke("catalog-sync")');
+    expect(admin).toContain("storage.filesKey.arn");
+    // the customer path still reads its own invoices and invokes the renderer
+    const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
+    expect(customer).toContain("$interpolate`${storage.invoices.arn}/*`");
+    expect(customer).toContain('invoke("access-details", "invoice-renderer")');
+    expect(customer).not.toMatch(
+      /s3:PutObject"\], resources: \[\$interpolate`\$\{storage\.invoices/,
+    );
+    // the renderer function is the one writer, PutObject only
+    expect(workers).toContain(
+      'actions: ["s3:PutObject"], resources: [$interpolate`${storage.invoices.arn}/*`]',
+    );
+  });
+
   it("names the web role identically where it is created and where kyc denies it", () => {
     expect(web).toContain('server: fixedServerRole(roleName(stage, "web"))');
     expect(web).toContain('server: fixedServerRole(roleName(stage, "admin"))');

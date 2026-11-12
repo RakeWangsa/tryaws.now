@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
-import { BILLING_ADDRESS_MAX, BILLING_NAME_MAX, parseBillingProfile } from "./billing-profile";
+import {
+  BILLING_ADDRESS_MAX,
+  BILLING_NAME_MAX,
+  maskNid,
+  parseBillingProfile,
+} from "./billing-profile";
 
 const ok = (form: Record<string, unknown>) => {
   const r = parseBillingProfile(form);
@@ -118,4 +123,18 @@ it("an unknown key is ignored and never carried on", () => {
     customerBin: null,
     customerNid: null,
   });
+});
+
+it("maskNid shows the last 4 digits only and never the rest (WPU-S8)", () => {
+  expect(maskNid("1234567890")).toBe("******7890");
+  expect(maskNid("1990123456789")).toBe("*********6789");
+  expect(maskNid("19901234567890123")).toBe("*************0123");
+  for (const nid of ["1234567890", "1990123456789", "19901234567890123"]) {
+    expect(maskNid(nid)).not.toContain(nid.slice(0, 6));
+    expect(maskNid(nid)).toHaveLength(nid.length);
+  }
+  // anything that is no stored NID gives no hint of its content
+  expect(maskNid(null)).toBe("");
+  expect(maskNid("")).toBe("");
+  expect(maskNid("123")).toBe("***");
 });

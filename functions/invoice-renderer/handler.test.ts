@@ -87,7 +87,18 @@ describe("invoice-renderer handler", () => {
     "<img src=x>",
     '<link rel="stylesheet" href="a.css">',
     "<script>1</script>",
-    "<p>https://example.com</p>",
+    '<p><a href="https://example.com">x</a></p>',
+    "<p><a href=//example.com>x</a></p>",
+    '<p onclick="1">x</p>',
+    "<p a='>' onclick=x>y</p>",
+    '<p title="x"onclick=y>z</p>',
+    "<svg onload=1></svg>",
+    "<IMG SRC=x>",
+    '<iframe src="a"></iframe>',
+    '<p style="color:red" >x</p>',
+    "<p>x</p><b",
+    "<style>p{background:\\75rl(a.png)}</style>",
+    "<style>p{background:u\\72l(a.png)}</style>",
     "<style>@import 'a.css'</style>",
     "<style>p{background:url(a.png)}</style>",
     '<p style="color:red">x</p>',
@@ -98,6 +109,52 @@ describe("invoice-renderer handler", () => {
       reason: "unsafe_html",
     });
     expect(stored.size).toBe(0);
+  });
+  // L3 (WPU-S8): the safety check looks at the template (tags, attributes, the style block) and not at the
+  // escaped text of the customer, so an ordinary address is not refused. Remote fetches stay refused.
+  it.each([
+    "House 12//B, Road 5",
+    "Burl (East), Road 5",
+    "Flat 3: Block C",
+    "Plot=7, Sector=3",
+    "see url(x) and on=1 and src=2 and style=3",
+    "https://example.com/my-shop",
+    "@import 'a.css'",
+    'Rahim & Sons, "Dhanmondi" <Dhaka>',
+    "<script>alert(1)</script>",
+    '<img src="https://evil.test/p.png" onerror="1">',
+    "বাড়ি ১২//খ, রোড ৫ (পূর্ব)",
+  ])("renders the customer's own text as escaped text: %s", async (text) => {
+    const { handler, stored } = setup();
+    for (const [name, address] of [
+      [text, "House 5, Dhaka"],
+      ["Rahim", text],
+    ] as const) {
+      const page = renderInvoiceHtml({ ...doc, customer: { name, address } }, "en");
+      const r = await handler({ customerId, invoiceId, locale: "en", html: page });
+      expect(r).toMatchObject({ ok: true });
+      const body = new TextDecoder().decode(
+        stored.get(`invoices/${customerId}/${invoiceId}.en.pdf`),
+      );
+      // the text is in the page only escaped: no tag of the customer survives
+      expect(body).not.toMatch(/<script|<img/i);
+    }
+  });
+  it("accepts the real tax invoice and the receipt templates (nothing of them is a fetch)", async () => {
+    const { handler } = setup();
+    for (const locale of ["bn", "en"] as const) {
+      const r = await handler({
+        customerId,
+        invoiceId,
+        locale,
+        html: renderInvoiceHtml(doc, locale),
+      });
+      expect(r).toMatchObject({ ok: true });
+      const receipt = renderInvoiceHtml({ ...doc, kind: "receipt" }, locale);
+      expect(await handler({ customerId, invoiceId, locale, html: receipt })).toMatchObject({
+        ok: true,
+      });
+    }
   });
   it("a failed engine or store throws a fixed message and logs a fixed reason, no HTML, no ids (R14)", async () => {
     const boom = setup({

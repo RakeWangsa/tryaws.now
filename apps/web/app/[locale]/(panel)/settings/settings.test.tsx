@@ -61,7 +61,8 @@ describe("/settings/profile", () => {
         billingName: "Rahim & Sons",
         billingAddress: "House 5, Dhaka",
         customerBin: "1234567890123",
-        customerNid: "",
+        customerNidMasked: "",
+        hasNid: false,
       },
     })("en");
     expect(html).toContain("Rahim &amp; Sons");
@@ -76,7 +77,8 @@ describe("/settings/profile", () => {
       billingName: "",
       billingAddress: "",
       customerBin: "",
-      customerNid: "",
+      customerNidMasked: "",
+      hasNid: false,
     });
     expect(
       toBillingScreen({
@@ -89,11 +91,53 @@ describe("/settings/profile", () => {
       billingName: "",
       billingAddress: "House 5, Dhaka",
       customerBin: "",
-      customerNid: "1234567890",
+      customerNidMasked: "******7890",
+      hasNid: true,
     });
     expect(toProfileScreen({ ...base0, phoneVerifiedAt: null }, true).billing).toEqual(
       toBillingScreen(null),
     );
+  });
+
+  // WPU-S8 (L2)
+  it("the loader never carries the full NID: only the last 4 digits reach the browser", () => {
+    const nid = "1990123456789";
+    const screen = toProfileScreen({ ...base0, phoneVerifiedAt: null }, true, {
+      billingName: "Rahim",
+      billingAddress: "House 5, Dhaka",
+      customerBin: null,
+      customerNid: nid,
+    });
+    const wire = JSON.stringify(screen);
+    expect(wire).not.toContain(nid);
+    expect(wire).not.toContain(nid.slice(0, 9));
+    expect(screen.billing.customerNidMasked).toBe("*********6789");
+    expect(screen.billing.hasNid).toBe(true);
+    expect(Object.keys(screen.billing)).not.toContain("customerNid");
+  });
+
+  it("shows a stored NID masked, never in full, with a keep-or-replace field and a remove box", () => {
+    const stored = { ...SCREEN.billing, customerNidMasked: "*********6789", hasNid: true };
+    const html = profile({ ...SCREEN, billing: stored })("en");
+    expect(html).toContain("*********6789");
+    expect(html).not.toContain("1990123456789");
+    expect(html).toMatch(/name="customerNid"[^>]*value=""|value=""[^>]*name="customerNid"/);
+    expect(html).toContain('name="clearCustomerNid"');
+    const bn = profile({ ...SCREEN, billing: stored })("bn");
+    expect(bn).toContain("*********6789");
+    expect(bn).toContain('name="clearCustomerNid"');
+  });
+
+  it("shows no remove box when no NID is stored, and the BIN responsibility text in both languages", () => {
+    const en = profile(SCREEN)("en");
+    expect(en).not.toContain('name="clearCustomerNid"');
+    expect(en).toContain(
+      "You are responsible for the BIN you enter; it appears on your tax invoices.",
+    );
+    expect(profile(SCREEN)("bn")).toContain("আপনি যে বিআইএন দেবেন তার দায়িত্ব আপনার");
+    // the fresh sign-in rule for the two numbers is said in both languages
+    expect(en).toContain("sign in again");
+    expect(profile(SCREEN)("bn")).toContain("আবার সাইন ইন");
   });
 
   it("toProfileScreen masks the phone and marks it verified only with a time", () => {

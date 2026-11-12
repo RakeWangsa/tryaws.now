@@ -34,7 +34,8 @@ export const SCREEN: ProfileScreen = {
     billingName: "",
     billingAddress: "",
     customerBin: "",
-    customerNid: "",
+    customerNidMasked: "",
+    hasNid: false,
   },
 };
 

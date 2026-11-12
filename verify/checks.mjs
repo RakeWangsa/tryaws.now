@@ -1034,6 +1034,23 @@ TASKS["WPU-S7"] = [
   repo,
 ];
 
+// WPU-S8: three LOW findings of an independent review. L1: the admin role has no grant on the invoices
+// bucket and cannot invoke invoice-renderer (the repo tests of the infra stacks). L2: a change to the BIN
+// or the NID needs a fresh sign-in, the stored NID reaches the browser masked only, and the BIN disclaimer
+// (core, web). L3: the renderer checks the markup and not the customer's escaped text (the renderer
+// function). No AWS call, no KYC change, no encryption.
+TASKS["WPU-S8"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  invoiceRenderer,
+  web,
+  repo,
+];
+
 // WPU-M1: an unattached static IP is charged as Amazon Lightsail does (free while attached, an hourly
 // price once unattached for more than one hour). Money path: the config price row and its migration (db),
 // the price through the pricing engine, the existing metered_charge posting once per IP and hour bucket,
