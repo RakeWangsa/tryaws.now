@@ -312,6 +312,14 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       { market: "BD", quotaCode: "instance_vcpu", reserve: 1 },
       "keep one vCPU",
     ),
+  "operations.clearPlanChangeMark": async (r) => {
+    const resourceId = await newResource(t.pool, await newCustomer(t.pool), {
+      family: "cdn",
+      state: "active",
+      config: JSON.stringify({ pendingPlanFailed: { code: "conflict" } }),
+    });
+    return r.operations.clearPlanChangeMark({ resourceId, requestId: uuidv7(), at: AT }, "clear");
+  },
   "operations.approve": async (r) =>
     r.operations.approve({ operationId: await seedOperation("needs_approval"), at: AT }, "checked"),
   "operations.retry": async (r) =>
@@ -383,6 +391,7 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "customers.search",
   "operations.counts",
   "operations.detail",
+  "operations.planChange",
   "operations.queue",
   "payments.detail",
   "payments.discrepancies",

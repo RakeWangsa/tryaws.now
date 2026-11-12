@@ -451,6 +451,37 @@ describe("plan change at the next renewal (WPU-G8)", () => {
   });
 });
 
+// WPA-P2. The admin action that clears the failure mark: no AWS call, only the config patch.
+describe("clear_plan_change_mark (admin, WPA-P2)", () => {
+  const NEXT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  it("removes the failure mark and calls AWS not at all; the pending plan and the applied plan stay", async () => {
+    const { adapter, ctx, calls } = setup();
+    const r = await adapter.aws.action(
+      "clear_plan_change_mark",
+      ctx(null, {
+        payload: { requestId: "r" },
+        config: { pendingPlanFailed: { code: "conflict", productId: NEXT, period: null } },
+      }),
+    );
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { pendingPlanFailed: null } } });
+    expect(
+      Object.keys((r as unknown as { patch: { configMerge: object } }).patch.configMerge),
+    ).toEqual(["pendingPlanFailed"]);
+    expect(calls()).toEqual([]);
+  });
+
+  it("is a repeat-safe patch when the mark is already gone, and a destroyed resource is a conflict", async () => {
+    const { adapter, ctx } = setup();
+    await expect(
+      adapter.aws.action("clear_plan_change_mark", ctx(null, { payload: {} })),
+    ).resolves.toMatchObject({ kind: "done" });
+    await expect(
+      adapter.aws.action("clear_plan_change_mark", ctx(null, { payload: {}, state: "destroyed" })),
+    ).rejects.toMatchObject({ code: "conflict" });
+  });
+});
+
 describe("deployment history (WPU-G8)", () => {
   it("keeps the last ten deployments as date, images and endpoint, never the environment", async () => {
     const { aws, adapter, ctx } = setup();

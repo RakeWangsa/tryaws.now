@@ -389,6 +389,7 @@ export interface OperationDetailViewProps {
 // There is no approver field: the approver is the signed-in admin.
 export function OperationDetailView({ locale, operation, result }: OperationDetailViewProps) {
   const t = useTranslations("AdminOps.detail");
+  const plan = useTranslations("AdminPlanChange");
   const actions = actionsFor(operation);
   const trailColumns: DataTableColumn<OperationDetail["trail"][number]>[] = [
     {
@@ -426,6 +427,14 @@ export function OperationDetailView({ locale, operation, result }: OperationDeta
           <dt>{t("resource")}</dt>
           <dd>
             <ShortId id={operation.resourceId} />
+            {operation.family === "container_service" || operation.family === "cdn" ? (
+              <>
+                {" "}
+                <a href={localePath(locale, `/operations/resources/${operation.resourceId}`)}>
+                  {plan("link")}
+                </a>
+              </>
+            ) : null}
           </dd>
           <dt>{t("family")}</dt>
           <dd>{operation.family ?? "-"}</dd>

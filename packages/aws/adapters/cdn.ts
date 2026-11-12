@@ -301,6 +301,11 @@ export function createCdnAdapter(deps: CdnDeps): ProductAdapter<CdnConfig> {
           new ResetDistributionCacheCommand({ distributionName: distributionName(ctx) }),
         );
         return stepDone();
+      case "clear_plan_change_mark":
+        // WPA-P2: an admin cleared the failure mark of a plan change (audited in the admin app). Only
+        // the config changes; nothing is called in AWS and nothing is charged or refunded.
+        if (!LIVE.includes(ctx.resource.state)) throw fail("conflict");
+        return stepDone({ configMerge: { pendingPlanFailed: null } });
       case "schedule_plan_change": {
         // WPU-G8: no proration in a prepaid term. The choice is stored and the renewal applies it;
         // nothing is called in AWS. null cancels a pending change.

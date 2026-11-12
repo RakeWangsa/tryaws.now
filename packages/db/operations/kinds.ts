@@ -48,6 +48,9 @@ export const OPERATION_KINDS = [
   "change_cdn_bundle",
   "set_cache_behaviors",
   "set_cdn_origin",
+  // WPA-P2: an admin clears the failure mark of a plan change (audited, reason required). No AWS call:
+  // the adapter only patches the config. Never requested by a customer.
+  "clear_plan_change_mark",
   "reject_operation",
 ] as const;
 
@@ -114,6 +117,7 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   change_cdn_bundle: info("action", false, false),
   set_cache_behaviors: info("action", false, true),
   set_cdn_origin: info("action", false, true),
+  clear_plan_change_mark: info("action", false, false),
   reject_operation: info("engine", false, false),
 };
 

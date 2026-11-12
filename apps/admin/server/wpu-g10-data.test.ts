@@ -69,7 +69,7 @@ beforeEach(() => {
 });
 
 describe("loadConfigPrices", () => {
-  it("lists the four keys, the price in force and the next change; only the hosted zone is read by orders", async () => {
+  it("lists the four keys, the price in force and the next change; every key has a reader now (WPA-P2)", async () => {
     world.prices = {
       ok: true,
       value: {
@@ -100,9 +100,17 @@ describe("loadConfigPrices", () => {
     expect(dns?.inForce?.usd).toBe("0.50");
     expect(dns?.scheduled?.usd).toBe("0.60");
     expect(dns?.readByOrders).toBe(true);
-    // WPU-M1: the static IP hour price is read by the hourly metering charge.
-    expect(r.value.lines.filter((l) => l.readByOrders).map((l) => l.key)).toEqual([DNS, STATIC_IP]);
-    expect([...READ_BY_ORDERS]).toEqual([DNS, STATIC_IP]);
+    // WPA-P2 and WPU-M1: the disk and the load balancer are read when an order is priced, the snapshot
+    // when the daily charge runs, the static IP hour price by the hourly metering charge; all five keys
+    // are read by a charge now.
+    expect(r.value.lines.filter((l) => l.readByOrders)).toHaveLength(5);
+    expect([...READ_BY_ORDERS].sort()).toEqual([
+      "config_price.block_storage_gb_month",
+      "config_price.dns_zone_month",
+      "config_price.load_balancer_month",
+      "config_price.snapshot_gb_month",
+      "config_price.static_ip_unattached_hour",
+    ]);
     expect(r.value.lines.find((l) => l.key === "config_price.snapshot_gb_month")?.invalid).toBe(
       true,
     );

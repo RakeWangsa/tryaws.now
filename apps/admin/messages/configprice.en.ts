@@ -54,7 +54,7 @@ export const configPriceEn: Same<typeof configPriceBn> = {
     state: {
       none: "No price set",
       invalid: "Cannot be read",
-      readNow: "Read by orders",
+      readNow: "Used for charges",
       notReadYet: "Not read by orders yet",
     },
     editor: {

@@ -10,6 +10,7 @@ import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
 import type { PostTransactionInput } from "../ledger/types";
 import type { Logger, RunTx } from "../operations/types";
+import { snapshotPrice } from "../products/snapshot-price";
 import { allowanceLevel, dailyMeteredChargeMinor } from "../pricing/metering";
 import type { Clock, Result } from "../types";
 
@@ -20,9 +21,14 @@ import type { Clock, Result } from "../types";
 // does; nothing is sent from here). Days are Dhaka days (UTC+6, no daylight saving).
 
 export const METERING_SETTING_KEYS = Object.freeze({
-  // Customer price of one GB-month of snapshot storage in paisa (market BD, scope market).
+  // WPA-P2. The OLD price source, read only while no config price is usable: the customer price of one
+  // GB-month of snapshot storage in paisa (market BD, scope market). The price source now is the config
+  // row `config_price.snapshot_gb_month` through the pricing engine, the one the screens show.
   snapshotGbMonthMinor: "metering.snapshot_gb_month_minor",
 });
+
+/** The market whose snapshot price is charged: the launch market (the old key was read for BD too). */
+const METERING_MARKET = "BD";
 
 export const SNAPSHOT_METRIC = "snapshot_gb";
 export const TRANSFER_TEMPLATES = Object.freeze({
@@ -50,12 +56,22 @@ type RepoPart = Pick<MeteringRepo, "listUsage" | "listTransfer"> &
 
 /** The database and ledger calls, replaceable in a test. */
 export interface MeteringOps {
+  /**
+   * The customer price of one GB-month of snapshot storage in paisa from the config row through the
+   * pricing engine, or null when the market has no usable one. Optional so a test world without a
+   * config price needs nothing; absent means null.
+   */
+  configPrice?(tx: Tx, clock: Clock): Promise<bigint | null>;
   repo(tx: Tx): RepoPart;
   hasCharge(tx: Tx, key: string): Promise<boolean>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
 }
 
 export const defaultMeteringOps: MeteringOps = {
+  configPrice: async (tx, clock) => {
+    const priced = await snapshotPrice(tx, METERING_MARKET, null, clock);
+    return priced.ok ? priced.value.perGbMonthMinor : null;
+  },
   repo: (tx) => {
     const m = meteringRepo(tx);
     const l = lifecycleRepo(tx);
@@ -87,6 +103,8 @@ export interface MeteringReport {
   readonly notified100: number;
   readonly failed: number;
   readonly priceMissing: boolean;
+  /** WPA-P2. Where the price of this run came from: the config row, the old setting, or none. */
+  readonly priceSource: "config" | "legacy" | "none";
 }
 
 // bigint paisa from a setting: digit text or a whole number; anything else is "no price" (R16).
@@ -118,10 +136,20 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
     deps.log({ event: "metering_row_failed", what, error: errorName(error) });
   };
 
-  const settings = await deps.runTx((tx) =>
-    ops.repo(tx).readSettings([METERING_SETTING_KEYS.snapshotGbMonthMinor]),
-  );
-  const price = readPrice(settings.get(METERING_SETTING_KEYS.snapshotGbMonthMinor));
+  // The price: the config row through the engine first; the old key only while there is none (an
+  // absent or zero engine price is no price). Neither: nothing is charged (R16).
+  const found = await deps.runTx(async (tx) => {
+    const fromConfig = (await ops.configPrice?.(tx, deps.clock)) ?? null;
+    if (fromConfig !== null && fromConfig > 0n) {
+      return { price: fromConfig, source: "config" as const };
+    }
+    const settings = await ops.repo(tx).readSettings([METERING_SETTING_KEYS.snapshotGbMonthMinor]);
+    const legacy = readPrice(settings.get(METERING_SETTING_KEYS.snapshotGbMonthMinor));
+    return legacy === null
+      ? { price: null, source: "none" as const }
+      : { price: legacy, source: "legacy" as const };
+  });
+  const price = found.price;
 
   // 1. snapshot storage: the days that ended, oldest first.
   if (price !== null) {
@@ -212,5 +240,5 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
     afterResource = rows[rows.length - 1]!.resourceId;
   }
 
-  return { ...count, priceMissing: price === null };
+  return { ...count, priceMissing: price === null, priceSource: found.source };
 }

@@ -63,6 +63,7 @@ export const opsBn = {
       change_cdn_bundle: "সিডিএন বান্ডল বদল",
       set_cache_behaviors: "ক্যাশ আচরণ বদল",
       set_cdn_origin: "সিডিএন উৎস বদল",
+      clear_plan_change_mark: "মাপ বদলের ব্যর্থতার চিহ্ন মোছা",
       reject_operation: "অনুরোধ বাতিলের কাজ",
       other: "অন্য ধরন",
     },

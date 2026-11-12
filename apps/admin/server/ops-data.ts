@@ -9,6 +9,7 @@ import {
   type OperationQueuePage,
   type OperationStateCounts,
   type OperationStateName,
+  type PlanChangeView,
   type WaitlistCount,
 } from "@tc/db";
 import { describeCorrection, parseLive, type Correction } from "./capacity-flow.ts";
@@ -118,6 +119,11 @@ export async function loadOpsQueues(
 
 export const loadOperation = (admin: AdminActor, id: string) =>
   read<OperationDetail>(admin, (repos) => repos.operations.detail(id));
+
+// WPA-P2. The plan change of a container service or a CDN: the applied plan, the pending plan, the
+// failure mark and the apply operations. The repository checks the role again.
+export const loadResourcePlan = (admin: AdminActor, id: string) =>
+  read<PlanChangeView>(admin, (repos) => repos.operations.planChange(id));
 
 // ------------------------------------------------------------------------------------- capacity
 

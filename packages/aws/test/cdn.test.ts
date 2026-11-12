@@ -618,6 +618,34 @@ describe("set_cache_behaviors (WPU-G8)", () => {
   });
 });
 
+// WPA-P2. The admin action that clears the failure mark: no AWS call, only the config patch.
+describe("clear_plan_change_mark (admin, WPA-P2)", () => {
+  it("removes the failure mark and calls AWS not at all; nothing else in the config is touched", async () => {
+    const { adapter, ctx, calls } = setup();
+    const r = await adapter.aws.action(
+      "clear_plan_change_mark",
+      ctx(null, { kind: "clear_plan_change_mark", state: "active", payload: {} }),
+    );
+    expect(r).toMatchObject({ kind: "done", patch: { configMerge: { pendingPlanFailed: null } } });
+    expect(
+      Object.keys((r as unknown as { patch: { configMerge: object } }).patch.configMerge),
+    ).toEqual(["pendingPlanFailed"]);
+    expect(calls()).toEqual([]);
+  });
+
+  it("works in a stopped or suspended distribution, and a destroyed one is a conflict", async () => {
+    const { adapter, ctx } = setup();
+    for (const state of ["stopped", "suspended"]) {
+      await expect(
+        adapter.aws.action("clear_plan_change_mark", ctx(null, { state, payload: {} })),
+      ).resolves.toMatchObject({ kind: "done" });
+    }
+    await expect(
+      adapter.aws.action("clear_plan_change_mark", ctx(null, { state: "destroyed", payload: {} })),
+    ).rejects.toMatchObject({ code: "conflict" });
+  });
+});
+
 describe("set_cdn_origin (WPU-G8)", () => {
   const OTHER_ORIGIN = "77777777-8888-4777-8666-555555555555";
 

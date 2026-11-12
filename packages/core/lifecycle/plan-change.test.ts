@@ -63,3 +63,13 @@ describe("readPlanFailure and planFailedFor (WPU-S3)", () => {
     expect(planFailedFor({ pendingPlanFailed: { code: "x" } }, B)).toBe(false);
   });
 });
+
+// WPA-P2. The admin repository (packages/db) repeats the plan-change families because db cannot import
+// core; this pins the two lists together.
+describe("the admin repository and the lifecycle agree on the plan-change families (WPA-P2)", () => {
+  it("lists the same families", async () => {
+    const { ADMIN_PLAN_CHANGE_FAMILIES } = await import("@tc/db");
+    const { PLAN_CHANGE_FAMILIES } = await import("./plan-change");
+    expect([...ADMIN_PLAN_CHANGE_FAMILIES].sort()).toEqual([...PLAN_CHANGE_FAMILIES].sort());
+  });
+});
