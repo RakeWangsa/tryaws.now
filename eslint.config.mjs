@@ -331,8 +331,12 @@ export default tseslint.config(
   },
   {
     // Code built from text cannot be checked by any import rule.
-    // no-implied-eval sees a bare setTimeout("...") only once the config declares the globals of the runtime; until then it catches the globalThis. and window. forms.
-    files: ["apps/**", "packages/**"],
+    // no-implied-eval sees a bare setTimeout("...") only when the config declares the timer globals
+    // (WPU-B4: declared below, so the bare form is caught as well as globalThis. and window.).
+    files: ["apps/**", "packages/**", "functions/**", "scripts/**", "infra/**", "verify/**"],
+    languageOptions: {
+      globals: { setTimeout: "readonly", setInterval: "readonly", setImmediate: "readonly" },
+    },
     rules: { "no-eval": "error", "no-implied-eval": "error", "no-new-func": "error" },
   },
   {

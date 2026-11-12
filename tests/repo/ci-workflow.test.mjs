@@ -11,8 +11,8 @@ it("runs on pull requests only, with read-only permissions", () => {
   expect(Object.keys(workflow.on)).toEqual(["pull_request"]);
   expect(workflow.permissions).toEqual({ contents: "read" });
 });
-it("has a PostgreSQL 16 service", () => {
-  expect(job.services.postgres.image).toBe("postgres:16");
+it("has a PostgreSQL 16 service, pinned to a minor", () => {
+  expect(job.services.postgres.image).toMatch(/^postgres:16\.\d+$/);
 });
 it("runs the checks of spec C.7 in order, each as a step of its own that always runs", () => {
   // A step that runs a required command has exactly that command as its run text (no `|| true`, no

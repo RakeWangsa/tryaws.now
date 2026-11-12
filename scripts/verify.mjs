@@ -3,6 +3,7 @@
 // Runs the checks, prints a table, writes verify/report-<name>.json and exits 0 only if all passed.
 import { resolve } from "node:path";
 import { listChangedFiles, readWorkspacePackages } from "./lib/changed-packages.mjs";
+import { abortOnSignals } from "./lib/abort-on-signals.mjs";
 import { verifyMain } from "./lib/verify-main.mjs";
 import { runChecks } from "./lib/verify-runner.mjs";
 
@@ -12,7 +13,7 @@ const root = resolve(import.meta.dirname, "..");
 // `once`: pnpm forwards the signal as well, and a second SIGINT with no handler would kill the
 // command before it writes its report.
 const controller = new AbortController();
-for (const name of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(name, () => controller.abort());
+abortOnSignals(controller);
 const { exitCode, output } = await verifyMain(process.argv.slice(2), {
   root,
   runChecks,

@@ -14,7 +14,7 @@ jobs:
       DATABASE_URL: postgres://postgres:ci-throwaway-password@localhost:5432/postgres
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.10
         env:
           # A throwaway password for the service container of this job. No secret, no AWS.
           POSTGRES_PASSWORD: ci-throwaway-password

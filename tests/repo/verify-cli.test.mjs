@@ -30,7 +30,7 @@ it("gate M0 and task WP0-T1 are the same six checks", () => {
 });
 it.each([
   [["--gate", "M9"], "Gate M9 does not exist", "gate-M9"],
-  [["--task", "WP10-T2"], "Task WP10-T2 has no proof yet", "task-WP10-T2"],
+  [["--task", "WP10-T1"], "Task WP10-T1 has no proof yet", "task-WP10-T1"],
 ])("fails closed for %j", (args, title, name) => {
   rmSync(`verify/report-${name}.json`, { force: true });
   const result = verify(...args);
@@ -98,8 +98,10 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP0-T6",
     "WP1-T1",
     "WP1-T2",
+    "WP1-T3",
     "WP1-T4",
     "WP1-T5",
+    "WP10-T2",
     "WP2-T1",
     "WP2-T2",
     "WP2-T3",
@@ -115,6 +117,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP4-T3",
     "WP4-T4",
     "WP4-T5",
+    "WP4-T6",
     "WP4-T7",
     "WP5-T1",
     "WP5-T2",
@@ -144,11 +147,13 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WP8-T5",
     "WP8-T6",
     "WP8-T7",
+    "WP9-T1",
     "WP9-T2",
     "WP9-T3",
     "WP9-T4",
     "WP9-T4b",
     "WP9-T5",
+    "WP9-T6",
     "WPA-P1",
     "WPA-P2",
     "WPP-T1",
@@ -156,6 +161,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPP-T3",
     "WPP-T4",
     "WPU-B1",
+    "WPU-B4",
     "WPU-C1",
     "WPU-D1",
     "WPU-D2",
@@ -189,6 +195,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-M8",
     "WPU-N1",
     "WPU-N2",
+    "WPU-R1",
     "WPU-S1",
     "WPU-S2",
     "WPU-S3",
@@ -3069,4 +3076,89 @@ it("the proof of WPU-M7 exists: the renderer settings and the provisioner networ
     expect(workers, part).toContain(part);
   }
   expect(JSON.parse(readFileSync("package.json", "utf8")).devDependencies.sst).toBe("4.17.2");
+});
+
+// WPU-B4 (audit item 18): TASKS keys for the backlog rows that had none. A manual check is BLOCKED, never a pass.
+const rows = (key) => TASKS[key].map((c) => [c.id, c.command.join(" ")]);
+const STATIC = [
+  ["spec-sync", "pnpm spec:check"],
+  ["baseline-sync", "pnpm baseline:check"],
+  ["lint", "pnpm lint"],
+  ["format", "pnpm format:check"],
+];
+const TYPED = [STATIC[0], STATIC[1], STATIC[2], ["typecheck", "pnpm typecheck"], STATIC[3]];
+const manualRow = (id) => [`manual-${id}`, `node scripts/manual-proof.mjs ${id}`];
+
+it("task WP1-T3 is proven by the pricing tests of packages/core", () => {
+  expect(rows("WP1-T3")).toEqual([
+    ...TYPED,
+    ["pricing", "pnpm test --filter @tc/core pricing --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WP4-T6 is proven by the firewall template and isolation case tests; the real pool is a BLOCKED manual proof", () => {
+  expect(rows("WP4-T6")).toEqual([
+    ...TYPED,
+    ["bootstrap-firewall", "pnpm test --filter @tc/aws bootstrap --no-passWithNoTests"],
+    ["isolation-local", "pnpm test --filter isolation --no-passWithNoTests"],
+    manualRow("wp4-t6-isolation-pool-dev"),
+  ]);
+});
+
+it("task WP9-T1 maps Section 15 to its tests and keeps the evidence a manual proof", () => {
+  expect(rows("WP9-T1")).toEqual([
+    ...STATIC,
+    ["section15-local", "pnpm test --filter repo section15-local --no-passWithNoTests"],
+    manualRow("wp9-t1-section15-evidence"),
+  ]);
+});
+
+it("task WP9-T6 is proven by the deploy workflow tests; the deploy and the beta payments are manual proofs", () => {
+  expect(rows("WP9-T6")).toEqual([
+    ...STATIC,
+    ["ci-deploy", "pnpm test --filter repo ci-deploy --no-passWithNoTests"],
+    manualRow("wp9-t6-production-tag-deploy"),
+    manualRow("wp9-t6-beta-payments"),
+  ]);
+});
+
+it("task WP10-T2 has only static checks and the manual first-day report", () => {
+  expect(rows("WP10-T2")).toEqual([...STATIC, manualRow("wp10-t2-first-day-report")]);
+});
+
+it("task WPU-R1 is proven by the zod form schema tests and the tier limit tests", () => {
+  expect(rows("WPU-R1")).toEqual([
+    ...TYPED,
+    [
+      "web-zod",
+      "pnpm test --filter @tc/web server/form-schema server/disk-actions --no-passWithNoTests",
+    ],
+    ["tier-limits", "pnpm test --filter @tc/core orders/gates --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("task WPU-B4 is proven by the forward-only and temp-db tests and the repository tests", () => {
+  expect(rows("WPU-B4")).toEqual([
+    ...TYPED,
+    ["db-forward-only", "pnpm test --filter @tc/db test/forward-only --no-passWithNoTests"],
+    ["db-temp-db", "pnpm test --filter @tc/db test/temp-db --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the manual checks of the new keys exist in the catalogue and are in the gates already", () => {
+  const manualIds = ["WP4-T6", "WP9-T1", "WP9-T6", "WP10-T2"]
+    .flatMap((key) => TASKS[key])
+    .filter((c) => c.id.startsWith("manual-"))
+    .map((c) => c.id.slice("manual-".length));
+  expect(manualIds).toHaveLength(5);
+  for (const id of manualIds) {
+    expect(Object.hasOwn(MANUAL_PROOFS, id), id).toBe(true);
+    expect(
+      GATES.M7.map((c) => c.id),
+      id,
+    ).toContain(`manual-${id}`);
+  }
 });
