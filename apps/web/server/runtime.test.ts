@@ -338,3 +338,52 @@ describe("getRuntime", () => {
     await expect(getRuntime()).resolves.toBeDefined();
   });
 });
+
+describe("assembleRuntime: the reader of the Metrics tab (WPU-G4)", () => {
+  const ID = "0190aaaa-0000-7000-8000-000000000001";
+  const CUSTOMER = { customerId: "0190aaaa-0000-7000-8000-0000000000c1" };
+
+  it("has none without a function name (the tab says 'not available', R16)", async () => {
+    const { assembleRuntime } = await load();
+    expect((await assembleRuntime({ ...STAGING, ...SECRETS })).runtime.reader).toBeNull();
+  });
+
+  it("has the invoke port when the function name is set, and builds no client until it is used", async () => {
+    const { assembleRuntime } = await load();
+    const { runtime } = await assembleRuntime({
+      ...STAGING,
+      ...SECRETS,
+      READER_FUNCTION_NAME: "tc-staging-reader",
+    });
+    expect(runtime.reader).not.toBeNull();
+    expect(typeof runtime.reader?.metrics).toBe("function");
+  });
+
+  it("a name that is an ARN gives none", async () => {
+    const { assembleRuntime } = await load();
+    const { runtime } = await assembleRuntime({
+      ...STAGING,
+      ...SECRETS,
+      READER_FUNCTION_NAME: "arn:aws:lambda:ap-south-1:123456789012:function:x",
+    });
+    expect(runtime.reader).toBeNull();
+  });
+
+  it("in fake mode the dev reader answers the four series, and production has none", async () => {
+    const { assembleRuntime } = await load();
+    const { runtime } = await assembleRuntime(FAKE);
+    const out = await runtime.reader?.metrics(ID, CUSTOMER, "1h");
+    expect(out?.ok).toBe(true);
+    if (out?.ok) {
+      expect(out.series.map((s) => s.metric)).toEqual([
+        "cpu",
+        "networkIn",
+        "networkOut",
+        "statusCheckFailed",
+      ]);
+      expect(out.series[0]?.points).toHaveLength(12);
+    }
+    const prod = await assembleRuntime({ ...STAGING, TC_STAGE: "production", ...SECRETS });
+    expect(prod.runtime.reader).toBeNull();
+  });
+});

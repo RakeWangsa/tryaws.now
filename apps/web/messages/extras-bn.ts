@@ -183,6 +183,14 @@ export const extrasBn = {
       latest: "সর্বশেষ: {value}",
       chart: "{name}-এর রেখাচিত্র, {count}টি বিন্দু",
       unit: { percent: "%", bytes: "বাইট", count: "বার" },
+      bytesUnit: { B: "বাইট", KB: "কেবি", MB: "এমবি", GB: "জিবি" },
+      status: {
+        ok: "ঠিক আছে",
+        recovered: "আগে ব্যর্থ হয়েছিল, এখন ঠিক",
+        failed: "এখন ব্যর্থ",
+        unknown: "জানা যায়নি",
+      },
+      noPoints: "এই সময়কালে ব্যবহারযোগ্য তথ্য নেই।",
       unavailable: {
         title: "মেট্রিক্স এখন পাওয়া যাচ্ছে না",
         body: "একটু পরে আবার দেখুন। আপনার সার্ভারে কোনো প্রভাব পড়েনি।",

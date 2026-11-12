@@ -100,7 +100,7 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
             panel.session,
             id,
             rangeOf(one(query["range"])),
-            getReaderPort(),
+            await getReaderPort(),
           ),
           actions,
         }

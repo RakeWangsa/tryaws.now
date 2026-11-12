@@ -14,8 +14,10 @@ import type { OtpDeps, SmsProvider } from "@tc/notify";
 import { headers } from "next/headers";
 import { readWebConfig } from "./config.ts";
 import type { WebConfig } from "./config.ts";
+import type { ReaderPort } from "./extras-view.ts";
 import type { KycPorts } from "./kyc-actions.ts";
 import { writeLog } from "./log.ts";
+import { readerPortFromEnv } from "./reader-invoke.ts";
 import { resourceSecrets } from "./secrets.ts";
 import type { AccountPorts } from "./settings-actions.ts";
 
@@ -46,6 +48,11 @@ export interface WebRuntime {
    * have it until the Cognito and SMS adapters are verified on staging.
    */
   account: AccountPorts | null;
+  /**
+   * The invoke port of the `reader` function for the Metrics tab (WPU-G4). null = not configured: the
+   * tab says "not available" (R16). Local and test with fakes use a dev reader instead.
+   */
+  reader: ReaderPort | null;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -197,8 +204,16 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
     account = accountFakes.getDevAccount();
   }
 
+  // The reader of the Metrics tab: the Lambda invoke port when READER_FUNCTION_NAME is set; a dev
+  // reader only in development and test with fakes (the literal condition lets the bundler drop it).
+  let reader: ReaderPort | null = readerPortFromEnv(env);
+  if (process.env.NODE_ENV !== "production" && config.fakes) {
+    const readerFake = await import("./fakes/reader-fake.ts");
+    reader = readerFake.devReader();
+  }
+
   return {
-    runtime: { config, eps, identity, otp, authLimitKey, kyc, account },
+    runtime: { config, eps, identity, otp, authLimitKey, kyc, account, reader },
     deps,
     ...(verifier !== undefined ? { verifier } : {}),
   };

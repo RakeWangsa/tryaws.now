@@ -2,6 +2,7 @@ import { currentCustomer } from "@tc/auth";
 import { renewNow } from "@tc/core";
 import { customerRepos, newUuidV7, readFeatureFlag, withTx } from "@tc/db";
 import { headers } from "next/headers";
+import type { DnsOpsDeps } from "./dns-actions.ts";
 import type { ExtrasDeps } from "./extras-actions.ts";
 import type { KeyActionDeps } from "./key-actions.ts";
 import type { KycActionDeps } from "./kyc-actions.ts";
@@ -132,6 +133,32 @@ export function serverOpsActionDeps(): ServerOpsDeps {
             const profile = await repos.profile.get();
             if (profile === null) return false;
             return (await readFeatureFlag(tx, family, profile.market)) === true;
+          },
+        });
+      }),
+  };
+}
+
+/**
+ * The ports of the core of the DNS record editor (dns-actions.ts, WPU-G4). R12, R16: the dns_zone flag
+ * for the customer's market; a flag that is off or unreadable is off.
+ */
+export function dnsActionDeps(): DnsOpsDeps {
+  return {
+    authenticate,
+    now: () => new Date(),
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({
+          resources: repos.resources,
+          operations: repos.operations,
+          audit: repos.audit,
+          rateLimits: repos.rateLimits,
+          dnsOn: async () => {
+            const profile = await repos.profile.get();
+            if (profile === null) return false;
+            return (await readFeatureFlag(tx, "dns_zone", profile.market)) === true;
           },
         });
       }),

@@ -2,6 +2,7 @@ import { hasLocale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { localePath } from "@tc/ui/runtime";
 import { routing } from "../../../../i18n/routing.ts";
 import { domainSearchPort } from "../../../../server/domain-deps.ts";
 import { loadDomainList, loadDomainSearch } from "../../../../server/domain-view.ts";
@@ -38,7 +39,13 @@ export default async function DomainsPage({ params, searchParams }: Props) {
   ]);
   return (
     <PanelFrame locale={locale} path="/domains" currentId="domains" panel={panel}>
-      <h1 className="h3 mergecolor mb-4">{t("Domains.heading")}</h1>
+      <h1 className="h3 mergecolor mb-3">{t("Domains.heading")}</h1>
+      <p className="mb-4">
+        <a href={localePath(locale, "/dns")}>
+          <i className="fas fa-sitemap me-1" aria-hidden="true" />
+          {t("Domains.dnsLink")}
+        </a>
+      </p>
       <DomainsContent
         locale={locale}
         numerals={numeralsFor(locale, panel)}

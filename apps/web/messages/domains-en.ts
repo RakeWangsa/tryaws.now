@@ -6,6 +6,7 @@ export const domainsEn: Same<typeof domainsBn> = {
   Domains: {
     meta: { title: "Domains" },
     heading: "Domains",
+    dnsLink: "DNS zones and records",
     awsNote:
       "Every domain is registered through Amazon Route 53. A registered domain is not refundable.",
     flagOff: {

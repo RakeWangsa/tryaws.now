@@ -167,6 +167,34 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  // WPU-G4: the DNS record editor. R9 order, the zone of another customer is one answer with a missing
+  // one, the flag, the busy zone and the idempotency key are all in dns-actions.test.ts.
+  "app/[locale]/(panel)/dns/[id]/actions.ts#saveRecordAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}dns-actions.test.ts`,
+        "another customer's zone answers like a missing zone and writes nothing",
+      ),
+      proof(
+        `${W}dns-actions.test.ts`,
+        "adds a record in that order and queues one change_dns_record operation",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/dns/[id]/actions.ts#deleteRecordAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}dns-actions.test.ts`,
+        "another customer's zone answers like a missing zone and writes nothing",
+      ),
+      proof(
+        `${W}dns-actions.test.ts`,
+        "delete needs an existing set and sends only the name and the type",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/domains/new/actions.ts#createDomainDraftAction": {
     kind: "session",
     proof: [
@@ -623,7 +651,40 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     ],
   },
 
+  // WPU-G4: the printable invoice. A customer's own invoice only; another customer's id is a 404.
+  "app/[locale]/(panel)/invoices/[id]/document/route.ts": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}invoice-document.test.ts`,
+        "answers 404 for another customer's invoice, like for a missing one (R8)",
+      ),
+      proof(`${W}invoice-document.test.ts`, "answers 401 without a session and reads nothing (R9)"),
+      CUSTOMER_REPOS,
+    ],
+  },
+
   // ---- pages with an id in the path
+  "app/[locale]/(panel)/invoices/[id]/page.tsx": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}invoice-view.test.ts`,
+        "answers null for another customer's invoice like for a missing one (R8)",
+      ),
+      CUSTOMER_REPOS,
+    ],
+  },
+  "app/[locale]/(panel)/dns/[id]/page.tsx": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}dns-view.test.ts`,
+        "answers null for another customer's zone like for a missing one (R8)",
+      ),
+      CUSTOMER_REPOS,
+    ],
+  },
   "app/[locale]/(panel)/domains/[name]/page.tsx": {
     kind: "id",
     proof: [

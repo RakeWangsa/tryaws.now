@@ -103,6 +103,9 @@ export function web(inputs: WebInputs) {
       COGNITO_USER_POOL_ID: auth.customers.id,
       COGNITO_CLIENT_ID: auth.customerClient.id,
       PROVISIONING_QUEUE_URL: queues.provisioning.url,
+      // WPU-G4: the function name (not the ARN) of the reader, for the Metrics tab. The role may
+      // invoke it (permissions below); apps/web/server/reader-invoke.ts builds the client lazily.
+      READER_FUNCTION_NAME: workers.invoked["reader"]?.name,
       KYC_BUCKET: storage.kyc.name,
       INVOICES_BUCKET: storage.invoices.name,
       EXPORTS_BUCKET: storage.exports.name,

@@ -93,6 +93,7 @@ it("runtime.ts imports the fakes only through a literal dynamic import()", () =>
     "./fakes/identity.ts",
     "./fakes/kyc-fakes.ts",
     "./fakes/outbox.ts",
+    "./fakes/reader-fake.ts",
   ]);
   // Every import( in the file has a string literal: nothing is computed.
   const all = stripComments(text).match(/\bimport\s*\(/g) ?? [];
