@@ -1782,6 +1782,34 @@ TASKS["WP9-T3"] = [
   repo,
 ];
 
+// WP9-T4: the runbooks of Section M. The repository test checks that every page listed in
+// docs/runbooks/README.md exists, every `pnpm` command cited names a script of package.json, and the
+// "walked through" column is empty until the owner fills it. The signed-in support form core (R9 order,
+// rate limit, audit, single-line text rule) is proven by its own tests in apps/web. That a person walked
+// through each runbook is a manual step of the owner.
+const runbooksIndex = {
+  id: "runbooks",
+  title:
+    "WP9-T4: every runbook of the README exists, every cited pnpm script exists, nobody is claimed to have walked",
+  command: ["pnpm", "test", "--filter", "repo", "runbooks", "--no-passWithNoTests"],
+};
+const supportFormCore = {
+  id: "support-form-core",
+  title:
+    "WP9-T4: the support form core authenticates, validates, rate limits, writes and audits; one-line text refuses CR, LF, NEL, LS, PS and control characters",
+  command: ["pnpm", "test", "--filter", "@tc/web", "support-actions", "--no-passWithNoTests"],
+};
+TASKS["WP9-T4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  runbooksIndex,
+  supportFormCore,
+  repo,
+];
+
 export const GATES = {
   M0: WP0_T1,
   M1: [],

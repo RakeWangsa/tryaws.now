@@ -60,7 +60,8 @@ export function parseSupportRequest(raw: unknown): SupportParse {
   const subject = cleanSubject ?? "";
   if (cleanSubject === null) fields["subject"] = "invalid";
 
-  const message = typeof input["message"] === "string" ? input["message"].normalize("NFC").trim() : "";
+  const message =
+    typeof input["message"] === "string" ? input["message"].normalize("NFC").trim() : "";
   if (message.length < 1 || message.length > MESSAGE_MAX || MESSAGE_FORBIDDEN.test(message)) {
     fields["message"] = "invalid";
   }
