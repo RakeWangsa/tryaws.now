@@ -159,6 +159,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-G3",
     "WPU-G4",
     "WPU-G5",
+    "WPU-H1",
     "WPU-T1",
     "WPU-T2",
     "WPU-T3",
@@ -213,6 +214,36 @@ it("task WPU-G3 is proven by lint, types, format, the core, aws, db, catalog-syn
     ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
+});
+
+it("task WPU-H1 is proven by lint, types, format, the ledger-at-the-database proof, the core and db tests and the repository tests", () => {
+  expect(TASKS["WPU-H1"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["ledger-unbalanced", "pnpm test --filter @tc/core ledger/unbalanced-db --no-passWithNoTests"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["db", "pnpm test --filter @tc/db"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
+});
+
+it("the proof test of WPU-H1 exists and covers the three application roles", () => {
+  const text = readFileSync("packages/core/ledger/unbalanced-db.test.ts", "utf8");
+  expect(text).toContain('const ROLES = ["web_rw", "worker_rw", "admin_rw"]');
+  for (const part of [
+    "single-sided",
+    "1 paisa",
+    "zero amount",
+    "negative amount",
+    "two currencies",
+    "reversal",
+    "append-only",
+  ]) {
+    expect(text, part).toContain(part);
+  }
 });
 
 it("task WPU-G4 is proven by lint, types, format, the core, db, aws, web and repository tests", () => {

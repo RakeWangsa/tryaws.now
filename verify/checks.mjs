@@ -2369,6 +2369,29 @@ TASKS["WPU-G3"] = [
   repo,
 ];
 
+// WPU-H1: money safety. The proof test of the ledger at the database: as web_rw, worker_rw and admin_rw
+// an unbalanced, single-sided, zero, negative or mixed-currency post is refused by the DATABASE (the
+// application check is skipped on purpose), a reversal balances, and UPDATE, DELETE and TRUNCATE of the
+// ledger and the audit log are refused. The second part is the time budget of the projects that use the
+// shared PostgreSQL (vitest.db-budgets.mjs). The db and core suites need the local PostgreSQL (pnpm db:up).
+const ledgerUnbalanced = {
+  id: "ledger-unbalanced",
+  title:
+    "R5 at the database: the ledger refuses what does not balance, as the three application roles",
+  command: ["pnpm", "test", "--filter", "@tc/core", "ledger/unbalanced-db", "--no-passWithNoTests"],
+};
+TASKS["WPU-H1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  ledgerUnbalanced,
+  core,
+  db,
+  repo,
+];
+
 // Items that only a person or AWS can prove (verify/manual-proofs.mjs). The check fails with BLOCKED
 // (exit 2) until verify/manual-proofs.json holds a valid record for the id; it is never a pass.
 const manual = (proofId) => {
