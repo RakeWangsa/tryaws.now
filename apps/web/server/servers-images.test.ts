@@ -83,7 +83,8 @@ describe("loadConfigurator: the images of each Region", () => {
     state.images = {
       "ap-southeast-1": [
         img("ubuntu_24_04", "os", "Ubuntu", "ubuntu"),
-        img("wordpress", "app", "WordPress", "bitnami"),
+        img("wordpress_ls_1_0", "app", "WordPress", "admin"),
+        img("wordpress", "app", "WordPress (Bitnami)", "bitnami"), // an old Bitnami id: not on by default (WPU-Y1),
         img("amazon_linux_2023", "os", "Amazon Linux", "ec2-user"),
         img("some_new_app", "app"), // not on the default list
       ],
@@ -100,11 +101,11 @@ describe("loadConfigurator: the images of each Region", () => {
         minPower: 0,
       },
       {
-        id: "wordpress",
+        id: "wordpress_ls_1_0",
         name: "WordPress",
         kind: "app",
         version: null,
-        loginUser: "bitnami",
+        loginUser: "admin",
         logo: "wordpress",
         minPower: 500, // an app with no known minimum: the default of the core (the 1 GB plan, WPU-Z19)
       },
@@ -127,19 +128,19 @@ describe("loadConfigurator: the images of each Region", () => {
     state.images = {
       "ap-southeast-1": [
         {
-          ...img("wordpress", "app", "WordPress"),
-          specs: { ...img("wordpress", "app").specs, minPower: 2000 },
+          ...img("wordpress_ls_1_0", "app", "WordPress"),
+          specs: { ...img("wordpress_ls_1_0", "app").specs, minPower: 2000 },
         },
-        img("nodejs", "app", "Node"),
+        img("node_ls_1_0", "app", "Node"),
         img("ubuntu_24_04", "os", "Ubuntu"),
       ],
     };
-    state.switches = { state: "ok", switches: { on: [], off: [], minPower: { nodejs: 500 } } };
+    state.switches = { state: "ok", switches: { on: [], off: [], minPower: { node_ls_1_0: 500 } } };
     const screen = (await loadConfigurator(session, now)) as Ready;
     const byId = Object.fromEntries(
       (screen.images["ap-southeast-1"] ?? []).map((i) => [i.id, i.minPower]),
     );
-    expect(byId).toEqual({ wordpress: 2000, nodejs: 500, ubuntu_24_04: 0 });
+    expect(byId).toEqual({ wordpress_ls_1_0: 2000, node_ls_1_0: 500, ubuntu_24_04: 0 });
     expect(screen.plans.map((p) => p.power)).toEqual([1000, null]);
   });
 

@@ -65,10 +65,13 @@ export const DEFAULT_ENABLED_BLUEPRINTS: readonly string[] = Object.freeze([
   "ubuntu_22_04",
   "amazon_linux_2023",
   "debian_12",
-  "wordpress",
-  "lamp_8_bitnami",
-  "nodejs",
-  "nginx",
+  // WPU-Y1 (owner round 4): the Lightsail-packaged app images. The Bitnami ids (wordpress, lamp_8_bitnami,
+  // nodejs, nginx; deprecated by AWS on 2026-11-19) are no longer offered for new servers; an admin can still
+  // switch one on, and an existing server keeps working.
+  "wordpress_ls_1_0",
+  "lamp_ls_1_0",
+  "node_ls_1_0",
+  "nginx_ls_1_0",
 ]);
 
 const BLUEPRINT_ID = /^[a-z0-9_]{1,64}$/;
@@ -243,8 +246,8 @@ const LOGOS: readonly (readonly [string, string])[] = [
   ["freebsd", "freebsd"],
   ["openbsd", "openbsd"],
   ["fedora", "fedora"],
-  ["wordpress", "wordpress"],
-  ["lamp", "lamp"],
+  ["wordpress", "wordpress"], // also wordpress_ls_1_0
+  ["lamp", "lamp"], // also lamp_ls_1_0
   ["lemp", "lemp"],
   ["joomla", "joomla"],
   ["magento", "magento"],

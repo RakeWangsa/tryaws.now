@@ -4,6 +4,8 @@ import {
   loginUserOf,
   parseServerDisplayName,
   sshCommandOf,
+  isLightsailPackaged,
+  appPasswordFileOf,
   storedLoginUserOf,
 } from "./connect";
 
@@ -17,6 +19,13 @@ describe("loginUserOf", () => {
     ["centos_stream_9", "ec2-user"],
     ["wordpress", "bitnami"],
     ["nodejs", "bitnami"],
+    ["nginx", "bitnami"],
+    ["lamp_8_bitnami", "bitnami"],
+    // WPU-Y1: Lightsail-packaged images log in as admin (Lightsail SSH guide), not bitnami.
+    ["wordpress_ls_1_0", "admin"],
+    ["lamp_ls_1_0", "admin"],
+    ["node_ls_1_0", "admin"],
+    ["nginx_ls_1_0", "admin"],
   ])("%s logs in as %s", (blueprint, user) => {
     expect(loginUserOf(blueprint)).toBe(user);
   });
@@ -76,5 +85,23 @@ describe("parseServerDisplayName", () => {
     expect(parseServerDisplayName("a".repeat(61))).toBeNull();
     expect(parseServerDisplayName("a<b>")).toBeNull();
     expect(parseServerDisplayName(5)).toBeNull();
+  });
+});
+
+describe("WPU-Y1 Lightsail-packaged images", () => {
+  it("tells a Lightsail-packaged id from a Bitnami one", () => {
+    for (const id of ["wordpress_ls_1_0", "lamp_ls_1_0", "node_ls_1_0", "nginx_ls_1_0"])
+      expect(isLightsailPackaged(id), id).toBe(true);
+    for (const id of ["wordpress", "lamp_8_bitnami", "nodejs", "nginx", "ubuntu_24_04", undefined])
+      expect(isLightsailPackaged(id), String(id)).toBe(false);
+  });
+  it("names the password file only where the Lightsail guides do", () => {
+    expect(appPasswordFileOf("lamp_ls_1_0")).toBe("~/application_credentials");
+    expect(appPasswordFileOf("node_ls_1_0")).toBe("~/application_credentials");
+    expect(appPasswordFileOf("wordpress")).toBe("~/bitnami_application_password");
+    // WordPress (Lightsail) is read from the console command; Nginx (Lightsail) is not documented: no guess.
+    expect(appPasswordFileOf("wordpress_ls_1_0")).toBeNull();
+    expect(appPasswordFileOf("nginx_ls_1_0")).toBeNull();
+    expect(appPasswordFileOf("ubuntu_24_04")).toBeNull();
   });
 });

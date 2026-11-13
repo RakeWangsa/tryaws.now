@@ -55,6 +55,13 @@ describe("mapBlueprint", () => {
     expect(m?.specs.kind).toBe("app");
     expect(m?.specs.loginUser).toBe("bitnami");
   });
+  it("maps a Lightsail-packaged app image to the admin user (WPU-Y1)", () => {
+    const m = mapBlueprint(
+      raw({ blueprintId: "wordpress_ls_1_0", type: "app", name: "WordPress" }),
+      REGION,
+    );
+    expect(m?.specs.loginUser).toBe("admin");
+  });
   it("refuses Windows, a bad id, an unknown type and a bad Region (fail closed)", () => {
     expect(mapBlueprint(raw({ platform: "WINDOWS" }), REGION)).toBeNull();
     expect(mapBlueprint(raw({ blueprintId: "Ubuntu 24" }), REGION)).toBeNull();
@@ -83,6 +90,17 @@ describe("login users", () => {
     ["nginx", "bitnami"],
   ])("%s logs in as %s", (id, user) => {
     expect(loginUserOf(id)).toBe(user);
+  });
+  it("WPU-Y1: the defaults are the Lightsail-packaged app images, not the Bitnami ones", () => {
+    for (const id of ["wordpress_ls_1_0", "lamp_ls_1_0", "node_ls_1_0", "nginx_ls_1_0"]) {
+      expect(DEFAULT_ENABLED_BLUEPRINTS, id).toContain(id);
+      expect(isImageOn(EMPTY_ALLOW_LIST, id), id).toBe(true);
+      expect(loginUserOf(id), id).toBe("admin");
+    }
+    for (const id of ["wordpress", "lamp_8_bitnami", "nodejs", "nginx"]) {
+      expect(DEFAULT_ENABLED_BLUEPRINTS, id).not.toContain(id);
+      expect(isImageOn(EMPTY_ALLOW_LIST, id), id).toBe(false);
+    }
   });
   it("every default image has a known login user", () => {
     for (const id of DEFAULT_ENABLED_BLUEPRINTS) expect(loginUserOf(id)).not.toBeNull();
@@ -119,6 +137,8 @@ describe("imageLogoOf", () => {
     ["ubuntu_24_04", "ubuntu"],
     ["wordpress", "wordpress"],
     ["lamp_8_bitnami", "lamp"],
+    ["lamp_ls_1_0", "lamp"],
+    ["wordpress_ls_1_0", "wordpress"],
     ["debian_12", "debian"],
   ])("%s uses the %s logo", (id, logo) => {
     expect(imageLogoOf(id)).toBe(logo);

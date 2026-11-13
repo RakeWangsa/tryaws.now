@@ -3815,6 +3815,9 @@ TASKS["WPU-Z19"] = [
   repo,
 ];
 
+// WPU-Y1: app images move to the Lightsail-packaged blueprints (core tables and defaults; no DB change).
+TASKS["WPU-Y1"] = [specSync, baselineSync, lint, typecheck, format, core, repo];
+
 // WPU-Z17: Gennet answers are read by their status code.
 TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];
 
