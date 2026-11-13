@@ -1,6 +1,7 @@
+import { Resource } from "sst/resource";
 import { expect, it } from "vitest";
 import { DB_PASSWORD_SECRET as INFRA_NAMES, DB_ROLES } from "../../infra/lib/functions";
-import { DB_PASSWORD_SECRETS, MIGRATOR_ERROR, readMigratorConfig } from "./config";
+import { DB_PASSWORD_SECRETS, envLinks, MIGRATOR_ERROR, readMigratorConfig } from "./config";
 
 const MASTER_PASSWORD = "m@ster:pw/#1";
 const env = (over: Record<string, string | undefined> = {}) => {
@@ -19,6 +20,9 @@ const env = (over: Record<string, string | undefined> = {}) => {
   }
   return { ...base, ...over };
 };
+// The links of these tests come from the SST_RESOURCE_<Name> variables of the environment object
+// (envLinks); the run-time path through the SST SDK is config-sst.test.ts (WPU-Z15).
+const read = (e: Record<string, string | undefined>) => readMigratorConfig(e, envLinks(e));
 
 it("names the same five password secrets as the function table of the infrastructure", () => {
   expect(DB_PASSWORD_SECRETS).toEqual(INFRA_NAMES);
@@ -26,7 +30,7 @@ it("names the same five password secrets as the function table of the infrastruc
 });
 
 it("reads the master URL, the five passwords and the migrations folder", () => {
-  const config = readMigratorConfig(env());
+  const config = read(env());
   const url = new URL(config.masterUrl);
   expect(url.hostname).toBe("db.example.test");
   expect(url.port).toBe("5432");
@@ -40,11 +44,9 @@ it("reads the master URL, the five passwords and the migrations folder", () => {
 });
 
 it("allows sslmode require and no weaker one", () => {
-  expect(new URL(readMigratorConfig(env({ DB_SSLMODE: "require" })).masterUrl).search).toBe(
-    "?sslmode=require",
-  );
+  expect(new URL(read(env({ DB_SSLMODE: "require" })).masterUrl).search).toBe("?sslmode=require");
   for (const mode of ["disable", "prefer", "allow", "verify-ca", ""]) {
-    expect(() => readMigratorConfig(env({ DB_SSLMODE: mode }))).toThrow(MIGRATOR_ERROR);
+    expect(() => read(env({ DB_SSLMODE: mode }))).toThrow(MIGRATOR_ERROR);
   }
 });
 
@@ -70,7 +72,7 @@ it("fails closed with one fixed message that holds no value", () => {
   for (const over of cases) {
     let message = "";
     try {
-      readMigratorConfig(env(over));
+      read(env(over));
     } catch (error) {
       message = error instanceof Error ? error.message : "";
     }
@@ -81,8 +83,14 @@ it("fails closed with one fixed message that holds no value", () => {
 
 it("does not read DATABASE_URL (a deploy never takes the master user from a variable)", () => {
   expect(() =>
-    readMigratorConfig(
-      env({ SST_RESOURCE_Postgres: undefined, DATABASE_URL: "postgres://a:b@h/d" }),
-    ),
+    read(env({ SST_RESOURCE_Postgres: undefined, DATABASE_URL: "postgres://a:b@h/d" })),
   ).toThrow(MIGRATOR_ERROR);
+});
+
+it("with its default links, the SST SDK, nothing linked fails with the fixed message (WPU-Z15)", () => {
+  // The SDK's own Resource throws for a name that is not linked; the reader must not pass it on.
+  expect(() => (Resource as unknown as Record<string, unknown>)["Postgres"]).toThrow();
+  expect(() => readMigratorConfig({ MIGRATIONS_DIR: "/var/task/migrations" })).toThrow(
+    new RegExp(`^${MIGRATOR_ERROR}$`),
+  );
 });
