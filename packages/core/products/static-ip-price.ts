@@ -45,7 +45,12 @@ export async function staticIpHourPrice(
     value: {
       unit: "hour",
       perHourMinor: quote.totalMinor,
-      breakdown: { totalMinor: quote.totalMinor, baseMinor: quote.baseMinor, steps: quote.steps },
+      breakdown: {
+        totalMinor: quote.totalMinor,
+        baseMinor: quote.baseMinor,
+        steps: quote.steps,
+        charge: one.value.charge,
+      },
     },
   };
 }

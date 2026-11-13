@@ -150,6 +150,20 @@ const BEFORE = [
 ];
 
 // WPU-B3: the stuck credit note, the usage writer and the scheduled polls.
+// WPU-Y2: the charge snapshot (price inputs saved with every charge) and the lines rebuilt from it.
+const Y2 = [
+  "CHARGE_SNAPSHOT_VERSION",
+  "ChargeSnapshotError",
+  "buildChargeSnapshot",
+  "chargeSnapshotMatchesInputs",
+  "chargeToPriceSnapshot",
+  "creditNoteLinesOf",
+  "meteredSnapshot",
+  "parseChargeSnapshot",
+  "readChargeSnapshot",
+  "resolveChargeLines",
+];
+
 const B3 = [
   "CREDIT_NOTE_STUCK_EVENT",
   "CREDIT_NOTE_STUCK_HOURS",
@@ -606,6 +620,7 @@ describe("the public surface of the order flow", () => {
           ...DIGIT_ONE,
           ...BILLING,
           ...B3,
+          ...Y2,
         ]),
       ].sort(),
     );

@@ -46,6 +46,7 @@ function posting(
     idempotencyKey: `topup:${paymentId}`,
     actor: { type: "system", id: null },
     memo: null,
+    priceSnapshot: null,
     currency: "BDT",
     lines,
     walletCustomerId: wallet.customerId,

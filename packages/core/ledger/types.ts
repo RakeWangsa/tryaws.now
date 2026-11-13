@@ -50,5 +50,10 @@ export interface PostTransactionInput {
   idempotencyKey: string;
   actor: Actor;
   memo?: string;
+  /**
+   * WPU-Y2: the ChargeSnapshot (pricing/charge-snapshot.ts) of a purchase, renewal or metered charge. Saved
+   * on the ledger transaction in the same statement group as the postings. Its total must be the debit.
+   */
+  priceSnapshot?: unknown;
   postings: Posting[];
 }

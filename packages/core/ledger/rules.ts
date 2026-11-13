@@ -1,3 +1,8 @@
+import {
+  parseChargeSnapshot,
+  type ChargeKind,
+  type ChargeSnapshot,
+} from "../pricing/charge-snapshot";
 import { STEP_ACCOUNTS } from "../pricing/validate";
 import { ledgerKey } from "./keys";
 import {
@@ -179,6 +184,8 @@ export interface NormalizedPosting {
   readonly lines: readonly NormalizedLine[];
   readonly walletCustomerId: string | null;
   readonly walletDelta: bigint;
+  /** WPU-Y2: the checked price inputs of a sale, or null. Its total is the wallet debit. */
+  readonly priceSnapshot: ChargeSnapshot | null;
 }
 
 export type CheckedPosting =
@@ -424,6 +431,25 @@ function check(
     if (linesValid) checkShape(rule.shape, lines, flag);
   }
 
+  // WPU-Y2: the price inputs of a sale. Checked here, so a charge cannot be saved with a snapshot that
+  // is damaged, of another kind, or whose total is not the amount taken from the wallet (R16).
+  let priceSnapshot: ChargeSnapshot | null = null;
+  if (input.priceSnapshot !== undefined && input.priceSnapshot !== null) {
+    try {
+      priceSnapshot = parseChargeSnapshot(input.priceSnapshot);
+    } catch {
+      flag("priceSnapshot", "The price snapshot is not valid.");
+    }
+    if (priceSnapshot !== null && kind !== null) {
+      const wanted = SNAPSHOT_KIND[kind];
+      if (wanted === undefined || priceSnapshot.kind !== wanted) {
+        flag("priceSnapshot", "The price snapshot is not of the kind of this posting.");
+      } else if (BigInt(priceSnapshot.totalMinor) !== -walletDelta) {
+        flag("priceSnapshot", "The total of the price snapshot is not the debit of the wallet.");
+      }
+    }
+  }
+
   if (Object.keys(bad).length > 0 || kind === null || actor === null) {
     return { ok: false, error: "validation", fields: bad };
   }
@@ -457,9 +483,17 @@ function check(
       lines,
       walletCustomerId,
       walletDelta,
+      priceSnapshot,
     },
   };
 }
+
+// WPU-Y2: the kinds that are sales, and the kind of snapshot each one carries.
+const SNAPSHOT_KIND: Partial<Record<LedgerKind, ChargeKind>> = {
+  purchase: "purchase",
+  renewal: "renewal",
+  metered_charge: "metered",
+};
 
 /** The lines of a kind (9.1). One problem at `postings`, and one at `postings[i]` per credit line that is not allowed. */
 function checkShape(

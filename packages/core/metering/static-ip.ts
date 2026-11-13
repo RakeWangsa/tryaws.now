@@ -14,7 +14,7 @@ import type { PostTransactionInput } from "../ledger/types";
 import type { Logger, RunTx } from "../operations/types";
 import { staticIpHourPrice, type StaticIpPrice } from "../products/static-ip-price";
 import type { Clock, Result } from "../types";
-import { UNPAID_TEMPLATE, dhakaDay } from "./run";
+import { UNPAID_TEMPLATE, dhakaDay, meteredSnapshot } from "./run";
 
 // WPU-M1. A static IP that is not attached to a server is charged as Amazon Lightsail does: free while
 // attached, and USD 0.005 an hour (config price, converted by the pricing engine) once it has been
@@ -154,6 +154,7 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
               idempotencyKey: key,
               actor: { type: "system" },
               memo: STATIC_IP_MEMO,
+              ...meteredSnapshot(breakdown, STATIC_IP_METRIC, "1", price),
               // WPU-M2: the split of a purchase (spec 9.1), from the steps of the engine's quote.
               postings: salePostings(row.customerId, {
                 totalMinor: price,

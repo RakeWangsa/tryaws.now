@@ -141,6 +141,7 @@ export async function writePosting(
       actorType: p.actor.type,
       actorId: p.actor.id,
       memo: p.memo,
+      priceSnapshot: p.priceSnapshot,
     });
     if (id === null) {
       const taken = await findLedgerTransactionByKey(sp, p.idempotencyKey);

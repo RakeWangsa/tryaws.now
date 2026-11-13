@@ -18,6 +18,7 @@ import {
   splitMeteredChargeMinor,
   type MeteredUnitPrice,
 } from "../pricing/metering";
+import { buildChargeSnapshot, type ChargeSnapshot } from "../pricing/charge-snapshot";
 import type { Clock, Result } from "../types";
 
 // Spec 11, metered items. Snapshot storage is charged once a day, one metered_charge ledger transaction
@@ -130,6 +131,26 @@ function readPrice(value: unknown): bigint | null {
   return null;
 }
 
+/**
+ * WPU-Y2: the price inputs of one metered charge: the unit price's inputs, the usage, and the split of THIS
+ * charge. Empty when the unit carries no inputs (a test world), which saves no snapshot.
+ */
+export function meteredSnapshot(
+  unit: MeteredUnitPrice,
+  metric: string,
+  usage: string,
+  chargeMinor: bigint,
+): { priceSnapshot?: ChargeSnapshot } {
+  if (unit.charge === undefined) return {};
+  const split = splitMeteredChargeMinor(chargeMinor, unit);
+  return {
+    priceSnapshot: buildChargeSnapshot("metered", unit.charge, {
+      meter: { metric, usage, unitTotalMinor: unit.totalMinor.toString() },
+      charge: { ...split, totalMinor: chargeMinor },
+    }),
+  };
+}
+
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : "unknown";
 }
@@ -200,6 +221,7 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
                 reference: { type: "resource", id: row.resourceId },
                 idempotencyKey: key,
                 actor: { type: "system" },
+                ...meteredSnapshot(unit, SNAPSHOT_METRIC, row.quantity, amountMinor),
                 postings: salePostings(row.customerId, {
                   totalMinor: amountMinor,
                   ...splitMeteredChargeMinor(amountMinor, unit),
