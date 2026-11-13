@@ -6,6 +6,9 @@ import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
 import { loadZone, pickEditing } from "../../../../../server/dns-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
+import { loadAutoRenew } from "../../../../../server/auto-renew-view.ts";
+import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
+import { setDnsZoneAutoRenewAction } from "../../_family/auto-renew-actions.ts";
 import { PanelFrame } from "../../PanelFrame.tsx";
 import { deleteRecordAction, destroyDnsZoneAction, saveRecordAction } from "./actions.ts";
 import { ZoneContent } from "./ZoneContent.tsx";
@@ -35,6 +38,11 @@ export default async function DnsZonePage({ params, searchParams }: Props) {
   const screen = await loadZone(panel.session, id, newUuidV7());
   const editing =
     screen !== null && screen.state === "ready" ? pickEditing(screen.zone, edit) : null;
+  // WPU-Z14: the auto-renew switch of the zone (null: no own zone, no subscription, flag off).
+  const renew =
+    screen !== null && screen.state === "ready"
+      ? await loadAutoRenew(panel.session, "dns_zone", id)
+      : null;
   return (
     <PanelFrame locale={locale} path={path} currentId="domains" panel={panel}>
       <ZoneContent
@@ -44,6 +52,9 @@ export default async function DnsZonePage({ params, searchParams }: Props) {
         saveAction={saveRecordAction}
         deleteAction={deleteRecordAction}
         destroyAction={destroyDnsZoneAction}
+        {...(renew !== null
+          ? { renewal: <AutoRenewSwitch action={setDnsZoneAutoRenewAction} view={renew} /> }
+          : {})}
       />
     </PanelFrame>
   );

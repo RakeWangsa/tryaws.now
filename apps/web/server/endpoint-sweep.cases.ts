@@ -35,6 +35,10 @@ const SERVER_OPS = proof(
   `${W}server-actions.test.ts`,
   "every action on an unknown id is not_found and writes nothing",
 );
+const AUTO_RENEW = proof(
+  `${W}auto-renew-actions.test.ts`,
+  "R8: another customer's %s, or none, is not_found, and nothing is written, audited or counted",
+);
 const ORDER_SESSION = proof(
   `${W}order-actions.test.ts`,
   "refuses without a session and runs nothing else",
@@ -166,6 +170,17 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  // WPU-Z14: the auto-renew switch of every family with no switch of its own; one Server Action per family
+  // (the family is fixed in the action). Another customer's row and a missing one are one answer that writes,
+  // audits and counts nothing (R8); the session is read first and the form's customerId is ignored (R9).
+  "app/[locale]/(panel)/_family/auto-renew-actions.ts#setWindowsAutoRenewAction": { kind: "id", proof: [AUTO_RENEW] },
+  "app/[locale]/(panel)/_family/auto-renew-actions.ts#setDiskAutoRenewAction": { kind: "id", proof: [AUTO_RENEW] },
+  "app/[locale]/(panel)/_family/auto-renew-actions.ts#setDatabaseAutoRenewAction": { kind: "id", proof: [AUTO_RENEW] },
+  "app/[locale]/(panel)/_family/auto-renew-actions.ts#setBucketAutoRenewAction": { kind: "id", proof: [AUTO_RENEW] },
+  "app/[locale]/(panel)/_family/auto-renew-actions.ts#setLoadBalancerAutoRenewAction": { kind: "id", proof: [AUTO_RENEW] },
+  "app/[locale]/(panel)/_family/auto-renew-actions.ts#setContainerAutoRenewAction": { kind: "id", proof: [AUTO_RENEW] },
+  "app/[locale]/(panel)/_family/auto-renew-actions.ts#setCdnAutoRenewAction": { kind: "id", proof: [AUTO_RENEW] },
+  "app/[locale]/(panel)/_family/auto-renew-actions.ts#setDnsZoneAutoRenewAction": { kind: "id", proof: [AUTO_RENEW] },
   "app/[locale]/(panel)/domains/[name]/actions.ts#setDomainAutoRenewAction": {
     kind: "id",
     proof: [

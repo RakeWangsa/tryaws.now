@@ -9,6 +9,9 @@ import { rangeOf } from "../../../../../server/extras-view.ts";
 import { getReaderPort } from "../../../../../server/reader-port.ts";
 import { loadDatabaseMetrics } from "../../../../../server/reader-reads-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
+import { loadAutoRenew } from "../../../../../server/auto-renew-view.ts";
+import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
+import { setDatabaseAutoRenewAction } from "../../_family/auto-renew-actions.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import {
   destroyDatabaseAction,
@@ -55,6 +58,8 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
   const path = `/databases/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const database = await loadDatabaseDetail(panel.session, id);
+  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
+  const renew = database === null ? null : await loadAutoRenew(panel.session, "database", id);
   const tab = one(query["tab"]);
   // WPU-Y8: read once on page load (the tabs are all rendered; no timer, no polling).
   const metricsScreen =
@@ -131,6 +136,9 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
                 />
               ),
             }
+          : {})}
+        {...(renew !== null
+          ? { renewal: <AutoRenewSwitch action={setDatabaseAutoRenewAction} view={renew} /> }
           : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />

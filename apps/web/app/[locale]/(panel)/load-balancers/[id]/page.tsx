@@ -8,6 +8,9 @@ import { loadLoadBalancerDetail } from "../../../../../server/load-balancers-vie
 import { getReaderPort } from "../../../../../server/reader-port.ts";
 import { loadTargetHealth } from "../../../../../server/reader-reads-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
+import { loadAutoRenew } from "../../../../../server/auto-renew-view.ts";
+import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
+import { setLoadBalancerAutoRenewAction } from "../../_family/auto-renew-actions.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { CertificateChange } from "../../_console/CertificateChange.tsx";
 import { LoadBalancerCertificate, LoadBalancerSettingsForm } from "../../_console/ConsoleForms.tsx";
@@ -49,6 +52,8 @@ export default async function LoadBalancerDetailPage({ params, searchParams }: P
   const path = `/load-balancers/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const balancer = await loadLoadBalancerDetail(panel.session, id);
+  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
+  const renew = balancer === null ? null : await loadAutoRenew(panel.session, "load_balancer", id);
   const tab = one(query["tab"]);
   // WPU-Y8: read once on page load, only for a balancer that exists for this customer (R8).
   const targetHealth =
@@ -104,6 +109,9 @@ export default async function LoadBalancerDetailPage({ params, searchParams }: P
                 </>
               ),
             }
+          : {})}
+        {...(renew !== null
+          ? { renewal: <AutoRenewSwitch action={setLoadBalancerAutoRenewAction} view={renew} /> }
           : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />

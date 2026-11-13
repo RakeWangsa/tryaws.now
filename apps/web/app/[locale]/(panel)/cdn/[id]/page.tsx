@@ -6,6 +6,9 @@ import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
 import { loadCdnDetail } from "../../../../../server/cdn-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
+import { loadAutoRenew } from "../../../../../server/auto-renew-view.ts";
+import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
+import { setCdnAutoRenewAction } from "../../_family/auto-renew-actions.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { CdnResetForm } from "../../_console/ConsoleForms.tsx";
 import { CdnDetailContent } from "./CdnDetailContent.tsx";
@@ -47,6 +50,8 @@ export default async function CdnDetailPage({ params, searchParams }: Props) {
   const path = `/cdn/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const cdn = await loadCdnDetail(panel.session, id);
+  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
+  const renew = cdn === null ? null : await loadAutoRenew(panel.session, "cdn", id);
   const tab = one(query["tab"]);
   return (
     <PanelFrame locale={locale} path={path} currentId="cdn" panel={panel}>
@@ -85,6 +90,9 @@ export default async function CdnDetailPage({ params, searchParams }: Props) {
                 />
               ),
             }
+          : {})}
+        {...(renew !== null
+          ? { renewal: <AutoRenewSwitch action={setCdnAutoRenewAction} view={renew} /> }
           : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />

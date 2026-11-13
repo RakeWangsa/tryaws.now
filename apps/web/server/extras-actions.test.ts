@@ -474,29 +474,30 @@ describe("storage and billing", () => {
   });
 });
 
-// WPU-Z2. The order review tells the buyer of every family that a purchase opens with auto-renew on: "You
-// can turn it off at any time on the Billing tab". This pins that promise to the switch: the Billing tab's
-// setAutoRenew accepts each such family. A family added to autoRenewAtPurchase without a switch fails here.
-describe("WPU-Z2: every family bought with auto-renew on can turn it off on the Billing tab", () => {
-  it("the Billing tab switch turns it off for each of them", async () => {
-    const on = FEATURE_FLAGS.filter((family) => autoRenewAtPurchase(family));
-    expect(on).toContain("linux_instance");
-    for (const family of on) {
+// WPU-Z2, WPU-Z14. The Billing tab switch is the switch of a Linux server, and of nothing else: every other
+// family bought with auto-renew on has its own switch (auto-renew-actions.test.ts pins each family to one).
+describe("WPU-Z2: the Billing tab switch belongs to a Linux server only", () => {
+  it("turns it off for a Linux server", async () => {
+    expect(autoRenewAtPurchase("linux_instance")).toBe(true);
+    const w = world({ rows: [row({ family: "linux_instance" })] });
+    expect(await setAutoRenewCore(w.deps, { serverId: SERVER, autoRenew: "off" })).toEqual({
+      ok: true,
+      done: "autoRenewOff",
+    });
+    expect(w.calls).toContain("autoRenew:false");
+    expect(w.calls.at(-1)).toBe("audit:subscription.auto_renew_off");
+  });
+
+  it("refuses every other family as not_found, and writes nothing", async () => {
+    for (const family of FEATURE_FLAGS.filter((f) => f !== "linux_instance")) {
       const w = world({ rows: [row({ family })] });
       expect(
         await setAutoRenewCore(w.deps, { serverId: SERVER, autoRenew: "off" }),
         family,
-      ).toEqual({ ok: true, done: "autoRenewOff" });
-      expect(w.calls, family).toContain("autoRenew:false");
-      expect(w.calls.at(-1), family).toBe("audit:subscription.auto_renew_off");
-    }
-  });
-
-  it("a family the Billing tab refuses is bought with auto-renew off", async () => {
-    for (const family of FEATURE_FLAGS) {
-      const w = world({ rows: [row({ family })] });
-      const answer = await setAutoRenewCore(w.deps, { serverId: SERVER, autoRenew: "off" });
-      if (!answer.ok) expect(autoRenewAtPurchase(family), family).toBe(false);
+      ).toEqual({ ok: false, error: "not_found" });
+      expect(w.calls.some((c) => c.startsWith("autoRenew") || c.startsWith("audit")), family).toBe(
+        false,
+      );
     }
   });
 });

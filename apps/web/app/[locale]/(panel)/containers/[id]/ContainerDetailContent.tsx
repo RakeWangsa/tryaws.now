@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   Button,
   Card,
@@ -62,6 +63,7 @@ export function ContainerDetailContent({
   endpointAction = refuse,
   ids,
   defaultTab,
+  renewal = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -79,6 +81,8 @@ export function ContainerDetailContent({
   endpointAction?: Action;
   ids?: FormIds;
   defaultTab?: string;
+  /** WPU-Z14: the auto-renew switch, built by the page; shown at the end of the Overview tab. */
+  renewal?: ReactNode;
 }) {
   const t = useTranslations("Containers");
   const tc = useTranslations("Console");
@@ -413,7 +417,19 @@ export function ContainerDetailContent({
         <Tabs
           label={t("detail.tabsLabel")}
           tabs={[
-            { id: "overview", title: t("detail.tab.overview"), content: overview },
+            {
+              id: "overview",
+              title: t("detail.tab.overview"),
+              content:
+                renewal === null ? (
+                  overview
+                ) : (
+                  <>
+                    {overview}
+                    {renewal}
+                  </>
+                ),
+            },
             { id: "deployments", title: t("detail.tab.deployments"), content: deployments },
             { id: "deploy", title: t("detail.tab.deploy"), content: deploy },
             { id: "endpoint", title: tc("tab.endpoint"), content: endpoint },

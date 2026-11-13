@@ -10,6 +10,9 @@ import { bucketKeysDeps } from "../../../../../server/bucket-deps.ts";
 import { listBucketKeysCore } from "../../../../../server/bucket-keys.ts";
 import { loadBucketDetail } from "../../../../../server/bucket-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
+import { loadAutoRenew } from "../../../../../server/auto-renew-view.ts";
+import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
+import { setBucketAutoRenewAction } from "../../_family/auto-renew-actions.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { BucketVersioningForm } from "../../_console/ConsoleForms.tsx";
 import { StorageDetailContent } from "./StorageDetailContent.tsx";
@@ -47,6 +50,8 @@ export default async function StorageDetailPage({ params, searchParams }: Props)
   const path = `/storage/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const bucket = await loadBucketDetail(panel.session, id);
+  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
+  const renew = bucket === null ? null : await loadAutoRenew(panel.session, "bucket", id);
   // WPU-N2: the keys through access-details (ownership checked again by the function). Anything but
   // a list is "cannot be listed" (R16); the list holds ids and facts, never a secret.
   const listed =
@@ -92,6 +97,9 @@ export default async function StorageDetailPage({ params, searchParams }: Props)
                 </>
               ),
             }
+          : {})}
+        {...(renew !== null
+          ? { renewal: <AutoRenewSwitch action={setBucketAutoRenewAction} view={renew} /> }
           : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />

@@ -49,6 +49,8 @@ import { invoicesBn } from "../messages/invoices-bn.ts";
 import { invoicesEn } from "../messages/invoices-en.ts";
 import { supportBn } from "../messages/support-bn.ts";
 import { supportEn } from "../messages/support-en.ts";
+import { autoRenewBn } from "../messages/auto-renew-bn.ts";
+import { autoRenewEn } from "../messages/auto-renew-en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const walletOwn: Readonly<Record<Locale, Messages>> = { bn: walletBn, en: walletEn };
@@ -82,6 +84,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     dbg9Bn,
     invoicesBn,
     historyBn,
+    autoRenewBn,
     authOwn.bn,
     kycOwn.bn,
     settingsOwn.bn,
@@ -110,6 +113,7 @@ export const webMessages: Readonly<Record<Locale, Messages>> = {
     dbg9En,
     invoicesEn,
     historyEn,
+    autoRenewEn,
     authOwn.en,
     kycOwn.en,
     settingsOwn.en,

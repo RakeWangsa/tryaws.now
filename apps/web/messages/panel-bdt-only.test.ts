@@ -38,7 +38,7 @@ describe("the panel shows BDT only (WPU-Z2)", () => {
 
   it("the auto-renew line of the review is the owner's sentence, in Bengali in bn, and names no AWS term", () => {
     expect(serversEn.Orders.review.autoRenew).toBe(
-      "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the Billing tab.",
+      "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the page of this service in the panel.",
     );
     expect(serversBn.Orders.review.autoRenew).toMatch(/^স্বয়ংক্রিয় নবায়ন চালু আছে/);
     for (const tree of [serversBn, serversEn]) {

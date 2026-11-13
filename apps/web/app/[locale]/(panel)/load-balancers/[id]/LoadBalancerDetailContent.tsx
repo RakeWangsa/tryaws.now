@@ -33,6 +33,7 @@ export function LoadBalancerDetailContent({
   defaultTab,
   extra = null,
   targetHealth,
+  renewal = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -47,6 +48,8 @@ export function LoadBalancerDetailContent({
   extra?: ReactNode;
   /** WPU-Y8. The health read; without it (the static mockup states) the tab says it is not available. */
   targetHealth?: TargetHealthScreen;
+  /** WPU-Z14: the auto-renew switch, built by the page; shown at the end of the Overview tab. */
+  renewal?: ReactNode;
 }) {
   const t = useTranslations("LoadBalancers");
   const regionLabel = useRegionLabel();
@@ -194,7 +197,19 @@ export function LoadBalancerDetailContent({
         <Tabs
           label={t("detail.tabsLabel")}
           tabs={[
-            { id: "overview", title: t("detail.tab.overview"), content: overview },
+            {
+              id: "overview",
+              title: t("detail.tab.overview"),
+              content:
+                renewal === null ? (
+                  overview
+                ) : (
+                  <>
+                    {overview}
+                    {renewal}
+                  </>
+                ),
+            },
             { id: "targets", title: t("detail.tab.targets"), content: targets },
             { id: "health", title: t("detail.tab.health"), content: health },
             { id: "destroy", title: t("detail.tab.destroy"), content: destroy },

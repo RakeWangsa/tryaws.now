@@ -36,6 +36,7 @@ export function StorageDetailContent({
   keys: keyList = null,
   defaultTab,
   extra = null,
+  renewal = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -51,6 +52,8 @@ export function StorageDetailContent({
   defaultTab?: string;
   /** The versioning form (WPU-G7), built by the page. */
   extra?: ReactNode;
+  /** WPU-Z14: the auto-renew switch, built by the page; shown at the end of the Overview tab. */
+  renewal?: ReactNode;
 }) {
   const t = useTranslations("Storage");
   const regionLabel = useRegionLabel();
@@ -233,7 +236,19 @@ export function StorageDetailContent({
         <Tabs
           label={t("detail.tabsLabel")}
           tabs={[
-            { id: "overview", title: t("detail.tab.overview"), content: overview },
+            {
+              id: "overview",
+              title: t("detail.tab.overview"),
+              content:
+                renewal === null ? (
+                  overview
+                ) : (
+                  <>
+                    {overview}
+                    {renewal}
+                  </>
+                ),
+            },
             { id: "access", title: t("detail.tab.access"), content: access },
             { id: "keys", title: t("detail.tab.keys"), content: keys },
             { id: "destroy", title: t("detail.tab.destroy"), content: destroy },

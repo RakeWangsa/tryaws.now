@@ -446,28 +446,49 @@ describe("/orders/review", () => {
     expect(bn).not.toContain("মার্কিন ডলারে মূল্য");
     const en = await renderPage(ReviewPage as never, "en", {}, { d: "payload.mac" });
     expect(en).toContain(
-      "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the Billing tab.",
+      "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the page of this service in the panel.",
     );
     expect(en).toContain("৳690.00");
     expect(en).not.toMatch(usdAmount);
     expect(en).not.toContain("Price in US dollars");
   });
 
-  // WPU-Z2: only a Linux server is bought with auto-renew on. A domain (nothing renews the name at the
-  // registry yet) and a family without a switch in the panel (a DNS zone, a database, a Windows server) are
-  // bought with it off, so their review must not say it is on or point to a Billing tab.
-  it.each(["domain", "dns_zone", "database", "windows_instance"])(
-    "WPU-Z2: the review of a %s says nothing about auto-renew being on, in bn and en",
+  // WPU-Z14: every family with a subscription is bought with auto-renew on, and each has the switch on the
+  // page of the service, so the review says it is on and points there for each of them.
+  it.each([
+    "windows_instance",
+    "disk",
+    "database",
+    "bucket",
+    "load_balancer",
+    "container_service",
+    "cdn",
+    "dns_zone",
+    "domain",
+  ])("WPU-Z14: the review of a %s says auto-renew is on and where to turn it off, in bn and en", async (fam) => {
+    state.verdict = { ok: true, claims: { ...claims, fam } };
+    const en = await renderPage(ReviewPage as never, "en", {}, { d: "payload.mac" });
+    expect(en).toContain(
+      "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the page of this service in the panel.",
+    );
+    expect(en).not.toContain("Billing tab");
+    const bn = await renderPage(ReviewPage as never, "bn", {}, { d: "payload.mac" });
+    expect(bn).toContain("স্বয়ংক্রিয় নবায়ন চালু আছে");
+    expect(bn).toContain("প্যানেলে এই সেবার পাতায়");
+  });
+
+  // A family with no subscription or switch of its own (a static IP, a backup) is bought with it off: its
+  // review must not say it is on.
+  it.each(["static_ip", "backup"])(
+    "WPU-Z14: the review of a %s says nothing about auto-renew being on, in bn and en",
     async (fam) => {
       state.verdict = { ok: true, claims: { ...claims, fam } };
       const en = await renderPage(ReviewPage as never, "en", {}, { d: "payload.mac" });
       expect(en).toContain("৳690.00");
       expect(en).not.toContain("Auto-renew is on");
-      expect(en).not.toContain("Billing tab");
       const bn = await renderPage(ReviewPage as never, "bn", {}, { d: "payload.mac" });
       expect(bn).toContain("৳৬৯০.০০");
       expect(bn).not.toContain("স্বয়ংক্রিয় নবায়ন চালু আছে");
-      expect(bn).not.toContain("বিলিং ট্যাবে");
     },
   );
 

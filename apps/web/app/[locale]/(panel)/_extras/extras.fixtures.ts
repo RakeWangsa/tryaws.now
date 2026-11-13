@@ -27,6 +27,7 @@ export const noopActions: ExtrasActions = {
   detachDisk: noop,
   destroyDisk: noop,
   setAutoRenew: noop,
+  setDiskAutoRenew: noop,
   renewNow: noop,
   restoreToNewServer: noop,
   destroyServer: noop,
@@ -68,6 +69,7 @@ export function extras(over: Partial<ServerExtras> = {}): ServerExtras {
         state: "active",
         attachedToThis: true,
         attachedElsewhere: false,
+        autoRenew: { resourceId: DISK_ID, autoRenew: true, canTurnOn: true },
       },
     ],
     freeDisks: [
@@ -79,6 +81,7 @@ export function extras(over: Partial<ServerExtras> = {}): ServerExtras {
         state: "active",
         attachedToThis: false,
         attachedElsewhere: false,
+        autoRenew: { resourceId: FREE_DISK_ID, autoRenew: false, canTurnOn: true },
       },
     ],
     diskOffer: { productId: "0190aaaa-0000-7000-8000-0000000000d9", minGb: 8, maxGb: 16384 },

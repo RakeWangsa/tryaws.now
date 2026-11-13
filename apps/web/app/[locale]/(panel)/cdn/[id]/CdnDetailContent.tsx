@@ -63,6 +63,7 @@ export function CdnDetailContent({
   ids,
   defaultTab,
   extra = null,
+  renewal = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -83,6 +84,8 @@ export function CdnDetailContent({
   defaultTab?: string;
   /** The cache flush form (WPU-G7), built by the page. */
   extra?: ReactNode;
+  /** WPU-Z14: the auto-renew switch, built by the page; shown at the end of the Overview tab. */
+  renewal?: ReactNode;
 }) {
   const t = useTranslations("Cdn");
   const tc = useTranslations("Console");
@@ -278,7 +281,19 @@ export function CdnDetailContent({
         <Tabs
           label={t("detail.tabsLabel")}
           tabs={[
-            { id: "overview", title: t("detail.tab.overview"), content: overview },
+            {
+              id: "overview",
+              title: t("detail.tab.overview"),
+              content:
+                renewal === null ? (
+                  overview
+                ) : (
+                  <>
+                    {overview}
+                    {renewal}
+                  </>
+                ),
+            },
             { id: "settings", title: t("detail.tab.settings"), content: settings },
             { id: "cache", title: tc("tab.cache"), content: cache },
             { id: "origin", title: tc("tab.origin"), content: origin },

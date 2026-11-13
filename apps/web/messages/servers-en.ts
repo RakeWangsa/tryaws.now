@@ -302,10 +302,11 @@ export const serversEn: Same<typeof serversBn> = {
       termValue: "30 days",
       renewal:
         "At the end of the term the renewal is paid from your wallet. You can turn automatic renewal off; the server is then suspended.",
-      // WPU-Z2: shown only for a family that a purchase opens with auto-renew on, a Linux server (owner
-      // decision of 2026-11-13; autoRenewAtPurchase of @tc/core). Its Billing tab has the switch.
+      // WPU-Z2, WPU-Z14: shown for a family that a purchase opens with auto-renew on (owner decision of
+      // 2026-11-13; autoRenewAtPurchase of @tc/core): every family with a subscription. Each has the switch
+      // on its own page (a Linux server: Billing tab; a disk: the Storage tab of its server).
       autoRenew:
-        "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the Billing tab.",
+        "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the page of this service in the panel.",
       // WPU-Z2: the panel shows BDT only (owner decision of 2026-11-13); today's rate stays.
       fx: {
         caption: "Exchange rate and amount in taka",

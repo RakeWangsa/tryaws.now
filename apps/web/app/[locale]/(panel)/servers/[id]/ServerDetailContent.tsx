@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { keyFileName, sshCommandOf } from "@tc/core";
 import {
   Button,
@@ -52,6 +53,7 @@ export function ServerDetailContent({
   history = null,
   defaultTab,
   windowsAction = refuseReveal,
+  renewal = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -64,6 +66,8 @@ export function ServerDetailContent({
   defaultTab?: string;
   /** The Server Action of the Windows password; the page passes `revealWindowsPasswordAction`. */
   windowsAction?: (form: FormData) => Promise<RevealResult>;
+  /** WPU-Z14: the auto-renew switch, built by the page; shown at the end of the Overview tab. */
+  renewal?: ReactNode;
 }) {
   const t = useTranslations("Servers");
   const tHistory = useTranslations("History");
@@ -276,7 +280,19 @@ export function ServerDetailContent({
         <Tabs
           label={t("detail.tabsLabel")}
           tabs={[
-            { id: "overview", title: t("detail.tab.overview"), content: overview },
+            {
+              id: "overview",
+              title: t("detail.tab.overview"),
+              content:
+                renewal === null ? (
+                  overview
+                ) : (
+                  <>
+                    {overview}
+                    {renewal}
+                  </>
+                ),
+            },
             { id: "access", title: t("detail.tab.access"), content: access },
             { id: "networking", title: t("detail.tab.networking"), content: networking },
             ...extraTabs,

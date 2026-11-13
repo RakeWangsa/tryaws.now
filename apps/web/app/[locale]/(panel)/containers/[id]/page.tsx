@@ -6,6 +6,9 @@ import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
 import { loadContainerDetail } from "../../../../../server/container-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
+import { loadAutoRenew } from "../../../../../server/auto-renew-view.ts";
+import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
+import { setContainerAutoRenewAction } from "../../_family/auto-renew-actions.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { ContainerDetailContent } from "./ContainerDetailContent.tsx";
 import {
@@ -44,6 +47,8 @@ export default async function ContainerDetailPage({ params, searchParams }: Prop
   const path = `/containers/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const service = await loadContainerDetail(panel.session, id);
+  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
+  const renew = service === null ? null : await loadAutoRenew(panel.session, "container_service", id);
   const tab = one(query["tab"]);
   return (
     <PanelFrame locale={locale} path={path} currentId="containers" panel={panel}>
@@ -70,6 +75,9 @@ export default async function ContainerDetailPage({ params, searchParams }: Prop
           endpoint: newUuidV7(),
           endpointRemove: newUuidV7(),
         }}
+        {...(renew !== null
+          ? { renewal: <AutoRenewSwitch action={setContainerAutoRenewAction} view={renew} /> }
+          : {})}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
       />
     </PanelFrame>
