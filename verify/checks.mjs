@@ -3844,6 +3844,22 @@ const kycCheckWeb = {
     "--no-passWithNoTests",
   ],
 };
+// WPU-Y5 (round 4): SMS-off production check, DNS zone lost-answer safety, tag ruleset script, RSA-only key import.
+TASKS["WPU-Y5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  web,
+  admin,
+  repo,
+];
+
 TASKS["WPU-Y3"] = [
   specSync,
   baselineSync,
