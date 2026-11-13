@@ -9,6 +9,8 @@ import {
   serverStatusForDisk,
 } from "../repositories/system/attached-disks";
 import { withCustomerRepos } from "../testing/repos";
+import type { Tx } from "../client";
+import { runTransaction } from "../tx";
 import { newCustomer, newResource } from "./fixtures";
 import { insertRow } from "./sql";
 import { useTempDatabase } from "./temp-db";
@@ -19,6 +21,9 @@ import { useTempDatabase } from "./temp-db";
 
 const t = useTempDatabase();
 const as = <T>(c: string, fn: (r: CustomerRepos) => Promise<T>) => withCustomerRepos(t.db, c, fn);
+// Fix round 3: the system calls run as worker_rw, the role of the lifecycle engine and the provisioner's guard,
+// so the grants are part of the proof (the customer's destroy runs as web_rw through `as`).
+const worker = <T>(fn: (tx: Tx) => Promise<T>) => runTransaction(t.db, fn, { role: "worker_rw" });
 const PERIOD_END = "2026-01-31T00:00:00.000Z";
 
 async function withSubscription(
@@ -130,10 +135,10 @@ it("is idempotent: a second run replays the stored rows and adds none (R7)", asy
   const a = await newCustomer(t.pool);
   const srv = await server(a);
   const attached = await disk(a, srv);
-  const first = await t.db.transaction((tx) =>
+  const first = await worker((tx) =>
     retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date()),
   );
-  const second = await t.db.transaction((tx) =>
+  const second = await worker((tx) =>
     retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date()),
   );
   expect(first.map((o) => o.created)).toEqual([true, true]);
@@ -148,7 +153,7 @@ it("leaves an ended, a destroyed and a failed disk alone", async () => {
   const ended = await disk(a, srv, "ended");
   const destroyed = await disk(a, srv, "retained", "destroyed");
   const failed = await disk(a, srv, "active", "failed");
-  const out = await t.db.transaction((tx) =>
+  const out = await worker((tx) =>
     retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date()),
   );
   expect(out).toEqual([]);
@@ -189,9 +194,7 @@ it("cross-tenant (R8): a disk of another customer whose config names the server 
 
 it("refuses ids that are not UUIDs before any statement (R16)", async () => {
   await expect(
-    t.db.transaction((tx) =>
-      retainAttachedDisks(tx, { customerId: "x", serverId: "y" }, new Date()),
-    ),
+    worker((tx) => retainAttachedDisks(tx, { customerId: "x", serverId: "y" }, new Date())),
   ).rejects.toThrow(TypeError);
 });
 
@@ -201,17 +204,17 @@ it("markConfig writes retainedWithServer = { serverId, from } once; a disk retai
   const srv = await server(a);
   const graceDisk = await disk(a, srv, "grace");
   const ownDisk = await disk(a, srv, "retained");
-  await t.db.transaction((tx) =>
+  await worker((tx) =>
     retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date(), { markConfig: true }),
   );
   expect(await markOf(graceDisk.id)).toEqual({ serverId: srv, from: "grace" });
   expect(await markOf(ownDisk.id)).toEqual({ serverId: srv, from: "retained" });
   // A replay keeps the first mark (the disk is retained now, its former status is the mark's).
-  await t.db.transaction((tx) =>
+  await worker((tx) =>
     retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date(), { markConfig: true }),
   );
   expect(await markOf(graceDisk.id)).toEqual({ serverId: srv, from: "grace" });
-  const listed = await t.db.transaction((tx) =>
+  const listed = await worker((tx) =>
     listDisksRetainedWithServer(tx, { customerId: a, serverId: srv }),
   );
   expect(new Map(listed.map((d) => [d.diskId, d.from]))).toEqual(
@@ -220,9 +223,7 @@ it("markConfig writes retainedWithServer = { serverId, from } once; a disk retai
       [ownDisk.id, "retained"],
     ]),
   );
-  await t.db.transaction((tx) =>
-    clearRetainedWithServer(tx, { customerId: a, diskId: graceDisk.id }),
-  );
+  await worker((tx) => clearRetainedWithServer(tx, { customerId: a, diskId: graceDisk.id }));
   expect(await markOf(graceDisk.id)).toBeNull();
 });
 
@@ -237,7 +238,7 @@ it("a web-path cascade (no mark) is still found by the payload, with the former 
       withFinalSnapshot: true,
     }),
   );
-  const listed = await t.db.transaction((tx) =>
+  const listed = await worker((tx) =>
     listDisksRetainedWithServer(tx, { customerId: a, serverId: srv }),
   );
   expect(listed).toEqual([
@@ -249,7 +250,7 @@ it("a web-path cascade (no mark) is still found by the payload, with the former 
     },
   ]);
   // Then the engine replays the cascade with the mark: the former status comes from the payload, not "retained".
-  await t.db.transaction((tx) =>
+  await worker((tx) =>
     retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date(), { markConfig: true }),
   );
   expect(await markOf(attached.id)).toEqual({ serverId: srv, from: "active" });
@@ -261,25 +262,23 @@ it("cross-tenant (R8): the list, the server status for a disk and the attached s
   const srvA = await server(a);
   const srvB = await server(b);
   const diskA = await disk(a, srvA);
-  await t.db.transaction((tx) =>
+  await worker((tx) =>
     retainAttachedDisks(tx, { customerId: a, serverId: srvA }, new Date(), { markConfig: true }),
   );
   expect(
-    await t.db.transaction((tx) =>
-      listDisksRetainedWithServer(tx, { customerId: b, serverId: srvA }),
-    ),
+    await worker((tx) => listDisksRetainedWithServer(tx, { customerId: b, serverId: srvA })),
   ).toEqual([]);
-  expect(
-    await t.db.transaction((tx) => serverStatusForDisk(tx, { diskId: diskA.id, serverId: srvA })),
-  ).toBe("active");
+  expect(await worker((tx) => serverStatusForDisk(tx, { diskId: diskA.id, serverId: srvA }))).toBe(
+    "active",
+  );
   // B's server is never the server of A's disk: null, so the guard refuses.
   expect(
-    await t.db.transaction((tx) => serverStatusForDisk(tx, { diskId: diskA.id, serverId: srvB })),
+    await worker((tx) => serverStatusForDisk(tx, { diskId: diskA.id, serverId: srvB })),
   ).toBeNull();
+  expect(await worker((tx) => attachedServerStatus(tx, { customerId: a, serverId: srvA }))).toBe(
+    "active",
+  );
   expect(
-    await t.db.transaction((tx) => attachedServerStatus(tx, { customerId: a, serverId: srvA })),
-  ).toBe("active");
-  expect(
-    await t.db.transaction((tx) => attachedServerStatus(tx, { customerId: b, serverId: srvA })),
+    await worker((tx) => attachedServerStatus(tx, { customerId: b, serverId: srvA })),
   ).toBeNull();
 });

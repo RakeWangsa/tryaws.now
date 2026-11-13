@@ -64,6 +64,16 @@ export async function retainAttachedDisks(
 ): Promise<AttachedDiskOperation[]> {
   if (!isUuid(input.customerId)) throw new TypeError("attached disks: customer id is not a UUID");
   if (!isUuid(input.serverId)) throw new TypeError("attached disks: server id is not a UUID");
+  // Fix round 3: web_rw may not read operations.payload (grants.expected.json), so the former status kept in an
+  // earlier destroy's payload is read on the worker path (markConfig) only. The web path (the customer's own destroy)
+  // reads the subscription's own status, which is all it needs: it runs once, before the disk is retained.
+  const payloadFrom =
+    options.markConfig === true
+      ? sql`(select o.payload ->> 'from' from operations o
+          where o.resource_id = r.id and o.kind = 'destroy'
+            and o.payload ->> 'withServer' = ${input.serverId}
+          order by o.created_at desc, o.id desc limit 1)`
+      : sql`null::text`;
   const { rows } = await tx.execute<{
     disk_id: string;
     subscription_id: string;
@@ -74,10 +84,7 @@ export async function retainAttachedDisks(
   }>(sql`
     select r.id as disk_id, s.id as subscription_id, s.status, s.period_end,
       r.config -> 'retainedWithServer' as mark,
-      (select o.payload ->> 'from' from operations o
-        where o.resource_id = r.id and o.kind = 'destroy'
-          and o.payload ->> 'withServer' = ${input.serverId}
-        order by o.created_at desc, o.id desc limit 1) as payload_from
+      ${payloadFrom} as payload_from
     from resources r
     join subscriptions s on s.resource_id = r.id
     where r.customer_id = ${input.customerId} and s.customer_id = ${input.customerId}

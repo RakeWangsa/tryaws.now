@@ -58,14 +58,24 @@ it("a payment after the unpaid retention gives the server AND its attached disk 
     `insert into settings (id, key, market, scope, scope_id, value, created_at)
      values (gen_random_uuid(), 'lifecycle_unpaid_enabled', 'BD', 'market', null, 'true'::jsonb, now())`,
   );
-  const unpaid = (now: Date) => {
+  // Fix round 3: a USD to BDT rate older than 7 days prices nothing (WPU-Y1), and the retry of a charge that cannot
+  // be priced is "blocked" (no stage, no retention). The rate in force is re-confirmed at the clock before each run,
+  // as the lifecycle tests do, so day 7 reaches the deletion stage.
+  const unpaid = async (now: Date) => {
     kit.clock.set(now);
+    await kit.refreshFx();
     return runUnpaid({ runTx: worker, clock: kit.clock, log: () => undefined });
   };
 
   kit.clock.set(T0);
+  await kit.refreshFx();
   await runStaticIpMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
   await unpaid(T0);
+  // The episode started at T0 (the first charge failed for the empty wallet).
+  const since = await q("select config ->> 'unpaidSince' as s from resources where id = $1", [
+    serverId,
+  ]);
+  expect(since[0]!.s).toBe(T0.toISOString());
   // 7 days unpaid: the server is retained, and its attached disk with it.
   const day7 = new Date(T0.getTime() + 7 * DAY + 3_600_000);
   expect(await unpaid(day7)).toMatchObject({ retained: 1 });
