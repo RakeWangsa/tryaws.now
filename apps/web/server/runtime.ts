@@ -11,6 +11,7 @@ import {
 import type { Eps, EpsDeps, EpsGateway } from "@tc/eps";
 import { GatewaySmsProvider, GennetSmsTransport, OTP_SEND_RULES } from "@tc/notify";
 import type { OtpDeps, SmsProvider } from "@tc/notify";
+import type { KycUploadCheck } from "@tc/core";
 import { headers } from "next/headers";
 import { readWebConfig } from "./config.ts";
 import type { WebConfig } from "./config.ts";
@@ -18,6 +19,7 @@ import type { ReaderPort } from "./extras-view.ts";
 import type { KycPorts } from "./kyc-actions.ts";
 import { writeLog } from "./log.ts";
 import { accessPortFromEnv, type AccessPort } from "./access-invoke.ts";
+import { kycCheckPortFromEnv } from "./kyc-check-invoke.ts";
 import { readerPortFromEnv } from "./reader-invoke.ts";
 import { rendererPortFromEnv, type RendererPort } from "./renderer-invoke.ts";
 import { linkedSecrets, type SecretSource } from "./secrets.ts";
@@ -41,9 +43,15 @@ export interface WebRuntime {
   /**
    * The object store and the crypto of the identity check (WP2-T4). null = not configured, which is
    * every stage but local and test until the S3 and KMS adapters are verified on staging: /kyc then
-   * shows the "not open" state (R16).
+   * shows the "not open" state (R16). The arrival check is its own port (`kycCheck`).
    */
-  kyc: KycPorts | null;
+  kyc: Omit<KycPorts, "check"> | null;
+  /**
+   * The invoke port of the `kyc-check` function (WPU-Y3): did a KYC upload arrive, its size and type.
+   * null = not configured: a KYC submit refuses as unavailable (R16). Local and test with fakes use the
+   * in-memory stand-in instead.
+   */
+  kycCheck: KycUploadCheck | null;
   /**
    * The identity provider's change calls and the phone OTP service of /settings (WP2-T5). null =
    * not configured: the changes of e-mail, phone and password refuse (R16). Only local and test
@@ -224,12 +232,17 @@ export async function assembleRuntime(
 
   // The KYC store and the account changes have no real adapter before the staging VERIFY: only the
   // fakes, only in development and test (the literal condition lets the bundler drop the imports).
-  let kyc: KycPorts | null = null;
+  // WPU-Y3: the arrival check is the kyc-check invoke port when KYC_CHECK_FUNCTION_NAME is set; with the
+  // fakes, the in-memory stand-in that answers from the fake store.
+  let kyc: Omit<KycPorts, "check"> | null = null;
+  let kycCheck: KycUploadCheck | null = kycCheckPortFromEnv(env);
   let account: AccountPorts | null = null;
   if (process.env.NODE_ENV !== "production" && config.fakes) {
     const kycFakes = await import("./fakes/kyc-fakes.ts");
     const accountFakes = await import("./fakes/account-fakes.ts");
-    kyc = kycFakes.getDevKyc();
+    const devKyc = kycFakes.getDevKyc();
+    kyc = { objects: devKyc.objects, crypto: devKyc.crypto };
+    kycCheck = devKyc.check;
     account = accountFakes.getDevAccount();
   }
 
@@ -265,6 +278,7 @@ export async function assembleRuntime(
       otp,
       authLimitKey,
       kyc,
+      kycCheck,
       account,
       reader,
       access,
