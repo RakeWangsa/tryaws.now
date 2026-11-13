@@ -206,7 +206,7 @@ describe("windows lifecycle shares the instance rules", () => {
     const { aws, adapter, ctx } = setup();
     aws.on("lightsail", "DeleteInstance", notFound());
     aws.on("lightsail", "ReleaseStaticIp", notFound());
-    expect(await adapter.aws.destroy(ctx(null))).toMatchObject({ step: "release_ip" });
+    expect(await adapter.aws.destroy(ctx("delete_instance"))).toMatchObject({ step: "release_ip" });
     expect(await adapter.aws.destroy(ctx("release_ip"))).toMatchObject({ kind: "done" });
   });
 

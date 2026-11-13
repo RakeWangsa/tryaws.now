@@ -319,6 +319,12 @@ export async function attachDiskCore(deps: ExtrasDeps, raw: unknown): Promise<Ex
       if (!["active", "stopped"].includes(server.state) || server.region !== disk.region) {
         throw new Refusal("not_allowed");
       }
+      // WPU-Y4: a server whose subscription is retained is being destroyed and takes its disks with it; a disk is
+      // never attached to it. No subscription row is a refusal too (R16).
+      const subscription = await repos.subscriptions.get(serverId);
+      if (subscription === null || !["active", "grace"].includes(subscription.status)) {
+        throw new Refusal("not_allowed");
+      }
       await request(repos, {
         resourceId: diskId,
         kind: "attach_disk",

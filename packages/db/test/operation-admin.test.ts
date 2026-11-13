@@ -171,6 +171,75 @@ describe("rejectOperation", () => {
     });
   });
 
+  // WPU-Y4 fix round 5 (M2): rejecting the destroy of a retained subscription whose resource lives leaves it with
+  // no live destroy; an attention item is written in the same transaction (once), ids and fixed words only.
+  it("a rejected retention destroy writes one attention item; one of a non-retained subscription writes none", async () => {
+    const customer = await newCustomer(t.pool);
+    const sub = async (status: string) => {
+      const res = await newResource(t.pool, customer, { state: "suspended" });
+      await insertRow(t.pool, "subscriptions", {
+        resource_id: res,
+        customer_id: customer,
+        term_days: 30,
+        price_snapshot: "{}",
+        period_start: "2026-01-01T00:00:00Z",
+        period_end: "2026-01-31T00:00:00Z",
+        status,
+      });
+      return res;
+    };
+    const items = async (res: string) =>
+      (
+        await t.pool.query(
+          "select kind, details from discrepancies where details ->> 'resourceId' = $1",
+          [res],
+        )
+      ).rows;
+    const retained = await sub("retained");
+    const a = await insertRow(t.pool, "operations", {
+      resource_id: retained,
+      kind: "destroy",
+      state: "needs_approval",
+      needs_approval: true,
+      idempotency_key: "a:" + uniqueSuffix(),
+    });
+    await admin((tx) => rejectOperation(tx, { operationId: a, at: AT }));
+    await admin((tx) => rejectOperation(tx, { operationId: a, at: AT }));
+    expect(await items(retained)).toEqual([
+      {
+        kind: "missing",
+        details: {
+          resourceId: retained,
+          operationId: a,
+          reason: "retention_destroy_rejected",
+          source: "admin_reject",
+        },
+      },
+    ]);
+    // needs_attention: the reject is a reject_operation; the item is written once too.
+    const b = await insertRow(t.pool, "operations", {
+      resource_id: retained,
+      kind: "destroy",
+      state: "needs_attention",
+      attempts: 3,
+      idempotency_key: "a:" + uniqueSuffix(),
+    });
+    await admin((tx) => rejectOperation(tx, { operationId: b, at: AT }));
+    await admin((tx) => rejectOperation(tx, { operationId: b, at: AT }));
+    expect((await items(retained)).filter((r) => r.details.operationId === b)).toHaveLength(1);
+    // An active subscription: nothing to note.
+    const active = await sub("active");
+    const c = await insertRow(t.pool, "operations", {
+      resource_id: active,
+      kind: "destroy",
+      state: "needs_approval",
+      needs_approval: true,
+      idempotency_key: "a:" + uniqueSuffix(),
+    });
+    await admin((tx) => rejectOperation(tx, { operationId: c, at: AT }));
+    expect(await items(active)).toEqual([]);
+  });
+
   it("a create that waits for approval is not rejected here: conflict, nothing written", async () => {
     const id = await seed("needs_approval", { needs_approval: true, kind: "create" });
     expect(await admin((tx) => rejectOperation(tx, { operationId: id, at: AT }))).toEqual({

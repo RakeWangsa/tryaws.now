@@ -469,6 +469,24 @@ export {
   type ConfigPriceKey,
 } from "./seed/config-prices";
 export { isCandidateKey, lifecycleRepo } from "./repositories/system/lifecycle";
+export {
+  RETAINED_WITH_SERVER_KEY,
+  attachedServerStatus,
+  clearRetainedWithServer,
+  endDiskRetentionOps,
+  lifecycleOperationKey,
+  listDisksRetainedWithServer,
+  lockDiskRetentionOps,
+  recordDiskHeld,
+  retainAttachedDisks,
+  serverStatusForDisk,
+} from "./repositories/system/attached-disks";
+export type {
+  AttachedDiskOperation,
+  DiskRetainedWithServer,
+  DiskRetentionOp,
+  RetainedFrom,
+} from "./repositories/system/attached-disks";
 export { pollingRepo } from "./repositories/system/polling";
 export type { PollingRepo } from "./repositories/system/polling";
 export type {

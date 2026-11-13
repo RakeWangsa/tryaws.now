@@ -205,6 +205,20 @@ describe("/servers/[id] with the tabs of WP5-T6", () => {
     expect(en).toContain('name="productId" value=""');
     expect(en).toMatch(/<button[^>]*disabled[^>]*>[^<]*(<[^>]+>)*[^<]*Go to the next step/);
   });
+  it("WPU-Y4: the Destroy tab lists the attached disks and says they are deleted with the server (bn, en)", async () => {
+    const en = await detailHtml("en", { tab: "destroy" });
+    expect(en).toContain("Disks deleted with this server");
+    expect(en).toMatch(/Disks deleted with this server[\s\S]*data[\s\S]*64 GB/);
+    expect(en).toContain("The attached disks (data) are deleted too");
+    const bn = await detailHtml("bn", { tab: "destroy" });
+    expect(bn).toContain("সার্ভারের সঙ্গে যে ডিস্ক মুছে যাবে");
+    expect(bn).toContain("যুক্ত ডিস্কগুলোও (data) মুছে যাবে");
+    // Without an attached disk there is no such section and the plain confirmation.
+    state.screen = { state: "ready", extras: extras({ disks: [] }) };
+    const none = await detailHtml("en", { tab: "destroy" });
+    expect(none).not.toContain("Disks deleted with this server");
+    expect(none).not.toContain("The attached disks");
+  });
   it("opens the tab named in the query", async () => {
     expect(await detailHtml("en", { tab: "metrics" })).toMatch(
       /aria-selected="true"[^>]*>(?:[^<]*<[^>]+>)*[^<]*Metrics/,

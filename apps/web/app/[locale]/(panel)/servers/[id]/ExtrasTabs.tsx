@@ -202,6 +202,7 @@ function StorageTab({
 }) {
   const t = useTranslations("Extras.storage");
   const tr = useTranslations("DiskRestore");
+  const tl = useTranslations("DiskList");
   const te = useTranslations("Extras");
   const size = (disk: DiskItem): ReactNode =>
     disk.sizeGb === null ? te("none") : `${disk.sizeGb} GB`;
@@ -297,6 +298,11 @@ function StorageTab({
           </Button>
         </p>
       )}
+      <p className="mt-3">
+        <Button href={localePath(locale, "/servers/disks")} size="sm">
+          {tl("link")}
+        </Button>
+      </p>
     </>
   );
 }
@@ -451,6 +457,10 @@ function BillingTab({
 
 function DestroyTab({ data, actions }: { data: ServerExtras; actions: ExtrasActions }) {
   const t = useTranslations("Extras.destroy");
+  const te = useTranslations("Extras");
+  // WPU-Y4: the disks attached to this server are destroyed with it (owner decision 2026-11-14).
+  const diskName = (disk: DiskItem): string => disk.name || disk.id.slice(0, 8);
+  const names = data.disks.map(diskName).join(", ");
   return (
     <>
       <h3 className="mergecolor h4">{t("deletes")}</h3>
@@ -458,6 +468,25 @@ function DestroyTab({ data, actions }: { data: ServerExtras; actions: ExtrasActi
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {t("deletesBody")}
       </div>
+      {data.disks.length === 0 ? null : (
+        <>
+          <h3 className="mergecolor h4">{t("disksTitle")}</h3>
+          <div className="alert alert-warning text-start" role="note">
+            <i className="fas fa-hdd me-2" aria-hidden="true" />
+            {t("disksBody", { names })}
+          </div>
+          <ul className="seccolor">
+            {data.disks.map((disk) => (
+              <li key={disk.id}>
+                {t("disk", {
+                  name: diskName(disk),
+                  size: disk.sizeGb === null ? te("none") : `${disk.sizeGb} GB`,
+                })}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       <h3 className="mergecolor h4">{t("keeps")}</h3>
       <p className="seccolor">{t("keepsBody", { count: data.destroy.manualBackups })}</p>
       <h3 className="mergecolor h4">{t("period")}</h3>
@@ -470,7 +499,11 @@ function DestroyTab({ data, actions }: { data: ServerExtras; actions: ExtrasActi
         resourceName={data.name}
         label={t("button")}
         title={t("confirmTitle")}
-        description={t("confirmDescription")}
+        description={
+          data.disks.length === 0
+            ? t("confirmDescription")
+            : t("confirmDescriptionWithDisks", { names })
+        }
         disabled={!data.destroy.allowed}
       />
     </>

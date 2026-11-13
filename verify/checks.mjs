@@ -3815,6 +3815,23 @@ TASKS["WPU-Z19"] = [
   repo,
 ];
 
+// WPU-Y4: a destroyed server takes its attached disks with it (lifecycle, customer destroy, adapters, the disk list
+// page); core, db and the cross-tenant suite include PostgreSQL.
+TASKS["WPU-Y4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  crossTenant,
+  aws,
+  provisioner,
+  web,
+  repo,
+];
+
 // WPU-Y1: app images move to the Lightsail-packaged blueprints (core tables and defaults; no DB change).
 TASKS["WPU-Y1"] = [specSync, baselineSync, lint, typecheck, format, core, repo];
 

@@ -1,7 +1,11 @@
 import {
+  attachedServerStatus,
+  insertFreshOperation,
   insertOperation,
+  lifecycleOperationKey,
   lifecycleRepo,
   patchResource,
+  retainAttachedDisks,
   type LifecycleRow,
   type OperationKind,
   type Tx,
@@ -27,6 +31,7 @@ import { planApplyWait, queuePlanApply } from "./plan-change";
 import { renewalQuote, renewSubscription, type Renewed } from "./renew";
 import { holdReasonOf, nextHoldMarker, staleHoldMarkers, type HoldReason } from "./hold-rule";
 import { walkCandidates } from "./candidate-walk";
+import { attachedServerOf, diskRenewalHeld } from "./attached-disks";
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -89,8 +94,8 @@ interface StepResult {
 
 // The key of an operation of the lifecycle: one per subscription, kind and period, so a repeat of
 // any run is a replay of the stored row (R7) and a new period starts afresh.
-function opKey(kind: string, row: LifecycleRow, at: Date): string {
-  return `lifecycle:${kind}:${row.id}:${at.toISOString()}`;
+function opKey(kind: OperationKind, row: LifecycleRow, at: Date): string {
+  return lifecycleOperationKey(kind, row.id, at);
 }
 
 class Work {
@@ -105,14 +110,18 @@ class Work {
   ) {}
 
   // R1: only an operation row. The queue message goes out after the commit.
-  async enqueue(kind: OperationKind, keyAt: Date): Promise<void> {
+  // WPU-Y4 fix round 4: `fresh` (a retention that starts now) moves past an ENDED row under the key (a release of an
+  // earlier retention in the same period, with or without an unpaid episode) to `<key>:after:<id>`; without it the
+  // subscription would stay retained with no live destroy, unbilled for ever. The ensure pass (already retained)
+  // only replays.
+  async enqueue(kind: OperationKind, keyAt: Date, fresh = false): Promise<void> {
     const request = (key: string) => ({
       resourceId: this.row.resourceId,
       kind,
       payload: { subscriptionId: this.row.id },
       idempotencyKey: key,
     });
-    const key = opKey(kind.replaceAll("_", "-"), this.row, keyAt);
+    const key = opKey(kind, this.row, keyAt);
     let inserted = await insertOperation(this.tx, request(key), this.now);
     // WPU-Y3b. A second unpaid episode in the same period must not get the dead (or finished) row of
     // the first one back: when the stored row is such, the episode takes a key of its own.
@@ -123,6 +132,15 @@ class Work {
       (kind === "destroy" || kind === "final_snapshot")
     ) {
       inserted = await insertOperation(this.tx, request(`${key}:u${this.episode}`), this.now);
+    }
+    if (
+      fresh &&
+      !inserted.created &&
+      retentionKeyNeedsSalt(inserted.state) &&
+      (kind === "destroy" || kind === "final_snapshot")
+    ) {
+      const last = this.episode !== undefined ? `${key}:u${this.episode}` : key;
+      inserted = await insertFreshOperation(this.tx, request(last), this.now);
     }
     if (inserted.created && inserted.state === "queued") {
       this.messages.push(firstMessage(inserted.operationId, this.row.resourceId));
@@ -338,7 +356,7 @@ async function enterGrace(work: Work, deps: LifecycleDeps, graceStart?: Date): P
 async function retain(work: Work): Promise<void> {
   const { row } = work;
   await lifecycleRepo(work.tx).setStatus(row.id, "retained");
-  await queueRetentionOperations(work);
+  await queueRetentionOperations(work, true);
 }
 
 // WPU-Y3: the unpaid-usage rule retains a subscription at 7 days unpaid. The same steps as the end of
@@ -358,11 +376,31 @@ export async function retainSubscription(
   return work.messages;
 }
 
-async function queueRetentionOperations(work: Work): Promise<void> {
+// WPU-Y4: the families a block storage disk is attached to (config.attachedInstanceId).
+const SERVER_FAMILIES: readonly string[] = ["linux_instance", "windows_instance"];
+
+async function queueRetentionOperations(work: Work, fresh = false): Promise<void> {
   if (SNAPSHOT_FAMILIES.includes(work.row.resource.family)) {
-    await work.enqueue("final_snapshot", work.row.periodEnd);
+    await work.enqueue("final_snapshot", work.row.periodEnd, fresh);
   }
-  await work.enqueue("destroy", work.row.periodEnd);
+  await work.enqueue("destroy", work.row.periodEnd, fresh);
+  // WPU-Y4 (owner decision 2026-11-14): a server's disks end with it. Their subscriptions become `retained` in this
+  // transaction and their final snapshot and destroy are queued under their own lifecycle keys (a replay on every
+  // later pass, R7). The disk's destroy waits for the server's destroy to stop the server.
+  if (SERVER_FAMILIES.includes(work.row.resource.family)) {
+    const disks = await retainAttachedDisks(
+      work.tx,
+      { customerId: work.row.customerId, serverId: work.row.resourceId },
+      work.now,
+      // Fix round 2: the mark on the disk (worker_rw) lets a revival of the server give the disk its status back.
+      { markConfig: true },
+    );
+    for (const op of disks) {
+      if (op.created && op.state === "queued") {
+        work.messages.push(firstMessage(op.operationId, op.diskId));
+      }
+    }
+  }
 }
 
 async function end(work: Work): Promise<void> {
@@ -420,6 +458,40 @@ async function remind(work: Work, day: number, deps: LifecycleDeps): Promise<boo
   );
 }
 
+export const SERVER_HOLD_KEY = "serverHold";
+const HELD_ACTIONS: readonly LifecycleAction["type"][] = ["period_end", "retry_renew", "retain"];
+
+// WPU-Y4 fix round 2 (point 2). true = the action of a disk waits for its server (nothing else is done this pass).
+async function diskServerHold(
+  tx: Tx,
+  row: LifecycleRow,
+  action: LifecycleAction,
+  now: Date,
+  deps: LifecycleDeps,
+): Promise<boolean> {
+  const serverId = attachedServerOf(row.resource.config);
+  const serverStatus =
+    serverId === null
+      ? null
+      : await attachedServerStatus(tx, { customerId: row.customerId, serverId });
+  const marked = row.resource.config[SERVER_HOLD_KEY];
+  const held = diskRenewalHeld(serverStatus) && HELD_ACTIONS.includes(action.type);
+  if (held) {
+    if (marked === undefined || marked === null) {
+      await patchResource(tx, row.resourceId, {
+        configMerge: { [SERVER_HOLD_KEY]: { serverId, since: now.toISOString() } },
+      });
+      // Ids and fixed words only (R14).
+      deps.log({ event: "lifecycle", action: "disk_held_for_server", subscriptionId: row.id });
+    }
+    return true;
+  }
+  if (marked !== undefined && marked !== null) {
+    await patchResource(tx, row.resourceId, { configMerge: { [SERVER_HOLD_KEY]: null } });
+  }
+  return false;
+}
+
 // One subscription, in its own transaction, under the lock of its row. The decision is taken again
 // on the locked row, so two runs together never act twice (and the ledger key stops the money).
 async function process(
@@ -450,6 +522,15 @@ async function process(
     now,
     config,
   );
+
+  // WPU-Y4 fix round 2 (point 2). A disk attached to a server whose subscription is in grace or retained is not
+  // renewed (no charge, no grace of its own) while that lasts: the cascade may destroy it with the server within
+  // hours. A mark says since when (once); it goes as soon as the server is active again, and the disk's period end
+  // is then handled as usual on the same pass.
+  if (row.resource.family === "disk") {
+    const hold = await diskServerHold(tx, row, action, now, deps);
+    if (hold) return { step: "none", messages: work.messages };
+  }
 
   // WPU-S5: a pending power, scale or bundle change is applied shortly BEFORE the renewal, so the
   // renewal charges the plan the customer then has. Inside the lead window only, once per period.

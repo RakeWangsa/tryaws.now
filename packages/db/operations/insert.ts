@@ -182,3 +182,27 @@ export async function insertOperation(
     enqueueSeq: stored.enqueueSeq,
   };
 }
+
+/** WPU-Y4 fix round 4. The most ended operations one key chain may pass before it refuses (R16). */
+export const FRESH_CHAIN_MAX = 50;
+const ENDED_STATES = new Set<string>(["failed", "succeeded"]);
+
+/**
+ * WPU-Y4 fix round 4. Like insertOperation, but a key whose stored operation has ENDED (failed or succeeded) is not
+ * an answer: a new operation is wanted (a resource retained again after a release in the same period). The next key
+ * is `<key>:after:<id of the ended operation>`, deterministic, so a repeat of the same call is a replay of the same
+ * row (R7). A live stored operation (queued, waiting, running, needs_approval, needs_attention) is replayed as it is.
+ */
+export async function insertFreshOperation(
+  tx: Tx,
+  input: OperationInput,
+  at: Date,
+): Promise<InsertedOperation> {
+  let key = input.idempotencyKey;
+  for (let i = 0; i < FRESH_CHAIN_MAX; i += 1) {
+    const inserted = await insertOperation(tx, { ...input, idempotencyKey: key }, at);
+    if (inserted.created || !ENDED_STATES.has(inserted.state)) return inserted;
+    key = `${input.idempotencyKey}:after:${inserted.operationId}`;
+  }
+  throw new RangeError("operation: too many ended operations under one key");
+}

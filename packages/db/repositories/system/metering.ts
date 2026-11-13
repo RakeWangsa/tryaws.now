@@ -70,6 +70,8 @@ export interface ResourceOpRow {
   readonly attempts: number;
   /** `created_at` in ms: the order in which the provisioner takes operations of one resource. */
   readonly createdAtMs: number;
+  /** WPU-Y4 fix round 4: the step it is at (null before its first run). Optional for older callers. */
+  readonly step?: string | null;
 }
 
 export type UnpaidFlagKey = "unpaidSuspended" | "unpaidRetained" | "unpaidRetainedFrom";
@@ -341,9 +343,10 @@ export function meteringRepo(tx: Tx) {
         approved: boolean;
         attempts: number;
         created_ms: string;
+        step: string | null;
       }>(sql`
         select id, kind, idempotency_key as key, state, (approved_by is not null) as approved,
-          attempts, (extract(epoch from created_at) * 1000)::bigint::text as created_ms
+          attempts, (extract(epoch from created_at) * 1000)::bigint::text as created_ms, step
         from operations
         where resource_id = ${resourceId} and kind in (${sql.join(
           kinds.map((k) => sql`${k}`),
@@ -360,6 +363,7 @@ export function meteringRepo(tx: Tx) {
         approved: r.approved,
         attempts: Number(r.attempts),
         createdAtMs: Number(r.created_ms),
+        step: r.step ?? null,
       }));
     },
 

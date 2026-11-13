@@ -581,7 +581,7 @@ describe("suspend, resume, snapshot, destroy, actions", () => {
   it("destroy treats not-found as done and releases the static IP", async () => {
     const { aws, adapter, ctx } = setup();
     aws.on("lightsail", "DeleteInstance", notFound());
-    expect(await adapter.aws.destroy(ctx(null))).toMatchObject({
+    expect(await adapter.aws.destroy(ctx("delete_instance"))).toMatchObject({
       kind: "next",
       step: "release_ip",
     });

@@ -62,6 +62,8 @@ function world(
     approval?: boolean;
     destroyError?: "conflict" | "not_found";
     renew?: Awaited<ReturnType<ExtrasRepos["renewNow"]>>;
+    /** WPU-Y4: the status of the server's subscription; null = no row. */
+    serverStatus?: "active" | "grace" | "retained" | "ended" | null;
   } = {},
 ): World {
   const calls: string[] = [];
@@ -97,7 +99,10 @@ function world(
       },
     },
     subscriptions: {
-      get: async () => null,
+      get: async (id) => {
+        const status = over.serverStatus === undefined ? "active" : over.serverStatus;
+        return id === SERVER && status !== null ? ({ resourceId: SERVER, status } as never) : null;
+      },
       list: async () => [],
       setAutoRenew: async (id, on) => {
         calls.push(`autoRenew:${on}`);
@@ -436,6 +441,29 @@ describe("storage and billing", () => {
       ok: false,
       error: "not_allowed",
     });
+  });
+  it("attach (WPU-Y4): refused to a server whose subscription is retained, ended or missing (it is being destroyed)", async () => {
+    for (const serverStatus of ["retained", "ended", null] as const) {
+      const w = world({ serverStatus });
+      expect(
+        await attachDiskCore(w.deps, {
+          diskId: DISK,
+          serverId: SERVER,
+          requestId: REQ,
+          diskPath: "/dev/xvdf",
+        }),
+      ).toEqual({ ok: false, error: "not_allowed" });
+      expect(w.calls.some((c) => c.startsWith("op:attach_disk"))).toBe(false);
+    }
+    const grace = world({ serverStatus: "grace" });
+    expect(
+      await attachDiskCore(grace.deps, {
+        diskId: DISK,
+        serverId: SERVER,
+        requestId: REQ,
+        diskPath: "/dev/xvdf",
+      }),
+    ).toEqual({ ok: true, done: "diskAttaching" });
   });
   it("detach needs an attached disk", async () => {
     expect(await detachDiskCore(world().deps, { diskId: DISK, requestId: REQ })).toEqual({

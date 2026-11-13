@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import { v7 as uuidv7 } from "uuid";
 import type { Tx } from "../client";
 import { isUuid } from "../repositories/scope";
 import { operations } from "../schema/provisioning";
@@ -136,7 +137,9 @@ export async function rejectOperation(
       .where(and(eq(operations.id, target.id), eq(operations.state, "needs_approval")))
       .returning({ id: operations.id });
     // No row: another admin was faster.
-    return updated.length === 1 ? { ok: true, replayed: false, message: null } : CONFLICT;
+    if (updated.length !== 1) return CONFLICT;
+    await noteRejectedRetention(tx, target);
+    return { ok: true, replayed: false, message: null };
   }
 
   if (target.state === "needs_attention") {
@@ -152,6 +155,8 @@ export async function rejectOperation(
       },
       input.at,
     );
+    // A repeat of the same reject is a replay: the attention item is written once.
+    if (inserted.created) await noteRejectedRetention(tx, target);
     return accepted(
       !inserted.created,
       inserted.operationId,
@@ -161,4 +166,29 @@ export async function rejectOperation(
   }
 
   return CONFLICT;
+}
+
+/**
+ * WPU-Y4 fix round 5 (M2). An admin's reject of a destroy whose subscription is `retained` and whose resource still
+ * lives leaves the subscription retained with no live destroy: no renewal, no charge, no deletion. That is TiCON's
+ * cost until someone acts, so an attention item is written in the same transaction (admin_rw may insert
+ * discrepancies). Ids and fixed words only (R14). A repeat of the reject is a replay above and writes nothing more.
+ */
+async function noteRejectedRetention(
+  tx: Tx,
+  target: { readonly id: string; readonly kind: string; readonly resourceId: string },
+): Promise<void> {
+  if (target.kind !== "destroy") return;
+  const { rows } = await tx.execute<{ status: string }>(sql`
+    select s.status from subscriptions s join resources r on r.id = s.resource_id
+    where r.id = ${target.resourceId} and r.state not in ('destroyed', 'failed') and r.deleted_at is null`);
+  if (rows[0]?.status !== "retained") return;
+  const details = JSON.stringify({
+    resourceId: target.resourceId,
+    operationId: target.id,
+    reason: "retention_destroy_rejected",
+    source: "admin_reject",
+  });
+  await tx.execute(sql`insert into discrepancies (id, kind, details)
+    values (${uuidv7()}, 'missing', ${details}::jsonb)`);
 }

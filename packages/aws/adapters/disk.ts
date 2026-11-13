@@ -18,6 +18,8 @@ import {
 import { runFinalSnapshot, runPurgeSnapshots, type BackupDeps } from "./backup";
 import {
   checkWaitBudget,
+  destroyWait,
+  detachWait,
   fail,
   hasTag,
   ignoreNotFound,
@@ -246,20 +248,73 @@ export function createDiskAdapter(deps: BackupDeps): ProductAdapter<DiskConfig> 
     return stepWait("wait_detached", pollAt(ctx));
   }
 
+  /**
+   * WPU-Y4. The destroy of a disk whose server is destroyed (the lifecycle names the server in the payload,
+   * `withServer`). The server must be the customer's (ctx.owned, R8) and the very instance the disk is attached to.
+   * The server's own destroy stops it; until it is stopped this destroy waits, bounded (destroyWait). It never stops
+   * a server itself. true = the server is stopped and the disk may be detached.
+   */
+  async function serverStoppedForDestroy(
+    ctx: OpCtx<DiskConfig>,
+    serverId: string,
+    attachedTo: unknown,
+  ): Promise<boolean> {
+    const server = await ctx.owned(serverId);
+    if (server === null || typeof attachedTo !== "string") throw fail("conflict");
+    if (attachedTo !== awsResourceName("instance", server.id)) throw fail("conflict");
+    const got = await orNull(() =>
+      lightsailOf(ctx).send(new GetInstanceCommand({ instanceName: attachedTo })),
+    );
+    // Attached to an instance that cannot be found or has no state: not a wait, a refusal (R16).
+    const state = got?.instance?.state?.name;
+    if (state === undefined) throw fail("conflict");
+    return state === "stopped";
+  }
+
+  /**
+   * WPU-Y4. The server this destroy goes with: the payload's `withServer`, else (fix round 2) the disk's mark
+   * `retainedWithServer.serverId` that the lifecycle wrote when it retained the disk with its server (a destroy the
+   * disk got on its own and the cascade replayed has no `withServer` in its payload). undefined = none.
+   */
+  function withServerOf(ctx: OpCtx<DiskConfig>): unknown {
+    const fromPayload = payloadOf(ctx).withServer;
+    if (fromPayload !== undefined) return fromPayload;
+    const config = ctx.resource.config;
+    const mark =
+      typeof config === "object" && config !== null
+        ? (config as Record<string, unknown>)["retainedWithServer"]
+        : undefined;
+    if (mark === undefined || mark === null) return undefined;
+    return typeof mark === "object" ? (mark as Record<string, unknown>)["serverId"] : mark;
+  }
+
   async function destroy(ctx: OpCtx<DiskConfig>): Promise<StepResult> {
     const step = ctx.operation.step;
-    if (step === null || step === "detach" || step === "wait_detached") {
+    if (step === null || step === "detach" || step === "wait_server" || step === "wait_detached") {
+      const withServer = withServerOf(ctx);
+      if (withServer !== undefined && !isUuid(withServer)) throw fail("validation");
       const disk = await ourDisk(ctx);
       if (disk === null) return stepNext("delete_disk");
       if (disk.isAttached === true) {
         if (step !== "wait_detached") {
-          // The same rule as detach: no stop step here, the destroy refuses until the instance is stopped (R13, R16).
-          await requireStoppedInstance(ctx, disk.attachedTo);
+          if (withServer !== undefined) {
+            if (!(await serverStoppedForDestroy(ctx, withServer, disk.attachedTo))) {
+              return destroyWait(ctx, "wait_server");
+            }
+          } else {
+            // The same rule as detach: no stop step here, the destroy refuses until the instance is stopped (R13, R16).
+            await requireStoppedInstance(ctx, disk.attachedTo);
+          }
           await lightsailOf(ctx).send(new DetachDiskCommand({ diskName: diskName(ctx) }));
-        } else {
-          checkWaitBudget(ctx);
+          // WPU-Y4 fix round 1: the detach wait is bounded from here (the step's start, after the approval).
+          return withServer !== undefined
+            ? stepWait("wait_detached", pollAt(ctx))
+            : detachWait(ctx, "wait_detached");
         }
-        return stepWait("wait_detached", pollAt(ctx));
+        // WPU-Y4: bounded from this destroy's own first wait, not from createdAt (the approval queue).
+        return withServer !== undefined
+          ? destroyWait(ctx, "wait_detached")
+          : detachWait(ctx, "wait_detached");
       }
       return stepNext("delete_disk");
     }

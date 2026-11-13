@@ -36,6 +36,7 @@ import {
 } from "@tc/core";
 import { AwsError } from "../errors";
 import { BOOTSTRAP_BEACON_PORT, bootstrapScript } from "./bootstrap";
+import { destroyWait } from "./shared";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 
 /** A Linux user name as the panel puts it in an ssh command (the rule of sshCommandOf in @tc/core). */
@@ -444,10 +445,36 @@ export function createLinuxInstanceAdapter(
     return stepWait("wait_snapshot", pollAt(ctx));
   }
 
+  /**
+   * WPU-Y4. A server is destroyed with its block storage disks. Lightsail keeps the disks of a deleted instance
+   * ("Deleting an instance doesn't delete its ... attached disks", user guide, read 2026-11-14), DeleteDisk needs a
+   * disk that is not attached and DetachDisk a stopped instance (API reference). No page says that DeleteInstance
+   * detaches its disks, so it is never sent while one is attached (R16). While the instance reports a disk that is
+   * not its system disk, the destroy stops the instance (it is being destroyed: the stop is part of the approved
+   * destroy, R13) and waits, bounded (destroyWait), for the disks' own destroys (queued by the lifecycle with the
+   * server's) to detach them. An answer without the disk list is a refusal.
+   */
+  async function releaseDisks(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
+    const lightsail = client(ctx);
+    const instanceName = names(ctx.resource.id).instance;
+    const got = await orNull(() => lightsail.send(new GetInstanceCommand({ instanceName })));
+    if (got === null) return stepNext("delete_instance");
+    const disks = got.instance?.hardware?.disks;
+    if (!Array.isArray(disks)) throw fail("conflict");
+    if (!disks.some((d) => d.isSystemDisk !== true)) return stepNext("delete_instance");
+    if (got.instance?.state?.name === "running") {
+      await lightsail.send(new StopInstanceCommand({ instanceName }));
+    }
+    return destroyWait(ctx, "release_disks");
+  }
+
   async function destroy(ctx: OpCtx<InstanceConfig>): Promise<StepResult> {
     const n = names(ctx.resource.id);
     const lightsail = client(ctx);
-    if (ctx.operation.step === null || ctx.operation.step === "delete_instance") {
+    if (ctx.operation.step === null || ctx.operation.step === "release_disks") {
+      return releaseDisks(ctx);
+    }
+    if (ctx.operation.step === "delete_instance") {
       try {
         await lightsail.send(new DeleteInstanceCommand({ instanceName: n.instance }));
       } catch (error) {

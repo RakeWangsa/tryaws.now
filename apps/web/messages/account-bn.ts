@@ -8,6 +8,7 @@ export const accountBn = {
     servers: "সার্ভার",
     snapshots: "স্ন্যাপশট",
     staticIps: "স্ট্যাটিক IP",
+    disks: "ডিস্ক",
   },
   Snapshots: {
     meta: { title: "স্ন্যাপশট" },

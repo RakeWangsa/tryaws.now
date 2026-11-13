@@ -1,5 +1,5 @@
 import type { LightsailClient } from "@aws-sdk/client-lightsail";
-import { resourceTags, type TcEnv } from "@tc/core";
+import { resourceTags, stepWait, type StepResult, type TcEnv } from "@tc/core";
 import { AwsError } from "../errors";
 import type { OpCtx } from "./types";
 
@@ -52,6 +52,72 @@ export function checkWaitBudget(ctx: OpCtx<unknown>): void {
   if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
     throw fail("upstream_unavailable");
   }
+}
+
+/**
+ * WPU-Y4. How long a destroy waits for another operation of the same flow (a server's destroy for its disks to be
+ * detached, a disk's destroy for its server to be stopped): 24 hours (fix round 1: an admin approval can take a
+ * day). The bound runs from the destroy's OWN first wait, never from `createdAt`: a destroy waits in the approval
+ * queue for days before it runs (R13), and a bound from its creation would end it at once. The first wait writes
+ * `destroyWait = { operationId, since }` into resources.config; a mark of another operation is not this one's.
+ */
+export const DESTROY_WAIT_MS = 24 * 60 * 60 * 1000;
+export const DESTROY_POLL_SECONDS = 60;
+
+/**
+ * A wait bounded from its own start (the `destroyWait` mark), for a destroy step. Past `boundMs`, or with a mark
+ * that cannot be read, it throws `code` (R16): the operation goes to needs_attention and nothing more is done.
+ */
+export function boundedWait(
+  ctx: OpCtx<unknown>,
+  step: string,
+  bound: {
+    readonly boundMs: number;
+    readonly pollSeconds: number;
+    readonly code: "conflict" | "upstream_unavailable";
+  },
+): StepResult {
+  const now = ctx.clock.now();
+  const until = new Date(now.getTime() + bound.pollSeconds * 1000);
+  const config = ctx.resource.config;
+  const mark =
+    typeof config === "object" && config !== null
+      ? (config as Record<string, unknown>)["destroyWait"]
+      : undefined;
+  const own =
+    typeof mark === "object" &&
+    mark !== null &&
+    (mark as Record<string, unknown>)["operationId"] === ctx.operation.id;
+  if (!own) {
+    return stepWait(step, until, {
+      configMerge: { destroyWait: { operationId: ctx.operation.id, since: now.toISOString() } },
+    });
+  }
+  const since = (mark as Record<string, unknown>)["since"];
+  const sinceMs = typeof since === "string" ? Date.parse(since) : Number.NaN;
+  if (Number.isNaN(sinceMs) || now.getTime() - sinceMs > bound.boundMs) throw fail(bound.code);
+  return stepWait(step, until);
+}
+
+/** The wait for the partner operation of a destroy (24 hours, then `conflict`). */
+export function destroyWait(ctx: OpCtx<unknown>, step: string): StepResult {
+  return boundedWait(ctx, step, {
+    boundMs: DESTROY_WAIT_MS,
+    pollSeconds: DESTROY_POLL_SECONDS,
+    code: "conflict",
+  });
+}
+
+/**
+ * WPU-Y4 fix round 1. The wait of a standalone disk destroy for its own DetachDisk: MAX_WAIT_MS (20 minutes) from
+ * when the step started (after the approval), never from when the operation was queued.
+ */
+export function detachWait(ctx: OpCtx<unknown>, step: string): StepResult {
+  return boundedWait(ctx, step, {
+    boundMs: MAX_WAIT_MS,
+    pollSeconds: POLL_SECONDS,
+    code: "upstream_unavailable",
+  });
 }
 
 export function pollAt(ctx: OpCtx<unknown>): Date {

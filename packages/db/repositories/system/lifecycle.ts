@@ -38,6 +38,12 @@ export interface GuardFacts {
   // WPU-B3: `resources.state`. Optional so a caller that builds facts by hand need not know it; the
   // guard refuses cleanup_failed_create without it (R16).
   readonly resourceState?: string;
+  /**
+   * WPU-Y4 fix round 2. Only for the destroy of a disk retained with its server (the payload's `withServer`, or the
+   * disk's mark `retainedWithServer`): that server's subscription status, null when it is not the same customer's
+   * server. Absent: the destroy names no server.
+   */
+  readonly withServerStatus?: string | null;
 }
 
 export interface NewLifecycleNotification {
