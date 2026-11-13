@@ -15,7 +15,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       service: {
         title: "2. The service",
-        p1: "{brand} is a prepaid, self-service cloud panel. Every server, database, disk, bucket, load balancer and container service you buy is an Amazon Lightsail resource in the AWS Region you choose. CDN, DNS and domains use Amazon Lightsail CDN and Amazon Route 53, which are global AWS services.",
+        p1: "{brand} is a prepaid, self-service cloud panel. Every server, database, disk, bucket, load balancer and container service you buy is an Amazon Lightsail resource in the AWS Region you choose. CDN, DNS and domains use Amazon Lightsail CDN distributions and Amazon Route 53, which are global AWS services.",
         p2: "You do not get an AWS account, the AWS console or access to the AWS API. You manage your resources in the {brand} panel. {brand} sells, bills and supports the service.",
         p3: "We open products step by step. A product that is not open yet cannot be bought; its page says so.",
       },
@@ -66,8 +66,8 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       usage: {
         title: "10. Charges by use and unpaid charges",
-        p1: "Some items are charged by use, day by day, from your wallet, for example the storage of the backups you keep.",
-        p2: "Each plan includes an amount of data transfer for its period, which can differ by location. We tell you when 80% and when 100% of it is used. [To be decided: how data transfer above the included amount is handled and charged.]",
+        p1: "Some items are charged by use from your wallet, for example the storage of the backups you keep, by the day, and a static IP that is not attached to a server, by the hour after the first hour.",
+        p2: "Each plan includes an amount of data transfer for its period, which can differ by location. We tell you when 80% and when 100% of it is used. [To be decided: the handling of data transfer above the included amount is not available yet. The rule planned for it: above 100%, 50 GB packs are bought from your wallet if you have switched this on; otherwise the public ports of the resource are closed until the next period.]",
         p3: "If a charge by use cannot be taken from your wallet, we try again every day. If it is still unpaid after 1 day, the resource is suspended. While the charge is unpaid we email you every day, with the days left before the deletion.",
         p4: "After 7 days unpaid we request the deletion of the resource. Where the product has backups, a final backup is made before anything is deleted. If you top up before the deletion, the charge is taken and the resource starts again.",
       },
@@ -123,7 +123,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       cdn: {
         title: "5. Limits of the CDN",
-        p1: "Do not use the CDN for video streaming or for a very high number of requests (Amazon Lightsail FAQ).",
+        p1: "Do not use the CDN for a workload with a high number of requests per second or a large amount of video streaming (Amazon Lightsail FAQ).",
       },
       email: {
         title: "6. Sending email",
@@ -195,8 +195,8 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       rights: {
         title: "9. Your rights and how to reach us",
-        p1: "You can see and change your profile and your billing details in the panel. To ask for a copy of your data, a correction or the deletion of your data, open a support request; without an account, use the form on the support page.",
-        p2: "[To be decided: the data protection rights that apply by law, and how fast we answer a request.]",
+        p1: "You can see and change your profile and your billing details in the panel.",
+        p2: "[To be decided: the data protection rights that apply by law; how you ask for a copy of your data, a correction or the deletion of your data (proposed: a support request in the panel, or the form on the support page without an account); and how fast we answer a request.]",
       },
     },
   },

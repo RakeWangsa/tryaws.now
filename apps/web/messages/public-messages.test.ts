@@ -201,13 +201,16 @@ describe("legal drafts (WPU-Z7)", () => {
       Object.values(legalDocs(tree)["acceptable-use"]!.sections)
         .flatMap((section) => Object.values(section))
         .join("\n");
+    // WPU-Z8 VERIFY (2026-11-13): the CDN rule in the words of the Amazon Lightsail FAQ ("How is Lightsail
+    // CDN intended to be used?": "workloads that involve a high number of requests per second or large
+    // amount of video streaming are not permitted").
     const rules = {
       en: [
         "AWS Acceptable Use Policy",
         "mine cryptocurrency",
         "AWS Service Terms, section 1.25",
         "AWS Service Terms, section 51.3",
-        "video streaming",
+        "a high number of requests per second or a large amount of video streaming",
         "Amazon Lightsail FAQ",
         "port 25 is closed",
         "AWS Customer Agreement, section 2.5",
@@ -217,7 +220,7 @@ describe("legal drafts (WPU-Z7)", () => {
         "ক্রিপ্টোকারেন্সি মাইনিং",
         "AWS Service Terms, ধারা ১.২৫",
         "AWS Service Terms, ধারা ৫১.৩",
-        "ভিডিও স্ট্রিমিং",
+        "প্রতি সেকেন্ডে অনেক বেশি অনুরোধ বা বিপুল পরিমাণ ভিডিও স্ট্রিমিং",
         "Amazon Lightsail FAQ",
         "পোর্ট ২৫ বন্ধ",
         "AWS Customer Agreement, ধারা ২.৫",
@@ -261,6 +264,108 @@ describe("legal drafts (WPU-Z7)", () => {
           `${locale} ${where}: a gap note on charges by use`,
         ).toBe(true);
       }
+    }
+  });
+});
+
+// WPU-Z8: the text items of the WPU-Z7 review.
+const allText = (doc: LegalDocTree): string =>
+  Object.values(doc.sections)
+    .flatMap((section) => Object.values(section))
+    .join("\n");
+
+describe("legal drafts, the review items of WPU-Z7 (WPU-Z8)", () => {
+  it("names the CDN with its AWS name of 16.13, Amazon Lightsail CDN distribution", () => {
+    for (const [locale, tree] of LOCALES) {
+      const docs = legalDocs(tree);
+      expect(docs["terms"]!.sections["service"]!["p1"], locale).toContain(
+        "Amazon Lightsail CDN distribution",
+      );
+      for (const [name, doc] of Object.entries(docs)) {
+        expect(allText(doc), `${locale} ${name}`).not.toMatch(
+          /Amazon Lightsail CDN(?! distribution)/,
+        );
+      }
+    }
+  });
+
+  it("does not say that every charge by use is taken by the day: a static IP is charged by the hour", () => {
+    const en = legalDocs(publicEn)["terms"]!.sections["usage"]!["p1"]!;
+    expect(en).not.toMatch(/day by day|every day|daily/);
+    expect(en).toContain("the storage of the backups you keep, by the day");
+    expect(en).toContain(
+      "a static IP that is not attached to a server, by the hour after the first hour",
+    );
+    const bn = legalDocs(publicBn)["terms"]!.sections["usage"]!["p1"]!;
+    expect(bn).not.toMatch(/চার্জ ব্যবহার অনুযায়ী প্রতিদিন/);
+    expect(bn).toContain("আপনার রাখা ব্যাকআপের স্টোরেজ প্রতিদিন");
+    expect(bn).toContain("স্ট্যাটিক আইপি প্রথম ঘণ্টার পর ঘণ্টা হিসেবে");
+  });
+
+  it("says in the gap note on data transfer that it is not available yet, with the rule of spec 11", () => {
+    // Spec 11: "above 100% buy 50 GB packs from the wallet if the customer enabled it, otherwise close
+    // public ports until the next period". Not built yet, so it stays inside the note.
+    const noteOf = (locale: "bn" | "en", tree: typeof publicBn | typeof publicEn): string => {
+      const p2 = legalDocs(tree)["terms"]!.sections["usage"]!["p2"]!;
+      const notes = p2.match(GAP[locale]) ?? [];
+      expect(notes, locale).toHaveLength(1);
+      expect(p2.replace(GAP[locale], ""), locale).not.toMatch(/50 GB|৫০ GB/);
+      return notes[0] as string;
+    };
+    const en = noteOf("en", publicEn);
+    for (const part of [
+      "is not available yet",
+      "above 100%, 50 GB packs are bought from your wallet if you have switched this on",
+      "otherwise the public ports of the resource are closed until the next period",
+    ]) {
+      expect(en, part).toContain(part);
+    }
+    const bn = noteOf("bn", publicBn);
+    for (const part of [
+      "এখনো চালু হয়নি",
+      "১০০% পার হলে, আপনি চালু করে থাকলে ওয়ালেট থেকে 50 GB-এর প্যাক কেনা হবে",
+      "না হলে পরের মেয়াদ পর্যন্ত রিসোর্সের পাবলিক পোর্ট বন্ধ থাকবে",
+    ]) {
+      expect(bn, part).toContain(part);
+    }
+  });
+
+  it("puts the way to ask for a copy, a correction or the deletion of data into the gap note of privacy 9", () => {
+    const words = {
+      en: [/support request/, /copy/, /correction/, /deletion/],
+      bn: [/সাপোর্ট অনুরোধ/, /কপি/, /সংশোধন/, /মুছে ফেলার/],
+    } as const;
+    for (const [locale, tree] of LOCALES) {
+      const rights = Object.values(legalDocs(tree)["privacy"]!.sections["rights"]!).slice(1);
+      const promise = rights.map((text) => text.replace(GAP[locale], "")).join(" ");
+      const notes = rights.flatMap((text) => text.match(GAP[locale]) ?? []).join(" ");
+      for (const word of words[locale]) {
+        expect(promise, `${locale} promise ${word}`).not.toMatch(word);
+        expect(notes, `${locale} note ${word}`).toMatch(word);
+      }
+    }
+  });
+
+  it("keeps the clauses that two documents share word for word the same in both", () => {
+    for (const [locale, tree] of LOCALES) {
+      const docs = legalDocs(tree);
+      // terms 5 and refund 6: a payment whose amount does not match is not added to the wallet
+      expect(docs["terms"]!.sections["wallet"]!["p3"], locale).toBe(
+        docs["refund"]!.sections["review"]!["p1"],
+      );
+      // terms 11 and acceptable use 7: a suspension for a breach is not lifted by a payment
+      const shared = docs["acceptable-use"]!.sections["suspend"]!["p2"]!;
+      expect(docs["terms"]!.sections["suspension"]!["p1"]!.endsWith(` ${shared}`), locale).toBe(
+        true,
+      );
+    }
+  });
+
+  it("the footer links to the terms and the privacy policy carry the titles of their pages", () => {
+    for (const [locale, tree] of LOCALES) {
+      const footer = (webMessages[locale]["Shell"] as Messages)["footer"] as Messages;
+      expect(footer["terms"], locale).toBe(legalDocs(tree)["terms"]!.title);
+      expect(footer["privacy"], locale).toBe(legalDocs(tree)["privacy"]!.title);
     }
   });
 });
