@@ -1,14 +1,17 @@
+import { Resource } from "sst/resource";
 import { expect, it } from "vitest";
-import { linkedSecret } from "./secrets";
+import { envLinks, linkedSecret, sstLinks } from "./secrets";
 
-// WPU-Z3: the reader of the two SMS secrets. Obviously fake values (R3).
+// WPU-Z3: the reader of the two SMS secrets. Obviously fake values (R3). The links of these tests come
+// from the SST_RESOURCE_<Name> variables of an environment object (envLinks); the run-time path through
+// the SST SDK is secrets-sst.test.ts (WPU-Z15).
 it("reads the value of an SST linked secret", () => {
   const env = {
     SST_RESOURCE_SmsApiKey: '{"type":"sst.sst.Secret","value":"fake-notifier-token"}',
     SST_RESOURCE_SmsSenderId: '{"type":"sst.sst.Secret","value":"FAKESENDER"}',
   };
-  expect(linkedSecret(env, "SmsApiKey")).toBe("fake-notifier-token");
-  expect(linkedSecret(env, "SmsSenderId")).toBe("FAKESENDER");
+  expect(linkedSecret(envLinks(env), "SmsApiKey")).toBe("fake-notifier-token");
+  expect(linkedSecret(envLinks(env), "SmsSenderId")).toBe("FAKESENDER");
 });
 
 it("gives undefined for a missing variable, malformed JSON, a value that is not a string and an empty value", () => {
@@ -23,11 +26,21 @@ it("gives undefined for a missing variable, malformed JSON, a value that is not 
     '{"value":""}',
     "{}",
   ]) {
-    expect(linkedSecret({ SST_RESOURCE_SmsApiKey: raw }, "SmsApiKey"), String(raw)).toBeUndefined();
+    expect(
+      linkedSecret(envLinks({ SST_RESOURCE_SmsApiKey: raw }), "SmsApiKey"),
+      String(raw),
+    ).toBeUndefined();
   }
 });
 
 it("reads only the variable of the name it is asked for", () => {
   const env = { SST_RESOURCE_SmsSenderId: '{"value":"FAKESENDER"}' };
-  expect(linkedSecret(env, "SmsApiKey")).toBeUndefined();
+  expect(linkedSecret(envLinks(env), "SmsApiKey")).toBeUndefined();
+});
+
+it("the SST SDK, with nothing linked, gives undefined and not an error (WPU-Z15)", () => {
+  // The SDK's own Resource throws for a name that is not linked; the reader must not pass it on.
+  expect(() => (Resource as unknown as Record<string, unknown>)["SmsApiKey"]).toThrow();
+  expect(linkedSecret(sstLinks, "SmsApiKey")).toBeUndefined();
+  expect(linkedSecret(sstLinks, "SmsSenderId")).toBeUndefined();
 });

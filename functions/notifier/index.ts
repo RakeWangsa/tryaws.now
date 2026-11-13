@@ -12,7 +12,7 @@ import type { NotifierReport, SesTransport, SmsProvider } from "@tc/notify";
 import { withTx } from "@tc/db";
 import { buildNotifierHandler, type LambdaContextLike } from "./build";
 import { readNotifierConfig } from "./config";
-import { linkedSecret } from "./secrets";
+import { linkedSecret, sstLinks, type LinkSource } from "./secrets";
 import { sesTransportFromEnv } from "./ses";
 
 export { createNotifierHandler, STOP_MARGIN_MS } from "./handler";
@@ -26,12 +26,11 @@ export function loadSesTransport(
   return sesTransportFromEnv(env);
 }
 
-// The Gennet gateway when both of its secrets are readable, else null. Builds no connection.
-export function loadSmsProvider(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): SmsProvider | null {
-  const apiToken = linkedSecret(env, "SmsApiKey");
-  const senderId = linkedSecret(env, "SmsSenderId");
+// The Gennet gateway when both of its secrets are readable, else null. Builds no connection. The links
+// default to the SST SDK, the run-time path of a deployed function (WPU-Z15).
+export function loadSmsProvider(links: LinkSource = sstLinks): SmsProvider | null {
+  const apiToken = linkedSecret(links, "SmsApiKey");
+  const senderId = linkedSecret(links, "SmsSenderId");
   if (apiToken === undefined || senderId === undefined) return null;
   return new GatewaySmsProvider({ transport: new GennetSmsTransport({ apiToken, senderId }) });
 }
