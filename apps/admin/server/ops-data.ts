@@ -10,6 +10,7 @@ import {
   type OperationStateCounts,
   type OperationStateName,
   type PlanChangeView,
+  type StuckRenewalRow,
   type WaitlistCount,
 } from "@tc/db";
 import { describeCorrection, parseLive, type Correction } from "./capacity-flow.ts";
@@ -195,4 +196,12 @@ export async function loadCapacity(
     }
     return { ok: true, value: { rows: rows.value, waitlist: waitlist.value, correction } };
   });
+}
+
+/**
+ * WPU-X3 (b): the domain renewals stuck at the registry check, with the last "registry confirmed not renewed" check
+ * of each (/payments/renewals). The repository answers `forbidden` for any role but finance and superadmin.
+ */
+export function loadStuckRenewals(admin: AdminActor): Promise<Loaded<StuckRenewalRow[]>> {
+  return read(admin, (repos) => repos.operations.stuckRenewals());
 }

@@ -26,6 +26,22 @@ describe("mapLastError (R14)", () => {
     expect(mapLastError("lease_expired")).toBe("lease_expired");
   });
 
+  it("WPU-X3: maps the outcomes of a 'registry confirmed not renewed' check", () => {
+    for (const code of [
+      "renewal_unrenewed_confirmed",
+      "renewal_not_confirmable",
+      "registry_renewed",
+      "renewal_in_progress",
+      "expiry_changed",
+      "renewal_unreadable",
+      "registry_unreachable",
+      "target_changed",
+      "renewal_check_missing",
+    ]) {
+      expect(mapLastError(code), code).toBe(code);
+    }
+  });
+
   it("never passes stored text through", () => {
     const leaked =
       "arn:aws:iam::123456789012:role/TcProvisioner is not authorized AKIAIOSFODNN7EXAMPLE";

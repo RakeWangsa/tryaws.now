@@ -6,6 +6,25 @@
 /** The image every Linux server is launched with (the provisioner imports it from here). */
 export const DEFAULT_BLUEPRINT_ID = "ubuntu_24_04";
 
+/**
+ * WPU-X3. The Bitnami stacks of Lightsail, by id prefix, and whether the Lightsail guide of the stack names
+ * `~/bitnami_application_password` as the file of the default application password. One list for the login user and
+ * the password file. GitLab logs in as `bitnami` but its file is not named here: nothing is guessed (R16).
+ */
+export const BITNAMI_STACKS: readonly (readonly [prefix: string, passwordFile: boolean])[] = [
+  ["wordpress", true],
+  ["lamp", true],
+  ["nodejs", true],
+  ["mean", true],
+  ["joomla", true],
+  ["drupal", true],
+  ["magento", true],
+  ["gitlab", false],
+  ["nginx", true],
+];
+
+const BITNAMI_PASSWORD_FILE = "~/bitnami_application_password";
+
 // Lightsail documents the default user of each image (connect to your instance with SSH). Prefixes
 // are matched in order; an image that is not listed has no guess (the screen then says so).
 const LOGIN_USERS: readonly (readonly [string, string])[] = [
@@ -16,15 +35,7 @@ const LOGIN_USERS: readonly (readonly [string, string])[] = [
   ["debian_", "admin"],
   ["freebsd_", "ec2-user"],
   ["opensuse_", "ec2-user"],
-  ["wordpress", "bitnami"],
-  ["lamp", "bitnami"],
-  ["nodejs", "bitnami"],
-  ["mean", "bitnami"],
-  ["joomla", "bitnami"],
-  ["drupal", "bitnami"],
-  ["magento", "bitnami"],
-  ["gitlab", "bitnami"],
-  ["nginx", "bitnami"],
+  ...BITNAMI_STACKS.map(([prefix]) => [prefix, "bitnami"] as const),
   ["plesk", "ubuntu"],
 ];
 
@@ -51,8 +62,8 @@ export function appPasswordFileOf(blueprintId: unknown): string | null {
       ? "~/application_credentials"
       : null;
   }
-  const bitnami = ["wordpress", "lamp", "nodejs", "mean", "joomla", "drupal", "magento", "nginx"];
-  return bitnami.some((p) => blueprintId.startsWith(p)) ? "~/bitnami_application_password" : null;
+  const stack = BITNAMI_STACKS.find(([prefix]) => blueprintId.startsWith(prefix));
+  return stack !== undefined && stack[1] ? BITNAMI_PASSWORD_FILE : null;
 }
 
 export function loginUserOf(blueprintId: unknown): string | null {

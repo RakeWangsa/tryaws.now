@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { DEFAULT_LOCALE, isLocale, localePath } from "@tc/ui/runtime";
 import { makeOpsAction } from "./ops-flow.ts";
 import { makePlanMarkAction } from "./plan-mark-flow.ts";
+import { makeConfirmUnrenewedAction } from "./renewal-flow.ts";
 import type { OpsActionKind } from "./ops-map.ts";
 import { isUuid } from "./schemas.ts";
 import { makeUnpaidRuleAction } from "./unpaid-rule-flow.ts";
@@ -62,4 +63,19 @@ export async function switchUnpaidRuleAction(form: FormData): Promise<void> {
   });
   const result = answer.ok ? (answer.replayed ? "replayed" : "ok") : answer.code;
   redirect(`${localePath(locale, "/operations/unpaid-rule")}?result=${result}`);
+}
+
+// WPU-X3 (b). "Registry confirmed not renewed" on /payments/renewals. The form carries the renewal, the id of the form
+// (a repeat of the same form is a replay) and the reason; it carries no actor and no role.
+export async function confirmUnrenewedAction(form: FormData): Promise<void> {
+  const rawLocale = text(form.get("locale"));
+  const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
+  ensureAdminAuth();
+  const answer = await makeConfirmUnrenewedAction(opsFlowDeps())({
+    id: text(form.get("id")),
+    requestId: text(form.get("requestId")),
+    reason: text(form.get("reason")),
+  });
+  const result = answer.ok ? (answer.replayed ? "replayed" : "ok") : answer.code;
+  redirect(`${localePath(locale, "/payments/renewals")}?result=${result}`);
 }

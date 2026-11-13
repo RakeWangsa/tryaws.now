@@ -217,6 +217,25 @@ it("reject_operation needs no adapter and no placement and is never blocked, but
   ).toEqual({ action: "run" });
 });
 
+it("WPU-X3: confirm_unrenewed is an engine kind too: no adapter and no placement, never blocked, still the resource and owner checks", () => {
+  const unplaced = { ...placed, family: "domain", poolAccountId: null, region: null };
+  expect(
+    decideClaim(view({ kind: "confirm_unrenewed", resource: unplaced, pool: null }), options()),
+  ).toEqual({ action: "run" });
+  expect(decideClaim(view({ kind: "confirm_unrenewed", resource: null }), options())).toEqual(
+    refused("resource_missing"),
+  );
+  expect(
+    decideClaim(
+      view({ kind: "confirm_unrenewed", owner: { orderCustomerId: null, keyCustomerId: "c-2" } }),
+      options(),
+    ),
+  ).toEqual(refused("owner_mismatch"));
+  expect(
+    decideClaim(view({ kind: "confirm_unrenewed", blockedBy: "op-target" }), options()),
+  ).toEqual({ action: "run" });
+});
+
 it("an active operation of the same resource blocks every kind but the engine kind for 60 seconds, but a refusal comes first", () => {
   expect(BLOCKED_RETRY_SECONDS).toBe(60);
   expect(decideClaim(view({ blockedBy: "op-1" }), options())).toEqual({

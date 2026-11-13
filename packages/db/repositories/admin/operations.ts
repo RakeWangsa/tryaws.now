@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   approveOperation,
+  confirmUnrenewedOperation,
   rejectOperation,
   retryOperation,
   type AdminMessage,
@@ -122,7 +123,43 @@ export interface ClearPlanChangeMarkResult {
   message: AdminMessage | null;
 }
 
+// WPU-X3 (b). A domain renewal stuck in needs_attention at `poll`, and the last "registry confirmed not renewed" check
+// asked for it (its outcome is that operation's state and last_error code). last_error is an engine code (R14).
+export interface StuckRenewalCheck {
+  id: string;
+  state: OperationStateName;
+  lastError: string | null;
+  createdAt: Date;
+}
+
+export interface StuckRenewalRow {
+  id: string;
+  resourceId: string;
+  /** The domain name of the resource (ASCII, as the domain adapter stores it), or null when not readable. */
+  domainName: string | null;
+  state: OperationStateName;
+  step: string | null;
+  attempts: number;
+  lastError: string | null;
+  createdAt: Date;
+  lastCheck: StuckRenewalCheck | null;
+}
+
+export interface ConfirmUnrenewedInput {
+  operationId: string;
+  // The id of the form the admin submitted: a repeat of the same form is the same operation (R7).
+  requestId: string;
+  at: Date;
+}
+
 export interface OperationsAdminRepo {
+  /** WPU-X3 (b): the renewals stuck at poll, for finance and superadmin. */
+  stuckRenewals(): Promise<Written<StuckRenewalRow[]>>;
+  /** WPU-X3 (b): queue a fresh registry check of a stuck renewal (finance, superadmin), audited. */
+  confirmUnrenewed(
+    input: ConfirmUnrenewedInput,
+    reason: string,
+  ): Promise<Written<OperationDecision>>;
   planChange(resourceId: string): Promise<Written<PlanChangeView>>;
   clearPlanChangeMark(
     input: ClearPlanChangeMarkInput,
@@ -151,6 +188,9 @@ const REFUSALS: Record<Extract<AdminOutcome, { ok: false }>["error"], RepoErrorC
 
 // The reads show every customer's operations: only an active ops or superadmin admin may run them (R16).
 const READ_ROLES: readonly string[] = ["ops", "superadmin"];
+// WPU-X3 (b): a refund decision on a domain renewal is a money decision: finance and superadmin (not ops).
+const RENEWAL_CONFIRM_ROLES: readonly string[] = ["finance", "superadmin"];
+const STUCK_RENEWALS_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const TRAIL_LIMIT = 50;
@@ -237,7 +277,119 @@ export function operationsAdminRepo(scope: AdminScope): OperationsAdminRepo {
   const mayRead = async (): Promise<boolean> =>
     READ_ROLES.includes(scope.actor.role) && (await isActiveAdmin(scope));
 
+  const mayConfirmRenewal = async (): Promise<boolean> =>
+    RENEWAL_CONFIRM_ROLES.includes(scope.actor.role) && (await isActiveAdmin(scope));
+
   return {
+    async stuckRenewals() {
+      if (!(await mayConfirmRenewal())) return refused("forbidden");
+      const { rows } = await scope.tx.execute<
+        {
+          id: string;
+          resourceId: string;
+          domainName: unknown;
+          state: OperationStateName;
+          step: string | null;
+          attempts: number;
+          lastError: string | null;
+          createdAt: string | Date;
+          checkId: string | null;
+          checkState: OperationStateName | null;
+          checkLastError: string | null;
+          checkCreatedAt: string | Date | null;
+        } & Record<string, unknown>
+      >(
+        sql`select o.id, o.resource_id as "resourceId", r.config ->> 'name' as "domainName", o.state, o.step,
+                   o.attempts, o.last_error as "lastError", o.created_at as "createdAt",
+                   c.id as "checkId", c.state as "checkState", c.last_error as "checkLastError",
+                   c.created_at as "checkCreatedAt"
+              from operations o
+              join resources r on r.id = o.resource_id
+              left join lateral (
+                select c.id, c.state, c.last_error, c.created_at
+                  from operations c
+                 where c.resource_id = o.resource_id and c.kind = 'confirm_unrenewed'
+                   and c.payload ->> 'targetOperationId' = o.id::text
+                 order by c.created_at desc, c.id desc
+                 limit 1) c on true
+             where o.kind = 'renew_domain' and o.state = 'needs_attention' and o.step = 'poll'
+             order by o.created_at, o.id
+             limit ${STUCK_RENEWALS_LIMIT}`,
+      );
+      return {
+        ok: true,
+        replayed: false,
+        value: rows.map((row) => ({
+          id: row.id,
+          resourceId: row.resourceId,
+          domainName: typeof row.domainName === "string" ? row.domainName : null,
+          state: row.state,
+          step: row.step,
+          attempts: row.attempts,
+          lastError: row.lastError,
+          createdAt: new Date(row.createdAt),
+          lastCheck:
+            row.checkId === null || row.checkState === null || row.checkCreatedAt === null
+              ? null
+              : {
+                  id: row.checkId,
+                  state: row.checkState,
+                  lastError: row.checkLastError,
+                  createdAt: new Date(row.checkCreatedAt),
+                },
+        })),
+      };
+    },
+
+    async confirmUnrenewed(input, reason) {
+      // Read once into locals, so a getter cannot answer differently on the second read.
+      const { operationId, requestId, at } = input;
+      // Authorize before validating (R9): finance and superadmin only, at this layer too (R10, R16).
+      if (!(await mayConfirmRenewal())) return refused("forbidden");
+      if (
+        typeof operationId !== "string" ||
+        !isUuid(operationId) ||
+        typeof requestId !== "string" ||
+        !isUuid(requestId) ||
+        !(at instanceof Date) ||
+        Number.isNaN(at.getTime())
+      ) {
+        return refused("validation");
+      }
+      try {
+        return await audited(
+          scope,
+          {
+            action: "operation.confirm_unrenewed",
+            targetType: "operation",
+            targetId: operationId,
+            reason,
+          },
+          async () => {
+            const outcome = await confirmUnrenewedOperation(scope.tx, {
+              operationId,
+              requestId,
+              at,
+            });
+            if (!outcome.ok) throw new Refusal(REFUSALS[outcome.error]);
+            return {
+              value: { message: outcome.message },
+              replayed: outcome.replayed,
+              before: null,
+              after: {
+                replayed: outcome.replayed,
+                operationId: outcome.message?.operationId ?? null,
+                kind: "confirm_unrenewed",
+              },
+            };
+          },
+        );
+      } catch (error) {
+        if (error instanceof Refusal) return refused(error.code);
+        throw error;
+      }
+    },
+
     async planChange(resourceId) {
       if (!(await mayRead())) return refused("forbidden");
       if (typeof resourceId !== "string" || !isUuid(resourceId)) return refused("not_found");

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Tx } from "../client";
 import {
   loadOperationBrief,
+  loadOperationPayload,
   loadOwnedResource,
   loadRunView,
   patchResource,
@@ -191,6 +192,25 @@ describe("loadOperationBrief and loadOwnedResource", () => {
       await worker((tx) => loadOperationBrief(tx, "01a1c97d-e814-7352-b32c-d3d3ee408ab8")),
     ).toBeNull();
     expect(await worker((tx) => loadOperationBrief(tx, "x"))).toBeNull();
+  });
+
+  it("WPU-X3 (b): the payload of an operation is read for its own resource only, as worker_rw", async () => {
+    const id = await seed("needs_attention", {
+      kind: "renew_domain",
+      step: "poll",
+      payload: JSON.stringify({ currentExpiryYear: 2031 }),
+    });
+    expect(await worker((tx) => loadOperationPayload(tx, id, resourceId))).toEqual({
+      payload: { currentExpiryYear: 2031 },
+    });
+    const other = await newResource(t.pool, await newCustomer(t.pool));
+    expect(await worker((tx) => loadOperationPayload(tx, id, other))).toBeNull();
+    expect(await worker((tx) => loadOperationPayload(tx, "x", resourceId))).toBeNull();
+    expect(
+      await worker((tx) =>
+        loadOperationPayload(tx, "01a1c97d-e814-7352-b32c-d3d3ee408ab8", resourceId),
+      ),
+    ).toBeNull();
   });
 
   it("an owned resource is found for its customer only, and a non-UUID id sends no query", async () => {

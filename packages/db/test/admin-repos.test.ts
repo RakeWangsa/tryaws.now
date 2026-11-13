@@ -137,7 +137,8 @@ const roleOf = (name: string): AdminActor["role"] =>
             name.startsWith("payments.") ||
             name.startsWith("priceBook.") ||
             name.startsWith("configPrices.") ||
-            name.startsWith("invoiceSeller.")) &&
+            name.startsWith("invoiceSeller.") ||
+            name === "operations.confirmUnrenewed") &&
           name !== "payments.resolveDiscrepancy"
         ? "finance"
         : "ops";
@@ -417,6 +418,21 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
     });
     return r.operations.clearPlanChangeMark({ resourceId, requestId: uuidv7(), at: AT }, "clear");
   },
+  // WPU-X3 (b): "registry confirmed not renewed" of a renewal stuck at poll (finance, roleOf).
+  "operations.confirmUnrenewed": async (r) => {
+    const resourceId = await newResource(t.pool, await newCustomer(t.pool));
+    const operationId = await insertRow(t.pool, "operations", {
+      resource_id: resourceId,
+      kind: "renew_domain",
+      state: "needs_attention",
+      step: "poll",
+      idempotency_key: "a:" + uniqueSuffix(),
+    });
+    return r.operations.confirmUnrenewed(
+      { operationId, requestId: uuidv7(), at: AT },
+      "registrar case: not renewed",
+    );
+  },
   "operations.approve": async (r) =>
     r.operations.approve({ operationId: await seedOperation("needs_approval"), at: AT }, "checked"),
   "operations.retry": async (r) =>
@@ -503,6 +519,8 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "operations.detail",
   "operations.planChange",
   "operations.queue",
+  // WPU-X3 (b): finance and superadmin.
+  "operations.stuckRenewals",
   "payments.detail",
   "payments.discrepancies",
   "payments.search",

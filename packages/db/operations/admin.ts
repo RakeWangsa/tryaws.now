@@ -168,6 +168,69 @@ export async function rejectOperation(
   return CONFLICT;
 }
 
+// WPU-X3 (b). The idempotency key of a "registry confirmed not renewed": the target and the id of the form, so the
+// same form again is a replay (R7) and a later form (after a check that kept the renewal) is a new check.
+export const CONFIRM_UNRENEWED_KEY = "admin:confirm-unrenewed:";
+
+/**
+ * WPU-X3 (b). The admin's "registry confirmed not renewed" of a domain renewal stuck in needs_attention at `poll`:
+ * inserts a `confirm_unrenewed` that the provisioner runs (a fresh registry check; the refund only on a final "not
+ * renewed" with the expiry unchanged). The admin never moves the target and never calls AWS (R1). A replay of the same
+ * form answers the first operation even when the target moved since; a new form needs the target still stuck at poll.
+ */
+export async function confirmUnrenewedOperation(
+  tx: Tx,
+  input: { operationId: string; requestId: string; at: Date },
+): Promise<AdminOutcome> {
+  if (typeof input.operationId !== "string" || !isUuid(input.operationId)) return NOT_FOUND;
+  if (typeof input.requestId !== "string" || !isUuid(input.requestId)) return CONFLICT;
+  const targetId = input.operationId.toLowerCase();
+  const key = `${CONFIRM_UNRENEWED_KEY}${targetId}:${input.requestId.toLowerCase()}`;
+  const known = await tx
+    .select({
+      id: operations.id,
+      resourceId: operations.resourceId,
+      enqueueSeq: operations.enqueueSeq,
+    })
+    .from(operations)
+    .where(eq(operations.idempotencyKey, key))
+    .limit(1);
+  const prior = known[0];
+  if (prior !== undefined) return accepted(true, prior.id, prior.resourceId, prior.enqueueSeq);
+
+  const rows = await tx
+    .select({
+      id: operations.id,
+      resourceId: operations.resourceId,
+      kind: operations.kind,
+      state: operations.state,
+      step: operations.step,
+    })
+    .from(operations)
+    .where(eq(operations.id, targetId))
+    .limit(1);
+  const target = rows[0];
+  if (target === undefined) return NOT_FOUND;
+  if (
+    target.kind !== "renew_domain" ||
+    target.state !== "needs_attention" ||
+    target.step !== "poll"
+  ) {
+    return CONFLICT;
+  }
+  const inserted = await insertOperation(
+    tx,
+    {
+      resourceId: target.resourceId,
+      kind: "confirm_unrenewed",
+      payload: { targetOperationId: target.id, requestId: input.requestId.toLowerCase() },
+      idempotencyKey: key,
+    },
+    input.at,
+  );
+  return accepted(!inserted.created, inserted.operationId, target.resourceId, inserted.enqueueSeq);
+}
+
 /**
  * WPU-Y4 fix round 5 (M2). An admin's reject of a destroy whose subscription is `retained` and whose resource still
  * lives leaves the subscription retained with no live destroy: no renewal, no charge, no deletion. That is TiCON's

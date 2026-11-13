@@ -1,6 +1,7 @@
 import type { AwsAccess } from "@tc/aws";
 import type {
   AttentionHook,
+  RenewalRecheck,
   Clock,
   Logger,
   OperationKind,
@@ -40,12 +41,24 @@ export interface OperationHooks {
   needsAttention?: AttentionHook;
 }
 
+/**
+ * WPU-X3 (b): the fresh registry check of a stuck domain renewal (packages/aws recheckRenewal through the domain ports;
+ * domain.ts domainRenewalRecheck). Reads only. Throws on any AWS error.
+ */
+export type RenewalRecheckFn = (input: {
+  readonly name: unknown;
+  readonly renewOperationId: unknown;
+  readonly payload: unknown;
+}) => Promise<RenewalRecheck>;
+
 export interface StepDeps extends Omit<ClaimDeps, "hasAdapter"> {
   readonly queue: OperationQueue;
   readonly adapters: AdapterRegistry;
   readonly access: AwsAccess<"provisioner">;
   readonly env: TcEnv;
   readonly hooks?: OperationHooks;
+  /** WPU-X3 (b): without it a confirm_unrenewed is refused (renewal_check_missing, R16). */
+  readonly renewalRecheck?: RenewalRecheckFn;
   readonly log: Logger;
 }
 

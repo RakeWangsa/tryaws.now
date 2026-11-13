@@ -229,6 +229,9 @@ export { readAdminApprover } from "./repositories/admin/approver";
 export { PLAN_CHANGE_FAMILIES as ADMIN_PLAN_CHANGE_FAMILIES } from "./repositories/admin/operations";
 export type {
   ClearPlanChangeMarkInput,
+  ConfirmUnrenewedInput,
+  StuckRenewalCheck,
+  StuckRenewalRow,
   ClearPlanChangeMarkResult,
   PlanChangeConfig,
   PlanChangeOperation,

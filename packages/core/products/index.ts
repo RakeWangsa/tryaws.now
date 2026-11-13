@@ -21,7 +21,9 @@ export {
   type RawBlueprint,
 } from "./blueprints";
 export {
+  BITNAMI_STACKS,
   DEFAULT_BLUEPRINT_ID,
+  appPasswordFileOf,
   keyFileName,
   loginUserOf,
   storedLoginUserOf,

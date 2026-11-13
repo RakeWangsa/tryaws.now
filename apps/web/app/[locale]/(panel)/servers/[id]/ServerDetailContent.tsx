@@ -185,6 +185,16 @@ export function ServerDetailContent({
             </p>
           </>
         )}
+        {/* WPU-X3: the file the image's Lightsail guide names; none is guessed (R16). */}
+        {server.appPasswordFile === null ? null : (
+          <div className="mt-3 mb-3">
+            <CopyField
+              label={t("detail.access.appPassword")}
+              value={`cat ${server.appPasswordFile}`}
+              hint={t("detail.access.appPasswordHint", { file: server.appPasswordFile })}
+            />
+          </div>
+        )}
         {server.imageName === null ? null : (
           <p className="seccolor mb-1">
             <b>{t("detail.access.image")}</b>

@@ -102,6 +102,7 @@ export function detail(over: Partial<ServerDetail> = {}): ServerDetail {
     keyName: "Laptop",
     imageName: "Ubuntu",
     loginUser: "ubuntu",
+    appPasswordFile: null,
     createdAt: new Date("2026-11-10T06:00:00Z"),
     ...over,
   };

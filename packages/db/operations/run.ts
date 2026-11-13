@@ -156,6 +156,26 @@ export async function loadOperationBrief(
   return row === undefined ? null : { ...row, state: row.state as OperationState };
 }
 
+/**
+ * WPU-X3 (b): the payload of one operation of one resource (a renewal's pre-renewal expiry), for the provisioner's
+ * confirm_unrenewed only (worker_rw). Kept apart from the brief, which reject and others read. null for an unknown id,
+ * a non-UUID or an operation of another resource (R8).
+ */
+export async function loadOperationPayload(
+  tx: Tx,
+  operationId: string,
+  resourceId: string,
+): Promise<{ readonly payload: unknown } | null> {
+  if (!isUuid(operationId) || !isUuid(resourceId)) return null;
+  const rows = await tx
+    .select({ payload: operations.payload })
+    .from(operations)
+    .where(and(eq(operations.id, operationId), eq(operations.resourceId, resourceId)))
+    .limit(1);
+  const row = rows[0];
+  return row === undefined ? null : { payload: row.payload };
+}
+
 // R8: the owner is part of the same statement. Another customer's resource, a missing one and an id
 // that is not a UUID all give null.
 export async function loadOwnedResource(

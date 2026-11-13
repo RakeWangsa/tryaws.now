@@ -11,9 +11,11 @@ import {
 
 it("every kind has one row of info and nothing else has", () => {
   expect(Object.keys(OPERATION_KIND_INFO).sort()).toEqual([...OPERATION_KINDS].sort());
-  expect(OPERATION_KINDS).toHaveLength(45);
+  expect(OPERATION_KINDS).toHaveLength(46);
   expect(OPERATION_KINDS).toContain("rename");
   expect(OPERATION_KINDS).toContain("reject_operation");
+  // WPU-X3 (b): the admin's "registry confirmed not renewed" of a stuck domain renewal.
+  expect(OPERATION_KINDS).toContain("confirm_unrenewed");
 });
 
 it("the destructive kinds of R13 are cleanup_failed_create, destroy, purge_snapshots and delete_backup", () => {
@@ -34,6 +36,7 @@ it("a lifecycle kind has its own adapter method, reject_operation is run by the 
     destroy: "destroy",
     purge_snapshots: "purgeSnapshots",
     reject_operation: "engine",
+    confirm_unrenewed: "engine",
     cleanup_failed_create: "destroy",
   } as const;
   for (const kind of OPERATION_KINDS) {
@@ -85,6 +88,7 @@ it("a customer may request the actions of 16.10 and nothing that the purchase, t
       "change_cdn_bundle",
       "cleanup_failed_create",
       "clear_plan_change_mark",
+      "confirm_unrenewed",
       "create",
       "final_snapshot",
       "purge_snapshots",

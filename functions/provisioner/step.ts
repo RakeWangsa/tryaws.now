@@ -22,6 +22,7 @@ import {
 import { loadOwnedResource, patchResource } from "@tc/db";
 import type { OperationUpdate, ResourceRow, RunView } from "@tc/db";
 import { claimStep } from "./claim";
+import { runConfirmUnrenewed } from "./confirm-unrenewed";
 import { runReject } from "./reject";
 import type { HookEvent, RunOutcome, StepDeps } from "./types";
 
@@ -112,7 +113,7 @@ async function callAdapter(
   const kind = view.operation.kind;
   if (!isOperationKind(kind)) throw new Error("step: unknown operation kind");
   const method = OPERATION_KIND_INFO[kind].method;
-  // runStep sends an engine kind (reject_operation) to runReject before it gets here.
+  // runStep sends an engine kind (reject_operation, confirm_unrenewed) to its runner before it gets here.
   if (method === "engine") throw new Error("step: an engine kind has no adapter method");
   if (method === "action") return adapter.aws.action(kind, ctx);
   return adapter.aws[method](ctx);
@@ -300,7 +301,13 @@ export async function runStep(deps: StepDeps, message: QueueMessage): Promise<Ru
   const { view, leaseUntil } = claim;
   const kind = view.operation.kind;
   if (!isOperationKind(kind)) throw new Error("step: unknown operation kind");
-  if (OPERATION_KIND_INFO[kind].method === "engine") return runReject(deps, view, leaseUntil);
+  if (OPERATION_KIND_INFO[kind].method === "engine") {
+    // WPU-X3 (b): the admin's "registry confirmed not renewed" has a runner of its own; every other engine kind is
+    // the rejection of a stuck operation.
+    return kind === "confirm_unrenewed"
+      ? runConfirmUnrenewed(deps, view, leaseUntil)
+      : runReject(deps, view, leaseUntil);
+  }
 
   const adapter = view.resource === null ? undefined : deps.adapters.get(view.resource.family);
   if (view.resource === null || adapter === undefined) {

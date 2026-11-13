@@ -69,11 +69,17 @@ export const OPERATION_KINDS = [
   // instead of a final snapshot: nothing of the customer's was ever there. Destructive: admin approval
   // until the end date of R13.
   "cleanup_failed_create",
+  // WPU-X3 (b): an admin (finance or superadmin) asks for a fresh registry check of a domain renewal stuck in
+  // needs_attention at `poll`. The provisioner reads the registry and, only on a final "not renewed" with the expiry
+  // unchanged, moves the renewal to failed with its refund (functions/provisioner/confirm-unrenewed.ts). Never
+  // requested by a customer; changes no AWS resource.
+  "confirm_unrenewed",
 ] as const;
 
 export type OperationKind = (typeof OPERATION_KINDS)[number];
 
-// "engine" means that no adapter runs: the provisioner does the work itself.
+// "engine" means that no adapter runs: the provisioner does the work itself (reject_operation; confirm_unrenewed,
+// which reads the registry through its own port).
 export type AdapterMethod =
   | "create"
   | "suspend"
@@ -146,6 +152,8 @@ export const OPERATION_KIND_INFO: Readonly<Record<OperationKind, KindInfo>> = {
   set_name_servers: info("action", false, true),
   reject_operation: info("engine", false, false),
   cleanup_failed_create: info("destroy", true, false),
+  // Run by the engine like reject_operation: it reads the registry (no adapter call) and writes the database.
+  confirm_unrenewed: info("engine", false, false),
 };
 
 export function isOperationKind(value: unknown): value is OperationKind {

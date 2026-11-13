@@ -327,6 +327,27 @@ describe("/servers/[id] management (WPU-G2)", () => {
     expect(bn).toContain("ssh -i Laptop.pem bitnami@203.0.113.10");
     expect(bn).toContain("ইমেজ");
   });
+  it("WPU-X3: an app image with a documented password file names the file and the command on the Connect tab", async () => {
+    state.detail = detail({
+      imageName: "LAMP",
+      loginUser: "admin",
+      appPasswordFile: "~/application_credentials",
+    });
+    state.manage = manage({ loginUser: "admin" });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain("Application password");
+    expect(en).toContain("cat ~/application_credentials");
+    const bn = await renderPage(ServerDetailPage as never, "bn", { id: SERVER_ID });
+    expect(bn).toContain("অ্যাপ্লিকেশন পাসওয়ার্ড");
+    expect(bn).toContain("cat ~/application_credentials");
+  });
+  it("WPU-X3: an image without a documented password file shows no password line (nothing guessed)", async () => {
+    state.detail = detail({ imageName: "WordPress", loginUser: "admin", appPasswordFile: null });
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).not.toContain("Application password");
+    expect(en).not.toContain("application_credentials");
+    expect(en).not.toContain("bitnami_application_password");
+  });
   it("an unknown image gets no guessed user", async () => {
     state.manage = manage({ loginUser: null });
     const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });

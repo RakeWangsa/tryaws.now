@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { isLocale } from "@tc/ui/runtime";
+import { isLocale, localePath } from "@tc/ui/runtime";
 import { AdminFrame } from "../../_components/AdminFrame.tsx";
 import { NoAccess } from "../../_components/NoAccess.tsx";
 import { PaymentsView, resultCodeOf } from "../../_components/MoneyViews.tsx";
@@ -32,8 +32,13 @@ export default async function Page({ params, searchParams }: PageProps) {
     loadPayments(loaded.admin, query),
     loadOpenDiscrepancies(loaded.admin),
   ]);
+  const renewals = await getTranslations({ locale, namespace: "AdminRenewals" });
   return (
     <AdminFrame locale={locale} admin={loaded.admin} currentId="payments">
+      {/* WPU-X3 (b): the domain renewals stuck at the registry check. */}
+      <p>
+        <a href={localePath(locale, "/payments/renewals")}>{renewals("link")}</a>
+      </p>
       <PaymentsView
         locale={locale}
         query={query}
