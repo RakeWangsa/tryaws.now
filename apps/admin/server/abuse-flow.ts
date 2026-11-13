@@ -2,11 +2,7 @@ import { z } from "zod";
 import { sendAfterCommit, type OperationQueue } from "@tc/core";
 import { ABUSE_SOURCES, type AbuseSource, type AdminActor, type AdminRole } from "@tc/db";
 import { optionalText, reason as reasonSchema, text, uuid } from "./schemas.ts";
-import {
-  failureCode,
-  type CaseActionAnswer,
-  type CaseFlowDeps,
-} from "./case-flow-common.ts";
+import { failureCode, type CaseActionAnswer, type CaseFlowDeps } from "./case-flow-common.ts";
 
 // The actions of /abuse (16.12) in the order of R9: authorize, validate, rate limit, execute (one
 // transaction, every write through `audited`), answer. ops, support and superadmin work cases;
