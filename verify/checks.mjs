@@ -3832,6 +3832,22 @@ TASKS["WPU-Y4"] = [
   repo,
 ];
 
+// WPU-X1 (owner round 5, required before the disk flag): a final snapshot that started when its retention ended
+// (a revived server gives its disks back, the unpaid payback) finishes as an ordinary, deletable backup; only an
+// unstarted one is ended, and the ended ids are logged. core and db include the PostgreSQL tests.
+TASKS["WPU-X1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  repo,
+];
+
 // WPU-Y1: app images move to the Lightsail-packaged blueprints (core tables and defaults; no DB change).
 TASKS["WPU-Y1"] = [specSync, baselineSync, lint, typecheck, format, core, repo];
 
