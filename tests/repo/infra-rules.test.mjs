@@ -517,11 +517,19 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(admin).not.toContain("INVOICES_BUCKET");
     expect(admin).not.toContain("invoice-renderer");
     expect(admin).not.toMatch(/invoices\//);
-    // what admin keeps: the exports bucket with its key, and catalog-sync
+    // what admin keeps: the exports bucket with its key
     expect(admin).toContain("$interpolate`${storage.exports.arn}/*`");
-    expect(admin).toContain('...invoke("catalog-sync")');
-    // WPU-Z9: catalog-sync is a CronV2, not in workers.invoked: the lookup reads the crons too
-    expect(web).toContain("workers.invoked[dir] ?? workers.crons[dir]?.nodes.function");
+    // WPU-Z9 (least privilege): no grant on catalog-sync, nothing in apps/admin invokes it. The one
+    // function admin may invoke is its own alias of the reader.
+    expect(web).not.toContain("catalog-sync");
+    expect(admin.match(/lambda:InvokeFunction/g)).toHaveLength(1);
+    expect(admin).toContain(
+      'actions: ["lambda:InvokeFunction"], resources: [workers.readerAliases.admin.arn]',
+    );
+    // WPU-Z9: the three function names of the web tier come from workers.invoked, fail closed (R16)
+    expect(web).toContain("const fn = workers.invoked[dir];");
+    expect(web).toContain("if (fn === undefined) throw new Error(`no function for ${dir}`);");
+    expect(web.match(/_FUNCTION_NAME: functionOf\("[a-z-]+"\)\.name/g)).toHaveLength(3);
     expect(admin).toContain("storage.filesKey.arn");
     // the customer path invokes the renderer and gets the PDF in its answer (WPU-N1); WPU-B7 (L2): it holds
     // no read of the invoices bucket, only of exports

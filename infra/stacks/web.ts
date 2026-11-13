@@ -89,17 +89,13 @@ export function web(inputs: WebInputs) {
     recorded.push(permissions);
     return permissions;
   };
-  // The function of a folder: one that web or admin calls (workers.invoked) or a scheduled one that
-  // admin also starts on demand (catalog-sync, a CronV2 in workers.crons). WPU-Z9: the lookup read
-  // workers.invoked only, so "catalog-sync" gave undefined, which Pulumi sends as a null resource
-  // of the admin policy (iam.getPolicyDocumentOutput, components/aws/function.ts). Fail closed
-  // (R16): a folder without a function stops the deploy here, never an undefined ARN or name later.
+  // The function of a folder that the web tier calls by name (workers.invoked). WPU-Z9, fail closed
+  // (R16): a folder without a function stops the deploy here, never an undefined name later.
   const functionOf = (dir: string) => {
-    const fn = workers.invoked[dir] ?? workers.crons[dir]?.nodes.function;
+    const fn = workers.invoked[dir];
     if (fn === undefined) throw new Error(`no function for ${dir}`);
     return fn;
   };
-  const invoke = (...dirs: string[]) => dirs.map((dir) => functionOf(dir).arn);
   // WPU-S6: each tier may invoke only its own alias of the reader (customerId on "web", adminId on
   // "admin"); the handler reads the tier from the alias in the invoked ARN.
   const dbEnvironment = (role: "web_rw" | "admin_rw") => ({
@@ -194,16 +190,18 @@ export function web(inputs: WebInputs) {
       KYC_BUCKET: storage.kyc.name,
       EXPORTS_BUCKET: storage.exports.name,
     },
-    // Admin reads KYC objects (the only role that may), invokes catalog-sync, calls the Cognito admin
-    // API of the admin pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
+    // Admin reads KYC objects (the only role that may) and calls the Cognito admin API of the admin
+    // pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
     // invoice-renderer (WPU-S8): an invoice PDF holds the buyer's BIN or NID and address; the renderer
     // function writes it and the customer's own web path reads it.
     // WPU-B7 (L1): no sqs:SendMessage and no queue URL: the admin app has no queue client, it writes
     // operation rows and the scheduler enqueues them (R1).
+    // WPU-Z9 (least privilege): no invoke of catalog-sync, which 3.2 allows: nothing in apps/admin
+    // calls it (its daily CronV2 runs it). An admin "sync now" adds the grant with its invoker.
     permissions: record([
       {
         actions: ["lambda:InvokeFunction"],
-        resources: [workers.readerAliases.admin.arn, ...invoke("catalog-sync")],
+        resources: [workers.readerAliases.admin.arn],
       },
       { actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/*`] },
       { actions: ["kms:Decrypt"], resources: [storage.kycKey.arn] },
