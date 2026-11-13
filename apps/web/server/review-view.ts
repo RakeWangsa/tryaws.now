@@ -1,4 +1,4 @@
-import { snapshotToQuote } from "@tc/core";
+import { customerUsd, snapshotToQuote } from "@tc/core";
 import type { verifyDraft } from "@tc/core";
 import { shortfallTopUpTaka } from "./servers-view.ts";
 
@@ -23,6 +23,11 @@ export type ReviewScreen =
       baseMinor: bigint;
       steps: { code: string; amountMinor: bigint }[];
       totalMinor: bigint;
+      /** WPU-Y4: the price in US dollars (decimal text), the rate that converts it, the day it was set, and the BDT debited (`totalMinor`). */
+      usdText: string;
+      fxRate: string;
+      /** ISO instant the rate took effect; null for a draft signed before the rate was carried. */
+      fxSetAt: string | null;
       balanceMinor: bigint;
       /** null when the balance covers the total */
       balanceAfterMinor: bigint | null;
@@ -47,8 +52,10 @@ export function reviewFromToken(
   if (claims.c !== customerId) return { state: "invalid" };
 
   let quote;
+  let usd;
   try {
     quote = snapshotToQuote(claims.snap);
+    usd = customerUsd(quote);
   } catch {
     return { state: "invalid" };
   }
@@ -65,6 +72,9 @@ export function reviewFromToken(
     baseMinor: quote.baseMinor,
     steps: quote.steps.map((s) => ({ code: s.code, amountMinor: s.amountMinor })),
     totalMinor: quote.totalMinor,
+    usdText: usd.text,
+    fxRate: quote.fxRate,
+    fxSetAt: claims.fx?.at ?? null,
     balanceMinor,
     balanceAfterMinor: shortfallTaka === null ? balanceMinor - quote.totalMinor : null,
     shortfallTaka,

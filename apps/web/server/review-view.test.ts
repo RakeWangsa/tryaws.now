@@ -40,6 +40,29 @@ describe("reviewFromToken", () => {
     expect(r.balanceAfterMinor).toBe(31000n);
   });
 
+  it("WPU-Y4: carries the USD price, the rate and its day; the USD converts back to the BDT debited", () => {
+    const withRate: Claims = {
+      ...claims,
+      fx: { id: "0190bbbb-0000-7000-8000-000000000002", at: "2026-11-10T04:00:00.000Z" },
+    };
+    const r = reviewFromToken(() => ({ ok: true, claims: withRate }), "tok", CUSTOMER, 100000n);
+    if (r.state !== "ready") throw new Error("expected ready");
+    expect(r.usdText).toBe("5.75");
+    expect(r.fxRate).toBe("120.0000");
+    expect(r.fxSetAt).toBe("2026-11-10T04:00:00.000Z");
+    expect(r.totalMinor).toBe(69000n);
+    const none = reviewFromToken(() => ok, "tok", CUSTOMER, 100000n);
+    if (none.state !== "ready") throw new Error("expected ready");
+    expect(none.fxSetAt).toBeNull();
+  });
+
+  it("WPU-Y4: a rate that cannot be inverted is invalid, never shown (fail closed)", () => {
+    const bad = { ...claims, snap: { ...claims.snap, fxRate: "20000" } };
+    expect(reviewFromToken(() => ({ ok: true, claims: bad }), "t", CUSTOMER, 0n).state).toBe(
+      "invalid",
+    );
+  });
+
   it("shows the shortfall rounded up to whole taka and a top-up amount", () => {
     const r = reviewFromToken(() => ok, "tok", CUSTOMER, 50001n);
     if (r.state !== "ready") throw new Error("expected ready");

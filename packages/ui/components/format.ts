@@ -46,6 +46,31 @@ export function formatMoney(
   return `${negative ? "-" : ""}${TAKA}${text}`;
 }
 
+const PLAIN_DECIMAL_TEXT = /^(\d+)(?:\.(\d+))?$/;
+
+/**
+ * Formats plain decimal text (digits and an optional fraction) with the digits of the locale or market,
+ * keeping every fraction digit of the text. The text is handed to Intl as text, so no float is formed (R4).
+ */
+export function formatDecimalText(
+  text: string,
+  o: { locale: Locale; numerals?: Numerals; minFraction?: number },
+): string {
+  const match = typeof text === "string" ? PLAIN_DECIMAL_TEXT.exec(text) : null;
+  if (match === null) throw new RangeError("formatDecimalText: plain decimal text expected");
+  const digits = (match[2] ?? "").length;
+  const min = o.minFraction ?? 0;
+  return new Intl.NumberFormat(intlTag(o.locale, o.numerals), {
+    minimumFractionDigits: min,
+    maximumFractionDigits: Math.max(digits, min),
+  }).format(text as unknown as number);
+}
+
+/** US dollars from the decimal text of the pricing engine (customerUsd): "$5.85". Never an Intl currency style. */
+export function formatUsd(text: string, o: { locale: Locale; numerals?: Numerals }): string {
+  return `$${formatDecimalText(text, { ...o, minFraction: 2 })}`;
+}
+
 /** Parses a Date or an ISO string that carries Z or an offset; anything else is a defect (R16). */
 export function toDate(value: Date | string): Date {
   let date: Date;

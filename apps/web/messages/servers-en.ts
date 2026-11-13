@@ -302,6 +302,16 @@ export const serversEn: Same<typeof serversBn> = {
       termValue: "30 days",
       renewal:
         "At the end of the term the renewal is paid from your wallet. You can turn automatic renewal off; the server is then suspended.",
+      fx: {
+        caption: "Price in US dollars, exchange rate and amount in taka",
+        usd: "Price in US dollars",
+        rate: "Exchange rate",
+        rateValue: "1 USD = ৳{rate}, set on {date}",
+        rateValueNoDate: "1 USD = ৳{rate}",
+        bdt: "Amount debited from your wallet (taka)",
+        // DRAFT WORDING (WPU-Y4): the owner confirms this note.
+        note: "The price is in US dollars. The amount in taka is the dollar price at the exchange rate shown, and it is exactly what is taken from your wallet. If the rate changes before you confirm, you will see the new amount and confirm again.",
+      },
       lines: "Price details",
       awsPrice: "AWS service price",
       step: {

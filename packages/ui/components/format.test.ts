@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TAKA, formatDate, formatMoney } from "./format";
+import { TAKA, formatDate, formatMoney, formatUsd } from "./format";
 
 const en = { locale: "en" as const };
 const bn = { locale: "bn" as const };
@@ -58,5 +58,23 @@ describe("formatDate", () => {
   it("supports the time variant and a numerals override", () => {
     expect(formatDate("2026-11-11T18:30:00Z", { locale: "en", variant: "time" })).toMatch(/12:30/);
     expect(formatDate("2026-11-11T18:30:00Z", { locale: "en", numerals: "beng" })).toContain("১২");
+  });
+});
+
+describe("formatUsd (WPU-Y4)", () => {
+  it("writes dollars from decimal text with at least two decimals and every given decimal", () => {
+    expect(formatUsd("5.85", { locale: "en" })).toBe("$5.85");
+    expect(formatUsd("5", { locale: "en" })).toBe("$5.00");
+    expect(formatUsd("0.585", { locale: "en" })).toBe("$0.585");
+    expect(formatUsd("1234.5", { locale: "en" })).toBe("$1,234.50");
+  });
+  it("uses Bengali digits in bn and Latin digits when asked", () => {
+    expect(formatUsd("5.85", { locale: "bn" })).toBe("$৫.৮৫");
+    expect(formatUsd("5.85", { locale: "bn", numerals: "latn" })).toBe("$5.85");
+  });
+  it("refuses anything that is not plain decimal text", () => {
+    expect(() => formatUsd("1e3", { locale: "en" })).toThrow(RangeError);
+    expect(() => formatUsd("-1", { locale: "en" })).toThrow(RangeError);
+    expect(() => formatUsd(5 as never, { locale: "en" })).toThrow(RangeError);
   });
 });

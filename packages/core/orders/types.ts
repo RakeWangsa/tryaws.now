@@ -29,6 +29,12 @@ export interface DraftClaims {
   readonly region: string;
   readonly cfg: Readonly<Record<string, unknown>>;
   readonly snap: PriceSnapshot;
+  /**
+   * WPU-Y4: the exchange rate row that priced the draft (its id and the instant it took effect), shown on the
+   * review page. Optional: a draft signed before had none. The price check compares the rate TEXT and the
+   * amounts of `snap`, never this id, so setting the same rate again does not ask the customer to confirm again.
+   */
+  readonly fx?: { readonly id: string; readonly at: string };
   readonly iat: number;
   readonly exp: number;
 }

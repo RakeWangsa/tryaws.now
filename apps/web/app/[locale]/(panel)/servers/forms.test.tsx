@@ -61,10 +61,56 @@ describe("PlaceForm (placeOrder)", () => {
     expect(html).toContain('name="idempotencyKey" value="0190aaaa-0000-7000-8000-0000000000e1"');
   });
 
+  it("WPU-Y4: shows the USD price, today's rate with the day it was set, and the BDT debited", () => {
+    const en = place("en");
+    expect(en).toContain("Price in US dollars");
+    expect(en).toContain("$5.75");
+    expect(en).toContain("1 USD = ৳120, set on");
+    expect(en).toContain("Nov 10, 2026");
+    expect(en).toContain("Amount debited from your wallet (taka)");
+    expect(en).toContain("৳690.00");
+    expect(en).toContain("exactly what is taken from your wallet");
+    const bn = place("bn");
+    expect(bn).toContain("$৫.৭৫");
+    expect(bn).toContain("১ USD = ৳১২০");
+    expect(bn).toContain("৳৬৯০.০০");
+    // a draft signed before the rate was carried has no date, and says no date
+    expect(place("en", { ...readyReview, fxSetAt: null })).toContain("1 USD = ৳120<");
+  });
+
+  it("WPU-Y4: after a rate change the new USD price, the new rate and the new BDT replace the old and ask to confirm again", () => {
+    hold.state = {
+      error: "price_changed",
+      draft: {
+        token: "fresh.token",
+        totalMinor: "75000",
+        expiresAt: "2026-11-12T01:30:00.000Z",
+        usdText: "5.00",
+        fxRate: "150",
+        fxSetAt: "2026-11-12T04:00:00.000Z",
+      },
+    } satisfies FormState;
+    const en = place("en");
+    expect(en).toContain("1 USD = ৳150, set on");
+    expect(en).toContain("Nov 12, 2026");
+    expect(en).toContain("$5.00");
+    expect(en).not.toContain("1 USD = ৳120");
+    expect(en).toContain("The price changed");
+    expect(en).toContain("৳750.00");
+    expect(en).toContain('name="token" value="fresh.token"');
+  });
+
   it("on price_changed posts the NEW token and shows the old and the new total, without the old lines", () => {
     hold.state = {
       error: "price_changed",
-      draft: { token: "fresh.token", totalMinor: "75000", expiresAt: "2026-11-12T01:30:00.000Z" },
+      draft: {
+        token: "fresh.token",
+        totalMinor: "75000",
+        expiresAt: "2026-11-12T01:30:00.000Z",
+        usdText: "5.00",
+        fxRate: "150",
+        fxSetAt: "2026-11-12T04:00:00.000Z",
+      },
     } satisfies FormState;
     const bn = place("bn");
     expect(bn).toContain('name="token" value="fresh.token"');
@@ -81,7 +127,14 @@ describe("PlaceForm (placeOrder)", () => {
   it("a new total above the balance turns the form into the shortfall state with a top-up link", () => {
     hold.state = {
       error: "price_changed",
-      draft: { token: "fresh.token", totalMinor: "160000", expiresAt: "2026-11-12T01:30:00.000Z" },
+      draft: {
+        token: "fresh.token",
+        totalMinor: "160000",
+        expiresAt: "2026-11-12T01:30:00.000Z",
+        usdText: "10.00",
+        fxRate: "160",
+        fxSetAt: null,
+      },
     } satisfies FormState;
     const en = place("en");
     expect(en).toContain("Shortfall");

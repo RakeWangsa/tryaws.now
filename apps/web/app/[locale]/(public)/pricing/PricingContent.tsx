@@ -46,7 +46,7 @@ export function PricingContent({
                   url: o + localePath(locale, "/pricing"),
                   offers: offers.map((offer) => ({
                     name: offerName(t, offer),
-                    priceMinor: offer.priceMinor,
+                    priceUsd: offer.priceUsd,
                     url: o + orderHref(locale),
                   })),
                 }),

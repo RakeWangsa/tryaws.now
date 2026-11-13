@@ -18,6 +18,7 @@ it("exports exactly the public API of the pricing engine", () => {
     "SnapshotError",
     "accountFor",
     "allowanceLevel",
+    "customerUsd",
     "dailyMeteredChargeMinor",
     "decimalAtMost",
     "fxChangeNeedsConfirm",
@@ -40,6 +41,8 @@ it("exports exactly the public API of the pricing engine", () => {
     "rateIsFresh",
     "snapshotToQuote",
     "toSnapshot",
+    "usdMicroText",
+    "usdToBdtMinor",
     "validateBookTerms",
     "validateRule",
   ]);

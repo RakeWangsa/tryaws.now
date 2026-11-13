@@ -393,6 +393,8 @@ const STORAGE_CONTAINER = [
 ];
 
 // WPU-Y1: the hand-set exchange rate has a maximum age (7 days).
+const WPU_Y4 = ["customerUsd", "usdMicroText", "usdToBdtMinor"];
+
 const WPU_Y1 = [
   "FX_ALERT_EVENT",
   "FX_CLOCK_SKEW_TOLERANCE_MS",
@@ -637,6 +639,7 @@ describe("the public surface of the order flow", () => {
           ...LIFECYCLE,
           ...WP7,
           ...WPU_Y1,
+          ...WPU_Y4,
           ...STORAGE_CONTAINER,
           ...KYC,
           ...RECONCILE,

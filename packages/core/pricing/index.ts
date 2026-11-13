@@ -26,6 +26,7 @@ export {
   type PricingPreview,
 } from "./preview";
 export { prorateMinor } from "./prorata";
+export { customerUsd, usdMicroText, usdToBdtMinor, type CustomerUsd } from "./usd";
 export { quote } from "./quote";
 export {
   SNAPSHOT_VERSION,

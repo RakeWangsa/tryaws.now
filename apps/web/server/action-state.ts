@@ -8,7 +8,14 @@ export interface FormState {
   /** A success key such as "added", "replayed" or "removed". */
   readonly done?: string;
   /** After price_changed: the new draft the review page continues with. */
-  readonly draft?: { token: string; totalMinor: string; expiresAt: string };
+  readonly draft?: {
+    token: string;
+    totalMinor: string;
+    expiresAt: string;
+    usdText: string;
+    fxRate: string;
+    fxSetAt: string | null;
+  };
 }
 
 export const INITIAL_FORM_STATE: FormState = Object.freeze({});
