@@ -5,7 +5,7 @@ Section M: "EPS unavailable (manual top-up by a `finance` admin with a bank or w
 ## Trigger
 
 - EPS GetToken or InitializeEPS fails for many customers (payments marked `failed` at once), or EPS is announced as down.
-- A customer holds a bank or wallet receipt for money sent to MeghVPS outside the gateway.
+- A customer holds a bank or wallet receipt for money sent to TryAWS.now outside the gateway.
 
 ## Who
 
