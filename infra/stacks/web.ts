@@ -122,8 +122,10 @@ export function web(inputs: WebInputs) {
       TC_STAGE: config.tcStage,
       APP_ORIGIN: `https://${config.webDomain}`,
       ...dbEnvironment("web_rw"),
-      COGNITO_USER_POOL_ID: auth.customers.id,
-      COGNITO_CLIENT_ID: auth.customerClient.id,
+      // The names packages/auth/config.ts authConfigFromEnv reads (the old COGNITO_USER_POOL_ID and
+      // COGNITO_CLIENT_ID were read by nothing: the first deploy would have had no sign-in).
+      COGNITO_CUSTOMER_POOL_ID: auth.customers.id,
+      COGNITO_CUSTOMER_CLIENT_ID: auth.customerClient.id,
       PROVISIONING_QUEUE_URL: queues.provisioning.url,
       // WPU-G4: the function name (not the ARN) of the reader, for the Metrics tab. The role may
       // invoke it (permissions below); apps/web/server/reader-invoke.ts builds the client lazily.
@@ -186,8 +188,9 @@ export function web(inputs: WebInputs) {
       // In-app second gate next to the WAF (apps/admin/server/gate.ts).
       ADMIN_IP_ALLOWLIST: config.adminAllowlist,
       ...dbEnvironment("admin_rw"),
-      COGNITO_USER_POOL_ID: auth.admins.id,
-      COGNITO_CLIENT_ID: auth.adminClient.id,
+      // The names packages/auth/config.ts adminAuthConfigFromEnv reads.
+      COGNITO_ADMIN_POOL_ID: auth.admins.id,
+      COGNITO_ADMIN_CLIENT_ID: auth.adminClient.id,
       KYC_BUCKET: storage.kyc.name,
       EXPORTS_BUCKET: storage.exports.name,
     },
