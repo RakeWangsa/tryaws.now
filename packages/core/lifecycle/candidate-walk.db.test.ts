@@ -3,15 +3,17 @@
 // the candidate list; with more held ones than one page (500), a subscription behind them was never examined again
 // (no renewal, no grace, no end of retention). The pass now walks every page of the list: the one behind them is
 // renewed in the same sweep. Own database; the rate is kept fresh (keepFxFresh), so only the price snapshots below
-// hold anything.
+// hold anything. The review of WPU-Z12: the walk has an upper bound in time (LIFECYCLE_BUDGET_MS); a pass that uses it
+// up stops between rows and fails, and the next pass starts at the head again.
 import type { Tx } from "@tc/db";
 import { newCustomer, runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { LogEvent } from "../operations/types";
 import { makeKit, placeOne, START, type Kit } from "../test/orders-kit";
-import { LIFECYCLE_LIMIT, runLifecycle } from "./engine";
+import { LIFECYCLE_LIMIT, LifecyclePassCutError, runLifecycle } from "./engine";
 
 const t = useTempDatabase();
+const SECOND = 1000;
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 let kit: Kit;
@@ -189,5 +191,61 @@ describe("the lifecycle pass walks every candidate (keyset paging, WPU-Z12)", ()
     expect(new Set(heldLines().map((e) => e.subscriptionId))).toEqual(new Set(held));
     // The failed row is left as it was (its transaction rolled back) and is a candidate again next sweep.
     expect((await periodOf(broken[0]!)).status).toBe("active");
+  });
+
+  it("a pass that uses up its time budget stops between rows and fails; the next pass starts at the head and reaches the rest (WPU-Z12 review)", async () => {
+    const r = await renewable();
+    const holder = await kit.newBuyer({ balanceMinor: 50_000_000n });
+    const held = await heldRows(holder.customerId, 10, new Date(r.end.getTime() - HOUR));
+    const at = new Date(r.end.getTime() + MINUTE);
+    kit.clock.set(at);
+
+    // A clock that moves one second at every reading. The pass reads it once at its start and once before each row (a
+    // held row reads no other time: it is priced at the pass's instant), so a budget of 4.5 s lets four rows start.
+    let readings = 0;
+    const stepping = { now: () => new Date(at.getTime() + SECOND * readings++) };
+    await expect(
+      runLifecycle({
+        runTx: worker,
+        clock: stepping,
+        log: (e) => void logged.push(e),
+        budgetMs: 4_500,
+      }),
+    ).rejects.toThrow(LifecyclePassCutError);
+    // One line with the counts. Every row it reached was held (one line each) and committed; the renewable one behind
+    // them was not reached; nothing was charged.
+    expect(logged.filter((e) => e.event === "lifecycle_pass_cut")).toEqual([
+      {
+        event: "lifecycle_pass_cut",
+        budgetMs: 4_500,
+        examined: 4,
+        reminded: 0,
+        renewed: 0,
+        graced: 0,
+        retained: 0,
+        ended: 0,
+        failed: 0,
+      },
+    ]);
+    expect(heldLines()).toHaveLength(4);
+    expect(await heldState(held)).toEqual({ active: 10, marked: 4, suspends: 0 });
+    expect(await renewals(r.subscriptionId)).toBe(0);
+
+    // The next pass, on time, starts at the head again: the four are held again (R7: nothing written twice), the other
+    // six for the first time, and the renewable one is renewed.
+    logged = [];
+    expect(await sweep()).toEqual({
+      examined: 11,
+      reminded: 0,
+      renewed: 1,
+      graced: 0,
+      retained: 0,
+      ended: 0,
+      failed: 0,
+    });
+    expect(await renewals(r.subscriptionId)).toBe(1);
+    expect(heldLines()).toHaveLength(10);
+    expect(await heldState(held)).toEqual({ active: 10, marked: 10, suspends: 0 });
+    expect(await kit.balance(holder.customerId)).toBe(50_000_000n);
   });
 });
