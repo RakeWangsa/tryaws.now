@@ -14,7 +14,7 @@ import type { PostTransactionInput } from "../ledger/types";
 import type { Logger, RunTx } from "../operations/types";
 import { staticIpHourPrice, type StaticIpPrice } from "../products/static-ip-price";
 import type { Clock, Result } from "../types";
-import { UNPAID_TEMPLATE, dhakaDay } from "./run";
+import { UNPAID_TEMPLATE, defaultMeteringOps, dhakaDay } from "./run";
 
 // WPU-M1. A static IP that is not attached to a server is charged as Amazon Lightsail does: free while
 // attached, and USD 0.005 an hour (config price, converted by the pricing engine) once it has been
@@ -44,9 +44,16 @@ export function dhakaHour(at: Date): string {
  * and up to two before it. A bucket is due when the IP had been detached for MORE than one hour at the
  * earlier of `now` and the end of the bucket. At exactly one hour nothing is due.
  */
-export function staticIpChargeableHours(detachedAt: Date, now: Date): string[] {
+export function staticIpChargeableHours(
+  detachedAt: Date,
+  now: Date,
+  /** WPU-Y1: hours held while the rate was stale (stale-window.ts); widens the look-back, never narrows it. */
+  heldHours = 0,
+): string[] {
   const start = Math.floor(now.getTime() / HOUR_MS) * HOUR_MS;
-  return staticIpHoursSince(detachedAt, new Date(start - STATIC_IP_CATCH_UP_HOURS * HOUR_MS), now);
+  // WPU-Y1 + WPU-Y3: the look-back is the normal catch-up, or longer after a stale-rate gap.
+  const lookBack = Math.max(STATIC_IP_CATCH_UP_HOURS, Number.isFinite(heldHours) ? heldHours : 0);
+  return staticIpHoursSince(detachedAt, new Date(start - lookBack * HOUR_MS), now);
 }
 
 /**
@@ -81,6 +88,8 @@ export function staticIpIsCharging(detachedAt: Date, now: Date): boolean {
 export interface StaticIpOps {
   list(tx: Tx, afterId: string | null, limit: number): Promise<DetachedIpRow[]>;
   price(tx: Tx, market: string, clock: Clock): Promise<Result<StaticIpPrice>>;
+  /** WPU-Y1. As MeteringOps.staleWindowMs: ms the launch market's rate was stale just before the one in force; absent means 0. */
+  staleWindowMs?(tx: Tx, clock: Clock, market: string): Promise<number>;
   hasCharge(tx: Tx, key: string): Promise<boolean>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
   notify(tx: Tx, notice: NewLifecycleNotification): Promise<boolean>;
@@ -95,6 +104,7 @@ export interface StaticIpOps {
 export const defaultStaticIpOps: StaticIpOps = {
   list: (tx, afterId, limit) => meteringRepo(tx).listDetachedStaticIps(afterId, limit),
   price: staticIpHourPrice,
+  staleWindowMs: defaultMeteringOps.staleWindowMs!,
   hasCharge: async (tx, key) => (await findLedgerTransactionByKey(tx, key)) !== null,
   post: postTransaction,
   notify: (tx, notice) => lifecycleRepo(tx).insertNotification(notice),
@@ -145,6 +155,12 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
     return value;
   };
 
+  const heldMs =
+    ops.staleWindowMs === undefined
+      ? 0
+      : await deps.runTx((tx) => ops.staleWindowMs!(tx, deps.clock, "BD"));
+  const heldHours = Math.ceil(heldMs / HOUR_MS);
+
   let after: string | null = null;
   for (;;) {
     const rows: DetachedIpRow[] = await deps.runTx((tx) => ops.list(tx, after, page));
@@ -155,7 +171,7 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
           deps.log({ event: "static_ip_no_timestamp", resourceId: row.resourceId });
           continue;
         }
-        const hours = staticIpChargeableHours(row.detachedAt, now);
+        const hours = staticIpChargeableHours(row.detachedAt, now, heldHours);
         if (hours.length === 0) {
           count.notDue += 1;
           continue;

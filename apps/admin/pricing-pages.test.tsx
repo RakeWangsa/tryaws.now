@@ -329,6 +329,48 @@ describe("/pricing", () => {
     expect(mine).toContain(msgs("en").AdminPricing.fx.mine);
   });
 
+  it.each(LOCALES)(
+    "WPU-Y1: shows who set the rate, when and its age, and warns in words once it is older than 6 days (%s)",
+    async (locale) => {
+      const m = msgs(locale).AdminPricing.fx;
+      const meta = { setBy: "0191a000-0000-7000-8000-0000000000ad", setAt: NOW };
+      const day = 86_400;
+      state.pricing = pricing({ fxMeta: meta, fxState: "fresh", fxAgeSeconds: 2 * day + 3600 });
+      const fresh = inProvider(await PricingPage(params(locale)), locale);
+      expect(fresh).toContain(m.state.fresh);
+      expect(fresh).toContain("0191a000");
+      expect(fresh).not.toContain('role="alert"');
+      for (const [fxState, age] of [
+        ["ageing", 6 * day + 60],
+        ["stale", 8 * day],
+        ["missing", null],
+      ] as const) {
+        state.pricing = pricing({ fxMeta: meta, fxState, fxAgeSeconds: age });
+        const html = inProvider(await PricingPage(params(locale)), locale);
+        expect(html, fxState).toContain(m.state[fxState]);
+        expect(html, fxState).toContain('role="alert"');
+      }
+    },
+  );
+
+  it("WPU-Y1: both the request form and the approve form carry the confirm box, and neither names an approver", async () => {
+    const pending = {
+      market: "BD",
+      rate: "140",
+      effectiveFrom: null,
+      reason: "r",
+      requestedBy: OTHER_ID,
+      requestedAt: NOW,
+      expiresAt: new Date(NOW.getTime() + 86_400_000),
+      status: "pending",
+      approvedBy: null,
+      approvedAt: null,
+    };
+    state.pricing = pricing({ pending });
+    const html = inProvider(await PricingPage(params("en")), "en");
+    expect(html.match(/name="confirmLarge"/g)?.length).toBe(2);
+  });
+
   it("no form carries a field that names an approver", async () => {
     state.pricing = pricing({
       submitted: true,

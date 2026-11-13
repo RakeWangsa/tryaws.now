@@ -40,6 +40,7 @@ describe("AdminPricing and AdminCatalog messages", () => {
       "second_admin_required",
       "must_differ_from_actor",
       "not_an_approver",
+      "confirm_required",
     ];
     expect(Object.keys(pricingEn.AdminPricing.result).sort()).toEqual([...codes].sort());
     for (const code of codes.filter(
@@ -50,6 +51,7 @@ describe("AdminPricing and AdminCatalog messages", () => {
           "second_admin_required",
           "must_differ_from_actor",
           "not_an_approver",
+          "confirm_required",
         ].includes(c),
     )) {
       expect(Object.keys(pricingEn.AdminCatalog.result)).toContain(code);

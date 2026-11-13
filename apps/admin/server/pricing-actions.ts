@@ -94,6 +94,7 @@ export async function setFxAction(form: FormData): Promise<void> {
     rate: text(form.get("rate")),
     from: text(form.get("from")),
     reason: text(form.get("reason")),
+    confirmLarge: text(form.get("confirmLarge")),
   });
   back(form, "/pricing", answer);
 }
@@ -102,6 +103,7 @@ export async function approveFxAction(form: FormData): Promise<void> {
   const answer = await makePricingFlow(pricingFlowDeps()).approveFx({
     market: text(form.get("market")),
     reason: text(form.get("reason")),
+    confirmLarge: text(form.get("confirmLarge")),
   });
   back(form, "/pricing", answer);
 }

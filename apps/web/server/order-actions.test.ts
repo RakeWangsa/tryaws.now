@@ -304,4 +304,38 @@ describe("publicErrorOf", () => {
       expect(typeof publicErrorOf(code)).toBe("string");
     }
   });
+
+  it("WPU-Y1: a missing or stale exchange rate reads 'prices are being updated'; any other upstream failure stays generic", () => {
+    expect(publicErrorOf("upstream_unavailable", { code: "prices_updating" })).toBe(
+      "prices_updating",
+    );
+    expect(publicErrorOf("upstream_unavailable")).toBe("unavailable");
+    expect(publicErrorOf("upstream_unavailable", { code: "other" })).toBe("unavailable");
+    // the data of another error never changes its public word
+    expect(publicErrorOf("internal", { code: "prices_updating" })).toBe("unavailable");
+  });
+
+  it("WPU-Y1: the draft and place cores pass the refusal to the form as prices_updating", async () => {
+    const refusal = {
+      ok: false,
+      error: "upstream_unavailable",
+      fields: { fxRate: "stale" },
+      data: { code: "prices_updating" },
+    } as const;
+    const draft = deps({
+      orders: {
+        createOrderDraft: vi.fn(async () => refusal),
+        placeOrder: vi.fn(async () => refusal),
+      } as never,
+    });
+    expect(
+      await createOrderDraftCore(draft.deps, {
+        productId: PRODUCT,
+        region: "ap-south-1",
+        displayName: "web-1",
+        keyPairId: "0190aaaa-0000-7000-8000-000000000002",
+        blueprintId: "ubuntu_24_04",
+      }),
+    ).toEqual({ ok: false, error: "prices_updating" });
+  });
 });

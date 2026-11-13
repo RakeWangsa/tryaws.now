@@ -11,7 +11,7 @@ import {
   SubmitButton,
   type DataTableColumn,
 } from "@tc/ui";
-import { FEATURE_FLAGS, FX_SECOND_ADMIN_PERCENT } from "@tc/core";
+import { FEATURE_FLAGS, FX_CONFIRM_PERCENT, FX_RATE_MAX_AGE_DAYS } from "@tc/core";
 import type { PreviewRow } from "@tc/core";
 import type { AdminActor, FxChange, FxRateRow, PricingRuleRow } from "@tc/db";
 import { localePath, type Locale } from "@tc/ui/runtime";
@@ -33,6 +33,7 @@ const RESULT_CODES = [
   "second_admin_required",
   "must_differ_from_actor",
   "not_an_approver",
+  "confirm_required",
 ] as const;
 type ResultCode = (typeof RESULT_CODES)[number];
 
@@ -102,6 +103,47 @@ function Hidden({ locale, market }: { locale: Locale; market: string }) {
   );
 }
 
+// WPU-Y1. The extra confirm of a change of more than 10 percent. The server checks it again; the box only carries it.
+function ConfirmLarge({ id }: { id: string }) {
+  const t = useTranslations("AdminPricing.fx");
+  return (
+    <div className="position-relative mb-3">
+      <label className="seccolor" htmlFor={id}>
+        <input type="checkbox" id={id} name="confirmLarge" value="on" className="me-2" />
+        {t("confirmLarge", { percent: String(FX_CONFIRM_PERCENT) })}
+      </label>
+    </div>
+  );
+}
+
+// WPU-Y1. Who set the rate in force, when, how old it is, and a warning in words (not by colour alone) once it is
+// older than 6 days. After 7 days the shop refuses purchases, renewals wait and metered charges are held.
+function FxFreshness({ screen }: { screen: PricingScreen }) {
+  const t = useTranslations("AdminPricing.fx");
+  const state = screen.fxState ?? "missing";
+  const seconds = screen.fxAgeSeconds ?? null;
+  const days = seconds === null ? 0 : Math.floor(seconds / 86_400);
+  const hours = seconds === null ? 0 : Math.floor((seconds % 86_400) / 3_600);
+  return (
+    <div className="mb-3">
+      {screen.fxMeta !== null && screen.fxMeta !== undefined ? (
+        <p className="mb-1">
+          {t("setBy", { who: screen.fxMeta.setBy === null ? "-" : screen.fxMeta.setBy.slice(0, 8) })}{" "}
+          <DateText value={screen.fxMeta.setAt} variant="datetime" />
+        </p>
+      ) : null}
+      {seconds !== null ? <p className="mb-1">{t("age", { days, hours })}</p> : null}
+      <p
+        role={state === "fresh" ? "status" : "alert"}
+        className={state === "fresh" ? "form-text seccolor" : "form-text"}
+      >
+        <strong>{t(`state.${state}`)}</strong>{" "}
+        {state === "fresh" ? null : t(`warn.${state}`, { max: String(FX_RATE_MAX_AGE_DAYS) })}
+      </p>
+    </div>
+  );
+}
+
 function FxCard({
   locale,
   screen,
@@ -128,6 +170,7 @@ function FxCard({
         {t("inForce")}:{" "}
         <strong>{screen.fxInForce === null ? t("none") : screen.fxInForce.rate}</strong>
       </p>
+      <FxFreshness screen={screen} />
       {screen.fxHistory.length === 0 ? (
         <EmptyState title={t("none")} description="" />
       ) : (
@@ -167,8 +210,9 @@ function FxCard({
           />
           <ReasonField id="fx-reason" />
         </FormBlock>
+        <ConfirmLarge id="fx-confirm" />
         <p className="form-text seccolor">
-          {t("bigChange", { percent: String(FX_SECOND_ADMIN_PERCENT) })}
+          {t("bigChange", { percent: String(FX_CONFIRM_PERCENT) })}
         </p>
         <SubmitButton variant="primary" size="sm">
           {t("submit")}
@@ -206,6 +250,7 @@ function PendingChange({
         <form action={approveFxAction}>
           <Hidden locale={locale} market={market} />
           <ReasonField id="fx-approve-reason" />
+          <ConfirmLarge id="fx-approve-confirm" />
           <p className="form-text seccolor">{t("approveHint")}</p>
           <SubmitButton variant="primary" size="sm">
             {t("approveSubmit")}

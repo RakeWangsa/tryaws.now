@@ -144,6 +144,7 @@ export const cdnEn: Same<typeof cdnBn> = {
       not_allowed: "This cannot be done in the current state.",
       busy: "A new plan is being applied to this CDN now. Try again when it is done.",
       unavailable: "We could not finish this now. Please try again shortly.",
+      prices_updating: "Prices are being updated. Please try again later.",
     },
     done: {
       enabled: "The request to turn the CDN on was taken.",

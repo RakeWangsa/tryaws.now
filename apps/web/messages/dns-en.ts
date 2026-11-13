@@ -170,6 +170,7 @@ export const dnsEn: Same<typeof dnsBn> = {
       conflict: "A record with this name and type exists, or this name cannot hold this type.",
       limit_reached: "The zone has reached its limit of records. Delete some records first.",
       unavailable: "We could not finish this now. Nothing was changed. Please try again shortly.",
+      prices_updating: "Prices are being updated. Please try again later.",
     },
     field: {
       invalid_name: "The name can hold letters, digits, hyphens and underscores only.",

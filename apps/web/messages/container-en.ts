@@ -177,6 +177,7 @@ export const containerEn: Same<typeof containerBn> = {
       not_allowed: "This cannot be done in the current state.",
       busy: "A new plan is being applied to this service now. Try again when it is done.",
       unavailable: "We could not finish this now. Please try again shortly.",
+      prices_updating: "Prices are being updated. Please try again later.",
     },
     done: {
       deployQueued: "The request to deploy was taken. Look at the state again in a little while.",

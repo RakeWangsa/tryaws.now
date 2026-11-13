@@ -66,7 +66,7 @@ export async function createDnsZoneDraftCore(
   if (!result.ok) {
     return {
       ok: false,
-      error: publicErrorOf(result.error),
+      error: publicErrorOf(result.error, result.data),
       // A held name is a conflict; the customer is told the name is taken, nothing else.
       ...(result.error === "validation" && result.fields ? { fields: result.fields } : {}),
       ...(result.error === "conflict" ? { fields: { zoneName: "taken" } } : {}),

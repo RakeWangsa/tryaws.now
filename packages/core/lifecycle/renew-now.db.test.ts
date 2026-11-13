@@ -50,8 +50,10 @@ const renewals = async (id: string) =>
       )
     )[0]!.n,
   );
-const run = (f: Fresh, resourceId = f.resourceId, customerId = f.customerId) =>
-  asWeb((tx) => renewNow(tx, { customerId, resourceId, clock: kit.clock }));
+const run = async (f: Fresh, resourceId = f.resourceId, customerId = f.customerId) => {
+  await kit.refreshFx(); // WPU-Y1: a rate older than 7 days prices nothing
+  return asWeb((tx) => renewNow(tx, { customerId, resourceId, clock: kit.clock }));
+};
 
 beforeAll(async () => {
   kit = await makeKit(t);

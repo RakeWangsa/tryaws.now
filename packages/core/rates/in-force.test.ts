@@ -33,6 +33,12 @@ beforeAll(async () => {
     steps: JSON.stringify(withMarkup),
     effective_from: "2026-11-15T00:00:00Z",
   });
+  // WPU-Y1: the same rate again from 15 November, as an admin re-confirms it (a rate older than 7 days prices nothing)
+  await insertRow(t.pool, "fx_rates", {
+    market: "BD",
+    rate: "127",
+    effective_from: "2026-11-15T00:00:00Z",
+  });
   // a new rate from 20 November
   await insertRow(t.pool, "fx_rates", {
     market: "BD",
@@ -121,7 +127,12 @@ it.each(["web_rw", "admin_rw", "worker_rw"] as const)(
 );
 
 it("with no rate in force nothing is priced: before the first row, in a market without rows", async () => {
-  const refused = { ok: false, error: "not_found", fields: { fxRate: "not_in_force" } };
+  const refused = {
+    ok: false,
+    error: "upstream_unavailable",
+    fields: { fxRate: "missing" },
+    data: { code: "prices_updating" },
+  };
   expect(await price(null, "2026-11-01T00:00:00Z")).toEqual(refused);
   const ke = await asRole(t, "web_rw", (tx) =>
     quoteInForce(tx, { market: "KE", productFamily: null, awsPriceUsd: "5" }, clockAt(T0)),
@@ -133,7 +144,7 @@ it("with a rate but no rule, and with a stored rule that fails the engine, nothi
   await insertRow(t.pool, "fx_rates", {
     market: "KE",
     rate: "1.25",
-    effective_from: "2026-11-01T00:00:00Z",
+    effective_from: "2026-11-10T00:00:00Z",
   });
   const ke = () =>
     asRole(t, "web_rw", (tx) =>
@@ -144,7 +155,7 @@ it("with a rate but no rule, and with a stored rule that fails the engine, nothi
   await insertRow(t.pool, "pricing_rules", {
     market: "KE",
     steps: JSON.stringify([handling]),
-    effective_from: "2026-11-01T00:00:00Z",
+    effective_from: "2026-11-10T00:00:00Z",
   });
   expect(await ke()).toEqual({
     ok: false,
@@ -162,4 +173,33 @@ it("a bad market, family, price or quantity is a validation failure that names t
   expect(await fieldsOf({ productFamily: "toaster" })).toEqual(["productFamily"]);
   expect(await fieldsOf({ awsPriceUsd: "abc" })).toEqual(["awsPriceUsd"]);
   expect(await fieldsOf({ quantity: "-1" })).toEqual(["quantity"]);
+});
+
+it("WPU-Y1: a rate is fresh for exactly 7 days and refuses one millisecond later (the rate of 15 November)", async () => {
+  expect((await price(null, "2026-11-22T00:00:00.000Z")).ok).toBe(true);
+  // the rate of 20 November is in force from then; the one of 15 November is the last before it
+  const refused = {
+    ok: false,
+    error: "upstream_unavailable",
+    fields: { fxRate: "stale" },
+    data: { code: "prices_updating" },
+  };
+  // the seed rate (11 November 06:00) is the one in force until 15 November 00:00: 4.75 days old at 15 Nov
+  expect((await price(null, "2026-11-14T23:59:59.999Z")).ok).toBe(true);
+  // after the rate of 20 November: 7 days later is 27 November 00:00
+  expect((await price(null, "2026-11-27T00:00:00.000Z")).ok).toBe(true);
+  expect(await price(null, "2026-11-27T00:00:00.001Z")).toEqual(refused);
+  expect(await price(null, "2027-01-01T00:00:00.000Z")).toEqual(refused);
+});
+
+it("WPU-Y1: an admin preview may still read a stale rate; a sale never does", async () => {
+  const stale = "2027-01-01T00:00:00.000Z";
+  const viaSale = await asRole(t, "web_rw", (tx) =>
+    pricingInForce(tx, { market: "BD", productFamily: null }, clockAt(stale)),
+  );
+  expect(viaSale.ok).toBe(false);
+  const viaPreview = await asRole(t, "web_rw", (tx) =>
+    pricingInForce(tx, { market: "BD", productFamily: null }, clockAt(stale), { allowStale: true }),
+  );
+  expect(viaPreview.ok).toBe(true);
 });

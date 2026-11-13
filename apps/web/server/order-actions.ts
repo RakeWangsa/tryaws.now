@@ -17,6 +17,7 @@ export type PublicError =
   | "capacity_full"
   | "rate_limited"
   | "draft_expired"
+  | "prices_updating"
   | "unavailable";
 
 const PUBLIC_OF: Partial<Record<ErrorCode, PublicError>> = {
@@ -31,8 +32,19 @@ const PUBLIC_OF: Partial<Record<ErrorCode, PublicError>> = {
   rate_limited: "rate_limited",
 };
 
-/** Everything not listed (internal, upstream, not found, conflict) is "unavailable": it says nothing. */
-export function publicErrorOf(code: ErrorCode): PublicError {
+/**
+ * Everything not listed (internal, upstream, not found, conflict) is "unavailable": it says nothing. One refusal of
+ * pricing gets its own words (WPU-Y1): the USD to BDT rate is missing or older than 7 days, `upstream_unavailable`
+ * with `data.code = "prices_updating"`. The customer reads that prices are being updated and to try later; nothing
+ * about the rate, its age or who sets it.
+ */
+export function publicErrorOf(code: ErrorCode, data?: unknown): PublicError {
+  if (
+    code === "upstream_unavailable" &&
+    (data as { code?: unknown } | undefined)?.code === "prices_updating"
+  ) {
+    return "prices_updating";
+  }
   return PUBLIC_OF[code] ?? "unavailable";
 }
 
@@ -126,7 +138,7 @@ export async function createOrderDraftCore(
   if (!result.ok) {
     return {
       ok: false,
-      error: publicErrorOf(result.error),
+      error: publicErrorOf(result.error, result.data),
       ...(result.error === "validation" && result.fields ? { fields: result.fields } : {}),
     };
   }
@@ -186,5 +198,5 @@ export async function placeOrderCore(
   if (result.error === "validation" && result.fields?.["token"] === "expired") {
     return { ok: false, error: "draft_expired" };
   }
-  return { ok: false, error: publicErrorOf(result.error) };
+  return { ok: false, error: publicErrorOf(result.error, result.data) };
 }

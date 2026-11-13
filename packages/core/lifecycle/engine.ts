@@ -22,6 +22,7 @@ import { walletLowDue } from "./unpaid";
 import { SNAPSHOT_FAMILIES } from "./guard";
 import { planApplyWait, queuePlanApply } from "./plan-change";
 import { renewalQuote, renewSubscription } from "./renew";
+import { isFxRateUnavailable } from "../rates/fx-gate";
 
 const HOUR_MS = 3_600_000;
 export const LIFECYCLE_LIMIT = 500;
@@ -122,12 +123,44 @@ async function ensureSuspended(work: Work): Promise<void> {
   await work.enqueue("suspend", row.periodEnd);
 }
 
+// WPU-Y1. The key of resources.config that marks a subscription whose renewal could not be priced because the
+// USD to BDT rate is missing or older than 7 days. The customer is not at fault: nothing is charged, suspended,
+// retained or destroyed because of it, and the renewal is tried again on every sweep (the period start stays the
+// OLD period end, so no day is lost and the ledger key stops a second charge, R7). The marker lets a subscription
+// whose grace ran out during the hold try to renew once before it is retained.
+export const FX_HOLD_KEY = "fxRateHold";
+
+const isHeld = (row: LifecycleRow): boolean => {
+  const v = row.resource.config[FX_HOLD_KEY];
+  return v !== undefined && v !== null;
+};
+
+async function holdForRate(work: Work, deps: LifecycleDeps, where: string): Promise<void> {
+  const { row } = work;
+  if (!isHeld(row)) {
+    await patchResource(work.tx, row.resourceId, {
+      configMerge: { [FX_HOLD_KEY]: { since: work.now.toISOString() } },
+    });
+  }
+  // Ids and fixed words only (R14).
+  deps.log({
+    event: "lifecycle_renewal_held",
+    reason: "fx_rate_unavailable",
+    where,
+    subscriptionId: row.id,
+    resourceId: row.resourceId,
+  });
+}
+
 async function afterRenewal(
   work: Work,
   renewed: { periodStart: Date; totalMinor: bigint; periodEnd: Date },
   fromGrace: boolean,
 ): Promise<void> {
   const { row } = work;
+  if (isHeld(row)) {
+    await patchResource(work.tx, row.resourceId, { configMerge: { [FX_HOLD_KEY]: null } });
+  }
   // 11: an admin's suspension is never lifted by a renewal; only an admin action lifts it.
   if (
     fromGrace &&
@@ -319,6 +352,12 @@ async function process(
           step = "renewed";
           break;
         }
+        // WPU-Y1: our rate is the problem, not the customer's wallet. No grace, no suspension: the renewal
+        // stays pending and the next sweep prices it again (R16 refuses the price, R7 stops a double charge).
+        if (isFxRateUnavailable(renewed)) {
+          await holdForRate(work, deps, "period_end");
+          break;
+        }
       }
       await enterGrace(work, deps);
       step = "graced";
@@ -329,15 +368,37 @@ async function process(
       if (renewed.ok) {
         await afterRenewal(work, renewed.value, true);
         step = "renewed";
+      } else if (isFxRateUnavailable(renewed)) {
+        await holdForRate(work, deps, "retry_renew");
       } else {
         await ensureSuspended(work);
       }
       break;
     }
-    case "retain":
+    case "retain": {
+      // WPU-Y1. A subscription is never retained (and so never destroyed) while its renewal cannot be priced.
+      // One whose grace ran out during such a hold gets one renewal before it is retained.
+      if (row.autoRenew) {
+        if (isHeld(row)) {
+          const renewed = await renewSubscription(tx, row, clock, deps.log);
+          if (renewed.ok) {
+            await afterRenewal(work, renewed.value, true);
+            step = "renewed";
+            break;
+          }
+          if (isFxRateUnavailable(renewed)) {
+            await holdForRate(work, deps, "retain");
+            break;
+          }
+        } else if (isFxRateUnavailable(await renewalQuote(tx, row, clock))) {
+          await holdForRate(work, deps, "retain");
+          break;
+        }
+      }
       await retain(work);
       step = "retained";
       break;
+    }
     case "ensure_retention_operations":
       await queueRetentionOperations(work);
       break;

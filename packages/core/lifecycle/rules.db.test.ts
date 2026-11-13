@@ -14,7 +14,11 @@ const HOUR = 3_600_000;
 let kit: Kit;
 
 const worker = <T>(fn: (tx: Tx) => Promise<T>) => runTransaction(t.db, fn, { role: "worker_rw" });
-const run = () => runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+// WPU-Y1: a rate older than 7 days prices nothing, so the rate in force is re-confirmed at the clock before each run.
+const run = async () => {
+  await kit.refreshFx();
+  return runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+};
 const q = async (sql: string, params: unknown[] = []) =>
   (await t.pool.query(sql, params)).rows as Record<string, unknown>[];
 

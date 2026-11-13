@@ -84,13 +84,14 @@ describe("createDraft", () => {
         await kit.t.pool.query("update pool_capacity set used = quota_limit");
       },
     ));
-  it("refuses with not_found when no exchange rate is in force", async () => {
+  it("refuses with prices_updating when no exchange rate is in force", async () => {
     const kit = await makeKit(t);
     kit.clock.set(new Date("2020-01-01T00:00:00.000Z"));
     expect(await createDraft(kit.deps, kit.session, kit.input())).toMatchObject({
       ok: false,
-      error: "not_found",
-      fields: { fxRate: "not_in_force" },
+      error: "upstream_unavailable",
+      fields: { fxRate: "missing" },
+      data: { code: "prices_updating" },
     });
   });
   it("refuses an inactive product as validation", () =>

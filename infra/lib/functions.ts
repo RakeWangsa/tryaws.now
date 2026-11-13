@@ -296,6 +296,9 @@ export const ALERT_LOG_EVENTS = {
   capacityReleaseProblem: "capacity_release_problem",
   // packages/core/invoices/credit-note.ts (log by the scheduler): a credit note refused for 24 hours.
   creditNoteStuck: "credit_note_stuck",
+  // packages/core/rates/fx-watch.ts (log by the scheduler): WPU-Y1, the hand-set USD to BDT rate is older than
+  // 6 days or missing; written once a day. After 7 days purchases are refused (R16).
+  fxRateStaleWarning: "fx_rate_stale_warning",
   // functions/reconciler/reconcile.ts (the hourly run): a run that found orphans or missing resources,
   // could not read something, found stale operations, or could not write usage.
   reconcileFindings: "reconcile_findings",

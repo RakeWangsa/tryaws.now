@@ -16,6 +16,7 @@ export const serversEn: Same<typeof serversBn> = {
       rate_limited: "Too many requests in a short time. Please wait a moment and try again.",
       draft_expired: "The price has expired. Configure again to see the current price.",
       unavailable: "We could not finish this now. You were not charged. Please try again shortly.",
+      prices_updating: "Prices are being updated. Please try again later.",
       conflict: "This key was already added under another name.",
       not_found: "This was not found.",
       name_mismatch: "The name does not match. Type exactly the same name.",

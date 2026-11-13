@@ -7,7 +7,13 @@ import type {
   setFeatureFlag as SetFeatureFlag,
   setFxRate as SetFxRate,
 } from "@tc/core";
-import { isFeatureFlag, isFxRateText } from "@tc/core";
+import {
+  FX_CONFIRM_PERCENT,
+  fxChangeNeedsConfirm,
+  fxRateInSaneRange,
+  isFeatureFlag,
+  isFxRateText,
+} from "@tc/core";
 import {
   IMAGE_MIN_POWER_MAX,
   type AdminActor,
@@ -41,9 +47,20 @@ export interface CorePorts {
   readonly setFeatureFlag: typeof SetFeatureFlag;
   // The rate in force for a market at an instant (readFxRateInForce), or null.
   readonly fxInForce: (tx: Tx, market: string, at: Date) => Promise<{ rate: string } | null>;
-  // fxChangeNeedsSecondAdmin of the pricing engine.
-  readonly needsSecondAdmin: (current: string, next: string) => boolean;
 }
+
+// WPU-Y1. The sanity checks of a typed rate, configurable by the caller that wires the flow. A rate outside the range
+// of its market is refused outright (a slipped decimal point); a change of more than `confirmPercent` percent from the
+// rate in force needs the extra confirm field of BOTH the admin who asks and the admin who approves.
+export interface FxPolicy {
+  readonly confirmPercent: bigint;
+  readonly ranges: Readonly<Record<string, { readonly min: string; readonly max: string }>>;
+}
+
+export const DEFAULT_FX_POLICY: FxPolicy = Object.freeze({
+  confirmPercent: FX_CONFIRM_PERCENT,
+  ranges: Object.freeze({ BD: Object.freeze({ min: "50", max: "500" }) }),
+});
 
 // How long a large FX change waits for the second admin.
 export const FX_PENDING_HOURS = 24;
@@ -65,6 +82,8 @@ export interface PricingFlowDeps {
   readonly run: <T>(actor: AdminActor, fn: (tx: Tx) => Promise<T>) => Promise<T>;
   readonly clock: { now(): Date };
   readonly core: CorePorts;
+  // Sanity checks of a typed rate; DEFAULT_FX_POLICY when absent.
+  readonly fxPolicy?: FxPolicy;
   // TC_STAGE. Anything that is not exactly "local", "test" or "staging" is production (R16).
   readonly stage: string;
 }
@@ -76,6 +95,7 @@ export type FlowCode =
   | "not_found"
   | "rate_limited"
   | "unavailable"
+  | "confirm_required"
   | "second_admin_required"
   | "must_differ_from_actor"
   | "not_an_approver";
@@ -99,14 +119,20 @@ export interface SetFxRequest {
   readonly rate: unknown;
   readonly from: unknown;
   readonly reason: unknown;
-  // There is deliberately no field for a second admin: an approver is never named by a request. A change
-  // above the percent waits until a different admin approves it from their own session (approveFx).
+  // The extra confirm of a change of more than the policy percent (true, "true", "on" or "1").
+  readonly confirmLarge?: unknown;
+  // There is deliberately no field for a second admin: an approver is never named by a request. EVERY change
+  // waits until a different admin approves it from their own session (approveFx), WPU-Y1.
 }
 
 export interface ApproveFxRequest {
   readonly market: unknown;
   readonly reason: unknown;
+  // The approver's own extra confirm of a large change.
+  readonly confirmLarge?: unknown;
 }
+
+const isConfirmed = (v: unknown): boolean => v === true || v === "true" || v === "on" || v === "1";
 
 export interface FxResult {
   // "set": the rate is stored. "pending": it waits for a different admin.
@@ -224,6 +250,7 @@ export interface PricingFlow {
 }
 
 export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
+  const policy = deps.fxPolicy ?? DEFAULT_FX_POLICY;
   // 1 and 2. Authenticate and authorize: the dependency and then a second look at the role it returned.
   const authorize = async (roles: readonly AdminRole[]): Promise<Authorized> => {
     try {
@@ -308,14 +335,18 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
     },
 
     async setFx(request) {
-      // Only these four are read; any other field of the request (a forged approver, say) is ignored.
-      const { market, rate, from, reason } = request;
+      // Only these five are read; any other field of the request (a forged approver, say) is ignored.
+      const { market, rate, from, reason, confirmLarge } = request;
       const auth = await authorize(PRICING_ROLES);
       if (!auth.ok) return auth.answer;
       const bad: string[] = [];
       if (!isMarket(market)) bad.push("market");
       // The engine's own test of a storable rate (plain decimal text, never a number).
       if (typeof rate !== "string" || !isFxRateText(rate.trim())) bad.push("rate");
+      else if (typeof market === "string") {
+        const range = policy.ranges[market];
+        if (range !== undefined && !fxRateInSaneRange(rate.trim(), range)) bad.push("rate");
+      }
       const start = typeof from === "string" ? startOf(from) : null;
       if (start === null) bad.push("from");
       const why = readReason(reason);
@@ -326,53 +357,40 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       const actor = auth.actor;
       const next = rate.trim();
       const effectiveFrom = start === undefined || start === null ? null : start;
+      const confirmed = isConfirmed(confirmLarge);
       return execute<FxResult>(actor, async (tx, at) => {
         const current = await deps.core.fxInForce(tx, market, at);
-        if (current !== null && deps.core.needsSecondAdmin(current.rate, next)) {
-          // Above the percent: nothing changes now. The change waits for a different admin (R10).
-          const asked = await deps.repos(tx, actor).fxChanges.request(
-            {
-              market,
-              rate: next,
-              effectiveFrom,
-              at,
-              expiresAt: new Date(at.getTime() + FX_PENDING_HOURS * 3_600_000),
-            },
-            why.text,
-          );
-          if (!asked.ok) return repoRefusal(asked.error);
-          return {
-            ok: true,
-            replayed: asked.replayed,
-            value: { kind: "pending", rate: asked.value.rate, effectiveFrom },
-          };
+        if (
+          current !== null &&
+          fxChangeNeedsConfirm(current.rate, next, policy.confirmPercent) &&
+          !confirmed
+        ) {
+          // Nothing is written: the screen shows the change and asks again with the confirm field.
+          return fail("confirm_required", ["confirmLarge"]);
         }
-        const saved = await deps.core.setFxRate(
-          tx,
-          actor,
+        // WPU-Y1 (owner decision 3): every rate, the first one too, is a pending change. Nothing changes now;
+        // a different admin approves it from their own session (approveFx), R10.
+        const asked = await deps.repos(tx, actor).fxChanges.request(
           {
             market,
             rate: next,
-            ...(effectiveFrom === null ? {} : { effectiveFrom }),
-            reason: why.text,
+            effectiveFrom,
+            at,
+            expiresAt: new Date(at.getTime() + FX_PENDING_HOURS * 3_600_000),
           },
-          { now: () => at },
+          why.text,
         );
-        if (!saved.ok) return refusal(saved);
+        if (!asked.ok) return repoRefusal(asked.error);
         return {
           ok: true,
-          replayed: saved.value.replayed,
-          value: {
-            kind: "set",
-            rate: saved.value.fx.rate,
-            effectiveFrom: saved.value.fx.effectiveFrom,
-          },
+          replayed: asked.replayed,
+          value: { kind: "pending", rate: asked.value.rate, effectiveFrom },
         };
       });
     },
 
     async approveFx(request) {
-      const { market, reason } = request;
+      const { market, reason, confirmLarge } = request;
       const auth = await authorize(PRICING_ROLES);
       if (!auth.ok) return auth.answer;
       const bad: string[] = [];
@@ -382,7 +400,20 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
       if (bad.length > 0 || typeof market !== "string") return fail("invalid", bad);
       // The approver is the actor of the verified session; the request cannot name anyone.
       const actor = auth.actor;
+      const confirmed = isConfirmed(confirmLarge);
       return execute<FxResult>(actor, async (tx, at) => {
+        // The approver sees the same sanity check as the requester: a large change needs their own confirm.
+        const waiting = await deps.repos(tx, actor).fxChanges.read(market);
+        if (waiting !== null && waiting !== undefined && waiting.status === "pending") {
+          const current = await deps.core.fxInForce(tx, market, at);
+          if (
+            current !== null &&
+            fxChangeNeedsConfirm(current.rate, waiting.rate, policy.confirmPercent) &&
+            !confirmed
+          ) {
+            return fail("confirm_required", ["confirmLarge"]);
+          }
+        }
         const decided = await deps.repos(tx, actor).fxChanges.approve({ market, at }, why.text);
         if (!decided.ok) return repoRefusal(decided.error);
         const change = decided.value;

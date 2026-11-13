@@ -8,7 +8,11 @@ The USD to BDT rate that MeghVPS charges must change (the market moved, or the o
 
 ## Who
 
-Finance admin sets it; a large change is approved by a different admin, never the one who requested it (proved by the WP8-T4 tests in `verify/checks.mjs`). Rates are posted by person, never by a script.
+Finance admin asks; EVERY rate (WPU-Y1, owner decision) is approved by a different admin, never the one who asked. Rates are posted by person, never by a script and never by a feed. A rate of more than 10 percent away from the one in force needs the confirm box from both admins; a rate outside the range of its market (BD: 50 to 500) is refused.
+
+## Maximum age (WPU-Y1)
+
+A rate is good for 7 days from its start. After 6 days the daily alert `fx_rate_stale_warning` fires and `/pricing` shows a warning. After 7 days new purchases are refused with "prices are being updated", renewals and usage charges are held (not dropped, not double charged) and are charged from the old period end once a new rate is approved. To keep the same rate, ask for the same value again: it is a re-confirm and restarts the 7 days.
 
 ## Safe checks
 

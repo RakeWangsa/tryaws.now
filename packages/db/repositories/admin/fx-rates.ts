@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
+import { DbError } from "../../errors";
 import { fxRates } from "../../schema/index";
 import { isMarketCode } from "../config/args";
 import { isStorableFxRate, type FxRateRow } from "../config/fx-rates";
@@ -14,13 +15,27 @@ export interface FxRateInput {
   rate: string;
   effectiveFrom: Date;
   at: Date; // the caller's clock reading
-  approvedBy?: string; // the second admin of a large change, verified by the caller
+  approvedBy?: string; // the second admin of the change, verified by the caller
+  /**
+   * WPU-Y1. Saving the rate that is already in force, starting now, writes a NEW row (an admin re-confirms the
+   * rate, which restarts its 7 days) instead of being a replay. Same-start repeats are still replays.
+   */
+  reconfirm?: boolean;
 }
 
 export type FxRateSaved = FxRateRow & { laterChangePending: Date | null };
 
+/** Who and when, for the rate in force (WPU-Y1): the admin whose session saved the row, and the time the row was written. */
+export interface FxRateMeta {
+  id: string;
+  setBy: string | null;
+  setAt: Date;
+}
+
 export interface FxRatesAdminRepo {
   set(input: FxRateInput, reason: string): Promise<Written<FxRateSaved>>;
+  /** The rate in force at `at` with who saved it and when; null when none. Any active admin may read it. */
+  meta(market: string, at: Date): Promise<FxRateMeta | null>;
 }
 
 // Thrown inside the audited write, so that a refusal writes no audit row.
@@ -38,9 +53,23 @@ const stamp = (row: FxRateRow) => ({
 
 export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
   return {
+    async meta(market, at) {
+      if (!(await isActiveAdmin(scope))) throw new DbError("42501");
+      if (!isMarketCode(market) || !isInstant(at)) return null;
+      const { rows } = await scope.tx.execute<{ id: string; set_by: string | null; created_at: Date }>(
+        sql`select id, set_by, created_at from fx_rates
+            where market = ${market} and effective_from <= ${at}
+            order by effective_from desc limit 1`,
+      );
+      const row = rows[0];
+      return row === undefined
+        ? null
+        : { id: row.id, setBy: row.set_by, setAt: new Date(row.created_at) };
+    },
+
     async set(input, reason) {
       // Read once into locals, so a getter cannot answer differently on the second read.
-      const { market, rate, effectiveFrom, at, approvedBy } = input;
+      const { market, rate, effectiveFrom, at, approvedBy, reconfirm } = input;
       if (!(await isActiveAdmin(scope))) return refused("forbidden");
       if (
         !isMarketCode(market) ||
@@ -96,7 +125,7 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
               const value = { ...plain(atStart), laterChangePending: null };
               return { value, replayed: true, before, after: stamp(value) };
             }
-            if (inForce?.same && effectiveFrom.getTime() === at.getTime()) {
+            if (reconfirm !== true && inForce?.same && effectiveFrom.getTime() === at.getTime()) {
               // Saving the value in force does not withdraw a scheduled change: it reports it.
               const [later] = await tx
                 .select({ effectiveFrom: fxRates.effectiveFrom })

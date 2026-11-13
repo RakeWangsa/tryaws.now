@@ -77,6 +77,11 @@ export interface Kit extends Buyer {
   setFlag(state: "on" | "off" | "missing"): Promise<void>;
   /** Inserts a rate that is in force a minute after START and moves the clock just past it (inside the 30 minutes of a draft). */
   changeFxRate(rate: string): Promise<void>;
+  /**
+   * WPU-Y1. A rate older than 7 days prices nothing. Call this after the clock moved more than 6 days past the
+   * last rate: it inserts the rate that is in force again, taking effect at the clock (an admin's re-confirm).
+   */
+  refreshFx(): Promise<void>;
   newProduct(over?: Record<string, unknown>): Promise<string>;
   balance(customerId?: string): Promise<bigint>;
   /** `<region>/<quota code>` to `used` for the kit's pool account. */
@@ -234,6 +239,16 @@ export async function makeKit(t: TempDatabaseHandle, options: KitOptions = {}): 
         effective_from: effective.toISOString(),
       });
       clock.set(new Date(effective.getTime() + 1000));
+    },
+    async refreshFx() {
+      const now = clock.now();
+      await t.pool.query(
+        `insert into fx_rates (id, market, rate, effective_from)
+         select gen_random_uuid(), market, rate, $1 from fx_rates
+         where market = 'BD' and effective_from <= $1 order by effective_from desc limit 1
+         on conflict (market, effective_from) do nothing`,
+        [now.toISOString()],
+      );
     },
     async balance(customerId = buyer.customerId) {
       const r = await t.pool.query<{ b: string }>(

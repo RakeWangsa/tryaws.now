@@ -12,6 +12,7 @@ import {
 } from "../pricing/index";
 import type { Clock, Result } from "../types";
 import { readInForce, ruleOf, scopeProblems, type Scope } from "./common";
+import { fxFreshnessRefusal } from "./fx-gate";
 
 export interface PricingInForce {
   pricedAt: Date;
@@ -24,19 +25,35 @@ export interface PricingInForce {
   book: BookTerms | null;
 }
 
+export interface InForceOptions {
+  /**
+   * WPU-Y1. Admin previews only: show the figures of a rate that is older than its maximum age so that a person
+   * can see what the next rate would do. Never set on a path that sells or charges (R16).
+   */
+  readonly allowStale?: boolean;
+}
+
 /**
- * The rate and the rule that price an item at the instant the clock reads (once). R16: no rate,
- * no rule, or a stored rule that the engine refuses, and nothing is priced.
+ * The rate and the rule that price an item at the instant the clock reads (once). R16: no rate, a rate older than
+ * its maximum age (7 days, WPU-Y1), no rule, or a stored rule that the engine refuses, and nothing is priced. A
+ * missing or stale rate answers `upstream_unavailable` with `data.code = "prices_updating"` (see fx-gate.ts).
  */
 export async function pricingInForce(
   tx: Tx,
   scope: Scope,
   clock: Clock,
+  options: InForceOptions = {},
 ): Promise<Result<PricingInForce>> {
   const pricedAt = clock.now();
   const problems = scopeProblems(scope);
   if (Object.keys(problems).length > 0) return { ok: false, error: "validation", fields: problems };
   const { fx, row } = await readInForce(tx, scope, pricedAt);
+  // WPU-Y1 (R16): a rate that is missing or older than its maximum age prices nothing. Only an admin preview
+  // may look at a stale rate, and even it needs one to exist.
+  if (options.allowStale !== true) {
+    const refused = fxFreshnessRefusal(fx, pricedAt);
+    if (refused !== null) return refused;
+  }
   if (fx === null) return { ok: false, error: "not_found", fields: { fxRate: "not_in_force" } };
   if (row === null) return { ok: false, error: "not_found", fields: { rule: "not_in_force" } };
   const value = ruleOf(row);

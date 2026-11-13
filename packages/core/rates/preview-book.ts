@@ -84,7 +84,7 @@ export async function previewBook(
   }
   if (Object.keys(fields).length > 0) return { ok: false, error: "validation", fields };
 
-  const found = await pricingInForce(tx, { market, productFamily }, clock);
+  const found = await pricingInForce(tx, { market, productFamily }, clock, { allowStale: true });
   if (!found.ok) return found;
   const { fx, rule, book } = found.value;
   const candidateTerms = terms === undefined ? book : terms;

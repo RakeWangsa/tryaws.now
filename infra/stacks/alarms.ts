@@ -203,6 +203,19 @@ export function alarms(
     "A credit note has been refused for more than 24 hours: see the open credit-note notices",
   );
 
+  // WPU-Y1: the hand-set exchange rate is older than 6 days (once a day, from the scheduler).
+  alertFilter(
+    "FxRateStaleFilter",
+    schedulerFunction,
+    [ALERT_LOG_EVENTS.fxRateStaleWarning],
+    "FxRateStale",
+  );
+  const fxRateStaleAlarm = alertAlarm(
+    "FxRateStaleAlarm",
+    "FxRateStale",
+    "The USD to BDT rate is older than 6 days or missing: set a new rate in the admin portal (purchases stop after 7 days)",
+  );
+
   // Item 36: reconciliation.
   const reconcilerFunction = workers.crons["reconciler"]?.nodes.function;
   alertFilter(
@@ -289,6 +302,7 @@ export function alarms(
     ledgerSilentAlarm,
     capacityReleaseAlarm,
     creditNoteStuckAlarm,
+    fxRateStaleAlarm,
     reconcileBadAlarm,
     reconcileSilentAlarm,
     functionErrorAlarms,

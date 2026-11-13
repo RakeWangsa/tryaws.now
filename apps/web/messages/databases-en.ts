@@ -192,6 +192,7 @@ export const databasesEn: Same<typeof databasesBn> = {
       name_mismatch: "The name does not match. Type exactly the same name.",
       not_allowed: "This cannot be done in the current state.",
       unavailable: "We could not finish this now. Please try again shortly.",
+      prices_updating: "Prices are being updated. Please try again later.",
     },
     done: {
       started: "The request to start the database was taken.",

@@ -116,7 +116,12 @@ export type { RepoErrorCode, Written } from "./repositories/result";
 export { adminRepos } from "./repositories/admin/index";
 export type { AdminRepos, AdminActor, AdminRole, AdminScope } from "./repositories/admin/index";
 export type { FeatureFlagSetting } from "./repositories/admin/feature-flags";
-export type { FxRateInput, FxRateSaved, FxRatesAdminRepo } from "./repositories/admin/fx-rates";
+export type {
+  FxRateInput,
+  FxRateMeta,
+  FxRateSaved,
+  FxRatesAdminRepo,
+} from "./repositories/admin/fx-rates";
 export type { FxChange, FxChangesAdminRepo } from "./repositories/admin/fx-changes";
 export type {
   CapacityAdminRepo,
