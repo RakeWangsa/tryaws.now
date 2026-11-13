@@ -52,6 +52,7 @@ export const invoiceSellerEn: Same<typeof invoiceSellerBn> = {
       addressBn: "Address (Bengali)",
       addressEn: "Address (English)",
       vatCircle: "VAT circle / commissionerate (optional)",
+      tradeLicense: "Trade License number (optional)",
       signatoryName: "Signatory name",
       signatoryDesignation: "Signatory designation",
       phone: "Phone (optional)",

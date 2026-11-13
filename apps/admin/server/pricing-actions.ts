@@ -166,6 +166,7 @@ export async function saveInvoiceSellerAction(form: FormData): Promise<void> {
     addressBn: text(form.get("addressBn")),
     addressEn: text(form.get("addressEn")),
     vatCircle: text(form.get("vatCircle")),
+    tradeLicense: text(form.get("tradeLicense")),
     signatoryName: text(form.get("signatoryName")),
     signatoryDesignation: text(form.get("signatoryDesignation")),
     phone: text(form.get("phone")),

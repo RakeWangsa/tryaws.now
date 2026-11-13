@@ -35,6 +35,7 @@ const FIELDS = [
   "addressBn",
   "addressEn",
   "vatCircle",
+  "tradeLicense",
   "signatoryName",
   "signatoryDesignation",
   "phone",
