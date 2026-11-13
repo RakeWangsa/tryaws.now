@@ -9,9 +9,10 @@ import {
 } from "./blueprints";
 
 // WPU-G10. The minimum bundle power of an image. Lightsail enforces it (GetBlueprints `minPower`, the
-// unit of GetBundles `power`: 500 is the 512 MB plan, 1000 the 1 GB plan, 0 every plan). The platform
-// stores what AWS says, lets an admin override it per image, and when nothing is known falls back to a
-// safe default: an app needs at least the 1 GB class, an OS-only image runs on every plan.
+// unit of GetBundles `power`; WPU-Z19, the AWS CLI get-bundles example: 298 is nano_3_0 with 0.5 GB, 500 micro_3_0
+// with 1 GB, 1000 small_3_0 with 2 GB; minPower 0 is every plan). The platform stores what AWS says, lets an admin
+// override it per image, and when nothing is known falls back to a safe default: an app needs at least the 1 GB
+// plan (power 500, owner ruling 2026-11-14), an OS-only image runs on every plan.
 const item = (over: Record<string, unknown> = {}) => ({
   blueprintId: "wordpress",
   name: "WordPress",
@@ -39,9 +40,12 @@ describe("minPowerOf", () => {
   const app = { id: "wordpress", kind: "app", minPower: null } as const;
   const os = { id: "ubuntu_24_04", kind: "os", minPower: null } as const;
 
-  it("the default for an app with no known minimum is the 1 GB class", () => {
-    expect(DEFAULT_APP_MIN_POWER).toBe(1000);
-    expect(minPowerOf(app, EMPTY_ALLOW_LIST)).toBe(1000);
+  it("the default for an app with no known minimum is the 1 GB plan (power 500)", () => {
+    expect(DEFAULT_APP_MIN_POWER).toBe(500);
+    expect(minPowerOf(app, EMPTY_ALLOW_LIST)).toBe(500);
+    // The 512 MB plan (298) does not fit an app with no known minimum; the 1 GB plan (500) does.
+    expect(planFitsImage(minPowerOf(app, EMPTY_ALLOW_LIST), 298)).toBe(false);
+    expect(planFitsImage(minPowerOf(app, EMPTY_ALLOW_LIST), 500)).toBe(true);
   });
   it("an OS-only image with no known minimum runs on every plan", () => {
     expect(minPowerOf(os, EMPTY_ALLOW_LIST)).toBe(0);
@@ -56,7 +60,7 @@ describe("minPowerOf", () => {
     expect(minPowerOf(os, list)).toBe(1000);
   });
   it("an override for another image does not apply", () => {
-    expect(minPowerOf(app, { on: [], off: [], minPower: { nodejs: 0 } })).toBe(1000);
+    expect(minPowerOf(app, { on: [], off: [], minPower: { nodejs: 0 } })).toBe(500);
   });
 });
 

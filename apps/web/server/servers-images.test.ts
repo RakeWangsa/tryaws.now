@@ -106,7 +106,7 @@ describe("loadConfigurator: the images of each Region", () => {
         version: null,
         loginUser: "bitnami",
         logo: "wordpress",
-        minPower: 1000, // an app with no known minimum: the default of the core
+        minPower: 500, // an app with no known minimum: the default of the core (the 1 GB plan, WPU-Z19)
       },
       {
         id: "amazon_linux_2023",

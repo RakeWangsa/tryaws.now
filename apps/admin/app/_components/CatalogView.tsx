@@ -159,7 +159,7 @@ function ImagesCard({ locale, screen }: { locale: Locale; screen: CatalogScreen 
       ),
     },
     {
-      // WPU-G10. The least bundle power a plan needs (500 is the 512 MB plan). The value in force and its
+      // WPU-G10. The least bundle power a plan needs (500 is the 1 GB plan, 298 the 512 MB plan; WPU-Z19). The value in force and its
       // source are shown; the form sets the admin's own value, or removes it when the field is empty.
       key: "minPower",
       header: t("minPower"),
