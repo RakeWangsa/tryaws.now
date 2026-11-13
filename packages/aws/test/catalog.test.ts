@@ -245,15 +245,28 @@ it("parseTldPrices keeps USD prices as text, drops other currencies and bad TLD 
   expect(out.prices[2]!.registrationUsd).toBeNull();
 });
 
-it("parseTldPrices marks an item whose shape it does not understand as needing review (open point 4)", () => {
+// WPU-Z19 (open point 4 answered): DomainPrice has no field that marks extra parameters (API_domains_DomainPrice).
+// Only the reviewed allowlist (com, net, org: not in the ExtraParam reference, no restriction on their Route 53
+// pages) goes without review; every other TLD, well-formed or not, goes to the admin step of spec 12 (R16).
+it("parseTldPrices: only the reviewed TLDs skip review; co.uk, ca, xyz and everything else need it", () => {
+  const usd = { Price: 12, Currency: "USD" };
   const out = parseTldPrices({
     Prices: [
-      { Name: "com", RegistrationPrice: { Price: 12, Currency: "USD" } },
-      { Name: "xyz" }, // no price object at all: the shape is not understood
+      { Name: "com", RegistrationPrice: usd },
+      { Name: "NET", RegistrationPrice: usd },
+      { Name: "org", RegistrationPrice: usd },
+      { Name: "co.uk", RegistrationPrice: usd },
+      { Name: "ca", RegistrationPrice: usd },
+      { Name: "it", RegistrationPrice: usd },
+      { Name: "xyz", RegistrationPrice: usd },
+      { Name: "info" },
     ],
   });
-  expect(out.prices.find((p) => p.tld === "com")!.needsExtraParams).toBe(false);
-  expect(out.prices.find((p) => p.tld === "xyz")!.needsExtraParams).toBe(true);
+  const flag = (tld: string) => out.prices.find((p) => p.tld === tld)!.needsExtraParams;
+  expect(flag("com")).toBe(false);
+  expect(flag("net")).toBe(false);
+  expect(flag("org")).toBe(false);
+  for (const tld of ["co.uk", "ca", "it", "xyz", "info"]) expect(flag(tld), tld).toBe(true);
   expect(() => parseTldPrices({})).toThrow(/catalog_response_invalid/);
 });
 
