@@ -1,5 +1,5 @@
-// WP0-T2: VPC with two AZs and managed NAT (3.3), the security groups of the data path, and the two
-// isolated subnets of invoice-renderer.
+// WP0-T2: VPC with two AZs and the NAT of the stage size (3.3, WPU-B8, WPU-Z10), the security groups of
+// the data path, and the two isolated subnets of invoice-renderer.
 //
 // NOT TYPE-CHECKED unless `.sst/platform/config.d.ts` exists: `sst`, `aws`, `$util` and `$output`
 // are globals that `sst install` declares there (git-ignored, absent in CI). Where it exists,
@@ -7,30 +7,126 @@
 // and Pulumi AWS 7.20.0 types (WPU-Z9). ESLint parses the file, Prettier formats it, and
 // tests/repo/infra-rules.test.mjs reads the text. Every detail the SST and Pulumi documents did not
 // confirm is marked `VERIFY:` and listed in JOURNEY.md.
-import { AZ_COUNT, VPC_CIDR, isolatedSubnets } from "../lib/network";
-import { sizing } from "../lib/lean";
+import { NAT_INSTANCE, sizing, sstNatOf } from "../lib/lean";
+import { AZ_COUNT, VPC_CIDR, isolatedSubnets, rebaseSubnetCidr } from "../lib/network";
 import { REGION, resourceName, type StageConfig } from "../lib/stage";
+
+// The callback form of SST's Transform<T> (.sst/platform/src/components/component.ts): it changes the
+// arguments in place and returns undefined. A callback built away from its call site needs it.
+type TransformFn<T> = (args: T) => undefined;
+
+// A value that is made later than the code that needs it: a promise resolved once (see lean NAT below).
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+// WPU-Z10 (lean, requirement 1): ONE NAT instance for the whole VPC.
+// VERIFY result, sst.aws.Vpc `nat: "ec2"` (SST 4.17.2 vpc.ts, and B1 infra/stacks/network.ts:17 of
+// docs/analysis/verify-review-2026-11-13.md, lines 132 to 142): it launches a t4g.nano fck-nat instance
+// and an Elastic IP in EACH AZ and routes each private subnet to the instance of its own AZ, so two of
+// each. A lean stage asks SST for no NAT
+// (sstNatOf) and builds the single one here: the image choice SST makes (NAT_INSTANCE), in the public
+// subnet of the first AZ, with one Elastic IP. The private route tables of BOTH AZs send 0.0.0.0/0 to
+// its network interface (the transform in network() below); the isolated subnets of invoice-renderer get
+// no route to it. Inbound only from the VPC, outbound anywhere. No IAM role and no key pair: NAT needs
+// neither (SST's role carries only SSM access). One instance is one point of failure for outbound
+// traffic; the lean runbook accepts that (docs/runbooks/single-account-lean.md).
+// A deploy can replace the instance when a newer fck-nat image is published (mostRecent, as in SST);
+// the Elastic IP is a separate resource, so the address (TC_PROBE_SOURCES) stays until the stage is
+// removed. A removed and redeployed staging gets a NEW address (docs/runbooks/staging-on-demand.md).
+function singleNatInstance(config: StageConfig, vpc: sst.aws.Vpc) {
+  const stage = config.stage;
+  const ami = aws.ec2.getAmiOutput({
+    owners: [NAT_INSTANCE.amiOwner],
+    filters: [
+      { name: "name", values: [NAT_INSTANCE.amiName] },
+      { name: "architecture", values: [NAT_INSTANCE.architecture] },
+    ],
+    mostRecent: true,
+  });
+  const securityGroup = new aws.ec2.SecurityGroup("NatSecurityGroup", {
+    vpcId: vpc.id,
+    name: resourceName(stage, "nat-sg"),
+    description: "NAT instance: inbound from the VPC only, outbound to the internet",
+    ingress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: [VPC_CIDR[config.kind]] }],
+    egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
+  });
+  const instance = new aws.ec2.Instance("NatInstance", {
+    instanceType: NAT_INSTANCE.type,
+    ami: ami.id,
+    // The public subnet of the first AZ; fail closed (R16) if SST built none.
+    subnetId: vpc.nodes.publicSubnets.apply((subnets) => {
+      const subnet = subnets[0];
+      if (subnet === undefined)
+        throw new Error("the VPC has no public subnet for the NAT instance");
+      return subnet.id;
+    }),
+    vpcSecurityGroupIds: [securityGroup.id],
+    // A NAT forwards traffic that is neither from nor to itself.
+    sourceDestCheck: false,
+    // sst:is-nat as SST tags its own NAT instances (vpc.ts), so the runbooks' EC2 filter finds it.
+    tags: { Name: resourceName(stage, "nat"), "sst:is-nat": "true" },
+  });
+  const elasticIp = new aws.ec2.Eip("NatElasticIp", {
+    domain: "vpc",
+    tags: { Name: resourceName(stage, "nat-ip") },
+  });
+  new aws.ec2.EipAssociation("NatElasticIpAssociation", {
+    instanceId: instance.id,
+    allocationId: elasticIp.allocationId,
+  });
+  return { instance, elasticIp, securityGroup };
+}
 
 export function network(config: StageConfig) {
   const stage = config.stage;
+  const nat = sizing(config.size, config.kind).network.nat;
 
-  // az: 2 is documented (sst.aws.Vpc: az default 2). nat comes from the stage size (WPU-B8): "managed"
-  // (a NAT gateway per AZ) in full, "ec2" (a NAT instance) in lean.
-  // VERIFY: sst.aws.Vpc nat: "ec2" makes one instance for the whole VPC or one per AZ, its default
-  // instance type, and that the private route tables of both AZs point at it; TC_PROBE_SOURCES must
-  // then list the address(es) of the instance(s) (max 10, one is fine).
+  // WPU-Z10, VERIFY review 2026-11-13 (B1 infra/stacks/network.ts:25, lines 144 to 154): SST 4.17.2
+  // vpc.ts lays out its public and private subnets in 10.0.x.x whatever the VPC CIDR, so each one is
+  // rebased onto the stage's /16 (infra/lib/network.ts rebaseSubnetCidr, fail closed). SST passes the
+  // CIDR as a plain string; anything else stops the deploy.
+  const rebase: TransformFn<aws.ec2.SubnetArgs> = (args) => {
+    if (typeof args.cidrBlock !== "string") {
+      throw new Error("the SST subnet CIDR is not a plain string: check vpc.ts of the SST version");
+    }
+    args.cidrBlock = rebaseSubnetCidr(args.cidrBlock, config.kind);
+  };
+
+  // Lean: the private route tables are created inside the Vpc component and need the network interface
+  // of the single NAT instance, and that instance needs a public subnet of the same VPC. The route takes
+  // the interface from a promise that is resolved right after the instance exists, so it does not matter
+  // when SST calls the transform (in 4.17.2 it does so inside an apply, vpc.ts createPrivateSubnets).
+  // VERIFY (first `sst diff` of a lean stage): both private route tables show 0.0.0.0/0 to the NAT
+  // instance's network interface, and the isolated route table shows no default route.
+  const natInterface = deferred<$util.Output<string>>();
+  const routeToSingleNat: TransformFn<aws.ec2.RouteTableArgs> = (args) => {
+    args.routes = [{ cidrBlock: "0.0.0.0/0", networkInterfaceId: $output(natInterface.promise) }];
+  };
+
+  // az: 2 is documented (sst.aws.Vpc: az default 2). The NAT comes from the stage size: "managed" (a NAT
+  // gateway and an Elastic IP per AZ, SST's own routes) in full, the single instance above in lean.
   const vpc = new sst.aws.Vpc("Vpc", {
     az: AZ_COUNT,
-    nat: sizing(config.size, config.kind).network.nat,
+    nat: sstNatOf(nat),
     transform: {
       // Transform<ec2.VpcArgs>, as SST passes it (.sst/platform/src/components/aws/vpc.ts).
+      // VERIFY result (WPU-Z9): transform.vpc exists (`vpc?: Transform<ec2.VpcArgs>`); the subnets are
+      // rebased above because the component does not derive them from this CIDR.
       vpc: (args: aws.ec2.VpcArgs) => {
-        // VERIFY: transform.vpc is listed in the docs; that aws.ec2.Vpc cidrBlock set here is honoured
-        // by the component's subnet layout (it may compute subnets from its own default 10.0.0.0/16).
         args.cidrBlock = VPC_CIDR[config.kind];
       },
+      publicSubnet: rebase,
+      privateSubnet: rebase,
+      ...(nat === "single-instance" ? { privateRouteTable: routeToSingleNat } : {}),
     },
   });
+  const singleNat = nat === "single-instance" ? singleNatInstance(config, vpc) : undefined;
+  if (singleNat !== undefined) natInterface.resolve(singleNat.instance.primaryNetworkInterfaceId);
 
   const egressAll = [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }];
 
@@ -126,6 +222,9 @@ export function network(config: StageConfig) {
     databaseSecurityGroup,
     isolatedSecurityGroup,
     isolatedSubnetIds: isolated.map((subnet) => subnet.id),
+    // The one public address of a lean stage's NAT (TC_PROBE_SOURCES is this address as /32); undefined
+    // on a full stage (two NAT gateways, read in the console). Output `natAddress` of infra/app.ts.
+    natAddress: singleNat?.elasticIp.publicIp,
   };
 }
 

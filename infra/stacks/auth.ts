@@ -2,8 +2,22 @@
 // custom-message trigger (functions/cognito-messages) renders the e-mails; it reads no database and
 // assumes no role (3.2), so it runs outside the VPC with no links.
 //
+// WPU-Z10 (requirement 3): `sst remove --stage staging` keeps both user pools, so the admin users and their
+// TOTP survive between test sessions (a pool costs nothing without active users). Each pool is created
+// with Pulumi `retainOnDelete` on staging: a removal drops it from the state and leaves it in AWS (its
+// deletion protection would refuse a delete anyway). The next deploy adopts the kept pool with Pulumi
+// `import` when its id is given (TC_COGNITO_CUSTOMER_POOL_ID, TC_COGNITO_ADMIN_POOL_ID, infra/lib/stage.ts
+// readUserPoolIds; staging only), else it creates a new pool. An import succeeds only when the arguments
+// match the kept pool, so on staging the trigger function has a fixed name: its ARN, which the pool
+// stores (lambdaConfig.customMessage), is then the same in every session.
+// VERIFY (first adoption, `sst diff --stage staging`): the two pools show "import" and no replacement,
+// the admin users can sign in with their TOTP, and the stack outputs customerPoolId and adminPoolId equal
+// the two variables. If the import refuses a difference, the runbook's fallback applies
+// (docs/runbooks/staging-on-demand.md).
+// Production and personal stages are unchanged: no retainOnDelete, no import, SST's own function name.
+//
 // NOT TYPE-CHECKED, see network.ts.
-import { resourceName, roleName, type StageConfig } from "../lib/stage";
+import { removalRules, resourceName, roleName, type StageConfig } from "../lib/stage";
 
 // 6.1 password policy of at least 12 characters.
 const PASSWORD_POLICY = {
@@ -17,6 +31,14 @@ const PASSWORD_POLICY = {
 
 export function auth(config: StageConfig) {
   const stage = config.stage;
+  const { retainUserPools } = removalRules(config.kind);
+
+  // The resource options of a kept and adopted pool (staging); nothing elsewhere.
+  const keepPool = (opts: $util.CustomResourceOptions, poolId: string | null) => {
+    if (!retainUserPools) return;
+    opts.retainOnDelete = true;
+    if (poolId !== null) opts.import = poolId;
+  };
 
   const email = {
     // Cognito sends through the verified SES identity (not the default Cognito sender).
@@ -28,6 +50,8 @@ export function auth(config: StageConfig) {
   // The trigger function: one Lambda for both pools.
   const messages = new sst.aws.Function("CognitoMessages", {
     handler: "functions/cognito-messages/index.handler",
+    // Staging: a fixed name, so the kept pools still point at the trigger of the next session (above).
+    ...(retainUserPools ? { name: resourceName(stage, "cognito-messages") } : {}),
     // 3.2 sizes: a short function; the e-mail must stay under 20,000 characters.
     timeout: "5 seconds",
     memory: "256 MB",
@@ -47,7 +71,8 @@ export function auth(config: StageConfig) {
     triggers: { customMessage: messages.arn },
     transform: {
       // Transform<cognito.UserPoolArgs>, as SST passes it (components/aws/cognito-user-pool.ts).
-      userPool: (args: aws.cognito.UserPoolArgs) => {
+      userPool: (args: aws.cognito.UserPoolArgs, opts) => {
+        keepPool(opts, config.userPoolIds.customers);
         args.name = resourceName(stage, "customers");
         args.passwordPolicy = PASSWORD_POLICY;
         args.autoVerifiedAttributes = ["email"];
@@ -98,7 +123,8 @@ export function auth(config: StageConfig) {
     softwareToken: true,
     triggers: { customMessage: messages.arn },
     transform: {
-      userPool: (args: aws.cognito.UserPoolArgs) => {
+      userPool: (args: aws.cognito.UserPoolArgs, opts) => {
+        keepPool(opts, config.userPoolIds.admins);
         args.name = resourceName(stage, "admins");
         args.passwordPolicy = PASSWORD_POLICY;
         args.autoVerifiedAttributes = ["email"];

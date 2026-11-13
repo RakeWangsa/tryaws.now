@@ -1,0 +1,81 @@
+name: remove-staging
+
+# WPU-Z10. Ends a staging test session: `sst remove --stage staging` deletes every staging resource that
+# costs money (owner decision 2026-11-13, docs/runbooks/staging-on-demand.md). It keeps the two Cognito user
+# pools (retainOnDelete, infra/stacks/auth.ts) and the SST secrets. Manual only, from the protected branch.
+#
+# It never reaches production: the stage is fixed to staging, and production refuses `sst remove` anyway
+# (`protect` in infra/app.ts).
+# Approval: the job `remove` uses the GitHub environment `staging` (the same required reviewers as a deploy).
+# Credentials: GitHub OIDC (R3), the same staging deploy role and the same pinned actions as
+# deploy-staging.yml. No AWS key in GitHub, no `secrets.*` in this file.
+# The stage configuration is read again by `sst remove` (infra/app.ts), so the job sets the same variables
+# as the deploy, TC_STAGE_SIZE included.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type staging to remove the staging stage"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # The deploy's group: a removal never runs while a staging deploy runs, and the other way round.
+  group: deploy-staging
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  remove:
+    # Fail closed: a dispatch from any other ref, or without the typed confirmation, does nothing.
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Required reviewers are set on this environment by DevOps.
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      TC_ACCOUNT_ID: ${{ vars.TC_ACCOUNT_ID }}
+      TC_POOL_ACCOUNT_IDS: ${{ vars.TC_POOL_ACCOUNT_IDS }}
+      TC_DNS_ACCOUNT_ID: ${{ vars.TC_DNS_ACCOUNT_ID }}
+      TC_DNS_EXTERNAL_ID: ${{ vars.TC_DNS_EXTERNAL_ID }}
+      TC_DOMAIN_WEB: ${{ vars.TC_DOMAIN_WEB }}
+      TC_DOMAIN_ADMIN: ${{ vars.TC_DOMAIN_ADMIN }}
+      TC_ADMIN_ALLOWLIST: ${{ vars.TC_ADMIN_ALLOWLIST }}
+      TC_ALARM_EMAILS: ${{ vars.TC_ALARM_EMAILS }}
+      TC_SES_IDENTITY_ARN: ${{ vars.TC_SES_IDENTITY_ARN }}
+      TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
+      TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
+      TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
+      TC_STAGE_SIZE: ${{ vars.TC_STAGE_SIZE }}
+      TC_COGNITO_CUSTOMER_POOL_ID: ${{ vars.TC_COGNITO_CUSTOMER_POOL_ID }}
+      TC_COGNITO_ADMIN_POOL_ID: ${{ vars.TC_COGNITO_ADMIN_POOL_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Assume the staging deploy role (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.TC_STAGING_DEPLOY_ROLE_ARN }}
+          role-session-name: tc-remove-staging
+          aws-region: ap-southeast-1
+          role-duration-seconds: 3600
+      # The locked sst of the lockfile; a person runs the same command in their own terminal.
+      - name: SST remove
+        run: pnpm exec sst remove --stage staging

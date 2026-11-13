@@ -18,7 +18,7 @@ export const MANUAL_PROOFS = {
     task: "WP0-T3",
     who: "DevOps",
     description:
-      "on staging: a connection from the internet fails; a connection without TLS through the proxy is refused; 14-day backup retention and deletion protection show on the instance; the migrator ran an empty migration",
+      "on staging: a connection from the internet fails; a connection without TLS through the proxy is refused; the instance shows 1-day backup retention, no deletion protection and no final snapshot (WPU-Z10: staging runs only during test sessions and its data is wiped at each sst remove), while production keeps 14-day (7 lean) retention, deletion protection and its final snapshot; the migrator ran an empty migration",
   },
   "wp0-t4-staging-outputs": {
     gate: "M1",
