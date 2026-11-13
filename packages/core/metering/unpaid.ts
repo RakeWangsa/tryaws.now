@@ -439,6 +439,7 @@ async function releaseFinalSnapshots(
   deps: UnpaidDeps,
   row: LifecycleRow,
   count: Counts,
+  sinceMs: number,
 ): Promise<void> {
   const held = (reason: string): void => {
     count.finalHeld += 1;
@@ -453,7 +454,20 @@ async function releaseFinalSnapshots(
   for (const op of view.toCancel) {
     if (!(await ops.cancel(tx, op.id))) return held("destroy_not_cancelled");
   }
-  count.finalReleased += (await ops.supersedeFinal(tx, row.resourceId)).length;
+  const released = (await ops.supersedeFinal(tx, row.resourceId)).length;
+  count.finalReleased += released;
+  // WPU-Y10: the customer is told once for each resource and episode that the former final snapshot is an
+  // ordinary backup now, billed every day until it is deleted. DRAFT wording (@tc/notify).
+  const product = productOfFamily(row.resource.family);
+  if (released > 0 && deps.notice !== undefined && product !== null) {
+    await deps.notice(tx, {
+      customerId: row.customerId,
+      template: "unpaid_snapshot_released",
+      data: { resourceId: row.resourceId, product },
+      dedupeKey: `unpaid:final-released:${row.resourceId}:${sinceMs}`,
+    });
+    count.noticed += 1;
+  }
 }
 
 async function processOne(
@@ -500,7 +514,7 @@ async function processOne(
       // destroy that is still waiting (R13) and the renewal flow goes on where it was. Unreadable: grace.
       status = config.unpaidRetainedFrom === "active" ? "active" : "grace";
       await ops.setStatus(tx, row.id, status);
-      await releaseFinalSnapshots(tx, ops, deps, row, count);
+      await releaseFinalSnapshots(tx, ops, deps, row, count, sinceMs);
     }
     // WPU-Y3c. A suspend of the job that has not started is CANCELLED, not answered with a blind resume
     // (the review found that a resume could lift an admin's suspension queued in the meantime). A resume

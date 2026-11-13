@@ -152,6 +152,10 @@ export const SAMPLES: Record<TemplateId, { data: Record<string, unknown>; channe
     },
     channels: ["email", "in_app"],
   },
+  unpaid_snapshot_released: {
+    data: { resourceId: IDS.resource, product: "database" },
+    channels: ["email", "in_app"],
+  },
   wallet_low_before_charge: {
     data: {
       resourceId: IDS.resource,

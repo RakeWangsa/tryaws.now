@@ -16,6 +16,15 @@ export type ClaimOutcome =
   | { readonly status: "skipped"; readonly reason: "not_found" | "not_runnable" | "blocked" }
   | { readonly status: "refused"; readonly code: Exclude<LocalFailure, "lease_expired"> };
 
+// Only a real boolean counts (R16): a string "true" or a missing key is not an admin mark.
+function flag(value: unknown, key: string): unknown {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+const isTrue = (value: unknown, key: string): boolean => flag(value, key) === true;
+const isFalse = (value: unknown, key: string): boolean => flag(value, key) === false;
+
 // Every value but the row id comes from the database; the message gives no authority.
 function toClaimView(view: RunView): ClaimView {
   const { operation, resource, pool } = view;
@@ -37,6 +46,8 @@ function toClaimView(view: RunView): ClaimView {
     pool: pool === null ? null : { awsAccountId: pool.awsAccountId, externalId: pool.externalId },
     owner: view.owner,
     blockedBy: view.blockedBy,
+    adminSuspended: isTrue(view.resource?.config, "adminSuspended"),
+    adminRestore: isFalse(view.operation.payload, "adminSuspended"),
   };
 }
 

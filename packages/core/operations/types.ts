@@ -18,6 +18,7 @@ export type LocalFailure =
   | "destructive_guard_refused"
   | "owner_mismatch"
   | "resource_state"
+  | "admin_suspended"
   | "failed_hook_missing"
   | "invalid_step_result"
   | "lease_expired";

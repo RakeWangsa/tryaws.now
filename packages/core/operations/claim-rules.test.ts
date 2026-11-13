@@ -227,3 +227,35 @@ it("an active operation of the same resource blocks every kind but the engine ki
     refused("approval_flag_missing"),
   );
 });
+
+// WPU-Y10: an admin suspension outranks the platform's automatic resume (R16).
+const suspended = { ...placed, state: "suspended" };
+it("[WPU-Y10] a resume without the admin marker is refused while config.adminSuspended is true", () => {
+  expect(
+    decideClaim(
+      view({ kind: "resume", resource: suspended, adminSuspended: true, adminRestore: false }),
+      options(),
+    ),
+  ).toEqual(refused("admin_suspended"));
+});
+
+it("[WPU-Y10] the admin restore (marker false in its payload) still resumes", () => {
+  expect(
+    decideClaim(
+      view({ kind: "resume", resource: suspended, adminSuspended: true, adminRestore: true }),
+      options(),
+    ),
+  ).toEqual({ action: "run" });
+});
+
+it("[WPU-Y10] a resume runs when the flag is false or unknown, and the rule touches no other kind", () => {
+  expect(decideClaim(view({ kind: "resume", resource: suspended }), options())).toEqual({
+    action: "run",
+  });
+  expect(
+    decideClaim(view({ kind: "resume", resource: suspended, adminSuspended: false }), options()),
+  ).toEqual({ action: "run" });
+  expect(decideClaim(view({ kind: "reboot", adminSuspended: true }), options())).toEqual({
+    action: "run",
+  });
+});

@@ -8,6 +8,7 @@ export const UNPAID_TEMPLATES = [
   "unpaid_warning",
   "unpaid_suspended",
   "unpaid_deletion",
+  "unpaid_snapshot_released",
   "wallet_low_before_charge",
 ] as const;
 export type UnpaidTemplateId = (typeof UNPAID_TEMPLATES)[number];

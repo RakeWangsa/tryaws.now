@@ -36,6 +36,7 @@ export const TEMPLATE_IDS = [
   "unpaid_warning",
   "unpaid_suspended",
   "unpaid_deletion",
+  "unpaid_snapshot_released",
   "wallet_low_before_charge",
 ] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
