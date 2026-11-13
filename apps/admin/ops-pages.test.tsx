@@ -289,6 +289,24 @@ describe("/operations", () => {
     }
   });
 
+  // WPU-Z4: the page of the unpaid-usage rule is a page of the operations area.
+  it("links to the switch of the unpaid-usage rule, also when the queues cannot be loaded", async () => {
+    for (const locale of LOCALES) {
+      const html = inProvider(await OperationsPage(listParams(locale)), locale);
+      const href = locale === "bn" ? "/operations/unpaid-rule" : "/en/operations/unpaid-rule";
+      const form = [...html.matchAll(/<form[^>]*>/g)]
+        .map((m) => m[0])
+        .find((tag) => tag.includes(`action="${href}"`));
+      expect(form, locale).toContain('method="get"');
+      const rule = adminMessages[locale]["AdminUnpaidRule"] as Record<string, string>;
+      expect(html).toContain(rule["link"]);
+    }
+    state.counts = { ok: false, error: "internal" };
+    expect(inProvider(await OperationsPage(listParams("en")), "en")).toContain(
+      'action="/en/operations/unpaid-rule"',
+    );
+  });
+
   it("maps the stored error to a fixed line: no AWS text, ARN or key reaches the page (R14)", async () => {
     for (const locale of LOCALES) {
       const html = inProvider(await OperationsPage(listParams(locale)), locale);

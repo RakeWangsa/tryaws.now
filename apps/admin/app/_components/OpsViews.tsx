@@ -289,9 +289,16 @@ function filteredHref(locale: Locale, query: OpsQuery, after: string): string {
 // 16.12 /operations: the queues that need a person, the filter, and the way into each operation.
 export function OperationsView({ locale, query, queues, result }: OperationsViewProps) {
   const t = useTranslations("AdminOps");
+  const rule = useTranslations("AdminUnpaidRule");
   return (
     <>
       <h2 className="h4 mergecolor">{t("queue.title")}</h2>
+      {/* WPU-Z4: the switch of the unpaid-usage job, a page of the operations area. */}
+      <form method="get" action={localePath(locale, "/operations/unpaid-rule")} className="mb-3">
+        <Button type="submit" variant="secondary" size="sm">
+          {rule("link")}
+        </Button>
+      </form>
       <ResultLine ns="AdminOps" result={result} />
       <p className="form-text seccolor">{t("queue.intro")}</p>
       {queues.kind !== "ok" ? (
