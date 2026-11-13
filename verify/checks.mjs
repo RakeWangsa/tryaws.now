@@ -3776,6 +3776,28 @@ TASKS["WPU-Z15"] = [
 // WPU-Z16: OmniRank audit in CI and AI-answer visibility of the public site; staging is never indexed.
 TASKS["WPU-Z16"] = [specSync, baselineSync, lint, typecheck, format, web, repo];
 
+// WPU-Z18: the migrator bootstraps the first superadmin from the optional FirstAdminSub secret (one time,
+// fail closed, READ COMMITTED pinned); first-admin includes PostgreSQL.
+TASKS["WPU-Z18"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "migrator",
+    "functions/migrator: five roles, TLS check, applied-hash check, system accounts after the migrations",
+    "@tc/fn-migrator",
+  ),
+  glueTest(
+    "first-admin",
+    "packages/db: the first superadmin bootstrap (R7, R14, R16)",
+    "@tc/db",
+    "test/first-admin",
+  ),
+  repo,
+];
+
 // WPU-Z17: Gennet answers are read by their status code.
 TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];
 
