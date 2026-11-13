@@ -35,7 +35,7 @@ const PLAIN_ERROR_NAME = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
 
 // 10.1: an error that can never succeed on a retry ends these kinds in `failed`, where the failed hook gives the
 // money back in the same transaction: a create its order (WP4-T4), a domain renewal its renewal charge (WPU-Z13),
-// the renewal only while the registry does not hold it (below). Every other kind stops in needs_attention for an
+// the renewal only when nothing can have reached the registry (below, WPU-Y2). Every other kind stops in needs_attention for an
 // admin. An admin's rejection runs the same hook (reject.ts).
 const REFUNDED_KINDS: readonly string[] = Object.freeze(["create", "renew_domain"]);
 
@@ -56,18 +56,11 @@ const RENEWAL_SUBMIT_STEP = "submit";
 /**
  * Whether the registry may hold the renewal of this operation: a `renew_domain` at any step but null (`submit`,
  * `poll`, or a step that is not known, R16). Such a renewal gives no money back on a final error unless the failure
- * proves that nothing reached the registry or the registry itself reported it failed (decideFailure), and an
- * admin's rejection of it is refused (reject.ts, `renewal_submitted`): a refund waits for the registry's answer.
+ * proves that nothing reached the registry (decideFailure; WPU-Y2: the registry's own refusal is no longer enough),
+ * and an admin's rejection of it is refused (reject.ts, `renewal_submitted`).
  */
 export function registryHoldsRenewal(kind: string, step: string | null): boolean {
   return kind === "renew_domain" && step !== null;
-}
-
-// The registry's own answer that a renewal failed (GetOperationDetail FAILED or ERROR): the domain adapter throws
-// `conflict` with no AWS error name. An AWS error of a read at that step carries its name (domains-client.ts) and
-// says nothing about the renewal itself.
-function registryRefused(facts: FailureFacts): boolean {
-  return facts.code === "conflict" && facts.awsErrorName === null;
 }
 
 // At `submit`: the failure proves that this run sent nothing the registry may act on (AwsError.mayHaveActed false:
@@ -96,9 +89,11 @@ function endsFailed(
   if (!refundedOnFailure(kind)) return false;
   if (kind !== "renew_domain" || step === null) return true;
   if (step === RENEWAL_SUBMIT_STEP) return provedNotSent(previous, facts);
-  // At `poll`, and at a step that is not known (R16): only the registry's own refusal. A poll that gave up after
-  // three days, a lost operation id or a bad answer stops in needs_attention, no money moved.
-  return registryRefused(facts);
+  // At `poll`, and at a step that is not known (R16): RenewDomain reached the registry. WPU-Y2 (owner rule c,
+  // 2026-11-14): a refusal there (the registry's own FAILED answer, which a MaxPrice refusal may be) never ends the
+  // renewal failed with its refund; like a poll that gave up, a lost operation id or a bad answer it stops in
+  // needs_attention for an admin, no money moved (WPU-Z13: never refund when RenewDomain may have reached it).
+  return false;
 }
 
 // No AWS text ever reaches last_error (R14): a code, and a plain error name when there is one.

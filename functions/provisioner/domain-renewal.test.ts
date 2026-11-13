@@ -21,11 +21,11 @@ import { NOW, useHarness } from "./test/harness";
 import { operationRow, seedOperation } from "./test/seed";
 
 // WPU-Z13: a renew_domain through the real provisioner path. A registry that refuses moves it to failed and the
-// renewal charge of its period goes back in the same transaction (one reversal, the subscription ended at the
-// period that was paid); an error that passes waits and moves no money; a reversal that cannot be made rolls the
+// renewal charge of its period goes back in the same transaction (one reversal, the subscription back, active, at the
+// period that was paid: WPU-Y2); an error that passes waits and moves no money; a reversal that cannot be made rolls the
 // move to failed back; an admin's rejection after the retries gives the money back too while the registry does
-// not hold the renewal. Once it does (step poll, review round 1) only the registry's own refusal gives it back: a
-// poll that gives up stops in needs_attention and a rejection is refused. At step submit (review round 2) only a
+// not hold the renewal. Once it does (step poll, review round 1) nothing gives it back (WPU-Y2: the registry's own
+// refusal too): every final error stops in needs_attention and a rejection is refused. At step submit (review round 2) only a
 // failure that proves nothing was sent gives it back. The domain adapter is a fake here (its
 // RenewDomain call and its errors are proved in packages/aws/test/domain-actions.test.ts).
 const { t, world, setup, message } = useHarness();
@@ -212,8 +212,9 @@ describe("a registry renewal that the registry refuses", () => {
     });
     expect(await reversalsOf(d.chargeId)).toBe(1);
     expect(await balance()).toBe(start + PRICE);
+    // WPU-Y2 (owner rule c): back, active, at the period that was paid; the customer can renew again.
     const s = await subscriptionOf(d.subscriptionId);
-    expect(s.status).toBe("ended");
+    expect(s.status).toBe("active");
     expect((s.period_start as Date).getTime()).toBe(at.getTime() - 365 * DAY);
     expect((s.period_end as Date).toISOString()).toBe(at.toISOString());
   });
@@ -288,7 +289,8 @@ describe("a registry renewal that the registry holds (step poll)", () => {
     expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
   });
 
-  it("the registry answers failed: failed, and the charge goes back once", async () => {
+  // WPU-Y2 (owner rule c): a refusal that reached the registry (a MaxPrice refusal may be one) is for an admin.
+  it("the registry answers failed: needs_attention, no money moves, the subscription stays", async () => {
     const at = new Date("2026-11-16T09:00:00.000Z");
     const d = await held(at);
     const start = await balance();
@@ -297,15 +299,15 @@ describe("a registry renewal that the registry holds (step poll)", () => {
       hooks: hooks(),
     });
     expect(await runStep(deps, message(d.operationId, d.resourceId))).toMatchObject({
-      to: "failed",
+      to: "needs_attention",
     });
     expect(await operationRow(t.pool, d.operationId)).toMatchObject({
-      state: "failed",
+      state: "needs_attention",
       last_error: "conflict",
     });
-    expect(await reversalsOf(d.chargeId)).toBe(1);
-    expect(await balance()).toBe(start + PRICE);
-    expect((await subscriptionOf(d.subscriptionId)).status).toBe("ended");
+    expect(await reversalsOf(d.chargeId)).toBe(0);
+    expect(await balance()).toBe(start);
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
   });
 
   it("an admin's rejection is refused (renewal_submitted): the renewal stays for a retry, no money moves", async () => {
@@ -407,7 +409,7 @@ describe("a registry renewal at step submit (RenewDomain may have been sent)", (
     expect(await reversalsOf(d.chargeId)).toBe(1);
     expect(await balance()).toBe(start + PRICE);
     const s = await subscriptionOf(d.subscriptionId);
-    expect(s.status).toBe("ended");
+    expect(s.status).toBe("active");
     expect((s.period_end as Date).toISOString()).toBe(at.toISOString());
   });
 
@@ -487,6 +489,6 @@ describe("a registry renewal that ran out of retries before RenewDomain was acce
     });
     expect(await reversalsOf(d.chargeId)).toBe(1);
     expect(await balance()).toBe(start + PRICE);
-    expect((await subscriptionOf(d.subscriptionId)).status).toBe("ended");
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
   });
 });

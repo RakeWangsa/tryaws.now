@@ -137,4 +137,43 @@ describe("listCandidates read page after page (keyset over period_end, id)", () 
     expect(last.periodEnd).toBe("2030-01-01T00:00:00.000000Z");
     expect(await page(500, last)).toEqual([]);
   });
+
+  // WPU-Y2 (NOT RUN in the sandbox). A domain is charged 30 days before its period end, so its row is a candidate
+  // 30 days before the reminder horizon; a row of any other family keeps the horizon.
+  it("a family with a lead time is a candidate that many days earlier, the others are not", async () => {
+    const leadEnd = "2026-12-20T06:00:00.000000Z"; // NOW + 7 + 30 days
+    const domainRes = await newResource(t.pool, customerId, { state: "active", family: "domain" });
+    const domainSub = await insertRow(t.pool, "subscriptions", {
+      resource_id: domainRes,
+      customer_id: customerId,
+      term_days: 365,
+      price_snapshot: "{}",
+      period_start: "2000-01-01T00:00:00.000000Z",
+      period_end: leadEnd,
+      status: "active",
+    });
+    const domainBeyond = await insertRow(t.pool, "subscriptions", {
+      resource_id: await newResource(t.pool, customerId, { state: "active", family: "domain" }),
+      customer_id: customerId,
+      term_days: 365,
+      price_snapshot: "{}",
+      period_start: "2000-01-01T00:00:00.000000Z",
+      period_end: "2026-12-20T06:00:00.000001Z",
+      status: "active",
+    });
+    const server = await subscription("active", leadEnd);
+    const ids: string[] = [];
+    let after: CandidateKey | null = null;
+    for (;;) {
+      const rows: CandidateKey[] = await worker((tx) =>
+        lifecycleRepo(tx).listCandidates(NOW, HORIZON_DAYS, 2, after, { domain: 30 }),
+      );
+      ids.push(...rows.map((r) => r.id));
+      if (rows.length < 2) break;
+      after = rows[rows.length - 1]!;
+    }
+    expect(ids).toContain(domainSub);
+    expect(ids).not.toContain(domainBeyond);
+    expect(ids).not.toContain(server);
+  });
 });

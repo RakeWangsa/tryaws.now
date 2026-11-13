@@ -149,7 +149,9 @@ describe("a domain renewal the registry holds (step poll)", () => {
     }
   });
 
-  it("the registry's own refusal (GetOperationDetail FAILED: conflict without an AWS error name) fails it, so the charge goes back", () => {
+  // WPU-Y2 (owner rule c, 2026-11-14): a refusal that reached the registry (a MaxPrice refusal among them) never ends
+  // the renewal failed, which reversed the charge and ended the subscription: it stops for an admin, no money moves.
+  it("the registry's own refusal (GetOperationDetail FAILED) reached the registry: needs attention, no refund", () => {
     expect(
       decideFailure({
         kind: "renew_domain",
@@ -158,16 +160,16 @@ describe("a domain renewal the registry holds (step poll)", () => {
         now: NOW,
         facts: final("conflict"),
       }),
-    ).toEqual({ to: "failed", attempts: 4, lastError: "conflict" });
+    ).toEqual({ to: "needs_attention", attempts: 4, lastError: "conflict" });
   });
 
-  it("a step that is not known is taken as held (R16): only the registry's refusal fails it", () => {
+  it("a step that is not known is taken as held (R16): nothing fails it", () => {
     expect(
       decideFailure({ kind: "renew_domain", attempts: 0, now: NOW, facts: final("validation") }).to,
     ).toBe("needs_attention");
     expect(
       decideFailure({ kind: "renew_domain", attempts: 0, now: NOW, facts: final("conflict") }).to,
-    ).toBe("failed");
+    ).toBe("needs_attention");
   });
 
   it("an error that passes still waits, and the fifth failure needs attention, as for any kind", () => {

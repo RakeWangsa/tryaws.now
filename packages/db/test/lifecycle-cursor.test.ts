@@ -94,6 +94,44 @@ describe("listCandidates: one page of the candidate list", () => {
     );
   });
 
+  it("WPU-Y2: a family with a lead time is a candidate that many days earlier; the others keep the horizon", async () => {
+    const r = recording([]);
+    expect(await lifecycleRepo(r.tx).listCandidates(NOW, 7, 500, KEY, { domain: 30 })).toEqual([]);
+    const { text, params } = r.sent[0]!;
+    // NOW + 7 + 30 days for a domain
+    expect(params).toEqual([
+      HORIZON,
+      "2026-12-20T06:00:00.000Z",
+      "domain",
+      KEY.periodEnd,
+      KEY.id,
+      500,
+    ]);
+    expect(text).toContain(
+      "where ((s.status = 'active' and s.period_end <= $1::timestamptz) or (s.status = 'active' and s.period_end <= $2::timestamptz and exists (select 1 from resources lr where lr.id = s.resource_id and lr.family = $3)) or s.status in ('grace', 'retained')) and (s.period_end, s.id) > ($4::timestamptz, $5::uuid) order by s.period_end, s.id limit $6",
+    );
+  });
+
+  it("WPU-Y2: a lead time that is not a whole number of days from 1 to 365, or a family of another form, is refused before any statement (R16)", async () => {
+    const s = untouchable();
+    const cases: Record<string, number>[] = [
+      { domain: 0 },
+      { domain: -1 },
+      { domain: 1.5 },
+      { domain: 366 },
+      { "Domain x": 30 },
+    ];
+    for (const leads of cases) {
+      await expect(
+        lifecycleRepo(s.tx).listCandidates(NOW, 7, 500, null, leads),
+        JSON.stringify(leads),
+      ).rejects.toThrow(
+        new RangeError("lifecycle: a lead time of the candidate list is not valid"),
+      );
+    }
+    expect(s.used).toEqual([]);
+  });
+
   it("an infinite period end, which has no text, comes back as an empty key: never a cursor", async () => {
     const r = recording([{ id: ID, period_end: null }]);
     const page = await lifecycleRepo(r.tx).listCandidates(NOW, 7, 500);

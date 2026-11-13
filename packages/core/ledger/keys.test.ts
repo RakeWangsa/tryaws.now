@@ -15,6 +15,13 @@ describe("ledgerKey (spec 9.1)", () => {
     expect(ledgerKey.renewal(ID, new Date("2026-12-01T00:00:00Z"))).toBe(
       `renew:${id}:2026-12-01T00:00:00.000Z`,
     );
+    // WPU-Y2: attempt 0 is the key of the period as before; a retry after a reversed domain renewal is `:a<n>`.
+    expect(ledgerKey.renewal(ID, new Date("2026-12-01T00:00:00Z"), 0)).toBe(
+      `renew:${id}:2026-12-01T00:00:00.000Z`,
+    );
+    expect(ledgerKey.renewal(ID, new Date("2026-12-01T00:00:00Z"), 3)).toBe(
+      `renew:${id}:2026-12-01T00:00:00.000Z:a3`,
+    );
     expect(ledgerKey.metered(ID, "snapshot_gb", "2026-11-11")).toBe(
       `meter:${id}:snapshot_gb:2026-11-11`,
     );
@@ -36,6 +43,9 @@ describe("ledgerKey (spec 9.1)", () => {
     ["purchase", () => ledgerKey.purchase("has space has space")],
     ["renewal", () => ledgerKey.renewal(ID, new Date("nope"))],
     ["renewal", () => ledgerKey.renewal("x", new Date())],
+    ["renewal", () => ledgerKey.renewal(ID, new Date(), -1)],
+    ["renewal", () => ledgerKey.renewal(ID, new Date(), 1.5)],
+    ["renewal", () => ledgerKey.renewal(ID, new Date(), 100)],
     ["metered", () => ledgerKey.metered(ID, "Bad Metric", "2026-11-11")],
     ["metered", () => ledgerKey.metered(ID, "snapshot_gb", "yesterday")],
   ])("%s refuses a part that has the wrong form, and the text holds no value", (name, call) => {

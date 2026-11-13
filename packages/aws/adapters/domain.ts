@@ -293,8 +293,8 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
   // (the charge goes back), and from `submit` on the failure policy of @tc/core (decideFailure,
   // registryHoldsRenewal) takes the renewal as held: at `submit` it gives the charge back only for an error that
   // proves nothing was sent, in the first run there (review round 2: a RenewDomain that timed out after it was sent
-  // stays at `submit`); at `poll`, only for `conflict` without an AWS error name, the registry's failed answer. A
-  // give-up or any other error stops in needs_attention (pinned in test/domain-actions.test.ts).
+  // stays at `submit`); at `poll`, never (WPU-Y2: the registry's failed answer, which a MaxPrice refusal may be, stops
+  // in needs_attention for an admin like a give-up or any other error; pinned in test/domain-actions.test.ts).
   async function renewAction(ctx: Ctx): Promise<StepResult> {
     const port = deps.domains();
     const { name } = ctx.config;

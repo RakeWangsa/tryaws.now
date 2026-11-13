@@ -41,6 +41,13 @@ describe("the key of a registry renewal", () => {
     );
     expect(domainRenewalKey(SUB, new Date(START.getTime()))).toBe(domainRenewalKey(SUB, START));
   });
+
+  it("WPU-Y2: a retry after a reversed renewal of the period has a key of its own (`:a<n>`)", () => {
+    expect(domainRenewalKey(SUB, START, 0)).toBe(domainRenewalKey(SUB, START));
+    expect(domainRenewalKey(SUB, START, 2)).toBe(
+      `lifecycle:renew-domain:${SUB}:2027-11-11T06:00:00.000Z:a2`,
+    );
+  });
 });
 
 describe("the operation a domain's renewal charge queues", () => {
@@ -57,6 +64,13 @@ describe("the operation a domain's renewal charge queues", () => {
         maxPriceUsd: "13.0000",
       },
       idempotencyKey: domainRenewalKey(SUB, START),
+    });
+  });
+
+  it("WPU-Y2: the retry of a reversed renewal names its attempt in the payload and the key", () => {
+    expect(domainRenewalOperation(domain(), START, USD, 1)).toMatchObject({
+      payload: { subscriptionId: SUB, periodStart: START.toISOString(), attempt: 1 },
+      idempotencyKey: domainRenewalKey(SUB, START, 1),
     });
   });
 
@@ -124,6 +138,15 @@ describe("the payload a failed renewal is read back from", () => {
     expect(readDomainRenewalPayload(input?.payload)).toEqual({
       subscriptionId: SUB,
       periodStart: START,
+      attempt: 0,
+    });
+    // WPU-Y2: the attempt of a retry, so the reversal finds the charge of that attempt
+    expect(
+      readDomainRenewalPayload(domainRenewalOperation(domain(), START, USD, 3)?.payload),
+    ).toEqual({
+      subscriptionId: SUB,
+      periodStart: START,
+      attempt: 3,
     });
   });
 
@@ -140,6 +163,11 @@ describe("the payload a failed renewal is read back from", () => {
       { subscriptionId: SUB, periodStart: "2027-11-11" },
       { subscriptionId: SUB, periodStart: "2027-11-11T06:00:00Z" },
       { subscriptionId: SUB, periodStart: START },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: 0 },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: -1 },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: 1.5 },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: 100 },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: "1" },
     ]) {
       expect(readDomainRenewalPayload(payload), JSON.stringify(payload)).toBeNull();
     }
@@ -162,6 +190,7 @@ describe("the reversal decision", () => {
       termDays: 365,
     },
     charge: { id: CHARGE, kind: "renewal", referenceId: SUB },
+    alreadyReversed: false,
     ...over,
   });
 
@@ -173,14 +202,22 @@ describe("the reversal decision", () => {
     });
   });
 
-  it("a repeat after the move back reverses again (a replay of the keyed reversal) and moves nothing", () => {
+  it("a repeat after the reversal is a replay of the keyed reversal and moves nothing, wherever the period is now", () => {
     const back = {
       ...facts().subscription!,
-      status: "ended" as const,
+      status: "active" as const,
       periodStart: new Date(START.getTime() - 365 * DAY),
       periodEnd: START,
     };
-    expect(decideDomainRenewalReversal(facts({ subscription: back }))).toEqual({
+    expect(
+      decideDomainRenewalReversal(facts({ subscription: back, alreadyReversed: true })),
+    ).toEqual({
+      action: "reverse",
+      chargeId: CHARGE,
+      rollBack: null,
+    });
+    // WPU-Y2: the customer renewed the period again since (attempt 1): a late repeat must not move it back.
+    expect(decideDomainRenewalReversal(facts({ alreadyReversed: true }))).toEqual({
       action: "reverse",
       chargeId: CHARGE,
       rollBack: null,
@@ -229,7 +266,7 @@ describe("the reversal decision", () => {
     for (const subscription of [
       // A later period was charged since.
       { ...sub, periodStart: renewedEnd, periodEnd: new Date(renewedEnd.getTime() + 365 * DAY) },
-      // Back at the paid period but not ended: not the state this module leaves.
+      // Back at the paid period while the charge was never reversed: not the state this module leaves.
       {
         ...sub,
         periodStart: new Date(START.getTime() - 365 * DAY),

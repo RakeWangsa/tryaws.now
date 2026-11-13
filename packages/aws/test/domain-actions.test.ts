@@ -322,9 +322,9 @@ describe("renew_domain", () => {
   };
 
   // Review round 1: after RenewDomain was accepted the registry holds the renewal (TiCON pays for it, it may still
-  // complete): a poll that gives up or cannot poll moves no money (needs_attention), and only the registry's own
-  // FAILED answer fails the operation, refunded.
-  it("from the step after RenewDomain only the registry's failed answer is a refusal that gives the charge back", async () => {
+  // complete): a poll that gives up or cannot poll moves no money (needs_attention). WPU-Y2 (owner rule c): the
+  // registry's own FAILED answer (a MaxPrice refusal may be one) reached the registry too: needs_attention, no refund.
+  it("from the step after RenewDomain nothing gives the charge back, not even the registry's failed answer", async () => {
     const { adapter, fake } = await registered();
     const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031 };
     const started = await run(adapter, "renew_domain", payload, { step: "submit" });
@@ -346,7 +346,7 @@ describe("renew_domain", () => {
       "needs_attention",
     );
     await fake.finish(opId, "failed");
-    expect(await decide(poll(), step)).toBe("failed");
+    expect(await decide(poll(), step)).toBe("needs_attention");
   });
 
   // Review round 2: RenewDomain is sent only at `submit`, which step null records first. A call that may have

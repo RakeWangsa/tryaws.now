@@ -155,20 +155,15 @@ describe("runStep: the failure policy reads the step of the renewal", () => {
     expect(needsAttention).toHaveBeenCalledTimes(1);
   });
 
-  it("the registry's failed answer at step poll fails it, and the failed hook gives the charge back once", async () => {
+  // WPU-Y2 (owner rule c): the registry's own refusal reached the registry (a MaxPrice refusal may be one): an admin
+  // decides, no refund and the subscription is not ended.
+  it("the registry's failed answer at step poll stops in needs_attention: no refund", async () => {
     const { outcome, failed } = await runWith(
       "poll",
       new AwsError({ code: "conflict", retryable: false }),
     );
-    expect(outcome).toEqual({ outcome: "advanced", to: "failed", sent: false });
-    expect(failed).toHaveBeenCalledTimes(1);
-    expect(failed).toHaveBeenCalledWith(TX, {
-      operationId: OP,
-      resourceId: RESOURCE,
-      customerId: CUSTOMER,
-      kind: "renew_domain",
-      code: "conflict",
-    });
+    expect(outcome).toMatchObject({ to: "needs_attention" });
+    expect(failed).not.toHaveBeenCalled();
   });
 
   it("a refusal before RenewDomain was accepted (step null) still fails it with its refund", async () => {

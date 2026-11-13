@@ -1,7 +1,9 @@
 import {
   findLedgerTransactionByKey,
+  findReversalOf,
   insertOperation,
   lifecycleRepo,
+  patchResource,
   type LifecycleRow,
   type OperationInput,
   type SubscriptionStatus,
@@ -9,7 +11,7 @@ import {
 } from "@tc/db";
 import { DOMAIN_YEARS } from "../domains/resolve";
 import { lockWallet } from "../ledger/balance";
-import { ledgerKey } from "../ledger/keys";
+import { MAX_RENEWAL_ATTEMPT, ledgerKey } from "../ledger/keys";
 import { isUuid } from "../validation/uuid";
 import { reverseTransaction } from "../ledger/reverse";
 import { firstMessage, type QueueMessage } from "../operations/queue";
@@ -22,10 +24,19 @@ import type { Result } from "../types";
 // holds, which the adapter checks against the live domain). When that operation ends `failed` (the registry
 // refused it, or an admin rejected it after its retries, 10.1) the charge is reversed in the transaction of the
 // move: one reversing ledger transaction (R5), the credit-note notice where the charge had an invoice, and the
-// subscription back at the period that was paid, ended. Ended, because the ledger key of the renewal stays taken:
-// a renewal of the same period again would be a replay of the reversed charge, a period for nothing.
-// Once RenewDomain was accepted the registry holds the renewal (operations/policy.ts registryHoldsRenewal): only
-// the registry's own refusal ends it failed; a poll that gives up and an admin's rejection move no money.
+// subscription back at the period that was paid (WPU-Y2: active, no longer ended; see below).
+// Once RenewDomain may have been sent the registry may hold the renewal (operations/policy.ts registryHoldsRenewal):
+// a poll that gives up and an admin's rejection move no money.
+//
+// WPU-Y2 (owner rule c, 2026-11-14, delegated money rule). A refusal must not end the subscription for good. Only a
+// renewal proven never to have reached the registry ends `failed` (step null, or a definite refusal of the first
+// run at `submit`; a refusal at `poll`, the registry's own FAILED included, stops in needs_attention: policy.ts).
+// Its charge is reversed as before, but the subscription goes back, ACTIVE, to the period that was paid, and the
+// customer can renew again: the retry is charged under the next attempt's ledger key (`renew:<sub>:<start>:a<n>`,
+// renewalAttempt) and queues a renew_domain of its own (`...:a<n>`), so the reversed charge's key never blocks it.
+// The marker `domainRenewalRefused` (resources.config) stops the lifecycle from charging that period again by
+// itself (it would meet the same refusal on every sweep): the engine holds it with an alarm, and the customer's
+// renewNow (or a later period) goes on.
 
 const DOMAIN_FAMILY = "domain";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,8 +60,51 @@ function instantOf(value: unknown): Date | null {
  * (`lifecycle:<kind>:<subscription>:<period start>`), so whoever charges the period (the engine or renewNow)
  * reaches the same row and a replay queues nothing (R7).
  */
-export function domainRenewalKey(subscriptionId: string, periodStart: Date): string {
-  return `lifecycle:renew-domain:${subscriptionId}:${periodStart.toISOString()}`;
+export function domainRenewalKey(subscriptionId: string, periodStart: Date, attempt = 0): string {
+  const base = `lifecycle:renew-domain:${subscriptionId}:${periodStart.toISOString()}`;
+  return attempt === 0 ? base : `${base}:a${attempt}`;
+}
+
+/** WPU-Y2. The key of resources.config that marks the period start whose registry renewal was refused. */
+export const DOMAIN_RENEWAL_REFUSED_KEY = "domainRenewalRefused";
+
+/**
+ * Pure. Whether the lifecycle must not charge the renewal starting at `periodStart` by itself: the registry refused
+ * the renewal of exactly that period (the marker names it). A marker that cannot be read blocks too (R16); a marker
+ * of another period does not (the customer renewed since).
+ */
+export function domainRenewalRefused(
+  config: Readonly<Record<string, unknown>>,
+  periodStart: Date,
+): boolean {
+  const marker = config[DOMAIN_RENEWAL_REFUSED_KEY];
+  if (marker === undefined || marker === null) return false;
+  if (typeof marker !== "object" || Array.isArray(marker)) return true;
+  const start = instantOf((marker as Record<string, unknown>)["periodStart"]);
+  return start === null || start.getTime() === periodStart.getTime();
+}
+
+/**
+ * WPU-Y2. The attempt under which the renewal of this period is charged now: the first attempt whose ledger key is
+ * free, or whose charge stands (a replay of it, R7). An attempt whose charge was reversed (a refused registry
+ * renewal, or an admin's reversal) is passed over, so a legitimate retry is charged anew. Only a domain retries: for
+ * every other family attempt 0 is the only one, as before. No free attempt left: null, and the caller refuses (R16).
+ */
+export async function renewalAttempt(
+  tx: Tx,
+  family: string,
+  subscriptionId: string,
+  periodStart: Date,
+): Promise<number | null> {
+  if (family !== DOMAIN_FAMILY) return 0;
+  for (let attempt = 0; attempt <= MAX_RENEWAL_ATTEMPT; attempt += 1) {
+    const charge = await findLedgerTransactionByKey(
+      tx,
+      ledgerKey.renewal(subscriptionId, periodStart, attempt),
+    );
+    if (charge === null || (await findReversalOf(tx, charge.id)) === null) return attempt;
+  }
+  return null;
 }
 
 /**
@@ -65,6 +119,8 @@ export function domainRenewalOperation(
   row: Pick<LifecycleRow, "id" | "resourceId" | "resource">,
   periodStart: Date,
   maxPriceUsd: string,
+  /** WPU-Y2: the attempt of the charge (renewalAttempt); 0 for the first charge of the period. */
+  attempt = 0,
 ): OperationInput | null {
   if (row.resource.family !== DOMAIN_FAMILY) return null;
   // WPU-Z19: the USD price this renewal charged (awsPriceUsd of its price snapshot, decimal text, R4). The adapter sends
@@ -76,6 +132,9 @@ export function domainRenewalOperation(
   if (expiry === null) {
     throw new DomainRenewalError("lifecycle: the registry expiry of the domain is not known");
   }
+  if (!validAttempt(attempt)) {
+    throw new DomainRenewalError("lifecycle: the attempt of the domain renewal is not valid");
+  }
   return {
     resourceId: row.resourceId,
     kind: "renew_domain",
@@ -86,20 +145,39 @@ export function domainRenewalOperation(
       currentExpiryYear: expiry.getUTCFullYear(),
       years: DOMAIN_YEARS,
       maxPriceUsd,
+      ...(attempt === 0 ? {} : { attempt }),
     },
-    idempotencyKey: domainRenewalKey(row.id, periodStart),
+    idempotencyKey: domainRenewalKey(row.id, periodStart, attempt),
   };
 }
 
+function validAttempt(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= MAX_RENEWAL_ATTEMPT
+  );
+}
+
 /** Pure. The subscription and the period of a `renew_domain` payload, or null when it is not one written here. */
-export function readDomainRenewalPayload(
-  payload: unknown,
-): { readonly subscriptionId: string; readonly periodStart: Date } | null {
+export interface DomainRenewalPayload {
+  readonly subscriptionId: string;
+  readonly periodStart: Date;
+  /** WPU-Y2: the attempt of the charge; 0 when the payload names none (written before WPU-Y2, or the first). */
+  readonly attempt: number;
+}
+
+/** Pure. The subscription, the period and the attempt of a `renew_domain` payload, or null when not one written here. */
+export function readDomainRenewalPayload(payload: unknown): DomainRenewalPayload | null {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
-  const { subscriptionId, periodStart } = payload as Record<string, unknown>;
+  const { subscriptionId, periodStart, attempt } = payload as Record<string, unknown>;
   if (!isUuid(subscriptionId)) return null;
   const start = instantOf(periodStart);
-  return start === null ? null : { subscriptionId, periodStart: start };
+  if (start === null) return null;
+  // Written only from 1 on: an explicit 0, or anything else, is not this module's (R16).
+  if (attempt !== undefined && (!validAttempt(attempt) || attempt === 0)) return null;
+  return { subscriptionId, periodStart: start, attempt: attempt ?? 0 };
 }
 
 export interface ReversalFacts {
@@ -107,7 +185,7 @@ export interface ReversalFacts {
   readonly resourceId: string;
   readonly customerId: string;
   /** The payload of the failed operation, read by readDomainRenewalPayload. */
-  readonly payload: { readonly subscriptionId: string; readonly periodStart: Date } | null;
+  readonly payload: Pick<DomainRenewalPayload, "subscriptionId" | "periodStart"> | null;
   /** The subscription the payload names, read under its lock; null when there is none. */
   readonly subscription: {
     readonly id: string;
@@ -124,13 +202,15 @@ export interface ReversalFacts {
     readonly kind: string;
     readonly referenceId: string;
   } | null;
+  /** WPU-Y2: the charge was reversed already (an earlier run of this hook, or an admin). */
+  readonly alreadyReversed: boolean;
 }
 
 export type ReversalDecision =
   | {
       readonly action: "reverse";
       readonly chargeId: string;
-      /** The period that was paid, to move the subscription back to (and end it); null when it is there already. */
+      /** The period that was paid, to move the subscription back to (active); null on a replay. */
       readonly rollBack: { readonly periodStart: Date; readonly periodEnd: Date } | null;
     }
   | {
@@ -163,8 +243,11 @@ export function decideDomainRenewalReversal(facts: ReversalFacts): ReversalDecis
   ) {
     return { action: "refuse", reason: "charge" };
   }
+  // WPU-Y2: reversed already: the keyed reversal is a replay and nothing else moves. Never moved back again: the
+  // customer may have renewed the period since, under the next attempt.
+  if (facts.alreadyReversed) return { action: "reverse", chargeId: charge.id, rollBack: null };
   const paidUntil = payload.periodStart.getTime();
-  // The period this charge paid is still the subscription's: move it back to the period before, and end it.
+  // The period this charge paid is still the subscription's: move it back to the period before (active).
   if (sub.periodStart.getTime() === paidUntil) {
     return {
       action: "reverse",
@@ -174,10 +257,6 @@ export function decideDomainRenewalReversal(facts: ReversalFacts): ReversalDecis
         periodEnd: payload.periodStart,
       },
     };
-  }
-  // An earlier call moved it back and ended it: the keyed reversal is a replay, nothing else moves.
-  if (sub.status === "ended" && sub.periodEnd.getTime() === paidUntil) {
-    return { action: "reverse", chargeId: charge.id, rollBack: null };
   }
   return { action: "refuse", reason: "period" };
 }
@@ -194,8 +273,10 @@ export async function queueDomainRenewal(
   periodStart: Date,
   now: Date,
   maxPriceUsd: string,
+  /** WPU-Y2: the attempt of the charge (Renewed.attempt). */
+  attempt = 0,
 ): Promise<QueueMessage | null> {
-  const input = domainRenewalOperation(row, periodStart, maxPriceUsd);
+  const input = domainRenewalOperation(row, periodStart, maxPriceUsd, attempt);
   if (input === null) return null;
   const inserted = await insertOperation(tx, input, now);
   return inserted.created && inserted.state === "queued"
@@ -232,16 +313,18 @@ export interface DomainRenewalFailure {
 export interface DomainRenewalReversed {
   /** The reversing ledger transaction: posted by this call or found (an earlier call's, R7). */
   readonly reversalId: string;
-  /** This call moved the subscription back to the period that was paid and ended it. */
-  readonly ended: boolean;
+  /** This call moved the subscription back, active, to the period that was paid (WPU-Y2: no longer ended). */
+  readonly rolledBack: boolean;
 }
 
 /**
  * The failed hook of a `renew_domain` (functions/provisioner), run as worker_rw in the transaction that moves the
  * operation to `failed`: a throw rolls that move back and the sweeper recovers the run. The renewal charge of the
- * period is reversed under its key (`reversal:<charge>`, R5, R7); reverseTransaction writes the credit-note notice
- * where the charge had an invoice, and the scheduler issues the credit note (WPU-C1). The subscription goes back to
- * the period that was paid and ends. The customer message waits for its wording (no template fits; JOURNEY).
+ * period (of the payload's attempt) is reversed under its key (`reversal:<charge>`, R5, R7); reverseTransaction
+ * writes the credit-note notice where the charge had an invoice, and the scheduler issues the credit note (WPU-C1).
+ * WPU-Y2: the subscription goes back, active, to the period that was paid, and the period is marked refused
+ * (DOMAIN_RENEWAL_REFUSED_KEY) so the lifecycle does not charge it again by itself; the customer can renew again.
+ * The customer message waits for its wording (no template fits; JOURNEY).
  */
 export async function reverseFailedDomainRenewal(
   tx: Tx,
@@ -259,16 +342,18 @@ export async function reverseFailedDomainRenewal(
       ? null
       : await findLedgerTransactionByKey(
           tx,
-          ledgerKey.renewal(payload.subscriptionId, payload.periodStart),
+          ledgerKey.renewal(payload.subscriptionId, payload.periodStart, payload.attempt),
         );
+  const alreadyReversed = charge !== null && (await findReversalOf(tx, charge.id)) !== null;
   const decision = decideDomainRenewalReversal({
     resourceId: event.resourceId,
     customerId: event.customerId,
     payload,
     subscription,
     charge,
+    alreadyReversed,
   });
-  if (decision.action === "refuse" || subscription === null) {
+  if (decision.action === "refuse" || subscription === null || payload === null) {
     throw new DomainRenewalError("lifecycle: a failed domain renewal cannot be reversed");
   }
 
@@ -283,9 +368,14 @@ export async function reverseFailedDomainRenewal(
     throw new DomainRenewalError("lifecycle: the reversal of a domain renewal was refused");
   }
   if (decision.rollBack !== null) {
-    await repo.setPeriod(subscription.id, { status: "ended", ...decision.rollBack });
+    await repo.setPeriod(subscription.id, { status: "active", ...decision.rollBack });
+    await patchResource(tx, event.resourceId, {
+      configMerge: {
+        [DOMAIN_RENEWAL_REFUSED_KEY]: { periodStart: payload.periodStart.toISOString() },
+      },
+    });
   }
-  const ended = decision.rollBack !== null;
+  const rolledBack = decision.rollBack !== null;
   // Ids and a fixed word only (R14).
   deps.log?.({
     event: "domain_renewal_reversed",
@@ -293,7 +383,7 @@ export async function reverseFailedDomainRenewal(
     resourceId: event.resourceId,
     subscriptionId: subscription.id,
     reversalId: reversal.value.transactionId,
-    ended,
+    rolledBack,
   });
-  return { reversalId: reversal.value.transactionId, ended };
+  return { reversalId: reversal.value.transactionId, rolledBack };
 }

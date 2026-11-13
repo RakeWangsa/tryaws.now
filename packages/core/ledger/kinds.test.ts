@@ -34,6 +34,25 @@ describe("the postings of spec 9.1, one row per kind", () => {
   it("accepts the exact keys of ledgerKey for a renewal and a metered charge, an hourly period too", () => {
     const at = "2026-12-01T00:00:00.000Z";
     expect(checkPosting(renewal({ idempotencyKey: `renew:${REF}:${at}` })).ok).toBe(true);
+    // WPU-Y2: the retry of a domain renewal whose charge was reversed (attempt 1 and on), in the one exact form.
+    expect(checkPosting(renewal({ idempotencyKey: `renew:${REF}:${at}:a1` })).ok).toBe(true);
+    expect(checkPosting(renewal({ idempotencyKey: `renew:${REF}:${at}:a12` })).ok).toBe(true);
+    for (const bad of [
+      ":a0",
+      ":a01",
+      ":a",
+      ":a-1",
+      ":a1.5",
+      ":b1",
+      ":a1:a2",
+      "a1",
+      ":A1",
+      ":a100",
+    ]) {
+      expect(checkPosting(renewal({ idempotencyKey: `renew:${REF}:${at}${bad}` })).ok, bad).toBe(
+        false,
+      );
+    }
     for (const period of ["2026-11-11", "2026-11-11T07"]) {
       expect(
         checkPosting(metered({ idempotencyKey: `meter:${REF}:snapshot_gb:${period}` })).ok,

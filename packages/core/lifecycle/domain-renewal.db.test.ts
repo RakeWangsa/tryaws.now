@@ -13,6 +13,7 @@ import { childId } from "../orders/ids";
 import { makeOrders } from "../orders/place";
 import { makeKit, placeOne, START, type Kit } from "../test/orders-kit";
 import { domainRenewalKey, queueDomainRenewal, reverseFailedDomainRenewal } from "./domain-renewal";
+import { renewalQuote } from "./renew";
 import { runLifecycle } from "./engine";
 import { renewNow } from "./renew-now";
 
@@ -58,20 +59,23 @@ interface Bought {
   end: Date;
   /** The registry expiry the row holds (a day after the period end, as a registration finishes after the order). */
   expiry: Date;
+  tldId: string;
 }
 
 /**
  * A domain bought through the order flow at START, then registered as the provisioner leaves it: the resource
  * active with the adapter's `expiresAt`, the domain row registered, the create succeeded. Auto-renew on.
  */
-async function boughtDomain(options: { expiry?: string | null } = {}): Promise<Bought> {
+async function boughtDomain(
+  options: { expiry?: string | null; renewal?: string; balanceMinor?: bigint } = {},
+): Promise<Bought> {
   kit.clock.set(START);
-  const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
+  const buyer = await kit.newBuyer({ balanceMinor: options.balanceMinor ?? 20_000_000n });
   const tld = "t" + uniqueSuffix();
   const tldId = await insertRow(t.pool, "tlds", {
     tld,
     registration_price_usd: "13.0000",
-    renewal_price_usd: "15.0000",
+    renewal_price_usd: options.renewal ?? "15.0000",
     needs_extra_params: false,
     synced_at: "2026-11-11T00:00:00Z",
   });
@@ -110,6 +114,7 @@ async function boughtDomain(options: { expiry?: string | null } = {}): Promise<B
     subscriptionId: String(sub.id),
     end,
     expiry,
+    tldId,
   };
 }
 
@@ -216,7 +221,8 @@ describe("one charge, one registry renewal", () => {
       idempotency_key: domainRenewalKey(d.subscriptionId, d.end),
     });
     // WPU-Z19: the USD price this renewal charged (its price snapshot) is RenewDomain's Consent.MaxPrice.
-    expect((ops[0]!.payload as { maxPriceUsd?: unknown }).maxPriceUsd).toMatch(/^13(\.0+)?$/);
+    // WPU-Y2: that price is the TLD's renewal price (15), not the registration price of the order (13).
+    expect((ops[0]!.payload as { maxPriceUsd?: unknown }).maxPriceUsd).toMatch(/^15(\.0+)?$/);
     // A second click is refused (the period moved) and the engine at the old end has nothing to renew.
     const second = await web((tx) =>
       renewNow(tx, { customerId: d.customerId, resourceId: d.resourceId, clock: kit.clock }),
@@ -283,8 +289,97 @@ describe("one charge, one registry renewal", () => {
   });
 });
 
+// WPU-Y2 (owner rule a): the renewal is priced from tlds.renewal_price_usd at the rate of the renewal day.
+describe("the price of a domain renewal (WPU-Y2)", () => {
+  it("a TLD whose renewal costs more than its registration renews at the renewal price, through the normal pricing", async () => {
+    const d = await boughtDomain({ renewal: "48.0000" });
+    const afterPurchase = await kit.balance(d.customerId);
+    const paidForPurchase = 20_000_000n - afterPurchase;
+    kit.clock.set(new Date(d.end.getTime() - 30 * DAY));
+    await kit.refreshFx();
+    const quote = await worker(async (tx) => {
+      const locked = await lifecycleRepo(tx).lock(d.subscriptionId);
+      if (locked === null) throw new Error("fixture: no subscription");
+      return renewalQuote(tx, locked, kit.clock);
+    });
+    if (!quote.ok) throw new Error(`fixture: the quote was refused (${quote.error})`);
+    expect(quote.value.awsPriceUsd).toMatch(/^48(\.0+)?$/);
+    await run();
+    const paidForRenewal = afterPurchase - (await kit.balance(d.customerId));
+    expect(paidForRenewal).toBe(BigInt(quote.value.totalMinor));
+    expect(paidForRenewal).toBeGreaterThan(paidForPurchase);
+    const [op] = await renewOps(d.resourceId);
+    // Consent.MaxPrice is the renewal USD price that was charged
+    expect((op!.payload as { maxPriceUsd?: unknown }).maxPriceUsd).toBe(quote.value.awsPriceUsd);
+  });
+
+  it("a renewal price that is missing is not charged: held for price_unavailable (R16)", async () => {
+    const d = await boughtDomain();
+    await q("update tlds set renewal_price_usd = null where id = $1", [d.tldId]);
+    kit.clock.set(d.end);
+    const before = await kit.balance(d.customerId);
+    await run();
+    expect(await renewals(d.subscriptionId)).toEqual([]);
+    expect(await kit.balance(d.customerId)).toBe(before);
+    const [marker] = await q("select config->'fxRateHold' as hold from resources where id = $1", [
+      d.resourceId,
+    ]);
+    expect(marker!.hold).toMatchObject({ reason: "price_unavailable", error: "internal" });
+    expect((await subRow(d.subscriptionId)).status).toBe("active");
+  });
+});
+
+// WPU-Y2 (owner rule b): the charge and RenewDomain 30 days before the period end; the new period still starts at the
+// old period end; a short wallet has the 30 days of retries before the grace of the period end.
+describe("the lead time of a domain renewal (WPU-Y2)", () => {
+  it("is charged 30 days before the period end, not a millisecond earlier, and the new period starts at the old end", async () => {
+    const d = await boughtDomain();
+    kit.clock.set(new Date(d.end.getTime() - 30 * DAY - 1));
+    await run();
+    expect(await renewals(d.subscriptionId)).toEqual([]);
+    expect(await renewOps(d.resourceId)).toEqual([]);
+
+    kit.clock.set(new Date(d.end.getTime() - 30 * DAY));
+    await run();
+    expect(await renewals(d.subscriptionId)).toHaveLength(1);
+    const ops = await renewOps(d.resourceId);
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ idempotency_key: domainRenewalKey(d.subscriptionId, d.end) });
+    const s = await subRow(d.subscriptionId);
+    expect(s.status).toBe("active");
+    expect((s.period_start as Date).toISOString()).toBe(d.end.toISOString());
+    expect((s.period_end as Date).getTime()).toBe(d.end.getTime() + 365 * DAY);
+    // one year per year: the period end comes again and nothing more is charged
+    kit.clock.set(d.end);
+    await run();
+    expect(await renewals(d.subscriptionId)).toHaveLength(1);
+  });
+
+  it("a short wallet is retried on every sweep of the 30 days, with no grace and no suspension", async () => {
+    const d = await boughtDomain({ renewal: "900000.0000" });
+    kit.clock.set(new Date(d.end.getTime() - 30 * DAY));
+    await run();
+    expect(await renewals(d.subscriptionId)).toEqual([]);
+    expect((await subRow(d.subscriptionId)).status).toBe("active");
+    expect(
+      await q("select id from operations where resource_id = $1 and kind = 'suspend'", [
+        d.resourceId,
+      ]),
+    ).toEqual([]);
+    // the price comes back within reach (the wallet would be topped up the same way): the next sweep renews
+    await q("update tlds set renewal_price_usd = '15.0000' where id = $1", [d.tldId]);
+    kit.clock.set(new Date(d.end.getTime() - 10 * DAY));
+    await run();
+    expect(await renewals(d.subscriptionId)).toHaveLength(1);
+    expect((await subRow(d.subscriptionId)).status).toBe("active");
+  });
+});
+
 describe("a registry renewal that failed gives the charge back once", () => {
-  it("one reversal, the wallet as before the charge, the subscription ended at the period that was paid, a credit note", async () => {
+  // WPU-Y2 (owner rule c): the refund no longer ends the subscription for good. It goes back, active, to the period
+  // that was paid; the lifecycle does not charge that period again by itself (held, with the alarm); the customer can
+  // renew again, under the next attempt's ledger key, and that queues a registry renewal of its own.
+  it("one reversal, the wallet as before the charge, the subscription active at the period that was paid, a credit note, and a retry by hand", async () => {
     const d = await boughtDomain();
     const before = await kit.balance(d.customerId);
     kit.clock.set(d.end);
@@ -308,8 +403,8 @@ describe("a registry renewal that failed gives the charge back once", () => {
     };
     const first = await worker((tx) => reverseFailedDomainRenewal(tx, {}, event));
     const second = await worker((tx) => reverseFailedDomainRenewal(tx, {}, event));
-    expect(first.ended).toBe(true);
-    expect(second).toEqual({ reversalId: first.reversalId, ended: false });
+    expect(first.rolledBack).toBe(true);
+    expect(second).toEqual({ reversalId: first.reversalId, rolledBack: false });
 
     const reversals = await reversalsOf(String(charge!.id));
     expect(reversals).toEqual([
@@ -317,14 +412,64 @@ describe("a registry renewal that failed gives the charge back once", () => {
     ]);
     expect(await kit.balance(d.customerId)).toBe(before);
     const s = await subRow(d.subscriptionId);
-    expect(s.status).toBe("ended");
+    expect(s.status).toBe("active");
     expect((s.period_start as Date).getTime()).toBe(d.end.getTime() - 365 * DAY);
     expect((s.period_end as Date).toISOString()).toBe(d.end.toISOString());
-    // The renewal is over: the next run renews nothing (no period for nothing under the reversed key).
-    await run();
+    const [marker] = await q(
+      "select config->'domainRenewalRefused' as refused from resources where id = $1",
+      [d.resourceId],
+    );
+    expect(marker!.refused).toEqual({ periodStart: d.end.toISOString() });
+
+    // The lifecycle does not charge the refused period again by itself: held, with the alarm line, no grace.
+    const logged: Record<string, unknown>[] = [];
+    await kit.refreshFx();
+    await runLifecycle({
+      runTx: worker,
+      clock: kit.clock,
+      log: (e) => logged.push(e as Record<string, unknown>),
+      queue,
+    });
     expect(await renewals(d.subscriptionId)).toHaveLength(1);
-    expect((await subRow(d.subscriptionId)).status).toBe("ended");
+    expect((await subRow(d.subscriptionId)).status).toBe("active");
     expect(await kit.balance(d.customerId)).toBe(before);
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        event: "lifecycle_renewal_held",
+        reason: "price_unavailable",
+        error: "conflict",
+        subscriptionId: d.subscriptionId,
+      }),
+    );
+
+    // The customer renews again by hand: charged under attempt 1, with a registry renewal of its own (R7 keys).
+    const again = await web((tx) =>
+      renewNow(tx, { customerId: d.customerId, resourceId: d.resourceId, clock: kit.clock }),
+    );
+    expect(again).toMatchObject({ ok: true, value: { attempt: 1 } });
+    const charges = await q(
+      `select idempotency_key from ledger_transactions where kind = 'renewal' and reference_id = $1
+        order by created_at, id`,
+      [d.subscriptionId],
+    );
+    expect(charges.map((c) => c.idempotency_key)).toEqual([
+      `renew:${d.subscriptionId}:${d.end.toISOString()}`,
+      `renew:${d.subscriptionId}:${d.end.toISOString()}:a1`,
+    ]);
+    const ops = await renewOps(d.resourceId);
+    expect(ops.map((o) => o.idempotency_key)).toEqual([
+      domainRenewalKey(d.subscriptionId, d.end),
+      domainRenewalKey(d.subscriptionId, d.end, 1),
+    ]);
+    expect(ops[1]).toMatchObject({ state: "queued", payload: { attempt: 1 } });
+    const renewed = await subRow(d.subscriptionId);
+    expect((renewed.period_start as Date).toISOString()).toBe(d.end.toISOString());
+    // A late repeat of the first hook is a replay: it never moves the period of the retry back.
+    expect(await worker((tx) => reverseFailedDomainRenewal(tx, {}, event))).toEqual({
+      reversalId: first.reversalId,
+      rolledBack: false,
+    });
+    expect((await subRow(d.subscriptionId)).period_start).toEqual(renewed.period_start);
 
     // The invoice stays (a legal document); the scheduler issues the credit note of the reversal (WPU-C1).
     await runInvoiceBacklog({ runTx: worker, clock: kit.clock, log: () => undefined });
