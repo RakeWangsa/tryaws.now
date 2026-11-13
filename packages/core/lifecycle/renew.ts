@@ -63,6 +63,8 @@ export type Renewed = {
   readonly periodStart: Date;
   readonly periodEnd: Date;
   readonly totalMinor: bigint;
+  /** WPU-Z19: the USD price this renewal charged (awsPriceUsd of its price snapshot, decimal text, R4). */
+  readonly awsPriceUsd: string;
 };
 
 // Charges the wallet once and moves the period: the new period starts at the OLD period end (also
@@ -123,5 +125,8 @@ export async function renewSubscription(
     now: clock.now(),
     ...(log === undefined ? {} : { log }),
   });
-  return { ok: true, value: { periodStart, periodEnd, totalMinor: total } };
+  return {
+    ok: true,
+    value: { periodStart, periodEnd, totalMinor: total, awsPriceUsd: fresh.awsPriceUsd },
+  };
 }

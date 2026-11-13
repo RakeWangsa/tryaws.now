@@ -192,7 +192,7 @@ export interface ImageAdminRow {
   /** True when an admin has switched it; false when it follows the default list. */
   readonly explicit: boolean;
   /**
-   * WPU-G10. The least bundle power a plan needs to run it (500 is the 512 MB plan): the value in force,
+   * WPU-G10. The least bundle power a plan needs to run it (500 is the 1 GB plan, 298 the 512 MB plan; WPU-Z19): the value in force,
    * where it comes from (the admin's override, what AWS reported, or the default of the core), and the
    * admin's own value when there is one.
    */

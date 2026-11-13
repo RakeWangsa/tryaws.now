@@ -9,8 +9,8 @@ import { isMarketCode } from "./args";
 //   { "v": 1, "on": ["<blueprint id>", ...], "off": ["<blueprint id>", ...],
 //     "minPower": { "<blueprint id>": <whole number> } }          (minPower is optional, WPU-G10)
 //
-// `minPower` is the admin's own minimum bundle power for an image (the unit of GetBundles `power`, 500 is
-// the 512 MB plan); it replaces the value AWS reported for the blueprint. 0 means every plan. The two
+// `minPower` is the admin's own minimum bundle power for an image (the unit of GetBundles `power`: 298 is
+// the 512 MB plan, 500 the 1 GB plan, 1000 the 2 GB plan; WPU-Z19); it replaces the value AWS reported for the blueprint. 0 means every plan. The two
 // lists are disjoint. An id in neither follows the default list of @tc/core. Written only by
 // adminRepos.blueprints.setEnabled (audited); read by the panel (web_rw) and the functions (worker_rw),
 // which already have SELECT on these columns of `settings`.

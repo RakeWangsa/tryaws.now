@@ -4,6 +4,7 @@ import {
   currentFirewallRules,
   isBlueprintId,
   loginUserOf,
+  storedLoginUserOf,
   optionOf,
   rulesOpenSshToWorld,
 } from "@tc/core";
@@ -81,7 +82,10 @@ export async function loadServerManage(
     const loginUser =
       imageId === null
         ? null
-        : ((imageRow === null ? null : optionOf(imageRow)?.loginUser) ?? loginUserOf(imageId));
+        : // WPU-Z19: the user GetInstance reported (stored at create) first, then the synced row, then the table.
+          (storedLoginUserOf(config) ??
+          (imageRow === null ? null : optionOf(imageRow)?.loginUser) ??
+          loginUserOf(imageId));
     return {
       flagOn,
       requestId,

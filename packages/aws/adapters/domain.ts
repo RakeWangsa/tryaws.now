@@ -54,9 +54,16 @@ export interface DomainAdapterConfig {
 }
 
 const POLL_SECONDS = 60;
-// VERIFY: Route 53 documents that most registrations finish within minutes, some TLDs take up to
-// three days. A registration older than this fails closed and the order is reversed.
+// WPU-Z19: the Route 53 FAQ (https://aws.amazon.com/route53/faqs/, read 2026-11-14): "Depending on the TLD you've
+// selected, registration can take from a few minutes to several hours." No AWS page gives three days: MAX_WAIT_MS is
+// a PLATFORM safety margin, not an AWS limit (owner ruling 2026-11-14: keep 3 days; the order money is held while it
+// runs). An operation can also wait for reasons that are not the registry's (GetOperationDetail StatusFlag
+// PENDING_CUSTOMER_ACTION, PENDING_SUPPORT_CASE, PENDING_PAYMENT_VERIFICATION). A registration or renewal older than
+// this fails closed (a registration's order is reversed; a renewal stops for an admin, WPU-Z13).
 const MAX_WAIT_MS = 3 * 24 * 60 * 60 * 1000;
+// WPU-Z19: the USD price the order charged, as the decimal text of its price snapshot (R4: never a float here). It is
+// Consent.MaxPrice of RegisterDomain and RenewDomain, so AWS refuses instead of charging more than the customer paid.
+const USD_TEXT = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,4})?$/;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const OPERATION_ID = /^[A-Za-z0-9-]{1,128}$/;
 const HOSTED_ZONE_ID = /^[A-Z0-9]{1,32}$/;
@@ -77,6 +84,15 @@ function recordOf(value: unknown): Record<string, unknown> {
 function savedOperationId(config: unknown): string | null {
   const id = recordOf(config)["route53OperationId"];
   return typeof id === "string" && OPERATION_ID.test(id) ? id : null;
+}
+
+/** The USD price in the operation payload (written by the purchase or the renewal charge); else a refusal (R16). */
+function maxPriceOf(payload: unknown): string {
+  const value = recordOf(payload)["maxPriceUsd"];
+  if (typeof value !== "string" || !USD_TEXT.test(value) || !/[1-9]/.test(value)) {
+    throw fail("validation");
+  }
+  return value;
 }
 
 function inSeconds(ctx: Ctx, seconds: number): Date {
@@ -150,11 +166,13 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
       }
       throw fail("conflict");
     }
+    const maxPriceUsd = maxPriceOf(ctx.operation.payload);
     const contact = await contactOf(deps, ctx.config);
     const { operationId } = await port.registerDomain({
       name,
       years: ctx.config.years,
       contact,
+      maxPriceUsd,
     });
     return stepWait("poll", inSeconds(ctx, POLL_SECONDS), {
       configMerge: { route53OperationId: operationId },
@@ -247,8 +265,9 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
   async function renewalCheck(
     port: DomainsPort,
     ctx: Ctx,
-  ): Promise<{ done: StepResult } | { year: number; years: number }> {
+  ): Promise<{ done: StepResult } | { year: number; years: number; maxPriceUsd: string }> {
     const payload = recordOf(ctx.operation.payload);
+    const maxPriceUsd = maxPriceOf(payload);
     const year = payload["currentExpiryYear"];
     const years = payload["years"] === undefined ? DOMAIN_YEARS : payload["years"];
     if (typeof year !== "number" || !Number.isInteger(year) || year < 2000 || year > 2200) {
@@ -266,7 +285,7 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
     }
     // An earlier live year, or a payload that is ahead of AWS, means row and registry disagree (R16).
     if (live !== year) throw fail("validation");
-    return { year, years };
+    return { year, years, maxPriceUsd };
   }
 
   // WPU-Z13: step null only reads, then moves to `submit` in a write of its own (step.ts records it before the next
@@ -291,6 +310,7 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
           name,
           years: checked.years,
           currentExpiryYear: checked.year,
+          maxPriceUsd: checked.maxPriceUsd,
         });
         return stepWait("poll", inSeconds(ctx, POLL_SECONDS), {
           configMerge: { renewOperationId: operationId },
@@ -392,14 +412,16 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
  */
 export async function renewDomainOnce(
   port: DomainsPort,
-  input: { readonly name: string; readonly years?: number },
+  input: { readonly name: string; readonly years?: number; readonly maxPriceUsd: string },
 ): Promise<{ readonly operationId: string }> {
+  const maxPriceUsd = maxPriceOf(input);
   const detail = await port.getDomainDetail(input.name);
   if (detail === null || detail.expiresAt === null) throw fail("validation");
   return port.renewDomain({
     name: input.name,
     years: input.years ?? DOMAIN_YEARS,
     currentExpiryYear: detail.expiresAt.getUTCFullYear(),
+    maxPriceUsd,
   });
 }
 

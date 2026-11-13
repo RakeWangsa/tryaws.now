@@ -45,6 +45,27 @@ function ctxFor(
   } as OpCtx<DnsZoneConfig>;
 }
 
+/**
+ * WPU-Z19: a zone create is two steps: CreateHostedZone, then GetChange until INSYNC. Runs both, as step.ts would:
+ * the wait's configMerge is in the resource config of the next run.
+ */
+async function createZone(
+  adapter: ReturnType<typeof createDnsZoneAdapter>,
+  ctx: OpCtx<DnsZoneConfig>,
+) {
+  const first = await adapter.aws.create(ctx);
+  if (first.kind !== "wait") return first;
+  const merge = (first.patch?.configMerge ?? {}) as Record<string, unknown>;
+  return adapter.aws.create({
+    ...ctx,
+    operation: { ...ctx.operation, step: first.step },
+    resource: {
+      ...ctx.resource,
+      config: { ...(ctx.resource.config as Record<string, unknown>), ...merge },
+    },
+  });
+}
+
 function record(name: string, type: string, values: string[], ttl = 300): ValidRecord {
   const r = validateRecord("example.com", { name, type, ttl, values });
   if (!r.ok) throw new Error("fixture");
@@ -73,8 +94,8 @@ describe("the zone adapter", () => {
     const fake = createFakeRoute53();
     const adapter = createDnsZoneAdapter({ route53: () => fake.port });
     const ctx = ctxFor({ zoneName: "example.com" });
-    const first = await adapter.aws.create(ctx);
-    const second = await adapter.aws.create(ctx);
+    const first = await createZone(adapter, ctx);
+    const second = await createZone(adapter, ctx);
     expect(fake.zones.size).toBe(1);
     expect(fake.calls.filter((c) => c.op === "createHostedZone").map((c) => c.detail)).toEqual([
       { callerReference: ctx.operation.id },
@@ -90,7 +111,7 @@ describe("the zone adapter", () => {
   it("saves the record list with the zone, so the editor of a fresh zone has its read-only apex records (WPU-G6)", async () => {
     const fake = createFakeRoute53();
     const adapter = createDnsZoneAdapter({ route53: () => fake.port });
-    const result = await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    const result = await createZone(adapter, ctxFor({ zoneName: "example.com" }));
     const merge = (result as { patch?: { configMerge?: Record<string, unknown> } }).patch
       ?.configMerge;
     expect(merge?.recordsStale).toBe(false);
@@ -108,7 +129,7 @@ describe("the zone adapter", () => {
   it("marks the list stale when it does not fit the step patch, instead of failing the create (R16)", async () => {
     const fake = createFakeRoute53();
     const adapter = createDnsZoneAdapter({ route53: () => fake.port });
-    const created = await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    const created = await createZone(adapter, ctxFor({ zoneName: "example.com" }));
     const id = (created as { patch?: { configMerge?: { hostedZoneId?: string } } }).patch
       ?.configMerge?.hostedZoneId as string;
     const big = Array.from({ length: 400 }, (_, i) => `h${i}.example.com`);
@@ -119,7 +140,7 @@ describe("the zone adapter", () => {
         set: { name: `${n}.`, type: "A", ttl: 60, values: ["192.0.2.1"] },
       })),
     );
-    const again = await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    const again = await createZone(adapter, ctxFor({ zoneName: "example.com" }));
     const merge = (again as { patch?: { configMerge?: Record<string, unknown> } }).patch
       ?.configMerge;
     expect(merge).toMatchObject({ records: null, recordsStale: true });
@@ -128,7 +149,7 @@ describe("the zone adapter", () => {
   it("describe answers active for a live zone and missing otherwise", async () => {
     const fake = createFakeRoute53();
     const adapter = createDnsZoneAdapter({ route53: () => fake.port });
-    await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    await createZone(adapter, ctxFor({ zoneName: "example.com" }));
     const live = ctxFor(
       { zoneName: "example.com" },
       { resourceConfig: { hostedZoneId: "Z000001" } },
@@ -157,7 +178,7 @@ describe("the zone adapter", () => {
   it("destroy removes the customer's records and the zone, never touches the apex NS and SOA, and a repeat is done", async () => {
     const fake = createFakeRoute53();
     const adapter = createDnsZoneAdapter({ route53: () => fake.port });
-    await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    await createZone(adapter, ctxFor({ zoneName: "example.com" }));
     fake.seed("Z000001", { name: "www.example.com.", type: "A", ttl: 300, values: ["1.2.3.4"] });
     const ctx = ctxFor(
       { zoneName: "example.com" },
@@ -170,6 +191,93 @@ describe("the zone adapter", () => {
     }[];
     expect(batch.map((c) => c.set.type)).toEqual(["A"]);
     expect((await adapter.aws.destroy(ctx)).kind).toBe("done");
+  });
+
+  it("WPU-Z19: destroy of a full zone (100 sets of 20 values) splits the DELETEs into batches under the limits", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    await createZone(adapter, ctxFor({ zoneName: "example.com" }));
+    for (let i = 0; i < 100; i += 1) {
+      fake.seed("Z000001", {
+        name: `h${i}.example.com.`,
+        type: "A",
+        ttl: 300,
+        values: Array.from({ length: 20 }, (_, j) => `203.0.113.${j + 1}`),
+      });
+    }
+    const ctx = ctxFor(
+      { zoneName: "example.com" },
+      { resourceConfig: { hostedZoneId: "Z000001" } },
+    );
+    expect((await adapter.aws.destroy(ctx)).kind).toBe("done");
+    expect(fake.zones.size).toBe(0);
+    const batches = fake.calls
+      .filter((c) => c.op === "changeRecordSets")
+      .map((c) => c.detail as { action: string; set: { values: string[] } }[]);
+    expect(batches.length).toBeGreaterThan(1);
+    for (const batch of batches) {
+      expect(batch.every((c) => c.action === "DELETE")).toBe(true);
+      expect(batch.reduce((n, c) => n + c.set.values.length, 0)).toBeLessThanOrEqual(1000);
+      expect(batch.reduce((n, c) => n + c.set.values.join("").length, 0)).toBeLessThanOrEqual(
+        32_000,
+      );
+    }
+    expect(batches.flat()).toHaveLength(100);
+  });
+
+  it("WPU-Z19: the zone is active only when GetChange says INSYNC; PENDING waits, and the wait is bounded", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    const ctx = ctxFor({ zoneName: "example.com" });
+    const first = await adapter.aws.create(ctx);
+    expect(first).toMatchObject({ kind: "wait", step: "wait_insync" });
+    const merge = (first as { patch?: { configMerge?: Record<string, unknown> } }).patch
+      ?.configMerge;
+    expect(merge).toMatchObject({ hostedZoneId: "Z000001", route53ChangeId: "CZ000001" });
+    // Not active yet: the customer is not told to set the name servers before INSYNC.
+    expect((first as { patch?: { state?: string } }).patch?.state).toBeUndefined();
+    const waiting = { step: "wait_insync", resourceConfig: merge };
+    fake.changes.set("CZ000001", "pending");
+    expect(await adapter.aws.create(ctxFor({ zoneName: "example.com" }, waiting))).toMatchObject({
+      kind: "wait",
+      step: "wait_insync",
+    });
+    const late = ctxFor({ zoneName: "example.com" }, waiting);
+    await expect(
+      adapter.aws.create({
+        ...late,
+        operation: { ...late.operation, createdAt: new Date(NOW.getTime() - 21 * 60 * 1000) },
+      }),
+    ).rejects.toMatchObject({ code: "upstream_unavailable" });
+    fake.changes.set("CZ000001", "insync");
+    const done = await adapter.aws.create(ctxFor({ zoneName: "example.com" }, waiting));
+    expect(done).toMatchObject({
+      kind: "done",
+      patch: { state: "active", configMerge: { hostedZoneId: "Z000001" } },
+    });
+    expect(fake.calls.filter((c) => c.op === "createHostedZone")).toHaveLength(1);
+  });
+
+  it("WPU-Z19: a step without a saved zone or with a foreign change id is refused (R16)", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    await expect(
+      adapter.aws.create(ctxFor({ zoneName: "example.com" }, { step: "wait_insync" })),
+    ).rejects.toMatchObject({ code: "internal" });
+    await expect(
+      adapter.aws.create(
+        ctxFor(
+          { zoneName: "example.com" },
+          {
+            step: "wait_insync",
+            resourceConfig: { hostedZoneId: "Z000001", route53ChangeId: "../x" },
+          },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "internal" });
+    await expect(
+      adapter.aws.create(ctxFor({ zoneName: "example.com" }, { step: "elsewhere" })),
+    ).rejects.toMatchObject({ code: "internal" });
   });
 
   it("destroy without a hosted zone id is done (nothing was made)", async () => {
@@ -189,7 +297,7 @@ describe("the record editor against the zone", () => {
   async function zone() {
     const fake = createFakeRoute53();
     const adapter = createDnsZoneAdapter({ route53: () => fake.port });
-    await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    await createZone(adapter, ctxFor({ zoneName: "example.com" }));
     return { fake, id: "Z000001" };
   }
 

@@ -44,7 +44,8 @@ export const extrasEn: Same<typeof extrasBn> = {
       backupDeleting: "The request to delete the backup was taken.",
       autoBackupSet: "The automatic backup setting was saved.",
       diskAttaching: "The disk is being attached to the server.",
-      diskDetaching: "The disk is being detached. A detached disk is still billed.",
+      diskDetaching:
+        "The disk is being detached from the stopped server. You can start the server again when the disk shows as free. A detached disk is still billed.",
       destroyQueued: "The request to destroy was taken. A final backup is made first.",
       autoRenewOn: "Automatic renewal is on.",
       autoRenewOff: "Automatic renewal is off. The server is suspended when the term ends.",
@@ -131,13 +132,16 @@ export const extrasEn: Same<typeof extrasBn> = {
       mount: {
         title: "Use the disk on the server",
         intro:
-          "A new disk is empty. Sign in to the server over SSH and do these steps once. The device name /dev/xvdf is the first extra disk; use the path you chose when you attached the disk.",
-        find: "Find the disk and check its size:",
+          "A new disk is empty. Sign in to the server over SSH and do these steps once. The commands use nvme1n1 as an example: use the name that lsblk shows for your disk.",
+        find: "Find the disk by its size. The extra disks are nvme1n1 and up; nvme0n1 is the system disk, never use it. The order of the names is not fixed, so check the size every time:",
+        check:
+          'Check that the disk is empty. A new disk prints only "data". If it names a file system, the disk holds data: skip the next step, or you erase it:',
         format: "Format it. This erases everything on the disk, so do it only on a new disk:",
         mount: "Create a folder and mount the disk:",
         persist:
-          "Read the UUID of the disk, then add a line for it to /etc/fstab so it is mounted after a reboot:",
-        note: "Detach the disk from the server in this tab before you destroy it, and take a snapshot of the server first if the data matters.",
+          "Read the UUID of the disk, then add a line like the one below to /etc/fstab with that UUID, so the disk is mounted after a reboot (nofail lets the server start without it):",
+        fstab: "The line for /etc/fstab:",
+        note: "To detach a disk: first unmount it on the server (sudo umount /data) and remove its line from /etc/fstab, then stop the server, then detach the disk in this tab. A disk is detached only from a stopped server. Detach the disk before you destroy it, and take a snapshot first if the data matters.",
       },
       empty: {
         title: "No disk is attached",

@@ -53,6 +53,8 @@ describe("parseDiskConfig", () => {
 
   it("accepts the size limits of the adapter and nothing outside them", () => {
     expect(parseDiskConfig({ ...GOOD, sizeGb: MIN_DISK_GB }).ok).toBe(true);
+    expect(MAX_DISK_GB).toBe(16_000);
+    expect(MIN_DISK_GB).toBe(8);
     expect(parseDiskConfig({ ...GOOD, sizeGb: MAX_DISK_GB }).ok).toBe(true);
     for (const sizeGb of [MIN_DISK_GB - 1, MAX_DISK_GB + 1, 0, -8, 8.5, "100", null, NaN]) {
       expect(parseDiskConfig({ ...GOOD, sizeGb })).toMatchObject({

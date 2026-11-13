@@ -135,13 +135,18 @@ function toRawDbBlueprint(item: unknown): RawDbBlueprint {
 }
 
 /**
- * VERIFY (open point 4): which field of a `ListPrices` item says that a TLD needs extra
- * parameters or an eligibility proof is not confirmed. Until it is, the conservative reading holds:
- * an item whose shape is not understood needs review (it goes to the admin step of spec 12), and
- * an item with a name and a registration price object does not. The fix is in this one function.
+ * WPU-Z19: open point 4 is answered. No field of a `ListPrices` item marks a TLD that needs extra parameters or an
+ * eligibility proof: DomainPrice holds only Name and five price objects (API_domains_DomainPrice, read 2026-11-14).
+ * So the rule is a reviewed static allowlist. The TLDs here are not in the ExtraParam reference
+ * (API_domains_ExtraParam: .au, .com.au, .net.au, .ca, .es, .eu, .fi, .it, .ru, .se, .sg, .uk, .co.uk, .me.uk,
+ * .org.uk, and "many TLDs require a VAT_NUMBER") and their pages of "Domains that you can register with Amazon
+ * Route 53" (com.html, net.html, org.html) list no registrant restriction. Every other TLD needs review: its order
+ * waits for an admin (spec 12, R16). Adding a TLD here is a reviewed change of its own.
  */
-function needsExtraParams(item: Record<string, unknown>): boolean {
-  return typeof item.Name !== "string" || !isRecord(item.RegistrationPrice);
+export const NO_EXTRA_PARAMS_TLDS: ReadonlySet<string> = new Set(["com", "net", "org"]);
+
+function needsExtraParams(tld: string): boolean {
+  return !NO_EXTRA_PARAMS_TLDS.has(tld);
 }
 
 function usdPrice(value: unknown): string | null {
@@ -171,7 +176,7 @@ export function parseTldPrices(page: unknown): {
       registrationUsd: usdPrice(item.RegistrationPrice),
       renewalUsd: usdPrice(item.RenewalPrice),
       transferUsd: usdPrice(item.TransferPrice),
-      needsExtraParams: needsExtraParams(item),
+      needsExtraParams: needsExtraParams(tld),
     });
   }
   const next = typeof page.NextPageMarker === "string" ? page.NextPageMarker : undefined;

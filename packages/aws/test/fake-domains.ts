@@ -46,7 +46,7 @@ export function createFakeDomains(options: FakeDomainsOptions = {}) {
   const premium = new Set<string>();
   const domains = new Map<string, FakeDomain>();
   const operations = new Map<string, FakeOperation>();
-  const calls: { op: string; name?: string }[] = [];
+  const calls: { op: string; name?: string; maxPriceUsd?: string }[] = [];
   const contacts = new Map<string, RegistrantContact>();
   let next = 1;
 
@@ -98,7 +98,7 @@ export function createFakeDomains(options: FakeDomainsOptions = {}) {
       return options.prices ?? [];
     },
     async registerDomain(input) {
-      calls.push({ op: "registerDomain", name: input.name });
+      calls.push({ op: "registerDomain", name: input.name, maxPriceUsd: input.maxPriceUsd });
       for (const op of operations.values()) {
         if (op.name === input.name && op.kind === "register" && op.status === "in_progress") {
           throw new AwsError({ code: "conflict", retryable: true });
@@ -134,7 +134,7 @@ export function createFakeDomains(options: FakeDomainsOptions = {}) {
       return { status: op.status };
     },
     async renewDomain(input) {
-      calls.push({ op: "renewDomain", name: input.name });
+      calls.push({ op: "renewDomain", name: input.name, maxPriceUsd: input.maxPriceUsd });
       const current = domains.get(input.name);
       if (current === undefined) throw new AwsError({ code: "not_found", retryable: false });
       if (current.expiresAt.getUTCFullYear() !== input.currentExpiryYear) {

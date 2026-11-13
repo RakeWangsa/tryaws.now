@@ -444,12 +444,44 @@ describe("storage and billing", () => {
     });
     const attached = world({
       rows: [
+        row({ state: "stopped" }),
         row({ id: DISK, family: "disk", config: { displayName: "d", attachedInstanceId: SERVER } }),
       ],
     });
     expect(await detachDiskCore(attached.deps, { diskId: DISK, requestId: REQ })).toMatchObject({
       ok: true,
     });
+    expect(attached.calls.some((c) => c.startsWith("op:detach_disk"))).toBe(true);
+  });
+  it("WPU-Z19: detach needs the server stopped (DetachDisk detaches a stopped disk); nothing is queued otherwise", async () => {
+    for (const state of ["active", "suspended", "creating"] as const) {
+      const w = world({
+        rows: [
+          row({ state }),
+          row({
+            id: DISK,
+            family: "disk",
+            config: { displayName: "d", attachedInstanceId: SERVER },
+          }),
+        ],
+      });
+      expect(await detachDiskCore(w.deps, { diskId: DISK, requestId: REQ })).toEqual({
+        ok: false,
+        error: "not_allowed",
+      });
+      expect(w.calls.some((c) => c.startsWith("op:") || c.startsWith("audit"))).toBe(false);
+    }
+    // The server the disk names is not readable through the customer's repository: refused (R8, R16).
+    const gone = world({
+      rows: [
+        row({ id: DISK, family: "disk", config: { displayName: "d", attachedInstanceId: SERVER } }),
+      ],
+    });
+    expect(await detachDiskCore(gone.deps, { diskId: DISK, requestId: REQ })).toEqual({
+      ok: false,
+      error: "not_allowed",
+    });
+    expect(gone.calls.some((c) => c.startsWith("op:"))).toBe(false);
   });
   it("auto backup carries the hour only when on", async () => {
     const on = world();

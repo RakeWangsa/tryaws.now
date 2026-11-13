@@ -79,13 +79,15 @@ const sorted = (cells: Record<string, Cell>): Record<string, Cell> =>
   );
 
 describe("migration 0027: the support thread", () => {
-  it("exists and is the last entry of the journal, right after 0026, with a newer time", () => {
+  // WPU-Z19: 0028 follows it, so 0027 is no longer the last entry; it is still the one right after 0026.
+  it("exists in the journal right after 0026, with a newer time", () => {
     expect(existsSync(`${MIGRATIONS_FOLDER}/${TAG}.sql`)).toBe(true);
     const journal = JSON.parse(read("meta/_journal.json")) as {
       entries: { idx: number; when: number; tag: string }[];
     };
-    const last = journal.entries[journal.entries.length - 1];
-    const before = journal.entries[journal.entries.length - 2];
+    const at = journal.entries.findIndex((e) => e.tag === TAG);
+    const last = journal.entries[at];
+    const before = journal.entries[at - 1];
     expect(last?.tag).toBe(TAG);
     expect(before?.tag).toBe("0026_sale_snapshot_required");
     expect(last?.idx).toBe((before?.idx ?? -2) + 1);

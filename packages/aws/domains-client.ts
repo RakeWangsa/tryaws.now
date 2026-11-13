@@ -2,6 +2,7 @@ import {
   CheckDomainAvailabilityCommand,
   GetContactReachabilityStatusCommand,
   GetDomainDetailCommand,
+  GetDomainPricesCommand,
   GetOperationDetailCommand,
   ListPricesCommand,
   RegisterDomainCommand,
@@ -29,10 +30,14 @@ import type { AwsRequestHandler } from "./types";
 // the environment; the role wiring is the caller's (functions/provisioner, JOURNEY Needs decision).
 // Nothing here logs or returns AWS text (U6, R14): every failure is an `AwsError`.
 //
-// VERIFY (nothing was run against AWS): the words of `Availability` and of `OperationStatus`; that
-// GetDomainDetail answers `InvalidInput` for a name this account does not hold; the `status` field of
-// GetContactReachabilityStatus (lower case in the SDK); `DuplicateRequest` for a second RegisterDomain;
-// privacy protection per TLD; `CurrentExpiryYear` on RenewDomain.
+// WPU-Z19, checked against the Route 53 Domains API reference on 2026-11-14 (verify review 2026-11-13): the
+// `Availability` words (CheckDomainAvailability) and the `OperationStatus` words; GetDomainDetail answers
+// `InvalidInput` for a name this account does not hold (there is no DomainNotFound error); GetContactReachabilityStatus
+// takes `domainName` and answers `status` (PENDING, DONE, EXPIRED); a second RegisterDomain gets `DuplicateRequest`;
+// RenewDomain needs `CurrentExpiryYear`. A registry premium name answers AVAILABLE with `Price.PriceType`
+// REGISTRY_PREMIUM; `Consent` (Currency, MaxPrice) caps what RegisterDomain and RenewDomain may charge. Still open in
+// tc-dns (no call was made): what a standard .com answer of CheckDomainAvailability holds, and whether MaxPrice is per
+// year or for the whole term (the platform sells one year, so the two are the same today).
 
 export const DOMAINS_REGION = "us-east-1";
 const MAX_PRICE_PAGES = 50;
@@ -79,9 +84,20 @@ function mapDomainsError(error: unknown, operation: string | null): AwsError {
       return plain("conflict", false);
     case "UnsupportedTLD":
       return plain("validation", false);
+    // WPU-Z19: "The top-level domain is currently undergoing maintenance and the request cannot be processed. Try
+    // again later." Nothing was done: retried.
+    case "TLDInMaintenance":
+      return new AwsError({
+        code: "upstream_unavailable",
+        retryable: true,
+        awsErrorName: name,
+        operation,
+        mayHaveActed: false,
+      });
     case "InvalidInput":
-      // On a change of a domain, "invalid input" is how Route 53 Domains says that the name is not in
-      // this account (VERIFY); on the others it is a bad argument.
+      // On a change of a domain, "invalid input" is how Route 53 Domains says that the name is not in this account
+      // (the reference: "it might not be a valid domain name or belong to the requester account"; there is no
+      // DomainNotFound); on the others it is a bad argument.
       return operation === "ResendContactReachabilityEmail" || operation === "RenewDomain"
         ? plain("not_found", false)
         : plain("validation", false);
@@ -90,24 +106,54 @@ function mapDomainsError(error: unknown, operation: string | null): AwsError {
   }
 }
 
-function availabilityOf(value: unknown): DomainAvailability {
+/**
+ * The word of CheckDomainAvailability. AVAILABLE is "available" only together with its price type (see
+ * `priceTypeOf`); here it is "check_price". UNAVAILABLE_PREMIUM means "The domain name is not available" (the
+ * reference); a registry premium name answers AVAILABLE with PriceType REGISTRY_PREMIUM. PENDING ("You can resubmit
+ * the request immediately") and DONT_KNOW are "unknown"; INVALID_NAME_FOR_TLD is "unavailable".
+ */
+function availabilityOf(value: unknown): DomainAvailability | "check_price" {
   switch (value) {
     case "AVAILABLE":
-      return "available";
-    case "UNAVAILABLE_PREMIUM":
-      return "premium";
+      return "check_price";
     case "DONT_KNOW":
+    case "PENDING":
       return "unknown";
     case "UNAVAILABLE":
+    case "UNAVAILABLE_PREMIUM":
     case "RESERVED":
     case "UNAVAILABLE_RESTRICTED":
     case "AVAILABLE_RESERVED":
     case "AVAILABLE_PREORDER":
+    case "INVALID_NAME_FOR_TLD":
       return "unavailable";
     default:
       // A word that is new to us is not "available" (R16).
       return "unknown";
   }
+}
+
+/** STANDARD is "available", REGISTRY_PREMIUM is "premium"; a missing or new type is not known (null). */
+function priceTypeOf(price: unknown): "available" | "premium" | null {
+  const type = isRecord(price) ? price["PriceType"] : undefined;
+  if (type === "STANDARD") return "available";
+  if (type === "REGISTRY_PREMIUM") return "premium";
+  return null;
+}
+
+// The USD price the order charged, as the decimal text of the order (R4: no money math here). It becomes the
+// Double of Consent.MaxPrice only at the SDK boundary.
+const USD_TEXT = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,4})?$/;
+
+function consentOf(maxPriceUsd: unknown, operation: string) {
+  if (
+    typeof maxPriceUsd !== "string" ||
+    !USD_TEXT.test(maxPriceUsd) ||
+    !/[1-9]/.test(maxPriceUsd)
+  ) {
+    throw new AwsError({ code: "validation", retryable: false, operation, mayHaveActed: false });
+  }
+  return { Currency: "USD", MaxPrice: Number(maxPriceUsd) };
 }
 
 function operationStatusOf(value: unknown, operation: string): DomainOperationStatus {
@@ -194,7 +240,18 @@ export function createRoute53DomainsPort(client: DomainsSender): DomainsPort {
   return {
     async checkAvailability(name) {
       const response = await call(new CheckDomainAvailabilityCommand({ DomainName: name }));
-      return availabilityOf(isRecord(response) ? response["Availability"] : undefined);
+      const word = availabilityOf(isRecord(response) ? response["Availability"] : undefined);
+      if (word !== "check_price") return word;
+      const priced = priceTypeOf(isRecord(response) ? response["Price"] : undefined);
+      if (priced !== null) return priced;
+      // AVAILABLE without a price type (PriceType is optional): GetDomainPrices of the name decides. Still unclear
+      // is "unknown", which refuses this name now and never every name (R16).
+      const prices = await call(new GetDomainPricesCommand({ DomainName: name }));
+      const domainPrice = isRecord(prices) ? prices["DomainPrice"] : undefined;
+      return (
+        priceTypeOf(isRecord(domainPrice) ? domainPrice["RegistrationPrice"] : undefined) ??
+        "unknown"
+      );
     },
 
     async listPrices() {
@@ -224,7 +281,10 @@ export function createRoute53DomainsPort(client: DomainsSender): DomainsPort {
     },
 
     async registerDomain(input) {
+      const consent = consentOf(input.maxPriceUsd, "RegisterDomain");
       const contact = contactDetail(input.contact);
+      // "You must specify the same privacy setting for the administrative, billing, registrant, and technical
+      // contacts": the billing contact is the same contact with privacy on, like the other three.
       const response = await call(
         new RegisterDomainCommand({
           DomainName: input.name,
@@ -233,9 +293,12 @@ export function createRoute53DomainsPort(client: DomainsSender): DomainsPort {
           AdminContact: contact,
           RegistrantContact: contact,
           TechContact: contact,
+          BillingContact: contact,
           PrivacyProtectAdminContact: true,
           PrivacyProtectRegistrantContact: true,
           PrivacyProtectTechContact: true,
+          PrivacyProtectBillingContact: true,
+          Consent: consent,
         }),
       );
       return operationIdOf(response, "RegisterDomain");
@@ -253,11 +316,13 @@ export function createRoute53DomainsPort(client: DomainsSender): DomainsPort {
     },
 
     async renewDomain(input) {
+      const consent = consentOf(input.maxPriceUsd, "RenewDomain");
       const response = await call(
         new RenewDomainCommand({
           DomainName: input.name,
           DurationInYears: input.years,
           CurrentExpiryYear: input.currentExpiryYear,
+          Consent: consent,
         }),
       );
       return operationIdOf(response, "RenewDomain");
@@ -268,7 +333,8 @@ export function createRoute53DomainsPort(client: DomainsSender): DomainsPort {
       try {
         response = await call(new GetDomainDetailCommand({ DomainName: name }));
       } catch (error) {
-        // "Not in this account" is an answer, not an error (VERIFY: InvalidInput).
+        // "Not in this account" is an answer, not an error: Route 53 Domains has no DomainNotFound; InvalidInput "For a
+        // domain name, it might not be a valid domain name or belong to the requester account" (reference).
         if (error instanceof AwsError && error.awsErrorName === "InvalidInput") return null;
         throw error;
       }

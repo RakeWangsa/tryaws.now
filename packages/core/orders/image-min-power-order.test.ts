@@ -101,7 +101,7 @@ describe("createOrderDraft: the plan must reach the minimum power of the image",
     const kit = await makeKit(t);
     await image("nodejs", { kind: "app" });
     await image("debian_12", { kind: "os" });
-    const small = await plan(kit, 500);
+    const small = await plan(kit, 298);
     expect(
       await createDraft(
         kit.deps,

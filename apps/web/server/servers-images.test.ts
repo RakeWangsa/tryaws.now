@@ -106,7 +106,7 @@ describe("loadConfigurator: the images of each Region", () => {
         version: null,
         loginUser: "bitnami",
         logo: "wordpress",
-        minPower: 1000, // an app with no known minimum: the default of the core
+        minPower: 500, // an app with no known minimum: the default of the core (the 1 GB plan, WPU-Z19)
       },
       {
         id: "amazon_linux_2023",
@@ -213,6 +213,15 @@ describe("loadServerDetail: the image and the login user of the server (WPU-G13)
     });
     state.resource = server({ blueprintId: "brand_new_thing" });
     expect(await loadServerDetail(session, "x")).toMatchObject({ loginUser: null });
+  });
+
+  it("WPU-Z19: the user GetInstance reported (stored by the provisioner) wins over the row and the table", async () => {
+    state.resource = server({ blueprintId: "wordpress", loginUser: "admin" });
+    state.image = img("wordpress", "app", "WordPress", "bitnami");
+    expect(await loadServerDetail(session, "x")).toMatchObject({ loginUser: "admin" });
+    // A stored value that is not a plain user name is ignored.
+    state.resource = server({ blueprintId: "wordpress", loginUser: "root; rm -rf /" });
+    expect(await loadServerDetail(session, "x")).toMatchObject({ loginUser: "bitnami" });
   });
 
   it("an older server (no image in its configuration) is the default image", async () => {

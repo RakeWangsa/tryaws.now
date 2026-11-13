@@ -227,10 +227,29 @@ describe("create: key import, instance, static IP, ports", () => {
       adapter.aws.create(ctx("wait_running", { createdAt: new Date(NOW - 3_600_000) })),
     ).rejects.toMatchObject({ code: "upstream_unavailable" });
     aws.on("lightsail", "GetInstance", lightsailOk({ instance: { state: { name: "running" } } }));
-    expect(await adapter.aws.create(ctx("wait_running"))).toMatchObject({
+    expect(await adapter.aws.create(ctx("wait_running"))).toEqual({
       kind: "next",
       step: "verify_bootstrap",
     });
+  });
+
+  it("WPU-Z19: stores the login user GetInstance reports (username), only a plain user name", async () => {
+    const { aws, adapter, ctx } = setup();
+    const running = (username: unknown) =>
+      lightsailOk({ instance: { state: { name: "running" }, username } });
+    aws.on("lightsail", "GetInstance", running("admin"));
+    expect(await adapter.aws.create(ctx("wait_running"))).toEqual({
+      kind: "next",
+      step: "verify_bootstrap",
+      patch: { configMerge: { loginUser: "admin" } },
+    });
+    for (const bad of ["Root", "a b", "x".repeat(40), 7]) {
+      aws.on("lightsail", "GetInstance", running(bad));
+      expect(await adapter.aws.create(ctx("wait_running"))).toEqual({
+        kind: "next",
+        step: "verify_bootstrap",
+      });
+    }
   });
 
   const RUNNING = lightsailOk({

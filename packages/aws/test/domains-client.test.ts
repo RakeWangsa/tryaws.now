@@ -41,9 +41,13 @@ const CONTACT = {
 };
 
 describe("checkAvailability", () => {
+  // WPU-Z19: the words of the CheckDomainAvailability reference (read 2026-11-14). UNAVAILABLE_PREMIUM is "The domain
+  // name is not available"; INVALID_NAME_FOR_TLD is a name the TLD refuses; PENDING asks for a new request. AVAILABLE
+  // is decided by the price that comes with it (the next describe).
   const words: [string | undefined, string][] = [
-    ["AVAILABLE", "available"],
-    ["UNAVAILABLE_PREMIUM", "premium"],
+    ["UNAVAILABLE_PREMIUM", "unavailable"],
+    ["INVALID_NAME_FOR_TLD", "unavailable"],
+    ["PENDING", "unknown"],
     ["UNAVAILABLE", "unavailable"],
     ["RESERVED", "unavailable"],
     ["UNAVAILABLE_RESTRICTED", "unavailable"],
@@ -62,6 +66,73 @@ describe("checkAvailability", () => {
       expect(calls[0]?.input).toEqual({ DomainName: "shop.com" });
     });
   }
+});
+
+describe("checkAvailability: AVAILABLE and the price type (WPU-Z19)", () => {
+  const standard = { Currency: "USD", Price: 15, PriceType: "STANDARD" };
+  const premium = { Currency: "USD", Price: 2500, PriceType: "REGISTRY_PREMIUM" };
+
+  it("AVAILABLE at the standard rate is available, without a second call", async () => {
+    const { fake, calls } = sender({
+      CheckDomainAvailabilityCommand: () => ({ Availability: "AVAILABLE", Price: standard }),
+    });
+    expect(await createRoute53DomainsPort(fake).checkAvailability("shop.com")).toBe("available");
+    expect(calls.map((c) => c.name)).toEqual(["CheckDomainAvailabilityCommand"]);
+  });
+
+  it("AVAILABLE with registry premium pricing is premium (refused by the adapter)", async () => {
+    const { fake } = sender({
+      CheckDomainAvailabilityCommand: () => ({ Availability: "AVAILABLE", Price: premium }),
+    });
+    expect(await createRoute53DomainsPort(fake).checkAvailability("shop.com")).toBe("premium");
+  });
+
+  it("AVAILABLE without a price type asks GetDomainPrices for the name", async () => {
+    for (const [price, ours] of [
+      [{ RegistrationPrice: standard }, "available"],
+      [{ RegistrationPrice: premium }, "premium"],
+      [{ RegistrationPrice: { Currency: "USD", Price: 15 } }, "unknown"],
+      [{}, "unknown"],
+    ] as const) {
+      for (const first of [
+        { Availability: "AVAILABLE" },
+        { Availability: "AVAILABLE", Price: { Price: 15 } },
+      ]) {
+        const { fake, calls } = sender({
+          CheckDomainAvailabilityCommand: () => first,
+          GetDomainPricesCommand: () => ({ DomainPrice: { Name: "shop.com", ...price } }),
+        });
+        expect(await createRoute53DomainsPort(fake).checkAvailability("shop.com")).toBe(ours);
+        expect(calls.map((c) => c.name)).toEqual([
+          "CheckDomainAvailabilityCommand",
+          "GetDomainPricesCommand",
+        ]);
+        expect(calls[1]?.input).toEqual({ DomainName: "shop.com" });
+      }
+    }
+  });
+
+  it("a GetDomainPrices that fails is thrown, never available (R16); TLDInMaintenance is retryable", async () => {
+    const { fake } = sender({
+      CheckDomainAvailabilityCommand: () => ({ Availability: "AVAILABLE" }),
+      GetDomainPricesCommand: () => {
+        throw awsFailure("TLDInMaintenance");
+      },
+    });
+    const error = await createRoute53DomainsPort(fake)
+      .checkAvailability("shop.com")
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "upstream_unavailable", retryable: true });
+    expect(JSON.stringify(error)).not.toContain("123456789012");
+    const blocked = sender({
+      CheckDomainAvailabilityCommand: () => {
+        throw awsFailure("TLDInMaintenance");
+      },
+    });
+    await expect(
+      createRoute53DomainsPort(blocked.fake).checkAvailability("shop.com"),
+    ).rejects.toMatchObject({ code: "upstream_unavailable", retryable: true });
+  });
 });
 
 describe("listPrices", () => {
@@ -108,6 +179,7 @@ describe("registerDomain", () => {
       name: "shop.com",
       years: 1,
       contact: CONTACT,
+      maxPriceUsd: "15.0000",
     });
     expect(result).toEqual({ operationId: "op-123" });
     const input = calls[0]?.input ?? {};
@@ -118,9 +190,14 @@ describe("registerDomain", () => {
       PrivacyProtectAdminContact: true,
       PrivacyProtectRegistrantContact: true,
       PrivacyProtectTechContact: true,
+      // WPU-Z19: the billing contact too ("the same privacy setting for the administrative, billing, registrant,
+      // and technical contacts"), and Consent: the USD price the order charged, so AWS never charges more.
+      PrivacyProtectBillingContact: true,
+      Consent: { Currency: "USD", MaxPrice: 15 },
     });
     expect(input["AdminContact"]).toEqual(input["RegistrantContact"]);
     expect(input["TechContact"]).toEqual(input["RegistrantContact"]);
+    expect(input["BillingContact"]).toEqual(input["RegistrantContact"]);
     expect(input["RegistrantContact"]).toMatchObject({
       ContactType: "PERSON",
       FirstName: "Rahim",
@@ -137,7 +214,7 @@ describe("registerDomain", () => {
       },
     });
     const error = await createRoute53DomainsPort(fake)
-      .registerDomain({ name: "shop.com", years: 1, contact: CONTACT })
+      .registerDomain({ name: "shop.com", years: 1, contact: CONTACT, maxPriceUsd: "15" })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AwsError);
     expect(error).toMatchObject({ code: "conflict", operation: "RegisterDomain" });
@@ -152,6 +229,7 @@ describe("registerDomain", () => {
         name: "shop.com",
         years: 1,
         contact: CONTACT,
+        maxPriceUsd: "15",
       }),
     ).rejects.toBeInstanceOf(AwsError);
   });
@@ -195,13 +273,32 @@ describe("renewDomain", () => {
         name: "shop.com",
         years: 1,
         currentExpiryYear: 2031,
+        maxPriceUsd: "13.5000",
       }),
     ).toEqual({ operationId: "op-9" });
     expect(calls[0]?.input).toEqual({
       DomainName: "shop.com",
       DurationInYears: 1,
       CurrentExpiryYear: 2031,
+      Consent: { Currency: "USD", MaxPrice: 13.5 },
     });
+  });
+
+  it("WPU-Z19: a USD price that is not a plain positive decimal is refused before any call (R16)", async () => {
+    for (const maxPriceUsd of ["", "0", "0.0000", "-1", "1e3", "15.123456", "abc", " 15"]) {
+      const { fake, calls } = sender({
+        RenewDomainCommand: () => ({ OperationId: "op-9" }),
+        RegisterDomainCommand: () => ({ OperationId: "op-1" }),
+      });
+      const port = createRoute53DomainsPort(fake);
+      await expect(
+        port.renewDomain({ name: "shop.com", years: 1, currentExpiryYear: 2031, maxPriceUsd }),
+      ).rejects.toMatchObject({ code: "validation", retryable: false });
+      await expect(
+        port.registerDomain({ name: "shop.com", years: 1, contact: CONTACT, maxPriceUsd }),
+      ).rejects.toMatchObject({ code: "validation", retryable: false });
+      expect(calls).toEqual([]);
+    }
   });
 
   // WPU-Z13: a renewal that ends failed gives the customer's money back, so only a real refusal may be final. Too
@@ -214,7 +311,7 @@ describe("renewDomain", () => {
             throw awsFailure(name);
           },
         }).fake,
-      ).renewDomain({ name: "shop.com", years: 1, currentExpiryYear: 2031 });
+      ).renewDomain({ name: "shop.com", years: 1, currentExpiryYear: 2031, maxPriceUsd: "15" });
     await expect(renew("OperationLimitExceeded")).rejects.toMatchObject({
       code: "conflict",
       retryable: true,
@@ -243,7 +340,7 @@ describe("renewDomain", () => {
           throw awsFailure("OperationLimitExceeded");
         },
       }).fake,
-    ).registerDomain({ name: "shop.com", years: 1, contact: CONTACT });
+    ).registerDomain({ name: "shop.com", years: 1, contact: CONTACT, maxPriceUsd: "15" });
     await expect(register).rejects.toMatchObject({ code: "conflict", retryable: false });
   });
 });

@@ -67,7 +67,7 @@ describe("diskOfferFor (addDisk: the anchor row of the server's Region, only beh
     expect(offer([anchor()])).toEqual({
       productId: "0190bbbb-0000-7000-8000-000000000001",
       minGb: 8,
-      maxGb: 16384,
+      maxGb: 16000,
     });
   });
   it("offers nothing when the flag is off, the server is not live, or no row fits (R12, R16)", () => {

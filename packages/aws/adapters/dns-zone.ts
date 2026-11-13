@@ -4,6 +4,7 @@ import {
   DNS_RECORD_TYPES,
   checkChange,
   stepDone,
+  stepWait,
   validateRecord,
   validateRecordKey,
   validateZoneName,
@@ -14,6 +15,11 @@ import {
 import { AwsError } from "../errors";
 import type { R53Change, R53RecordSet, Route53Port } from "./route53-port";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
+import { splitChangeBatches } from "./route53-limits";
+import { checkWaitBudget, pollAt } from "./shared";
+
+// WPU-Z19: the id of a Route 53 change as the create saved it (route53-client.ts strips "/change/").
+const CHANGE_ID = /^[A-Z0-9]{1,32}$/;
 
 // WP7-T3: Amazon Route 53 zones and records of the customers. Everything runs in the tc-dns account
 // (hosted zones via STS, TcDnsProvisioner / TcDnsReader; VERIFY the role names against the real
@@ -281,13 +287,41 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
     },
     aws: {
       // CreateHostedZone with the operation id as caller reference: a retry finds the same zone (spec 12).
+      // WPU-Z19 (verify review, JOURNEY.md:1796): two steps. A new zone is PENDING until its NS and SOA records are
+      // on every Route 53 name server ("Changes generally propagate to all Route 53 name servers within 60
+      // seconds"); `wait_insync` follows GetChange and the zone becomes active, and the customer is told to set
+      // the name servers, only at INSYNC. The wait is bounded (checkWaitBudget).
       async create(ctx: OpCtx<DnsZoneConfig>): Promise<StepResult> {
         const port = deps.route53();
-        const { zone } = await port.createHostedZone({
-          name: ctx.config.zoneName,
-          callerReference: ctx.operation.id,
-          comment: `tc-dnszone-${ctx.resource.id.replaceAll("-", "").slice(16)}`,
-        });
+        if (ctx.operation.step === null || ctx.operation.step === "create_zone") {
+          const { zone, changeId } = await port.createHostedZone({
+            name: ctx.config.zoneName,
+            callerReference: ctx.operation.id,
+            comment: `tc-dnszone-${ctx.resource.id.replaceAll("-", "").slice(16)}`,
+          });
+          // A repeat that found the zone of an earlier call has no change id (null): that call was at least one
+          // run ago, so the next step reads the zone and goes on.
+          return stepWait("wait_insync", pollAt(ctx), {
+            configMerge: { hostedZoneId: zone.id, route53ChangeId: changeId },
+          });
+        }
+        if (ctx.operation.step !== "wait_insync") throw fail("internal");
+        const id = savedZoneId(ctx.resource.config);
+        const changeId = (ctx.resource.config as Record<string, unknown> | null)?.[
+          "route53ChangeId"
+        ];
+        if (
+          id === null ||
+          (changeId !== null && (typeof changeId !== "string" || !CHANGE_ID.test(changeId)))
+        ) {
+          throw fail("internal");
+        }
+        if (changeId !== null && (await port.getChangeStatus(changeId)) === "pending") {
+          checkWaitBudget(ctx);
+          return stepWait("wait_insync", pollAt(ctx));
+        }
+        const zone = await port.getHostedZone(id);
+        if (zone === null) throw new AwsError({ code: "upstream_unavailable", retryable: true });
         // WPU-G6: the list is saved with the zone (apex NS and SOA, read-only), so the record editor of a
         // zone that was never changed shows what exists and can add the first record.
         return stepDone({
@@ -314,7 +348,10 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
               (s) => !isApexReadOnly(ctx.config.zoneName, { fqdn: plain(s.name), type: s.type }),
             )
             .map((set) => ({ action: "DELETE" as const, set }));
-          if (doomed.length > 0) await port.changeRecordSets(id, doomed);
+          // WPU-Z19: a full zone holds more than one request may (100 sets of 20 values is 2,000 elements): the
+          // DELETEs go in batches under the limits. A retry lists the sets again, so what a batch already deleted
+          // is not sent twice (R7).
+          for (const batch of splitChangeBatches(doomed)) await port.changeRecordSets(id, batch);
           await port.deleteHostedZone(id);
         } catch (error) {
           if (!isNotFound(error)) throw error; // a step that deletes treats "not found" as done

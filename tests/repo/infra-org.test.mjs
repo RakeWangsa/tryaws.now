@@ -527,6 +527,21 @@ describe("permissions", () => {
     );
   });
 
+  it("WPU-Z19: TcDnsProvisioner may read the price of one name (GetDomainPrices) and the e-mail check, in us-east-1", () => {
+    const role = roleByName(tpl["dns-account.yaml"], "TcDnsProvisioner");
+    const statement = rolePolicyDocs(role)
+      .flatMap(statementsOf)
+      .find((s) => s.Sid === "DomainRegistration");
+    expect(statement.Effect).toBe("Allow");
+    expect(list(statement.Action)).toEqual(
+      expect.arrayContaining([
+        "route53domains:GetDomainPrices",
+        "route53domains:GetContactReachabilityStatus",
+      ]),
+    );
+    expect(statement.Condition).toEqual({ StringEquals: { "aws:RequestedRegion": "us-east-1" } });
+  });
+
   it("WPU-D4: TcDnsProvisioner allows exactly the hosted zone calls of the Route 53 client, in us-east-1 only", () => {
     const role = roleByName(tpl["dns-account.yaml"], "TcDnsProvisioner");
     const statement = rolePolicyDocs(role)

@@ -5,6 +5,7 @@ import {
   imageLogoOf,
   isBlueprintId,
   loginUserOf,
+  storedLoginUserOf,
   minPowerOf,
   offeredImages,
   optionOf,
@@ -306,7 +307,11 @@ export async function loadServerDetail(
       specs: product === null ? {} : planSpecsOf(product.specs),
       keyName: family === WINDOWS_FAMILY ? null : (key?.name ?? null),
       imageName: option?.name ?? null,
-      loginUser: imageId === null ? null : (option?.loginUser ?? loginUserOf(imageId)),
+      // WPU-Z19: the user GetInstance reported (stored at create) first, then the synced row, then the table.
+      loginUser:
+        imageId === null
+          ? null
+          : (storedLoginUserOf(resource.config) ?? option?.loginUser ?? loginUserOf(imageId)),
       createdAt: resource.createdAt,
     };
   });

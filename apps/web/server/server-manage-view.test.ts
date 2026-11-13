@@ -79,6 +79,9 @@ describe("loadServerManage", () => {
     // An image nobody knows has no guessed user.
     state.resource = resource({ config: { blueprintId: "brand_new_thing" } });
     expect(await loadServerManage(session, "x", REQ)).toMatchObject({ loginUser: null });
+    // WPU-Z19: the user GetInstance reported wins (a Lightsail-packaged app logs in as admin, not bitnami).
+    state.resource = resource({ config: { blueprintId: "wordpress", loginUser: "admin" } });
+    expect(await loadServerManage(session, "x", REQ)).toMatchObject({ loginUser: "admin" });
   });
   it("reads the saved rules, a detached IP and a restricted SSH rule", async () => {
     state.resource = resource({

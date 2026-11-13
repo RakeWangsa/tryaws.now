@@ -150,6 +150,9 @@ Resources:
                 Effect: Allow
                 Action:
                   - route53domains:CheckDomainAvailability
+                  # WPU-Z19: an AVAILABLE answer without a price type is decided by GetDomainPrices of the name
+                  # (registry premium pricing, verify review 2026-11-13).
+                  - route53domains:GetDomainPrices
                   - route53domains:GetContactReachabilityStatus
                   - route53domains:ListPrices
                   - route53domains:RegisterDomain

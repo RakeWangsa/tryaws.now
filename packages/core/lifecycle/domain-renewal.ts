@@ -27,6 +27,8 @@ import type { Logger } from "../operations/types";
 
 const DOMAIN_FAMILY = "domain";
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Plain positive decimal text with at most 4 decimals: the form of an awsPriceUsd (the adapter's rule). */
+const USD_TEXT = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,4})?$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A registry renewal that cannot be queued or reversed. The message is fixed text (R14). */
@@ -52,6 +54,7 @@ export function domainRenewalKey(subscriptionId: string, periodStart: Date): str
 
 /**
  * Pure. The `renew_domain` operation that the renewal charge of a domain queues; null for every other family.
+ * `maxPriceUsd` is the USD price the renewal charged (WPU-Z19).
  * `currentExpiryYear` is the UTC year of the registry expiry the row holds (`resources.config.expiresAt`, written
  * by the adapter at the registration and at every renewal): RenewDomain's CurrentExpiryYear, which the adapter
  * compares with the live domain before it calls (a later live year is a renewal that already went through).
@@ -60,8 +63,14 @@ export function domainRenewalKey(subscriptionId: string, periodStart: Date): str
 export function domainRenewalOperation(
   row: Pick<LifecycleRow, "id" | "resourceId" | "resource">,
   periodStart: Date,
+  maxPriceUsd: string,
 ): OperationInput | null {
   if (row.resource.family !== DOMAIN_FAMILY) return null;
+  // WPU-Z19: the USD price this renewal charged (awsPriceUsd of its price snapshot, decimal text, R4). The adapter sends
+  // it as RenewDomain's Consent.MaxPrice, so the registry refuses instead of charging more than the customer paid.
+  if (!USD_TEXT.test(maxPriceUsd) || !/[1-9]/.test(maxPriceUsd)) {
+    throw new DomainRenewalError("lifecycle: the USD price of the domain renewal is not valid");
+  }
   const expiry = instantOf(row.resource.config["expiresAt"]);
   if (expiry === null) {
     throw new DomainRenewalError("lifecycle: the registry expiry of the domain is not known");
@@ -75,6 +84,7 @@ export function domainRenewalOperation(
       periodStart: periodStart.toISOString(),
       currentExpiryYear: expiry.getUTCFullYear(),
       years: DOMAIN_YEARS,
+      maxPriceUsd,
     },
     idempotencyKey: domainRenewalKey(row.id, periodStart),
   };
@@ -182,8 +192,9 @@ export async function queueDomainRenewal(
   row: LifecycleRow,
   periodStart: Date,
   now: Date,
+  maxPriceUsd: string,
 ): Promise<QueueMessage | null> {
-  const input = domainRenewalOperation(row, periodStart);
+  const input = domainRenewalOperation(row, periodStart, maxPriceUsd);
   if (input === null) return null;
   const inserted = await insertOperation(tx, input, now);
   return inserted.created && inserted.state === "queued"

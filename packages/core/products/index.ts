@@ -24,6 +24,7 @@ export {
   DEFAULT_BLUEPRINT_ID,
   keyFileName,
   loginUserOf,
+  storedLoginUserOf,
   parseServerDisplayName,
   sshCommandOf,
 } from "./connect";

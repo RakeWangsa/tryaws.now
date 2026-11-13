@@ -119,13 +119,17 @@ describe("queueDomainRenewal: the hook of a renewal charge", () => {
       state: "queued",
       enqueueSeq: 0,
     });
-    expect(await queueDomainRenewal(TX, row(), P, NOW)).toEqual({
+    expect(await queueDomainRenewal(TX, row(), P, NOW, "13.0000")).toEqual({
       operationId: OP,
       resourceId: RES,
       enqueueSeq: 0,
     });
     expect(insertOperation).toHaveBeenCalledTimes(1);
-    expect(insertOperation).toHaveBeenCalledWith(TX, domainRenewalOperation(row(), P), NOW);
+    expect(insertOperation).toHaveBeenCalledWith(
+      TX,
+      domainRenewalOperation(row(), P, "13.0000"),
+      NOW,
+    );
     expect(insertOperation.mock.calls[0]?.[1]).toMatchObject({
       kind: "renew_domain",
       idempotencyKey: domainRenewalKey(SUB, P),
@@ -139,37 +143,37 @@ describe("queueDomainRenewal: the hook of a renewal charge", () => {
       state: "queued",
       enqueueSeq: 3,
     });
-    expect(await queueDomainRenewal(TX, row(), P, NOW)).toBeNull();
+    expect(await queueDomainRenewal(TX, row(), P, NOW, "13.0000")).toBeNull();
     insertOperation.mockResolvedValue({
       operationId: OP,
       created: true,
       state: "needs_approval",
       enqueueSeq: 0,
     });
-    expect(await queueDomainRenewal(TX, row(), P, NOW)).toBeNull();
+    expect(await queueDomainRenewal(TX, row(), P, NOW, "13.0000")).toBeNull();
   });
 
   it("does nothing for a family without a registry", async () => {
-    expect(await queueDomainRenewal(TX, row("linux_instance"), P, NOW)).toBeNull();
+    expect(await queueDomainRenewal(TX, row("linux_instance"), P, NOW, "13.0000")).toBeNull();
     expect(insertOperation).not.toHaveBeenCalled();
   });
 
   it("throws for a domain whose expiry is not known, before anything is written (R16)", async () => {
     await expect(
-      queueDomainRenewal(TX, row("domain", { expiresAt: null }), P, NOW),
+      queueDomainRenewal(TX, row("domain", { expiresAt: null }), P, NOW, "13.0000"),
     ).rejects.toBeInstanceOf(DomainRenewalError);
     expect(insertOperation).not.toHaveBeenCalled();
   });
 
   it("lets an error of the insert reach the caller, whose transaction rolls the charge back", async () => {
     insertOperation.mockRejectedValue(new Error("db"));
-    await expect(queueDomainRenewal(TX, row(), P, NOW)).rejects.toThrow("db");
+    await expect(queueDomainRenewal(TX, row(), P, NOW, "13.0000")).rejects.toThrow("db");
   });
 });
 
 describe("reverseFailedDomainRenewal: the failed hook of a registry renewal", () => {
   const event = { operationId: OP, resourceId: RES, customerId: CUS, code: "conflict" };
-  const payload = domainRenewalOperation(row(), P)?.payload;
+  const payload = domainRenewalOperation(row(), P, "13.0000")?.payload;
   const logs: unknown[] = [];
   const deps = { log: (e: unknown) => logs.push(e) } as never;
 

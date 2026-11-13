@@ -25,7 +25,8 @@ export interface RawBlueprint {
   readonly isActive: boolean;
   /**
    * WPU-G10: `minPower` of GetBlueprints, the least bundle power the image runs on (the unit of
-   * GetBundles `power`; 500 is the 512 MB plan, 0 every plan). Absent or not a whole number: unknown.
+   * GetBundles `power`; 298 is the 512 MB plan, 500 the 1 GB plan, 1000 the 2 GB plan, 0 every plan: the AWS CLI
+   * get-bundles example, WPU-Z19). Absent or not a whole number: unknown.
    */
   readonly minPower?: number | null;
 }
@@ -127,12 +128,15 @@ export function mapBlueprint(item: unknown, region: string): BlueprintRow | null
 
 /**
  * WPU-G10. The minimum bundle power of an app image whose minimum nobody knows (AWS did not report one
- * and no admin set one): 1000, the 1 GB plan. Lightsail itself requires about that much for the common
- * apps (WordPress, LAMP, Node.js), so the default errs on the side of refusing a plan that may not run
- * the app, which an admin can lower per image. An OS-only image has no default minimum: it runs on every
- * plan. VERIFY: the value AWS reports for each blueprint (`GetBlueprints.minPower`) on a pool account.
+ * and no admin set one). WPU-Z19 (verify review 2026-11-13, owner ruling 2026-11-14): 500, the 1 GB plan. The AWS
+ * CLI get-bundles example gives nano_3_0 power 298 with 0.5 GB, micro_3_0 power 500 with 1.0 GB and small_3_0 power
+ * 1000 with 2.0 GB (the old value 1000 was the 2 GB plan, one plan off). The get-blueprints example reports minPower
+ * 0 for wordpress, lamp_8_bitnami and nodejs ("0 indicates that the blueprint runs on all instance sizes"), so the
+ * floor is the platform's own margin against the 512 MB plan, which an admin can lower per image; a minPower that
+ * AWS reports wins over it. An OS-only image has no default minimum: it runs on every plan. Still to check:
+ * `GetBlueprints.minPower` for each enabled blueprint in tc-pool-dev.
  */
-export const DEFAULT_APP_MIN_POWER = 1000;
+export const DEFAULT_APP_MIN_POWER = 500;
 /** The largest minimum that is believed (matches the admin editor); anything above is "unknown". */
 const MIN_POWER_MAX = 100000;
 

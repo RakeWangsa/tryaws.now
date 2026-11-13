@@ -67,7 +67,7 @@ export async function renewNow(tx: Tx, input: RenewNowInput): Promise<Result<Ren
   if (!renewed.ok) return renewed;
   // WPU-Z13: a domain's charge pays the registry. The engine's key, so one renew_domain per period whoever renews;
   // no queue here: the scheduler's sweep sends the queued row within minutes (3.4).
-  await queueDomainRenewal(tx, row, renewed.value.periodStart, now);
+  await queueDomainRenewal(tx, row, renewed.value.periodStart, now, renewed.value.awsPriceUsd);
 
   let resumeQueued = false;
   // WPU-Y3b: not while an unpaid usage charge is open; the unpaid job resumes after that is paid.

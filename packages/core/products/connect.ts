@@ -38,6 +38,18 @@ export function loginUserOf(blueprintId: unknown): string | null {
   return null;
 }
 
+/**
+ * WPU-Z19. The login user the provisioner stored from GetInstance `username` ("The user name for connecting to the
+ * instance", Lightsail API reference), or null. It wins over `loginUserOf`, whose prefix table cannot tell a Bitnami
+ * image (`bitnami`) from a Lightsail-packaged one (`admin`, "Lightsail packaged versions of WordPress, Nginx,
+ * WordPress Multisite, LAMP, Node.js instances: admin" in the Lightsail SSH guide) when the id does not say.
+ */
+export function storedLoginUserOf(config: unknown): string | null {
+  if (typeof config !== "object" || config === null) return null;
+  const user = (config as Record<string, unknown>)["loginUser"];
+  return typeof user === "string" && USER.test(user) ? user : null;
+}
+
 const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
 const USER = /^[a-z][a-z0-9_-]{0,31}$/;
 

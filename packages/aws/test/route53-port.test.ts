@@ -41,16 +41,23 @@ const hostedZone = (id = "Z0TESTZONE1", name = "shop.example.") => ({
 });
 
 describe("createHostedZone", () => {
-  it("creates a public zone with a generated reference and comment, and returns the id and name servers", async () => {
-    const { port, calls } = fake({ CreateHostedZone: () => hostedZone() });
+  it("creates a public zone with a generated reference and comment, and returns the id, name servers and change", async () => {
+    const { port, calls } = fake({
+      CreateHostedZone: () => ({
+        ...hostedZone(),
+        ChangeInfo: { Id: "/change/C0CHANGE1", Status: "PENDING" },
+      }),
+    });
     const out = await port.createHostedZone({
       name: "shop.example",
       callerReference: REF,
       comment: COMMENT,
     });
+    // WPU-Z19: the change of the create, which GetChange follows until INSYNC.
     expect(out).toEqual({
       created: true,
       zone: { id: "Z0TESTZONE1", name: "shop.example.", nameServers: NS },
+      changeId: "C0CHANGE1",
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.input).toEqual({
@@ -84,6 +91,8 @@ describe("createHostedZone", () => {
       comment: COMMENT,
     });
     expect(out.created).toBe(false);
+    // The change of the first call is not known on a repeat.
+    expect(out.changeId).toBeNull();
     expect(out.zone.id).toBe("Z0TESTZONE1");
     expect(out.zone.nameServers).toEqual(NS);
     expect(calls.map((c) => c.op)).toEqual([
@@ -271,6 +280,33 @@ describe("listRecordSets", () => {
   });
 });
 
+// WPU-Z19 (verify review, JOURNEY.md:1796): "the initial status of the hosted zone is PENDING ... When the NS and SOA
+// records are available, the status of the zone changes to INSYNC" (CreateHostedZone); GetChange reads it.
+describe("getChangeStatus", () => {
+  it("reads GetChange: PENDING is pending, INSYNC is insync", async () => {
+    for (const [status, ours] of [
+      ["PENDING", "pending"],
+      ["INSYNC", "insync"],
+    ] as const) {
+      const { port, calls } = fake({
+        GetChange: () => ({ ChangeInfo: { Id: "/change/C0CHANGE1", Status: status } }),
+      });
+      expect(await port.getChangeStatus("C0CHANGE1")).toBe(ours);
+      expect(calls[0]?.input).toEqual({ Id: "C0CHANGE1" });
+    }
+  });
+
+  it("an unknown status is an invalid answer, a bad id is refused with no call", async () => {
+    const { port, calls } = fake({ GetChange: () => ({ ChangeInfo: { Status: "SOMETHING" } }) });
+    await expect(port.getChangeStatus("C0CHANGE1")).rejects.toBeInstanceOf(AwsError);
+    calls.length = 0;
+    for (const bad of ["", "/change/C1", "c1; x", "C".repeat(40)]) {
+      await expect(port.getChangeStatus(bad)).rejects.toMatchObject({ code: "validation" });
+    }
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe("changeRecordSets", () => {
   const set = { name: "www.shop.example.", type: "A", ttl: 300, values: ["203.0.113.10"] };
 
@@ -338,6 +374,48 @@ describe("changeRecordSets", () => {
       port.changeRecordSets("Z0TESTZONE1", [{ action: "DROP" as never, set }]),
     ).rejects.toMatchObject({ code: "validation" });
     expect(calls).toHaveLength(0);
+  });
+
+  // WPU-Z19: the DNS quotas page (DNSLimitations.html): "A request cannot contain more than 1,000 ResourceRecord
+  // elements ... When the value of the Action element is UPSERT, each ResourceRecord element is counted twice", and
+  // at most 32,000 characters of Value, where an UPSERT's characters also count twice.
+  it("counts ResourceRecord elements and value characters, an UPSERT twice", async () => {
+    const { port, calls } = fake({
+      ChangeResourceRecordSets: () => ({ ChangeInfo: { Id: "/change/C1", Status: "PENDING" } }),
+    });
+    const values = (n: number) => Array.from({ length: n }, (_, i) => `203.0.113.${i % 250}`);
+    const multi = (action: "CREATE" | "UPSERT" | "DELETE", n: number) => ({
+      action,
+      set: { ...set, values: values(n) },
+    });
+    // 501 values: 501 elements as a CREATE or DELETE, 1002 as an UPSERT.
+    await port.changeRecordSets("Z0TESTZONE1", [multi("CREATE", 501)]);
+    await port.changeRecordSets("Z0TESTZONE1", [multi("DELETE", 501)]);
+    await expect(
+      port.changeRecordSets("Z0TESTZONE1", [multi("UPSERT", 501)]),
+    ).rejects.toMatchObject({ code: "validation" });
+    await port.changeRecordSets("Z0TESTZONE1", [multi("UPSERT", 500)]);
+    // Two DELETEs of 20 values per set: 25 sets is 500 elements; 51 sets of 20 is 1020, over the limit.
+    const sets = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        action: "DELETE" as const,
+        set: { ...set, name: `h${i}.shop.example.`, values: values(20) },
+      }));
+    await port.changeRecordSets("Z0TESTZONE1", sets(50));
+    await expect(port.changeRecordSets("Z0TESTZONE1", sets(51))).rejects.toMatchObject({
+      code: "validation",
+    });
+    // 16,001 characters: allowed once, refused as an UPSERT (32,002).
+    const text = (action: "CREATE" | "UPSERT") => ({
+      action,
+      set: { ...set, type: "TXT", values: [`"${"x".repeat(15_999)}"`] },
+    });
+    await port.changeRecordSets("Z0TESTZONE1", [text("CREATE")]);
+    await expect(port.changeRecordSets("Z0TESTZONE1", [text("UPSERT")])).rejects.toMatchObject({
+      code: "validation",
+    });
+    // Sent: CREATE 501, DELETE 501, UPSERT 500, 50 DELETE sets, the TXT CREATE; every refusal sent nothing.
+    expect(calls).toHaveLength(5);
   });
 
   it("maps a refused batch to conflict and a missing zone to not_found", async () => {

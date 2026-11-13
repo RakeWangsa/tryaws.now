@@ -517,6 +517,8 @@ const SERVER_CONTROLS = [
   "removeFirewallRule",
   "rulesOpenSshToWorld",
   "sshCommandOf",
+  // WPU-Z19: the login user GetInstance reported, stored by the provisioner.
+  "storedLoginUserOf",
 ];
 
 // WPU-G5: the first-use guide, the usage summary and the snapshot grouping (packages/core/products).
