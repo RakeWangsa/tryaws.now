@@ -1,4 +1,4 @@
-// WPU-B8: the monthly cost budget of a lean stage (about 50 USD). Called from sst.config.ts only when
+// WPU-B8: the monthly cost budget of a lean stage (about 50 USD). Called from infra/app.ts only when
 // config.size is "lean". It notifies the alarm topic of alarms.ts, so the same people get the mail.
 //
 // NOT TYPE-CHECKED, see network.ts.

@@ -141,8 +141,8 @@ describe("the wiring", () => {
     );
   });
 
-  it("sst.config.ts hands the web components to the alarms", () => {
-    expect(code("infra/sst.config.ts")).toContain("alarms(config, queues, fns, apps)");
+  it("infra/app.ts hands the web components to the alarms", () => {
+    expect(code("infra/app.ts")).toContain("alarms(config, queues, fns, apps)");
   });
 });
 

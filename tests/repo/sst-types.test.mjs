@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// WPU-B4 (audit item 38): type-check the SST stack files (infra/stacks and infra/sst.config.ts).
+// WPU-B4 (audit item 38): type-check the SST stack files (infra/stacks, infra/app.ts and the root sst.config.ts).
 // They use the globals of SST ($config, $app, sst.aws.*), which exist only after `sst install` has
 // generated .sst/platform/config.d.ts, and that command downloads Pulumi and the AWS provider: it needs
 // network. Without that file this check is SKIPPED with the reason below (never a pass of the types).
@@ -24,7 +24,12 @@ describe("infra/tsconfig.stacks.json", () => {
 
   it("covers the stack files, the SST config and the generated SST types", () => {
     expect(config.include).toEqual(
-      expect.arrayContaining(["sst.config.ts", "stacks/**/*.ts", "../.sst/platform/config.d.ts"]),
+      expect.arrayContaining([
+        "app.ts",
+        "../sst.config.ts",
+        "stacks/**/*.ts",
+        "../.sst/platform/config.d.ts",
+      ]),
     );
     expect(config.extends).toBe("../tsconfig.base.json");
   });

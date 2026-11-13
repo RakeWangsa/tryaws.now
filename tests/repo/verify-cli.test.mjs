@@ -455,8 +455,8 @@ it("task WPU-D2 is proven by lint, types, format, the migrator and hash tests an
 it("the proof of WPU-D2 exists: sst pinned, outputs, role names, OIDC bounds, probe sources, ledger alarms, hashes", () => {
   expect(JSON.parse(readFileSync("package.json", "utf8")).devDependencies.sst).toBe("4.17.2");
   for (const [file, part] of [
-    ["infra/sst.config.ts", "featureFlagDefaults: featureFlagDefaults(),"],
-    ["infra/sst.config.ts", "webRolePolicies: apps.webRolePolicies,"],
+    ["infra/app.ts", "featureFlagDefaults: featureFlagDefaults(),"],
+    ["infra/app.ts", "webRolePolicies: apps.webRolePolicies,"],
     ["infra/org/pool-roles.yaml", "tc-${ControlPlaneStage}-provisioner-role"],
     ["infra/org/ci-deploy-production.yaml", "TcCiRoleBoundary"],
     ["infra/org/ci-plan-production.yaml", "NoLogsMessagesItemsOrDatabaseData"],

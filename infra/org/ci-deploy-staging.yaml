@@ -25,7 +25,7 @@ Description: >-
 # server and image functions, the RDS proxy, the Cron scheduler and the CloudFront edge function). Run the
 # first staging deploy, read the AccessDenied in the role's CloudTrail, widen the boundary by pull request
 # (never remove the Deny statements) and record it in JOURNEY.md.
-# VERIFY: that SST names its own roles ticon-cloud-<stage>-* (app name `ticon-cloud` in infra/sst.config.ts).
+# VERIFY: that SST names its own roles ticon-cloud-<stage>-* (app name `ticon-cloud` in infra/app.ts).
 # Check the role names after the first deploy and correct the prefixes below if they differ.
 # VERIFY: iam:PermissionsBoundary is evaluated for CreateRole, PutRolePolicy, AttachRolePolicy,
 # DetachRolePolicy, DeleteRolePolicy and PutRolePermissionsBoundary (IAM documentation "Delegate

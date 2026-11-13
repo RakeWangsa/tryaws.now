@@ -6,8 +6,8 @@
 // Exit codes: 0 all assertions hold, 1 an assertion failed, 2 BLOCKED (the input to decide is missing).
 // R16: a check that cannot complete is a failure, never a pass.
 //
-// Input keys the SST app must output (names only, never a secret value). infra/sst.config.ts has to
-// output them since WPU-D2 (infra/sst.config.ts: featureFlagDefaults, webRolePolicies from infra/stacks/web.ts).
+// Input keys the SST app must output (names only, never a secret value). infra/app.ts has to
+// output them since WPU-D2 (infra/app.ts: featureFlagDefaults, webRolePolicies from infra/stacks/web.ts).
 //   stage                string, must equal --stage
 //   featureFlagDefaults  object, flag key -> boolean. R12: every default is false in production.
 //   webRolePolicies      array of IAM policy documents (objects or JSON strings) attached to the web role

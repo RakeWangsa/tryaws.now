@@ -4,7 +4,8 @@
     "types": ["node"]
   },
   "include": [
-    "sst.config.ts",
+    "app.ts",
+    "../sst.config.ts",
     "stacks/**/*.ts",
     "lib/**/*.ts",
     "../.sst/platform/config.d.ts",

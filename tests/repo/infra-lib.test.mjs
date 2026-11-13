@@ -298,7 +298,7 @@ describe("stack outputs featureFlagDefaults and webRolePolicies", () => {
   });
 
   it("are returned by the SST app, from the permission lists the web and admin functions receive", () => {
-    const config = readFileSync(resolve(root, "infra/sst.config.ts"), "utf8");
+    const config = readFileSync(resolve(root, "infra/app.ts"), "utf8");
     expect(config).toContain("featureFlagDefaults: featureFlagDefaults(),");
     expect(config).toContain("webRolePolicies: apps.webRolePolicies,");
     const web = readFileSync(resolve(root, "infra/stacks/web.ts"), "utf8");

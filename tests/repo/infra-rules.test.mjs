@@ -27,7 +27,7 @@ const storage = source("infra/stacks/storage.ts");
 const alarms = source("infra/stacks/alarms.ts");
 const workers = source("infra/stacks/workers.ts");
 const secrets = source("infra/stacks/secrets.ts");
-const config = source("infra/sst.config.ts");
+const config = source("infra/app.ts");
 
 // The text of one `new sst.aws.<Kind>("<Name>", { ... })` call up to the next sibling call.
 function between(text, startMarker, endMarker) {
@@ -39,8 +39,12 @@ function between(text, startMarker, endMarker) {
 
 describe("WP0-T2: stages, VPC, CloudFront, WAF", () => {
   it("guards the stage before anything is declared", () => {
-    expect(config).toMatch(/app\(input\)[\s\S]*assertDeployAllowed\(stage, process\.env\)/);
-    expect(config).toContain("readStageConfig($app.stage, process.env)");
+    // infra/app.ts gets the environment from the root sst.config.ts (SST refuses static imports there).
+    expect(config).toMatch(
+      /export function appConfig\(stage: string, env: Env\)[\s\S]*assertDeployAllowed\(stage, env\)/,
+    );
+    expect(config).toContain("readStageConfig($app.stage, env)");
+    expect(source("sst.config.ts")).toContain('return appConfig(input?.stage ?? "", process.env);');
     expect(config).toMatch(/protect: stageKind\(stage\) === "production"/);
     expect(config).toContain('home: "aws"');
     expect(config).toContain("providers: { aws: { region: REGION } }");

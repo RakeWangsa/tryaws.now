@@ -144,7 +144,7 @@ describe("WPU-B8: the stacks read config.size", () => {
   const database = source("infra/stacks/database.ts");
   const waf = source("infra/stacks/waf.ts");
   const workers = source("infra/stacks/workers.ts");
-  const sstConfig = source("infra/sst.config.ts");
+  const sstConfig = source("infra/app.ts");
 
   it("network.ts takes nat from the table, keeps two AZs", () => {
     expect(network).toContain("az: AZ_COUNT");
@@ -205,7 +205,7 @@ describe("WPU-B8: the stacks read config.size", () => {
     expect(raw("infra/stacks/budget.ts")).toContain("VERIFY:");
   });
 
-  it("sst.config.ts calls budget only for lean, after the alarm topic exists", () => {
+  it("infra/app.ts calls budget only for lean, after the alarm topic exists", () => {
     expect(sstConfig).toContain('await import("./stacks/budget")');
     expect(sstConfig).toMatch(
       /const alarm = alarms\([^)]*\);[\s\S]*if \(config\.size === "lean"\) \{ budget\(config, alarm\.topic\); \}/,

@@ -73,10 +73,8 @@ describe("tooling", () => {
     }
   });
 
-  it("reads nothing from the environment outside sst.config.ts", () => {
-    for (const file of ours.filter(
-      (f) => f.endsWith(".ts") && f !== join("infra", "sst.config.ts"),
-    )) {
+  it("reads nothing from the environment outside the root sst.config.ts", () => {
+    for (const file of ours.filter((f) => f.endsWith(".ts") && f !== "sst.config.ts")) {
       expect(readFileSync(resolve(root, file), "utf8"), file).not.toMatch(/process\.env/);
     }
   });
