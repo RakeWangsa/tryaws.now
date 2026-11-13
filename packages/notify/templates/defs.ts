@@ -405,6 +405,14 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
       note: h.x(d.approval === true ? "approval" : "direct"),
     }),
   },
+  // WPU-Y10 (DRAFT): after a late payment the final backup of the retention became an ordinary backup.
+  unpaid_snapshot_released: {
+    spec: { ...resource },
+    channels: () => ek,
+    path: resourcePath,
+    cta: "view_resource",
+    vars: (d, h) => ({ name: name(d, h) }),
+  },
   // WPU-Y3: 3 days and 1 day before a renewal charge that the wallet cannot cover.
   wallet_low_before_charge: {
     spec: {

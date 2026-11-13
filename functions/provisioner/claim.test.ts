@@ -94,6 +94,29 @@ describe("claimStep", () => {
     expect(guard).not.toHaveBeenCalled();
   });
 
+  it("[WPU-Y10] a resume is refused while config.adminSuspended is true, except the admin restore", async () => {
+    const config = JSON.stringify({ adminSuspended: true });
+    const auto = await seedOperation(
+      t.pool,
+      await seedResource(t.pool, world, { state: "suspended", config }),
+      { kind: "resume" },
+    );
+    expect(await claimStep(deps(), message(auto))).toEqual({
+      status: "refused",
+      code: "admin_suspended",
+    });
+    expect(await operationRow(t.pool, auto)).toMatchObject({
+      state: "needs_attention",
+      last_error: "admin_suspended",
+    });
+    const restore = await seedOperation(
+      t.pool,
+      await seedResource(t.pool, world, { state: "suspended", config }),
+      { kind: "resume", payload: JSON.stringify({ adminSuspended: false }) },
+    );
+    expect((await claimStep(deps(), message(restore))).status).toBe("run");
+  });
+
   it("a destructive operation runs only through the guard, inside the claim transaction", async () => {
     const approved = { needs_approval: true, approved_by: world.adminId, kind: "destroy" };
     const yes = vi.fn<DestructiveGuard>(async () => true);

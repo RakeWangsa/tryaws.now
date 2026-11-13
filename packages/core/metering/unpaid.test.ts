@@ -1207,6 +1207,33 @@ describe("the final snapshot after a payment that came after day 7 (WPU-Y3c, 2)"
   });
 });
 
+describe("the customer is told once that the former final snapshot is billed (WPU-Y10)", () => {
+  const released = (t: ReturnType<typeof retainedPaid>) =>
+    [...t.notices.values()].filter((n) => n.template === "unpaid_snapshot_released");
+
+  it("writes one notice, with the episode in the key, when a snapshot is released", async () => {
+    const t = retainedPaid();
+    const report = await t.run();
+    const list = released(t);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({
+      template: "unpaid_snapshot_released",
+      data: { resourceId: RES, product: "instance" },
+      dedupeKey: `unpaid:final-released:${RES}:${sinceMs(since(9 * DAY))}`,
+    });
+    expect(report.finalReleased).toBe(1);
+  });
+
+  it("writes none when the snapshot is held, or when there was nothing to release", async () => {
+    const held = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state: "succeeded" }] });
+    await held.run();
+    expect(released(held)).toHaveLength(0);
+    const none = retainedPaid({ finalBackups: [] });
+    await none.run();
+    expect(released(none)).toHaveLength(0);
+  });
+});
+
 // Finding 6 (MEDIUM, cost).
 describe("bounded work for each run (finding 6)", () => {
   const long = (n: number) => {

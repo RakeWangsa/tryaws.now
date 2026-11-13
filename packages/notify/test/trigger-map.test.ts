@@ -71,6 +71,7 @@ const TABLE: ReadonlyArray<{
       "unpaid_warning",
       "unpaid_suspended",
       "unpaid_deletion",
+      "unpaid_snapshot_released",
       "wallet_low_before_charge",
     ],
     sms: "no",

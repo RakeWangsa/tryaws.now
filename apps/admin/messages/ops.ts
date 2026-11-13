@@ -102,6 +102,7 @@ export const opsBn = {
       destructive_guard_refused: "মোছার সুরক্ষা আটকে দিয়েছে",
       owner_mismatch: "মালিক মিলছে না",
       resource_state: "সম্পদের অবস্থা কাজের উপযোগী নয়",
+      admin_suspended: "অ্যাডমিনের স্থগিতাদেশ চালু আছে; শুধু অ্যাডমিনের পুনরুদ্ধার তা তুলতে পারে",
       failed_hook_missing: "ব্যর্থতা সামলানোর অংশ নেই",
       invalid_step_result: "ধাপের ফল ঠিক ছিল না",
       lease_expired: "কাজের সময় শেষ হয়ে গেছে",

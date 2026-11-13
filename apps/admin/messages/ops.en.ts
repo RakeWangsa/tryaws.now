@@ -102,6 +102,7 @@ export const opsEn: Same<typeof opsBn> = {
       destructive_guard_refused: "The delete guard stopped it",
       owner_mismatch: "The owner does not match",
       resource_state: "The resource state does not fit this operation",
+      admin_suspended: "An admin suspension is in force; only an admin restore lifts it",
       failed_hook_missing: "No handler for the failure",
       invalid_step_result: "A step answered with an invalid result",
       lease_expired: "The time for the operation ran out",

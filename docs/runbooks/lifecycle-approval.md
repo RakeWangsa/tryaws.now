@@ -24,6 +24,30 @@ Operations (`ops` role). The approver reads the evidence below; the audit row st
 2. Watch the operation go `running` then `succeeded`; the state becomes `retained` and the customer is notified.
 3. 14 days later the job purges snapshots and the state becomes `ended`; this also needs the matching approval while the rule lasts.
 
+## Unpaid usage, day 7 (WPU-Y3, WPU-Y10)
+
+Applies only while the setting `lifecycle_unpaid_enabled` is on (see [unpaid-usage-switch.md](unpaid-usage-switch.md)).
+
+### What you see
+
+A usage charge (daily snapshot, static IP and so on) has been unpaid for 7 days. The job has already suspended the resource (from day 1) and moved the subscription to `retained`. In `/operations` you see, for that resource, a `final_snapshot` operation and a `destroy` operation in `needs_approval` (until 2026-12-01; after that date the destroy runs alone, but the guard still needs state `retained` and the final snapshot). The customer got the "deletion requested" message; nothing is deleted before you approve.
+
+### Before you approve the destroy
+
+1. The customer has really not paid: `/customers/[id]`, wallet balance, `/payments` (no pending top-up, nothing in `review`), and the resource has no `unpaidSince` cleared. If the customer paid, reject.
+2. The final snapshot exists and is `available` (the `final_snapshot` operation is `succeeded`). If it is missing or failed, do not approve (R13, R16).
+3. The resource is not under an abuse suspension; see [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md). An admin suspension outranks every automatic resume.
+4. Today's date against the R13 date 2026-12-01: before it, approval is mandatory.
+
+### Approve or reject
+
+- Approve with `approveOperation` and a written reason. Reject with `rejectOperation` to give more time; a rejected destroy stays rejected.
+- If the customer pays while the destroy waits, the job restores the subscription and cancels a destroy that has not started. If one is still `needs_approval` after a payment, reject it.
+
+### Held final snapshot
+
+After a late payment the job turns the former final snapshot into an ordinary backup (the customer is told once, DRAFT message `unpaid_snapshot_released`) and bills it daily until the customer deletes it. If a destroy had started, was approved or the state is unclear, the job does NOT release it: log `final_held`, report field `finalHeld`. That snapshot stays `final` and the customer cannot delete it. An admin decides: check that the resource is live and the destroy did not run, then delete the backup with a `delete_backup` operation and approval (until 2026-12-01), reason written. Never delete a final snapshot of a resource that is still `retained`.
+
 ## Rollback
 
 Destroy cannot be undone. If a customer pays during retention, restore from the final snapshot (new period starts at restore time). That is why every check above comes first.

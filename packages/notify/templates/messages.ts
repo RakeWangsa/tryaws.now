@@ -349,6 +349,16 @@ export const BN: Catalog = {
       direct: "এটি মুছে ফেলা হবে। যে প্রোডাক্টে ব্যাকআপ আছে, মোছার আগে শেষ ব্যাকআপ নেওয়া হবে।",
     },
   },
+  // WPU-Y10 DRAFT: owner approves the wording.
+  unpaid_snapshot_released: {
+    subject: "{name}: শেষ ব্যাকআপ এখন সাধারণ ব্যাকআপ",
+    headline: "শেষ ব্যাকআপ এখন সাধারণ ব্যাকআপ",
+    body: [
+      "বকেয়া চার্জ পরিশোধ হওয়ায় {name} আবার চালু হচ্ছে। মুছে ফেলার আগে নেওয়া শেষ ব্যাকআপটি এখন একটি সাধারণ ব্যাকআপ হিসেবে রাখা আছে।",
+      "আপনি মুছে না ফেলা পর্যন্ত এই ব্যাকআপের জন্য প্রতিদিন চার্জ কাটা হবে।",
+      "দরকার না থাকলে রিসোর্সের পাতার ব্যাকআপ অংশ থেকে এটি মুছে ফেলতে পারেন।",
+    ],
+  },
   // WPU-Y3 DRAFT
   wallet_low_before_charge: {
     subject: "{date} তারিখের চার্জের জন্য ওয়ালেটে টাকা কম",
@@ -601,6 +611,16 @@ export const EN: Catalog = {
       direct:
         "It will be deleted. Where the product has backups, a final backup is made before anything is deleted.",
     },
+  },
+  // WPU-Y10 DRAFT: owner approves the wording.
+  unpaid_snapshot_released: {
+    subject: "{name}: the final backup is now an ordinary backup",
+    headline: "The final backup is now an ordinary backup",
+    body: [
+      "Your unpaid charge is paid, so {name} starts again. The final backup made before a deletion is now kept as an ordinary backup.",
+      "A daily charge is taken for this backup until you delete it.",
+      "If you do not need it, delete it from the backups section of the resource page.",
+    ],
   },
   // WPU-Y3 DRAFT
   wallet_low_before_charge: {

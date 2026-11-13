@@ -36,6 +36,10 @@ export interface ClaimView {
     readonly keyCustomerId: string | null;
   };
   readonly blockedBy: string | null;
+  // WPU-Y10: resources.config.adminSuspended === true (only a boolean true counts), and whether the
+  // payload of this operation is the admin restore (`adminSuspended: false`). Absent means false.
+  readonly adminSuspended?: boolean;
+  readonly adminRestore?: boolean;
 }
 
 export interface ClaimOptions {
@@ -98,6 +102,10 @@ export function decideClaim(view: ClaimView, options: ClaimOptions): ClaimDecisi
     return refuse("resource_unplaced");
   }
   if (!options.hasAdapter(resource.family)) return refuse("no_adapter");
+  // An admin suspension (abuse, support) outranks every automatic resume; only the admin restore lifts it.
+  if (kind === "resume" && view.adminSuspended === true && view.adminRestore !== true) {
+    return refuse("admin_suspended");
+  }
   if (view.blockedBy !== null) {
     return {
       action: "block",
