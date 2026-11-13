@@ -487,23 +487,28 @@ async function releaseFinalSnapshots(
   // that nobody asked for, billed every day). One that started (or whose cancel loses the race with a claim)
   // finishes: its backup is an ordinary one (superseded below, or not final from the start when its row comes
   // after this commit: ensureFinalBackup of @tc/db). Ids and fixed words only in the log (R14).
+  // Fix round 1: a started one that is kept counts for the notice below, even when its backup row comes later.
+  let kept = 0;
   for (const op of await ops.resourceOps(tx, row.resourceId, ["final_snapshot"])) {
-    if (!finalSnapshotUnstarted(op)) continue;
-    if (await ops.cancel(tx, op.id)) {
+    if (op.state === "succeeded" || op.state === "failed") continue;
+    if (finalSnapshotUnstarted(op) && (await ops.cancel(tx, op.id))) {
       deps.log({
         event: "unpaid",
         action: "final_snapshot_ended",
         resourceId: row.resourceId,
         operationId: op.id,
       });
+      continue;
     }
+    kept += 1;
   }
   const released = (await ops.supersedeFinal(tx, row.resourceId)).length;
   count.finalReleased += released;
   // WPU-Y10: the customer is told once for each resource and episode that the former final snapshot is an
   // ordinary backup now, billed every day until it is deleted. Wording approved by the owner on 2026-11-13 (@tc/notify).
+  // WPU-X1 fix round 1: also when a kept (started) final snapshot will finish as such a backup.
   const product = productOfFamily(row.resource.family);
-  if (released > 0 && deps.notice !== undefined && product !== null) {
+  if ((released > 0 || kept > 0) && deps.notice !== undefined && product !== null) {
     await deps.notice(tx, {
       customerId: row.customerId,
       template: "unpaid_snapshot_released",

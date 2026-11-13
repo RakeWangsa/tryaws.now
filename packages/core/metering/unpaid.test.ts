@@ -210,7 +210,10 @@ function build(init: Partial<World> = {}) {
       if (
         o === undefined ||
         w.cancelLoses.includes(id) ||
-        !["queued", "needs_approval"].includes(o.state) ||
+        !(
+          ["queued", "needs_approval"].includes(o.state) ||
+          (o.state === "waiting" && (o.step ?? null) === null)
+        ) ||
         o.approved ||
         o.attempts > 0
       ) {
@@ -1451,6 +1454,23 @@ describe("the server's own final snapshot at the payback (WPU-X1)", () => {
     expect(t.logs.some((l) => (l as { action?: string }).action === "final_snapshot_ended")).toBe(
       false,
     );
+  });
+
+  it("one blocked behind another operation (waiting, no step, never attempted) is cancelled (fix round 1)", async () => {
+    const t = retainedPaid({ seed: [{ key: SNAP, kind: "final_snapshot", state: "waiting" }] });
+    await t.run();
+    expect(t.cancelled).toEqual([SNAP]);
+  });
+
+  it("one that started, with no backup row yet to release, still gets the released notice (fix round 1)", async () => {
+    const t = retainedPaid({
+      finalBackups: [],
+      seed: [{ key: SNAP, kind: "final_snapshot", state: "running", attempts: 1 }],
+    });
+    await t.run();
+    expect(
+      [...t.notices.values()].filter((n) => n.template === "unpaid_snapshot_released"),
+    ).toHaveLength(1);
   });
 
   it("one whose cancel loses the race (it was claimed) is left to finish", async () => {

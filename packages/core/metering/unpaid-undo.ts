@@ -92,14 +92,15 @@ export function viewDestroys(ops: readonly ResourceOpRow[]): DestroyView {
 }
 
 /**
- * WPU-X1. A final snapshot that never started: queued (or waiting for an approval nobody gave), never claimed and at
- * no step. Only such a one is ended when the retention ends; one that started finishes as an ordinary backup.
+ * WPU-X1. A final snapshot that never started: queued, waiting for an approval nobody gave, or held back by the
+ * claim's block rule (`waiting`), never attempted and at no step. Only such a one is ended when the retention ends; one that started finishes as an ordinary backup.
  * An unknown step is a start (fail closed: its AWS snapshot may exist).
  */
 export function finalSnapshotUnstarted(op: ResourceOpRow): boolean {
   return (
     op.kind === "final_snapshot" &&
-    (op.state === "queued" || op.state === "needs_approval") &&
+    // Fix round 1: `waiting` with no step and no attempt is an operation the claim's block rule held back.
+    (op.state === "queued" || op.state === "needs_approval" || op.state === "waiting") &&
     !op.approved &&
     op.attempts === 0 &&
     (op.step === null || op.step === undefined)

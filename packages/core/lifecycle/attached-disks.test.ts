@@ -59,22 +59,24 @@ describe("a final snapshot that started", () => {
     attempts: 0,
     ...over,
   });
-  it("is one that runs, waits, has a step or was attempted", () => {
+  it("is one that runs, has a step or was attempted", () => {
     expect(finalSnapshotStarted(op({ state: "running", attempts: 1 }))).toBe(true);
     expect(finalSnapshotStarted(op({ state: "running" }))).toBe(true);
     expect(finalSnapshotStarted(op({ state: "waiting", step: "wait_snapshot", attempts: 1 }))).toBe(
       true,
     );
-    expect(finalSnapshotStarted(op({ state: "waiting" }))).toBe(true);
     expect(finalSnapshotStarted(op({ state: "queued", attempts: 2 }))).toBe(true);
     expect(finalSnapshotStarted(op({ state: "needs_attention", step: "wait_snapshot" }))).toBe(
       true,
     );
   });
-  it("is not one that is queued or waits for an approval and never ran", () => {
+  it("is not one that is queued, blocked or waits for an approval and never ran", () => {
     expect(finalSnapshotStarted(op())).toBe(false);
     expect(finalSnapshotStarted(op({ state: "needs_approval" }))).toBe(false);
     expect(finalSnapshotStarted(op({ state: "needs_attention" }))).toBe(false);
+    // Fix round 1: moved to `waiting` by the claim's block rule (another operation of the resource ran first):
+    // no step, no attempt, nothing was sent to AWS.
+    expect(finalSnapshotStarted(op({ state: "waiting" }))).toBe(false);
   });
   it("is never a destroy (the destroy has its own rule)", () => {
     expect(finalSnapshotStarted({ ...op({ state: "running" }), kind: "destroy" })).toBe(false);

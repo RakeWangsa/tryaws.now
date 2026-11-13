@@ -201,8 +201,36 @@ export async function insertFreshOperation(
   let key = input.idempotencyKey;
   for (let i = 0; i < FRESH_CHAIN_MAX; i += 1) {
     const inserted = await insertOperation(tx, { ...input, idempotencyKey: key }, at);
-    if (inserted.created || !ENDED_STATES.has(inserted.state)) return inserted;
+    if (inserted.created) return inserted;
+    // WPU-X1 fix round 1: a live final snapshot that a release kept (its backup is no longer final) does not serve
+    // a new retention either: it finishes as an ordinary backup, and the new retention needs a final one (R13).
+    const passed =
+      ENDED_STATES.has(inserted.state) ||
+      (input.kind === "final_snapshot" &&
+        (await isReleasedFinalSnapshot(tx, input.resourceId, inserted.operationId)));
+    if (!passed) return inserted;
     key = `${input.idempotencyKey}:after:${inserted.operationId}`;
   }
   throw new RangeError("operation: too many ended operations under one key");
+}
+
+/**
+ * WPU-X1 fix round 1. A final_snapshot operation that a release kept: it started before the retention ended, so it
+ * was left to finish, and its backup row (config.finalOperation = the operation) was made an ordinary backup
+ * (final false). Such an operation never serves a later retention: its backup does not count for the destroy.
+ * False while it has no backup row yet (a row made under a new retention is final again: ensureFinalBackup).
+ * Reads resources only (web_rw and worker_rw may), scoped to the operation's own resource.
+ */
+export async function isReleasedFinalSnapshot(
+  tx: Tx,
+  resourceId: string,
+  operationId: string,
+): Promise<boolean> {
+  if (!isUuid(resourceId) || !isUuid(operationId)) return false;
+  const { rows } = await tx.execute<{ released: boolean }>(sql`
+    select exists (select 1 from resources b
+      where b.parent_resource_id = ${resourceId} and b.family = 'backup'
+        and b.config ->> 'finalOperation' = ${operationId}
+        and b.config ->> 'final' = 'false') as released`);
+  return rows[0]?.released === true;
 }

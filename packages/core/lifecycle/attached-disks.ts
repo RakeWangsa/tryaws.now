@@ -31,8 +31,8 @@ export interface ReleasedDisks {
 const DELETE_STEP = "delete_disk";
 
 /**
- * WPU-X1. A final snapshot that started: it runs or waits (wait_snapshot), it is at a step, or the provisioner
- * claimed it before. Its AWS snapshot may exist already, so a release lets it finish (its backup then ends as an
+ * WPU-X1. A final snapshot that started: it runs, it is at a step (wait_snapshot), or the provisioner claimed it
+ * before. A `waiting` row with no step and no attempt was only blocked by the claim (fix round 1): not started. Its AWS snapshot may exist already, so a release lets it finish (its backup then ends as an
  * ordinary, deletable one: ensureFinalBackup and markFinalBackup of @tc/db) instead of ending it, which would leave
  * a snapshot that is billed and cannot be deleted. Pure.
  */
@@ -40,7 +40,9 @@ export function finalSnapshotStarted(
   op: Pick<DiskRetentionOp, "kind" | "state" | "step" | "attempts">,
 ): boolean {
   if (op.kind !== "final_snapshot") return false;
-  return op.state === "running" || op.state === "waiting" || op.step !== null || op.attempts > 0;
+  // Fix round 1: `waiting` alone is not a start. The claim's block rule moves an operation to `waiting` with no
+  // step and no attempt when another operation of the resource runs first; nothing was sent to AWS.
+  return op.state === "running" || op.step !== null || op.attempts > 0;
 }
 
 const ENDED = ["succeeded", "failed"];

@@ -94,6 +94,12 @@ it("a payment after the unpaid retention gives the server AND its attached disk 
     )[0]!.n,
   );
 
+  // Fix round 1: the server's final snapshot was blocked by the claim (another operation of the server ran first):
+  // waiting, no step, never attempted. It never started, so the payback ends it.
+  await q(
+    "update operations set state = 'waiting', step = null, attempts = 0 where resource_id = $1 and kind = 'final_snapshot'",
+    [serverId],
+  );
   // The wallet pays.
   await q("update wallets set balance_minor = 20000000 where customer_id = $1", [buyer.customerId]);
   expect(await unpaid(new Date(day7.getTime() + 3_600_000))).toMatchObject({ paid: 1 });
