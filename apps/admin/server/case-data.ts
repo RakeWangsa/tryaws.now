@@ -10,6 +10,7 @@ import type {
   SupportRequestDetail,
   SupportStatus,
 } from "@tc/db";
+import { isUuid } from "@tc/core";
 import type { AdminActor } from "@tc/db";
 import { read, type Loaded } from "./customers-data.ts";
 
@@ -35,7 +36,6 @@ export interface ReconciliationQuery {
   readonly after: string | null;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CASE_STATUS = ["open", "closed"] as const;
 const SUPPORT_STATUS = ["open", "answered", "closed"] as const;
 const KINDS = ["orphan", "missing", "cost", "payment"] as const;
@@ -59,7 +59,7 @@ export function caseQueryOf(raw: Raw): CaseQuery {
         : (CASE_STATUS as readonly string[]).includes(status)
           ? (status as CaseStatus)
           : "open",
-    after: UUID.test(after) ? after : null,
+    after: isUuid(after) ? after : null,
   };
 }
 
@@ -75,7 +75,7 @@ export function supportQueryOf(raw: Raw): SupportQuery {
         : (SUPPORT_STATUS as readonly string[]).includes(status)
           ? (status as SupportStatus)
           : "open",
-    after: UUID.test(after) ? after : null,
+    after: isUuid(after) ? after : null,
   };
 }
 
@@ -91,7 +91,7 @@ export function reconciliationQueryOf(raw: Raw): ReconciliationQuery {
         : (STATES as readonly string[]).includes(status)
           ? (status as DiscrepancyState)
           : "open",
-    after: UUID.test(after) ? after : null,
+    after: isUuid(after) ? after : null,
   };
 }
 

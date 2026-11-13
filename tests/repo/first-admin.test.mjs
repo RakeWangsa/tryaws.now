@@ -32,8 +32,12 @@ describe("the secret FirstAdminSub", () => {
     expect(code("functions/migrator/config.ts")).toContain(
       'export const FIRST_ADMIN_SUB_SECRET = "FirstAdminSub";',
     );
+    // final review M3: the one constant of @tc/db/links
     expect(code("packages/db/repositories/system/first-admin.ts")).toContain(
-      'export const FIRST_ADMIN_NOT_CONFIGURED = "not-configured";',
+      "export const FIRST_ADMIN_NOT_CONFIGURED = NOT_CONFIGURED;",
+    );
+    expect(code("packages/db/links.ts")).toContain(
+      'export const NOT_CONFIGURED = "not-configured";',
     );
     // the same literal as the EPS placeholder of the owner script
     expect(read("scripts/golive/stage-secrets.sh")).toContain(

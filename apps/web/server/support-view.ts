@@ -1,4 +1,5 @@
 import type { CustomerSession } from "@tc/auth";
+import { isUuid } from "@tc/core";
 import { customerRepos, withTx } from "@tc/db";
 import type { CustomerSupportRequestRow, CustomerSupportThread } from "@tc/db";
 import { serverConfigOf } from "./servers-view.ts";
@@ -54,8 +55,6 @@ export async function loadSupportRequests(
   }));
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * WPU-Z6: /support/requests/[id], the request and its replies (oldest first, never an admin's name or id).
  * Null for a request of another customer, a missing one and an id that is not a UUID alike (R8): the page
@@ -65,7 +64,7 @@ export async function loadSupportThread(
   session: CustomerSession,
   requestId: string,
 ): Promise<CustomerSupportThread | null> {
-  if (!UUID.test(requestId)) return null;
+  if (!isUuid(requestId)) return null;
   return withTx(async (tx) => {
     const found = await customerRepos(tx, session.customerId).support.thread(requestId);
     return found.ok ? found.value : null;

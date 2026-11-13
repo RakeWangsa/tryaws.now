@@ -10,6 +10,7 @@ import {
 import { DOMAIN_YEARS } from "../domains/resolve";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
+import { isUuid } from "../validation/uuid";
 import { reverseTransaction } from "../ledger/reverse";
 import { firstMessage, type QueueMessage } from "../operations/queue";
 import type { Logger } from "../operations/types";
@@ -30,7 +31,6 @@ const DOMAIN_FAMILY = "domain";
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Plain positive decimal text with at most 4 decimals: the form of an awsPriceUsd (the adapter's rule). */
 const USD_TEXT = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,4})?$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A registry renewal that cannot be queued or reversed. The message is fixed text (R14). */
 export class DomainRenewalError extends Error {
@@ -97,7 +97,7 @@ export function readDomainRenewalPayload(
 ): { readonly subscriptionId: string; readonly periodStart: Date } | null {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
   const { subscriptionId, periodStart } = payload as Record<string, unknown>;
-  if (typeof subscriptionId !== "string" || !UUID.test(subscriptionId)) return null;
+  if (!isUuid(subscriptionId)) return null;
   const start = instantOf(periodStart);
   return start === null ? null : { subscriptionId, periodStart: start };
 }

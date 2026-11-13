@@ -1,4 +1,5 @@
 import type { CustomerSession } from "@tc/auth";
+import { isUuid } from "@tc/core";
 import { SUPPORT_MESSAGE_KEY, messageBody } from "@tc/db";
 import type { AuditRepo, CustomerLimit, RateLimitsRepo, SupportRepo } from "@tc/db";
 import { z } from "zod";
@@ -41,8 +42,7 @@ export const SUPPORT_CLOSE_LIMITS: readonly CustomerLimit[] = Object.freeze([
   Object.freeze({ action: "support.close", limit: 30, windowSeconds: 3600 }),
 ]);
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const requestIdField = z.unknown().refine((v) => typeof v === "string" && UUID.test(v));
+const requestIdField = z.unknown().refine(isUuid);
 
 // The shape of each form (R9: zod). The text rule (CRLF to LF, trimmed, 1 to 5000 characters, no control
 // or direction-override character) and the key rule are the repository's, so there is one source for each.

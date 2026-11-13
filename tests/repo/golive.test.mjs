@@ -17,6 +17,7 @@ import {
   ALL_SECRETS,
   DB_PASSWORD_SECRET,
   FIRST_ADMIN_SUB_SECRET,
+  OPTIONAL_SECRET_PLACEHOLDER,
 } from "../../infra/lib/functions.ts";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -449,10 +450,25 @@ describe("scripts/golive/stage-secrets.sh", () => {
 // ---- EPS placeholder (requirement 3) -------------------------------------------------------------------
 
 describe("the EPS placeholder is the same literal in the scripts and the code", () => {
-  it("apps/web and functions/payments-sweeper treat not-configured as no value", () => {
+  // Final review M3: one constant, NOT_CONFIGURED of @tc/db/links. The code imports it; infra and the
+  // owner script keep their literal, pinned here to equal it.
+  it("apps/web, functions/payments-sweeper and the migrator's decision use the one constant of @tc/db/links", async () => {
+    const { NOT_CONFIGURED } = await import("../../packages/db/links.ts");
+    expect(NOT_CONFIGURED).toBe("not-configured");
+    expect(read("packages/db/links.ts")).toContain(
+      'export const NOT_CONFIGURED = "not-configured";',
+    );
     for (const file of ["apps/web/server/secrets.ts", "functions/payments-sweeper/secrets.ts"]) {
-      expect(read(file), file).toContain('export const NOT_CONFIGURED = "not-configured";');
+      const text = read(file);
+      expect(text, file).toMatch(/import \{[^}]*\bNOT_CONFIGURED\b[^}]*\} from "@tc\/db\/links";/);
+      expect(text, file).not.toContain('"not-configured"');
     }
+    expect(read("packages/db/repositories/system/first-admin.ts")).not.toContain(
+      '"not-configured"',
+    );
+    // the literals that stay: infra (no workspace import there) and the shell script
+    expect(OPTIONAL_SECRET_PLACEHOLDER).toBe(NOT_CONFIGURED);
+    expect(read(STAGE_SECRETS)).toContain(`readonly PLACEHOLDER="${NOT_CONFIGURED}"`);
   });
 });
 
