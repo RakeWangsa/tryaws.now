@@ -3933,6 +3933,11 @@ TASKS["WPU-Y2"] = [
   repo,
 ];
 
+// WPU-X2 (owner round 5): the domain renewal rules (30 days before expiry, the refund when the registry
+// refuses) in the terms and the refund policy, en and bn, with LEGAL_VERSIONS moved to version 2. The text
+// waits for the owner's approval before merge.
+TASKS["WPU-X2"] = [specSync, baselineSync, lint, typecheck, format, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".
