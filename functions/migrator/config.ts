@@ -1,8 +1,14 @@
-// The configuration of the migrator, read from the environment of the Lambda. The master user comes
-// from the linked Postgres component (SST_RESOURCE_Postgres, a JSON object with host, port, username,
-// password, database) and the five role passwords from the linked secrets (SST_RESOURCE_<Name>, a JSON
-// object with `value`). Nothing is read from DATABASE_URL, and a failure has one fixed message that
-// holds no value (R3, R14, R16).
+import { secretValue, sstLinks, type LinkSource } from "@tc/db/links";
+
+// The configuration of the migrator, read from the environment of the Lambda and its links. The master
+// user comes from the linked Postgres component (host, port, username, password, database) and the
+// five role passwords from the linked secrets (`value`). Nothing is read from DATABASE_URL, and a
+// failure has one fixed message that holds no value (R3, R14, R16).
+//
+// WPU-Z15: at run time the links are read through the SST SDK. SST 4.17.2 hands a deployed function
+// its links only in an encrypted file (SST_KEY_FILE, SST_KEY), which the SDK's Resource decrypts; only
+// `sst dev` sets the variables SST_RESOURCE_<Name>. The links are read through @tc/db/links, the one
+// reader of linked values.
 
 export const MIGRATOR_ERROR = "migrator: the configuration is not valid";
 
@@ -29,23 +35,15 @@ type Env = Readonly<Record<string, string | undefined>>;
 const HOST = /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/;
 const NAME = /^[A-Za-z0-9_]{1,63}$/;
 
-function json(env: Env, name: string): Record<string, unknown> | undefined {
-  const raw = env[`SST_RESOURCE_${name}`];
-  if (typeof raw !== "string") return undefined;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
+function linked(links: LinkSource, name: string): Record<string, unknown> | undefined {
+  const link = links(name);
+  return typeof link === "object" && link !== null ? (link as Record<string, unknown>) : undefined;
 }
 
 const text = (v: unknown): string | undefined =>
   typeof v === "string" && v !== "" ? v : undefined;
 
-export function readMigratorConfig(env: Env): MigratorConfig {
+export function readMigratorConfig(env: Env, links: LinkSource = sstLinks): MigratorConfig {
   const fail = (): never => {
     throw new Error(MIGRATOR_ERROR);
   };
@@ -53,7 +51,7 @@ export function readMigratorConfig(env: Env): MigratorConfig {
   const sslmode = env.DB_SSLMODE ?? "verify-full";
   if (sslmode !== "require" && sslmode !== "verify-full") return fail();
 
-  const master = json(env, "Postgres");
+  const master = linked(links, "Postgres");
   const host = text(master?.host);
   const username = text(master?.username);
   const password = text(master?.password);
@@ -75,7 +73,7 @@ export function readMigratorConfig(env: Env): MigratorConfig {
 
   const rolePasswords = {} as Record<RoleName, string>;
   for (const [role, secret] of Object.entries(DB_PASSWORD_SECRETS) as [RoleName, string][]) {
-    const value = text(json(env, secret)?.value);
+    const value = secretValue(links(secret));
     if (value === undefined) return fail();
     rolePasswords[role] = value;
   }

@@ -2,7 +2,7 @@ import type { TemplateId } from "../queue/types";
 
 // The texts of the 22 messages, Bengali first. Two typed catalogs: a missing key is a type error,
 // and test/templates.test.ts checks every placeholder, the SMS length and the forbidden forms
-// (16.16: "AWS Lightsail"). Placeholders are plain `{name}`. Wording: MeghVPS sells, bills and
+// (16.16: "AWS Lightsail"). Placeholders are plain `{name}`. Wording: TryAWS.now sells, bills and
 // supports; AWS is named only in the footer statements of 16.13, which are used unchanged.
 
 export interface TemplateText {
@@ -36,11 +36,11 @@ const ADDRESS =
 
 export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
   bn: {
-    wordmark: "MeghVPS",
+    wordmark: "TryAWS.now",
     awsShort: "১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
     trademark: TRADEMARK,
     address: ADDRESS,
-    footerNote: "এই বার্তাটি আপনার MeghVPS অ্যাকাউন্টের জন্য পাঠানো হয়েছে।",
+    footerNote: "এই বার্তাটি আপনার TryAWS.now অ্যাকাউন্টের জন্য পাঠানো হয়েছে।",
     cta: {
       open_panel: "প্যানেল খুলুন",
       kyc: "KYC দেখুন",
@@ -78,11 +78,11 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
     },
   },
   en: {
-    wordmark: "MeghVPS",
+    wordmark: "TryAWS.now",
     awsShort: "100% AWS infrastructure. Built on Amazon Lightsail.",
     trademark: TRADEMARK,
     address: ADDRESS,
-    footerNote: "This message was sent for your MeghVPS account.",
+    footerNote: "This message was sent for your TryAWS.now account.",
     cta: {
       open_panel: "Open the panel",
       kyc: "View KYC",
@@ -134,7 +134,7 @@ const SECURITY_BN = (what: string, sms: string): TemplateText => ({
 
 export const BN: Catalog = {
   welcome: {
-    subject: "MeghVPS-এ স্বাগতম",
+    subject: "TryAWS.now-এ স্বাগতম",
     headline: "স্বাগতম",
     body: [
       "আপনার অ্যাকাউন্ট প্রস্তুত।",
@@ -150,7 +150,7 @@ export const BN: Catalog = {
     subject: "আপনার KYC অনুমোদিত হয়েছে",
     headline: "KYC অনুমোদিত",
     body: ["আপনার KYC যাচাই সম্পন্ন হয়েছে। এখন আপনি রিসোর্স কিনতে পারবেন।"],
-    sms: "MeghVPS: আপনার KYC অনুমোদিত হয়েছে। এখন রিসোর্স কিনতে পারবেন।",
+    sms: "TryAWS.now: আপনার KYC অনুমোদিত হয়েছে। এখন রিসোর্স কিনতে পারবেন।",
   },
   kyc_rejected: {
     subject: "আপনার KYC গ্রহণ করা যায়নি",
@@ -194,7 +194,7 @@ export const BN: Catalog = {
     subject: "আপনার {product} প্রস্তুত",
     headline: "রিসোর্স প্রস্তুত",
     body: ["{name} ({product}) প্রস্তুত।", "লোকেশন: {region}", "ঠিকানা: {address}"],
-    sms: "MeghVPS: আপনার {product} প্রস্তুত। ঠিকানা: {address}",
+    sms: "TryAWS.now: আপনার {product} প্রস্তুত। ঠিকানা: {address}",
   },
   renewal_reminder: {
     subject: "{days} দিন পর রিনিউ",
@@ -204,7 +204,7 @@ export const BN: Catalog = {
       "রিনিউয়ের পরিমাণ: {amount}। ওয়ালেট ব্যালেন্স: {balance}।",
       "{note}",
     ],
-    sms: "MeghVPS: {name} কাল ({date}) শেষ হচ্ছে। রিনিউ {amount}, ব্যালেন্স {balance}।",
+    sms: "TryAWS.now: {name} কাল ({date}) শেষ হচ্ছে। রিনিউ {amount}, ব্যালেন্স {balance}।",
     extra: {
       auto_on: "স্বয়ংক্রিয় রিনিউ চালু আছে। ওয়ালেটে যথেষ্ট টাকা রাখুন।",
       auto_off: "স্বয়ংক্রিয় রিনিউ বন্ধ আছে। মেয়াদের মধ্যে নিজে রিনিউ করুন।",
@@ -226,7 +226,7 @@ export const BN: Catalog = {
       "{until} পর্যন্ত রিনিউ করলে সব আগের মতো চলবে। এরপর রিসোর্স মুছে যাবে।",
       "রিনিউয়ের পরিমাণ: {amount}। ওয়ালেট ব্যালেন্স: {balance}।",
     ],
-    sms: "MeghVPS: {name} স্থগিত। {until} এর মধ্যে রিনিউ ({amount}) না করলে মুছে যাবে।",
+    sms: "TryAWS.now: {name} স্থগিত। {until} এর মধ্যে রিনিউ ({amount}) না করলে মুছে যাবে।",
   },
   resource_destroyed: {
     subject: "রিসোর্স মুছে গেছে, {kept} রাখা আছে",
@@ -235,7 +235,7 @@ export const BN: Catalog = {
       "{name} মুছে ফেলা হয়েছে। আপনার {kept} {until} পর্যন্ত রাখা হবে।",
       "এর মধ্যে রিস্টোর করতে পারবেন।",
     ],
-    sms: "MeghVPS: {name} মুছে গেছে। {kept} {until} পর্যন্ত রিস্টোর করতে পারবেন।",
+    sms: "TryAWS.now: {name} মুছে গেছে। {kept} {until} পর্যন্ত রিস্টোর করতে পারবেন।",
     extra: { backup: "ব্যাকআপ", settings: "সেটিং" },
   },
   backups_purged: {
@@ -262,23 +262,23 @@ export const BN: Catalog = {
   },
   security_new_sign_in: SECURITY_BN(
     "নতুন সাইন-ইন",
-    "MeghVPS: আপনার অ্যাকাউন্টে নতুন সাইন-ইন হয়েছে। আপনি না হলে এখনই পাসওয়ার্ড বদলান।",
+    "TryAWS.now: আপনার অ্যাকাউন্টে নতুন সাইন-ইন হয়েছে। আপনি না হলে এখনই পাসওয়ার্ড বদলান।",
   ),
   security_password_changed: SECURITY_BN(
     "পাসওয়ার্ড পরিবর্তন",
-    "MeghVPS: আপনার পাসওয়ার্ড বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
+    "TryAWS.now: আপনার পাসওয়ার্ড বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
   security_totp_changed: SECURITY_BN(
     "TOTP সেটিং পরিবর্তন",
-    "MeghVPS: আপনার TOTP সেটিং বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
+    "TryAWS.now: আপনার TOTP সেটিং বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
   security_email_changed: SECURITY_BN(
     "ইমেইল ঠিকানা পরিবর্তন",
-    "MeghVPS: আপনার ইমেইল ঠিকানা বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
+    "TryAWS.now: আপনার ইমেইল ঠিকানা বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
   security_phone_changed: SECURITY_BN(
     "ফোন নম্বর পরিবর্তন",
-    "MeghVPS: আপনার ফোন নম্বর বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
+    "TryAWS.now: আপনার ফোন নম্বর বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
   domain_contact_pending: {
     subject: "ডোমেইন {domain}: যোগাযোগ যাচাই বাকি",
@@ -295,13 +295,13 @@ export const BN: Catalog = {
       "{domain} এর মেয়াদ {date} তারিখে শেষ হবে ({days} দিন বাকি)।",
       "রিনিউ না করলে ডোমেইনটি হারাতে পারেন।",
     ],
-    sms: "MeghVPS: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। রিনিউ করুন।",
+    sms: "TryAWS.now: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। রিনিউ করুন।",
   },
   support_reply: {
     subject: "আপনার সাপোর্ট অনুরোধের উত্তর",
     headline: "সাপোর্টের উত্তর",
     body: [
-      "MeghVPS সাপোর্ট আপনার অনুরোধের উত্তর দিয়েছে:",
+      "TryAWS.now সাপোর্ট আপনার অনুরোধের উত্তর দিয়েছে:",
       "{message}",
       "আরও সাহায্য লাগলে প্যানেলের সাপোর্ট পেজে জানান।",
     ],
@@ -391,7 +391,7 @@ const SECURITY_EN = (what: string, subject: string, sms: string): TemplateText =
 
 export const EN: Catalog = {
   welcome: {
-    subject: "Welcome to MeghVPS",
+    subject: "Welcome to TryAWS.now",
     headline: "Welcome",
     body: [
       "Your account is ready.",
@@ -407,7 +407,7 @@ export const EN: Catalog = {
     subject: "Your KYC is approved",
     headline: "KYC approved",
     body: ["Your KYC check is complete. You can now buy resources."],
-    sms: "MeghVPS: your KYC is approved. You can now buy resources.",
+    sms: "TryAWS.now: your KYC is approved. You can now buy resources.",
   },
   kyc_rejected: {
     subject: "Your KYC could not be accepted",
@@ -451,7 +451,7 @@ export const EN: Catalog = {
     subject: "Your {product} is ready",
     headline: "Resource ready",
     body: ["{name} ({product}) is ready.", "Location: {region}", "Address: {address}"],
-    sms: "MeghVPS: your {product} is ready. Address: {address}",
+    sms: "TryAWS.now: your {product} is ready. Address: {address}",
   },
   renewal_reminder: {
     subject: "Renews in {days} days",
@@ -461,7 +461,7 @@ export const EN: Catalog = {
       "Renewal amount: {amount}. Wallet balance: {balance}.",
       "{note}",
     ],
-    sms: "MeghVPS: {name} ends tomorrow ({date}). Renewal {amount}, balance {balance}.",
+    sms: "TryAWS.now: {name} ends tomorrow ({date}). Renewal {amount}, balance {balance}.",
     extra: {
       auto_on: "Automatic renewal is on. Keep enough money in your wallet.",
       auto_off: "Automatic renewal is off. Renew yourself before it ends.",
@@ -483,7 +483,7 @@ export const EN: Catalog = {
       "Renew by {until} and everything runs as before. After that the resource is deleted.",
       "Renewal amount: {amount}. Wallet balance: {balance}.",
     ],
-    sms: "MeghVPS: {name} is suspended. Renew ({amount}) by {until} or it is deleted.",
+    sms: "TryAWS.now: {name} is suspended. Renew ({amount}) by {until} or it is deleted.",
   },
   resource_destroyed: {
     subject: "Resource deleted, {kept} kept",
@@ -492,7 +492,7 @@ export const EN: Catalog = {
       "{name} was deleted. Your {kept} is kept until {until}.",
       "You can restore it until then.",
     ],
-    sms: "MeghVPS: {name} was deleted. You can restore the {kept} until {until}.",
+    sms: "TryAWS.now: {name} was deleted. You can restore the {kept} until {until}.",
     extra: { backup: "backup", settings: "settings" },
   },
   backups_purged: {
@@ -520,27 +520,27 @@ export const EN: Catalog = {
   security_new_sign_in: SECURITY_EN(
     "A new sign-in to your account was seen",
     "new sign-in",
-    "MeghVPS: a new sign-in to your account. If it was not you, change your password now.",
+    "TryAWS.now: a new sign-in to your account. If it was not you, change your password now.",
   ),
   security_password_changed: SECURITY_EN(
     "Your password was changed",
     "password changed",
-    "MeghVPS: your password was changed. If it was not you, tell support now.",
+    "TryAWS.now: your password was changed. If it was not you, tell support now.",
   ),
   security_totp_changed: SECURITY_EN(
     "Your TOTP setting was changed",
     "TOTP changed",
-    "MeghVPS: your TOTP setting was changed. If it was not you, tell support now.",
+    "TryAWS.now: your TOTP setting was changed. If it was not you, tell support now.",
   ),
   security_email_changed: SECURITY_EN(
     "Your email address was changed",
     "email changed",
-    "MeghVPS: your email address was changed. If it was not you, tell support now.",
+    "TryAWS.now: your email address was changed. If it was not you, tell support now.",
   ),
   security_phone_changed: SECURITY_EN(
     "Your phone number was changed",
     "phone changed",
-    "MeghVPS: your phone number was changed. If it was not you, tell support now.",
+    "TryAWS.now: your phone number was changed. If it was not you, tell support now.",
   ),
   domain_contact_pending: {
     subject: "Domain {domain}: contact verification pending",
@@ -557,13 +557,13 @@ export const EN: Catalog = {
       "{domain} ends on {date} ({days} days left).",
       "If you do not renew, you can lose the domain.",
     ],
-    sms: "MeghVPS: {domain} ends in {days} days ({date}). Renew it.",
+    sms: "TryAWS.now: {domain} ends in {days} days ({date}). Renew it.",
   },
   support_reply: {
     subject: "Reply to your support request",
     headline: "Reply from support",
     body: [
-      "MeghVPS support has answered your request:",
+      "TryAWS.now support has answered your request:",
       "{message}",
       "If you need more help, tell us on the support page of the panel.",
     ],

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InMemoryEmailProvider, SesEmailProvider, type SesTransport } from "../email/provider";
 import { GatewaySmsProvider, type SmsTransport } from "../sms/gateway";
+import { SMS_FAILURE_DETAILS, isSmsFailureDetail } from "../sms/provider";
 
 const MSG = {
   to: "rahim.uddin@example.test",
@@ -15,7 +16,7 @@ describe("SesEmailProvider", () => {
   const make = (send: SesTransport["send"], timeoutMs?: number) =>
     new SesEmailProvider({
       transport: { send },
-      from: "MeghVPS <no-reply@ticoncloud.test>",
+      from: "TryAWS.now <no-reply@ticoncloud.test>",
       timeoutMs,
     });
 
@@ -24,7 +25,7 @@ describe("SesEmailProvider", () => {
     const r = await make(send).send(MSG);
     expect(r).toEqual({ ok: true, messageId: "ses-1" });
     expect(send).toHaveBeenCalledWith({
-      from: "MeghVPS <no-reply@ticoncloud.test>",
+      from: "TryAWS.now <no-reply@ticoncloud.test>",
       to: MSG.to,
       subject: MSG.subject,
       html: MSG.html,
@@ -143,5 +144,72 @@ describe("GatewaySmsProvider", () => {
     const p = make(() => new Promise(() => {}), 50).send("+8801712345678", "x");
     await vi.advanceTimersByTimeAsync(60);
     await expect(p).resolves.toEqual({ ok: false, reason: "unavailable" });
+  });
+
+  it("passes the transport's reason word on as `detail`, and leaves out anything that is not one of the fixed words (WPU-Z17, R14)", async () => {
+    const answer = (result: unknown) =>
+      make(vi.fn().mockResolvedValue(result)).send("+8801712345678", "x");
+    expect(await answer({ status: "refused", detail: "invalid_number" })).toStrictEqual({
+      ok: false,
+      reason: "rejected",
+      detail: "invalid_number",
+    });
+    for (const detail of SMS_FAILURE_DETAILS) {
+      expect(await answer({ status: "failed", detail }), detail).toStrictEqual({
+        ok: false,
+        reason: "unavailable",
+        detail,
+      });
+    }
+    // anything else may hold the number or the text: the field is left out
+    for (const detail of [
+      "+8801712345678",
+      "Invalid MSISDN 8801712345678",
+      "TOKEN",
+      "",
+      42,
+      null,
+    ]) {
+      expect(await answer({ status: "failed", detail }), String(detail)).toStrictEqual({
+        ok: false,
+        reason: "unavailable",
+      });
+      expect(await answer({ status: "refused", detail }), String(detail)).toStrictEqual({
+        ok: false,
+        reason: "rejected",
+      });
+    }
+  });
+});
+
+describe("the reason words of the SMS port (WPU-Z17)", () => {
+  it("are exactly seven fixed words, and nothing else is one of them", () => {
+    expect(SMS_FAILURE_DETAILS).toEqual([
+      "token",
+      "sender",
+      "ip_not_whitelisted",
+      "duplicate",
+      "rate_limited",
+      "invalid_number",
+      "unknown",
+    ]);
+    for (const word of SMS_FAILURE_DETAILS) expect(isSmsFailureDetail(word), word).toBe(true);
+    for (const value of [
+      "",
+      "TOKEN",
+      "token ",
+      "invalid number",
+      "+8801712345678",
+      "rejected",
+      "unavailable",
+      "toString",
+      42,
+      null,
+      undefined,
+      {},
+      ["token"],
+    ]) {
+      expect(isSmsFailureDetail(value), JSON.stringify(value)).toBe(false);
+    }
   });
 });

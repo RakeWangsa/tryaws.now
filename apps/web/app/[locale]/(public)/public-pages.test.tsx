@@ -344,12 +344,14 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
         expect(main, where).toContain(escape(t.version));
         expect(main, where).not.toMatch(/\[legal text[^\]]*pending\]|\[আইনি লেখা[^\]]*বাকি\]/i);
         // Every title and paragraph of the messages is on the page, in their order, with the
-        // provider's name and address filled in from the footer messages.
+        // provider's name and address filled in from the footer messages, and the brand from the
+        // shell's brand (WPU-Z8).
         const tree = (t.docs as unknown as Record<string, LegalTree>)[doc]!;
         const fill = (text: string): string =>
           text
             .replace(/\{company\}/g, leaf(locale, "Shell.footer.companyName"))
-            .replace(/\{address\}/g, leaf(locale, "Shell.footer.address"));
+            .replace(/\{address\}/g, leaf(locale, "Shell.footer.address"))
+            .replace(/\{brand\}/g, leaf(locale, "Shell.brand"));
         let from = 0;
         for (const [key, section] of Object.entries(tree.sections)) {
           for (const [part, text] of Object.entries(section)) {
@@ -358,7 +360,8 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
             from = at + 1;
           }
         }
-        expect(main, where).not.toMatch(/\{(?:company|address)\}/);
+        expect(main, where).not.toMatch(/\{(?:company|address|brand)\}/);
+        expect(main, `${where}: the brand`).toContain(leaf(locale, "Shell.brand"));
         // One heading per section, under the h2 of the document.
         expect(count(main, /<h3[\s>]/g), where).toBe(Object.keys(tree.sections).length);
         expect(page).toContain('aria-current="page"');

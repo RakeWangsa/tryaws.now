@@ -3,9 +3,9 @@
 export const bn = {
   Shell: {
     skip: "মূল অংশে যান",
-    brand: "MeghVPS",
-    logoAlt: "MeghVPS",
-    homeLabel: "MeghVPS হোম",
+    brand: "TryAWS.now",
+    logoAlt: "TryAWS.now",
+    homeLabel: "TryAWS.now হোম",
     menu: "মেনু",
     close: "বন্ধ করুন",
     public: {
@@ -27,7 +27,7 @@ export const bn = {
       payments: "পেমেন্ট",
       help: "সহায়তা কেন্দ্র",
       contact: "সাপোর্ট অনুরোধ",
-      terms: "ব্যবহারের শর্ত",
+      terms: "সেবার শর্তাবলি",
       privacy: "গোপনীয়তা নীতি",
       companyName: "TiCON System Limited",
       address: "Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230",
@@ -90,7 +90,7 @@ export const bn = {
   },
   Aws: {
     short: "১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
-    long: "এখানে কেনা প্রতিটি সার্ভার, ডেটাবেস ও স্টোরেজ একটি Amazon Lightsail resource, যা Singapore বা Mumbai AWS Region থেকে চলে। বিক্রি, বিল ও সাপোর্ট MeghVPS দেয়। সবকিছু এই প্যানেল থেকেই চালানো যায়, আলাদা AWS account লাগে না।",
+    long: "এখানে কেনা প্রতিটি সার্ভার, ডেটাবেস ও স্টোরেজ একটি Amazon Lightsail resource, যা Singapore বা Mumbai AWS Region থেকে চলে। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়। সবকিছু এই প্যানেল থেকেই চালানো যায়, আলাদা AWS account লাগে না।",
     trademark:
       "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.",
   },

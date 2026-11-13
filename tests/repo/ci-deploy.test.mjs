@@ -43,9 +43,15 @@ const stepsOf = (job) => job.steps ?? [];
 const runText = (step) => (typeof step.run === "string" ? step.run : "");
 
 describe("every file under .github", () => {
-  it("has the three deploy files and the CI file", () => {
+  // WPU-Z10: remove-staging.yml ends a staging test session (tests/repo/remove-staging.test.mjs).
+  it("has the deploy files, the staging removal and the CI file", () => {
     const names = workflowFiles.map((f) => f.split("/").pop()).sort();
-    expect(names).toEqual(["ci.yml", "deploy-production.yml", "deploy-staging.yml"]);
+    expect(names).toEqual([
+      "ci.yml",
+      "deploy-production.yml",
+      "deploy-staging.yml",
+      "remove-staging.yml",
+    ]);
   });
   it("holds no static AWS key and no AWS secret reference (R3)", () => {
     for (const file of githubFiles) {

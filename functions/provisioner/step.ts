@@ -162,7 +162,9 @@ const refusal = (code: Exclude<LocalFailure, "lease_expired">, attempts: number)
   decision: decideRefusal(code, attempts),
 });
 
-// R14: only the code of an AwsError is kept; the text of any other error is dropped.
+// R14: only the code of an AwsError is kept; the text of any other error is dropped. Whether AWS may have acted
+// is carried as the error says it (WPU-Z13 review round 2: a domain renewal is refunded at `submit` only when
+// nothing was sent); any other error may have come after a call that acted, so it counts as acted (R16).
 function factsOf(error: unknown): FailureFacts {
   if (error instanceof AwsError) {
     return {
@@ -170,9 +172,16 @@ function factsOf(error: unknown): FailureFacts {
       retryable: error.retryable,
       poolFull: error.poolFull,
       awsErrorName: error.awsErrorName,
+      mayHaveActed: error.mayHaveActed,
     };
   }
-  return { code: "internal", retryable: true, poolFull: false, awsErrorName: null };
+  return {
+    code: "internal",
+    retryable: true,
+    poolFull: false,
+    awsErrorName: null,
+    mayHaveActed: true,
+  };
 }
 
 // WPU-B5 item 22 (JOURNEY T7-3, section 11): an admin suspension carries `adminSuspended: true` in its
@@ -224,11 +233,15 @@ async function plan(
   } catch (error) {
     const decision = decideFailure({
       kind: operation.kind as HookEvent["kind"],
+      // WPU-Z13: a domain renewal the registry may hold (any step but null) is refunded only when the failure proves
+      // nothing was sent (step submit: the first run there and no may-have-acted error) or on the registry's refusal.
+      step: operation.step,
       attempts: operation.attempts,
+      lastError: operation.lastError,
       now: deps.clock.now(),
       facts: factsOf(error),
     });
-    // R16: a create reaches failed only when the hook that reverses the money is installed.
+    // R16: a create or a domain renewal reaches failed only when the hook that reverses the money is installed.
     if (decision.to === "failed" && deps.hooks?.failed === undefined) {
       return refusal("failed_hook_missing", decision.attempts);
     }

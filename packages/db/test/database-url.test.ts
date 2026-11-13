@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { databaseUrl, databaseUrlFromEnv, DATABASE_URL_ERROR, LOCAL_DATABASE_URL } from "../env";
+import { envLinks } from "../links";
 
 // A password that URL syntax would break, and that must never appear in an error.
 const PASSWORD = "p@ss:w/ord#1?x";
@@ -13,6 +14,9 @@ const deployed = (over: Record<string, string | undefined> = {}) => ({
   SST_RESOURCE_DbPasswordWorkerRw: JSON.stringify({ value: PASSWORD }),
   ...over,
 });
+// The links of these tests come from the SST_RESOURCE_<Name> variables of the environment object
+// (envLinks); the run-time path through the SST SDK is database-url-sst.test.ts (WPU-Z15).
+const fromEnv = (env: Record<string, string | undefined>) => databaseUrlFromEnv(env, envLinks(env));
 
 it("uses DATABASE_URL as it is when it is set (local and test)", () => {
   const url = "postgres://u:p@127.0.0.1:5432/x";
@@ -20,7 +24,7 @@ it("uses DATABASE_URL as it is when it is set (local and test)", () => {
 });
 
 it("builds the URL from the parts and the linked secret, with sslmode verify-full by default", () => {
-  const url = new URL(databaseUrlFromEnv(deployed()));
+  const url = new URL(fromEnv(deployed()));
   expect(url.protocol).toBe("postgres:");
   expect(url.hostname).toBe("proxy.example.test");
   expect(url.port).toBe("5432");
@@ -31,14 +35,12 @@ it("builds the URL from the parts and the linked secret, with sslmode verify-ful
 });
 
 it("accepts sslmode require and verify-full, nothing weaker", () => {
-  expect(new URL(databaseUrlFromEnv(deployed({ DB_SSLMODE: "require" }))).search).toBe(
-    "?sslmode=require",
-  );
-  expect(new URL(databaseUrlFromEnv(deployed({ DB_SSLMODE: "verify-full" }))).search).toBe(
+  expect(new URL(fromEnv(deployed({ DB_SSLMODE: "require" }))).search).toBe("?sslmode=require");
+  expect(new URL(fromEnv(deployed({ DB_SSLMODE: "verify-full" }))).search).toBe(
     "?sslmode=verify-full",
   );
   for (const mode of ["disable", "allow", "prefer", "verify-ca", "", "REQUIRE", "no-verify"]) {
-    expect(() => databaseUrlFromEnv(deployed({ DB_SSLMODE: mode }))).toThrow(DATABASE_URL_ERROR);
+    expect(() => fromEnv(deployed({ DB_SSLMODE: mode }))).toThrow(DATABASE_URL_ERROR);
   }
 });
 
@@ -67,7 +69,7 @@ it("fails closed with one fixed message, without a value, when anything is missi
   for (const over of bad) {
     let message = "";
     try {
-      databaseUrlFromEnv(deployed(over));
+      fromEnv(deployed(over));
     } catch (error) {
       message = error instanceof Error ? error.message : "";
     }
@@ -78,7 +80,7 @@ it("fails closed with one fixed message, without a value, when anything is missi
 
 it("an unparsable secret does not leak into the error (no cause)", () => {
   try {
-    databaseUrlFromEnv(deployed({ SST_RESOURCE_DbPasswordWorkerRw: `{"value":"${PASSWORD}` }));
+    fromEnv(deployed({ SST_RESOURCE_DbPasswordWorkerRw: `{"value":"${PASSWORD}` }));
     expect.unreachable();
   } catch (error) {
     expect((error as Error).message).toBe(DATABASE_URL_ERROR);
@@ -92,6 +94,6 @@ it("databaseUrl: falls back to the local URL only outside a deployed stage", () 
   expect(databaseUrl({ DATABASE_URL: "" })).toBe(LOCAL_DATABASE_URL);
   expect(() => databaseUrl({ TC_STAGE: "staging" })).toThrow(DATABASE_URL_ERROR);
   expect(() => databaseUrl({ TC_STAGE: "production" })).toThrow(DATABASE_URL_ERROR);
-  expect(databaseUrl(deployed())).toContain("worker_rw:");
+  expect(databaseUrl(deployed(), envLinks(deployed()))).toContain("worker_rw:");
   expect(databaseUrl({ DATABASE_URL: "postgres://a:b@h/d" })).toBe("postgres://a:b@h/d");
 });

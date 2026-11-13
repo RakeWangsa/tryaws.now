@@ -10,13 +10,13 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
     sections: {
       provider: {
         title: "1. Who provides the service",
-        p1: "MeghVPS is a brand of {company}, {address}. In these terms, “MeghVPS”, “we” and “us” mean {company}.",
-        p2: "These terms apply to your MeghVPS account and to every resource you buy. You accept them, together with the acceptable use policy and the privacy policy, when you open your account, and we record the version you accepted.",
+        p1: "{brand} is a brand of {company}, {address}. In these terms, “{brand}”, “we” and “us” mean {company}.",
+        p2: "These terms apply to your {brand} account and to every resource you buy. You accept them, together with the acceptable use policy and the privacy policy, when you open your account, and we record the version you accepted.",
       },
       service: {
         title: "2. The service",
-        p1: "MeghVPS is a prepaid, self-service cloud panel. Every server, database, disk, bucket, load balancer and container service you buy is an Amazon Lightsail resource in the AWS Region you choose. CDN, DNS and domains use Amazon Lightsail CDN and Amazon Route 53, which are global AWS services.",
-        p2: "You do not get an AWS account, the AWS console or access to the AWS API. You manage your resources in the MeghVPS panel. MeghVPS sells, bills and supports the service.",
+        p1: "{brand} is a prepaid, self-service cloud panel. Every server, database, disk, bucket, load balancer and container service you buy is an Amazon Lightsail resource in the AWS Region you choose. CDN, DNS and domains use Amazon Lightsail CDN distributions and Amazon Route 53, which are global AWS services.",
+        p2: "You do not get an AWS account, the AWS console or access to the AWS API. You manage your resources in the {brand} panel. {brand} sells, bills and supports the service.",
         p3: "We open products step by step. A product that is not open yet cannot be bought; its page says so.",
       },
       account: {
@@ -32,7 +32,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       wallet: {
         title: "5. Wallet and payments",
-        p1: "MeghVPS is prepaid. You add money to your wallet in taka (BDT) through EPS, and every purchase, renewal and charge by use is paid from the wallet. There is no credit and no bill to pay later.",
+        p1: "{brand} is prepaid. You add money to your wallet in taka (BDT) through EPS, and every purchase, renewal and charge by use is paid from the wallet. There is no credit and no bill to pay later.",
         p2: "We add a top-up to your wallet only after EPS has confirmed the same payment and the same amount to us directly. The smallest and the largest top-up amounts are shown when you top up.",
         p3: "If EPS reports a payment as successful but the amount does not match, we do not add it to your wallet. Our finance staff check it, and the panel shows the payment as pending with a note to contact support.",
         p4: "For a top-up you get a payment receipt. A tax invoice is issued for each purchase and each renewal.",
@@ -40,7 +40,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       prices: {
         title: "6. Prices and checkout",
         p1: "Our price list is in US dollars (USD), for 30 days. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%. Your invoice shows each tax and fee on its own line.",
-        p2: "When you buy, we convert the price to taka with the exchange rate of the day that MeghVPS sets. Before you confirm, the checkout shows the amount in taka and the rate used, with the date the rate was set. Your wallet is charged exactly the amount shown.",
+        p2: "When you buy, we convert the price to taka with the exchange rate of the day that {brand} sets. Before you confirm, the checkout shows the amount in taka and the rate used, with the date the rate was set. Your wallet is charged exactly the amount shown.",
         p3: "If the price or the rate changes before you confirm, the checkout shows the new amount and asks you again. A later change of a price or a rate never changes an order you have placed or a period you have paid for.",
         p4: "In the panel every amount is in taka.",
       },
@@ -66,8 +66,8 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       usage: {
         title: "10. Charges by use and unpaid charges",
-        p1: "Some items are charged by use, day by day, from your wallet, for example the storage of the backups you keep.",
-        p2: "Each plan includes an amount of data transfer for its period, which can differ by location. We tell you when 80% and when 100% of it is used. [To be decided: how data transfer above the included amount is handled and charged.]",
+        p1: "Some items are charged by use from your wallet, for example the storage of the backups you keep, by the day, and a static IP that is not attached to a server, by the hour after the first hour.",
+        p2: "Each plan includes an amount of data transfer for its period, which can differ by location. We tell you when 80% and when 100% of it is used. [To be decided: the handling of data transfer above the included amount is not available yet. The rule planned for it: above 100%, 50 GB packs are bought from your wallet if you have switched this on; otherwise the public ports of the resource are closed until the next period.]",
         p3: "If a charge by use cannot be taken from your wallet, we try again every day. If it is still unpaid after 1 day, the resource is suspended. While the charge is unpaid we email you every day, with the days left before the deletion.",
         p4: "After 7 days unpaid we request the deletion of the resource. Where the product has backups, a final backup is made before anything is deleted. If you top up before the deletion, the charge is taken and the resource starts again.",
       },
@@ -106,8 +106,8 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
     sections: {
       scope: {
         title: "1. Why these rules apply",
-        p1: "These rules apply to everything you run, store or send with a MeghVPS resource.",
-        p2: "You use these resources as an end user of AWS services, so the AWS rules for end users bind you too. The rules below pass them on, together with the rules of MeghVPS.",
+        p1: "These rules apply to everything you run, store or send with a {brand} resource.",
+        p2: "You use these resources as an end user of AWS services, so the AWS rules for end users bind you too. The rules below pass them on, together with the rules of {brand}.",
       },
       aws: {
         title: "2. The AWS Acceptable Use Policy",
@@ -123,7 +123,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       cdn: {
         title: "5. Limits of the CDN",
-        p1: "Do not use the CDN for video streaming or for a very high number of requests (Amazon Lightsail FAQ).",
+        p1: "Do not use the CDN for a workload with a high number of requests per second or a large amount of video streaming (Amazon Lightsail FAQ).",
       },
       email: {
         title: "6. Sending email",
@@ -136,11 +136,11 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       report: {
         title: "8. Reporting abuse",
-        p1: "To report abuse of a MeghVPS resource, use the form on the support page and choose “Report abuse”.",
+        p1: "To report abuse of a {brand} resource, use the form on the support page and choose “Report abuse”.",
       },
       more: {
         title: "9. Other rules",
-        p1: "[To be decided: rules of MeghVPS beyond the AWS rules above, and what happens to an account after repeated breaches.]",
+        p1: "[To be decided: rules of {brand} beyond the AWS rules above, and what happens to an account after repeated breaches.]",
       },
     },
   },
@@ -149,13 +149,13 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
     sections: {
       controller: {
         title: "1. Who is responsible",
-        p1: "{company}, {address}, is responsible for the personal data that MeghVPS processes.",
+        p1: "{company}, {address}, is responsible for the personal data that {brand} processes.",
       },
       collect: {
         title: "2. What we collect",
         p1: "Account: your full name, email address, Bangladesh mobile number, password and account type, and the company name of a business.",
         p2: "Identity check: the identity details you give and the identity document you upload.",
-        p3: "Payments and billing: your top-ups and their payment references, your orders, wallet entries, invoices, receipts and credit notes, and the billing details you choose to give for your invoices (the name and address on the invoice, and the BIN of a VAT-registered business). You enter your payment details on the payment page of EPS, not on MeghVPS.",
+        p3: "Payments and billing: your top-ups and their payment references, your orders, wallet entries, invoices, receipts and credit notes, and the billing details you choose to give for your invoices (the name and address on the invoice, and the BIN of a VAT-registered business). You enter your payment details on the payment page of EPS, not on {brand}.",
         p4: "Your resources: their settings, their state, the actions you start and the usage we measure for billing, such as data transfer.",
         p5: "Support and notices: what you write in support requests and in the support form, and the email address you leave to hear when a product opens.",
         p6: "Security: the IP address of your requests, which we use to limit repeated attempts, and the sign-in events we need to warn you about a new sign-in.",
@@ -175,7 +175,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       share: {
         title: "5. Who receives your data",
-        p1: "AWS runs the infrastructure on which MeghVPS and your resources run. EPS processes your payments. Our email and SMS providers deliver the messages we send you.",
+        p1: "AWS runs the infrastructure on which {brand} and your resources run. EPS processes your payments. Our email and SMS providers deliver the messages we send you.",
         p2: "Our staff see your data in their work: support, the identity check, finance and operations.",
         p3: "[To be decided: whether and when we give data to authorities, and any other recipients.]",
       },
@@ -195,8 +195,8 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       rights: {
         title: "9. Your rights and how to reach us",
-        p1: "You can see and change your profile and your billing details in the panel. To ask for a copy of your data, a correction or the deletion of your data, open a support request; without an account, use the form on the support page.",
-        p2: "[To be decided: the data protection rights that apply by law, and how fast we answer a request.]",
+        p1: "You can see and change your profile and your billing details in the panel.",
+        p2: "[To be decided: the data protection rights that apply by law; how you ask for a copy of your data, a correction or the deletion of your data (proposed: a support request in the panel, or the form on the support page without an account); and how fast we answer a request.]",
       },
     },
   },
@@ -205,7 +205,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
     sections: {
       wallet: {
         title: "1. Your wallet",
-        p1: "MeghVPS is prepaid. The money you add is kept in your wallet in taka (BDT), and purchases, renewals and charges by use are paid from the wallet.",
+        p1: "{brand} is prepaid. The money you add is kept in your wallet in taka (BDT), and purchases, renewals and charges by use are paid from the wallet.",
         p2: "Refunds and credit notes are in taka, like the wallet and the invoices.",
       },
       failed: {

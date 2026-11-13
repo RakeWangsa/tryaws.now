@@ -2,10 +2,14 @@ import { inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SmsTransportResult } from "../sms/gateway";
 import { GENNET_SEND_URL, GennetSmsTransport, csmsIdFor } from "../sms/gennet";
+import { SMS_FAILURE_DETAILS, type SmsFailureDetail } from "../sms/provider";
 
 // WPU-Z3: the Gennet transport (ISMS API v3) over an injected fetch. No network call is made. The
 // token and the sender id are obviously fake (R3); the answers follow the public ISMS Plus v3 format of
 // SSL Wireless, which the Gennet API is believed to share (VERIFY, docs/runbooks/sms-gateway.md).
+// WPU-Z17: the answer is read by its status code, and every failure carries a fixed reason word. The
+// second answer shape (status_meaning, description) is the one of the test fixtures of a third-party
+// Gennet SDK (docs/analysis/gennet-isms-api-2026-11-13.md).
 const TOKEN = "fake-gennet-token-for-unit-tests";
 const SENDER = "FAKESENDERID";
 const TO = "+8801712345678";
@@ -62,6 +66,24 @@ const failure = (code: number | string | null, message: string) => ({
   ...(code === null ? {} : { status_code: code }),
   error_message: message,
 });
+// The second answer shape: status_meaning and description instead of error_message, and no smsinfo.
+const failureByMeaning = (code: number | string | null, meaning: string, description = "") => ({
+  status: "FAILED",
+  ...(code === null ? {} : { status_code: code }),
+  status_meaning: meaning,
+  description,
+});
+// A FAILED answer whose one smsinfo item has this sms_status.
+const failureWithItem = (code: number | string | null, smsStatus: string, message = "") => ({
+  status: "FAILED",
+  ...(code === null ? {} : { status_code: code }),
+  error_message: "",
+  smsinfo: [item({ sms_status: smsStatus, status_message: message, sms_body: undefined })],
+});
+
+// The two outcomes of an answer that is not a success (WPU-Z17).
+const failed = (detail: SmsFailureDetail) => ({ status: "failed", detail });
+const REFUSED = { status: "refused", detail: "invalid_number" };
 
 const sendWith = async (answer: Answer | Error, reference?: string) => {
   const { transport } = make(answer);
@@ -125,11 +147,10 @@ describe("GennetSmsTransport: the request", () => {
       "+8801712 345678",
       "",
     ]) {
-      expect(await transport.send({ to, text: TEXT }), JSON.stringify(to)).toEqual({
-        status: "refused",
-      });
+      expect(await transport.send({ to, text: TEXT }), JSON.stringify(to)).toEqual(REFUSED);
     }
-    expect(await transport.send({ to: TO, text: "" })).toEqual({ status: "refused" });
+    // an empty text has no reason word (GatewaySmsProvider refuses it before the transport)
+    expect(await transport.send({ to: TO, text: "" })).toStrictEqual({ status: "refused" });
     expect(mock).not.toHaveBeenCalled();
   });
 
@@ -214,61 +235,7 @@ describe("GennetSmsTransport: the answer, fail closed", () => {
     }
   });
 
-  it.each([
-    [4001, "Unauthorized"],
-    [4002, "SID Not Permitted"],
-    [4003, "IP Blacklisted"],
-    [4004, "Invalid Request Format"],
-    [4005, "End Point Not Found"],
-    [4020, "Invalid CSMS ID"],
-    [4022, "Required Parameter Missing"],
-    [4023, "Duplicate CMS ID"],
-    [4024, "Duplicate MSISDN"],
-    [4026, "Blocked MSISDN"],
-    [4028, "Invalid Message Data"],
-    [4029, "Too Many Requests"],
-    [4030, "Limit Exceed"],
-    [4031, "TPS Exceeded"],
-    [4033, "Too Many OTP Requests"],
-    [4034, "Unable to Decrypt SMS"],
-    [4035, "Client Signature Mismatch"],
-    [5000, "Internal Error"],
-    ["4001", "Unauthorized"],
-    [null, "Invalid API token"],
-    [null, "Invalid sender ID"],
-    [null, "Your IP is not whitelisted"],
-    [null, "Insufficient balance"],
-    [null, "SMS limit exceeded"],
-    [null, "Invalid SMS signature"],
-    [null, "Duplicated CSMS ID for this message"],
-    [null, "Something new happened"],
-    [null, ""],
-  ] as const)(
-    "failed: a FAILED answer %s %j does not say that the number or the text is invalid",
-    async (code, message) => {
-      expect(await sendWith({ body: failure(code, message) })).toEqual({ status: "failed" });
-    },
-  );
-
-  it.each([
-    [4025, "Invalid MSISDN"],
-    [4027, "Message Length Exceeded"],
-    [4032, "Invalid SMS"],
-    ["4025", "Invalid MSISDN"],
-    [null, "Invalid MSISDN"],
-    [null, "Invalid mobile number"],
-    [null, "The phone number is not a valid one"],
-    [null, "Wrong number"],
-    [null, "Message length exceeded"],
-    [null, "SMS text too long"],
-  ] as const)(
-    "refused: a FAILED answer %s %j says that the number or the text is invalid",
-    async (code, message) => {
-      expect(await sendWith({ body: failure(code, message) })).toEqual({ status: "refused" });
-    },
-  );
-
-  it("refused also when the status_message of the smsinfo item names the number as invalid", async () => {
+  it("refused also when the smsinfo item is INVALID, with no status code", async () => {
     const body = {
       status: "FAILED",
       error_message: "",
@@ -276,33 +243,30 @@ describe("GennetSmsTransport: the answer, fail closed", () => {
         item({ sms_status: "INVALID", status_message: "Invalid MSISDN", sms_body: undefined }),
       ],
     };
-    expect(await sendWith({ body })).toEqual({ status: "refused" });
+    expect(await sendWith({ body })).toEqual(REFUSED);
   });
 
-  it("with status SUCCESS the smsinfo item decides: INVALID is refused, DUPLICATE, BLOCKED and anything else failed", async () => {
+  it("with status SUCCESS the smsinfo item decides: INVALID and BLOCKED are refused, DUPLICATE and anything else failed", async () => {
     expect(
       await sendWith({
         body: success({ sms_status: "INVALID", status_message: "Invalid MSISDN" }),
       }),
-    ).toEqual({ status: "refused" });
+    ).toEqual(REFUSED);
     expect(
       await sendWith({
         body: success({ sms_status: "DUPLICATE", status_message: "Duplicated CSMS ID" }),
       }),
-    ).toEqual({ status: "failed" });
+    ).toEqual(failed("duplicate"));
+    // WPU-Z17: BLOCKED is refused (it was failed in WPU-Z3)
     expect(
       await sendWith({
         body: success({ sms_status: "BLOCKED", status_message: "Blocked MSISDN" }),
       }),
-    ).toEqual({ status: "failed" });
+    ).toEqual(REFUSED);
     expect(await sendWith({ body: success({ sms_status: "QUEUED", status_message: "" }) })).toEqual(
-      {
-        status: "failed",
-      },
+      failed("unknown"),
     );
-    expect(await sendWith({ body: success({ sms_status: undefined }) })).toEqual({
-      status: "failed",
-    });
+    expect(await sendWith({ body: success({ sms_status: undefined }) })).toEqual(failed("unknown"));
   });
 
   it("status SUCCESS with an empty, malformed or non-array smsinfo is failed", async () => {
@@ -310,24 +274,22 @@ describe("GennetSmsTransport: the answer, fail closed", () => {
       expect(
         await sendWith({ body: { status: "SUCCESS", smsinfo } }),
         JSON.stringify(smsinfo),
-      ).toEqual({
-        status: "failed",
-      });
+      ).toEqual(failed("unknown"));
     }
-    expect(await sendWith({ body: { status_code: 200, smsinfo: [item()] } })).toEqual({
-      status: "failed",
-    });
+    expect(await sendWith({ body: { status_code: 200, smsinfo: [item()] } })).toEqual(
+      failed("unknown"),
+    );
   });
 
   it("HTTP 5xx and 3xx are failed whatever the body says", async () => {
     for (const status of [500, 502, 503, 504, 300]) {
-      expect(await sendWith({ status, body: success() }), String(status)).toEqual({
-        status: "failed",
-      });
+      expect(await sendWith({ status, body: success() }), String(status)).toEqual(
+        failed("unknown"),
+      );
       expect(
         await sendWith({ status, body: failure(4025, "Invalid MSISDN") }),
         String(status),
-      ).toEqual({ status: "failed" });
+      ).toEqual(failed("unknown"));
     }
   });
 
@@ -336,40 +298,41 @@ describe("GennetSmsTransport: the answer, fail closed", () => {
       expect(
         await sendWith({ status, body: failure(4025, "Invalid MSISDN") }),
         String(status),
-      ).toEqual({ status: "failed" });
+      ).toEqual(failed("unknown"));
     }
   });
 
-  it("HTTP 400, 413 and 422 are refused, unless the body names a fault of ours or carries such a code", async () => {
+  it("HTTP 400, 413 and 422 are read like HTTP 200: refused only by the status code or the item (WPU-Z17)", async () => {
     for (const status of [400, 413, 422]) {
+      // WPU-Z17: the HTTP status alone no longer refuses (these three were refused in WPU-Z3)
       expect(
         await sendWith({ status, body: failure(null, "Bad request") }),
         String(status),
-      ).toEqual({
-        status: "refused",
-      });
-      expect(await sendWith({ status, body: {} }), String(status)).toEqual({ status: "refused" });
+      ).toEqual(failed("unknown"));
+      expect(await sendWith({ status, body: {} }), String(status)).toEqual(failed("unknown"));
+      // a 4xx with an answer of success is not a success
+      expect(await sendWith({ status, body: success() }), String(status)).toEqual(
+        failed("unknown"),
+      );
       expect(
         await sendWith({ status, body: failure(4001, "Unauthorized") }),
         String(status),
-      ).toEqual({ status: "failed" });
+      ).toEqual(failed("token"));
       expect(
         await sendWith({ status, body: failure(null, "Invalid api_token") }),
         String(status),
-      ).toEqual({ status: "failed" });
-      // a 4xx with an answer of success is not a success
-      expect(await sendWith({ status, body: success() }), String(status)).toEqual({
-        status: "refused",
-      });
+      ).toEqual(failed("token"));
+      expect(
+        await sendWith({ status, body: failure(4025, "Invalid MSISDN") }),
+        String(status),
+      ).toEqual(REFUSED);
     }
   });
 
   it("a body that is not JSON, or JSON that is not an object, is failed, also with HTTP 400", async () => {
     for (const raw of ["<html>Bad Gateway</html>", "", "null", "[]", '"SUCCESS"', "{", "42"]) {
-      expect(await sendWith({ raw }), JSON.stringify(raw)).toEqual({ status: "failed" });
-      expect(await sendWith({ status: 400, raw }), JSON.stringify(raw)).toEqual({
-        status: "failed",
-      });
+      expect(await sendWith({ raw }), JSON.stringify(raw)).toEqual(failed("unknown"));
+      expect(await sendWith({ status: 400, raw }), JSON.stringify(raw)).toEqual(failed("unknown"));
     }
   });
 
@@ -377,7 +340,7 @@ describe("GennetSmsTransport: the answer, fail closed", () => {
     const result = await sendWith(
       new TypeError(`fetch failed for ${TOKEN} ${SENDER} ${TO} ${TEXT}`),
     );
-    expect(result).toEqual({ status: "failed" });
+    expect(result).toEqual(failed("unknown"));
   });
 
   it("a body that cannot be read is failed", async () => {
@@ -392,7 +355,222 @@ describe("GennetSmsTransport: the answer, fail closed", () => {
       senderId: SENDER,
       fetch: (() => Promise.resolve(broken)) as unknown as typeof fetch,
     });
-    expect(await transport.send({ to: TO, text: TEXT })).toEqual({ status: "failed" });
+    expect(await transport.send({ to: TO, text: TEXT })).toEqual(failed("unknown"));
+  });
+});
+
+describe("GennetSmsTransport: the answer is read by its status code (WPU-Z17)", () => {
+  // Every status code of the ISMS v3 table, with its outcome and reason word. The rows of WPU-Z3 are all
+  // here; 4028 is now refused, and 4027 and 4032 failed.
+  it.each([
+    [4001, "Unauthorized", failed("token")],
+    [4002, "SID Not Permitted", failed("sender")],
+    [4003, "IP Blacklisted", failed("ip_not_whitelisted")],
+    [4004, "Invalid Request Format", failed("unknown")],
+    [4005, "End Point Not Found", failed("unknown")],
+    [4020, "Invalid CSMS ID", failed("unknown")],
+    [4022, "Required Parameter Missing", failed("unknown")],
+    [4023, "Duplicate CMS ID", failed("duplicate")],
+    [4024, "Duplicate MSISDN", failed("unknown")],
+    [4025, "Invalid MSISDN", REFUSED],
+    [4026, "Blocked MSISDN", failed("unknown")],
+    [4027, "Message Length Exceeded", failed("unknown")],
+    [4028, "Invalid Message Data", REFUSED],
+    [4029, "Too Many Requests", failed("rate_limited")],
+    [4030, "Limit Exceed", failed("unknown")],
+    [4031, "TPS Exceeded", failed("rate_limited")],
+    [4032, "Invalid SMS", failed("unknown")],
+    [4033, "Too Many OTP Requests", failed("rate_limited")],
+    [4034, "Unable to Decrypt SMS", failed("unknown")],
+    [4035, "Client Signature Mismatch", failed("unknown")],
+    [5000, "Internal Error", failed("unknown")],
+    ["4001", "Unauthorized", failed("token")],
+    ["4025", "Invalid MSISDN", REFUSED],
+  ] as const)("status_code %j %j gives %j, in both answer shapes", async (code, name, expected) => {
+    expect(await sendWith({ body: failure(code, name) })).toEqual(expected);
+    expect(await sendWith({ body: failureByMeaning(code, name, `${name}.`) })).toEqual(expected);
+  });
+
+  it.each([
+    ["Unauthorized", "token"],
+    ["Authentication failed", "token"],
+    ["Authorization failed", "token"],
+    ["Invalid API token", "token"],
+    ["Invalid api_token", "token"],
+    ["SID Not Permitted", "sender"],
+    ["Invalid sender ID", "sender"],
+    ["Stakeholder not permitted to send SMS", "sender"],
+    ["IP Blacklisted", "ip_not_whitelisted"],
+    ["Your IP is not whitelisted", "ip_not_whitelisted"],
+    ["Duplicated CSMS ID for this message", "duplicate"],
+    ["Too many requests", "rate_limited"],
+    ["TPS Exceeded", "rate_limited"],
+    // words never refuse: these were refused in WPU-Z3
+    ["Invalid MSISDN", "unknown"],
+    ["Invalid mobile number", "unknown"],
+    ["The phone number is not a valid one", "unknown"],
+    ["Wrong number", "unknown"],
+    ["Message length exceeded", "unknown"],
+    ["SMS text too long", "unknown"],
+    ["Insufficient balance", "unknown"],
+    ["SMS limit exceeded", "unknown"],
+    ["Invalid SMS signature", "unknown"],
+    ["Something new happened", "unknown"],
+    ["", "unknown"],
+  ] as const)(
+    "with no status code or one outside the table, %j gives failed %s, in each of the four fields",
+    async (message, detail) => {
+      for (const code of [null, 4999]) {
+        const where = `code ${String(code)}`;
+        // error_message, the status_message of the item, status_meaning, description
+        expect(await sendWith({ body: failure(code, message) }), where).toEqual(failed(detail));
+        expect(await sendWith({ body: failureWithItem(code, "FAILED", message) }), where).toEqual(
+          failed(detail),
+        );
+        expect(await sendWith({ body: failureByMeaning(code, message) }), where).toEqual(
+          failed(detail),
+        );
+        expect(await sendWith({ body: failureByMeaning(code, "", message) }), where).toEqual(
+          failed(detail),
+        );
+      }
+    },
+  );
+
+  it("a status code of the table decides, whatever the words of the answer say", async () => {
+    // 4028 also covers an invalid sender id in the ISMS table: refused by its code all the same (VERIFY)
+    expect(await sendWith({ body: failure(4028, "Invalid SID") })).toEqual(REFUSED);
+    expect(await sendWith({ body: failureByMeaning(4025, "Unauthorized") })).toEqual(REFUSED);
+    expect(await sendWith({ body: failure(4001, "Invalid MSISDN") })).toEqual(failed("token"));
+    expect(await sendWith({ body: failure(5000, "Invalid API token") })).toEqual(failed("unknown"));
+    expect(await sendWith({ body: failureByMeaning(4024, "Duplicate MSISDN") })).toEqual(
+      failed("unknown"),
+    );
+  });
+
+  it("the item: DUPLICATE is duplicate whatever the code; INVALID and BLOCKED are refused unless the code names a fault of ours or the provider's", async () => {
+    for (const code of [null, 4025, 4028, 4026, 5000, 4999]) {
+      expect(await sendWith({ body: failureWithItem(code, "DUPLICATE") }), String(code)).toEqual(
+        failed("duplicate"),
+      );
+    }
+    for (const status of ["INVALID", "BLOCKED", "invalid", "Blocked"]) {
+      for (const code of [null, 4025, 4026, 4027, 4028, 5000, 4999]) {
+        expect(
+          await sendWith({ body: failureWithItem(code, status) }),
+          `${status} ${String(code)}`,
+        ).toEqual(REFUSED);
+      }
+      for (const [code, detail] of [
+        [4001, "token"],
+        [4002, "sender"],
+        [4003, "ip_not_whitelisted"],
+        [4023, "duplicate"],
+        [4029, "rate_limited"],
+        [4031, "rate_limited"],
+        [4033, "rate_limited"],
+      ] as const) {
+        expect(
+          await sendWith({ body: failureWithItem(code, status) }),
+          `${status} ${code}`,
+        ).toEqual(failed(detail));
+      }
+    }
+  });
+
+  it("the failure examples of the ISMS v3 documentation and of the Gennet SDK fixtures, as published", async () => {
+    // single: 4025 with an item INVALID
+    expect(
+      await sendWith({
+        body: {
+          status: "FAILED",
+          status_code: 4025,
+          error_message: "Invalid MSISDN",
+          smsinfo: [
+            item({ sms_status: "INVALID", status_message: "Invalid MSISDN", sms_body: undefined }),
+          ],
+        },
+      }),
+    ).toEqual(REFUSED);
+    // bulk or dynamic: 4028 with an item DUPLICATE is a repeated csms_id, never a refusal
+    expect(
+      await sendWith({
+        body: {
+          status: "FAILED",
+          status_code: 4028,
+          error_message: "Invalid message data",
+          smsinfo: [
+            item({
+              sms_status: "DUPLICATE",
+              status_message: "Duplicated CSMS ID",
+              sms_body: undefined,
+            }),
+          ],
+        },
+      }),
+    ).toEqual(failed("duplicate"));
+    // the OTP endpoint's signature failure
+    expect(
+      await sendWith({
+        body: {
+          status: "FAILED",
+          error_message: "Client signature mismatch",
+          status_code: 4035,
+          smsinfo: [],
+        },
+      }),
+    ).toEqual(failed("unknown"));
+    // the second shape, from the Gennet SDK fixtures
+    expect(
+      await sendWith({
+        body: {
+          status: "FAILED",
+          status_code: 4029,
+          status_meaning: "Too many requests",
+          description: "Same recipient already accepted within 1000 milliseconds.",
+        },
+      }),
+    ).toEqual(failed("rate_limited"));
+  });
+
+  it("the reason is read whatever the HTTP status; a refusal counts only with HTTP 2xx, 400, 413 or 422", async () => {
+    for (const status of [200, 201, 400, 413, 422, 300, 401, 403, 429, 500, 503]) {
+      const at = String(status);
+      expect(await sendWith({ status, body: failure(4001, "Unauthorized") }), at).toEqual(
+        failed("token"),
+      );
+      expect(await sendWith({ status, body: failure(4002, "SID Not Permitted") }), at).toEqual(
+        failed("sender"),
+      );
+      expect(await sendWith({ status, body: failure(4003, "IP Blacklisted") }), at).toEqual(
+        failed("ip_not_whitelisted"),
+      );
+      expect(await sendWith({ status, body: failureWithItem(null, "DUPLICATE") }), at).toEqual(
+        failed("duplicate"),
+      );
+      expect(
+        await sendWith({ status, body: failureByMeaning(4029, "Too many requests") }),
+        at,
+      ).toEqual(failed("rate_limited"));
+    }
+    for (const status of [200, 201, 400, 413, 422]) {
+      const at = String(status);
+      expect(await sendWith({ status, body: failure(4028, "Invalid Message Data") }), at).toEqual(
+        REFUSED,
+      );
+      expect(await sendWith({ status, body: failureWithItem(null, "BLOCKED") }), at).toEqual(
+        REFUSED,
+      );
+    }
+    for (const status of [300, 401, 402, 403, 404, 408, 409, 429, 500, 502, 503, 504]) {
+      const at = String(status);
+      expect(await sendWith({ status, body: failure(4028, "Invalid Message Data") }), at).toEqual(
+        failed("unknown"),
+      );
+      expect(await sendWith({ status, body: failureWithItem(null, "INVALID") }), at).toEqual(
+        failed("unknown"),
+      );
+    }
   });
 });
 
@@ -406,6 +584,10 @@ describe("GennetSmsTransport: secrets and personal data (R3, R14)", () => {
       { body: failure(4025, `Invalid MSISDN ${MSISDN}`) },
       { body: failure(4001, `Unauthorized ${TOKEN}`) },
       { body: failure(null, leaky) },
+      // WPU-Z17: the second answer shape and the item's message are read, never passed on
+      { body: failureByMeaning(null, leaky, leaky) },
+      { body: failureByMeaning(4003, `IP Blacklisted ${leaky}`, leaky) },
+      { body: failureWithItem(4999, "FAILED", leaky) },
       { status: 500, raw: leaky },
       { status: 400, raw: leaky },
       { raw: leaky },
@@ -416,6 +598,12 @@ describe("GennetSmsTransport: secrets and personal data (R3, R14)", () => {
     const shown = JSON.stringify(results);
     for (const value of [TOKEN, SENDER, MSISDN, CODE, "TryAWS.now"]) {
       expect(shown).not.toContain(value);
+    }
+    // a failure carries one of the fixed reason words of the port and nothing else
+    for (const result of results) {
+      if (result.status === "accepted") continue;
+      expect(Object.keys(result).sort(), JSON.stringify(result)).toEqual(["detail", "status"]);
+      expect(SMS_FAILURE_DETAILS, JSON.stringify(result)).toContain(result.detail);
     }
   });
 

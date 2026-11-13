@@ -74,6 +74,10 @@ export async function runApp(env: Env) {
   const { web } = await import("./stacks/web");
   const { alarms } = await import("./stacks/alarms");
   const { budget } = await import("./stacks/budget");
+  const { logRetention } = await import("./stacks/logs");
+
+  // WPU-Z10: before any stack, so it reaches every sst.aws.Function (one week of logs on staging).
+  logRetention(config);
 
   const secretSet = secrets();
   const net = network(config);
@@ -120,6 +124,8 @@ export async function runApp(env: Env) {
     customerPoolId: identity.customers.id,
     adminPoolId: identity.admins.id,
     alarmTopic: alarm.topic.arn,
+    // WPU-Z10: the single NAT address of a lean stage, for TC_PROBE_SOURCES (docs/runbooks).
+    natAddress: net.natAddress,
     // C.2: read by scripts/post-deploy-check.mjs after a production deploy. R12: every default is
     // false; R1: no policy of the web and admin roles allows sts:AssumeRole.
     featureFlagDefaults: featureFlagDefaults(),

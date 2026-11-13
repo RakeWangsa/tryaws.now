@@ -14,7 +14,7 @@ Operations lead and admins with the right role. Reviewing KYC documents is done 
 
 1. `/customers/[id]`: the submission, the document images (shown through short-lived presigned URLs, never cached) and the profile. Read them in the browser; do not download them or send them by chat.
 2. Names and numbers match the profile. A mismatch is a rejection reason, not a guess.
-3. Risk tier: existing MeghVPS customers and verified businesses may be `trusted`, set before the first purchase, because the home pool account is chosen once.
+3. Risk tier: existing TryAWS.now customers and verified businesses may be `trusted`, set before the first purchase, because the home pool account is chosen once.
 
 ## Steps
 

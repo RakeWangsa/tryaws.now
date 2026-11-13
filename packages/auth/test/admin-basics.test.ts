@@ -18,22 +18,19 @@ beforeAll(() => {
   verifier = createAccessTokenVerifier(issuer.pool, { jwksCache: issuer.jwksCache });
 });
 
-describe("the amr claim of a verified token", () => {
-  it("is returned as a list of strings", async () => {
-    const out = await verifier.verify(issuer.sign({ amr: ["pwd", "mfa"] }));
-    expect(out.ok && out.token.amr).toEqual(["pwd", "mfa"]);
-  });
-
-  it("is an empty list when the claim is absent or not a list", async () => {
-    const none = await verifier.verify(issuer.sign());
-    expect(none.ok && none.token.amr).toEqual([]);
-    const odd = await verifier.verify(issuer.sign({ amr: "mfa" }));
-    expect(odd.ok && odd.token.amr).toEqual([]);
-  });
-
-  it("keeps only the strings of a mixed list", async () => {
-    const out = await verifier.verify(issuer.sign({ amr: ["mfa", 7, null, { a: 1 }] }));
-    expect(out.ok && out.token.amr).toEqual(["mfa"]);
+describe("a verified token", () => {
+  // WPU-Z15: the second factor is proven by the admin sign-in flow, not by a claim of the token (a
+  // Cognito access token has no `amr`, admin.ts), so the verifier hands on no such field.
+  it("carries the subject and the three times only, with or without an amr claim", async () => {
+    for (const claims of [{}, { amr: ["pwd", "mfa"] }]) {
+      const out = await verifier.verify(issuer.sign(claims));
+      expect(out.ok && Object.keys(out.token).sort()).toEqual([
+        "authTime",
+        "expiresAt",
+        "issuedAt",
+        "sub",
+      ]);
+    }
   });
 });
 

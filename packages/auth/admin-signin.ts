@@ -7,6 +7,12 @@ import { ADMIN_ACCESS_COOKIE } from "./cookies";
 // values at once and the function makes the two calls. There is no way in without the second factor:
 // a Cognito answer that is not the TOTP challenge is a refusal, and the session that comes out is
 // verified with the same checks as every later request before any cookie is set.
+//
+// WPU-Z15, ruling of 2026-11-13: this flow IS the proof of TOTP (the access token carries no `amr`,
+// admin.ts). The admin pool requires TOTP, and the session is created only from the tokens that
+// answer the SOFTWARE_TOKEN_MFA challenge of the same flow. Every other path is refused (R16): tokens
+// without a challenge, another challenge (MFA_SETUP, NEW_PASSWORD_REQUIRED, ...), and an answer to the
+// code that is not plain tokens.
 
 export type StartResult =
   | { readonly kind: "mfa_challenge"; readonly session: string }
@@ -96,7 +102,8 @@ export async function signInAdmin(
     if (second.kind === "unavailable") return { ok: false, reason: "unavailable" };
     if (second.kind !== "signed_in") return { ok: false, reason: "denied" };
 
-    // The session is verified as every request is: token, active admin, second factor in the token.
+    // The tokens answer the TOTP challenge of this flow. The session is verified as every request is:
+    // the allowlist, the token of the admin pool and its age, an active admin.
     const checked = await authenticateAdmin(
       deps,
       { cookieHeader: `${ADMIN_ACCESS_COOKIE}=${second.accessToken}`, viewerAddress },
@@ -132,8 +139,9 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 // The same unsigned public form as the refresh port: plain fetch, no SDK, no SigV4, no secret (R3).
-// VERIFY on staging: the admin app client has ALLOW_USER_PASSWORD_AUTH, no client secret, and the
-// pool has TOTP as required MFA with no self sign-up.
+// The admin app client allows exactly the flows used here (infra/stacks/auth.ts adminClient,
+// explicitAuthFlows; pinned by tests/repo/infra-rules.test.mjs), has no client secret, and the pool
+// requires TOTP with no self sign-up. VERIFY on staging with a real admin.
 export function cognitoAdminSignInPort(
   pool: PoolConfig,
   fetchImpl: typeof fetch = fetch,
@@ -208,6 +216,8 @@ export function cognitoAdminSignInPort(
       if (answer.errorType !== undefined) {
         return DENIED.test(answer.errorType) ? { kind: "denied" } : { kind: "unavailable" };
       }
+      // Another challenge after the code is not a sign-in, even when tokens come with it (R16).
+      if (answer.body["ChallengeName"] !== undefined) return { kind: "denied" };
       const result = asRecord(answer.body["AuthenticationResult"]);
       const accessToken = result?.["AccessToken"];
       const expiresIn = result?.["ExpiresIn"];

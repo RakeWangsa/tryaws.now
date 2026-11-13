@@ -20,7 +20,7 @@ import { writeLog } from "./log.ts";
 import { accessPortFromEnv, type AccessPort } from "./access-invoke.ts";
 import { readerPortFromEnv } from "./reader-invoke.ts";
 import { rendererPortFromEnv, type RendererPort } from "./renderer-invoke.ts";
-import { resourceSecrets } from "./secrets.ts";
+import { linkedSecrets, type SecretSource } from "./secrets.ts";
 import type { AccountPorts } from "./settings-actions.ts";
 
 // The one composition of apps/web (open point 1): configuration from the environment, secrets
@@ -126,10 +126,15 @@ function buildDeps(gateway: EpsGateway, limitKey: string, urls: EpsDeps["urls"])
   };
 }
 
-/** Pure of the process: the environment is the parameter. Exported for the tests. */
-export async function assembleRuntime(env: Env): Promise<Assembled> {
+/**
+ * The environment and the secret port are parameters. The secrets default to the SST SDK, which is
+ * how a deployed server reads its links (WPU-Z15); the tests hand in their own. Exported for the tests.
+ */
+export async function assembleRuntime(
+  env: Env,
+  secret: SecretSource = linkedSecrets(),
+): Promise<Assembled> {
   const config = readWebConfig(env);
-  const secret = resourceSecrets(env);
 
   let eps: Eps | null = null;
   let deps: EpsDeps | null = null;

@@ -1,3 +1,5 @@
+import { secretValue, sstLinks, type LinkSource } from "./links";
+
 // A local development value, not a secret (the password belongs to docker-compose.yml).
 export const LOCAL_DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:5432/ticoncloud";
 
@@ -10,27 +12,16 @@ const HOST = /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/;
 const NAME = /^[A-Za-z0-9_]{1,63}$/;
 const SECRET_NAME = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
 
-// The password of a linked secret: SST v3 gives each link as the variable SST_RESOURCE_<Name>, a JSON
-// object with `value` (the convention of apps/web/server/secrets.ts).
-function linkedSecret(env: Env, name: string): string | undefined {
-  const raw = env[`SST_RESOURCE_${name}`];
-  if (typeof raw !== "string") return undefined;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return undefined;
-    const value = (parsed as { value?: unknown }).value;
-    return typeof value === "string" && value.length > 0 ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
+// WPU-Z15: the links at run time come from @tc/db/links (sstLinks, the SST SDK), the one reader of
+// linked values; a link that is missing or cannot be read fails closed with DATABASE_URL_ERROR (R16).
 
 // The URL of the database at run time (R2, R3). `DATABASE_URL` (local and test) wins. Otherwise the
 // parts come from the environment of the deploy (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_SSLMODE: none
-// of them a secret) and the password from the linked secret that DB_PASSWORD_SECRET names, so a
-// password is never in a deploy-time variable. TLS only: `require` or `verify-full` (default), nothing
-// weaker. Anything missing or malformed fails closed with DATABASE_URL_ERROR (R16).
-export function databaseUrlFromEnv(env: Env): string {
+// of them a secret) and the password from the linked secret that DB_PASSWORD_SECRET names (read through
+// `links`, the SST SDK at run time), so a password is never in a deploy-time variable. TLS only:
+// `require` or `verify-full` (default), nothing weaker. Anything missing or malformed fails closed with
+// DATABASE_URL_ERROR (R16).
+export function databaseUrlFromEnv(env: Env, links: LinkSource = sstLinks): string {
   const direct = env.DATABASE_URL;
   if (direct !== undefined && direct !== "") return direct;
 
@@ -54,7 +45,7 @@ export function databaseUrlFromEnv(env: Env): string {
   ) {
     throw new Error(DATABASE_URL_ERROR);
   }
-  const password = linkedSecret(env, secretName);
+  const password = secretValue(links(secretName));
   if (password === undefined) throw new Error(DATABASE_URL_ERROR);
   return `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${name}?sslmode=${sslmode}`;
 }
@@ -62,11 +53,11 @@ export function databaseUrlFromEnv(env: Env): string {
 // A deployed stage (the TC_STAGE of infra/lib/stage.ts) never falls back to the local URL.
 const DEPLOYED_STAGES = ["staging", "production"];
 
-export function databaseUrl(env: Env = process.env): string {
+export function databaseUrl(env: Env = process.env, links: LinkSource = sstLinks): string {
   const direct = env.DATABASE_URL;
   if (direct !== undefined && direct !== "") return direct;
   if (env.DB_HOST !== undefined || DEPLOYED_STAGES.includes(env.TC_STAGE ?? "")) {
-    return databaseUrlFromEnv(env);
+    return databaseUrlFromEnv(env, links);
   }
   return LOCAL_DATABASE_URL;
 }

@@ -6,7 +6,7 @@ import type { Locale } from "@tc/ui/runtime";
 // server, from fixed fields and the texts of the page; it is serialised with every character that
 // could end a script block escaped, so no text of a catalog or of a message can break out of it.
 
-export const SITE_NAME = "MeghVPS";
+export const SITE_NAME = "TryAWS.now";
 
 export interface PageMeta {
   /** A plain origin without a final slash (WebConfig.appOrigin); null when the site has none configured. */

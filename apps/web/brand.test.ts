@@ -34,6 +34,27 @@ describe("placeholder brand files", () => {
     }
   });
 
+  // WPU-Z8: the brand is TryAWS.now (owner decision 2026-11-13). The wordmark is plain SVG text with a
+  // generic font stack until the owner supplies final artwork; the symbol mark (the T) is kept.
+  it("name TryAWS.now and write it as the wordmark of both logos; the symbol keeps its mark", () => {
+    for (const name of FILES) {
+      const text = read(SOURCE, name).toString("utf8");
+      expect(text, name).toContain('aria-label="TryAWS.now"');
+      expect(text, name).toContain("<title>TryAWS.now</title>");
+      expect(text, name).not.toMatch(/Megh|VPS/);
+    }
+    for (const name of ["logo.svg", "logo-light.svg"]) {
+      const text = read(SOURCE, name).toString("utf8");
+      const visible = [...text.matchAll(/<text\b[^>]*>(.*?)<\/text>/g)]
+        .map((m) => (m[1] as string).replace(/<[^>]+>/g, ""))
+        .join("");
+      expect(visible, name).toBe("TryAWS.now");
+      expect(text, name).toMatch(/<text\b[^>]*font-family="[^"]*, sans-serif"/);
+    }
+    expect(read(SOURCE, "symbol.svg").toString("utf8")).toContain('<path d="M18 24h28M32 24v26"');
+    expect(read(SOURCE, "logo.svg").toString("utf8")).toContain('<path d="M9 19h14M16 19v14"');
+  });
+
   it("hold no script, style, link, external URL or foreignObject", () => {
     for (const name of FILES) {
       // The one namespace declaration an SVG file needs to work in an <img> is the only URL allowed.

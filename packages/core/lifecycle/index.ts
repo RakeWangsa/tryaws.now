@@ -48,6 +48,11 @@ export {
   type PlanCreditRule,
 } from "./plan-credit";
 export { renewalQuote, renewSubscription, type Renewed } from "./renew";
+export {
+  reverseFailedDomainRenewal,
+  type DomainRenewalFailure,
+  type DomainRenewalReversed,
+} from "./domain-renewal";
 export { RENEW_NOW_WINDOW_DAYS, renewNow, type RenewedNow } from "./renew-now";
 export { completeRestore } from "./restore";
 export { lifecycleHooks, type LifecycleHookEvent } from "./hooks";

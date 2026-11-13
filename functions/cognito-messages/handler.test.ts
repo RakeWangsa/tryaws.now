@@ -37,7 +37,7 @@ it("sign-up, resend, verify and update attribute send the verification message",
     "CustomMessage_UpdateUserAttribute",
   ]) {
     const out = await handler(eventOf(source, { clientMetadata: { locale: "en" } }));
-    expect(out.response.emailSubject, source).toBe("MeghVPS: your email verification code");
+    expect(out.response.emailSubject, source).toBe("TryAWS.now: your email verification code");
     expect(out.response.emailMessage, source).toContain("verification code");
     expect(out.response.emailMessage).toContain("{####}");
   }
@@ -47,7 +47,7 @@ it("forgot password sends the reset message", async () => {
   const out = await handler(
     eventOf("CustomMessage_ForgotPassword", { clientMetadata: { locale: "en" } }),
   );
-  expect(out.response.emailSubject).toBe("MeghVPS: your password reset code");
+  expect(out.response.emailSubject).toBe("TryAWS.now: your password reset code");
   expect(out.response.emailMessage).toContain("{####}");
 });
 
@@ -55,7 +55,7 @@ it("an admin's new account gets the temporary-password message with the username
   const out = await handler(
     eventOf("CustomMessage_AdminCreateUser", { clientMetadata: { locale: "en" } }),
   );
-  expect(out.response.emailSubject).toBe("MeghVPS admin: your temporary password");
+  expect(out.response.emailSubject).toBe("TryAWS.now admin: your temporary password");
   expect(out.response.emailMessage).toContain("{####}");
   expect(out.response.emailMessage).toContain("{username}");
 });

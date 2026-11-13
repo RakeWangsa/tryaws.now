@@ -31,9 +31,9 @@ function specRow(markdown: string, label: string): { en: string; bn: string } {
     .map((c) => c.trim());
   const [, en, bn] = cells;
   if (en === undefined || bn === undefined) throw new Error(`row has no two statements: ${label}`);
-  // WPU-B1: docs/spec/16.13 still names the old brand (the plan is edited in its own pull request); the
-  // statements are compared with the brand of the product.
-  const brand = (text: string): string => text.replaceAll("TiCON Cloud", "MeghVPS");
+  // WPU-B1, WPU-Z8: docs/spec/16.13 still names the old brand (the plan is edited in its own pull request);
+  // the statements are compared with the brand of the product, TryAWS.now (owner decision 2026-11-13).
+  const brand = (text: string): string => text.replaceAll("TiCON Cloud", "TryAWS.now");
   return { en: brand(en), bn: brand(bn) };
 }
 
@@ -122,5 +122,21 @@ describe("shellMessages", () => {
   it("keeps the footer address and company name unchanged in both locales", () => {
     expect(leaf(bn, "Shell.footer.address")).toBe(leaf(en, "Shell.footer.address"));
     expect(leaf(bn, "Shell.footer.companyName")).toBe("TiCON System Limited");
+  });
+
+  // WPU-Z8: the brand is TryAWS.now (owner decision 2026-11-13), in Latin letters in both locales.
+  it("names the brand TryAWS.now in the header, the logo text and the home link", () => {
+    for (const tree of [bn, en]) {
+      expect(leaf(tree, "Shell.brand")).toBe("TryAWS.now");
+      expect(leaf(tree, "Shell.logoAlt")).toBe("TryAWS.now");
+    }
+    expect(leaf(bn, "Shell.homeLabel")).toBe("TryAWS.now হোম");
+    expect(leaf(en, "Shell.homeLabel")).toBe("TryAWS.now home");
+  });
+
+  // WPU-Z8: the footer link carries the title of the page it opens (apps/web: Public.legal.docs.terms.title).
+  it("calls the terms link of the footer 'Terms of service'", () => {
+    expect(leaf(en, "Shell.footer.terms")).toBe("Terms of service");
+    expect(leaf(bn, "Shell.footer.terms")).toBe("সেবার শর্তাবলি");
   });
 });

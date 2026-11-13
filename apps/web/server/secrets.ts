@@ -1,9 +1,13 @@
+import { secretValue, sstLinks, type LinkSource } from "@tc/db/links";
+
 // The secrets of the web app (EPS, the keys, the SMS gateway) reach it only through this port (R3).
-// No `sst` import: the linked resources arrive as environment variables named SST_RESOURCE_<Name>,
-// each a JSON object with a `value`. VERIFY (open point 2): the SST v3 format of these variables, and
-// that OpenNext passes them to the server function; not checked here. A secret is read when asked for
-// and is never held in a module constant; an unreadable one is `undefined`, and the caller fails
-// closed (R16). WPU-Z3: SmsApiKey (the Gennet api_token) and SmsSenderId (the sid), for the phone OTP.
+// WPU-Z15: at run time they are read through the SST SDK. SST 4.17.2 hands the Next.js server its links
+// through the wrapper that decrypts the encrypted link file into globalThis.SST_KEY_FILE_DATA (the
+// SST_RESOURCE_<Name> variables exist for `next build` only), and the SDK's Resource reads that and
+// every other delivery path (`sst dev` sets SST_RESOURCE_<Name>). The links are read through
+// @tc/db/links, the one reader of linked values. A secret is read when asked for and
+// is never held in a module constant; an unreadable one is `undefined`, and the caller fails closed
+// (R16). WPU-Z3: SmsApiKey (the Gennet api_token) and SmsSenderId (the sid), for the phone OTP.
 
 export type SecretName =
   | "EpsMerchantId"
@@ -27,19 +31,11 @@ export type SecretSource = (name: SecretName) => string | undefined;
 // there is no EPS, every top-up says "not open" and nothing is sent to EPS (R6, R16).
 export const NOT_CONFIGURED = "not-configured";
 
-export function resourceSecrets(env: Readonly<Record<string, string | undefined>>): SecretSource {
+// Each secret is the `value` of its linked sst.Secret when it is a string that is not empty (secretValue)
+// and not the placeholder.
+export function linkedSecrets(links: LinkSource = sstLinks): SecretSource {
   return (name) => {
-    const raw = env[`SST_RESOURCE_${name}`];
-    if (typeof raw !== "string") return undefined;
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (typeof parsed !== "object" || parsed === null) return undefined;
-      const value = (parsed as { value?: unknown }).value;
-      return typeof value === "string" && value.length > 0 && value !== NOT_CONFIGURED
-        ? value
-        : undefined;
-    } catch {
-      return undefined;
-    }
+    const value = secretValue(links(name));
+    return value === NOT_CONFIGURED ? undefined : value;
   };
 }

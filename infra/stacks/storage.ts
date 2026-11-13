@@ -3,8 +3,12 @@
 // admin"). The deny is written twice, on purpose: in the bucket policy and by giving the web role no
 // kms:Decrypt on the kyc key.
 //
+// WPU-Z10: a removal of staging empties and deletes the three buckets (forceDestroy set here; staging test
+// data is wiped by decision). Production and personal stages get the bucket arguments exactly as before
+// (SST's own forceDestroy default; production's `retain` keeps its buckets on a removal anyway).
+//
 // NOT TYPE-CHECKED, see network.ts.
-import { resourceName, roleName, type StageConfig } from "../lib/stage";
+import { removalRules, resourceName, roleName, type StageConfig } from "../lib/stage";
 
 const BLOCK_ALL = {
   blockPublicAcls: true,
@@ -16,6 +20,7 @@ const BLOCK_ALL = {
 function privateBucket(
   name: string,
   key: aws.kms.Key,
+  forceEmpty: boolean,
   extraPolicy: sst.aws.BucketArgs["policy"] = [],
 ) {
   const bucket = new sst.aws.Bucket(name, {
@@ -24,6 +29,15 @@ function privateBucket(
     enforceHttps: true,
     policy: extraPolicy,
     transform: {
+      // Transform<s3.BucketArgs> (components/aws/bucket.ts createBucket). Staging only (removalRules
+      // forceEmptyBuckets): forceDestroy deletes every object and every version, then the bucket.
+      ...(forceEmpty
+        ? {
+            bucket: (args: aws.s3.BucketArgs) => {
+              args.forceDestroy = true;
+            },
+          }
+        : {}),
       // VERIFY: transform.publicAccessBlock is listed in the docs; the docs do not say whether the
       // component creates one by default, so it is set here explicitly.
       // Transform<s3.BucketPublicAccessBlockArgs>, as SST passes it (components/aws/bucket.ts).
@@ -87,9 +101,10 @@ export function storage(config: StageConfig) {
     conditions: [{ test: "ArnEquals", variable: "aws:PrincipalArn", values: [webRoleArn] }],
   };
 
-  const kyc = privateBucket("Kyc", kycKey, [denyWebRead]);
-  const invoices = privateBucket("Invoices", filesKey);
-  const exportFiles = privateBucket("Exports", filesKey);
+  const { forceEmptyBuckets } = removalRules(config.kind);
+  const kyc = privateBucket("Kyc", kycKey, forceEmptyBuckets, [denyWebRead]);
+  const invoices = privateBucket("Invoices", filesKey, forceEmptyBuckets);
+  const exportFiles = privateBucket("Exports", filesKey, forceEmptyBuckets);
 
   // Lifecycle: exports are temporary files for customers.
   // VERIFY: aws.s3.BucketLifecycleConfiguration; keep 30 days is a placeholder (Needs decision).

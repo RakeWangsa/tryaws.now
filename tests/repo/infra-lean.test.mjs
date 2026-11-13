@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  LEAN_BUDGET_USD,
-  LEAN_BUDGET_THRESHOLDS_USD,
+  NAT_INSTANCE,
   STAGE_SIZES,
+  budgetOf,
   logRetentionOf,
   parseStageSize,
   sizing,
@@ -90,8 +90,9 @@ describe("WPU-B8: the sizing table", () => {
     }
   });
 
-  it("network: one NAT instance in lean, managed gateways in full", () => {
-    expect(sizing("lean", "staging").network.nat).toBe("ec2");
+  it("network: one NAT instance in lean (WPU-Z10: built by network.ts), managed gateways in full", () => {
+    expect(sizing("lean", "staging").network.nat).toBe("single-instance");
+    expect(sizing("lean", "production").network.nat).toBe("single-instance");
     expect(sizing("full", "staging").network.nat).toBe("managed");
     expect(sizing("full", "production").network.nat).toBe("managed");
   });
@@ -114,9 +115,9 @@ describe("WPU-B8: the sizing table", () => {
     expect(logRetentionOf("full")).toBe("2 weeks");
   });
 
-  it("budget: 50 USD, notifications at 40 and 50 USD absolute", () => {
-    expect(LEAN_BUDGET_USD).toBe(50);
-    expect([...LEAN_BUDGET_THRESHOLDS_USD]).toEqual([40, 50]);
+  it("budget (WPU-Z10): staging 50 USD at 25, 40 and 50; production 100 USD at 50, 80 and 100", () => {
+    expect(budgetOf("staging")).toEqual({ limitUsd: 50, thresholdsUsd: [25, 40, 50] });
+    expect(budgetOf("production")).toEqual({ limitUsd: 100, thresholdsUsd: [50, 80, 100] });
   });
 
   it("is frozen (a stack cannot change the table)", () => {
@@ -148,7 +149,9 @@ describe("WPU-B8: the stacks read config.size", () => {
 
   it("network.ts takes nat from the table, keeps two AZs", () => {
     expect(network).toContain("az: AZ_COUNT");
-    expect(network).toContain("nat: sizing(config.size, config.kind).network.nat");
+    // WPU-Z10: lean builds its own single NAT instance, so the Vpc gets sstNatOf(nat).
+    expect(network).toContain("const nat = sizing(config.size, config.kind).network.nat");
+    expect(network).toContain("nat: sstNatOf(nat)");
     expect(network).not.toMatch(/nat: "(managed|ec2)"/);
   });
 
@@ -157,14 +160,19 @@ describe("WPU-B8: the stacks read config.size", () => {
     expect(database).toContain("instance: size.instance");
     expect(database).toContain("multiAz: size.multiAz");
     expect(database).toContain("storage: size.storage");
-    expect(database).toContain("args.backupRetentionPeriod = size.backupRetentionDays");
+    // WPU-Z10: one day on staging, the size's days elsewhere (backupRetentionDays).
+    expect(database).toContain(
+      "args.backupRetentionPeriod = backupRetentionDays(config.kind, config.size)",
+    );
   });
 
+  // WPU-Z10: deletion protection and the final snapshot follow removalRules (off on staging only, which
+  // tests/repo/staging-on-demand.test.mjs pins); they still do not depend on the size.
   it("database.ts keeps the proxy, TLS, KMS, deletion protection and final snapshot in both sizes (R2, R13)", () => {
     for (const part of [
       "args.requireTls = true",
-      "args.deletionProtection = true",
-      "args.skipFinalSnapshot = false",
+      "args.deletionProtection = rules.databaseDeletionProtection",
+      "args.skipFinalSnapshot = !rules.databaseFinalSnapshot",
       "args.storageEncrypted = true",
       "args.kmsKeyId = key.arn",
       "args.publiclyAccessible = false",
@@ -187,17 +195,19 @@ describe("WPU-B8: the stacks read config.size", () => {
     }
   });
 
-  it("workers.ts sets the log retention of every function from the size", () => {
-    expect(workers).toContain("logging: { retention: logRetentionOf(inputs.config.size) }");
+  it("workers.ts sets the log retention of every function from the size (one week on staging, WPU-Z10)", () => {
+    expect(workers).toContain(
+      "logging: { retention: workerLogRetention(inputs.config.kind, inputs.config.size) }",
+    );
   });
 
-  it("budget.ts: MONTHLY, USD, limit 50, two ACTUAL notifications at 40 and 50 to the alarm topic", () => {
+  it("budget.ts: MONTHLY, USD, the limit and ACTUAL notifications of the stage (WPU-Z10) to the alarm topic", () => {
     const budget = source("infra/stacks/budget.ts");
     expect(budget).toContain("new aws.budgets.Budget(");
     expect(budget).toContain('timeUnit: "MONTHLY"');
     expect(budget).toContain('limitUnit: "USD"');
-    expect(budget).toContain("limitAmount: String(LEAN_BUDGET_USD)");
-    expect(budget).toContain("LEAN_BUDGET_THRESHOLDS_USD.map(");
+    expect(budget).toContain("limitAmount: String(plan.limitUsd)");
+    expect(budget).toContain("plan.thresholdsUsd.map(");
     expect(budget).toContain('notificationType: "ACTUAL"');
     expect(budget).toContain('thresholdType: "ABSOLUTE_VALUE"');
     expect(budget).toContain("subscriberSnsTopicArns: [topic.arn]");
@@ -220,7 +230,9 @@ describe("WPU-B8: the stacks read config.size", () => {
     ]) {
       expect(raw(file)).toContain("VERIFY");
     }
-    expect(raw("infra/stacks/network.ts")).toMatch(/VERIFY[^\n]*nat: "ec2"/);
+    // WPU-Z10: the nat "ec2" question is answered (one per AZ); the single instance's routes are a VERIFY.
+    expect(raw("infra/stacks/network.ts")).toMatch(/VERIFY result[^\n]*nat: "ec2"/);
+    expect(raw("infra/stacks/network.ts")).toMatch(/VERIFY \(first `sst diff` of a lean stage\)/);
     expect(raw("infra/stacks/budget.ts")).toMatch(/VERIFY[^\n]*aws\.budgets/);
   });
 });
@@ -228,10 +240,16 @@ describe("WPU-B8: the stacks read config.size", () => {
 describe("WPU-B8: the new files hold no account id and no secret", () => {
   const files = ["infra/lib/lean.ts", "infra/stacks/budget.ts"];
 
-  it("has no 12-digit account id", () => {
+  // WPU-Z10: the one 12-digit number allowed is the public AWS account that publishes the fck-nat
+  // images (the AMI owner filter of SST 4.17.2 vpc.ts), in NAT_INSTANCE of lean.ts and nowhere else.
+  it("has no 12-digit account id (the fck-nat image publisher of NAT_INSTANCE aside)", () => {
     for (const file of files) {
-      expect(raw(file), file).not.toMatch(/(?<![0-9])[0-9]{12}(?![0-9])/);
+      const text = raw(file);
+      expect(text.replaceAll(`amiOwner: "${NAT_INSTANCE.amiOwner}"`, ""), file).not.toMatch(
+        /(?<![0-9])[0-9]{12}(?![0-9])/,
+      );
     }
+    expect(raw("infra/lib/lean.ts").split(NAT_INSTANCE.amiOwner)).toHaveLength(2);
   });
 
   it("has no secret-looking text", () => {

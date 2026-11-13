@@ -70,7 +70,10 @@ function mapDomainsError(error: unknown, operation: string | null): AwsError {
     // A second RegisterDomain while the first runs: the caller looks again before it goes on.
     case "DuplicateRequest":
       return plain("conflict", true);
+    // WPU-Z13: too many operations running in the account passes. A renewal that ends failed gives the customer's
+    // money back and lets the name lapse, so on RenewDomain it is retried (10.1: an admin decides after the fifth).
     case "OperationLimitExceeded":
+      return plain("conflict", operation === "RenewDomain");
     case "DomainLimitExceeded":
     case "TLDRulesViolation":
       return plain("conflict", false);
