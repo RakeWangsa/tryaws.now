@@ -674,3 +674,20 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     }
   });
 });
+
+// Final review M5: the web and admin apps get no bucket name that nothing reads. When code starts to read one, it
+// adds the variable together with that code (and this test changes with it).
+describe("no unused bucket variables on the Next.js apps", () => {
+  it("passes neither KYC_BUCKET nor EXPORTS_BUCKET, and nothing reads them", async () => {
+    expect(web).not.toMatch(/KYC_BUCKET|EXPORTS_BUCKET/);
+    const { spawnSync } = await import("node:child_process");
+    const r = spawnSync(
+      "git",
+      ["grep", "-l", "-E", "KYC_BUCKET|EXPORTS_BUCKET", "--", "apps", "packages", "functions"],
+      { cwd: resolve(import.meta.dirname, "../.."), encoding: "utf8" },
+    );
+    // git grep: exit 1 and no output when nothing matches
+    expect(r.status, r.stderr).toBe(1);
+    expect(r.stdout).toBe("");
+  });
+});

@@ -136,8 +136,8 @@ export function web(inputs: WebInputs) {
       // WPU-N1: the function name of the invoice renderer, for "Download PDF"
       // (apps/web/server/renderer-invoke.ts); the role may invoke its "web" alias only.
       INVOICE_RENDERER_FUNCTION_NAME: functionOf("invoice-renderer").name,
-      KYC_BUCKET: storage.kyc.name,
-      EXPORTS_BUCKET: storage.exports.name,
+      // Final review M5: no KYC_BUCKET or EXPORTS_BUCKET: no code of apps/, packages/ or functions/ reads them.
+      // The grants below stay for the code that will use the buckets; that code adds its variable with it.
     },
     // Least privilege of web (3.2): enqueue, presign KYC uploads (PutObject only), read its own
     // invoices and exports, invoke reader, access-details and invoice-renderer, sign out its own
@@ -194,8 +194,7 @@ export function web(inputs: WebInputs) {
       // The names packages/auth/config.ts adminAuthConfigFromEnv reads.
       COGNITO_ADMIN_POOL_ID: auth.admins.id,
       COGNITO_ADMIN_CLIENT_ID: auth.adminClient.id,
-      KYC_BUCKET: storage.kyc.name,
-      EXPORTS_BUCKET: storage.exports.name,
+      // Final review M5: no KYC_BUCKET or EXPORTS_BUCKET (nothing reads them; see the web app above).
     },
     // Admin reads KYC objects (the only role that may) and calls the Cognito admin API of the admin
     // pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
