@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_BLUEPRINT_ID, loginUserOf, parseServerDisplayName, sshCommandOf } from "./connect";
+import {
+  DEFAULT_BLUEPRINT_ID,
+  loginUserOf,
+  parseServerDisplayName,
+  sshCommandOf,
+  storedLoginUserOf,
+} from "./connect";
 
 describe("loginUserOf", () => {
   it.each([
@@ -20,6 +26,20 @@ describe("loginUserOf", () => {
   });
   it("the default image of the platform has a known user", () => {
     expect(loginUserOf(DEFAULT_BLUEPRINT_ID)).toBe("ubuntu");
+  });
+});
+
+// WPU-Z19 (verify review, JOURNEY.md:1098): GetInstance `username` is "The user name for connecting to the instance".
+// The provisioner stores it in the resource config; the panel prefers it over the table of image prefixes.
+describe("storedLoginUserOf", () => {
+  it("reads the user the instance reported, and only a plain user name", () => {
+    expect(storedLoginUserOf({ loginUser: "admin" })).toBe("admin");
+    expect(storedLoginUserOf({ loginUser: "bitnami" })).toBe("bitnami");
+    for (const bad of [undefined, null, "", "Admin", "root; rm", "a".repeat(40), 5]) {
+      expect(storedLoginUserOf({ loginUser: bad }), String(bad)).toBeNull();
+    }
+    expect(storedLoginUserOf(null)).toBeNull();
+    expect(storedLoginUserOf("x")).toBeNull();
   });
 });
 

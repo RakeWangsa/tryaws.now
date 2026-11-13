@@ -37,6 +37,9 @@ import { AwsError } from "../errors";
 import { BOOTSTRAP_BEACON_PORT, bootstrapScript } from "./bootstrap";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 
+/** A Linux user name as the panel puts it in an ssh command (the rule of sshCommandOf in @tc/core). */
+const LOGIN_USER = /^[a-z][a-z0-9_-]{0,31}$/;
+
 /**
  * What the adapter needs and OpCtx (contract F) does not carry: the OpCtx has no database. The
  * function that runs the adapter supplies it, with the customer id taken from the resource row and
@@ -238,7 +241,15 @@ export function createLinuxInstanceAdapter(
     const n = names(ctx.resource.id);
     const got = await client(ctx).send(new GetInstanceCommand({ instanceName: n.instance }));
     const state = got.instance?.state?.name;
-    if (state === "running") return stepNext("verify_bootstrap");
+    if (state === "running") {
+      // WPU-Z19: GetInstance `username` is the user for SSH ("The user name for connecting to the instance"); the
+      // panel shows it instead of guessing from the image id (a Bitnami image logs in as bitnami, a
+      // Lightsail-packaged app as admin). Only a plain user name is kept; anything else is left out.
+      const user = got.instance?.username;
+      return typeof user === "string" && LOGIN_USER.test(user)
+        ? stepNext("verify_bootstrap", { configMerge: { loginUser: user } })
+        : stepNext("verify_bootstrap");
+    }
     if (state === "pending" || state === undefined) {
       checkWaitBudget(ctx);
       return stepWait("wait_running", pollAt(ctx));
