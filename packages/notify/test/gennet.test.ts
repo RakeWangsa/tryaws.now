@@ -8,8 +8,8 @@ import { SMS_FAILURE_DETAILS, type SmsFailureDetail } from "../sms/provider";
 // token and the sender id are obviously fake (R3); the answers follow the public ISMS Plus v3 format of
 // SSL Wireless, which the Gennet API is believed to share (VERIFY, docs/runbooks/sms-gateway.md).
 // WPU-Z17: the answer is read by its status code, and every failure carries a fixed reason word. The
-// second answer shape (status_meaning, description) is the one of the Gennet SDK test fixtures
-// (docs/analysis/gennet-isms-api-2026-11-13.md).
+// second answer shape (status_meaning, description) is the one of the test fixtures of a third-party
+// Gennet SDK (docs/analysis/gennet-isms-api-2026-11-13.md).
 const TOKEN = "fake-gennet-token-for-unit-tests";
 const SENDER = "FAKESENDERID";
 const TO = "+8801712345678";

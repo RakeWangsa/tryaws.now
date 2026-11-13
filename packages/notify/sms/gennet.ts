@@ -55,8 +55,8 @@ const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const PLAIN_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 
 // HTTP statuses of an answer about the content of the request. Besides 2xx, only these may refuse;
-// every other status (3xx, any other 4xx, 5xx) is failed whatever the body says, but its reason word is
-// still read from the body.
+// every other status (3xx, any other 4xx, 5xx) is failed whatever the body says. Its reason word is
+// still read from the body, `unknown` in place of a refusal.
 const CONTENT_ERRORS: ReadonlySet<number> = new Set([400, 413, 422]);
 
 // Every status_code of the ISMS v3 table (VERIFY for Gennet) and its reason word. `invalid_number` is
