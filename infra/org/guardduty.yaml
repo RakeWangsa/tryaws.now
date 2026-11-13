@@ -8,8 +8,10 @@ Description: >-
 # `aws guardduty enable-organization-admin-account --admin-account-id <log archive account>` per
 # Region; (2) in the delegated administrator account this template creates the detector, then
 # `aws guardduty update-organization-configuration --detector-id <id> --auto-enable-organization-members ALL`
-# per Region; (3) `aws guardduty list-members` shows every account as Enabled. The command shapes
-# are from memory of the public API; check them against the current documentation before use.
+# per Region; (3) `aws guardduty list-members --detector-id <id> --only-associated false --region
+# <region>` shows every RelationshipStatus as Enabled (--detector-id is required: VERIFY result of
+# WPU-Z11, AWS CLI reference). Auto-enable without --features turns GuardDuty on for the members but not
+# the protection plans; each plan costs money, so check it against the budget before adding one.
 # VERIFY: GuardDuty sees CloudTrail management events, DNS logs and VPC flow logs of EC2. Whether it
 # sees anything of a Lightsail instance (the VPC belongs to Lightsail) is NOT established: treat
 # GuardDuty here as account-level threat detection (stolen role credentials, odd API calls), and do

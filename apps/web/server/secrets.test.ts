@@ -1,6 +1,6 @@
 import { envLinks } from "@tc/db/links";
 import { describe, expect, it } from "vitest";
-import { linkedSecrets } from "./secrets.ts";
+import { linkedSecrets, NOT_CONFIGURED } from "./secrets.ts";
 
 // The links of these tests come from the SST_RESOURCE_<Name> variables of an environment object
 // (envLinks); the run-time path through the SST SDK is secrets-sst.test.ts (WPU-Z15).
@@ -47,6 +47,23 @@ describe("linkedSecrets", () => {
     expect(source("EpsHashKey")).toBeUndefined();
     env["SST_RESOURCE_EpsHashKey"] = '{"value":"late"}';
     expect(source("EpsHashKey")).toBe("late");
+  });
+
+  // WPU-Z11: scripts/golive/stage-secrets.sh stores this literal for an EPS value that the owner does
+  // not have yet (SST needs a value for every declared secret). It is the same as no value.
+  it("reads the placeholder not-configured as no value, whatever the name (WPU-Z11)", () => {
+    const placeholder = '{"type":"sst.sst.Secret","value":"not-configured"}';
+    const source = fromEnv({
+      SST_RESOURCE_EpsMerchantId: placeholder,
+      SST_RESOURCE_EpsPassword: placeholder,
+      SST_RESOURCE_SmsApiKey: placeholder,
+      SST_RESOURCE_EpsHashKey: '{"value":"not-configured-is-only-a-prefix-here"}',
+    });
+    expect(NOT_CONFIGURED).toBe("not-configured");
+    expect(source("EpsMerchantId")).toBeUndefined();
+    expect(source("EpsPassword")).toBeUndefined();
+    expect(source("SmsApiKey")).toBeUndefined();
+    expect(source("EpsHashKey")).toBe("not-configured-is-only-a-prefix-here");
   });
 
   it("holds no secret in a property of the source", () => {

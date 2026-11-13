@@ -170,6 +170,9 @@ export function web(inputs: WebInputs) {
     ]),
     transform: {
       server: fixedServerRole(roleName(stage, "web")),
+      // WPU-Z11 (VERIFY of 2026-11-13, B2): SST names the ISR revalidation subscriber role from a long
+      // logical name that loses the ticon-cloud-<stage>- prefix, which the CI deploy policy refuses.
+      revalidationEventsSubscriber: fixedServerRole(roleName(stage, "web-revalidation")),
       cdn: cdnTransform(waf.customerAclArn, waf.securityHeadersPolicyId),
     },
   });
@@ -233,6 +236,9 @@ export function web(inputs: WebInputs) {
     ]),
     transform: {
       server: fixedServerRole(roleName(stage, "admin")),
+      // WPU-Z11 (VERIFY of 2026-11-13, B2): SST names the ISR revalidation subscriber role from a long
+      // logical name that loses the ticon-cloud-<stage>- prefix, which the CI deploy policy refuses.
+      revalidationEventsSubscriber: fixedServerRole(roleName(stage, "admin-revalidation")),
       cdn: cdnTransform(waf.adminAclArn, waf.securityHeadersPolicyId),
     },
   });

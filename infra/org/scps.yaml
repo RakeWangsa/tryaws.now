@@ -9,7 +9,9 @@ Description: >-
 # VERIFY: before attaching the pool and dns SCPs, in tc-pool-dev with the SCPs attached: TcProvisioner
 # can create an instance and a bucket; the admin role can list and file a quota increase; a denied
 # action (for example ec2:RunInstances) is refused. Record the final policy JSON next to this file.
-# VERIFY: each SCP document is at most 5,120 characters (AWS limit); check the size after Fn::Sub.
+# VERIFY result (WPU-Z11): the AWS limit of an SCP document is 10,240 characters (Organizations quotas,
+# May 2026; the CloudFormation page still says 5,120). This repository keeps 5,120 after Fn::Sub as a
+# self-imposed margin; the largest document is far below both.
 # No exemption exists for the CloudFormation StackSets execution role: nobody protects such a role, so
 # the Tc roles are deployed by the admin role only (see README). Add one only together with a deny on
 # changes to that role.
@@ -32,7 +34,10 @@ Parameters:
     Description: >-
       The one named admin role that may change the Tc roles, file quota increases and support cases
       in a member account (IAM Identity Center permission set TcOrgAdmin). VERIFY the exact ARN
-      form of the permission set role in a member account.
+      form of the permission set role in a member account. VERIFY result (WPU-Z11): when the Identity
+      Center home Region is us-east-1 the ARN has no Region segment
+      (.../sso.amazonaws.com/AWSReservedSSO_...), which this default does not match; narrow or widen
+      it once the home Region is known (docs/analysis/verify-review-2026-11-13.md, scps.yaml:34).
   RootId:
     Type: String
     AllowedPattern: "^r-[0-9a-z]{4,32}$"

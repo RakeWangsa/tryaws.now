@@ -33,6 +33,8 @@ const ROLES = [
     name: "TcCiDeployStaging",
     environment: "staging",
     workflow: "deploy-staging.yml",
+    stage: "staging",
+    other: "production",
   },
   {
     file: "ci-plan-production.yaml",
@@ -45,6 +47,8 @@ const ROLES = [
     name: "TcCiDeployProduction",
     environment: "production",
     workflow: "deploy-production.yml",
+    stage: "production",
+    other: "staging",
   },
 ];
 
@@ -60,12 +64,27 @@ describe("the CI OIDC templates parse and hold no account, secret or contact", (
     }
   });
 
-  it("take the organisation and the repository as parameters", () => {
+  it("take the organisation, the repository and their numeric ids as parameters", () => {
     for (const { file } of ROLES) {
-      expect(Object.keys(tpl[file].Parameters), file).toEqual(
-        expect.arrayContaining(["GitHubOrg", "GitHubRepo"]),
+      const params = tpl[file].Parameters;
+      expect(Object.keys(params), file).toEqual(
+        expect.arrayContaining(["GitHubOrg", "GitHubOwnerId", "GitHubRepo", "GitHubRepoId"]),
       );
+      expect(params.GitHubOwnerId.AllowedPattern, file).toBe("^[0-9]{1,20}$");
+      expect(params.GitHubRepoId.AllowedPattern, file).toBe("^[0-9]{1,20}$");
+      expect(params.GitHubOwnerId.Default, file).toBeUndefined();
+      expect(params.GitHubRepoId.Default, file).toBeUndefined();
     }
+  });
+
+  // WPU-Z11: the GitHub OIDC provider may already exist in the account (one per account and URL). No
+  // role template creates it, imports it or depends on the provider stack: each builds the ARN itself.
+  it("do not need the stack of ci-oidc-provider.yaml (no import, no provider resource)", () => {
+    for (const { file } of ROLES) {
+      expect(text[file], file).not.toMatch(/Fn::ImportValue|ImportValue|DependsOn/);
+      expect(resources(tpl[file], "AWS::IAM::OIDCProvider"), file).toEqual([]);
+    }
+    expect(text["ci-oidc-provider.yaml"]).toContain("list-open-id-connect-providers");
   });
 });
 
@@ -106,24 +125,34 @@ describe.each(ROLES)("$name", ({ file, name, environment, workflow }) => {
     });
   });
 
-  it("requires the audience, the subject of the GitHub environment and the workflow reference", () => {
+  // WPU-Z11 (VERIFY, GitHub OIDC reference "Immutable subject claims"): a repository created, renamed or
+  // transferred after 2026-07-15 gets repo:OWNER@OWNER-ID/REPO@REPO-ID:... as its sub. job_workflow_ref
+  // keeps the names.
+  it("requires the audience, the immutable subject of the GitHub environment and the workflow reference", () => {
     const equals = statement.Condition.StringEquals;
     expect(equals[`${KEY}:aud`]).toBe("sts.amazonaws.com");
     expect(equals[`${KEY}:sub`]).toEqual({
-      "Fn::Sub": `repo:\${GitHubOrg}/\${GitHubRepo}:environment:${environment}`,
+      "Fn::Sub": `repo:\${GitHubOrg}@\${GitHubOwnerId}/\${GitHubRepo}@\${GitHubRepoId}:environment:${environment}`,
     });
-    const ref = production
-      ? statement.Condition.StringLike?.[`${KEY}:job_workflow_ref`]
-      : equals[`${KEY}:job_workflow_ref`];
-    const value = ref["Fn::Sub"];
-    expect(value.startsWith("${GitHubOrg}/${GitHubRepo}/.github/workflows/" + workflow + "@")).toBe(
-      true,
-    );
-    expect(value).not.toMatch(/^repo:/);
-    if (production) expect(value.endsWith("@refs/tags/v*")).toBe(true);
-    else {
-      expect(value.endsWith("@refs/heads/${ProtectedBranch}")).toBe(true);
-      expect(value).not.toContain("*");
+    if (production) {
+      const value = statement.Condition.StringLike?.[`${KEY}:job_workflow_ref`]["Fn::Sub"];
+      expect(value).toBe(
+        "${GitHubOrg}/${GitHubRepo}/.github/workflows/" + workflow + "@refs/tags/v*",
+      );
+    } else {
+      // WPU-Z11 fix round 1: the staging role serves deploy-staging.yml and remove-staging.yml, each at the
+      // protected branch, as two exact values under StringEquals (no wildcard).
+      expect(equals[`${KEY}:job_workflow_ref`]).toEqual([
+        {
+          "Fn::Sub":
+            "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-staging.yml@refs/heads/${ProtectedBranch}",
+        },
+        {
+          "Fn::Sub":
+            "${GitHubOrg}/${GitHubRepo}/.github/workflows/remove-staging.yml@refs/heads/${ProtectedBranch}",
+        },
+      ]);
+      expect(JSON.stringify(equals[`${KEY}:job_workflow_ref`])).not.toMatch(/\*|repo:/);
     }
   });
 
@@ -136,8 +165,11 @@ describe.each(ROLES)("$name", ({ file, name, environment, workflow }) => {
   });
 
   it("names a GitHub environment and a workflow that exist in .github/workflows", () => {
-    const wf = read(join(root, ".github", "workflows", workflow));
-    expect(wf).toMatch(new RegExp(`^\\s+environment:\\s+${environment}\\s*$`, "m"));
+    const files = production ? [workflow] : [workflow, "remove-staging.yml"];
+    for (const f of files) {
+      const wf = read(join(root, ".github", "workflows", f));
+      expect(wf, f).toMatch(new RegExp(`^\\s+environment:\\s+${environment}\\s*$`, "m"));
+    }
   });
 });
 
@@ -159,15 +191,26 @@ const inlineStatements = (file) =>
 const actionsOf = (statements, effect) =>
   statements.filter((s) => s.Effect === effect).flatMap((s) => list(s.Action));
 const resourceText = (s) => JSON.stringify(s.Resource ?? s.NotResource ?? "");
-const BOUNDARY_ARN = "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary";
+const BOUNDARY = { staging: "TcCiRoleBoundaryStaging", production: "TcCiRoleBoundaryProduction" };
+const boundaryArn = (stage) => `arn:aws:iam::\${AWS::AccountId}:policy/${BOUNDARY[stage]}`;
 
 describe("deploy roles: no privilege escalation through IAM", () => {
+  // WPU-Z11 (one account): each deploy role writes only the IAM names of its own stage.
   const files = [
-    ["ci-deploy-staging.yaml", ["role/tc-*", "role/ticon-cloud-*"]],
-    ["ci-deploy-production.yaml", ["role/tc-production-*", "role/ticon-cloud-production-*"]],
+    [
+      "ci-deploy-staging.yaml",
+      "staging",
+      ["role/tc-staging-*", "role/ticon-cloud-staging-*", "instance-profile/tc-staging-*"],
+    ],
+    [
+      "ci-deploy-production.yaml",
+      "production",
+      ["role/tc-production-*", "role/ticon-cloud-production-*", "instance-profile/tc-production-*"],
+    ],
   ];
 
-  describe.each(files)("%s", (file, prefixes) => {
+  describe.each(files)("%s", (file, stage, prefixes) => {
+    const BOUNDARY_ARN = boundaryArn(stage);
     const statements = inlineStatements(file);
     const allows = statements.filter((s) => s.Effect === "Allow");
     const iamWrites = allows.filter((s) =>
@@ -224,13 +267,20 @@ describe("deploy roles: no privilege escalation through IAM", () => {
     it("attaches only listed AWS managed policies and passes roles only to listed services", () => {
       const attach = allows.find((s) => s.Action === "iam:AttachRolePolicy");
       const arns = list(attach.Condition.StringEquals["iam:PolicyARN"]);
-      expect(arns.length).toBeGreaterThan(0);
-      for (const arn of arns)
-        expect(arn).toMatch(/^arn:aws:iam::aws:policy\/service-role\/AWSLambda/);
+      // WPU-Z11: the NAT instance role of a lean stage (SST vpc.ts) gets AmazonSSMManagedInstanceCore.
+      expect(arns.sort()).toEqual(
+        [
+          "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole",
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+        ].sort(),
+      );
       const pass = allows.find((s) => s.Action === "iam:PassRole");
       const services = list(pass.Condition.StringEquals["iam:PassedToService"]);
       expect(services.sort()).toEqual(
         [
+          "ec2.amazonaws.com",
           "edgelambda.amazonaws.com",
           "events.amazonaws.com",
           "lambda.amazonaws.com",
@@ -269,7 +319,49 @@ describe("deploy roles: no privilege escalation through IAM", () => {
         "Fn::Sub": BOUNDARY_ARN,
       });
       const policy = statements.find((s) => s.Sid === "NeverChangeTheBoundaryPolicyItself");
-      expect(resourceText(policy)).toContain("policy/TcCiRoleBoundary");
+      expect(resourceText(policy)).toContain(`policy/${BOUNDARY[stage]}"`);
+    });
+
+    // WPU-Z11 (VERIFY): SST's RdsRoleLookup (postgres.ts) reads the RDS service-linked role.
+    it("may read the RDS service-linked role, with iam:GetRole only", () => {
+      const s = allows.find((x) => x.Sid === "ReadTheRdsServiceLinkedRole");
+      expect(s.Action).toBe("iam:GetRole");
+      expect(s.Resource).toEqual({
+        "Fn::Sub":
+          "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
+      });
+    });
+
+    // WPU-Z11 (VERIFY): SST KvKeys and the budget of a lean stage.
+    it("may change the CloudFront key value stores and only the budget of its own stage", () => {
+      const kv = allows.find((x) => x.Sid === "KeyValueStoresOfTheSites");
+      expect(list(kv.Action).sort()).toEqual([
+        "cloudfront-keyvaluestore:DescribeKeyValueStore",
+        "cloudfront-keyvaluestore:ListKeys",
+        "cloudfront-keyvaluestore:UpdateKeys",
+      ]);
+      const budget = allows.find((x) => x.Sid === "BudgetOfTheStage");
+      expect(list(budget.Action)).toEqual(
+        expect.arrayContaining(["budgets:ModifyBudget", "budgets:ViewBudget"]),
+      );
+      expect(resourceText(budget)).toContain(`budget/tc-${stage}-*`);
+    });
+
+    // WPU-Z11: the NAT instance profile is named tc-<stage>-* by infra/app.ts (SST leaves it unnamed).
+    it("manages instance profiles of its own stage only", () => {
+      const s = allows.find((x) => x.Sid === "InstanceProfilesOfTheStage");
+      expect(list(s.Action)).toEqual(
+        expect.arrayContaining([
+          "iam:CreateInstanceProfile",
+          "iam:AddRoleToInstanceProfile",
+          "iam:RemoveRoleFromInstanceProfile",
+          "iam:DeleteInstanceProfile",
+          "iam:GetInstanceProfile",
+        ]),
+      );
+      expect(s.Resource).toEqual({
+        "Fn::Sub": `arn:aws:iam::\${AWS::AccountId}:instance-profile/tc-${stage}-*`,
+      });
     });
 
     it("keeps the CI roles, the provider and users out of reach", () => {
@@ -281,25 +373,229 @@ describe("deploy roles: no privilege escalation through IAM", () => {
     });
   });
 
-  it("the two deploy templates differ only by the role-name prefix, the trust and the comments", () => {
-    const strip = (file) =>
-      JSON.stringify(resources(tpl[file], "AWS::IAM::Role").map((r) => r.Properties.Policies))
-        .replaceAll("role/tc-production-*", "role/tc-*")
-        .replaceAll("role/ticon-cloud-production-*", "role/ticon-cloud-*");
-    expect(strip("ci-deploy-production.yaml")).toBe(strip("ci-deploy-staging.yaml"));
+  // Swapping the two stage names turns one template into the other, except the DNS-record limit that
+  // only staging has (the production zone is the parent of the staging names).
+  it("the two deploy templates differ only by the stage names, the trust and the staging DNS limit", () => {
+    const swap = (value) =>
+      value
+        .replaceAll("production", "\u0000")
+        .replaceAll("staging", "production")
+        .replaceAll("\u0000", "staging")
+        .replaceAll("Production", "\u0001")
+        .replaceAll("Staging", "Production")
+        .replaceAll("\u0001", "Staging");
+    const policies = (file) => {
+      const [role] = resources(tpl[file], "AWS::IAM::Role");
+      return role.Properties.Policies.map((p) => ({
+        ...p,
+        PolicyDocument: {
+          ...p.PolicyDocument,
+          Statement: p.PolicyDocument.Statement.filter(
+            (s) => s.Sid !== "OnlyTheDnsRecordsOfTheStage",
+          ),
+        },
+      }));
+    };
+    expect(swap(JSON.stringify(policies("ci-deploy-production.yaml")))).toBe(
+      JSON.stringify(policies("ci-deploy-staging.yaml")),
+    );
     const boundary = (file) =>
       JSON.stringify(resources(tpl[file], "AWS::IAM::ManagedPolicy").map((p) => p.Properties));
-    expect(boundary("ci-deploy-production.yaml")).toBe(boundary("ci-deploy-staging.yaml"));
+    expect(swap(boundary("ci-deploy-production.yaml"))).toBe(boundary("ci-deploy-staging.yaml"));
   });
 });
 
-describe("the permissions boundary TcCiRoleBoundary", () => {
-  describe.each(["ci-deploy-staging.yaml", "ci-deploy-production.yaml"])("%s", (file) => {
+// WPU-Z11 (owner decision 2026-11-13): staging and production live in ONE account. Two stacks there must
+// not create the same fixed name, and the staging deploy role must not change production.
+describe("one account: fixed names are unique and each deploy role stays in its stage", () => {
+  const ORG = ["ci-deploy-staging.yaml", "ci-plan-production.yaml", "ci-deploy-production.yaml"];
+  const named = (file) => {
+    const t = parse(read(join(root, "infra", "org", file)));
+    return Object.values(t.Resources).flatMap((r) =>
+      [r.Properties?.RoleName, r.Properties?.ManagedPolicyName].filter(
+        (n) => typeof n === "string",
+      ),
+    );
+  };
+
+  it("no IAM name appears in two of the CI, pool or DNS templates", () => {
+    const seen = new Map();
+    for (const file of [...ORG, "pool-roles.yaml", "dns-account.yaml"]) {
+      for (const n of named(file)) {
+        // TcBillingReader exists in both pool-roles.yaml and dns-account.yaml; in one account the DNS
+        // stack is deployed with CreateBillingReader=false (infra-org.test.mjs pins the condition).
+        if (n === "TcBillingReader" && file === "dns-account.yaml") continue;
+        expect(seen.get(n), `${n} in ${file} and ${seen.get(n)}`).toBeUndefined();
+        seen.set(n, file);
+      }
+    }
+    expect([...seen.keys()]).toEqual(
+      expect.arrayContaining(["TcCiRoleBoundaryStaging", "TcCiRoleBoundaryProduction"]),
+    );
+    expect([...seen.keys()]).not.toContain("TcCiRoleBoundary");
+  });
+
+  describe.each(ROLES.filter((r) => r.other))("$name", ({ file, stage, other }) => {
+    const statements = inlineStatements(file);
+    const allows = statements.filter((s) => s.Effect === "Allow");
+
+    it(`never names a resource of the ${other} stage in an Allow`, () => {
+      for (const s of allows) expect(resourceText(s), s.Sid).not.toContain(other);
+    });
+
+    it(`denies every action on what SST tags or names for the ${other} stage`, () => {
+      const tagged = statements.find((s) => s.Sid === "NeverWhatSstTaggedForTheOtherStage");
+      expect(tagged).toMatchObject({ Effect: "Deny", Action: "*", Resource: "*" });
+      expect(tagged.Condition).toEqual({ StringEquals: { "aws:ResourceTag/sst:stage": other } });
+      const created = statements.find((s) => s.Sid === "NeverCreateForTheOtherStage");
+      expect(created.Condition).toEqual({ StringEquals: { "aws:RequestTag/sst:stage": other } });
+      const names = statements.find((s) => s.Sid === "NeverANameOfTheOtherStage");
+      expect(names).toMatchObject({ Effect: "Deny", Action: "*" });
+      const text = resourceText(names);
+      for (const part of [
+        `role/tc-${other}-*`,
+        `role/ticon-cloud-${other}-*`,
+        `function:tc-${other}-*`,
+        `function:ticon-cloud-${other}-*`,
+        `parameter/sst/passphrase/ticon-cloud/${other}`,
+        `sst-state-*/*/ticon-cloud/${other}*`,
+        `budget/tc-${other}-*`,
+      ]) {
+        expect(text, part).toContain(part);
+      }
+      expect(text).not.toContain(`-${stage}-`);
+    });
+
+    // WPU-Z11 fix round 1: CloudFront Functions and the WAF of the other stage, by name.
+    it(`denies the CloudFront Functions and the WAF of the ${other} stage by name`, () => {
+      const text = resourceText(statements.find((s) => s.Sid === "NeverANameOfTheOtherStage"));
+      for (const part of [
+        `cloudfront::\${AWS::AccountId}:function/ticon-cloud-${other}-*`,
+        `cloudfront::\${AWS::AccountId}:function/*-${other}-*`,
+        `:*/webacl/tc-${other}-*`,
+        `:*/ipset/tc-${other}-*`,
+      ]) {
+        expect(text, part).toContain(part);
+      }
+    });
+
+    // WPU-Z11 fix round 1: the SST bootstrap is shared by both stages; neither deploy role may change it.
+    it("never changes the shared SST bootstrap parameter or the SST state and asset buckets", () => {
+      const param = statements.find((s) => s.Sid === "NeverTheSharedSstBootstrap");
+      expect(param.Effect).toBe("Deny");
+      expect(list(param.Action)).toEqual(
+        expect.arrayContaining([
+          "ssm:PutParameter",
+          "ssm:DeleteParameter",
+          "ssm:DeleteParameters",
+          "ssm:LabelParameterVersion",
+          "ssm:AddTagsToResource",
+        ]),
+      );
+      expect(param.Resource).toEqual({
+        "Fn::Sub": "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/bootstrap",
+      });
+      const buckets = statements.find((s) => s.Sid === "NeverTheSharedSstBuckets");
+      expect(buckets.Effect).toBe("Deny");
+      expect(list(buckets.Action)).toEqual(
+        expect.arrayContaining([
+          "s3:PutBucket*",
+          "s3:DeleteBucket*",
+          "s3:PutLifecycleConfiguration",
+          "s3:PutEncryptionConfiguration",
+          "s3:PutReplicationConfiguration",
+        ]),
+      );
+      // bucket-level actions only: objects (state files, assets) stay usable
+      for (const a of list(buckets.Action)) expect(a).not.toMatch(/Object/);
+      expect(buckets.Resource).toEqual(["arn:aws:s3:::sst-state-*", "arn:aws:s3:::sst-asset-*"]);
+    });
+
+    // WPU-Z11 fix round 2: the name-based object denies cannot be bypassed through an S3 access point.
+    it("may neither create nor use an S3 access point", () => {
+      const create = statements.find((s) => s.Sid === "NeverCreateAnS3AccessPoint");
+      expect(create).toMatchObject({ Effect: "Deny", Resource: "*" });
+      expect(list(create.Action).sort()).toEqual([
+        "s3:CreateAccessPoint",
+        "s3:CreateAccessPointForObjectLambda",
+        "s3:CreateMultiRegionAccessPoint",
+      ]);
+      const use = statements.find((s) => s.Sid === "NeverUseAnS3AccessPoint");
+      expect(use).toMatchObject({ Effect: "Deny", Action: "s3:*", Resource: "*" });
+      expect(use.Condition).toEqual({ Null: { "s3:DataAccessPointArn": "false" } });
+    });
+
+    it("names the shared SST asset bucket and the response headers policy as known residuals", () => {
+      const text = readFileSync(join(root, "infra", "org", file), "utf8");
+      expect(text).toContain("(4) the shared SST asset bucket sst-asset-*");
+      expect(text).toContain("tc-<stage>-security-headers");
+      expect(text).not.toContain("objects stay usable");
+    });
+  });
+
+  // WPU-Z11 (security review): a role CREATED by one stage (it carries that stage's boundary) cannot read
+  // or change the data, secrets or functions of the other stage in the shared account.
+  describe.each(ROLES.filter((r) => r.other))("boundary of $name", ({ file, stage, other }) => {
     const [boundary] = resources(tpl[file], "AWS::IAM::ManagedPolicy");
     const statements = expand(boundary.Properties.PolicyDocument.Statement);
 
-    it("is the managed policy named TcCiRoleBoundary, defined in the same template", () => {
-      expect(boundary.Properties.ManagedPolicyName).toBe("TcCiRoleBoundary");
+    it(`denies every action on what SST tags sst:stage=${other}`, () => {
+      const s = statements.find((x) => x.Sid === "NeverWhatSstTaggedForTheOtherStage");
+      expect(s).toMatchObject({ Effect: "Deny", Action: "*", Resource: "*" });
+      expect(s.Condition).toEqual({ StringEquals: { "aws:ResourceTag/sst:stage": other } });
+    });
+
+    it(`denies every action on the ${other} secrets, parameters, state, data and functions by name`, () => {
+      const s = statements.find((x) => x.Sid === "NeverANameOfTheOtherStage");
+      expect(s).toMatchObject({ Effect: "Deny", Action: "*" });
+      const text = resourceText(s);
+      for (const part of [
+        `arn:aws:s3:::ticon-cloud-${other}-*`,
+        `sst-state-*/*/ticon-cloud/${other}*`,
+        `parameter/sst/passphrase/ticon-cloud/${other}"`,
+        `parameter/sst/ticon-cloud/${other}/*`,
+        `secret:ticon-cloud-${other}-*`,
+        `table/ticon-cloud-${other}-*`,
+        `:ticon-cloud-${other}-*`,
+        `function:tc-${other}-*`,
+        `function:ticon-cloud-${other}-*`,
+        `alias/tc-${other}-*`,
+      ]) {
+        expect(text, part).toContain(part);
+      }
+      expect(text).not.toContain(`-${stage}-`);
+      expect(text).not.toContain(`/${stage}`);
+    });
+  });
+
+  it("the staging role changes only the DNS records of the two staging names", () => {
+    const s = inlineStatements("ci-deploy-staging.yaml").find(
+      (x) => x.Sid === "OnlyTheDnsRecordsOfTheStage",
+    );
+    expect(s).toMatchObject({ Effect: "Deny", Action: "route53:ChangeResourceRecordSets" });
+    expect(
+      s.Condition["ForAnyValue:StringNotLike"][
+        "route53:ChangeResourceRecordSetsNormalizedRecordNames"
+      ],
+    ).toEqual([
+      { Ref: "WebDomain" },
+      { "Fn::Sub": "*.${WebDomain}" },
+      { Ref: "AdminDomain" },
+      { "Fn::Sub": "*.${AdminDomain}" },
+    ]);
+  });
+});
+
+describe("the permissions boundaries TcCiRoleBoundaryStaging and TcCiRoleBoundaryProduction", () => {
+  describe.each([
+    ["ci-deploy-staging.yaml", "staging"],
+    ["ci-deploy-production.yaml", "production"],
+  ])("%s", (file, stage) => {
+    const [boundary] = resources(tpl[file], "AWS::IAM::ManagedPolicy");
+    const statements = expand(boundary.Properties.PolicyDocument.Statement);
+
+    it("is the managed policy of its stage, defined in the same template", () => {
+      expect(boundary.Properties.ManagedPolicyName).toBe(BOUNDARY[stage]);
       expect(resources(tpl[file], "AWS::IAM::ManagedPolicy")).toHaveLength(1);
     });
 
@@ -351,13 +647,18 @@ describe("plan role: minimal customer-managed read policy, no data-plane reads",
   });
 
   it("limits object reads to the SST state bucket and parameter reads to the SST passphrase", () => {
-    const objects = statements.find((s) => s.Sid === "TheSstStateBucketOnly");
-    expect(list(objects.Resource).every((r) => r.startsWith("arn:aws:s3:::sst-state-"))).toBe(true);
+    const bucket = statements.find((s) => s.Sid === "TheSstStateBucketOnly");
+    expect(bucket.Action).toBe("s3:ListBucket");
+    expect(bucket.Resource).toBe("arn:aws:s3:::sst-state-*");
+    // WPU-Z11 fix round 1: objects of the production stage only (the bucket is shared with staging).
+    const objects = statements.find((s) => s.Sid === "TheProductionStateObjectsOnly");
+    expect(objects.Action).toBe("s3:GetObject");
+    expect(objects.Resource).toBe("arn:aws:s3:::sst-state-*/*/ticon-cloud/production*");
     const params = statements.find((s) => s.Sid === "TheSstPassphraseAndBootstrapParameterOnly");
     for (const r of list(params.Resource)) expect(JSON.stringify(r)).toContain("parameter/sst/");
     expect(JSON.stringify(params.Resource)).not.toContain("parameter/*");
     const noObject = statements.find((s) => s.Sid === "NoObjectReadOutsideTheStateBucket");
-    expect(noObject.NotResource).toBe("arn:aws:s3:::sst-state-*/*");
+    expect(noObject.NotResource).toBe("arn:aws:s3:::sst-state-*/*/ticon-cloud/production*");
     const noParam = statements.find((s) => s.Sid === "NoParameterReadOutsideSst");
     expect(JSON.stringify(noParam.NotResource)).toContain("parameter/sst/*");
   });
@@ -397,5 +698,25 @@ describe("plan role: minimal customer-managed read policy, no data-plane reads",
     const decryptDeny = statements.filter((s) => s.Effect === "Deny" && s.Action === "kms:Decrypt");
     expect(decryptDeny.some((s) => s.NotResource?.Ref === "SstStateKeyArn")).toBe(true);
     expect(decryptDeny.some((s) => s.Resource === "*")).toBe(true);
+  });
+
+  // WPU-Z11 (VERIFY, Parameter Store "Restricting access"): reading the SecureString passphrase needs
+  // kms:Decrypt of the caller on aws/ssm. Both Deny branches exempt exactly that decryption, by the
+  // encryption context PARAMETER_ARN of the production passphrase (not staging's, in one account).
+  it("exempts only the decryption of the production SST passphrase from the kms:Decrypt deny", () => {
+    const passphrase =
+      "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/production";
+    const decryptDeny = statements.filter((s) => s.Effect === "Deny" && s.Action === "kms:Decrypt");
+    expect(decryptDeny).toHaveLength(2);
+    for (const s of decryptDeny) {
+      expect(s.Condition).toEqual({
+        StringNotLike: { "kms:EncryptionContext:PARAMETER_ARN": { "Fn::Sub": passphrase } },
+      });
+    }
+    const params = statements.find((s) => s.Sid === "TheSstPassphraseAndBootstrapParameterOnly");
+    expect(params.Resource).toEqual([
+      { "Fn::Sub": passphrase },
+      { "Fn::Sub": "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/bootstrap" },
+    ]);
   });
 });
