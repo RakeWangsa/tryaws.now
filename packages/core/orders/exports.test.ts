@@ -371,6 +371,26 @@ const STORAGE_CONTAINER = [
   "parseDeployment",
 ];
 
+// WPU-Y1: the hand-set exchange rate has a maximum age (7 days).
+const WPU_Y1 = [
+  "FX_ALERT_EVENT",
+  "FX_CLOCK_SKEW_TOLERANCE_MS",
+  "FX_CONFIRM_PERCENT",
+  "FX_RATE_ALERT_AGE_DAYS",
+  "FX_RATE_MAX_AGE_DAYS",
+  "FX_RATE_UNAVAILABLE_CODE",
+  "fxAlertWindowOpen",
+  "fxChangeNeedsConfirm",
+  "fxFreshnessRefusal",
+  "fxRateAgeSeconds",
+  "fxRateAlertDue",
+  "fxRateInSaneRange",
+  "fxRateState",
+  "isFxRateUnavailable",
+  "rateIsFresh",
+  "runFxRateWatch",
+];
+
 // WP7-T3 and WP7-T5 add the DNS record rules and metering to @tc/core.
 const WP7 = [
   "CATCH_UP_DAYS",
@@ -595,6 +615,7 @@ describe("the public surface of the order flow", () => {
           ...PRODUCTS,
           ...LIFECYCLE,
           ...WP7,
+          ...WPU_Y1,
           ...STORAGE_CONTAINER,
           ...KYC,
           ...RECONCILE,

@@ -185,6 +185,7 @@ export const bucketEn: Same<typeof bucketBn> = {
       already_created:
         "This key was already made, and its secret key cannot be shown again. Delete it and make a new key if you lost the secret.",
       unavailable: "We could not finish this now. Please try again shortly.",
+      prices_updating: "Prices are being updated. Please try again later.",
     },
     done: {
       accessPrivate: "The request to make the bucket private was taken.",

@@ -1,12 +1,5 @@
-import {
-  adminRepos,
-  readAdminApprover,
-  readFxRateInForce,
-  type AdminActor,
-  type FxRateRow,
-  type Tx,
-} from "@tc/db";
-import { fxChangeNeedsSecondAdmin, isFxRateText } from "../pricing/index";
+import { adminRepos, readAdminApprover, type AdminActor, type FxRateRow, type Tx } from "@tc/db";
+import { isFxRateText } from "../pricing/index";
 import type { Clock, Result } from "../types";
 import { isMarketText, isUuidText, marketProblem, reasonProblem, resolveStart } from "./common";
 
@@ -63,21 +56,15 @@ export async function setFxRate(
   const unknown = await marketProblem(tx, market);
   if (unknown !== null) return { ok: false, error: "validation", fields: { market: unknown } };
 
-  const current = await readFxRateInForce(tx, market, at);
-  const needsSecondAdmin = current !== null && fxChangeNeedsSecondAdmin(current.rate, rate);
-  if (needsSecondAdmin && requestedBy === undefined) return forbidden("second_admin_required");
-  if (requestedBy !== undefined) {
-    if (requestedBy.toLowerCase() === actor.adminId.toLowerCase()) {
-      return forbidden("must_differ_from_actor");
-    }
-    const approver = await readAdminApprover(tx, requestedBy);
-    if (
-      approver === null ||
-      approver.status !== "active" ||
-      !APPROVER_ROLES.includes(approver.role)
-    ) {
-      return forbidden("not_an_approver");
-    }
+  // WPU-Y1 (owner decision 3): EVERY rate is a four-eyes change. The requester is named by the stored pending
+  // change, never by a request, and the actor here is the approver: a rate without a second admin is refused.
+  if (requestedBy === undefined) return forbidden("second_admin_required");
+  if (requestedBy.toLowerCase() === actor.adminId.toLowerCase()) {
+    return forbidden("must_differ_from_actor");
+  }
+  const other = await readAdminApprover(tx, requestedBy);
+  if (other === null || other.status !== "active" || !APPROVER_ROLES.includes(other.role)) {
+    return forbidden("not_an_approver");
   }
 
   const written = await adminRepos(tx, actor).fxRates.set(
@@ -86,7 +73,8 @@ export async function setFxRate(
       rate,
       effectiveFrom: start.value,
       at,
-      ...(requestedBy !== undefined ? { approvedBy: requestedBy } : {}),
+      approvedBy: requestedBy,
+      reconfirm: true,
     },
     reason,
   );

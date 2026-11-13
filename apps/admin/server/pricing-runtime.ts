@@ -1,6 +1,5 @@
 import { createHmac } from "node:crypto";
 import {
-  fxChangeNeedsSecondAdmin,
   previewBook,
   previewConfigPrice,
   previewChange,
@@ -64,7 +63,6 @@ export function pricingFlowDeps(): PricingFlowDeps {
       setFxRate,
       setFeatureFlag,
       fxInForce: (tx, market, at) => readFxRateInForce(tx, market, at),
-      needsSecondAdmin: fxChangeNeedsSecondAdmin,
     },
     stage: process.env["TC_STAGE"] ?? "",
   };

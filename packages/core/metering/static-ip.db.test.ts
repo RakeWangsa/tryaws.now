@@ -28,8 +28,9 @@ const detach = async (resourceId: string, when: Date | null): Promise<void> => {
     [resourceId, when === null ? null : when.toISOString()],
   );
 };
-const run = (now: Date) => {
+const run = async (now: Date) => {
   kit.clock.set(now);
+  await kit.refreshFx(); // WPU-Y1: a rate older than 7 days prices nothing
   return runStaticIpMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
 };
 

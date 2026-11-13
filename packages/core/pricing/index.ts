@@ -1,6 +1,21 @@
 export { decimalAtMost, isPlainDecimal, isPositiveDecimal } from "./decimal";
 export { PricingInputError, type PricingProblem } from "./errors";
-export { FX_SECOND_ADMIN_PERCENT, fxChangeNeedsSecondAdmin, isFxRateText } from "./fx-rate";
+export {
+  FX_CLOCK_SKEW_TOLERANCE_MS,
+  FX_CONFIRM_PERCENT,
+  FX_RATE_ALERT_AGE_DAYS,
+  FX_RATE_MAX_AGE_DAYS,
+  FX_SECOND_ADMIN_PERCENT,
+  fxChangeNeedsConfirm,
+  fxChangeNeedsSecondAdmin,
+  fxRateAgeSeconds,
+  fxRateAlertDue,
+  fxRateInSaneRange,
+  fxRateState,
+  isFxRateText,
+  rateIsFresh,
+  type FxRateState,
+} from "./fx-rate";
 export {
   PREVIEW_SAMPLES,
   previewPricing,

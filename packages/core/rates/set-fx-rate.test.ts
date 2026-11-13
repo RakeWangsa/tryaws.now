@@ -17,12 +17,13 @@ beforeAll(async () => {
   actor = await adminActor(t, "finance");
   second = await adminActor(t, "superadmin");
 });
+// WPU-Y1: every rate is a four-eyes change. `actor` approves here; `second` is the admin who asked.
 const set = (input: Partial<SetFxRateInput>, now: Date = T0, as: AdminActor = actor) =>
   asRole(t, "admin_rw", (tx) =>
     setFxRate(
       tx,
       as,
-      { market: "BD", rate: "127", reason: "rate change", ...input },
+      { market: "BD", rate: "127", reason: "rate change", requestedBy: second.adminId, ...input },
       { now: () => now },
     ),
   );
@@ -31,7 +32,7 @@ const count = async () =>
 const audits = () => auditRowsOf(t.pool, actor.adminId);
 const inForce = (at: Date) => asRole(t, "web_rw", (tx) => readFxRateInForce(tx, "BD", at));
 
-it("the first rate starts now and is audited with actor, reason, IP and target", async () => {
+it("the first rate starts now and is audited with actor, reason, IP, target and the admin who asked", async () => {
   const r = await set({ rate: "127", reason: "launch rate" });
   expect(r).toEqual({
     ok: true,
@@ -46,33 +47,26 @@ it("the first rate starts now and is audited with actor, reason, IP and target",
       action: "fx_rate.set",
       target_id: "BD@2026-11-11T06:00:00.000Z",
       ip: "203.0.113.9",
-      metadata: { reason: "launch rate", before: null },
+      metadata: { reason: "launch rate", before: null, after: { approvedBy: second.adminId } },
     },
   ]);
 });
 
-it("a change of 5 percent or less needs no second admin", async () => {
-  const r = await set({ rate: "130" }, day(1)); // +2.36 percent
-  expect(r).toMatchObject({
-    ok: true,
-    value: { replayed: false, fx: { rate: "130", effectiveFrom: day(1) } },
-  });
-});
-
-it("a change of more than 5 percent is refused without a second admin, and with the actor as the second admin", async () => {
+it("even a tiny change is refused without a second admin, and when the actor is the second admin", async () => {
   const n = await count();
   const a = (await audits()).length;
-  expect(await set({ rate: "140" }, day(2))).toEqual({
+  const bare = { requestedBy: undefined as unknown as string };
+  expect(await set({ rate: "128", ...bare }, day(1))).toEqual({
     ok: false,
     error: "forbidden",
     fields: { requestedBy: "second_admin_required" },
-  }); // +7.69 percent
-  expect(await set({ rate: "140", requestedBy: actor.adminId }, day(2))).toEqual({
+  }); // +0.79 percent
+  expect(await set({ rate: "128", requestedBy: actor.adminId }, day(1))).toEqual({
     ok: false,
     error: "forbidden",
     fields: { requestedBy: "must_differ_from_actor" },
   });
-  expect(await set({ rate: "140", requestedBy: actor.adminId.toUpperCase() }, day(2))).toEqual({
+  expect(await set({ rate: "128", requestedBy: actor.adminId.toUpperCase() }, day(1))).toEqual({
     ok: false,
     error: "forbidden",
     fields: { requestedBy: "must_differ_from_actor" },
@@ -87,7 +81,7 @@ it("a second admin that does not exist, or is not finance or superadmin, is refu
   const ops = await newAdmin(t.pool, "ops");
   const gone = "01900000-0000-7000-8000-000000000000";
   for (const requestedBy of [support, ops, gone]) {
-    expect(await set({ rate: "140", requestedBy }, day(2)), requestedBy).toEqual({
+    expect(await set({ rate: "130", requestedBy }, day(2)), requestedBy).toEqual({
       ok: false,
       error: "forbidden",
       fields: { requestedBy: "not_an_approver" },
@@ -95,7 +89,7 @@ it("a second admin that does not exist, or is not finance or superadmin, is refu
   }
   const disabled = await newAdmin(t.pool, "superadmin");
   await t.pool.query("update admin_users set status = 'disabled' where id = $1", [disabled]);
-  expect(await set({ rate: "140", requestedBy: disabled }, day(2))).toEqual({
+  expect(await set({ rate: "130", requestedBy: disabled }, day(2))).toEqual({
     ok: false,
     error: "forbidden",
     fields: { requestedBy: "not_an_approver" },
@@ -104,34 +98,26 @@ it("a second admin that does not exist, or is not finance or superadmin, is refu
 });
 
 it("with a second admin the change is saved and the audit row records who asked", async () => {
-  const r = await set({ rate: "140", requestedBy: second.adminId }, day(2));
-  expect(r).toMatchObject({ ok: true, value: { replayed: false, fx: { rate: "140" } } });
+  const r = await set({ rate: "130" }, day(2));
+  expect(r).toMatchObject({ ok: true, value: { replayed: false, fx: { rate: "130" } } });
   expect((await audits()).at(-1)?.metadata).toMatchObject({
     reason: "rate change",
-    before: { rate: "130" },
-    after: { rate: "140", approvedBy: second.adminId },
+    before: { rate: "127" },
+    after: { rate: "130", approvedBy: second.adminId },
   });
 });
 
-it("exactly 5 percent is allowed; a rate a tenth of the old one is not (14.7 for 147)", async () => {
-  expect(await set({ rate: "147" }, day(3))).toMatchObject({
-    ok: true,
-    value: { fx: { rate: "147" } },
-  }); // 140 x 1.05
-  expect(await set({ rate: "14.7" }, day(4))).toEqual({
-    ok: false,
-    error: "forbidden",
-    fields: { requestedBy: "second_admin_required" },
-  });
-});
-
-it("the same rate again, to start now, adds no row", async () => {
+it("the same rate again, to start now, is a re-confirm: it adds a row and restarts the age of the rate", async () => {
   const n = await count();
-  expect(await set({ rate: "147.00" }, day(5))).toMatchObject({
+  expect(await set({ rate: "130.00" }, day(5))).toMatchObject({
     ok: true,
-    value: { replayed: true, fx: { rate: "147" } },
+    value: { replayed: false, fx: { rate: "130", effectiveFrom: day(5) } },
   });
-  expect(await count()).toBe(n);
+  expect(await count()).toBe(n + 1);
+  expect((await inForce(day(5)))?.effectiveFrom).toEqual(day(5));
+  // the same call again at the same instant is a replay, not a second row
+  expect(await set({ rate: "130" }, day(5))).toMatchObject({ ok: true, value: { replayed: true } });
+  expect(await count()).toBe(n + 1);
 });
 
 it("a change can be scheduled: it is not in force before its start and is from its start on", async () => {
@@ -140,7 +126,7 @@ it("a change can be scheduled: it is not in force before its start and is from i
     ok: true,
     value: { replayed: false },
   });
-  expect((await inForce(new Date(start.getTime() - 1)))?.rate).toBe("147");
+  expect((await inForce(new Date(start.getTime() - 1)))?.rate).toBe("130");
   expect((await inForce(start))?.rate).toBe("150");
 });
 
@@ -204,7 +190,7 @@ it("web_rw cannot save a rate: the database refuses with 42501 (section 3.3)", a
       setFxRate(
         tx,
         actor,
-        { market: "BD", rate: "153", reason: "x" },
+        { market: "BD", rate: "153", reason: "x", requestedBy: second.adminId },
         clockAt("2026-12-01T00:00:00Z"),
       ),
     ),

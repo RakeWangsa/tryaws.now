@@ -87,7 +87,7 @@ export async function createLoadBalancerDraftCore(
   if (!result.ok) {
     return {
       ok: false,
-      error: publicErrorOf(result.error),
+      error: publicErrorOf(result.error, result.data),
       ...(result.error === "validation" && result.fields ? { fields: result.fields } : {}),
     };
   }

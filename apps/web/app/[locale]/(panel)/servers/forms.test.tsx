@@ -95,6 +95,7 @@ describe("PlaceForm (placeOrder)", () => {
     ["forbidden", "not allowed to do this"],
     ["draft_expired", "The price has expired"],
     ["capacity_full", "This location is full"],
+    ["prices_updating", "Prices are being updated"],
     ["unavailable", "You were not charged"],
   ])("shows %s in platform words, never raw text", (code, words) => {
     hold.state = { error: code } satisfies FormState;

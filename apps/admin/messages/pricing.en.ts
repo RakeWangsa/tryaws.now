@@ -28,6 +28,8 @@ export const pricingEn: Same<typeof pricingBn> = {
       second_admin_required: "This change needs the approval of a different admin.",
       must_differ_from_actor: "You cannot approve a change that you asked for.",
       not_an_approver: "The approver does not have a role that may approve.",
+      confirm_required:
+        "This rate differs by more than 10% from the rate in force. Tick the confirm box if it is right.",
     },
     reason: {
       label: "Reason",
@@ -100,7 +102,24 @@ export const pricingEn: Same<typeof pricingBn> = {
       rateHint: "Decimal text, for example 122.5",
       fromLabel: "Starts (Dhaka time)",
       bigChange:
-        "A change of more than {percent}% from the rate in force does not apply at once. A different admin has to approve it.",
+        "Every new rate waits until a different admin approves it. A rate that differs by more than {percent}% from the rate in force also needs the confirm box.",
+      confirmLarge: "I checked this rate: it differs by more than {percent}% from the rate in force",
+      setBy: "Set by admin #{who} on",
+      age: "Age of the rate: {days} days {hours} hours",
+      state: {
+        missing: "No rate",
+        fresh: "Fresh",
+        ageing: "Getting old",
+        stale: "Too old",
+      },
+      warn: {
+        missing:
+          "There is no rate. Purchases and renewals are refused until one is approved.",
+        ageing:
+          "The rate is older than 6 days. After {max} days purchases are refused, renewals and usage charges wait. Set a new rate.",
+        stale:
+          "The rate is older than {max} days. Purchases are refused, renewals and usage charges wait until a new rate is approved.",
+      },
       submit: "Save the rate",
       pendingTitle: "Waiting for approval",
       pendingBody: "Waiting rate {rate}. Asked by admin #{who}.",

@@ -125,6 +125,18 @@ describe("the hour buckets of a detached IP", () => {
     expect(staticIpChargeableHours(new Date("2026-11-01T00:00:00Z"), at("13:30"))).toHaveLength(3);
   });
 
+  it("WPU-Y1: hours held while the rate was stale widen the look-back, and never narrow it", () => {
+    const long = new Date("2026-11-01T00:00:00Z");
+    expect(staticIpChargeableHours(long, at("13:30"), 10)).toHaveLength(11);
+    expect(staticIpChargeableHours(long, at("13:30"), 0)).toHaveLength(3);
+    expect(staticIpChargeableHours(long, at("13:30"), Number.NaN)).toHaveLength(3);
+    // still only hours after the first free hour
+    expect(staticIpChargeableHours(D0, at("12:10"), 48)).toEqual([
+      "2026-11-12T17",
+      "2026-11-12T18",
+    ]);
+  });
+
   it("staticIpIsCharging is true only after MORE than one hour unattached (the badge of the screens)", () => {
     expect(staticIpIsCharging(D0, at("10:59"))).toBe(false);
     expect(staticIpIsCharging(D0, at("11:00"))).toBe(false);

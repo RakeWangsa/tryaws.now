@@ -31,6 +31,7 @@ describe("the log events of the alerts exist in the code that writes them", () =
   const writers = {
     capacityReleaseProblem: "packages/core/capacity/release.ts",
     creditNoteStuck: "packages/core/invoices/credit-note.ts",
+    fxRateStaleWarning: "packages/core/rates/fx-watch.ts",
     reconcileFindings: "functions/reconciler/reconcile.ts",
     reconcileIncomplete: "functions/reconciler/reconcile.ts",
     reconcileStaleOperations: "functions/reconciler/reconcile.ts",
@@ -71,6 +72,7 @@ describe("infra/stacks/alarms.ts", () => {
     for (const id of [
       "CapacityReleaseAlarm",
       "CreditNoteStuckAlarm",
+      "FxRateStaleAlarm",
       "ReconcileBadAlarm",
       "ReconcileSilentAlarm",
     ]) {
@@ -79,6 +81,7 @@ describe("infra/stacks/alarms.ts", () => {
     for (const event of [
       "capacityReleaseProblem",
       "creditNoteStuck",
+      "fxRateStaleWarning",
       "reconcileFindings",
       "reconcileIncomplete",
       "reconcileStaleOperations",
@@ -92,6 +95,7 @@ describe("infra/stacks/alarms.ts", () => {
   it("puts the capacity alert on the provisioner and the credit note alert on the scheduler", () => {
     expect(alarms).toMatch(/"CapacityReleaseProblemFilter", provisionerFunction/);
     expect(alarms).toMatch(/"CreditNoteStuckFilter", schedulerFunction/);
+    expect(alarms).toMatch(/"FxRateStaleFilter", schedulerFunction/);
     expect(alarms).toMatch(/workers\.provisioner\?\.nodes\.function/);
   });
 

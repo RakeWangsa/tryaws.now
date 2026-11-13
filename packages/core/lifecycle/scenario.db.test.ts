@@ -50,12 +50,15 @@ const notes = async () =>
   ).map((r) => `${String(r.channel)}:${String(r.template)}`);
 
 const tick = (to: Date) => kit.clock.set(to);
-const run = () =>
-  runLifecycle({
+// WPU-Y1: a rate older than 7 days prices nothing, so the rate in force is re-confirmed at the clock before each run.
+const run = async () => {
+  await kit.refreshFx();
+  return runLifecycle({
     runTx: worker,
     clock: kit.clock,
     log: (e) => logged.push(e),
   });
+};
 const setSub = (autoRenew: boolean) =>
   t.pool.query("update subscriptions set auto_renew = $2 where id = $1", [
     subscriptionId,

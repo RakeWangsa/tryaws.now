@@ -7,7 +7,10 @@ import {
   pricingInForce,
   previewChange,
   priceCatalog,
+  fxRateAgeSeconds,
+  fxRateState,
   type FlagState,
+  type FxRateState,
   type PreviewRow,
   type PricedCatalogRow,
   type PricingStep,
@@ -60,6 +63,11 @@ export interface PricingScreen {
   readonly rules: readonly PricingRuleRow[];
   readonly fxHistory: readonly FxRateRow[];
   readonly fxInForce: FxRateRow | null;
+  // WPU-Y1. Who saved the rate in force and when, and its state at `now` (missing, fresh, ageing after 6 days,
+  // stale after 7 days). `setBy` is an admin id; the screen shows its first 8 characters only.
+  readonly fxMeta?: { readonly setBy: string | null; readonly setAt: Date } | null;
+  readonly fxState?: FxRateState;
+  readonly fxAgeSeconds?: number | null;
   readonly pending: FxChange | null;
   readonly preview: PreviewState;
   readonly now: Date;
@@ -99,12 +107,14 @@ export async function loadPricing(
       const once = { now: () => now };
       const markets = (await readMarkets(tx)).map((m) => m.code);
       const market = markets.includes(asked.market) ? asked.market : (markets[0] ?? asked.market);
-      const [rules, fxHistory, fxInForce, pending] = await Promise.all([
+      const [rules, fxHistory, fxInForce, pending, fxMeta] = await Promise.all([
         readPricingRules(tx, market, 50),
         readFxRates(tx, market, 50),
         readFxRateInForce(tx, market, now),
         adminRepos(tx, admin).fxChanges.read(market),
+        adminRepos(tx, admin).fxRates.meta(market, now),
       ]);
+      const anchor = fxInForce === null ? null : fxInForce.effectiveFrom;
       let draft: Draft = { ...asked, market };
       let preview: PreviewState = { kind: "none" };
       if (submitted) {
@@ -130,7 +140,12 @@ export async function loadPricing(
         }
       } else {
         // The editor opens on the rule in force for the family, or the rule of the market.
-        const found = await pricingInForce(tx, { market, productFamily: draft.family }, once);
+        const found = await pricingInForce(
+          tx,
+          { market, productFamily: draft.family },
+          once,
+          { allowStale: true },
+        );
         if (found.ok) draft = { ...draft, steps: draftOfSteps(found.value.rule.value.steps) };
       }
       return {
@@ -141,6 +156,9 @@ export async function loadPricing(
         rules,
         fxHistory,
         fxInForce,
+        fxMeta: fxMeta === null ? null : { setBy: fxMeta.setBy, setAt: fxMeta.setAt },
+        fxState: fxRateState(anchor, now),
+        fxAgeSeconds: fxRateAgeSeconds(anchor, now),
         pending,
         preview,
         now,

@@ -2,6 +2,7 @@ import {
   findLedgerTransactionByKey,
   lifecycleRepo,
   meteringRepo,
+  readFxRates,
   type LifecycleRepo,
   type MeteringRepo,
   type Tx,
@@ -19,6 +20,7 @@ import {
   type MeteredUnitPrice,
 } from "../pricing/metering";
 import type { Clock, Result } from "../types";
+import { staleWindowMs } from "./stale-window";
 
 // Spec 11, metered items. Snapshot storage is charged once a day, one metered_charge ledger transaction
 // per (resource, day) under the key `meter:<resource>:snapshot_gb:<day>`, so a repeat of any run is a
@@ -74,6 +76,12 @@ export interface MeteringOps {
    * has no usable one. Optional so a test world without a config price needs nothing; absent means null.
    */
   configPrice?(tx: Tx, clock: Clock, market: string): Promise<MeteredUnitPrice | null>;
+  /**
+   * WPU-Y1. How long the rate of the market was stale just before the rate in force took effect, in ms, while that is
+   * recent (see stale-window.ts); 0 otherwise. The pass looks back that far, so a day that could not be priced while
+   * the rate was older than 7 days is charged once a new rate is set. Optional: absent means 0.
+   */
+  staleWindowMs?(tx: Tx, clock: Clock, market: string): Promise<number>;
   repo(tx: Tx): RepoPart;
   hasCharge(tx: Tx, key: string): Promise<boolean>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
@@ -83,6 +91,14 @@ export const defaultMeteringOps: MeteringOps = {
   configPrice: async (tx, clock, market) => {
     const priced = await snapshotPrice(tx, market, null, clock);
     return priced.ok ? priced.value.breakdown : null;
+  },
+  staleWindowMs: async (tx, clock, market) => {
+    const now = clock.now();
+    const rows = await readFxRates(tx, market, 3);
+    const inForce = rows.find((r) => r.effectiveFrom.getTime() <= now.getTime());
+    if (inForce === undefined) return 0;
+    const before = rows.find((r) => r.effectiveFrom.getTime() < inForce.effectiveFrom.getTime());
+    return staleWindowMs(before?.effectiveFrom ?? null, inForce.effectiveFrom, now);
   },
   repo: (tx) => {
     const m = meteringRepo(tx);
@@ -173,7 +189,13 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
   // 1. snapshot storage: the days that ended, oldest first.
   {
     const lastEnded = new Date(now.getTime() + DHAKA_OFFSET_MS - DAY_MS);
-    for (let back = CATCH_UP_DAYS; back >= 0; back -= 1) {
+    // WPU-Y1: days that were held while the rate was stale are charged now (launch market; replays are keyed).
+    const held =
+      ops.staleWindowMs === undefined
+        ? 0
+        : await deps.runTx((tx) => ops.staleWindowMs!(tx, deps.clock, DEFAULT_MARKET));
+    const lookBack = Math.max(CATCH_UP_DAYS, Math.ceil(held / DAY_MS));
+    for (let back = lookBack; back >= 0; back -= 1) {
       const day = new Date(lastEnded.getTime() - back * DAY_MS).toISOString().slice(0, 10);
       let after: string | null = null;
       for (;;) {

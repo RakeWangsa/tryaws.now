@@ -44,7 +44,10 @@ it("charges 10 GB at 300 paisa a month as 100 paisa a day, once, and sends 80% a
   );
 
   const before = await kit.balance(buyer.customerId);
-  const run = () => runMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
+  const run = async () => {
+    await kit.refreshFx(); // WPU-Y1: a rate older than 7 days prices nothing
+    return runMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
+  };
   const first = await run();
   expect(first).toMatchObject({ charged: 1, failed: 0, notified80: 1, notified100: 0 });
   const perGb = await worker(async (tx) => {
@@ -112,6 +115,7 @@ async function chargeOf(
     return p.ok ? p.value.perGbMonthMinor : 0n;
   });
   const before = await kit.balance(buyer.customerId);
+  await kit.refreshFx();
   const report = await runMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
   const after = await kit.balance(buyer.customerId);
   return { charged: before - after, perGb, source: report.priceSource };
@@ -160,7 +164,10 @@ it("posts a snapshot day as base + VAT + fee, balanced, once", async () => {
   );
   await worker((tx) => meteringRepo(tx).upsertUsage(resourceId, "snapshot_gb", "2026-11-10", "30"));
   const before = await kit.balance(buyer.customerId);
-  const run = () => runMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
+  const run = async () => {
+    await kit.refreshFx(); // WPU-Y1: a rate older than 7 days prices nothing
+    return runMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
+  };
   // Earlier tests left usage rows of other resources: they are charged here too, so only this one is checked.
   expect(await run()).toMatchObject({ failed: 0, priceSource: "config" });
   const charged = before - (await kit.balance(buyer.customerId));

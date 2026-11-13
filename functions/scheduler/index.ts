@@ -3,8 +3,10 @@ import {
   createFifoQueue,
   markPlanChangeFailed,
   runInvoiceBacklog,
+  runFxRateWatch,
   runLifecycle,
   runMetering,
+  type FxWatchReport,
   runPolling,
   runStaticIpMetering,
   sweepOperations,
@@ -50,6 +52,7 @@ export interface SchedulerReport {
   readonly staticIps: StaticIpReport | null;
   readonly invoices: InvoiceBacklogReport | null;
   readonly polling: PollingReport | null;
+  readonly fxWatch: FxWatchReport | null;
   readonly rateLimitsPurged: number | null;
 }
 
@@ -67,6 +70,7 @@ export function createHandler(
     let staticIps: StaticIpReport | null = null;
     let invoices: InvoiceBacklogReport | null = null;
     let polling: PollingReport | null = null;
+    let fxWatch: FxWatchReport | null = null;
     let rateLimitsPurged: number | null = null;
     const failed: string[] = [];
     const job = async (name: string, fn: () => Promise<void>): Promise<void> => {
@@ -148,6 +152,17 @@ export function createHandler(
         if (dnsDelegation.failed > 0) throw new Error("scheduler: dns delegation rows failed");
       });
     }
+    // WPU-Y1: the exchange rate is set by hand. Older than 6 days (or missing) writes the daily alert line.
+    await job("fx_rate_watch", async () => {
+      fxWatch = await runFxRateWatch({ runTx: deps.runTx, clock: deps.clock, log: deps.log });
+      if (fxWatch.alerted > 0) {
+        deps.log({
+          event: "fx_rate_watch_run",
+          checked: fxWatch.checked,
+          alerted: fxWatch.alerted,
+        });
+      }
+    });
     await job("rate_limits", async () => {
       const before = new Date(deps.clock.now().getTime() - RATE_LIMIT_RETENTION_MS);
       rateLimitsPurged = await deps.runTx((tx) => purgeRateLimits(tx, before));
@@ -162,6 +177,7 @@ export function createHandler(
       invoices,
       polling,
       dnsDelegation,
+      fxWatch,
       rateLimitsPurged,
     };
   };

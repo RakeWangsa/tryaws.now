@@ -62,6 +62,7 @@ export async function previewConfigPrice(
     tx,
     { market, productFamily: CONFIG_PRICE_FAMILY[key] },
     clock,
+    { allowStale: true },
   );
   if (!found.ok) return found;
   const { fx, rule, book } = found.value;
