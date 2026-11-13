@@ -49,7 +49,11 @@ describe("L2: the web role reads no invoice object", () => {
 
 describe("L3: the invoice renderer is invoked by its web alias only", () => {
   it("publishes a version and has exactly one alias, named web", () => {
-    expect(workers).toMatch(/spec\.dir === "reader" \|\| spec\.dir === "invoice-renderer"/);
+    // WPU-Z10: the published functions are listed once (access-details too, verify review B1).
+    expect(workers).toContain(
+      'const PUBLISHED_VERSIONS: readonly string[] = ["reader", "access-details", "invoice-renderer"]',
+    );
+    expect(workers).toContain("...(PUBLISHED_VERSIONS.includes(spec.dir)");
     expect(workers.match(/Alias\("InvoiceRendererAliasWeb"/g)).toHaveLength(1);
     expect(workers.match(/aws\.lambda\.Alias\(/g)?.length).toBeGreaterThanOrEqual(3);
   });

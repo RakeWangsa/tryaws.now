@@ -69,7 +69,7 @@ describe("requirement 3: what a removal deletes and keeps, per stage kind", () =
     expect(removalRules("production")).toEqual({
       databaseDeletionProtection: true,
       databaseFinalSnapshot: true,
-      bucketForceDestroy: false,
+      forceEmptyBuckets: false,
       retainUserPools: false,
     });
   });
@@ -78,16 +78,16 @@ describe("requirement 3: what a removal deletes and keeps, per stage kind", () =
     expect(removalRules("staging")).toEqual({
       databaseDeletionProtection: false,
       databaseFinalSnapshot: false,
-      bucketForceDestroy: true,
+      forceEmptyBuckets: true,
       retainUserPools: true,
     });
   });
 
-  it("a personal stage keeps its behaviour: protection and final snapshot on, SST's forceDestroy, pools not retained", () => {
+  it("a personal stage keeps its behaviour: protection and final snapshot on, SST's buckets, pools not retained", () => {
     expect(removalRules("personal")).toEqual({
       databaseDeletionProtection: true,
       databaseFinalSnapshot: true,
-      bucketForceDestroy: true,
+      forceEmptyBuckets: false,
       retainUserPools: false,
     });
   });

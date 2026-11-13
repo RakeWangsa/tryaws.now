@@ -52,8 +52,10 @@ describe("WP0-T2: stages, VPC, CloudFront, WAF", () => {
 
   it("builds a VPC with two AZs and the NAT of the stage size (managed in full, WPU-B8)", () => {
     expect(network).toMatch(
-      /new sst\.aws\.Vpc\("Vpc",\s*\{[\s\S]*az: AZ_COUNT[\s\S]*nat: sizing\(config\.size, config\.kind\)\.network\.nat/,
+      /new sst\.aws\.Vpc\("Vpc",\s*\{[\s\S]*az: AZ_COUNT[\s\S]*nat: sstNatOf\(nat\)/,
     );
+    // WPU-Z10: lean builds one NAT instance itself (sstNatOf gives the Vpc no NAT); full stays managed.
+    expect(network).toContain("const nat = sizing(config.size, config.kind).network.nat");
     expect(source("infra/lib/lean.ts")).toContain('network: { nat: "managed" }');
   });
 
@@ -94,7 +96,10 @@ describe("WP0-T2: stages, VPC, CloudFront, WAF", () => {
   });
 
   it("creates the web ACLs in us-east-1 with the three managed groups and the rate rules", () => {
-    expect(waf).toContain('new aws.Provider("EdgeProvider", { region: EDGE_REGION })');
+    // WPU-Z10: the hand-built provider carries SST's default tags (the budget's tag filter).
+    expect(waf).toContain(
+      'new aws.Provider("EdgeProvider", { region: EDGE_REGION, defaultTags: { tags: sstTags($app.name, stage) }})',
+    );
     expect(waf).toContain("EDGE_REGION");
     expect([...waf.matchAll(/scope: "CLOUDFRONT"/g)].length).toBeGreaterThanOrEqual(4);
     // WPU-B8: the groups are listed in the sizing table (infra/lib/lean.ts); full keeps all three.
@@ -281,15 +286,21 @@ describe("Cognito attribute writes", () => {
 describe("WP0-T3: database, proxy and roles", () => {
   const instance = between(database, "instance: (args", "parameterGroup:");
 
+  // WPU-Z10: protection, the final snapshot and the backup days follow removalRules and
+  // backupRetentionDays, pinned per stage kind in tests/repo/staging-on-demand.test.mjs (production keeps
+  // protection, the final snapshot and 14 or 7 days; staging, removed after each test session, gives
+  // them up).
   it("keeps the instance private, protected, backed up 14 days, encrypted, with a final snapshot (R2)", () => {
     expect(instance).toContain("args.publiclyAccessible = false");
-    expect(instance).toContain("args.deletionProtection = true");
-    // WPU-B8: the days come from the sizing table; full is 14 (lean is 7).
-    expect(instance).toContain("args.backupRetentionPeriod = size.backupRetentionDays");
+    expect(instance).toContain("args.deletionProtection = rules.databaseDeletionProtection");
+    // WPU-B8: the days come from the sizing table; full is 14 (lean is 7). WPU-Z10: staging 1.
+    expect(instance).toContain(
+      "args.backupRetentionPeriod = backupRetentionDays(config.kind, config.size)",
+    );
     expect(source("infra/lib/lean.ts")).toContain("backupRetentionDays: 14");
     expect(instance).toContain("args.storageEncrypted = true");
     expect(instance).toContain("args.kmsKeyId = key.arn");
-    expect(instance).toContain("args.skipFinalSnapshot = false");
+    expect(instance).toContain("args.skipFinalSnapshot = !rules.databaseFinalSnapshot");
     expect(instance).toContain("args.vpcSecurityGroupIds = [net.databaseSecurityGroup.id]");
     expect(database).not.toMatch(
       /publiclyAccessible = true|deletionProtection = false|skipFinalSnapshot = true/,
@@ -297,7 +308,10 @@ describe("WP0-T3: database, proxy and roles", () => {
   });
 
   it("forces TLS on the instance and on the proxy", () => {
-    expect(database).toMatch(/name: "rds\.force_ssl", value: "1"/);
+    // WPU-Z10 (verify review B1 database.ts:63): one rds.force_ssl = 1 REPLACES SST's 0
+    // (infra/lib/database.ts withForcedTls, tested in tests/repo/staging-on-demand.test.mjs).
+    expect(database).toContain("withForcedTls(existing ?? [])");
+    expect(source("infra/lib/database.ts")).toMatch(/name: FORCE_SSL, value: "1"/);
     expect(database).toContain("args.requireTls = true");
     expect(database).toContain("args.vpcSecurityGroupIds = [net.proxySecurityGroup.id]");
     // WPU-B8: Multi-AZ in production comes from the sizing table (full).
@@ -491,7 +505,7 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(storage).toMatch(/effect: "deny"/);
     expect(storage).toContain('actions: ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"]');
     expect(storage).toContain('roleName(stage, "web")');
-    expect(storage).toContain('privateBucket("Kyc", kycKey, [denyWebRead])');
+    expect(storage).toContain('privateBucket("Kyc", kycKey, forceEmptyBuckets, [denyWebRead])');
     const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
     // the web role writes kyc objects (presigned POST) and nothing else on that bucket or key
     expect(customer).toContain(

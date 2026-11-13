@@ -120,7 +120,8 @@ describe("infra/stacks/alarms.ts", () => {
     const at = alarms.indexOf('new aws.cloudwatch.LogMetricFilter("RenewalPriceHoldFilter"');
     expect(at).toBeGreaterThan(-1);
     const filter = alarms.slice(at, alarms.indexOf("metricTransformation", at));
-    expect(filter).toContain("logGroupName: $interpolate`/aws/lambda/${schedulerFunction?.name}`");
+    // WPU-Z10 (verify review 2026-11-13, B1 alarms.ts:79): the log group comes from the function.
+    expect(filter).toContain("logGroupName: logGroupOf(schedulerFunction)");
     // The pattern, with the constants of infra/lib/functions.ts put in, is exactly the one of the task.
     const template = filter.match(/pattern: `([^`]*)`/);
     expect(template).not.toBeNull();

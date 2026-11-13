@@ -24,10 +24,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-// WPU-Z10 (lean, requirement 1): ONE NAT instance for the whole VPC. VERIFY result (SST 4.17.2 vpc.ts,
-// and docs/analysis/verify-review-2026-11-13.md, B1 infra/stacks/network.ts:17, lines 132 to 142):
-// sst.aws.Vpc `nat: "ec2"` launches a t4g.nano fck-nat instance and an Elastic IP in EACH AZ and routes
-// each private subnet to the instance of its own AZ, so two of each. A lean stage asks SST for no NAT
+// WPU-Z10 (lean, requirement 1): ONE NAT instance for the whole VPC.
+// VERIFY result, sst.aws.Vpc `nat: "ec2"` (SST 4.17.2 vpc.ts, and B1 infra/stacks/network.ts:17 of
+// docs/analysis/verify-review-2026-11-13.md, lines 132 to 142): it launches a t4g.nano fck-nat instance
+// and an Elastic IP in EACH AZ and routes each private subnet to the instance of its own AZ, so two of
+// each. A lean stage asks SST for no NAT
 // (sstNatOf) and builds the single one here: the image choice SST makes (NAT_INSTANCE), in the public
 // subnet of the first AZ, with one Elastic IP. The private route tables of BOTH AZs send 0.0.0.0/0 to
 // its network interface (the transform in network() below); the isolated subnets of invoice-renderer get
@@ -35,7 +36,8 @@ function deferred<T>() {
 // neither (SST's role carries only SSM access). One instance is one point of failure for outbound
 // traffic; the lean runbook accepts that (docs/runbooks/single-account-lean.md).
 // A deploy can replace the instance when a newer fck-nat image is published (mostRecent, as in SST);
-// the Elastic IP is a separate resource, so the address (TC_PROBE_SOURCES) stays.
+// the Elastic IP is a separate resource, so the address (TC_PROBE_SOURCES) stays until the stage is
+// removed. A removed and redeployed staging gets a NEW address (docs/runbooks/staging-on-demand.md).
 function singleNatInstance(config: StageConfig, vpc: sst.aws.Vpc) {
   const stage = config.stage;
   const ami = aws.ec2.getAmiOutput({

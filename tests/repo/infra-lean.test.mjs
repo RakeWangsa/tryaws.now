@@ -149,7 +149,9 @@ describe("WPU-B8: the stacks read config.size", () => {
 
   it("network.ts takes nat from the table, keeps two AZs", () => {
     expect(network).toContain("az: AZ_COUNT");
-    expect(network).toContain("nat: sizing(config.size, config.kind).network.nat");
+    // WPU-Z10: lean builds its own single NAT instance, so the Vpc gets sstNatOf(nat).
+    expect(network).toContain("const nat = sizing(config.size, config.kind).network.nat");
+    expect(network).toContain("nat: sstNatOf(nat)");
     expect(network).not.toMatch(/nat: "(managed|ec2)"/);
   });
 
@@ -158,14 +160,19 @@ describe("WPU-B8: the stacks read config.size", () => {
     expect(database).toContain("instance: size.instance");
     expect(database).toContain("multiAz: size.multiAz");
     expect(database).toContain("storage: size.storage");
-    expect(database).toContain("args.backupRetentionPeriod = size.backupRetentionDays");
+    // WPU-Z10: one day on staging, the size's days elsewhere (backupRetentionDays).
+    expect(database).toContain(
+      "args.backupRetentionPeriod = backupRetentionDays(config.kind, config.size)",
+    );
   });
 
+  // WPU-Z10: deletion protection and the final snapshot follow removalRules (off on staging only, which
+  // tests/repo/staging-on-demand.test.mjs pins); they still do not depend on the size.
   it("database.ts keeps the proxy, TLS, KMS, deletion protection and final snapshot in both sizes (R2, R13)", () => {
     for (const part of [
       "args.requireTls = true",
-      "args.deletionProtection = true",
-      "args.skipFinalSnapshot = false",
+      "args.deletionProtection = rules.databaseDeletionProtection",
+      "args.skipFinalSnapshot = !rules.databaseFinalSnapshot",
       "args.storageEncrypted = true",
       "args.kmsKeyId = key.arn",
       "args.publiclyAccessible = false",
@@ -188,17 +195,19 @@ describe("WPU-B8: the stacks read config.size", () => {
     }
   });
 
-  it("workers.ts sets the log retention of every function from the size", () => {
-    expect(workers).toContain("logging: { retention: logRetentionOf(inputs.config.size) }");
+  it("workers.ts sets the log retention of every function from the size (one week on staging, WPU-Z10)", () => {
+    expect(workers).toContain(
+      "logging: { retention: workerLogRetention(inputs.config.kind, inputs.config.size) }",
+    );
   });
 
-  it("budget.ts: MONTHLY, USD, limit 50, two ACTUAL notifications at 40 and 50 to the alarm topic", () => {
+  it("budget.ts: MONTHLY, USD, the limit and ACTUAL notifications of the stage (WPU-Z10) to the alarm topic", () => {
     const budget = source("infra/stacks/budget.ts");
     expect(budget).toContain("new aws.budgets.Budget(");
     expect(budget).toContain('timeUnit: "MONTHLY"');
     expect(budget).toContain('limitUnit: "USD"');
-    expect(budget).toContain("limitAmount: String(LEAN_BUDGET_USD)");
-    expect(budget).toContain("LEAN_BUDGET_THRESHOLDS_USD.map(");
+    expect(budget).toContain("limitAmount: String(plan.limitUsd)");
+    expect(budget).toContain("plan.thresholdsUsd.map(");
     expect(budget).toContain('notificationType: "ACTUAL"');
     expect(budget).toContain('thresholdType: "ABSOLUTE_VALUE"');
     expect(budget).toContain("subscriberSnsTopicArns: [topic.arn]");
@@ -221,7 +230,9 @@ describe("WPU-B8: the stacks read config.size", () => {
     ]) {
       expect(raw(file)).toContain("VERIFY");
     }
-    expect(raw("infra/stacks/network.ts")).toMatch(/VERIFY[^\n]*nat: "ec2"/);
+    // WPU-Z10: the nat "ec2" question is answered (one per AZ); the single instance's routes are a VERIFY.
+    expect(raw("infra/stacks/network.ts")).toMatch(/VERIFY result[^\n]*nat: "ec2"/);
+    expect(raw("infra/stacks/network.ts")).toMatch(/VERIFY \(first `sst diff` of a lean stage\)/);
     expect(raw("infra/stacks/budget.ts")).toMatch(/VERIFY[^\n]*aws\.budgets/);
   });
 });
