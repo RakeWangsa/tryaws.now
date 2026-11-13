@@ -48,6 +48,7 @@ const content =
   (locale) =>
     render(
       <SupportContent
+        locale={locale}
         numerals={locale === "bn" ? "beng" : "latn"}
         requests={requests}
         action={never}

@@ -65,3 +65,23 @@ describe("the support screens follow the shared mockup", () => {
     expect(STATE_RENDERERS["support.list"]?.("en")).toContain("Top-up not shown");
   });
 });
+
+// Final review (Z6 minors): each earlier request on /support/new opens its thread, in both locales.
+describe("/support/new, the earlier requests", () => {
+  it("links each subject to /support/requests/<id>", () => {
+    // bn is the default locale and has no prefix (localePath)
+    for (const [locale, prefix] of [
+      ["en", "/en"],
+      ["bn", ""],
+    ] as const) {
+      const out = (STATE_RENDERERS["support.list"] as (l: "bn" | "en") => string)(locale);
+      expect(out).toContain(
+        `href="${prefix}/support/requests/0190aaaa-0000-7000-8000-000000000001"`,
+      );
+      expect(out).toContain(
+        `href="${prefix}/support/requests/0190aaaa-0000-7000-8000-000000000002"`,
+      );
+      expect(out).toMatch(/<a class="mergecolor text-break" href="[^"]+">Top-up not shown<\/a>/);
+    }
+  });
+});

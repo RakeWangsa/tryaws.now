@@ -31,6 +31,7 @@ export default async function SupportNewPage({ params }: Props) {
     <PanelFrame locale={locale} path="/support/new" currentId="support" panel={panel}>
       <h1 className="h3 mergecolor mb-4">{t("SupportForm.heading")}</h1>
       <SupportContent
+        locale={locale}
         numerals={numeralsFor(locale, panel)}
         requests={screen.requests}
         resources={screen.resources}

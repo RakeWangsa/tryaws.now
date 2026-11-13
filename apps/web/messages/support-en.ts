@@ -7,7 +7,7 @@ export const supportEn: Same<typeof supportBn> = {
     meta: { title: "Contact support" },
     heading: "Contact support",
     intro:
-      "Write down your problem or question. The TryAWS.now support team answers by email to the address of your account.",
+      "Write down your problem or question. The TryAWS.now support team answers in your support requests.",
     form: {
       title: "New request",
       category: {
@@ -34,7 +34,7 @@ export const supportEn: Same<typeof supportBn> = {
     },
     done: {
       title: "Request sent",
-      body: "We have your request. The answer comes to the email address of your account.",
+      body: "We have your request. The answer appears in your support requests.",
       reference: "Request reference",
       again: "Write another request",
       replayed: "This request was already sent earlier. It was not added again.",
@@ -49,7 +49,7 @@ export const supportEn: Same<typeof supportBn> = {
       sentOn: "Sent on",
       empty: { title: "No requests yet", body: "Your requests show here once you send one." },
     },
-    status: { open: "Open", answered: "Answered", closed: "Closed" },
+    status: { open: "Open", answered: "Answered", closed: "Closed", unknown: "Status unknown" },
     error: {
       unauthenticated: "Your session has ended. Sign in again.",
       validation: "Some details are wrong. Correct the marked fields and try again.",
@@ -82,7 +82,11 @@ export const supportEn: Same<typeof supportBn> = {
       openedOn: "Sent on",
       lastActivity: "Last activity",
       reference: "Reference",
-      author: { customer: "You", visitor: "You", admin: "TryAWS.now support" },
+      author: {
+        customer: "You",
+        visitor: "Sent from the public support form",
+        admin: "TryAWS.now support",
+      },
       earlier: "Some earlier replies are not shown here. Tell support if you need them.",
       closed: "This request is closed. Writing a reply below opens it again.",
     },

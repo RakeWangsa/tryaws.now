@@ -54,10 +54,35 @@ describe("support request messages (WPU-Z6)", () => {
   it("signs support's replies with the brand only, never a person, in both locales", () => {
     expect(supportEn.SupportRequests.thread.author).toEqual({
       customer: "You",
-      visitor: "You",
+      visitor: "Sent from the public support form",
       admin: "TryAWS.now support",
     });
     expect(supportBn.SupportRequests.thread.author.admin).toBe("TryAWS.now সাপোর্ট");
+  });
+
+  // Final review (Z6 minors).
+  it("labels a visitor's entry neutrally, names an unknown status, and says where the answer appears", () => {
+    expect(supportBn.SupportRequests.thread.author.visitor).toBe(
+      "সর্বজনীন সাপোর্ট ফর্ম থেকে পাঠানো",
+    );
+    expect(supportBn.SupportRequests.thread.author.visitor).not.toBe(
+      supportBn.SupportRequests.thread.author.customer,
+    );
+    expect(supportEn.SupportForm.status.unknown).toBe("Status unknown");
+    expect(supportBn.SupportForm.status.unknown).toBe("অবস্থা জানা নেই");
+    // signed in: the answer is in the support requests; e-mail is said to visitors only (Public namespace)
+    expect(supportEn.SupportForm.intro).toMatch(/in your support requests/);
+    expect(supportEn.SupportForm.done.body).toMatch(/appears in your support requests/);
+    expect(supportBn.SupportForm.intro).toMatch(/সাপোর্ট অনুরোধে/);
+    expect(supportBn.SupportForm.done.body).toMatch(/সাপোর্ট অনুরোধে/);
+    for (const text of [
+      supportEn.SupportForm.intro,
+      supportEn.SupportForm.done.body,
+      supportBn.SupportForm.intro,
+      supportBn.SupportForm.done.body,
+    ]) {
+      expect(text).not.toMatch(/e-?mail|ইমেইল/i);
+    }
   });
 
   it("states that a reply opens a closed request again, in both locales", () => {
