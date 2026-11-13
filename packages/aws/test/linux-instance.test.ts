@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { awsResourceName, type OperationKind } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { createAwsAccessInternal } from "../access";
@@ -15,7 +16,23 @@ const POOL = { awsAccountId: "210987654321", externalId: "tc-ext-7f3a9c" };
 const INSTANCE = awsResourceName("instance", RID);
 const NOW = Date.now();
 const clock = { now: () => new Date(NOW) };
-const PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAKEKEYFORTESTS customer@laptop";
+// WPU-Y5 (e): ImportKeyPair takes ssh-rsa keys only, so the stored line is an OpenSSH ssh-rsa line (no comment).
+function rsaLine(bits: number): string {
+  const jwk = generateKeyPairSync("rsa", { modulusLength: bits }).publicKey.export({
+    format: "jwk",
+  });
+  const field = (b: Buffer) => {
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(b.length);
+    return Buffer.concat([head, b]);
+  };
+  const mpint = (b: Buffer) => field((b[0] ?? 0) & 0x80 ? Buffer.concat([Buffer.from([0]), b]) : b);
+  const e = Buffer.from(jwk.e as string, "base64url");
+  const n = Buffer.from(jwk.n as string, "base64url");
+  const blob = Buffer.concat([field(Buffer.from("ssh-rsa")), mpint(e), mpint(n)]);
+  return `ssh-rsa ${blob.toString("base64")}`;
+}
+const PUBLIC_KEY = rsaLine(2048);
 
 function setup(over: Partial<LinuxInstanceDeps> = {}) {
   const aws = fakeAws();
@@ -186,6 +203,27 @@ describe("create: key import, instance, static IP, ports", () => {
     aws.on("lightsail", "GetKeyPair", lightsailOk({ keyPair: { name: "x" } }));
     await adapter.aws.create(ctx("import_key"));
     expect(calls()).toEqual(["GetKeyPair"]);
+  });
+
+  it("WPU-Y5: refuses a key ImportKeyPair does not take (not ssh-rsa, or under 2048 bits) before any AWS call", async () => {
+    for (const publicKey of [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAKEKEYFORTESTS",
+      "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTY=",
+      rsaLine(1024),
+      `${PUBLIC_KEY} customer@laptop`,
+    ]) {
+      const bad = setup({
+        loadLaunch: async () => ({ bundleId: "b", blueprintId: "p", publicKey }),
+      });
+      await expect(
+        bad.adapter.aws.create(bad.ctx(null)),
+        publicKey.slice(0, 20),
+      ).rejects.toMatchObject({
+        code: "validation",
+        retryable: false,
+      });
+      expect(bad.calls()).toEqual([]);
+    }
   });
 
   it("fails closed without a key, or when the key is not the customer's (loader says null)", async () => {

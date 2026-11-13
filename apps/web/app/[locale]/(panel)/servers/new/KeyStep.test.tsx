@@ -10,11 +10,11 @@ import { webMessages } from "../../../../../i18n/messages.ts";
 // testing library: react-dom and act are enough (no new dependency, R17).
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const PRIVATE = "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n";
-const PUBLIC = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const PUBLIC = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAAQC7";
 const keygen = vi.hoisted(() => ({ fail: null as null | Error }));
 vi.mock("./ssh-keygen.ts", async (importActual) => ({
   ...(await importActual<typeof import("./ssh-keygen.ts")>()),
-  generateEd25519KeyPair: async () => {
+  generateRsaKeyPair: async () => {
     if (keygen.fail !== null) throw keygen.fail;
     return { publicKey: PUBLIC, privateKey: PRIVATE };
   },
@@ -160,7 +160,7 @@ describe("KeyStep", () => {
     expect(ready.at(-1)).toBe(false);
   });
 
-  it("a browser without Ed25519 says so and points to the other ways, and never becomes ready", async () => {
+  it("a browser that cannot make the RSA pair says so and points to the other ways, and never becomes ready", async () => {
     keygen.fail = new DOMException("no", "NotSupportedError");
     await mount([]);
     await type(q<HTMLInputElement>('[name="newKeyName"]') as HTMLInputElement, "k");

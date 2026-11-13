@@ -117,7 +117,7 @@ export const serversEn: Same<typeof serversBn> = {
       keyNameTaken: "You already have another key with this name. Use a different name.",
       keyPublic: "Public key",
       keyPublicHint:
-        "One line that starts with ssh-ed25519, ssh-rsa or ecdsa. Never paste a private key here.",
+        "One line that starts with ssh-rsa (an RSA key of 2048 bits or more). Never paste a private key here.",
       keyGenerate: "Create key pair",
       keyGenerateHint:
         "The key pair is made in your browser. The private key never reaches us; you can download it once.",
@@ -433,7 +433,7 @@ export const serversEn: Same<typeof serversBn> = {
       name: "Key name",
       nameHint: "English letters, digits, spaces, dots, dashes and underscores.",
       publicKey: "Public key",
-      publicKeyHint: "One line that starts with ssh-ed25519, ssh-rsa or ecdsa.",
+      publicKeyHint: "One line that starts with ssh-rsa (an RSA key of 2048 bits or more).",
       submit: "Add key",
       done: "The key was added.",
       replayed: "This key was already added.",

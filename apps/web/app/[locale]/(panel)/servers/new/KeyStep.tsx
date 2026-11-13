@@ -6,7 +6,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState } from "react";
 import type { KeyOption } from "../../../../../server/servers-view.ts";
-import { fileNameOfPrivateKey, generateEd25519KeyPair } from "./ssh-keygen.ts";
+import { fileNameOfPrivateKey, generateRsaKeyPair } from "./ssh-keygen.ts";
 
 // The key step of the create wizard (WPU-G10), like the Lightsail console: use a key you have, create a
 // key pair here, or upload (paste) your public key. The private key of a pair is made in this tab with
@@ -68,7 +68,7 @@ export function KeyStep({
   const make = async (): Promise<void> => {
     setPhase("working");
     try {
-      const pair = await generateEd25519KeyPair(name.trim());
+      const pair = await generateRsaKeyPair(name.trim());
       privateKey.current = pair.privateKey;
       setPublicKey(pair.publicKey);
       setPhase("made");

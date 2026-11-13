@@ -23,15 +23,23 @@ const OLD_KEY = "0190aaaa-0000-7000-8000-0000000000c1";
 const NEW_KEY = "0190aaaa-0000-7000-8000-0000000000c2";
 
 function publicLine(seed = "k"): string {
-  const type = Buffer.from("ssh-ed25519");
-  const raw = createHash("sha256").update(seed).digest();
+  // WPU-Y5 (e): an OpenSSH ssh-rsa line (ImportKeyPair takes ssh-rsa only): e 65537 and a 2048 bit modulus
+  // made from the seed. The parser checks the form and the size, not the arithmetic.
+  const field = (b: Buffer) => {
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(b.length);
+    return Buffer.concat([head, b]);
+  };
+  const n = Buffer.concat(
+    Array.from({ length: 8 }, (_, i) => createHash("sha256").update(`${seed}:${i}`).digest()),
+  );
+  n[0] = (n[0] ?? 0) | 0x80;
   const blob = Buffer.concat([
-    Buffer.from([0, 0, 0, type.length]),
-    type,
-    Buffer.from([0, 0, 0, raw.length]),
-    raw,
+    field(Buffer.from("ssh-rsa")),
+    field(Buffer.from([1, 0, 1])),
+    field(Buffer.concat([Buffer.from([0]), n])),
   ]);
-  return `ssh-ed25519 ${blob.toString("base64")}`;
+  return `ssh-rsa ${blob.toString("base64")}`;
 }
 
 const DRAFT: OrderDraft = {
