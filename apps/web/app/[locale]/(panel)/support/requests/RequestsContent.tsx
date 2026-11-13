@@ -22,10 +22,17 @@ const STATUS_LOOK: Record<Status, BadgeState> = {
   closed: "retained",
 };
 
+// Final review (Z6 minors): a status the screen does not know (a newer state, a bad row) is named "Status
+// unknown", never an empty badge.
 export function SupportStatusBadge({ status }: { status: Status }) {
   const t = useTranslations("SupportForm.status");
-  const look = STATUS_LOOK[status] ?? "pending";
-  return <StateBadge state={look} label={t.has(status) ? t(status) : ""} />;
+  const known = Object.hasOwn(STATUS_LOOK, status);
+  return (
+    <StateBadge
+      state={known ? STATUS_LOOK[status] : "pending"}
+      label={known && t.has(status) ? t(status) : t("unknown")}
+    />
+  );
 }
 
 export const threadHref = (locale: Locale, id: string): string =>

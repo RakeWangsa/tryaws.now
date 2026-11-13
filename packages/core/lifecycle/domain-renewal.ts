@@ -10,9 +10,11 @@ import {
 import { DOMAIN_YEARS } from "../domains/resolve";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
+import { isUuid } from "../validation/uuid";
 import { reverseTransaction } from "../ledger/reverse";
 import { firstMessage, type QueueMessage } from "../operations/queue";
 import type { Logger } from "../operations/types";
+import type { Result } from "../types";
 
 // WPU-Z13. A domain's renewal charge (the lifecycle at the period end, or renewNow) pays for a renewal at the
 // registry: in the transaction of the charge one `renew_domain` operation is queued for the period (R7), and the
@@ -29,7 +31,6 @@ const DOMAIN_FAMILY = "domain";
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Plain positive decimal text with at most 4 decimals: the form of an awsPriceUsd (the adapter's rule). */
 const USD_TEXT = /^(?:0|[1-9]\d{0,9})(?:\.\d{1,4})?$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A registry renewal that cannot be queued or reversed. The message is fixed text (R14). */
 export class DomainRenewalError extends Error {
@@ -96,7 +97,7 @@ export function readDomainRenewalPayload(
 ): { readonly subscriptionId: string; readonly periodStart: Date } | null {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
   const { subscriptionId, periodStart } = payload as Record<string, unknown>;
-  if (typeof subscriptionId !== "string" || !UUID.test(subscriptionId)) return null;
+  if (!isUuid(subscriptionId)) return null;
   const start = instantOf(periodStart);
   return start === null ? null : { subscriptionId, periodStart: start };
 }
@@ -200,6 +201,26 @@ export async function queueDomainRenewal(
   return inserted.created && inserted.state === "queued"
     ? firstMessage(inserted.operationId, row.resourceId)
     : null;
+}
+
+/**
+ * Final review M2. The lifecycle's renewal charge and its registry renewal (queueDomainRenewal) in one savepoint of
+ * the caller's transaction. A domain whose renewal cannot be queued (DomainRenewalError: the expiry or the charged
+ * USD price cannot be read) rolls the savepoint back, the charge with it, and comes out as `conflict`: the engine
+ * holds the renewal for price_unavailable (hold-rule.ts), so the hold marker is written and its alarm fires, and
+ * the next sweep tries again once a person repaired the row. Without the savepoint the throw rolled the whole
+ * subscription back on every sweep, with no marker and no alarm. Any other error still reaches the caller (R16).
+ */
+export async function renewWithRegistry<T>(
+  tx: Tx,
+  charge: (savepoint: Tx) => Promise<Result<T>>,
+): Promise<Result<T>> {
+  try {
+    return await tx.transaction(charge);
+  } catch (error) {
+    if (error instanceof DomainRenewalError) return { ok: false, error: "conflict" };
+    throw error;
+  }
 }
 
 export interface DomainRenewalFailure {

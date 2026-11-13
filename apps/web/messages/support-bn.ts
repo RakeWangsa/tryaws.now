@@ -6,7 +6,7 @@ export const supportBn = {
     meta: { title: "সাপোর্টে অনুরোধ" },
     heading: "সাপোর্টে অনুরোধ",
     intro:
-      "সমস্যা বা প্রশ্ন লিখে পাঠান। TryAWS.now-এর সাপোর্ট দল আপনার অ্যাকাউন্টের ইমেইলে উত্তর দেবে।",
+      "সমস্যা বা প্রশ্ন লিখে পাঠান। TryAWS.now-এর সাপোর্ট দলের উত্তর আপনার সাপোর্ট অনুরোধে দেখা যাবে।",
     form: {
       title: "নতুন অনুরোধ",
       category: {
@@ -30,7 +30,7 @@ export const supportBn = {
     },
     done: {
       title: "অনুরোধ পাঠানো হয়েছে",
-      body: "আমরা আপনার অনুরোধ পেয়েছি। উত্তর অ্যাকাউন্টের ইমেইলে আসবে।",
+      body: "আমরা আপনার অনুরোধ পেয়েছি। উত্তর আপনার সাপোর্ট অনুরোধে দেখা যাবে।",
       reference: "অনুরোধের রেফারেন্স",
       again: "আরেকটি অনুরোধ লিখুন",
       replayed: "এই অনুরোধ আগেই পাঠানো হয়েছিল, নতুন করে যোগ করা হয়নি।",
@@ -47,7 +47,13 @@ export const supportBn = {
       empty: { title: "এখনও কোনো অনুরোধ নেই", body: "অনুরোধ পাঠালে এখানে দেখা যাবে।" },
     },
     // WPU-Z5: a request that support has answered and that waits for the customer.
-    status: { open: "খোলা", answered: "উত্তর দেওয়া হয়েছে", closed: "বন্ধ" },
+    // Final review (Z6 minors): the label of a status the screen does not know.
+    status: {
+      open: "খোলা",
+      answered: "উত্তর দেওয়া হয়েছে",
+      closed: "বন্ধ",
+      unknown: "অবস্থা জানা নেই",
+    },
     error: {
       unauthenticated: "আপনার সেশন শেষ হয়েছে। আবার সাইন ইন করুন।",
       validation: "কিছু তথ্য ঠিক নয়। চিহ্নিত ঘর ঠিক করে আবার চেষ্টা করুন।",
@@ -82,7 +88,12 @@ export const supportBn = {
       openedOn: "পাঠানোর সময়",
       lastActivity: "সর্বশেষ কার্যক্রম",
       reference: "রেফারেন্স",
-      author: { customer: "আপনি", visitor: "আপনি", admin: "TryAWS.now সাপোর্ট" },
+      // Final review (Z6 minors): what a visitor sent from the public form is labelled neutrally, not "আপনি".
+      author: {
+        customer: "আপনি",
+        visitor: "সর্বজনীন সাপোর্ট ফর্ম থেকে পাঠানো",
+        admin: "TryAWS.now সাপোর্ট",
+      },
       earlier: "আগের কিছু উত্তর এখানে দেখানো হচ্ছে না। প্রয়োজনে সাপোর্টকে জানান।",
       closed: "এই অনুরোধটি বন্ধ। নিচে উত্তর লিখলে অনুরোধটি আবার খুলবে।",
     },

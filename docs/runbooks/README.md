@@ -18,6 +18,7 @@ Commands cited in these pages: `pnpm verify --task <id>`, `pnpm db:up`, `pnpm db
 | [provisioning-failed-and-dead-letter.md](provisioning-failed-and-dead-letter.md) | provisioning failed, dead-letter queue                  |
 | [capacity-full-and-quota.md](capacity-full-and-quota.md)                         | capacity full, quota request                            |
 | [lifecycle-approval.md](lifecycle-approval.md)                                   | lifecycle approval                                      |
+| [disk-detach-and-destroy.md](disk-detach-and-destroy.md)                         | disk detach and destroy: unmount, stop, then detach     |
 | [unpaid-usage-switch.md](unpaid-usage-switch.md)                                 | turning the unpaid usage rule on or off                 |
 | [pool-account-onboarding.md](pool-account-onboarding.md)                         | adding a pool account                                   |
 | [pool-account-single.md](pool-account-single.md)                                 | launch on one pool account                              |
@@ -49,6 +50,7 @@ Filled in by the owner when a person has read the page against the admin app and
 | [provisioning-failed-and-dead-letter.md](provisioning-failed-and-dead-letter.md) |                                |
 | [capacity-full-and-quota.md](capacity-full-and-quota.md)                         |                                |
 | [lifecycle-approval.md](lifecycle-approval.md)                                   |                                |
+| [disk-detach-and-destroy.md](disk-detach-and-destroy.md)                         |                                |
 | [unpaid-usage-switch.md](unpaid-usage-switch.md)                                 |                                |
 | [pool-account-onboarding.md](pool-account-onboarding.md)                         |                                |
 | [pool-account-single.md](pool-account-single.md)                                 |                                |

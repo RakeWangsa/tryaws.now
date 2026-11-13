@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import type { Tx } from "../../client";
+import { NOT_CONFIGURED } from "../../links";
 import { insertAudit } from "../audit-log";
 
 // WPU-Z18: the first superadmin after the first deploy. The go-live runbook creates the admin in the
@@ -9,8 +10,8 @@ import { insertAudit } from "../audit-log";
 // and calls bootstrapFirstSuperadmin once per deploy. It writes a row only while admin_users has no row
 // at all, so after the first admin exists it never fires again (R7), whatever the secret holds.
 
-/** The value an optional secret holds when nothing was set (the placeholder of scripts/golive). */
-export const FIRST_ADMIN_NOT_CONFIGURED = "not-configured";
+/** The value an optional secret holds when nothing was set: NOT_CONFIGURED of @tc/db/links (final review M3). */
+export const FIRST_ADMIN_NOT_CONFIGURED = NOT_CONFIGURED;
 export const FIRST_ADMIN_ACTION = "admin_user.bootstrap";
 export const FIRST_ADMIN_REASON = "first superadmin bootstrap";
 export const FIRST_ADMIN_ISOLATION_ERROR = "first admin: the transaction is not read committed";

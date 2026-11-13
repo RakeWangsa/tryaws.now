@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -10,6 +12,8 @@ const text = readFileSync(join(root, ".github/workflows/omnirank.yml"), "utf8");
 const workflow = parse(text);
 const config = JSON.parse(readFileSync(join(root, "omnirank.config.json"), "utf8"));
 const steps = (job) => workflow.jobs[job].steps;
+const HOST_CHECK =
+  '[[ "$TC_DOMAIN_WEB" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$ ]]';
 const runs = (job) => steps(job).map((s) => (typeof s.run === "string" ? s.run : ""));
 
 describe("omnirank.yml", () => {
@@ -30,8 +34,6 @@ describe("omnirank.yml", () => {
       "github.com/bemoshiur/OmniRank.git@${OMNIRANK_COMMIT}#subdirectory=scripts/py",
     );
     expect(all).toMatch(/omnirank" audit --config/);
-    expect(all).toContain("https://staging.tryaws.now");
-    expect(all).toContain("https://tryaws.now");
     // The gates come from the config (audit.failOn): no --fail-on on the command line overrides them.
     expect(all).not.toContain("--fail-on");
   });
@@ -98,11 +100,62 @@ describe("omnirank.yml", () => {
     }
   });
 
-  it("pings IndexNow for production only", () => {
-    expect(runs("indexnow").join("\n")).toContain(
-      "node scripts/indexnow-ping.mjs --origin https://tryaws.now",
-    );
+  it("pings IndexNow for production only, at the origin of the environment production", () => {
+    const ping = runs("indexnow").join("\n");
+    expect(ping).toContain('node scripts/indexnow-ping.mjs --origin "https://$TC_DOMAIN_WEB"');
+    expect(ping).toContain(HOST_CHECK);
+    expect(workflow.jobs.indexnow.environment).toEqual({ name: "production", deployment: false });
     expect(workflow.jobs.indexnow.if).toContain("inputs.target == 'production'");
+  });
+
+  // Final review M4: the origins come from the variable TC_DOMAIN_WEB of the target's GitHub environment,
+  // not from a host written in the workflow.
+  it("reads the target origin from TC_DOMAIN_WEB of the target's environment, without a deployment", () => {
+    expect(text).not.toMatch(/https:\/\/(staging\.)?tryaws\.now/);
+    expect(workflow.jobs.audit.environment).toEqual({
+      name: "${{ github.event.inputs.target || 'production' }}",
+      deployment: false,
+    });
+    const choose = steps("audit").find((s) => s.name === "Choose the site");
+    expect(choose.env.TC_DOMAIN_WEB).toBe("${{ vars.TC_DOMAIN_WEB }}");
+    expect(choose.run).toContain(HOST_CHECK);
+    expect(choose.run).toContain('echo "SITE_URL=https://$TC_DOMAIN_WEB" >> "$GITHUB_ENV"');
+    const ping = steps("indexnow").find((s) => /IndexNow/.test(s.name ?? ""));
+    expect(ping.env.TC_DOMAIN_WEB).toBe("${{ vars.TC_DOMAIN_WEB }}");
+  });
+
+  it("refuses a TC_DOMAIN_WEB that is not a host name, before anything is audited (R16)", () => {
+    const choose = steps("audit").find((s) => s.name === "Choose the site").run;
+    const dir = mkdtempSync(join(tmpdir(), "omnirank-"));
+    const runChoose = (target, domain) => {
+      const envFile = join(dir, `env-${Math.random().toString(16).slice(2)}`);
+      writeFileSync(envFile, "");
+      const r = spawnSync("bash", ["-e", "-c", choose], {
+        env: { PATH: process.env.PATH, TARGET: target, TC_DOMAIN_WEB: domain, GITHUB_ENV: envFile },
+        encoding: "utf8",
+      });
+      return { status: r.status, env: readFileSync(envFile, "utf8") };
+    };
+    expect(runChoose("staging", "staging.example.com")).toEqual({
+      status: 0,
+      env: "SITE_URL=https://staging.example.com\n",
+    });
+    expect(runChoose("production", "example.com").env).toBe("SITE_URL=https://example.com\n");
+    for (const bad of [
+      "",
+      "https://example.com",
+      "example.com/x",
+      "example.com:443",
+      "Example.com",
+      "localhost",
+      "example.com\nSITE_URL=https://evil.example",
+      "a.b c.com",
+    ]) {
+      const r = runChoose("production", bad);
+      expect(r.status, JSON.stringify(bad)).not.toBe(0);
+      expect(r.env, JSON.stringify(bad)).toBe("");
+    }
+    expect(runChoose("other", "example.com").status).not.toBe(0);
   });
 });
 

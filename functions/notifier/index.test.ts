@@ -31,6 +31,20 @@ it("has an SMS provider only when both SMS secrets are readable (WPU-Z3)", () =>
   expect(typeof provider?.send).toBe("function");
 });
 
+// Final review M2: either SMS secret on the placeholder not-configured is "SMS off": no provider, so no
+// request ever reaches Gennet and the SMS rows stay pending (R16).
+it("has no SMS provider when either SMS secret is the placeholder not-configured", () => {
+  const placeholder = '{"type":"sst.sst.Secret","value":"not-configured"}';
+  for (const name of ["SST_RESOURCE_SmsApiKey", "SST_RESOURCE_SmsSenderId"]) {
+    expect(loadSmsProvider(envLinks({ ...SMS_ENV, [name]: placeholder })), name).toBeNull();
+  }
+  expect(
+    loadSmsProvider(
+      envLinks({ SST_RESOURCE_SmsApiKey: placeholder, SST_RESOURCE_SmsSenderId: placeholder }),
+    ),
+  ).toBeNull();
+});
+
 it("the SMS provider shows neither the token nor the sender id, in JSON or in inspect", () => {
   const provider = loadSmsProvider(envLinks(SMS_ENV));
   const shown = [JSON.stringify(provider), inspect(provider, { depth: 10, showHidden: true })].join(

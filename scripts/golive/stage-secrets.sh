@@ -9,8 +9,10 @@
 #
 # Values:
 #   internal keys and database passwords  random, `openssl rand -hex 32`, never shown
-#   SmsApiKey (Gennet API token)          hidden prompt (read -rs)
-#   SmsSenderId (not a secret)            visible prompt
+#   SmsApiKey (Gennet API token)          hidden prompt (read -rs), optional
+#   SmsSenderId (not a secret)            visible prompt, optional: an empty answer sets nothing, the
+#                                         stack's placeholder `not-configured` applies and SMS is off
+#                                         (no request to Gennet; the phone OTP says SMS is unavailable)
 #   EpsMerchantId, EpsStoreId, EpsUsername, EpsPassword, EpsHashKey
 #                                         hidden prompt; an empty answer stores the literal
 #                                         `not-configured`: the platform then has no EPS and every top-up
@@ -135,16 +137,26 @@ for name in $RANDOM_SECRETS $DB_PASSWORD_SECRETS; do
   fi
 done
 
-# 4. The SMS gateway (Gennet): the API token hidden, the sender id visible (not a secret).
+# 4. The SMS gateway (Gennet), optional: the API token hidden, the sender id visible (not a secret). An empty
+# answer (or the end of the input) sets nothing: the stack's placeholder `not-configured` applies
+# (infra/stacks/secrets.ts), SMS is off, the phone OTP says SMS is unavailable and nothing is sent to Gennet.
 if should_set "$SMS_TOKEN_SECRET"; then
-  read -rs -p "Gennet API token for ${STAGE} (hidden): " SMS_TOKEN
+  read -rs -p "Gennet API token for ${STAGE} (hidden; empty = SMS off): " SMS_TOKEN || SMS_TOKEN=""
   echo
-  set_secret "$SMS_TOKEN_SECRET" "$SMS_TOKEN"
+  if [[ -z "$SMS_TOKEN" ]]; then
+    echo "skipped ${SMS_TOKEN_SECRET} (empty: SMS stays off, the placeholder ${PLACEHOLDER} applies)"
+  else
+    set_secret "$SMS_TOKEN_SECRET" "$SMS_TOKEN"
+  fi
   unset SMS_TOKEN
 fi
 if should_set "$SMS_SENDER_SECRET"; then
-  read -r -p "SMS sender id (sid) for ${STAGE}: " SMS_SENDER
-  set_secret "$SMS_SENDER_SECRET" "$SMS_SENDER"
+  read -r -p "SMS sender id (sid) for ${STAGE} (empty = SMS off): " SMS_SENDER || SMS_SENDER=""
+  if [[ -z "$SMS_SENDER" ]]; then
+    echo "skipped ${SMS_SENDER_SECRET} (empty: SMS stays off, the placeholder ${PLACEHOLDER} applies)"
+  else
+    set_secret "$SMS_SENDER_SECRET" "$SMS_SENDER"
+  fi
   unset SMS_SENDER
 fi
 

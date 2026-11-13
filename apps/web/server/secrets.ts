@@ -1,4 +1,4 @@
-import { secretValue, sstLinks, type LinkSource } from "@tc/db/links";
+import { configuredSecretValue, NOT_CONFIGURED, sstLinks, type LinkSource } from "@tc/db/links";
 
 // The secrets of the web app (EPS, the keys, the SMS gateway) reach it only through this port (R3).
 // WPU-Z15: at run time they are read through the SST SDK. SST 4.17.2 hands the Next.js server its links
@@ -29,13 +29,13 @@ export type SecretSource = (name: SecretName) => string | undefined;
 // literal for each EPS value the owner leaves empty (the EPS production keys come later). It reads as no
 // value: the caller fails closed exactly as for a missing secret, so with an EPS value on the placeholder
 // there is no EPS, every top-up says "not open" and nothing is sent to EPS (R6, R16).
-export const NOT_CONFIGURED = "not-configured";
+// Final review M3: the one constant of @tc/db/links, re-exported for the tests and callers of this port.
+export { NOT_CONFIGURED };
 
 // Each secret is the `value` of its linked sst.Secret when it is a string that is not empty (secretValue)
 // and not the placeholder.
 export function linkedSecrets(links: LinkSource = sstLinks): SecretSource {
   return (name) => {
-    const value = secretValue(links(name));
-    return value === NOT_CONFIGURED ? undefined : value;
+    return configuredSecretValue(links(name));
   };
 }

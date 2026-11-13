@@ -1,4 +1,4 @@
-import { validateRecord, type ValidRecord } from "@tc/core";
+import { decideFailure, MAX_ATTEMPTS, validateRecord, type ValidRecord } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import {
   applyRecordChange,
@@ -278,6 +278,83 @@ describe("the zone adapter", () => {
     await expect(
       adapter.aws.create(ctxFor({ zoneName: "example.com" }, { step: "elsewhere" })),
     ).rejects.toMatchObject({ code: "internal" });
+  });
+
+  // Final review Z19 I-1: once CreateHostedZone ran, the hosted zone exists (and is billed). A create that cannot
+  // finish its wait (PENDING past the budget, or a saved zone or change id that cannot be read) must never end
+  // `failed`, whose hook refunds the order while the zone stays: it ends in needs_attention for an admin.
+  const endOf = (error: unknown) => {
+    const e = error as {
+      code: never;
+      retryable: boolean;
+      poolFull: boolean;
+      awsErrorName: string | null;
+    };
+    const facts = {
+      code: e.code,
+      retryable: e.retryable,
+      poolFull: e.poolFull,
+      awsErrorName: e.awsErrorName,
+      mayHaveActed: true,
+    };
+    const decisions = Array.from({ length: MAX_ATTEMPTS }, (_, attempts) =>
+      decideFailure({ kind: "create", step: "wait_insync", attempts, now: NOW, facts }),
+    );
+    return decisions;
+  };
+  const expectAttention = (error: unknown) => {
+    const decisions = endOf(error);
+    for (const d of decisions) expect(d.to).not.toBe("failed");
+    expect(decisions.at(-1)?.to).toBe("needs_attention");
+  };
+
+  it("PENDING past budget ends needs_attention, no refund", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    const first = await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    const merge = (first as { patch?: { configMerge?: Record<string, unknown> } }).patch
+      ?.configMerge;
+    fake.changes.set("CZ000001", "pending");
+    const late = ctxFor(
+      { zoneName: "example.com" },
+      { step: "wait_insync", resourceConfig: merge },
+    );
+    const error = await adapter.aws
+      .create({
+        ...late,
+        operation: { ...late.operation, createdAt: new Date(NOW.getTime() - 21 * 60 * 1000) },
+      })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(error).toMatchObject({ code: "upstream_unavailable", retryable: true });
+    expectAttention(error);
+    // a later run that finds the change INSYNC still finishes the create
+    fake.changes.set("CZ000001", "insync");
+    expect(
+      await adapter.aws.create({
+        ...late,
+        operation: { ...late.operation, createdAt: new Date(NOW.getTime() - 40 * 60 * 1000) },
+      }),
+    ).toMatchObject({ kind: "done", patch: { state: "active" } });
+  });
+
+  it("a bad saved zone or change id, or a step it does not know, ends needs_attention, no refund", async () => {
+    const adapter = createDnsZoneAdapter({ route53: () => createFakeRoute53().port });
+    for (const extra of [
+      { step: "wait_insync" },
+      { step: "wait_insync", resourceConfig: { hostedZoneId: "Z000001", route53ChangeId: "../x" } },
+      { step: "wait_insync", resourceConfig: { hostedZoneId: "../z", route53ChangeId: null } },
+      { step: "elsewhere" },
+    ]) {
+      const error = await adapter.aws.create(ctxFor({ zoneName: "example.com" }, extra)).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(error, JSON.stringify(extra)).toMatchObject({ code: "internal", retryable: true });
+      expectAttention(error);
+    }
   });
 
   it("destroy without a hosted zone id is done (nothing was made)", async () => {

@@ -25,3 +25,4 @@ export {
   BILLING_ADDRESS_MAX,
 } from "./billing-profile";
 export type { BillingFieldCode, BillingParsed, BillingProfileInput } from "./billing-profile";
+export { isUuid, UUID_PATTERN } from "./uuid";

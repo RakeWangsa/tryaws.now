@@ -637,6 +637,9 @@ const BILLING = [
   "wrapDigitOneHtml",
 ];
 
+// Final review M3: the one UUID check of the id fields (packages/core/validation/uuid.ts).
+const SHARED_UUID = ["UUID_PATTERN", "isUuid"];
+
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
     expect(Object.keys(orders).sort()).toEqual(ORDERS_VALUES);
@@ -682,6 +685,7 @@ describe("the public surface of the order flow", () => {
 
           ...Y2,
           ...Z13,
+          ...SHARED_UUID,
         ]),
       ].sort(),
     );

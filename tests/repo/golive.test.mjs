@@ -17,6 +17,7 @@ import {
   ALL_SECRETS,
   DB_PASSWORD_SECRET,
   FIRST_ADMIN_SUB_SECRET,
+  OPTIONAL_SECRET_PLACEHOLDER,
 } from "../../infra/lib/functions.ts";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -307,6 +308,43 @@ describe("scripts/golive/stage-secrets.sh", () => {
     expect(r.stdout + r.stderr).not.toMatch(/merchant-test-value|rand-|a-value-that-must-not-show/);
   });
 
+  // Final review M2: the SMS gateway is optional. An empty token or sender id sets nothing (the stack's
+  // placeholder not-configured applies and SMS is off), like FirstAdminSub; a value is set as before.
+  it("an empty SMS token or sender id sets nothing and says SMS stays off", () => {
+    expect(text).toMatch(
+      /read -rs -p "Gennet API token for \$\{STAGE\} \(hidden; empty = SMS off\): " SMS_TOKEN \|\| SMS_TOKEN=""/,
+    );
+    expect(text).toMatch(
+      /read -r -p "SMS sender id \(sid\) for \$\{STAGE\} \(empty = SMS off\): " SMS_SENDER \|\| SMS_SENDER=""/,
+    );
+    const smsSets = (calls) =>
+      calls.split("\n").filter((l) => /secret set Sms(ApiKey|SenderId) /.test(l));
+    // both empty, then five empty EPS answers and an empty FirstAdminSub
+    const both = run(STAGE_SECRETS, ["staging"], { input: "\n\n\n\n\n\n\n\n" });
+    expect(both.status, both.stderr).toBe(0);
+    expect(smsSets(both.calls)).toEqual([]);
+    expect(both.stdout).toContain(
+      "skipped SmsApiKey (empty: SMS stays off, the placeholder not-configured applies)",
+    );
+    expect(both.stdout).toContain(
+      "skipped SmsSenderId (empty: SMS stays off, the placeholder not-configured applies)",
+    );
+    expect(both.calls.split("\n").filter((l) => l.includes("secret set"))).toHaveLength(15);
+    // a token and an empty sender id: the token is set, the sender id is not
+    const one = run(STAGE_SECRETS, ["staging"], { input: "token-test-value\n\n\n\n\n\n\n\n" });
+    expect(one.status, one.stderr).toBe(0);
+    expect(smsSets(one.calls)).toEqual([
+      "npx --no-install sst secret set SmsApiKey --stage staging CI= TC_PRODUCTION_DEPLOY= VALUE=token-test-value",
+    ]);
+    expect(one.stdout + one.stderr).not.toContain("token-test-value");
+    // the end of the input at the SMS prompts is the same as empty answers (the EPS prompts after them
+    // still need an answer each, as before)
+    const eof = run(STAGE_SECRETS, ["staging"], { input: "" });
+    expect(eof.stdout).toContain("skipped SmsApiKey (empty: SMS stays off");
+    expect(eof.stdout).toContain("skipped SmsSenderId (empty: SMS stays off");
+    expect(smsSets(eof.calls)).toEqual([]);
+  });
+
   it("--force sets the names that already have a value", () => {
     const r = run(STAGE_SECRETS, ["staging", "--force"], {
       env: { FAKE_EXISTING: "SmsApiKey SmsSenderId" },
@@ -412,10 +450,25 @@ describe("scripts/golive/stage-secrets.sh", () => {
 // ---- EPS placeholder (requirement 3) -------------------------------------------------------------------
 
 describe("the EPS placeholder is the same literal in the scripts and the code", () => {
-  it("apps/web and functions/payments-sweeper treat not-configured as no value", () => {
+  // Final review M3: one constant, NOT_CONFIGURED of @tc/db/links. The code imports it; infra and the
+  // owner script keep their literal, pinned here to equal it.
+  it("apps/web, functions/payments-sweeper and the migrator's decision use the one constant of @tc/db/links", async () => {
+    const { NOT_CONFIGURED } = await import("../../packages/db/links.ts");
+    expect(NOT_CONFIGURED).toBe("not-configured");
+    expect(read("packages/db/links.ts")).toContain(
+      'export const NOT_CONFIGURED = "not-configured";',
+    );
     for (const file of ["apps/web/server/secrets.ts", "functions/payments-sweeper/secrets.ts"]) {
-      expect(read(file), file).toContain('export const NOT_CONFIGURED = "not-configured";');
+      const text = read(file);
+      expect(text, file).toMatch(/import \{[^}]*\bNOT_CONFIGURED\b[^}]*\} from "@tc\/db\/links";/);
+      expect(text, file).not.toContain('"not-configured"');
     }
+    expect(read("packages/db/repositories/system/first-admin.ts")).not.toContain(
+      '"not-configured"',
+    );
+    // the literals that stay: infra (no workspace import there) and the shell script
+    expect(OPTIONAL_SECRET_PLACEHOLDER).toBe(NOT_CONFIGURED);
+    expect(read(STAGE_SECRETS)).toContain(`readonly PLACEHOLDER="${NOT_CONFIGURED}"`);
   });
 });
 
@@ -564,5 +617,39 @@ describe("docs/runbooks/go-live.md", () => {
     // WPU-Z11 fix round 2: the one-account residuals are named, the asset bucket and headers policy included
     expect(page).toContain("the shared SST asset bucket `sst-asset-*`");
     expect(page).toContain("`tc-<stage>-security-headers`");
+  });
+
+  // Final review I1: the production verify job runs gate M5, which holds two manual proofs. The gate stays
+  // as it is; the runbook says how the owner records both, in the staging session and before the tag.
+  it("names both manual proofs of gate M5 in the staging session, before the tag, and the gate keeps them", async () => {
+    const { GATES } = await import("../../verify/checks.mjs");
+    const { MANUAL_PROOFS } = await import("../../verify/manual-proofs.mjs");
+    const ids = ["m5-gate-b-staging-cycles", "m5-reconciler-staging"];
+    const m5 = GATES.M5.map((c) => [c.id, c.command.join(" ")]);
+    for (const id of ids) {
+      expect(MANUAL_PROOFS[id].gate).toBe("M5");
+      expect(m5).toContainEqual([`manual-${id}`, `node scripts/manual-proof.mjs ${id}`]);
+    }
+    const workflow = read(".github/workflows/deploy-production.yml");
+    expect(workflow).toContain("run: pnpm verify --gate M5");
+    const session = page.indexOf("7. **Staging test session.**");
+    const tag = page.indexOf("git tag -a v0.1.0");
+    expect(session).toBeGreaterThan(-1);
+    for (const id of ids) {
+      for (const text of [`\`${id}\``, `node scripts/manual-proof.mjs ${id}`]) {
+        const at = page.indexOf(text, session);
+        expect(at, text).toBeGreaterThan(session);
+        expect(at, text).toBeLessThan(tag);
+      }
+    }
+    for (const key of [
+      "`evidence`",
+      "`recordedBy`",
+      "`recordedAt`",
+      "`verify/manual-proofs.json`",
+    ]) {
+      expect(page).toContain(key);
+    }
+    expect(page.indexOf("pnpm verify --gate M5", session)).toBeLessThan(tag);
   });
 });

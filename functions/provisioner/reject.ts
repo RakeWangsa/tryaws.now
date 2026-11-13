@@ -1,5 +1,6 @@
 import {
   decideRefusal,
+  isUuid,
   refundedOnFailure,
   registryHoldsRenewal,
   transitionOperation,
@@ -9,15 +10,13 @@ import { loadOperationBrief } from "@tc/db";
 import type { RunView, Tx } from "@tc/db";
 import type { RunOutcome, StepDeps } from "./types";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 type Recorded =
   { readonly to: "succeeded" } | { readonly to: "needs_attention"; code: string } | null;
 
 function targetOf(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const target = (payload as Record<string, unknown>)["targetOperationId"];
-  return typeof target === "string" && UUID.test(target) ? target : null;
+  return isUuid(target) ? target : null;
 }
 
 // The rejection of a stuck operation (an engine kind, no adapter): the target goes needs_attention

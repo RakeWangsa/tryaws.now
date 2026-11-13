@@ -45,3 +45,15 @@ export function secretValue(link: unknown): string | undefined {
   const value = (link as { value?: unknown }).value;
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
+
+// The value a person stores for a secret that is deliberately not configured yet (WPU-Z11 EPS values,
+// WPU-Z18 FirstAdminSub, the optional SMS secrets). SST needs a value for every declared secret, so
+// scripts/golive/stage-secrets.sh and infra/stacks/secrets.ts use this literal (tests/repo pins they equal
+// it). It reads as no value: the caller fails closed exactly as for a missing secret (R16).
+export const NOT_CONFIGURED = "not-configured";
+
+// secretValue, with the placeholder NOT_CONFIGURED read as no value (only the whole value, never a prefix).
+export function configuredSecretValue(link: unknown): string | undefined {
+  const value = secretValue(link);
+  return value === NOT_CONFIGURED ? undefined : value;
+}

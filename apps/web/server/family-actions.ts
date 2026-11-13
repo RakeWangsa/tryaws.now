@@ -1,6 +1,6 @@
 import { requireFreshSignIn } from "@tc/auth";
 import type { CustomerSession } from "@tc/auth";
-import { decideDestructive } from "@tc/core";
+import { decideDestructive, isUuid, UUID_PATTERN } from "@tc/core";
 import type {
   AuditRepo,
   CatalogProduct,
@@ -75,7 +75,8 @@ export interface FamilySpec {
   nameKey?: "displayName" | "zoneName";
 }
 
-export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// Final review M3: the one UUID check (@tc/core isUuid); kept as UUID for the zod regex of the actions.
+export const UUID = UUID_PATTERN;
 const LIVE_STATES = ["active", "stopped", "suspended"];
 
 const limit = (action: string, count: number, windowSeconds: number): CustomerLimit[] => [
@@ -111,7 +112,7 @@ export function uuidField(
   bad: Record<string, string>,
 ): string {
   const value = input[key];
-  if (typeof value === "string" && UUID.test(value)) return value;
+  if (isUuid(value)) return value;
   bad[key] = "invalid";
   return "";
 }

@@ -1,3 +1,5 @@
+import { NOT_CONFIGURED } from "@tc/db/links";
+
 // The five EPS secrets reach this function only through this port (R3). The real source reads SST's
 // linked Resource (index.ts, open point 3); tests pass a plain object. Errors name the secret, never its value.
 export const EPS_SECRET_NAMES = [
@@ -14,11 +16,10 @@ export interface SecretSource {
   get(name: EpsSecretName): string;
 }
 
-// WPU-Z11: the value a person stores for an EPS secret before the merchant account exists (the same
-// literal as NOT_CONFIGURED of apps/web/server/secrets.ts; scripts/golive/stage-secrets.sh writes it for
-// each EPS value left empty). One of the five on it means EPS is not configured: the job then asks EPS
-// nothing (R6, R16).
-export const NOT_CONFIGURED = "not-configured";
+// WPU-Z11: the value a person stores for an EPS secret before the merchant account exists (final review M3:
+// the one constant NOT_CONFIGURED of @tc/db/links; scripts/golive/stage-secrets.sh writes it for each EPS
+// value left empty). One of the five on it means EPS is not configured: the job then asks EPS nothing (R6, R16).
+export { NOT_CONFIGURED };
 
 export function epsConfigured(secrets: SecretSource): boolean {
   return EPS_SECRET_NAMES.every((name) => secrets.get(name) !== NOT_CONFIGURED);

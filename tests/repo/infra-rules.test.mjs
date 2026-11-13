@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { OPTIONAL_SMS_SECRETS } from "../../infra/lib/functions.ts";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -406,15 +407,21 @@ describe("WP0-T3: database, proxy and roles", () => {
 
   it("keeps all declared secrets without values", () => {
     expect(secrets).toContain("new sst.Secret(name)");
-    // Every sst.Secret with a second argument (a placeholder). WPU-Z18: exactly one, the optional
-    // FirstAdminSub, whose placeholder is not a value (the migrator reads it as "no secret");
-    // tests/repo/first-admin.test.mjs holds the rest of its rules.
+    // Every sst.Secret with a second argument (a placeholder). WPU-Z18: the optional FirstAdminSub, whose
+    // placeholder is not a value (the migrator reads it as "no secret"); tests/repo/first-admin.test.mjs
+    // holds the rest of its rules. Final review M2: and the two optional SMS secrets, exactly those, whose
+    // placeholder the readers treat as "SMS off".
     const placeholders = [...secrets.matchAll(/new sst\.Secret\(([^)]*),([^)]*)\)/g)].map((m) =>
       m[0].replace(/\s+/g, " "),
     );
     expect(placeholders).toEqual([
+      "new sst.Secret(name, OPTIONAL_SECRET_PLACEHOLDER)",
       "new sst.Secret(FIRST_ADMIN_SUB_SECRET, OPTIONAL_SECRET_PLACEHOLDER)",
     ]);
+    expect(secrets).toMatch(
+      /OPTIONAL_SMS_SECRETS\.includes\(name\)\s*\?\s*new sst\.Secret\(name, OPTIONAL_SECRET_PLACEHOLDER\)\s*:\s*new sst\.Secret\(name\)/,
+    );
+    expect(OPTIONAL_SMS_SECRETS).toEqual(["SmsApiKey", "SmsSenderId"]);
   });
 });
 
@@ -665,5 +672,22 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     for (const [name, text] of Object.entries({ web, workers })) {
       expect(text, name).not.toMatch(/DB_PASSWORD\b|DATABASE_URL|\.password\b/);
     }
+  });
+});
+
+// Final review M5: the web and admin apps get no bucket name that nothing reads. When code starts to read one, it
+// adds the variable together with that code (and this test changes with it).
+describe("no unused bucket variables on the Next.js apps", () => {
+  it("passes neither KYC_BUCKET nor EXPORTS_BUCKET, and nothing reads them", async () => {
+    expect(web).not.toMatch(/KYC_BUCKET|EXPORTS_BUCKET/);
+    const { spawnSync } = await import("node:child_process");
+    const r = spawnSync(
+      "git",
+      ["grep", "-l", "-E", "KYC_BUCKET|EXPORTS_BUCKET", "--", "apps", "packages", "functions"],
+      { cwd: resolve(import.meta.dirname, "../.."), encoding: "utf8" },
+    );
+    // git grep: exit 1 and no output when nothing matches
+    expect(r.status, r.stderr).toBe(1);
+    expect(r.stdout).toBe("");
   });
 });

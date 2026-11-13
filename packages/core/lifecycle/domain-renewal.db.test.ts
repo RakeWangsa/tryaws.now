@@ -244,16 +244,42 @@ describe("one charge, one registry renewal", () => {
     expect(await renewOps(resourceId)).toEqual([]);
   });
 
-  it("a domain whose registry expiry is not known is not charged at all: the run fails for it (R16)", async () => {
+  it("a domain whose registry expiry is not known is not charged at all: it is held for price_unavailable (R16, final review M2)", async () => {
     const d = await boughtDomain({ expiry: null });
     const before = await kit.balance(d.customerId);
     kit.clock.set(d.end);
-    expect((await run()).failed).toBeGreaterThanOrEqual(1);
+    const logged: Record<string, unknown>[] = [];
+    await kit.refreshFx();
+    await runLifecycle({
+      runTx: worker,
+      clock: kit.clock,
+      log: (e) => logged.push(e as Record<string, unknown>),
+      queue,
+    });
+    // the charge rolled back with its savepoint: no renewal, no registry operation, the wallet untouched
     expect(await renewals(d.subscriptionId)).toEqual([]);
     expect(await renewOps(d.resourceId)).toEqual([]);
     expect(await kit.balance(d.customerId)).toBe(before);
     const s = await subRow(d.subscriptionId);
+    expect(s.status).toBe("active");
     expect((s.period_end as Date).toISOString()).toBe(d.end.toISOString());
+    // the hold marker is written once and its log line (the alarm) names the subscription
+    const [marker] = await q("select config->'fxRateHold' as hold from resources where id = $1", [
+      d.resourceId,
+    ]);
+    expect(marker!.hold).toMatchObject({ reason: "price_unavailable", error: "conflict" });
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        event: "lifecycle_renewal_held",
+        reason: "price_unavailable",
+        error: "conflict",
+        subscriptionId: d.subscriptionId,
+      }),
+    );
+    // no grace and no suspension while held: the next sweep holds again and charges nothing
+    await run();
+    expect(await renewals(d.subscriptionId)).toEqual([]);
+    expect((await subRow(d.subscriptionId)).status).toBe("active");
   });
 });
 

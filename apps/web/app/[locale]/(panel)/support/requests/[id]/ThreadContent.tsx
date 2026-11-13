@@ -23,9 +23,11 @@ interface Entry {
   at: Date;
 }
 
+// Final review (Z6 minors): an entry a visitor sent from the public support form (before the request was linked
+// to the account) is shown neutrally: its own label and an envelope, not "You".
 const AUTHOR_ICON: Record<Author, string> = {
   customer: "fas fa-user",
-  visitor: "fas fa-user",
+  visitor: "fas fa-envelope",
   admin: "fas fa-headset",
 };
 

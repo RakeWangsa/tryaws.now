@@ -198,3 +198,31 @@ describe("/support/requests/[id]", () => {
     }
   });
 });
+
+// Final review (Z6 minors).
+describe("the support thread and status, neutral labels", () => {
+  it("labels an entry sent from the public support form neutrally, with an envelope, in both locales", () => {
+    const withVisitor = {
+      ...THREAD,
+      messages: [
+        {
+          id: "0190aaaa-0000-7000-8000-0000000000f1",
+          authorType: "visitor" as const,
+          body: "Sent before I signed in.",
+          createdAt: new Date("2026-11-11T06:00:00.000Z"),
+        },
+      ],
+    };
+    const en = thread(withVisitor)("en");
+    expect(textOf(en)).toContain("Sent from the public support form");
+    expect(en).toContain('<i class="fas fa-envelope me-2" aria-hidden="true"></i>');
+    expect(textOf(thread(withVisitor)("bn"))).toContain("সর্বজনীন সাপোর্ট ফর্ম থেকে পাঠানো");
+  });
+
+  it('names a status it does not know "Status unknown", never an empty badge', () => {
+    const odd = { ...THREAD, status: "escalated" as unknown as typeof THREAD.status };
+    expect(textOf(thread(odd)("en"))).toContain("Status unknown");
+    expect(textOf(thread(odd)("bn"))).toContain("অবস্থা জানা নেই");
+    expect(textOf(thread({ ...THREAD, status: "answered" })("en"))).toContain("Answered");
+  });
+});

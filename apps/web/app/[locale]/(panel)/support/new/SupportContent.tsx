@@ -1,9 +1,11 @@
 import { Badge, Card, DataTable, DateText, EmptyState } from "@tc/ui";
+import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type {
   CustomerSupportRequestRow,
   SupportResourceChoice,
 } from "../../../../../server/support-view.ts";
+import { threadHref } from "../requests/RequestsContent.tsx";
 import { SupportForm } from "./SupportForm.tsx";
 import type { SupportAction } from "./SupportForm.tsx";
 
@@ -14,11 +16,13 @@ import type { SupportAction } from "./SupportForm.tsx";
 type Numerals = "beng" | "latn";
 
 export function SupportContent({
+  locale,
   numerals,
   requests,
   resources = [],
   action,
 }: {
+  locale: Locale;
   numerals: Numerals;
   requests: readonly CustomerSupportRequestRow[];
   resources?: readonly SupportResourceChoice[];
@@ -40,7 +44,16 @@ export function SupportContent({
           rows={[...requests]}
           rowKey={(row) => row.id}
           columns={[
-            { key: "subject", header: t("list.subject"), cell: (row) => row.subject },
+            {
+              key: "subject",
+              header: t("list.subject"),
+              // Final review (Z6 minors): each earlier request opens its thread.
+              cell: (row) => (
+                <a className="mergecolor text-break" href={threadHref(locale, row.id)}>
+                  {row.subject}
+                </a>
+              ),
+            },
             {
               key: "category",
               header: t("list.category"),
