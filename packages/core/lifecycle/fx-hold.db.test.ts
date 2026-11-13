@@ -19,6 +19,7 @@ const q = async (sql: string, params: unknown[] = []) =>
 interface Fresh {
   resourceId: string;
   subscriptionId: string;
+  customerId: string;
   end: Date;
 }
 
@@ -35,7 +36,12 @@ async function fresh(balanceMinor = 50_000_000n): Promise<Fresh> {
   // charge, so it is switched on here as in every other lifecycle fixture. Without it the period end goes
   // straight to grace (no renewal is tried) and the hold is never reached.
   await q("update subscriptions set auto_renew = true where id = $1", [s.id]);
-  return { resourceId, subscriptionId: String(s.id), end: s.period_end as Date };
+  return {
+    resourceId,
+    subscriptionId: String(s.id),
+    customerId: buyer.customerId,
+    end: s.period_end as Date,
+  };
 }
 
 const status = async (id: string) =>
@@ -61,12 +67,12 @@ describe("a renewal that cannot be priced because the rate is stale", () => {
     const f = await fresh();
     // the period ends 30 days after START; the only rate is the staging seed from START: 30 days old, stale
     kit.clock.set(new Date(f.end.getTime() + 60_000));
-    const before = await kit.balance();
+    const before = await kit.balance(f.customerId);
     for (let i = 0; i < 3; i += 1) await sweep();
     expect(await status(f.subscriptionId)).toBe("active");
     expect(await state(f.resourceId)).toBe("active");
     expect(await renewals(f.subscriptionId)).toBe(0);
-    expect(await kit.balance()).toBe(before);
+    expect(await kit.balance(f.customerId)).toBe(before);
     const held = (
       await q("select config->'fxRateHold' as h from resources where id = $1", [f.resourceId])
     )[0]!;

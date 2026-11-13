@@ -150,6 +150,8 @@ describe("the price of today", () => {
     // fx_rates is shared by this file: the cases above ran at f.end, so `run()` re-entered the rate 127 AT f.end,
     // and that row (newer than any rate set near START) is the one in force at the period end. The new rate is
     // therefore set just after f.end, and the renewal runs at the clock that changeFxRate leaves (still due).
+    // The rate 200 entered at f.end + 60s (and its refresh copy) stays in force for the later cases of this file,
+    // whose clocks are later than that, so a later case renews at 200, not 127; later cases assert no amount.
     await kit.changeFxRate("200", new Date(f.end.getTime() + 60_000));
     const before = await kit.balance(f.customerId);
     expect(await run()).toMatchObject({ renewed: 1 });
