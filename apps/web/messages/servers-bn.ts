@@ -307,7 +307,7 @@ export const serversBn = {
         rateValue: "১ USD = ৳{rate}, {date} তারিখে নির্ধারিত",
         rateValueNoDate: "১ USD = ৳{rate}",
         bdt: "ওয়ালেট থেকে কাটা হবে (টাকায়)",
-        // DRAFT WORDING (WPU-Y4): the owner confirms this note.
+        // WPU-Y4 wording (approved by the owner on 2026-11-13).
         note: "মূল্য মার্কিন ডলারে। টাকার পরিমাণ হলো দেখানো বিনিময় হারে ডলার মূল্যের সমান, এবং ঠিক এই পরিমাণই আপনার ওয়ালেট থেকে কাটা হবে। নিশ্চিত করার আগে হার বদলালে নতুন পরিমাণ দেখানো হবে, আবার নিশ্চিত করতে হবে।",
       },
       lines: "মূল্যের বিবরণ",

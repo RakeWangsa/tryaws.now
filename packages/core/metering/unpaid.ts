@@ -475,7 +475,7 @@ async function releaseFinalSnapshots(
   const released = (await ops.supersedeFinal(tx, row.resourceId)).length;
   count.finalReleased += released;
   // WPU-Y10: the customer is told once for each resource and episode that the former final snapshot is an
-  // ordinary backup now, billed every day until it is deleted. DRAFT wording (@tc/notify).
+  // ordinary backup now, billed every day until it is deleted. Wording approved by the owner on 2026-11-13 (@tc/notify).
   const product = productOfFamily(row.resource.family);
   if (released > 0 && deps.notice !== undefined && product !== null) {
     await deps.notice(tx, {

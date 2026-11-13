@@ -44,7 +44,7 @@ export const publicBn = {
       seePricing: "মূল্য দেখুন",
       seePlans: "প্ল্যান দেখুন",
       login: "প্যানেলে যান",
-      // DRAFT WORDING (WPU-Y4): the owner confirms this note (USD, taka at checkout, Amazon Lightsail).
+      // WPU-Y4 wording (approved by the owner on 2026-11-13): USD, taka at checkout, Amazon Lightsail.
       priceNote:
         "মূল্য মার্কিন ডলারে (USD), ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত। টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয় এবং নিশ্চিত করার আগেই দেখানো হয়। ১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
       unavailableTitle: "মূল্য এখন দেখানো যাচ্ছে না",

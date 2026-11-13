@@ -315,7 +315,7 @@ export const BN: Catalog = {
       "{date} তারিখের মধ্যে বদলানো না হলে জোনটি মুছে ফেলা হবে।",
     ],
   },
-  // WPU-Y3 DRAFT: owner approves the wording, above all every sentence that says data is deleted.
+  // WPU-Y3 wording, approved by the owner on 2026-11-13 (including every sentence that says data is deleted).
   unpaid_warning: {
     subject: "{name}: একটি চার্জ পরিশোধ হয়নি",
     headline: "একটি চার্জ পরিশোধ হয়নি",
@@ -324,7 +324,7 @@ export const BN: Catalog = {
       "এখনই ওয়ালেটে টাকা যোগ করুন। চার্জ বাকি থাকলে ১ দিন পরে {name} স্থগিত হবে এবং ৭ দিন পরে মুছে ফেলা হবে।",
     ],
   },
-  // WPU-Y3 DRAFT
+  // WPU-Y3 wording, approved by the owner on 2026-11-13.
   unpaid_suspended: {
     subject: "{name} স্থগিত আছে: মুছে ফেলার আগে {days} দিন বাকি",
     headline: "বকেয়া চার্জের কারণে স্থগিত",
@@ -334,7 +334,7 @@ export const BN: Catalog = {
       "ওয়ালেটে টাকা যোগ করলে চার্জ নিজে থেকে নেওয়া হবে এবং রিসোর্স আবার চালু হবে।",
     ],
   },
-  // WPU-Y3 DRAFT
+  // WPU-Y3 wording, approved by the owner on 2026-11-13.
   unpaid_deletion: {
     subject: "{name} মুছে ফেলার অনুরোধ হয়েছে",
     headline: "বকেয়া চার্জ: মুছে ফেলার ধাপ",
@@ -349,7 +349,7 @@ export const BN: Catalog = {
       direct: "এটি মুছে ফেলা হবে। যে প্রোডাক্টে ব্যাকআপ আছে, মোছার আগে শেষ ব্যাকআপ নেওয়া হবে।",
     },
   },
-  // WPU-Y10 DRAFT: owner approves the wording.
+  // WPU-Y10 wording, approved by the owner on 2026-11-13.
   unpaid_snapshot_released: {
     subject: "{name}: শেষ ব্যাকআপ এখন সাধারণ ব্যাকআপ",
     headline: "শেষ ব্যাকআপ এখন সাধারণ ব্যাকআপ",
@@ -359,7 +359,7 @@ export const BN: Catalog = {
       "দরকার না থাকলে রিসোর্সের পাতার ব্যাকআপ অংশ থেকে এটি মুছে ফেলতে পারেন।",
     ],
   },
-  // WPU-Y3 DRAFT
+  // WPU-Y3 wording, approved by the owner on 2026-11-13.
   wallet_low_before_charge: {
     subject: "{date} তারিখের চার্জের জন্য ওয়ালেটে টাকা কম",
     headline: "ওয়ালেটে টাকা কম",
@@ -577,7 +577,7 @@ export const EN: Catalog = {
       "If this is not done by {date}, the zone will be removed.",
     ],
   },
-  // WPU-Y3 DRAFT: owner approves the wording, above all every sentence that says data is deleted.
+  // WPU-Y3 wording, approved by the owner on 2026-11-13 (including every sentence that says data is deleted).
   unpaid_warning: {
     subject: "{name}: a charge is unpaid",
     headline: "A charge is unpaid",
@@ -586,7 +586,7 @@ export const EN: Catalog = {
       "Top up your wallet now. If the charge stays unpaid, {name} is suspended after 1 day and deleted after 7 days.",
     ],
   },
-  // WPU-Y3 DRAFT
+  // WPU-Y3 wording, approved by the owner on 2026-11-13.
   unpaid_suspended: {
     subject: "{name} is suspended: {days} days until deletion",
     headline: "Suspended for an unpaid charge",
@@ -596,7 +596,7 @@ export const EN: Catalog = {
       "Top up your wallet and the charge is taken automatically and the resource starts again.",
     ],
   },
-  // WPU-Y3 DRAFT
+  // WPU-Y3 wording, approved by the owner on 2026-11-13.
   unpaid_deletion: {
     subject: "Deletion of {name} has been requested",
     headline: "Unpaid charge: deletion step",
@@ -612,7 +612,7 @@ export const EN: Catalog = {
         "It will be deleted. Where the product has backups, a final backup is made before anything is deleted.",
     },
   },
-  // WPU-Y10 DRAFT: owner approves the wording.
+  // WPU-Y10 wording, approved by the owner on 2026-11-13.
   unpaid_snapshot_released: {
     subject: "{name}: the final backup is now an ordinary backup",
     headline: "The final backup is now an ordinary backup",
@@ -622,7 +622,7 @@ export const EN: Catalog = {
       "If you do not need it, delete it from the backups section of the resource page.",
     ],
   },
-  // WPU-Y3 DRAFT
+  // WPU-Y3 wording, approved by the owner on 2026-11-13.
   wallet_low_before_charge: {
     subject: "Your wallet is low for the charge on {date}",
     headline: "Low wallet balance",

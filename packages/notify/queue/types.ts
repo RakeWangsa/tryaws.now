@@ -32,7 +32,7 @@ export const TEMPLATE_IDS = [
   "waitlist_capacity_available",
   // WPU-D4: a hosted zone whose domain does not point to its name servers (day 7 and day 12).
   "dns_delegation_notice",
-  // WPU-Y3 (DRAFT wording, owner approval needed): the unpaid-usage rule and the low-wallet reminder.
+  // WPU-Y3 (wording approved by the owner on 2026-11-13): the unpaid-usage rule and the low-wallet reminder.
   "unpaid_warning",
   "unpaid_suspended",
   "unpaid_deletion",

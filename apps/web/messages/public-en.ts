@@ -47,7 +47,7 @@ export const publicEn: Same<typeof publicBn> = {
       seePricing: "See pricing",
       seePlans: "See plans",
       login: "Go to the panel",
-      // DRAFT WORDING (WPU-Y4): the owner confirms this note (USD, taka at checkout, Amazon Lightsail).
+      // WPU-Y4 wording (approved by the owner on 2026-11-13): USD, taka at checkout, Amazon Lightsail.
       priceNote:
         "Prices are in US dollars (USD), for 30 days, and include VAT and fees. The amount in taka is worked out at checkout with the exchange rate of the day, and you see it before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail.",
       unavailableTitle: "Prices cannot be shown now",

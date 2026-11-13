@@ -309,7 +309,7 @@ export const serversEn: Same<typeof serversBn> = {
         rateValue: "1 USD = ৳{rate}, set on {date}",
         rateValueNoDate: "1 USD = ৳{rate}",
         bdt: "Amount debited from your wallet (taka)",
-        // DRAFT WORDING (WPU-Y4): the owner confirms this note.
+        // WPU-Y4 wording (approved by the owner on 2026-11-13).
         note: "The price is in US dollars. The amount in taka is the dollar price at the exchange rate shown, and it is exactly what is taken from your wallet. If the rate changes before you confirm, you will see the new amount and confirm again.",
       },
       lines: "Price details",

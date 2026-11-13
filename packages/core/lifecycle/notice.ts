@@ -3,7 +3,7 @@ import type { Tx } from "@tc/db";
 // WPU-Y3. The four customer messages of the unpaid-usage rule and of the low-wallet reminder. They are
 // templates of @tc/notify (TEMPLATE_IDS), which core cannot import (notify depends on core), so the
 // caller injects the writer: the scheduler passes `notify` of @tc/notify. A test in @tc/notify keeps
-// this list inside TEMPLATE_IDS. DRAFT wording: the texts are in packages/notify/templates/messages.ts.
+// this list inside TEMPLATE_IDS. Wording approved by the owner on 2026-11-13: the texts are in packages/notify/templates/messages.ts.
 export const UNPAID_TEMPLATES = [
   "unpaid_warning",
   "unpaid_suspended",

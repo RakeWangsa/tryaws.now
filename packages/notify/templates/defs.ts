@@ -377,7 +377,7 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
       date: h.d(d.removeAt),
     }),
   },
-  // WPU-Y3 (DRAFT, owner approves the wording): a usage charge could not be paid. Day 0 of the rule.
+  // WPU-Y3 (wording approved by the owner on 2026-11-13): a usage charge could not be paid. Day 0 of the rule.
   unpaid_warning: {
     spec: { ...resource },
     channels: () => ek,
@@ -405,7 +405,7 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
       note: h.x(d.approval === true ? "approval" : "direct"),
     }),
   },
-  // WPU-Y10 (DRAFT): after a late payment the final backup of the retention became an ordinary backup.
+  // WPU-Y10 (wording approved by the owner on 2026-11-13): after a late payment the final backup of the retention became an ordinary backup.
   unpaid_snapshot_released: {
     spec: { ...resource },
     channels: () => ek,
