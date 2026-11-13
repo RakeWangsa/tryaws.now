@@ -32,8 +32,9 @@ describe("the unpaid static IP charge", () => {
        where id = $1`,
       [resourceId, DETACHED.toISOString()],
     );
-    // The real writer (@tc/notify) keeps one message per dedupeKey (R7); this stand-in does the same, so the
-    // test sees what a customer would receive, and a replay is a no-op only if the job reuses the key.
+    // The real writer (@tc/notify) keys its rows on template + dedupeKey + channel (R7); this stand-in dedupes on
+    // template + dedupeKey (it has no channel), so it is no stricter than the real writer, and a replay is a
+    // no-op only if the job reuses the key.
     const notices: Notice[] = [];
     const seenKeys = new Set<string>();
     const unpaid = (now: Date) => {
@@ -43,8 +44,9 @@ describe("the unpaid static IP charge", () => {
         clock: kit.clock,
         log: () => undefined,
         notice: async (_tx, n) => {
-          if (seenKeys.has(n.dedupeKey)) return;
-          seenKeys.add(n.dedupeKey);
+          const key = `${n.template}:${n.dedupeKey}`;
+          if (seenKeys.has(key)) return;
+          seenKeys.add(key);
           notices.push(n);
         },
       });
