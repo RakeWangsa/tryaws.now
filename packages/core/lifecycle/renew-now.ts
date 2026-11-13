@@ -4,6 +4,7 @@ import type { Clock, Result } from "../types";
 import { DEFAULT_LIFECYCLE_CONFIG } from "./config";
 import { planApplyWait } from "./plan-change";
 import { renewSubscription, type Renewed } from "./renew";
+import { resumeAfterRenewalAllowed } from "./resume-rule";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LIVE_STATES = ["active", "stopped", "suspended"];
@@ -65,11 +66,8 @@ export async function renewNow(tx: Tx, input: RenewNowInput): Promise<Result<Ren
   if (!renewed.ok) return renewed;
 
   let resumeQueued = false;
-  if (
-    row.status === "grace" &&
-    row.resource.state === "suspended" &&
-    row.resource.config.adminSuspended !== true
-  ) {
+  // WPU-Y3b: not while an unpaid usage charge is open; the unpaid job resumes after that is paid.
+  if (row.status === "grace" && resumeAfterRenewalAllowed(row)) {
     // The key of the engine's own resume: one resume per renewal, whoever renews.
     const inserted = await insertOperation(
       tx,

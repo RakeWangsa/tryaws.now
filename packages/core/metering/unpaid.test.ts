@@ -5,8 +5,9 @@ import { R13_APPROVAL_UNTIL } from "../lifecycle/unpaid";
 import type { PostTransactionInput } from "../ledger/types";
 import { createMemoryQueue } from "../operations/queue";
 import type { MeteredUnitPrice } from "../pricing/metering";
+import type { StaticIpPrice } from "../products/static-ip-price";
 import type { Result } from "../types";
-import { runUnpaid, unpaidRunKey, type UnpaidOps } from "./index";
+import { UNPAID_PERIOD_CAP, runUnpaid, unpaidRunKey, type UnpaidOps } from "./index";
 
 // WPU-Y3. The unpaid-usage rule with a fake world (no database): retry every unpaid day without a
 // window, suspend at 1 day, retain at 7 days, R13 on both sides of the date, a payment restores, and a
@@ -40,6 +41,10 @@ interface World {
   enabled: boolean;
   approvalUntil: Date | null;
   family: string;
+  periodEnd: Date;
+  finalBackups: string[];
+  ipPrice: StaticIpPrice | null;
+  opStates: Record<string, string>;
 }
 
 function build(init: Partial<World> = {}) {
@@ -53,12 +58,25 @@ function build(init: Partial<World> = {}) {
     enabled: true,
     approvalUntil: R13_APPROVAL_UNTIL,
     family: "linux_instance",
+    periodEnd: new Date("2026-12-20T00:00:00Z"),
+    finalBackups: [],
+    ipPrice: null,
+    opStates: {},
     ...init,
   };
   const posted = new Map<string, PostTransactionInput>();
   const ops = new Map<string, { kind: string; state: string }>();
   const notices = new Map<string, Notice>();
-  const calls = { list: 0, retain: 0, setStatus: [] as string[], flags: [] as string[] };
+  const keys: string[] = [];
+  const calls = {
+    list: 0,
+    retain: 0,
+    setStatus: [] as string[],
+    flags: [] as string[],
+    chargedQueries: 0,
+    episode: undefined as number | undefined,
+    balanceReads: 0,
+  };
   const fake: UnpaidOps = {
     enabled: async () => w.enabled,
     approvalUntil: async () => w.approvalUntil,
@@ -85,7 +103,7 @@ function build(init: Partial<World> = {}) {
         termDays: 30,
         priceSnapshot: {},
         periodStart: new Date("2026-11-01T00:00:00Z"),
-        periodEnd: new Date("2026-12-20T00:00:00Z"),
+        periodEnd: w.periodEnd,
         autoRenew: true,
         status: w.status,
         resource: { family: w.family, state: w.state, config: { ...w.config }, deletedAt: null },
@@ -93,8 +111,23 @@ function build(init: Partial<World> = {}) {
     usage: async (_tx, _r, _m, from, to) =>
       w.usage.filter((u) => u.period >= from && u.period <= to),
     snapshotUnit: async () => w.unit,
-    staticIpPrice: async () => ({ ok: false, error: "not_found" }),
-    hasCharge: async (_tx, key) => posted.has(key),
+    staticIpPrice: async () =>
+      w.ipPrice === null ? { ok: false, error: "not_found" } : { ok: true, value: w.ipPrice },
+    chargedPeriods: async (_tx, resourceId, metric, from, to) => {
+      calls.chargedQueries += 1;
+      const prefix = `meter:${resourceId}:${metric}:`;
+      return new Set(
+        [...posted.keys()]
+          .filter((k) => k.startsWith(prefix))
+          .map((k) => k.slice(prefix.length))
+          .filter((p) => p >= from && p <= to),
+      );
+    },
+    balance: async () => {
+      calls.balanceReads += 1;
+      return w.balance;
+    },
+    supersedeFinal: async () => w.finalBackups,
     post: async (_tx, input): Promise<Result<{ transactionId: string }>> => {
       if (posted.has(input.idempotencyKey)) return { ok: true, value: { transactionId: "x" } };
       const wallet = input.postings.find((p) => p.account.type === "customer_wallet")!;
@@ -106,7 +139,15 @@ function build(init: Partial<World> = {}) {
       return { ok: true, value: { transactionId: "x" } };
     },
     clear: async () => {
-      for (const k of ["unpaidSince", "unpaidSuspended", "unpaidRetained"]) delete w.config[k];
+      for (const k of [
+        "unpaidSince",
+        "unpaidSuspended",
+        "unpaidRetained",
+        "unpaidRetainedFrom",
+        "unpaidIpFrom",
+        "unpaidIpTo",
+      ])
+        delete w.config[k];
     },
     setFlag: async (_tx, _r, key, value) => {
       calls.flags.push(`${key}=${value}`);
@@ -118,21 +159,23 @@ function build(init: Partial<World> = {}) {
         return {
           operationId: "0190e000-0000-7000-8000-000000000001",
           created: false,
-          state: existing.state,
+          state: w.opStates[input.key] ?? existing.state,
         };
       const state =
         input.kind === "destroy" && w.approvalUntil && NOW < w.approvalUntil
           ? "needs_approval"
           : "queued";
       ops.set(input.key, { kind: input.kind, state });
+      keys.push(input.key);
       return { operationId: "0190e000-0000-7000-8000-000000000001", created: true, state };
     },
     setStatus: async (_tx, _s, status) => {
       calls.setStatus.push(status);
       w.status = status;
     },
-    retain: async (_tx, row) => {
+    retain: async (_tx, row, _now, episode) => {
       calls.retain += 1;
+      calls.episode = episode;
       w.status = "retained";
       ops.set(`lifecycle:final-snapshot:${row.id}`, { kind: "final_snapshot", state: "queued" });
       ops.set(`lifecycle:destroy:${row.id}`, {
@@ -154,7 +197,7 @@ function build(init: Partial<World> = {}) {
       },
       ops: fake,
     });
-  return { w, run, posted, ops, notices, calls, logs };
+  return { w, run, posted, ops, notices, calls, logs, keys };
 }
 
 // Every Dhaka day that ended between two ISO days, as usage rows of 30 GB.
@@ -392,7 +435,12 @@ describe("paying restores; deletion never follows a payment", () => {
     const t = build({
       state: "suspended",
       status: "retained",
-      config: { unpaidSince: since(9 * DAY), unpaidSuspended: true, unpaidRetained: true },
+      config: {
+        unpaidSince: since(9 * DAY),
+        unpaidSuspended: true,
+        unpaidRetained: true,
+        unpaidRetainedFrom: "active",
+      },
       usage: days("2026-11-10", "2026-11-19"),
       balance: 100_000n,
     });
@@ -504,5 +552,331 @@ describe("failures", () => {
       resourceId: RES,
       error: "Error",
     });
+  });
+});
+const sinceMs = (iso: string): number => Date.parse(iso);
+const IP: StaticIpPrice = {
+  unit: "hour",
+  perHourMinor: 77n,
+  breakdown: {
+    totalMinor: 77n,
+    baseMinor: 64n,
+    steps: [{ code: "bd_vat", amountMinor: 13n }],
+  },
+};
+
+// WPU-Y3b, finding 1 (HIGH).
+describe("the paid path resumes only a subscription that is active and not past its period end", () => {
+  it("keeps the suspension while the renewal itself is unpaid (grace), and ends the episode", async () => {
+    const t = build({
+      state: "suspended",
+      status: "grace",
+      config: { unpaidSince: since(3 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.paid).toBe(1);
+    expect(report.resumed).toBe(0);
+    expect(t.ops.size).toBe(0);
+    expect(t.w.config.unpaidSince).toBeUndefined();
+  });
+
+  it("keeps the suspension when the period end is already past", async () => {
+    const t = build({
+      state: "suspended",
+      periodEnd: new Date(NOW.getTime() - HOUR),
+      config: { unpaidSince: since(3 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.resumed).toBe(0);
+    expect(t.ops.size).toBe(0);
+  });
+
+  it("resumes a resource that the renewal flow left suspended (it skipped the resume during the episode)", async () => {
+    const t = build({
+      state: "suspended",
+      config: { unpaidSince: since(3 * DAY) }, // not flagged: suspended by the grace of an earlier period
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.resumed).toBe(1);
+    expect([...t.ops.values()].map((o) => o.kind)).toEqual(["resume"]);
+  });
+
+  it("restores the status the subscription had before the job retained it", async () => {
+    for (const from of ["active", "grace"] as const) {
+      const t = build({
+        state: "suspended",
+        status: "retained",
+        config: {
+          unpaidSince: since(9 * DAY),
+          unpaidSuspended: true,
+          unpaidRetained: true,
+          unpaidRetainedFrom: from,
+        },
+        usage: days("2026-11-10", "2026-11-19"),
+        balance: 100_000n,
+      });
+      await t.run();
+      expect(t.calls.setStatus).toEqual([from]);
+      // grace: the renewal flow owns the resume; active with a future end: the job resumes
+      expect([...t.ops.values()].map((o) => o.kind)).toEqual(from === "active" ? ["resume"] : []);
+    }
+  });
+
+  it("restores to grace when the stored status cannot be read (R16)", async () => {
+    const t = build({
+      state: "suspended",
+      status: "retained",
+      config: {
+        unpaidSince: since(9 * DAY),
+        unpaidRetained: true,
+        unpaidRetainedFrom: "weird",
+      },
+      usage: days("2026-11-10", "2026-11-19"),
+      balance: 100_000n,
+    });
+    await t.run();
+    expect(t.calls.setStatus).toEqual(["grace"]);
+    expect(t.ops.size).toBe(0);
+  });
+
+  it("stores the status it retains from, and the episode for the retention keys", async () => {
+    const t = build({
+      state: "suspended",
+      status: "grace",
+      config: { unpaidSince: since(7 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-10", "2026-11-19"),
+    });
+    await t.run();
+    expect(t.calls.flags).toContain("unpaidRetainedFrom=grace");
+    expect(t.calls.episode).toBe(sinceMs(since(7 * DAY)));
+  });
+});
+
+// Finding 2 (HIGH), the unpaid side: a resumed resource can be suspended again in the same episode.
+describe("the suspend key changes after a resume (finding 2)", () => {
+  it("suspends again on a later day of the same episode, once for each day", async () => {
+    const t = build({
+      config: { unpaidSince: since(2 * DAY) },
+      usage: days("2026-11-15", "2026-11-19"),
+    });
+    await t.run();
+    expect(t.keys.filter((k) => k.startsWith("unpaid:suspend:"))).toHaveLength(1);
+    await t.run(new Date(NOW.getTime() + HOUR)); // same day: a replay
+    expect(t.keys.filter((k) => k.startsWith("unpaid:suspend:"))).toHaveLength(1);
+    // an admin (or anything else) resumed it; the next unpaid day suspends it again
+    t.w.state = "active";
+    await t.run(new Date(NOW.getTime() + DAY));
+    const suspends = t.keys.filter((k) => k.startsWith("unpaid:suspend:"));
+    expect(suspends).toHaveLength(2);
+    expect(new Set(suspends).size).toBe(2);
+  });
+});
+
+// Finding 3 (MEDIUM).
+describe("the unpaid static IP hours stay in the mark (finding 3)", () => {
+  const H = (h: string): string => `meter:${RES}:static_ip_hour:${h}`;
+  const ipConfig = () => ({
+    unpaidSince: since(5 * HOUR),
+    staticIpAttached: true,
+    unpaidIpFrom: "2026-11-20T09",
+    unpaidIpTo: "2026-11-20T11",
+  });
+  it("retries the marked hours although the IP is attached again", async () => {
+    const t = build({
+      ipPrice: IP,
+      config: ipConfig(),
+      usage: [],
+      balance: 10_000n,
+    });
+    const report = await t.run();
+    expect([...t.posted.keys()].sort()).toEqual([
+      H("2026-11-20T09"),
+      H("2026-11-20T10"),
+      H("2026-11-20T11"),
+    ]);
+    expect(report.paid).toBe(1);
+    expect(t.w.config.unpaidIpFrom).toBeUndefined();
+  });
+
+  it("is not paid until those hours are charged", async () => {
+    const t = build({
+      ipPrice: IP,
+      config: ipConfig(),
+      usage: [],
+      balance: 100n,
+    });
+    const report = await t.run();
+    expect(report.charged).toBe(1);
+    expect(report.paid).toBe(0);
+    expect(report.stillUnpaid).toBe(1);
+    expect(t.w.config.unpaidSince).toBeDefined();
+  });
+
+  it("skips the hours that were charged in the meantime", async () => {
+    const t = build({
+      ipPrice: IP,
+      config: ipConfig(),
+      usage: [],
+      balance: 10_000n,
+    });
+    t.posted.set(H("2026-11-20T10"), {} as PostTransactionInput);
+    await t.run();
+    expect(t.posted.size).toBe(3);
+  });
+
+  it("an unreadable hour mark decides nothing (R16)", async () => {
+    const t = build({
+      ipPrice: IP,
+      config: {
+        unpaidSince: since(5 * HOUR),
+        unpaidIpFrom: "yesterday",
+        unpaidIpTo: "now",
+      },
+      balance: 10_000n,
+    });
+    const report = await t.run();
+    expect(report.blocked).toBe(1);
+    expect(t.posted.size + t.ops.size).toBe(0);
+  });
+});
+
+// Finding 4 (MEDIUM).
+describe("a suspend that has not run yet when the customer pays (finding 4)", () => {
+  it("queues the resume anyway (it runs after the suspend) and ends the episode", async () => {
+    const t = build({
+      state: "active", // the suspend is queued, not done
+      config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.resumed).toBe(1);
+    expect([...t.ops.values()].map((o) => o.kind)).toEqual(["resume"]);
+    expect(t.w.config.unpaidSince).toBeUndefined();
+  });
+
+  it("does the same when the suspend already ran in the meantime", async () => {
+    const t = build({
+      state: "suspended",
+      config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    await t.run();
+    expect([...t.ops.values()].map((o) => o.kind)).toEqual(["resume"]);
+  });
+});
+
+// Finding 5 (MEDIUM).
+describe("the final snapshot after a payment that came after day 7 (finding 5)", () => {
+  it("is no longer a final snapshot and its removal is queued (R13 approval applies at insert)", async () => {
+    const t = build({
+      state: "suspended",
+      status: "retained",
+      finalBackups: ["0190f000-0000-7000-8000-000000000001"],
+      config: {
+        unpaidSince: since(9 * DAY),
+        unpaidSuspended: true,
+        unpaidRetained: true,
+        unpaidRetainedFrom: "active",
+      },
+      usage: days("2026-11-10", "2026-11-19"),
+      balance: 100_000n,
+    });
+    await t.run();
+    expect(t.keys).toContain("unpaid:final-delete:0190f000-0000-7000-8000-000000000001");
+    expect([...t.ops.values()].map((o) => o.kind).sort()).toEqual(["delete_backup", "resume"]);
+  });
+
+  it("queues nothing for a subscription that was not retained by this job", async () => {
+    const t = build({
+      state: "suspended",
+      status: "active",
+      finalBackups: ["0190f000-0000-7000-8000-000000000001"],
+      config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    await t.run();
+    expect(t.keys.some((k) => k.startsWith("unpaid:final-delete:"))).toBe(false);
+  });
+});
+
+// Finding 6 (MEDIUM, cost).
+describe("bounded work for each run (finding 6)", () => {
+  const long = (n: number) => {
+    const first = new Date(Date.parse("2026-11-19") - (n - 1) * DAY).toISOString().slice(0, 10);
+    return days(first, "2026-11-19");
+  };
+
+  it("asks the ledger once for all charged days, not once for each day", async () => {
+    const t = build({
+      config: { unpaidSince: since(30 * DAY) },
+      usage: long(30),
+      balance: 1_000_000n,
+    });
+    await t.run();
+    expect(t.calls.chargedQueries).toBe(1);
+  });
+
+  it("charges at most the cap of periods for each resource and run, oldest first, and goes on the next run", async () => {
+    const t = build({
+      config: { unpaidSince: since(250 * DAY) },
+      usage: long(252),
+      balance: 10_000_000n,
+    });
+    const first = await t.run();
+    expect(first.charged).toBe(UNPAID_PERIOD_CAP);
+    expect(first.paid).toBe(0);
+    expect(first.capped).toBe(1);
+    const oldest = [...t.posted.keys()].map((k) => k.slice(-10)).sort()[0];
+    expect(oldest).toBe(long(252)[0]!.period);
+    const second = await t.run(new Date(NOW.getTime() + 20 * HOUR));
+    expect(second.charged).toBe(252 - UNPAID_PERIOD_CAP);
+    expect(second.paid).toBe(1);
+  });
+
+  it("after the deletion stage it does not retry while the wallet is empty, and still writes the daily message", async () => {
+    const t = build({
+      state: "suspended",
+      status: "retained",
+      config: {
+        unpaidSince: since(9 * DAY),
+        unpaidSuspended: true,
+        unpaidRetained: true,
+        unpaidRetainedFrom: "active",
+      },
+      usage: days("2026-11-10", "2026-11-19"),
+      balance: 0n,
+    });
+    const report = await t.run();
+    expect(t.calls.chargedQueries).toBe(0);
+    expect(report.skipped).toBe(1);
+    expect(report.stillUnpaid).toBe(1);
+    expect([...t.notices.values()][0]!.template).toBe("unpaid_deletion");
+  });
+
+  it("after the deletion stage it retries again once the wallet holds money", async () => {
+    const t = build({
+      state: "suspended",
+      status: "retained",
+      config: {
+        unpaidSince: since(9 * DAY),
+        unpaidSuspended: true,
+        unpaidRetained: true,
+        unpaidRetainedFrom: "active",
+      },
+      usage: days("2026-11-10", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.paid).toBe(1);
+    expect(t.calls.setStatus).toEqual(["active"]);
   });
 });

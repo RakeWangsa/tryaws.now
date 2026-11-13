@@ -1,5 +1,4 @@
 import {
-  findLedgerTransactionByKey,
   insertOperation,
   lifecycleRepo,
   meteringRepo,
@@ -14,6 +13,7 @@ import {
 import { retainSubscription } from "../lifecycle/engine";
 import { productOfFamily, type NoticeWriter } from "../lifecycle/notice";
 import { decideUnpaid, unpaidDayIndex } from "../lifecycle/unpaid";
+import { walletBalance } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
 import { salePostings } from "../ledger/sale-postings";
@@ -41,19 +41,25 @@ import {
   staticIpHoursSince,
 } from "./static-ip";
 
-// WPU-Y3. The daily job of the unpaid-usage rule (owner decision 2026-11-13, item 4).
+// WPU-Y3, corrected by WPU-Y3b. The daily job of the unpaid-usage rule (owner decision 2026-11-13, item 4).
 //
 // * A charge that the wallet could not pay was recorded by the normal passes (runMetering,
-//   runStaticIpMetering) as `resources.config.unpaidSince`, the instant of the first failure.
-// * This job looks at every resource with that mark, every run, and (1) tries every period back to the
-//   first failure again, oldest first, under the SAME ledger key as the normal pass
-//   (`meter:<resource>:<metric>:<period>`), so a period is charged at most once however often it is tried
-//   (R7); there is no window, so no unpaid day is lost; (2) when everything is paid, ends the episode and
-//   brings back what this job took away; (3) otherwise acts by `decideUnpaid`: day 0 a warning only, from
-//   1 day the resource is suspended (no grace), at 7 days the subscription is retained, which queues the
-//   final snapshot (where the product has one) and the destroy; the destroy waits for an admin until
-//   the end date of R13 because insertOperation decides that by the same date. The destructive guard
-//   still checks the subscription state and the final snapshot when the operation is claimed (R13).
+//   runStaticIpMetering) as `resources.config.unpaidSince`, the instant of the first failure, and, for a
+//   static IP, the first and last failed hour (`unpaidIpFrom`, `unpaidIpTo`).
+// * This job looks at every resource with that mark once a Dhaka day (the scheduler calls it in the first
+//   minutes of 07:00, `unpaidDue`), and (1) tries every period back to the first failure again, oldest
+//   first, under the SAME ledger key as the normal pass (`meter:<resource>:<metric>:<period>`), so a period
+//   is charged at most once however often it is tried (R7); the charged periods are read with one query for
+//   a range of keys, and at most UNPAID_PERIOD_CAP periods are charged for each resource and run (the rest
+//   is next run); (2) when everything is paid, ends the episode and brings back what this job took away,
+//   but resumes only a subscription that is active and not past its period end (the renewal flow owns the
+//   rest); (3) otherwise acts by `decideUnpaid`: day 0 a warning only, from 1 day the resource is
+//   suspended (no grace), at 7 days the subscription is retained, which queues the final snapshot (where
+//   the product has one) and the destroy; the destroy waits for an admin until the end date of R13 because
+//   insertOperation decides that by the same date. The destructive guard still checks the subscription
+//   state and the final snapshot when the operation is claimed (R13).
+// * After the retention (config.unpaidRetained) the job stops retrying while the wallet is empty; the
+//   daily message goes on.
 // * One message for each resource and unpaid day: the key holds the episode and the day index.
 //
 // The run key of a day is `unpaid:<Dhaka day>` (UNPAID_RUN_PREFIX): every effect of a run has a key of its
@@ -66,14 +72,37 @@ import {
 export const UNPAID_SETTING_KEY = "lifecycle_unpaid_enabled";
 export const UNPAID_RUN_PREFIX = "unpaid";
 export const UNPAID_PAGE = 200;
+/** Periods (days of snapshot storage, hours of a static IP) charged for one resource in one run. */
+export const UNPAID_PERIOD_CAP = 240;
+/** The job runs in the first UNPAID_RUN_MINUTES minutes of this Dhaka hour. */
+const UNPAID_RUN_HOUR_DHAKA = 7;
+const UNPAID_RUN_MINUTES = 5;
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 const DHAKA_OFFSET_MS = 6 * HOUR_MS;
 const LIVE_STATES = ["active", "stopped", "suspended"] as const;
+// Keys of one range query: well under the limit of the statement.
+const KEY_WINDOW = 900;
+// A static IP hour range longer than this is not a range we wrote (R16).
+const MAX_MARKED_HOURS = 24 * 400;
+const IP_HOUR = /^\d{4}-\d{2}-\d{2}T\d{2}$/;
 
 export function unpaidRunKey(now: Date): string {
   return `${UNPAID_RUN_PREFIX}:${dhakaDay(now)}`;
+}
+
+/**
+ * WPU-Y3b. True in the first minutes of 07:00 Dhaka: the scheduler runs every minute, the job once a
+ * day (a few repeats in the window are replays by the keys). Its cost does not grow with time. An
+ * invalid clock is never due (R16).
+ */
+export function unpaidDue(now: Date): boolean {
+  if (Number.isNaN(now.getTime())) return false;
+  const dhaka = new Date(now.getTime() + DHAKA_OFFSET_MS);
+  return (
+    dhaka.getUTCHours() === UNPAID_RUN_HOUR_DHAKA && dhaka.getUTCMinutes() < UNPAID_RUN_MINUTES
+  );
 }
 
 export interface UnpaidOps {
@@ -91,17 +120,33 @@ export interface UnpaidOps {
   ): Promise<{ period: string; quantity: string }[]>;
   snapshotUnit(tx: Tx, clock: Clock, market: string): Promise<MeteredUnitPrice | null>;
   staticIpPrice(tx: Tx, clock: Clock, market: string): Promise<Result<StaticIpPrice>>;
-  hasCharge(tx: Tx, key: string): Promise<boolean>;
+  /** The periods from `from` to `to` (inclusive) of this metric that already have a charge: one query. */
+  chargedPeriods(
+    tx: Tx,
+    resourceId: string,
+    metric: string,
+    from: string,
+    to: string,
+  ): Promise<Set<string>>;
+  /** The wallet balance of the customer (paisa). */
+  balance(tx: Tx, customerId: string): Promise<bigint>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
   clear(tx: Tx, resourceId: string): Promise<void>;
-  setFlag(tx: Tx, resourceId: string, key: UnpaidFlagKey, value: boolean): Promise<void>;
+  setFlag(
+    tx: Tx,
+    resourceId: string,
+    key: UnpaidFlagKey,
+    value: boolean | "active" | "grace",
+  ): Promise<void>;
   enqueue(
     tx: Tx,
     input: { resourceId: string; kind: OperationKind; key: string; payload: unknown },
     now: Date,
   ): Promise<{ operationId: string; created: boolean; state: string }>;
   setStatus(tx: Tx, subscriptionId: string, status: SubscriptionStatus): Promise<void>;
-  retain(tx: Tx, row: LifecycleRow, now: Date): Promise<QueueMessage[]>;
+  retain(tx: Tx, row: LifecycleRow, now: Date, episode?: number): Promise<QueueMessage[]>;
+  /** Final snapshots of the resource stop being final (a restore ends the retention); returns their ids. */
+  supersedeFinal(tx: Tx, resourceId: string): Promise<string[]>;
 }
 
 export const defaultUnpaidOps: UnpaidOps = {
@@ -117,7 +162,14 @@ export const defaultUnpaidOps: UnpaidOps = {
     return priced.ok ? priced.value.breakdown : null;
   },
   staticIpPrice: (tx, clock, market) => staticIpHourPrice(tx, market, clock),
-  hasCharge: async (tx, key) => (await findLedgerTransactionByKey(tx, key)) !== null,
+  chargedPeriods: async (tx, resourceId, metric, from, to) => {
+    const lo = ledgerKey.metered(resourceId, metric, from);
+    const hi = ledgerKey.metered(resourceId, metric, to);
+    const prefix = lo.slice(0, lo.length - from.length);
+    const keys = await meteringRepo(tx).chargedKeys(prefix, lo, hi, 1000);
+    return new Set(keys.map((k) => k.slice(prefix.length)));
+  },
+  balance: (tx, customerId) => walletBalance(tx, customerId),
   post: postTransaction,
   clear: (tx, resourceId) => meteringRepo(tx).clearUnpaid(resourceId),
   setFlag: (tx, resourceId, key, value) => meteringRepo(tx).setUnpaidFlag(resourceId, key, value),
@@ -136,6 +188,7 @@ export const defaultUnpaidOps: UnpaidOps = {
   },
   setStatus: (tx, subscriptionId, status) => lifecycleRepo(tx).setStatus(subscriptionId, status),
   retain: retainSubscription,
+  supersedeFinal: (tx, resourceId) => meteringRepo(tx).supersedeFinalBackups(resourceId),
 };
 
 export interface UnpaidDeps {
@@ -162,6 +215,12 @@ export interface UnpaidReport {
   readonly retained: number;
   readonly noticed: number;
   readonly stillUnpaid: number;
+  /** Resources that hit UNPAID_PERIOD_CAP in this run; the rest is next run. */
+  readonly capped: number;
+  /** Resources after the retention with an empty wallet: no retry was made. */
+  readonly skipped: number;
+  /** Final snapshots whose removal was queued after a restore. */
+  readonly snapshotsQueued: number;
   /** No price, no subscription, an unreadable mark or a family without a message word. */
   readonly blocked: number;
   readonly failed: number;
@@ -180,7 +239,59 @@ function lastEndedDay(now: Date): string {
   return new Date(now.getTime() + DHAKA_OFFSET_MS - DAY_MS).toISOString().slice(0, 10);
 }
 
-type Retried = "paid" | "unpaid" | "blocked";
+const hourStart = (hour: string): number => Date.parse(`${hour}:00:00+06:00`);
+const hourName = (ms: number): string => new Date(ms + DHAKA_OFFSET_MS).toISOString().slice(0, 13);
+
+// The hours from `from` to `to` (Dhaka hour names), or null when the pair cannot be read (R16).
+function hoursBetween(from: unknown, to: unknown): string[] | null {
+  if (typeof from !== "string" || typeof to !== "string") return null;
+  if (!IP_HOUR.test(from) || !IP_HOUR.test(to)) return null;
+  const a = hourStart(from);
+  const b = hourStart(to);
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return null;
+  if ((b - a) / HOUR_MS + 1 > MAX_MARKED_HOURS) return null;
+  const out: string[] = [];
+  for (let t = a; t <= b; t += HOUR_MS) out.push(hourName(t));
+  return out;
+}
+
+/**
+ * The periods of `periods` (sorted, oldest first) that have no charge yet: at most `limit` of them, and
+ * whether there are more. The charged ones are read with one range query for each window of
+ * KEY_WINDOW periods, not one lookup for each period.
+ */
+async function pendingPeriods(
+  tx: Tx,
+  ops: UnpaidOps,
+  resourceId: string,
+  metric: string,
+  periods: readonly string[],
+  limit: number,
+): Promise<{ pending: string[]; more: boolean }> {
+  const pending: string[] = [];
+  let more = false;
+  for (let at = 0; at < periods.length && !more; at += KEY_WINDOW) {
+    const window = periods.slice(at, at + KEY_WINDOW);
+    const charged = await ops.chargedPeriods(
+      tx,
+      resourceId,
+      metric,
+      window[0]!,
+      window[window.length - 1]!,
+    );
+    for (const period of window) {
+      if (charged.has(period)) continue;
+      if (pending.length >= limit) {
+        more = true;
+        break;
+      }
+      pending.push(period);
+    }
+  }
+  return { pending, more };
+}
+
+type Retried = "paid" | "unpaid" | "blocked" | "capped";
 
 async function retryCharges(
   tx: Tx,
@@ -193,6 +304,7 @@ async function retryCharges(
 ): Promise<Retried> {
   const { resourceId, customerId } = { resourceId: row.resourceId, customerId: row.customerId };
   const config = row.resource.config;
+  let budget = UNPAID_PERIOD_CAP;
 
   // 1. snapshot storage: every day from the day the first failed attempt could have looked at (the
   // catch-up of the normal pass) to the last day that ended.
@@ -203,16 +315,23 @@ async function retryCharges(
   if (unit === null || unit.totalMinor <= 0n) {
     // A usage row exists but there is no price: nothing can be charged, nothing is concluded (R16).
     if (days.length > 0) return "blocked";
-  } else {
-    for (const day of days) {
-      const key = ledgerKey.metered(resourceId, SNAPSHOT_METRIC, day.period);
-      if (await ops.hasCharge(tx, key)) continue;
-      const amountMinor = dailyMeteredChargeMinor(day.quantity, unit.totalMinor);
+  } else if (days.length > 0) {
+    const quantity = new Map(days.map((d) => [d.period, d.quantity]));
+    const { pending, more } = await pendingPeriods(
+      tx,
+      ops,
+      resourceId,
+      SNAPSHOT_METRIC,
+      days.map((d) => d.period),
+      budget,
+    );
+    for (const period of pending) {
+      const amountMinor = dailyMeteredChargeMinor(quantity.get(period)!, unit.totalMinor);
       if (amountMinor === 0n) continue;
       const posted = await ops.post(tx, {
         kind: "metered_charge",
         reference: { type: "resource", id: resourceId },
-        idempotencyKey: key,
+        idempotencyKey: ledgerKey.metered(resourceId, SNAPSHOT_METRIC, period),
         actor: { type: "system" },
         postings: salePostings(customerId, {
           totalMinor: amountMinor,
@@ -221,48 +340,67 @@ async function retryCharges(
       });
       if (posted.ok) {
         count.charged += 1;
+        budget -= 1;
         continue;
       }
       if (posted.error === "insufficient_balance") return "unpaid"; // oldest first: stop here
       return "blocked";
     }
+    if (more) return "capped";
   }
 
-  // 2. an unattached static IP: every due hour since the hour of the first failure (minus the catch-up).
+  // 2. a static IP: the hours that failed (the range kept in the mark, whatever the attach state is by
+  // now) and, while it is unattached, every due hour since the hour of the first failure.
+  const hours = new Set<string>();
+  if (config.unpaidIpFrom !== undefined || config.unpaidIpTo !== undefined) {
+    const marked = hoursBetween(config.unpaidIpFrom, config.unpaidIpTo);
+    if (marked === null) return "blocked";
+    for (const h of marked) hours.add(h);
+  }
   if (config.staticIpAttached === false || config.staticIpAttached === "false") {
     const detachedAt = exactDate(config.detachedAt);
     if (detachedAt !== null) {
       const start = new Date(since.getTime() - STATIC_IP_CATCH_UP_HOURS * HOUR_MS);
-      const hours = staticIpHoursSince(detachedAt, start, now);
-      if (hours.length > 0) {
-        const quoted = await ops.staticIpPrice(tx, clock, row.market);
-        if (!quoted.ok) return "blocked";
-        const price = quoted.value.perHourMinor;
-        if (price > 0n) {
-          for (const hour of hours) {
-            const key = ledgerKey.metered(resourceId, STATIC_IP_METRIC, hour);
-            if (await ops.hasCharge(tx, key)) continue;
-            const posted = await ops.post(tx, {
-              kind: "metered_charge",
-              reference: { type: "resource", id: resourceId },
-              idempotencyKey: key,
-              actor: { type: "system" },
-              memo: STATIC_IP_MEMO,
-              postings: salePostings(customerId, {
-                totalMinor: price,
-                ...splitMeteredChargeMinor(price, quoted.value.breakdown),
-              }),
-            });
-            if (posted.ok) {
-              count.charged += 1;
-              continue;
-            }
-            if (posted.error === "insufficient_balance") return "unpaid";
-            return "blocked";
+      for (const h of staticIpHoursSince(detachedAt, start, now)) hours.add(h);
+    }
+  }
+  if (hours.size > 0) {
+    const sorted = [...hours].sort();
+    const { pending, more } = await pendingPeriods(
+      tx,
+      ops,
+      resourceId,
+      STATIC_IP_METRIC,
+      sorted,
+      budget,
+    );
+    if (pending.length > 0) {
+      const quoted = await ops.staticIpPrice(tx, clock, row.market);
+      if (!quoted.ok) return "blocked";
+      const price = quoted.value.perHourMinor;
+      if (price > 0n) {
+        for (const hour of pending) {
+          const posted = await ops.post(tx, {
+            kind: "metered_charge",
+            reference: { type: "resource", id: resourceId },
+            idempotencyKey: ledgerKey.metered(resourceId, STATIC_IP_METRIC, hour),
+            actor: { type: "system" },
+            memo: STATIC_IP_MEMO,
+            postings: salePostings(customerId, {
+              totalMinor: price,
+              ...splitMeteredChargeMinor(price, quoted.value.breakdown),
+            }),
+          });
+          if (posted.ok) {
+            count.charged += 1;
+            continue;
           }
+          if (posted.error === "insufficient_balance") return "unpaid";
+          return "blocked";
         }
       }
     }
+    if (more) return "capped";
   }
   return "paid";
 }
@@ -293,20 +431,56 @@ async function processOne(
   if (since === null) return blocked();
 
   const clock: Clock = { now: () => now };
-  const retried = await retryCharges(tx, ops, row, since, now, clock, count);
-  if (retried === "blocked") return blocked();
-
   const config = row.resource.config;
   const sinceMs = since.getTime();
 
+  // After the retention nothing is retried while the wallet is empty (a payment is what ends the wait).
+  let retried: Retried;
+  if (config.unpaidRetained === true && (await ops.balance(tx, row.customerId)) <= 0n) {
+    count.skipped += 1;
+    retried = "unpaid";
+  } else {
+    retried = await retryCharges(tx, ops, row, since, now, clock, count);
+  }
+  if (retried === "blocked") return blocked();
+
   if (retried === "paid") {
     // Everything is paid: the episode ends. Only what this job did is undone (an admin's suspension
-    // stays, section 11); a retained subscription goes back to active, so that the destructive guard
-    // refuses any destroy that is still waiting (R13).
+    // stays, section 11).
+    let status: SubscriptionStatus = row.status;
+    if (config.unpaidRetained === true && row.status === "retained") {
+      // Back to the status it had before the job retained it, so that the destructive guard refuses any
+      // destroy that is still waiting (R13) and the renewal flow goes on where it was. Unreadable: grace.
+      status = config.unpaidRetainedFrom === "active" ? "active" : "grace";
+      await ops.setStatus(tx, row.id, status);
+      // The final snapshot is no longer final; its removal is queued (R13: approval until the end date).
+      for (const backupId of await ops.supersedeFinal(tx, row.resourceId)) {
+        const removal = await ops.enqueue(
+          tx,
+          {
+            resourceId: backupId,
+            kind: "delete_backup",
+            key: `unpaid:final-delete:${backupId}`,
+            payload: {},
+          },
+          now,
+        );
+        if (removal.created && removal.state === "queued") {
+          messages.push(firstMessage(removal.operationId, backupId));
+        }
+        count.snapshotsQueued += 1;
+      }
+    }
+    // Resume only a subscription that is active and not past its period end (finding 1); a suspension
+    // that holds a renewal stays for the renewal flow. A suspend of this job that has not run yet is
+    // undone anyway: the resume runs after it (finding 4).
+    const state = row.resource.state;
+    const subscriptionOk = status === "active" && row.periodEnd.getTime() > now.getTime();
+    const undoPendingSuspend =
+      config.unpaidSuspended === true && (state === "active" || state === "stopped");
     if (
-      config.unpaidSuspended === true &&
       config.adminSuspended !== true &&
-      row.resource.state === "suspended"
+      ((state === "suspended" && subscriptionOk) || undoPendingSuspend)
     ) {
       const resume = await ops.enqueue(
         tx,
@@ -323,20 +497,14 @@ async function processOne(
       }
       count.resumed += 1;
     }
-    if (
-      config.unpaidRetained === true &&
-      row.status === "retained" &&
-      row.resource.state !== "destroyed"
-    ) {
-      await ops.setStatus(tx, row.id, "active");
-    }
     await ops.clear(tx, row.resourceId);
     count.paid += 1;
     return { messages };
   }
 
-  // Still unpaid.
+  // Still unpaid (or the cap of this run was reached: the rest is next run).
   count.stillUnpaid += 1;
+  if (retried === "capped") count.capped += 1;
   const approvalUntil = await ops.approvalUntil(tx);
   const stage = decideUnpaid({ unpaidSince: since, now, approvalUntil });
   const index = unpaidDayIndex(since, now);
@@ -357,12 +525,14 @@ async function processOne(
 
   const ensureSuspended = async (): Promise<void> => {
     if (row.resource.state !== "active" && row.resource.state !== "stopped") return;
+    // The key holds the unpaid day: a resource that was resumed in the same episode (an admin, say) is
+    // suspended again on the next unpaid day, and a repeat of the run on one day is a replay (R7).
     const op = await ops.enqueue(
       tx,
       {
         resourceId: row.resourceId,
         kind: "suspend",
-        key: `unpaid:suspend:${row.resourceId}:${sinceMs}`,
+        key: `unpaid:suspend:${row.resourceId}:${sinceMs}:${index}`,
         payload: { subscriptionId: row.id },
       },
       now,
@@ -395,7 +565,9 @@ async function processOne(
       // Only an active or grace subscription is retained; retained already means the operations exist
       // (the engine's own pass keeps them); ended has nothing left to do.
       if (row.status === "active" || row.status === "grace") {
-        messages.push(...(await ops.retain(tx, row, now)));
+        // The status to return to when the customer pays, and the episode for the operation keys.
+        await ops.setFlag(tx, row.resourceId, "unpaidRetainedFrom", row.status);
+        messages.push(...(await ops.retain(tx, row, now, sinceMs)));
         await ops.setFlag(tx, row.resourceId, "unpaidRetained", true);
         count.retained += 1;
       }
@@ -424,6 +596,9 @@ export async function runUnpaid(deps: UnpaidDeps): Promise<UnpaidReport> {
     retained: 0,
     noticed: 0,
     stillUnpaid: 0,
+    capped: 0,
+    skipped: 0,
+    snapshotsQueued: 0,
     blocked: 0,
     failed: 0,
   };
