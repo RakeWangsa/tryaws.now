@@ -377,6 +377,53 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
       date: h.d(d.removeAt),
     }),
   },
+  // WPU-Y3 (DRAFT, owner approves the wording): a usage charge could not be paid. Day 0 of the rule.
+  unpaid_warning: {
+    spec: { ...resource },
+    channels: () => ek,
+    path: fixed("/wallet/topup"),
+    cta: "top_up",
+    vars: (d, h) => ({ name: name(d, h) }),
+  },
+  // WPU-Y3: from 1 day unpaid, once for each unpaid day: suspended, with the days left before deletion.
+  unpaid_suspended: {
+    spec: { ...resource, daysLeft: f.oneOf(1, 2, 3, 4, 5, 6), deleteAt: f.instant },
+    channels: () => ek,
+    path: fixed("/wallet/topup"),
+    cta: "top_up",
+    vars: (d, h) => ({ name: name(d, h), days: h.n(d.daysLeft), date: h.d(d.deleteAt) }),
+  },
+  // WPU-Y3: 7 days unpaid. `approval` is true while an admin must approve a deletion (R13).
+  unpaid_deletion: {
+    spec: { ...resource, deleteAt: f.instant, approval: f.bool },
+    channels: () => ek,
+    path: fixed("/wallet/topup"),
+    cta: "top_up",
+    vars: (d, h) => ({
+      name: name(d, h),
+      date: h.d(d.deleteAt),
+      note: h.x(d.approval === true ? "approval" : "direct"),
+    }),
+  },
+  // WPU-Y3: 3 days and 1 day before a renewal charge that the wallet cannot cover.
+  wallet_low_before_charge: {
+    spec: {
+      ...resource,
+      days: f.oneOf(3, 1),
+      chargeDate: f.instant,
+      amountMinor: f.minor,
+      balanceMinor: f.minor,
+    },
+    channels: () => ek,
+    path: fixed("/wallet/topup"),
+    cta: "top_up",
+    vars: (d, h) => ({
+      name: name(d, h),
+      date: h.d(d.chargeDate),
+      amount: h.m(d.amountMinor),
+      balance: h.m(d.balanceMinor),
+    }),
+  },
   waitlist_capacity_available: {
     spec: { productFamily: f.key, region: f.region },
     channels: () => ek,

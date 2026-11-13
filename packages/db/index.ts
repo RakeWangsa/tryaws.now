@@ -459,6 +459,8 @@ export type {
   DetachedIpRow,
   MeteringRepo,
   TransferRow,
+  UnpaidFlagKey,
+  UnpaidResourceRow,
   UsageRow,
 } from "./repositories/system/metering";
 export type {

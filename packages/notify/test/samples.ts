@@ -130,6 +130,39 @@ export const SAMPLES: Record<TemplateId, { data: Record<string, unknown>; channe
     data: { productFamily: "linux_instance", region: "ap-southeast-1" },
     channels: ["email", "in_app"],
   },
+  unpaid_warning: {
+    data: { resourceId: IDS.resource, product: "instance" },
+    channels: ["email", "in_app"],
+  },
+  unpaid_suspended: {
+    data: {
+      resourceId: IDS.resource,
+      product: "instance",
+      daysLeft: 6,
+      deleteAt: "2026-11-20T04:00:00.000Z",
+    },
+    channels: ["email", "in_app"],
+  },
+  unpaid_deletion: {
+    data: {
+      resourceId: IDS.resource,
+      product: "database",
+      deleteAt: "2026-11-20T04:00:00.000Z",
+      approval: true,
+    },
+    channels: ["email", "in_app"],
+  },
+  wallet_low_before_charge: {
+    data: {
+      resourceId: IDS.resource,
+      product: "instance",
+      days: 3,
+      chargeDate: "2026-11-20T04:00:00.000Z",
+      amountMinor: "125000",
+      balanceMinor: "5000",
+    },
+    channels: ["email", "in_app"],
+  },
   dns_delegation_notice: {
     data: { domain: "shop.example.com", day: 12, removeAt: "2026-11-29T06:00:00.000Z" },
     channels: ["email", "in_app"],

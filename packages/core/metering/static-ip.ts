@@ -46,12 +46,29 @@ export function dhakaHour(at: Date): string {
  */
 export function staticIpChargeableHours(detachedAt: Date, now: Date): string[] {
   const start = Math.floor(now.getTime() / HOUR_MS) * HOUR_MS;
+  return staticIpHoursSince(detachedAt, new Date(start - STATIC_IP_CATCH_UP_HOURS * HOUR_MS), now);
+}
+
+/**
+ * WPU-Y3. Every hour bucket that is due from the Dhaka hour of `from` to the current one, oldest first,
+ * by the same rule as above (MORE than one hour detached at the earlier of `now` and the end of the
+ * bucket). The retry of an unpaid charge starts at the hour of the first failed charge, so no hour is
+ * lost to the three-hour window of the normal pass.
+ */
+export function staticIpHoursSince(detachedAt: Date, from: Date, now: Date): string[] {
   const out: string[] = [];
-  for (let back = STATIC_IP_CATCH_UP_HOURS; back >= 0; back -= 1) {
-    const bucketStart = start - back * HOUR_MS;
-    const horizon = Math.min(now.getTime(), bucketStart + HOUR_MS);
-    if (detachedAt.getTime() + STATIC_IP_FREE_MS < horizon)
-      out.push(dhakaHour(new Date(bucketStart)));
+  const nowMs = now.getTime();
+  const fromMs = from.getTime();
+  const detachedMs = detachedAt.getTime();
+  if (Number.isNaN(nowMs) || Number.isNaN(fromMs) || Number.isNaN(detachedMs)) return out;
+  const end = Math.floor(nowMs / HOUR_MS) * HOUR_MS;
+  for (
+    let bucketStart = Math.floor(fromMs / HOUR_MS) * HOUR_MS;
+    bucketStart <= end;
+    bucketStart += HOUR_MS
+  ) {
+    const horizon = Math.min(nowMs, bucketStart + HOUR_MS);
+    if (detachedMs + STATIC_IP_FREE_MS < horizon) out.push(dhakaHour(new Date(bucketStart)));
   }
   return out;
 }
@@ -67,6 +84,12 @@ export interface StaticIpOps {
   hasCharge(tx: Tx, key: string): Promise<boolean>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
   notify(tx: Tx, notice: NewLifecycleNotification): Promise<boolean>;
+  /**
+   * WPU-Y3. Records the instant of the first failed charge of this resource (only when none is
+   * recorded), so the daily unpaid job retries every period back to it. Optional so a test world
+   * without it needs nothing.
+   */
+  markUnpaid?(tx: Tx, resourceId: string, at: Date): Promise<void>;
 }
 
 export const defaultStaticIpOps: StaticIpOps = {
@@ -75,6 +98,7 @@ export const defaultStaticIpOps: StaticIpOps = {
   hasCharge: async (tx, key) => (await findLedgerTransactionByKey(tx, key)) !== null,
   post: postTransaction,
   notify: (tx, notice) => lifecycleRepo(tx).insertNotification(notice),
+  markUnpaid: (tx, resourceId, at) => meteringRepo(tx).markUnpaid(resourceId, at),
 };
 
 export interface StaticIpMeteringDeps {
@@ -164,6 +188,7 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
             if (posted.error !== "insufficient_balance") return "failed" as const;
             // The snapshot behaviour: nothing is posted, one notice for each resource and day, and the
             // next run tries again. The wallet is never taken below zero (R16).
+            await ops.markUnpaid?.(tx, row.resourceId, now);
             await ops.notify(tx, {
               customerId: row.customerId,
               channel: "email",

@@ -65,6 +65,16 @@ const TABLE: ReadonlyArray<{
     templates: ["dns_delegation_notice"],
     sms: "no",
   },
+  {
+    row: "WPU-Y3: unpaid usage (warning, suspended, deletion) and the low-wallet reminder",
+    templates: [
+      "unpaid_warning",
+      "unpaid_suspended",
+      "unpaid_deletion",
+      "wallet_low_before_charge",
+    ],
+    sms: "no",
+  },
   // A reply of support goes to a visitor too, who has no bell: email only.
   { row: "WPU-D4: reply of support", templates: ["support_reply"], sms: "no", bell: false },
 ];

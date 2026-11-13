@@ -315,6 +315,49 @@ export const BN: Catalog = {
       "{date} তারিখের মধ্যে বদলানো না হলে জোনটি মুছে ফেলা হবে।",
     ],
   },
+  // WPU-Y3 DRAFT: owner approves the wording, above all every sentence that says data is deleted.
+  unpaid_warning: {
+    subject: "{name}: একটি চার্জ পরিশোধ হয়নি",
+    headline: "একটি চার্জ পরিশোধ হয়নি",
+    body: [
+      "আপনার ওয়ালেট থেকে {name} এর একটি ব্যবহারের চার্জ নেওয়া যায়নি।",
+      "এখনই ওয়ালেটে টাকা যোগ করুন। চার্জ বাকি থাকলে ১ দিন পরে {name} স্থগিত হবে এবং ৭ দিন পরে মুছে ফেলা হবে।",
+    ],
+  },
+  // WPU-Y3 DRAFT
+  unpaid_suspended: {
+    subject: "{name} স্থগিত আছে: মুছে ফেলার আগে {days} দিন বাকি",
+    headline: "বকেয়া চার্জের কারণে স্থগিত",
+    body: [
+      "একটি ব্যবহারের চার্জ বাকি থাকায় {name} স্থগিত আছে। আপনার ডেটা এখনো রাখা আছে।",
+      "{date} তারিখে চার্জ বাকি থাকলে {name} মুছে ফেলা হবে। আর {days} দিন বাকি।",
+      "ওয়ালেটে টাকা যোগ করলে চার্জ নিজে থেকে নেওয়া হবে এবং রিসোর্স আবার চালু হবে।",
+    ],
+  },
+  // WPU-Y3 DRAFT
+  unpaid_deletion: {
+    subject: "{name} মুছে ফেলার অনুরোধ হয়েছে",
+    headline: "বকেয়া চার্জ: মুছে ফেলার ধাপ",
+    body: [
+      "একটি চার্জ ৭ দিন ধরে বাকি আছে, তাই {name} স্থগিত আছে।",
+      "{note}",
+      "মুছে ফেলার আগে ওয়ালেটে টাকা যোগ করলে এটি বন্ধ করা যাবে।",
+    ],
+    extra: {
+      approval:
+        "মুছে ফেলার অনুরোধ করা হয়েছে। আমাদের টিম যাচাই না করা পর্যন্ত কিছু মোছা হবে না। যে প্রোডাক্টে ব্যাকআপ আছে, মোছার আগে শেষ ব্যাকআপ নেওয়া হবে।",
+      direct: "এটি মুছে ফেলা হবে। যে প্রোডাক্টে ব্যাকআপ আছে, মোছার আগে শেষ ব্যাকআপ নেওয়া হবে।",
+    },
+  },
+  // WPU-Y3 DRAFT
+  wallet_low_before_charge: {
+    subject: "{date} তারিখের চার্জের জন্য ওয়ালেটে টাকা কম",
+    headline: "ওয়ালেটে টাকা কম",
+    body: [
+      "{name} এর {amount} চার্জ {date} তারিখে কাটা হবে, কিন্তু ওয়ালেটে আছে {balance}।",
+      "চার্জ নেওয়ার জন্য ওই তারিখের আগে টাকা যোগ করুন।",
+    ],
+  },
   waitlist_capacity_available: {
     subject: "{product}: এখন জায়গা আছে",
     headline: "অপেক্ষার তালিকা: জায়গা খালি হয়েছে",
@@ -522,6 +565,50 @@ export const EN: Catalog = {
       "The DNS zone for {domain} was created {days} days ago, but the name servers of the domain still do not point to it.",
       "At the registrar of the domain, change the name servers of {domain} to the name servers shown on the DNS page.",
       "If this is not done by {date}, the zone will be removed.",
+    ],
+  },
+  // WPU-Y3 DRAFT: owner approves the wording, above all every sentence that says data is deleted.
+  unpaid_warning: {
+    subject: "{name}: a charge is unpaid",
+    headline: "A charge is unpaid",
+    body: [
+      "We could not take a usage charge for {name} from your wallet.",
+      "Top up your wallet now. If the charge stays unpaid, {name} is suspended after 1 day and deleted after 7 days.",
+    ],
+  },
+  // WPU-Y3 DRAFT
+  unpaid_suspended: {
+    subject: "{name} is suspended: {days} days until deletion",
+    headline: "Suspended for an unpaid charge",
+    body: [
+      "{name} is suspended because a usage charge is unpaid. Your data is still kept.",
+      "If the charge is still unpaid on {date}, {name} will be deleted. That is {days} days from now.",
+      "Top up your wallet and the charge is taken automatically and the resource starts again.",
+    ],
+  },
+  // WPU-Y3 DRAFT
+  unpaid_deletion: {
+    subject: "Deletion of {name} has been requested",
+    headline: "Unpaid charge: deletion step",
+    body: [
+      "A charge has been unpaid for 7 days, so {name} is suspended.",
+      "{note}",
+      "You can still stop this by topping up your wallet before it is deleted.",
+    ],
+    extra: {
+      approval:
+        "Deletion has been requested. Our team checks it first, and nothing is deleted before that. Where the product has backups, a final backup is made before anything is deleted.",
+      direct:
+        "It will be deleted. Where the product has backups, a final backup is made before anything is deleted.",
+    },
+  },
+  // WPU-Y3 DRAFT
+  wallet_low_before_charge: {
+    subject: "Your wallet is low for the charge on {date}",
+    headline: "Low wallet balance",
+    body: [
+      "The charge of {amount} for {name} is due on {date}, but your wallet holds {balance}.",
+      "Top up before that date so the charge can be taken.",
     ],
   },
   waitlist_capacity_available: {
