@@ -50,7 +50,8 @@ async function zone() {
   const adapter = createDnsZoneAdapter({ route53: () => fake.port });
   await adapter.aws.create({
     ...ctx({}),
-    operation: { ...ctx({}).operation, kind: "create" },
+    // WPU-Y5 (c): CreateHostedZone runs at create_zone (step null only moves there)
+    operation: { ...ctx({}).operation, kind: "create", step: "create_zone" },
     resource: { ...ctx({}).resource, config: {} },
   });
   return { fake, adapter };

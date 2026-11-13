@@ -5,6 +5,7 @@ import {
   RETRY_DELAYS_SECONDS,
   decideFailure,
   decideRefusal,
+  dnsZoneMayExist,
   lastErrorText,
   refundedOnFailure,
   registryHoldsRenewal,
@@ -193,6 +194,45 @@ describe("a domain renewal the registry holds (step poll)", () => {
     for (const kind of ["create", "set_name_servers", "resend_verification", "reboot", ""]) {
       expect(registryHoldsRenewal(kind, "poll"), kind).toBe(false);
       expect(registryHoldsRenewal(kind, "submit"), kind).toBe(false);
+    }
+  });
+
+  // WPU-Y5 (c), fix round 1: step null sends nothing (it only moves to create_zone). At create_zone CreateHostedZone
+  // may have run in an earlier attempt with its answer lost: only a first attempt (attempts 0, no last error) or the
+  // local input check of createHostedZone (last_error exactly "validation": the same input every attempt, so no
+  // attempt ever sent it) proves no zone. Past create_zone, or at a step that is not known (R16), the zone may exist.
+  it("a dns_zone create may hold a zone from an attempt at create_zone on, unless nothing can have been sent", () => {
+    const fresh = { attempts: 0, lastError: null };
+    const tried = { attempts: 2, lastError: "upstream_unavailable:ServiceException" };
+    expect(dnsZoneMayExist("dns_zone", "create", null, tried)).toBe(false);
+    expect(dnsZoneMayExist("dns_zone", "create", "create_zone", fresh)).toBe(false);
+    expect(
+      dnsZoneMayExist("dns_zone", "create", "create_zone", {
+        attempts: 3,
+        lastError: "validation",
+      }),
+    ).toBe(false);
+    for (const previous of [
+      tried,
+      { attempts: 1, lastError: null },
+      { attempts: 0, lastError: "lease_expired" },
+      { attempts: 1, lastError: "validation:InvalidInput" },
+      { attempts: 0, lastError: undefined },
+      { attempts: Number.NaN, lastError: null },
+    ]) {
+      expect(
+        dnsZoneMayExist("dns_zone", "create", "create_zone", previous),
+        JSON.stringify(previous),
+      ).toBe(true);
+    }
+    for (const step of ["wait_insync", "Wait_insync", "later", "", "Create_zone"]) {
+      expect(dnsZoneMayExist("dns_zone", "create", step, fresh), step).toBe(true);
+    }
+    for (const family of ["linux_instance", "domain", "dns", ""]) {
+      expect(dnsZoneMayExist(family, "create", "wait_insync", tried), family).toBe(false);
+    }
+    for (const kind of ["change_dns_record", "destroy", "reboot", ""]) {
+      expect(dnsZoneMayExist("dns_zone", kind, "wait_insync", tried), kind).toBe(false);
     }
   });
 

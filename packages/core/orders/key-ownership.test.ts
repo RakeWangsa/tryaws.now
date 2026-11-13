@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { insertRow, uniqueSuffix, useTempDatabase } from "@tc/db/testing";
 import { describe, expect, it } from "vitest";
 import { makeKit, snapshotRows, type Buyer, type Kit } from "../test/orders-kit";
@@ -13,14 +13,35 @@ import type { DraftClaims } from "./types";
 // The draft and the purchase both check it, and a refusal writes nothing.
 const t = useTempDatabase();
 
-async function keyOf(customerId: string): Promise<string> {
+/** WPU-Y5 (e): an ssh-rsa line of 2048 bits (e 65537, a modulus from the seed): the only kind a server takes. */
+function rsaLine(seed: string): string {
+  const field = (b: Buffer) => {
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(b.length);
+    return Buffer.concat([head, b]);
+  };
+  const n = Buffer.concat(
+    Array.from({ length: 8 }, (_, i) => createHash("sha256").update(`${seed}:${i}`).digest()),
+  );
+  n[0] = (n[0] ?? 0) | 0x80;
+  const blob = Buffer.concat([
+    field(Buffer.from("ssh-rsa")),
+    field(Buffer.from([1, 0, 1])),
+    field(Buffer.concat([Buffer.from([0]), n])),
+  ]);
+  return `ssh-rsa ${blob.toString("base64")}`;
+}
+
+async function keyOf(customerId: string, publicKey = rsaLine(uniqueSuffix())): Promise<string> {
   return insertRow(t.pool, "ssh_keys", {
     customer_id: customerId,
     name: "laptop",
-    public_key: "ssh-ed25519 AAAAkey" + uniqueSuffix(),
+    public_key: publicKey,
     fingerprint: "SHA256:key-" + uniqueSuffix(),
   });
 }
+// A key stored before WPU-Y5 (e): Ed25519, which Lightsail ImportKeyPair does not take.
+const ED25519 = () => "ssh-ed25519 AAAAkey" + uniqueSuffix();
 
 /** A token of the buyer whose configuration names `keyPairId`, signed like a real draft. */
 async function tokenNaming(kit: Kit, buyer: Buyer, keyPairId: string): Promise<string> {
@@ -61,6 +82,15 @@ describe("createOrderDraft: the key pair must be the customer's", () => {
     expect(r).toEqual({ ok: false, error: "validation", fields: { keyPairId: "invalid" } });
   });
 
+  it("WPU-Y5: refuses the customer's own key when ImportKeyPair cannot take it (not ssh-rsa 2048+), writing nothing", async () => {
+    const kit = await makeKit(t);
+    const own = await keyOf(kit.customerId, ED25519());
+    const before = await snapshotRows(t);
+    const r = await createDraft(kit.deps, kit.session, kit.input({ keyPairId: own }));
+    expect(r).toEqual({ ok: false, error: "validation", fields: { keyPairId: "invalid" } });
+    expect(await snapshotRows(t)).toEqual(before);
+  });
+
   it("accepts the customer's own key", async () => {
     const kit = await makeKit(t);
     const own = await keyOf(kit.customerId);
@@ -97,6 +127,20 @@ describe("runPurchase: the key pair is checked again, before any write", () => {
     });
     expect(r).toEqual({ ok: false, error: "validation", fields: { keyPairId: "invalid" } });
     expect(await snapshotRows(t)).toEqual(before);
+  });
+
+  it("WPU-Y5: refuses a token that names the customer's own Ed25519 key, before any charge", async () => {
+    const kit = await makeKit(t);
+    const own = await keyOf(kit.customerId, ED25519());
+    const token = await tokenNaming(kit, kit, own);
+    const before = await snapshotRows(t);
+    expect(await purchase(kit, kit, token)).toEqual({
+      ok: false,
+      error: "validation",
+      fields: { keyPairId: "invalid" },
+    });
+    expect(await snapshotRows(t)).toEqual(before);
+    expect(kit.queue.depth).toBe(0);
   });
 
   it("buys with the customer's own key and stores it in the configuration", async () => {

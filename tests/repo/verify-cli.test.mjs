@@ -402,7 +402,8 @@ it("the proof tests of WPU-G10 exist: the key made in the browser, the plan chec
   for (const [file, title] of [
     [
       "apps/web/app/[locale]/(panel)/servers/new/ssh-keygen.test.ts",
-      "the seed signs and the public key verifies",
+      // WPU-Y5 (e): the pair is RSA now (Lightsail ImportKeyPair takes ssh-rsa only)
+      "the private key signs and the line verifies",
     ],
     [
       "tests/repo/ssh-keygen-openssh.test.mjs",

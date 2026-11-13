@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { orderProgress, planSpecsOf, serverConfigOf, shortfallTopUpTaka } from "./servers-view.ts";
+import {
+  keyOptionOf,
+  orderProgress,
+  planSpecsOf,
+  serverConfigOf,
+  shortfallTopUpTaka,
+} from "./servers-view.ts";
 
 describe("planSpecsOf", () => {
   it("reads the specs the catalog sync writes", () => {
@@ -64,5 +70,24 @@ describe("shortfallTopUpTaka", () => {
   it("is null when the balance covers the total", () => {
     expect(shortfallTopUpTaka(100000n, 100000n)).toBeNull();
     expect(shortfallTopUpTaka(100000n, 100001n)).toBeNull();
+  });
+});
+
+// WPU-Y5 (e): a stored key is offered to the wizard only when Lightsail ImportKeyPair can take it.
+describe("keyOptionOf", () => {
+  it("marks ssh-rsa keys of 2048 bits or more usable and every other stored key not usable", () => {
+    const field = (b: Buffer) => {
+      const head = Buffer.alloc(4);
+      head.writeUInt32BE(b.length);
+      return Buffer.concat([head, b]);
+    };
+    const n = Buffer.alloc(256, 0xab);
+    const rsa = `ssh-rsa ${Buffer.concat([field(Buffer.from("ssh-rsa")), field(Buffer.from([1, 0, 1])), field(Buffer.concat([Buffer.from([0]), n]))]).toString("base64")}`;
+    const base = { id: "k1", name: "Laptop", fingerprint: "SHA256:a" };
+    expect(keyOptionOf({ ...base, publicKey: rsa })).toEqual({ ...base, usable: true });
+    expect(keyOptionOf({ ...base, publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA" })).toEqual({
+      ...base,
+      usable: false,
+    });
   });
 });

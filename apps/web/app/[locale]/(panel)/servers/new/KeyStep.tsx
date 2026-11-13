@@ -6,7 +6,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState } from "react";
 import type { KeyOption } from "../../../../../server/servers-view.ts";
-import { fileNameOfPrivateKey, generateEd25519KeyPair } from "./ssh-keygen.ts";
+import { fileNameOfPrivateKey, generateRsaKeyPair } from "./ssh-keygen.ts";
 
 // The key step of the create wizard (WPU-G10), like the Lightsail console: use a key you have, create a
 // key pair here, or upload (paste) your public key. The private key of a pair is made in this tab with
@@ -35,7 +35,9 @@ export function KeyStep({
 }) {
   const t = useTranslations("Servers.new");
   const base = useId();
-  const [mode, setMode] = useState<KeyMode>(keys.length > 0 ? "existing" : "generate");
+  // WPU-Y5 (e): a stored key that cannot start a server (not ssh-rsa of 2048 bits or more) is listed, disabled.
+  const usable = keys.filter((key) => key.usable);
+  const [mode, setMode] = useState<KeyMode>(usable.length > 0 ? "existing" : "generate");
   const [name, setName] = useState("");
   const [publicKey, setPublicKey] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -49,7 +51,8 @@ export function KeyStep({
     };
   }, []);
 
-  const ready = mode === "existing" ? keys.length > 0 : mode === "paste" ? true : phase === "saved";
+  const ready =
+    mode === "existing" ? usable.length > 0 : mode === "paste" ? true : phase === "saved";
   useEffect(() => {
     onReady(ready);
   }, [ready, onReady]);
@@ -68,7 +71,7 @@ export function KeyStep({
   const make = async (): Promise<void> => {
     setPhase("working");
     try {
-      const pair = await generateEd25519KeyPair(name.trim());
+      const pair = await generateRsaKeyPair(name.trim());
       privateKey.current = pair.privateKey;
       setPublicKey(pair.publicKey);
       setPhase("made");
@@ -134,8 +137,16 @@ export function KeyStep({
             kind="select"
             name="keyPairId"
             legend={t("keyMode.existing")}
-            options={keys.map((key) => ({ value: key.id, label: key.name }))}
-            defaultValue={(keys[0] as KeyOption).id}
+            options={keys.map((key) =>
+              key.usable
+                ? { value: key.id, label: key.name }
+                : {
+                    value: key.id,
+                    label: t("keyNotUsable", { name: key.name }),
+                    disabled: true,
+                  },
+            )}
+            {...(usable[0] !== undefined ? { defaultValue: usable[0].id } : {})}
             hint={t("keyHint")}
             required
             {...(fieldError("keyPairId") !== undefined

@@ -25,6 +25,8 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 const list = (v) => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
 const CI_ROLES = "scripts/golive/ci-roles.sh";
 const STAGE_SECRETS = "scripts/golive/stage-secrets.sh";
+// WPU-Y5 (d): its behaviour is in tag-ruleset.test.mjs; the static rules below hold for it too.
+const TAG_RULESET = "scripts/golive/tag-ruleset.sh";
 const FAKE_ACCOUNT = "000000000000";
 const OTHER_ACCOUNT = "000000000009";
 
@@ -102,7 +104,7 @@ function run(script, args, { env = {}, input = "" } = {}) {
 
 // ---- static rules of both scripts ---------------------------------------------------------------------
 
-describe.each([CI_ROLES, STAGE_SECRETS])("%s (static)", (script) => {
+describe.each([CI_ROLES, STAGE_SECRETS, TAG_RULESET])("%s (static)", (script) => {
   const text = read(script);
   const code = text
     .split("\n")
@@ -617,6 +619,26 @@ describe("docs/runbooks/go-live.md", () => {
     // WPU-Z11 fix round 2: the one-account residuals are named, the asset bucket and headers policy included
     expect(page).toContain("the shared SST asset bucket `sst-asset-*`");
     expect(page).toContain("`tc-<stage>-security-headers`");
+  });
+
+  // WPU-Y5 (d): the GitHub facts of 2026-11-14 and the order: GitHub Pro and the tag ruleset before a collaborator.
+  it("records the GitHub facts and the tag ruleset script before any collaborator is added", () => {
+    for (const text of [
+      "private on GitHub Free",
+      "HTTP 403",
+      "deployment tag policy `v*` of the environment `production`",
+      "one collaborator",
+      "bash scripts/golive/tag-ruleset.sh",
+      "`refs/tags/v*`",
+    ]) {
+      expect(page, text).toContain(text);
+    }
+    const before = page.indexOf("**Before adding any collaborator with write access:**");
+    expect(before).toBeGreaterThan(-1);
+    expect(page.indexOf("buy GitHub Pro", before)).toBeGreaterThan(before);
+    expect(page.indexOf("scripts/golive/tag-ruleset.sh", before)).toBeGreaterThan(
+      page.indexOf("buy GitHub Pro", before),
+    );
   });
 
   // Final review I1: the production verify job runs gate M5, which holds two manual proofs. The gate stays

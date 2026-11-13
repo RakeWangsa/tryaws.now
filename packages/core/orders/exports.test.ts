@@ -408,6 +408,16 @@ const LIFECYCLE = [
 // and a renewal the registry holds already (review round 1), which only the registry's own refusal refunds.
 const Z13 = ["refundedOnFailure", "registryHoldsRenewal", "reverseFailedDomainRenewal"];
 
+// WPU-Y5 (c): the rejection of a dns_zone create whose hosted zone exists is refused. (e): the SSH keys that
+// Lightsail ImportKeyPair takes (ssh-rsa, 2048 to 16384 bits).
+const Y5 = [
+  "dnsZoneMayExist",
+  "isImportableSshKey",
+  "sshRsaKeyBits",
+  "SSH_RSA_MAX_BITS",
+  "SSH_RSA_MIN_BITS",
+];
+
 // Names of the bucket and container tasks, merged without a pin.
 const STORAGE_CONTAINER = [
   "CONTAINER_POWERS",
@@ -687,6 +697,7 @@ describe("the public surface of the order flow", () => {
 
           ...Y2,
           ...Z13,
+          ...Y5,
           ...SHARED_UUID,
         ]),
       ].sort(),

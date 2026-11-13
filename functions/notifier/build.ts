@@ -66,6 +66,11 @@ export function buildNotifierHandler(
       deps.log({ event: "notifier_not_configured", channel: "email" });
       throw new Error("notifier: email is not configured");
     }
+    // WPU-Y5 (a): a run without the SMS gateway says so first, so that production cannot run with SMS off
+    // unnoticed (the alarm NotifierSmsOffAlarm of infra/stacks/alarms.ts counts this line). No value is logged.
+    if (deps.sms === null) {
+      deps.log({ event: "notifier_sms_off", channel: "sms", severity: "alert" });
+    }
     const getRemaining = context?.getRemainingTimeInMillis;
     const run = createNotifierHandler({
       store: deps.sms === null ? withoutChannels(deps.store, ["sms"]) : deps.store,

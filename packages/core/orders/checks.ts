@@ -38,6 +38,7 @@ import {
   type TargetCandidate,
 } from "../products/load-balancer";
 import type { Result } from "../types";
+import { isImportableSshKey } from "../validation/ssh-rsa-key";
 import { checkCustomer, checkLimits, tierLimitsFromStored, type CustomerFacts } from "./gates";
 
 const INSTANCE_FAMILIES = ["linux_instance", "windows_instance"] as const;
@@ -71,7 +72,8 @@ export async function gateCustomer(
 /**
  * A key pair named in the configuration must be a key of the scope's customer. The tenant-scoped
  * repository answers `null` for another customer's key as it does for a missing one, so both are
- * `keyPairId: invalid` and the refusal says nothing about whose key it is. A read that fails throws
+ * `keyPairId: invalid` and the refusal says nothing about whose key it is. A key of the customer that a server
+ * cannot be created with (WPU-Y5: not ssh-rsa of 2048 bits or more) is `keyPairId: invalid` too. A read that fails throws
  * and the action is refused (R16). Used by the draft and again by the purchase, before any write.
  */
 export async function gateKeyPair(
@@ -80,7 +82,13 @@ export async function gateKeyPair(
 ): Promise<Result<true>> {
   const keyPairId = product.resourceConfig.keyPairId;
   if (keyPairId === undefined || keyPairId === null) return { ok: true, value: true };
-  if (typeof keyPairId !== "string" || (await repos.sshKeys.get(keyPairId)) === null) {
+  if (typeof keyPairId !== "string") {
+    return { ok: false, error: "validation", fields: { keyPairId: "invalid" } };
+  }
+  const key = await repos.sshKeys.get(keyPairId);
+  // WPU-Y5 (e): a stored key that Lightsail ImportKeyPair cannot take (Ed25519 or ECDSA from before, an RSA key under
+  // 2048 bits) is refused the same way, before any charge; the provisioner's guard stays as the second line.
+  if (key === null || !isImportableSshKey(key.publicKey)) {
     return { ok: false, error: "validation", fields: { keyPairId: "invalid" } };
   }
   return { ok: true, value: true };

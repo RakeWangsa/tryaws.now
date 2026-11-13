@@ -4,6 +4,7 @@ import {
   EMPTY_ALLOW_LIST,
   imageLogoOf,
   isBlueprintId,
+  isImportableSshKey,
   loginUserOf,
   storedLoginUserOf,
   minPowerOf,
@@ -131,6 +132,23 @@ export interface KeyOption {
   id: string;
   name: string;
   fingerprint: string;
+  /**
+   * WPU-Y5 (e): whether a server can be created with the key (Lightsail ImportKeyPair takes ssh-rsa of 2048 bits or
+   * more). An Ed25519 or ECDSA key stored before that rule is listed but cannot be chosen; the order refuses it too.
+   */
+  usable: boolean;
+}
+
+/** The wizard's view of a stored key. */
+export function keyOptionOf(
+  key: Pick<SshKey, "id" | "name" | "fingerprint" | "publicKey">,
+): KeyOption {
+  return {
+    id: key.id,
+    name: key.name,
+    fingerprint: key.fingerprint,
+    usable: isImportableSshKey(key.publicKey),
+  };
 }
 
 /** An image the customer can pick in a Region (WPU-G3), with the logo file of the theme or null. */
@@ -204,7 +222,7 @@ export async function loadConfigurator(
       state: "ready",
       plans,
       regions,
-      keys: keys.map((k) => ({ id: k.id, name: k.name, fingerprint: k.fingerprint })),
+      keys: keys.map(keyOptionOf),
       images,
     };
   });

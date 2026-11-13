@@ -1,5 +1,6 @@
 import {
   decideRefusal,
+  dnsZoneMayExist,
   isUuid,
   refundedOnFailure,
   registryHoldsRenewal,
@@ -35,6 +36,10 @@ function targetOf(payload: unknown): string | null {
 // and the money stay as they are. Only a renewal at step null (reads only, nothing sent) is rejected
 // with its refund. Whether a person may refund a held one without that answer is the owner's decision
 // (JOURNEY, Needs decision).
+// WPU-Y5 (c): the same for a dns_zone create whose hosted zone may exist (dnsZoneMayExist: at `create_zone` once an
+// attempt may have sent CreateHostedZone, and past it): a rejection would refund the order while the zone stays. The reject operation needs attention with
+// `zone_created`; the target and the money stay. A person retries the create, or destroys the zone first
+// (docs/runbooks/dns-zone.md).
 export async function runReject(
   deps: StepDeps,
   view: RunView,
@@ -76,6 +81,9 @@ export async function runReject(
     const rejectable = target.state === "needs_attention";
     if (rejectable && registryHoldsRenewal(target.kind, target.step)) {
       return refuse(tx, "renewal_submitted");
+    }
+    if (rejectable && dnsZoneMayExist(resource.family, target.kind, target.step, target)) {
+      return refuse(tx, "zone_created");
     }
     const refunded = refundedOnFailure(target.kind);
     if (rejectable && refunded && deps.hooks?.failed === undefined) {
