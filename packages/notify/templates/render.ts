@@ -83,12 +83,17 @@ export function renderEmail(
 ): RenderedEmail {
   const { def, text, shared, vars, href } = build(id, data, ctx);
   const subject = fillFrom(text.subject, vars);
+  const cta = typeof def.cta === "function" ? def.cta(data) : def.cta;
+  const label = shared.cta[cta];
+  if (label === undefined) throw new TypeError("render: the button has no label");
   const { html, text: plain } = layoutEmail({
     locale: ctx.locale,
     subject,
     headline: fillFrom(text.headline, vars),
+    // A paragraph that is empty for this data (for example the reply text of a mail that only links to
+    // it) is left out by the layout.
     paragraphs: text.body.map((p) => fillFrom(p, vars)),
-    button: { label: shared.cta[def.cta] as string, url: href },
+    button: { label, url: href },
   });
   return { subject, html, text: plain };
 }

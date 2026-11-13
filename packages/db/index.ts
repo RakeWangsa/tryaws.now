@@ -181,7 +181,7 @@ export type {
   BooleanSettingTarget,
   SettingsAdminRepo,
 } from "./repositories/admin/settings";
-export { SUPPORT_REPLY_TEMPLATE } from "./repositories/admin/support";
+export { SUPPORT_REPLY_TEMPLATE, supportReplyPayload } from "./repositories/admin/support";
 export type {
   CaseStatus,
   SupportAdminRepo,

@@ -119,10 +119,12 @@ export const SAMPLES: Record<TemplateId, { data: Record<string, unknown>; channe
     channels: ["email", "sms", "in_app"],
   },
   // WPU-D4: a reply of support (email only: a visitor has no bell) and the capacity notice of the waitlist.
+  // WPU-Z5: the visitor's mail carries the text (a customer's only links to the request).
   support_reply: {
     data: {
       requestId: IDS.request,
       body: "Hello,\nWe fixed the problem on your side.\n\nPlease try again and tell us.",
+      audience: "visitor",
     },
     channels: ["email"],
   },

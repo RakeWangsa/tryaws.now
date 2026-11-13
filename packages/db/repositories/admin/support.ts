@@ -124,6 +124,17 @@ export interface SupportAdminRepo {
   reopen(input: SupportReopenInput, reason: string): Promise<Written<SupportReopened>>;
 }
 
+// The data of the `support_reply` notification (packages/notify checks it against the closed list of the
+// template, test/wpu-z5-support-reply.test.ts there). A customer reads the reply in the panel and gets a link
+// to the request; a visitor has no account and gets the text by e-mail.
+export function supportReplyPayload(
+  requestId: string,
+  body: string,
+  audience: "customer" | "visitor",
+): { requestId: string; body: string; audience: "customer" | "visitor" } {
+  return { requestId, body, audience };
+}
+
 // The id of the admin message of one reply: a UUID v5 of the reply id inside the namespace of the request,
 // so the same form submitted again finds its message (R7) and one reply id cannot reach another request.
 export function supportReplyMessageId(requestId: string, replyId: string): string {
@@ -397,11 +408,7 @@ export function supportAdminRepo(scope: AdminScope): SupportAdminRepo {
             // reads the reply in the panel; a visitor through the address of the request, with the text.
             const visitor = current.customer_id === null;
             const toEmail = visitor ? current.email : null;
-            const payload = {
-              requestId,
-              body,
-              audience: visitor ? "visitor" : "customer",
-            };
+            const payload = supportReplyPayload(requestId, body, visitor ? "visitor" : "customer");
             // admin_rw may insert notifications but not read them (migration 0006): no RETURNING and no
             // conflict target (both need SELECT). The key is the one of today; the message above already
             // decided that this reply is new.

@@ -36,7 +36,8 @@ export interface TemplateDef {
   readonly spec: Spec;
   readonly channels: (data: Data) => readonly Channel[];
   readonly path: (data: Data) => string;
-  readonly cta: string;
+  // The key of the button label in SHARED.cta; a function when the button depends on the data (WPU-Z5).
+  readonly cta: string | ((data: Data) => string);
   readonly vars: (data: Data, h: Helpers) => Readonly<Record<string, string>>;
 }
 
@@ -356,14 +357,24 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
       date: h.d(d.expiresAt),
     }),
   },
-  // WPU-D4: the text is written by an admin; the request id only keeps the row tied to its request.
+  // WPU-D4: the text is written by an admin. WPU-Z5 (owner decision 2026-11-13, round 3: support is an
+  // in-app ticket system, there is no support inbox): a customer reads the reply in the panel, so the mail
+  // says a reply waits and links to the request (the panel page of WPU-Z6) without the text; a visitor has
+  // no account, so the mail carries the text and says that an answer is a new request from the support page.
   support_reply: {
-    spec: { requestId: f.uuid, body: f.multiline(SUPPORT_REPLY_MAX) },
+    spec: {
+      requestId: f.uuid,
+      body: f.multiline(SUPPORT_REPLY_MAX),
+      audience: f.oneOf("customer", "visitor"),
+    },
     // A visitor has no bell and no phone: the email is the whole message.
     channels: () => ["email"],
-    path: fixed("/support"),
-    cta: "open_support",
-    vars: (d) => ({ message: s(d.body) }),
+    path: (d) => (d.audience === "customer" ? `/support/requests/${s(d.requestId)}` : "/support"),
+    cta: (d) => (d.audience === "customer" ? "open_request" : "open_support"),
+    vars: (d, h) =>
+      d.audience === "customer"
+        ? { lead: h.x("customer_lead"), message: "", next: h.x("customer_next") }
+        : { lead: h.x("visitor_lead"), message: s(d.body), next: h.x("visitor_next") },
   },
   // WPU-D4 (spec 12): told on day 7 and day 12 after the zone was made; removed on day 14.
   dns_delegation_notice: {
