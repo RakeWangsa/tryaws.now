@@ -160,7 +160,16 @@ export async function runPurchase(
   const fresh = priced.value.snapshot;
   if (!comparePrice(claims.snap, fresh).same) {
     const iat = Math.floor(now.getTime() / 1000);
-    const next: DraftClaims = { ...claims, snap: fresh, iat, exp: iat + DRAFT_TTL_SECONDS };
+    const next: DraftClaims = {
+      ...claims,
+      snap: fresh,
+      fx: {
+        id: priced.value.inForce.fx.id,
+        at: priced.value.inForce.fx.effectiveFrom.toISOString(),
+      },
+      iat,
+      exp: iat + DRAFT_TTL_SECONDS,
+    };
     return { ok: false, error: "price_changed", data: { claims: next } };
   }
 

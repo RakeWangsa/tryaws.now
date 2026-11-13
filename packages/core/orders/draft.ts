@@ -111,6 +111,10 @@ export async function createDraft(
       region: product.region,
       cfg: product.resourceConfig,
       snap: priced.value.snapshot,
+      fx: {
+        id: priced.value.inForce.fx.id,
+        at: priced.value.inForce.fx.effectiveFrom.toISOString(),
+      },
       iat,
       exp,
     };

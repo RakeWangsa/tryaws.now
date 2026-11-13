@@ -1,5 +1,5 @@
 import { currentCustomer } from "@tc/auth";
-import { renewNow } from "@tc/core";
+import { renewNow, verifyDraft } from "@tc/core";
 import { customerRepos, newUuidV7, readFeatureFlag, withTx } from "@tc/db";
 import { headers } from "next/headers";
 import type { DnsOpsDeps } from "./dns-actions.ts";
@@ -39,6 +39,12 @@ export async function orderActionDeps(): Promise<OrderActionDeps> {
         customerRepos(tx, session.customerId).rateLimits.consume(DRAFT_RATE_LIMITS, new Date()),
       ),
     orders: runtime === null ? null : runtime.orders,
+    // WPU-Y4: the draft was signed by this server a moment ago, and the date is only shown.
+    fxSetAtOf: (token) => {
+      if (runtime === null) return null;
+      const verdict = verifyDraft(runtime.secrets, token, runtime.now());
+      return verdict.ok ? (verdict.claims.fx?.at ?? null) : null;
+    },
   };
 }
 

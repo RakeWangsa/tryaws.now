@@ -261,8 +261,49 @@ describe("placeOrderCore", () => {
     expect(result).toEqual({
       ok: false,
       error: "price_changed",
-      draft: { token: "new.tok", totalMinor: "120000", expiresAt: "2026-11-12T00:30:00.000Z" },
+      draft: {
+        token: "new.tok",
+        totalMinor: "120000",
+        expiresAt: "2026-11-12T00:30:00.000Z",
+        usdText: "10.00",
+        fxRate: "120.0000",
+        fxSetAt: null,
+      },
     });
+  });
+
+  it("WPU-Y4: the re-confirm draft carries the new USD price, the rate and the day the rate was set", async () => {
+    const changed: OrderDraft = {
+      ...DRAFT,
+      token: "new.tok",
+      quote: { ...DRAFT.quote, fxRate: "125", totalMinor: 125000n },
+    };
+    const { deps: d } = deps({
+      orders: {
+        createOrderDraft: async () => ({ ok: true, value: DRAFT }),
+        placeOrder: async () => ({ ok: false, error: "price_changed", data: changed }),
+      },
+      fxSetAtOf: (token) => (token === "new.tok" ? "2026-11-12T04:00:00.000Z" : null),
+    });
+    expect(await placeOrderCore(d, input)).toMatchObject({
+      error: "price_changed",
+      draft: { usdText: "10.00", fxRate: "125", fxSetAt: "2026-11-12T04:00:00.000Z" },
+    });
+  });
+
+  it("WPU-Y4: a changed draft whose rate cannot be inverted is unavailable, never shown (fail closed)", async () => {
+    const changed: OrderDraft = {
+      ...DRAFT,
+      token: "new.tok",
+      quote: { ...DRAFT.quote, fxRate: "0" },
+    };
+    const { deps: d } = deps({
+      orders: {
+        createOrderDraft: async () => ({ ok: true, value: DRAFT }),
+        placeOrder: async () => ({ ok: false, error: "price_changed", data: changed }),
+      },
+    });
+    expect(await placeOrderCore(d, input)).toEqual({ ok: false, error: "unavailable" });
   });
 
   it("keeps a price_changed with data of an unknown shape as unavailable (fail closed)", async () => {

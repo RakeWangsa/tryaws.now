@@ -11,17 +11,17 @@ export const publicEn: Same<typeof publicBn> = {
       home: {
         title: "MeghVPS: Cloud Server, built on Amazon Lightsail",
         description:
-          "Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in taka, top up with EPS.",
+          "Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in US dollars, wallet in taka, top up with EPS.",
       },
       pricing: {
         title: "Pricing: Cloud Server, built on Amazon Lightsail",
         description:
-          "Cloud Server plans with prices in taka for 30 days. Prices include VAT and fees. Built on Amazon Lightsail.",
+          "Cloud Server plans with prices in US dollars for 30 days. Prices include VAT and fees. Built on Amazon Lightsail.",
       },
       cloudServers: {
         title: "Cloud Server, built on Amazon Lightsail",
         description:
-          "Cloud servers that run in the AWS Region Singapore or Mumbai. Plans, specifications and prices in taka. Built on Amazon Lightsail.",
+          "Cloud servers that run in the AWS Region Singapore or Mumbai. Plans, specifications and prices in US dollars. Built on Amazon Lightsail.",
       },
       help: {
         title: "Help and frequently asked questions",
@@ -47,8 +47,9 @@ export const publicEn: Same<typeof publicBn> = {
       seePricing: "See pricing",
       seePlans: "See plans",
       login: "Go to the panel",
+      // DRAFT WORDING (WPU-Y4): the owner confirms this note (USD, taka at checkout, Amazon Lightsail).
       priceNote:
-        "Every price is in taka, for 30 days, and includes VAT and fees. Rounded up to whole taka.",
+        "Prices are in US dollars (USD), for 30 days, and include VAT and fees. The amount in taka is worked out at checkout with the exchange rate of the day, and you see it before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail.",
       unavailableTitle: "Prices cannot be shown now",
       unavailableText: "The price list cannot be read at the moment. Try again in a little while.",
       noPlansTitle: "No plan is open yet",
@@ -80,7 +81,7 @@ export const publicEn: Same<typeof publicBn> = {
     home: {
       heroTitle: "Cloud Server, built on Amazon Lightsail",
       heroLead:
-        "A prepaid cloud panel for Bangladesh. Prices in taka, top up your wallet with EPS. Run everything from one panel.",
+        "A prepaid cloud panel for Bangladesh. Prices in US dollars, wallet in taka, top up your wallet with EPS. Run everything from one panel.",
       plansTitle: "Popular Cloud Server plans",
       plansLead:
         "The lowest priced open plans right now. Every price comes straight from the price list.",
@@ -91,7 +92,7 @@ export const publicEn: Same<typeof publicBn> = {
           text: "Every server is an Amazon Lightsail resource that runs in the AWS Region you choose.",
         },
         bdt: {
-          title: "Prices in taka, top up first",
+          title: "Wallet in taka, top up first",
           text: "Add money to your wallet with EPS, then buy from it.",
         },
         panel: {
@@ -115,7 +116,7 @@ export const publicEn: Same<typeof publicBn> = {
     },
     pricing: {
       heading: "Pricing",
-      lead: "Cloud Server, built on Amazon Lightsail. Every price is for 30 days, in taka.",
+      lead: "Cloud Server, built on Amazon Lightsail. Every price is for 30 days, in US dollars.",
       tabsLabel: "Product type",
       tabCloudServers: "Cloud Server",
       tableTitle: "Compare plans",
@@ -209,11 +210,11 @@ export const publicEn: Same<typeof publicBn> = {
         },
         payment: {
           q: "How do I pay?",
-          a: "Top up your wallet with EPS first, then buy servers from the wallet. All amounts are in taka.",
+          a: "Top up your wallet with EPS first, then buy servers from the wallet. The wallet and all payments are in taka; the taka amount of an order is shown at checkout.",
         },
         priceIncludes: {
           q: "What does the price include?",
-          a: "A displayed price is for 30 days and includes VAT and fees. It is rounded up to whole taka, so you are never charged more than the price shown.",
+          a: "A displayed price is in US dollars, for 30 days, and includes VAT and fees. At checkout you see the exchange rate of the day and the amount in taka before you confirm, and you are charged exactly that amount.",
         },
         locations: {
           q: "Which locations are there?",
@@ -237,7 +238,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         bdt: {
           q: "Are prices in taka?",
-          a: "Yes. All prices and payments are in Bangladeshi taka (BDT).",
+          a: "Prices are shown in US dollars. Your wallet, top-ups and invoices are in Bangladeshi taka (BDT); the taka amount of an order is worked out at checkout with the exchange rate of the day.",
         },
       },
     },

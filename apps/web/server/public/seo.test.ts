@@ -81,9 +81,9 @@ describe("structured data", () => {
       name: "Cloud Server",
       description: "d",
       url: ORIGIN,
-      offers: [{ name: "n", priceMinor: 123401n, url: ORIGIN }],
+      offers: [{ name: "n", priceUsd: "5.85", url: ORIGIN }],
     }) as { offers: { priceCurrency: string; price: string }[] };
-    expect(product.offers[0]).toMatchObject({ priceCurrency: "BDT", price: "1235" });
+    expect(product.offers[0]).toMatchObject({ priceCurrency: "USD", price: "5.85" });
   });
 
   it("writes the price the way the plan cards show it: whole taka, rounded up (R4)", () => {

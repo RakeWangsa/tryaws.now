@@ -39,6 +39,8 @@ export function signDraft(secrets: readonly Uint8Array[], claims: DraftClaims): 
     region: claims.region,
     cfg: claims.cfg,
     snap: claims.snap,
+    // WPU-Y4: after snap and only when present, so a draft without a rate row signs as before.
+    ...(claims.fx === undefined ? {} : { fx: claims.fx }),
     iat: claims.iat,
     exp: claims.exp,
   };
@@ -58,10 +60,28 @@ function boundedText(value: unknown): value is string {
 function readClaims(raw: unknown): DraftClaims | null {
   if (!isRecord(raw)) return null;
   const keys = Object.keys(raw);
-  if (keys.length !== CLAIM_KEYS.length || !CLAIM_KEYS.every((k) => Object.hasOwn(raw, k))) {
+  const withFx = Object.hasOwn(raw, "fx");
+  if (
+    keys.length !== CLAIM_KEYS.length + (withFx ? 1 : 0) ||
+    !CLAIM_KEYS.every((k) => Object.hasOwn(raw, k))
+  ) {
     return null;
   }
-  const { v, c, fam, pid, region, cfg, snap, iat, exp } = raw;
+  const { v, c, fam, pid, region, cfg, snap, iat, exp, fx } = raw;
+  let rate: { id: string; at: string } | undefined;
+  if (withFx) {
+    if (!isRecord(fx) || Object.keys(fx).length !== 2) return null;
+    const { id, at } = fx as Record<string, unknown>;
+    if (
+      !boundedText(id) ||
+      typeof at !== "string" ||
+      Number.isNaN(new Date(at).getTime()) ||
+      new Date(at).toISOString() !== at
+    ) {
+      return null;
+    }
+    rate = { id, at };
+  }
   if (v !== 1) return null;
   if (typeof c !== "string" || !UUID.test(c)) return null;
   if (!boundedText(fam) || !boundedText(pid) || !boundedText(region)) return null;
@@ -76,7 +96,18 @@ function readClaims(raw: unknown): DraftClaims | null {
   } catch {
     return null;
   }
-  return { v: 1, c, fam, pid, region, cfg, snap: snapshot, iat: issued, exp: expires };
+  return {
+    v: 1,
+    c,
+    fam,
+    pid,
+    region,
+    cfg,
+    snap: snapshot,
+    ...(rate === undefined ? {} : { fx: rate }),
+    iat: issued,
+    exp: expires,
+  };
 }
 
 /**

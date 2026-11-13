@@ -22,6 +22,20 @@ describe("PlanCard", () => {
     expect(price.querySelector("span.period")?.textContent).toBe("/ 30 days");
   });
 
+  it("WPU-Y4: shows a dollar price instead of taka, with the mockup markup unchanged", () => {
+    const { container } = renderKit(
+      <PlanCard name="Nano" priceUsd="5.85" specs={specs} cta={cta} />,
+      { locale: "en" },
+    );
+    const price = container.querySelector(".price.seccolor") as HTMLElement;
+    expect(price.textContent).toBe("$5.85 / 30 days");
+    expect(container.textContent).not.toContain("৳");
+    expect(unknownClasses(container)).toEqual([]);
+    expect(() =>
+      renderKit(<PlanCard name="N" priceUsd="5.85" priceMinor={1n} specs={specs} cta={cta} />),
+    ).toThrow(TypeError);
+  });
+
   it("shows Bengali numerals in bn", () => {
     const { container } = renderKit(
       <PlanCard name="Nano" priceMinor={123450n} specs={specs} cta={cta} />,

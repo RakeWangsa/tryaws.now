@@ -116,6 +116,7 @@ export const bn = {
         source: "Bootstrap placeholder ক্লাস (16.13): কোনো মকআপ পাতা নেই",
       },
       moneyText: { title: "MoneyText", source: "কোনো মকআপ পাতা নেই (16.13)" },
+      usdText: { title: "UsdText", source: "কোনো মকআপ পাতা নেই (16.13)" },
       dateText: { title: "DateText", source: "কোনো মকআপ পাতা নেই (16.13)" },
       localeSwitch: { title: "LocaleSwitch", source: "header.html: section#drop-lng" },
       walletChip: { title: "WalletChip", source: "header.html: yellow CLIENT AREA button" },

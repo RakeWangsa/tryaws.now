@@ -23,6 +23,7 @@ it("exports exactly the public API of the pricing engine", () => {
     "buildChargeSnapshot",
     "chargeSnapshotMatchesInputs",
     "chargeToPriceSnapshot",
+    "customerUsd",
     "dailyMeteredChargeMinor",
     "decimalAtMost",
     "fxChangeNeedsConfirm",
@@ -47,6 +48,8 @@ it("exports exactly the public API of the pricing engine", () => {
     "readChargeSnapshot",
     "snapshotToQuote",
     "toSnapshot",
+    "usdMicroText",
+    "usdToBdtMinor",
     "validateBookTerms",
     "validateRule",
   ]);

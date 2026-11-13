@@ -4,6 +4,7 @@ import { DateText } from "../../components/DateText.tsx";
 import { LocaleSwitch } from "../../components/LocaleSwitch.tsx";
 import { MoneyText } from "../../components/MoneyText.tsx";
 import { toLocale } from "../../components/types.ts";
+import { UsdText } from "../../components/UsdText.tsx";
 import { WalletChip } from "../../components/WalletChip.tsx";
 import { localeHrefs, localePath } from "../../runtime/index.ts";
 import { DEMO_BALANCE_MINOR, DEMO_INSTANT, MONEY_SAMPLES } from "../data.ts";
@@ -42,6 +43,15 @@ export function Format(): ReactElement {
             </tbody>
           </table>
         </div>
+      </Sample>
+      <Sample name="UsdText" titleKey="Gallery.samples.usdText">
+        <ul className="list-unstyled seccolor">
+          {["0.00", "5.85", "14.0400", "0.585"].map((text) => (
+            <li key={text}>
+              <UsdText text={text} />
+            </li>
+          ))}
+        </ul>
       </Sample>
       <Sample name="DateText" titleKey="Gallery.samples.dateText">
         <ul className="list-unstyled seccolor">

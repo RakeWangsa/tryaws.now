@@ -2,15 +2,18 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { useId, useState, type ChangeEvent } from "react";
-import { formatMoney } from "./format";
+import { formatMoney, formatUsd } from "./format";
 import { MoneyText } from "./MoneyText";
+import { UsdText } from "./UsdText";
 import { toLocale, type Numerals } from "./types";
 
 export interface PickerPlan {
   id: string;
   name: string;
-  /** Paisa. A number throws TypeError (R4). */
-  priceMinor: bigint;
+  /** Paisa. A number throws TypeError (R4). Give this or `priceUsd`. */
+  priceMinor?: bigint;
+  /** WPU-Y4: US dollars as plain decimal text of the pricing engine (public pages). */
+  priceUsd?: string;
   lines: string[];
   /**
    * WPU-G10. A plan the customer cannot pick now (for example a plan too small for the chosen image).
@@ -52,7 +55,7 @@ export function PlanPicker({
 
   const seen = new Set<string>();
   for (const plan of plans) {
-    if (typeof plan.priceMinor !== "bigint") {
+    if (plan.priceUsd === undefined && typeof plan.priceMinor !== "bigint") {
       throw new TypeError(`PlanPicker: the price of plan ${plan.id} must be a bigint of paisa`);
     }
     if (seen.has(plan.id)) throw new RangeError(`PlanPicker: duplicate plan id ${plan.id}`);
@@ -79,7 +82,11 @@ export function PlanPicker({
       [...plans.slice(0, at)].reverse().find((plan) => plan.disabled !== true);
     if (next) choose(next.id);
   };
-  const valueText = `${selected.name}, ${formatMoney(selected.priceMinor, { locale, mode: "wholeUp", numerals })}`;
+  const priceOf = (plan: PickerPlan): string =>
+    plan.priceUsd !== undefined
+      ? formatUsd(plan.priceUsd, { locale, numerals })
+      : formatMoney(plan.priceMinor as bigint, { locale, mode: "wholeUp", numerals });
+  const valueText = `${selected.name}, ${priceOf(selected)}`;
 
   return (
     <fieldset>
@@ -113,7 +120,15 @@ export function PlanPicker({
                   </span>
                 ) : null}
                 <span className="d-block price seccolor">
-                  <MoneyText minor={plan.priceMinor} mode="wholeUp" numerals={numerals} />{" "}
+                  {plan.priceUsd !== undefined ? (
+                    <UsdText text={plan.priceUsd} numerals={numerals} />
+                  ) : (
+                    <MoneyText
+                      minor={plan.priceMinor as bigint}
+                      mode="wholeUp"
+                      numerals={numerals}
+                    />
+                  )}{" "}
                   <span className="period">{t("perPeriod")}</span>
                 </span>
               </label>

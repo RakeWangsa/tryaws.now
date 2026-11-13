@@ -129,11 +129,12 @@ export function faqLd(items: readonly { question: string; answer: string }[]): L
 export interface ProductOffer {
   /** The name of the plan at its location. */
   name: string;
-  priceMinor: bigint;
+  /** US dollars, the decimal text of the pricing engine (WPU-Y4). */
+  priceUsd: string;
   url: string;
 }
 
-/** A product with one offer in BDT for each plan; the price is whole taka, as the page shows it. */
+/** A product with one offer in USD for each plan; the price is the text the page shows (WPU-Y4). */
 export function productLd(input: {
   name: string;
   description: string;
@@ -151,8 +152,8 @@ export function productLd(input: {
       "@type": "Offer",
       name: offer.name,
       url: offer.url,
-      priceCurrency: "BDT",
-      price: wholeTakaUp(offer.priceMinor),
+      priceCurrency: "USD",
+      price: offer.priceUsd,
       availability: "https://schema.org/InStock",
     })),
   };

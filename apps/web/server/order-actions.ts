@@ -1,4 +1,4 @@
-import { CLIENT_KEY, parseInstanceConfig } from "@tc/core";
+import { CLIENT_KEY, customerUsd, parseInstanceConfig } from "@tc/core";
 import type { ErrorCode, OrderDraft, OrderSession, Orders } from "@tc/core";
 
 // The cores of the Server Actions of the order flow. Each follows R9: authenticate, validate,
@@ -55,6 +55,11 @@ export interface OrderActionDeps {
   rateLimit(session: OrderSession): Promise<{ allowed: boolean }>;
   /** null = the order functions are not configured. */
   orders: Pick<Orders, "createOrderDraft" | "placeOrder"> | null;
+  /**
+   * WPU-Y4: the instant the exchange rate of a draft that this server has just signed took effect, for the
+   * re-confirm box. Display only; null or absent when it cannot be read.
+   */
+  fxSetAtOf?(token: string): string | null;
 }
 
 export type DraftActionResult =
@@ -65,7 +70,15 @@ export type PlaceActionResult =
   | {
       ok: false;
       error: "price_changed";
-      draft: { token: string; totalMinor: string; expiresAt: string };
+      draft: {
+        token: string;
+        totalMinor: string;
+        expiresAt: string;
+        /** WPU-Y4: the new price in US dollars, the rate that converts it and the day the rate was set. */
+        usdText: string;
+        fxRate: string;
+        fxSetAt: string | null;
+      };
     }
   | { ok: false; error: PublicError; fields?: Record<string, string> };
 
@@ -185,6 +198,12 @@ export async function placeOrderCore(
 
   if (result.error === "price_changed") {
     if (!isDraft(result.data)) return { ok: false, error: "unavailable" };
+    let usdText: string;
+    try {
+      usdText = customerUsd(result.data.quote).text;
+    } catch {
+      return { ok: false, error: "unavailable" };
+    }
     return {
       ok: false,
       error: "price_changed",
@@ -192,6 +211,9 @@ export async function placeOrderCore(
         token: result.data.token,
         totalMinor: result.data.quote.totalMinor.toString(),
         expiresAt: result.data.expiresAt.toISOString(),
+        usdText,
+        fxRate: result.data.quote.fxRate,
+        fxSetAt: deps.fxSetAtOf?.(result.data.token) ?? null,
       },
     };
   }

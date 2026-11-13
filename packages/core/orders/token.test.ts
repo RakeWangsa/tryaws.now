@@ -50,6 +50,27 @@ describe("signDraft and verifyDraft", () => {
     expect(v).toEqual({ ok: true, claims: c });
   });
 
+  it("WPU-Y4: carries the rate row (id and instant) in the signed claims and refuses a changed or malformed one", () => {
+    const fx = { id: "0190bbbb-0000-7000-8000-000000000002", at: "2026-11-10T04:00:00.000Z" };
+    const c: DraftClaims = { ...claims(), fx };
+    const token = signDraft([SECRET_1], c);
+    expect(verifyDraft([SECRET_1], token, at(IAT + 10))).toEqual({ ok: true, claims: c });
+    // a token without the rate differs and still verifies (a draft signed before)
+    expect(signDraft([SECRET_1], claims())).not.toBe(token);
+    const base = { ...claims() };
+    for (const bad of [
+      { id: "", at: fx.at },
+      { id: fx.id, at: "yesterday" },
+      { id: fx.id, at: fx.at, extra: 1 },
+      "x",
+    ]) {
+      expect(verifyDraft([SECRET_1], forge(SECRET_1, { ...base, fx: bad }), at(IAT + 10))).toEqual({
+        ok: false,
+        reason: "malformed",
+      });
+    }
+  });
+
   it("is deterministic for the same claims", () => {
     expect(signDraft([SECRET_1], claims())).toBe(signDraft([SECRET_1], claims()));
   });

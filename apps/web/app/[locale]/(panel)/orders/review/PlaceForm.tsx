@@ -6,7 +6,10 @@ import {
   PriceBreakdown,
   SubmitButton,
   SummarySidebar,
+  formatDate,
+  formatDecimalText,
   formatMoney,
+  formatUsd,
 } from "@tc/ui";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
@@ -48,6 +51,11 @@ export function PlaceForm({
   const changed = state.draft;
   const token = changed?.token ?? review.token;
   const totalMinor = changed !== undefined ? BigInt(changed.totalMinor) : review.totalMinor;
+  // WPU-Y4: what the customer sees is exactly what is charged: the USD price, the rate and its day, and the
+  // BDT amount, all from the signed draft (or from the new one after a change). Nothing is computed here.
+  const usdText = changed?.usdText ?? review.usdText;
+  const fxRate = changed?.fxRate ?? review.fxRate;
+  const fxSetAt = changed !== undefined ? changed.fxSetAt : review.fxSetAt;
   const shortfallMinor = totalMinor > review.balanceMinor ? totalMinor - review.balanceMinor : null;
   const shortfallTaka = shortfallMinor === null ? null : (shortfallMinor + 99n) / 100n;
   const errorKey =
@@ -75,7 +83,8 @@ export function PlaceForm({
           <b>{t("priceChanged.title")}</b> {t("priceChanged.body")}{" "}
           <span className="d-block">
             {t("priceChanged.old")}: <MoneyText minor={review.totalMinor} /> ·{" "}
-            {t("priceChanged.new")}: <MoneyText minor={totalMinor} />
+            {t("priceChanged.new")}: <MoneyText minor={totalMinor} /> (
+            {formatUsd(usdText, { locale })})
           </span>
         </div>
       ) : null}
@@ -112,6 +121,46 @@ export function PlaceForm({
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <div className="table-responsive-lg mb-4">
+            <table className="table compare">
+              <caption className="visually-hidden">{t("fx.caption")}</caption>
+              <tbody>
+                <tr className="seccolor">
+                  <th scope="row" className="title border-start-0">
+                    {t("fx.usd")}
+                  </th>
+                  <td>{formatUsd(usdText, { locale })}</td>
+                </tr>
+                <tr className="seccolor">
+                  <th scope="row" className="title border-start-0">
+                    {t("fx.rate")}
+                  </th>
+                  <td>
+                    {fxSetAt === null
+                      ? t("fx.rateValueNoDate", {
+                          rate: formatDecimalText(fxRate, { locale }),
+                        })
+                      : t("fx.rateValue", {
+                          rate: formatDecimalText(fxRate, { locale }),
+                          date: formatDate(fxSetAt, { locale }),
+                        })}
+                  </td>
+                </tr>
+                <tr className="seccolor">
+                  <th scope="row" className="title border-start-0">
+                    {t("fx.bdt")}
+                  </th>
+                  <td>
+                    <b>
+                      <MoneyText minor={totalMinor} />
+                    </b>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="small seccolor mt-2">{t("fx.note")}</p>
           </div>
 
           {changed === undefined ? (

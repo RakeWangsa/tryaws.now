@@ -120,6 +120,7 @@ export const en: Same<typeof bn> = {
         source: "Bootstrap placeholder classes (16.13): no mockup page",
       },
       moneyText: { title: "MoneyText", source: "No mockup page (16.13)" },
+      usdText: { title: "UsdText", source: "No mockup page (16.13)" },
       dateText: { title: "DateText", source: "No mockup page (16.13)" },
       localeSwitch: { title: "LocaleSwitch", source: "header.html: section#drop-lng" },
       walletChip: { title: "WalletChip", source: "header.html: yellow CLIENT AREA button" },
