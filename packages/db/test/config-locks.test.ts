@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
 import type { Tx } from "../client";
-import { lockFxRateWrites, lockPricingRuleWrites } from "../repositories/config/locks";
+import {
+  lockFxRateWrites,
+  lockPricingRuleWrites,
+  lockSettingWrites,
+} from "../repositories/config/locks";
 import { runTransaction } from "../tx";
 import { useTempDatabase } from "./temp-db";
 
@@ -11,6 +15,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 it.each([
   ["fx rates", lockFxRateWrites],
   ["pricing rules", lockPricingRuleWrites],
+  // WPU-Z4: the switch of the unpaid-usage job.
+  [
+    "a settings switch",
+    (tx: Tx, market: string) => lockSettingWrites(tx, "lifecycle_unpaid_enabled", market),
+  ],
 ])(
   "%s: the second transaction of a market waits for the first; another market does not wait",
   async (_, lock) => {

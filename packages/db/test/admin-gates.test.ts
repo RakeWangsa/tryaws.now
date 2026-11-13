@@ -88,6 +88,13 @@ const GATE_CASES: Record<string, GateCase> = {
     call: (r) => r.reconciliation.list({} as never),
     deny: "support",
   },
+  // WPU-Z4: every admin reads the switch of the unpaid-usage job; turning it on is superadmin only.
+  "settings.read": { call: (r) => r.settings.read("lifecycle_unpaid_enabled", "BD"), deny: null },
+  "settings.setBoolean": {
+    call: (r) =>
+      r.settings.setBoolean({ key: "lifecycle_unpaid_enabled", market: "BD" }, true, "r"),
+    deny: "ops",
+  },
   "support.list": { call: (r) => r.support.list({} as never), deny: "finance" },
   "support.detail": { call: (r) => r.support.detail(ID()), deny: "finance" },
   "support.reply": {
