@@ -36,6 +36,18 @@ export interface DetachedIpRow {
   readonly detachedAt: Date | null;
 }
 
+/** WPU-Y3. A resource with a charge that is unpaid: the instant of its first failed charge. */
+export interface UnpaidResourceRow {
+  readonly resourceId: string;
+  readonly customerId: string;
+  /** The subscription of the resource (the newest period), or null when it has none. */
+  readonly subscriptionId: string | null;
+  /** config.unpaidSince as an exact ISO instant; null when it is not one (the caller refuses, R16). */
+  readonly unpaidSince: Date | null;
+}
+
+export type UnpaidFlagKey = "unpaidSuspended" | "unpaidRetained";
+
 const METRIC = /^[a-z][a-z0-9_]{0,39}$/;
 const PERIOD = /^\d{4}-\d{2}(-\d{2}(T\d{2})?)?$/;
 const PLAIN = /^\d+(\.\d+)?$/;
@@ -151,6 +163,92 @@ export function meteringRepo(tx: Tx) {
           detachedAt: exact ? at : null,
         };
       });
+    },
+
+    // WPU-Y3. The first failed charge of a resource: written once and never moved (the clock of the
+    // 1 day and the 7 days starts here). A later failure of the same episode changes nothing. `||` on
+    // jsonb replaces one top-level key and keeps the others, so it cannot undo a concurrent patch.
+    async markUnpaid(resourceId: string, at: Date): Promise<void> {
+      if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
+      if (Number.isNaN(at.getTime())) throw new TypeError("metering: the instant is not a date");
+      await tx.execute(sql`
+        update resources
+        set config = config || jsonb_build_object('unpaidSince', ${at.toISOString()}::text)
+        where id = ${resourceId} and (config ->> 'unpaidSince') is null`);
+    },
+
+    // WPU-Y3. Everything is paid: the episode ends and its marks go (`-` removes a top-level key).
+    async clearUnpaid(resourceId: string): Promise<void> {
+      if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
+      await tx.execute(sql`
+        update resources
+        set config = config - 'unpaidSince' - 'unpaidSuspended' - 'unpaidRetained'
+        where id = ${resourceId}`);
+    },
+
+    // WPU-Y3. The two marks of what the unpaid job itself did, so that a payment undoes only that (an
+    // admin's suspension is never lifted by it, section 11).
+    async setUnpaidFlag(resourceId: string, key: UnpaidFlagKey, value: boolean): Promise<void> {
+      if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
+      if (key !== "unpaidSuspended" && key !== "unpaidRetained") {
+        throw new TypeError("metering: the flag is not one of the unpaid marks");
+      }
+      await tx.execute(sql`
+        update resources set config = config || jsonb_build_object(${key}::text, ${value}::boolean)
+        where id = ${resourceId}`);
+    },
+
+    // WPU-Y3. The resources that still exist on AWS and have an unpaid charge, in id order after
+    // `afterId`. A destroyed resource is not listed: its charge is not retried (Needs decision).
+    async listUnpaidResources(afterId: string | null, limit: number): Promise<UnpaidResourceRow[]> {
+      if (afterId !== null && !isUuid(afterId))
+        throw new TypeError("metering: afterId is not a UUID");
+      checkLimit(limit);
+      const { rows } = await tx.execute<{
+        id: string;
+        customer_id: string;
+        subscription_id: string | null;
+        unpaid_since: string | null;
+      }>(sql`
+        select r.id, r.customer_id, r.config ->> 'unpaidSince' as unpaid_since,
+          (select s.id from subscriptions s where s.resource_id = r.id
+            order by s.period_end desc limit 1) as subscription_id
+        from resources r
+        where (r.config ->> 'unpaidSince') is not null
+          and r.state in ('active', 'stopped', 'suspended')
+          and (${afterId}::uuid is null or r.id > ${afterId}::uuid)
+        order by r.id limit ${limit}`);
+      return rows.map((r) => {
+        const at = r.unpaid_since === null ? null : new Date(r.unpaid_since);
+        const exact =
+          at !== null && !Number.isNaN(at.getTime()) && at.toISOString() === r.unpaid_since;
+        return {
+          resourceId: r.id,
+          customerId: r.customer_id,
+          subscriptionId: r.subscription_id,
+          unpaidSince: exact ? at : null,
+        };
+      });
+    },
+
+    // WPU-Y3. The usage rows of one resource and metric whose period lies in [from, to], oldest first
+    // (periods are `YYYY-MM-DD` days, so text order is date order).
+    async usageOfResource(
+      resourceId: string,
+      metric: string,
+      fromPeriod: string,
+      toPeriod: string,
+    ): Promise<{ period: string; quantity: string }[]> {
+      if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
+      if (!METRIC.test(metric) || !PERIOD.test(fromPeriod) || !PERIOD.test(toPeriod)) {
+        throw new TypeError("metering: metric or period has the wrong form");
+      }
+      const { rows } = await tx.execute<{ period: string; quantity: string }>(sql`
+        select period, quantity::text as quantity from usage_records
+        where resource_id = ${resourceId} and metric = ${metric}
+          and period >= ${fromPeriod} and period <= ${toPeriod}
+        order by period limit 1000`);
+      return rows.filter((r) => PLAIN.test(r.quantity));
     },
 
     // The one writer of usage_records (the reconciler and the reader call it): one row per resource,

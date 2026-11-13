@@ -36,6 +36,9 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
   expect(report.lifecycle).toMatchObject({ examined: 0, failed: 0 });
   expect(report.metering).toMatchObject({ charged: 0, failed: 0, priceMissing: true });
   expect(report.staticIps).toMatchObject({ charged: 0, failed: 0, priceMissing: false });
+  // WPU-Y3: off until the setting says true (R12): the job runs and does nothing.
+  expect(report.unpaid).toMatchObject({ enabled: false, examined: 0, failed: 0 });
+  expect(report.unpaid?.runKey).toBe("unpaid:2026-11-11");
   expect(report.invoices).toEqual({
     issued: 0,
     replayed: 0,
@@ -58,6 +61,7 @@ it("runs the sweep, the lifecycle pass and the rate-limit purge, and logs the co
     "lifecycle_run",
     "metering_run",
     "static_ip_metering_run",
+    "unpaid_run",
     "invoice_backlog_run",
     "polling_run",
     "rate_limits_purged",

@@ -15,8 +15,10 @@ import {
 } from "../operations/queue";
 import type { Logger, RunTx } from "../operations/types";
 import type { Clock } from "../types";
-import { readLifecycleConfig, type LifecycleConfig } from "./config";
+import { DEFAULT_LIFECYCLE_CONFIG, readLifecycleConfig, type LifecycleConfig } from "./config";
 import { decideSubscription, type LifecycleAction } from "./decide";
+import { productOfFamily, type NoticeWriter } from "./notice";
+import { walletLowDue } from "./unpaid";
 import { SNAPSHOT_FAMILIES } from "./guard";
 import { planApplyWait, queuePlanApply } from "./plan-change";
 import { renewalQuote, renewSubscription } from "./renew";
@@ -33,6 +35,9 @@ export interface LifecycleDeps {
   // within minutes (3.4). A lost send is found again by the sweeper either way.
   readonly queue?: OperationQueue;
   readonly limit?: number;
+  // WPU-Y3: writes the "your wallet is low for the charge on <date>" message (a template of @tc/notify).
+  // Without it that reminder is not sent; the renewal reminder is not affected.
+  readonly notice?: NoticeWriter;
 }
 
 export interface LifecycleReport {
@@ -167,6 +172,21 @@ async function retain(work: Work): Promise<void> {
   await queueRetentionOperations(work);
 }
 
+// WPU-Y3: the unpaid-usage rule retains a subscription at 7 days unpaid. The same steps as the end of
+// a grace period (state `retained`, final snapshot where the product has one, destroy), with the same
+// keys, so the engine's own `ensure_retention_operations` pass replays them. The destroy waits for an
+// admin until the end date of R13 (insertOperation decides). Returns the queue messages to send after
+// the commit.
+export async function retainSubscription(
+  tx: Tx,
+  row: LifecycleRow,
+  now: Date,
+): Promise<QueueMessage[]> {
+  const work = new Work(tx, row, now, DEFAULT_LIFECYCLE_CONFIG);
+  await retain(work);
+  return work.messages;
+}
+
 async function queueRetentionOperations(work: Work): Promise<void> {
   if (SNAPSHOT_FAMILIES.includes(work.row.resource.family)) {
     await work.enqueue("final_snapshot", work.row.periodEnd);
@@ -187,6 +207,27 @@ async function end(work: Work): Promise<void> {
 async function remind(work: Work, day: number, deps: LifecycleDeps): Promise<boolean> {
   const { row, config } = work;
   const balance = await walletBalance(work.tx, row.customerId);
+  // WPU-Y3: 3 days and 1 day before an auto-renewal that the wallet cannot cover, once each.
+  const product = productOfFamily(row.resource.family);
+  if (deps.notice !== undefined && row.autoRenew && product !== null) {
+    const amount = await amountText(work.tx, row, deps.clock);
+    const amountMinor = amount === null ? null : BigInt(amount);
+    if (walletLowDue({ day, balanceMinor: balance, amountMinor })) {
+      await deps.notice(work.tx, {
+        customerId: row.customerId,
+        template: "wallet_low_before_charge",
+        data: {
+          resourceId: row.resourceId,
+          product,
+          days: day,
+          chargeDate: row.periodEnd.toISOString(),
+          amountMinor: amount,
+          balanceMinor: balance.toString(),
+        },
+        dedupeKey: `wallet-low:${row.id}:${row.periodEnd.getTime()}:${day}`,
+      });
+    }
+  }
   return work.notify(
     "lifecycle_renewal_reminder",
     `${row.id}:${row.periodEnd.toISOString()}:${day}`,

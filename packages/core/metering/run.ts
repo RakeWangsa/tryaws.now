@@ -77,6 +77,12 @@ export interface MeteringOps {
   repo(tx: Tx): RepoPart;
   hasCharge(tx: Tx, key: string): Promise<boolean>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
+  /**
+   * WPU-Y3. Records the instant of the first failed charge of this resource (only when none is
+   * recorded), so the daily unpaid job retries every period back to it, with no window. Optional so a
+   * test world without it needs nothing.
+   */
+  markUnpaid?(tx: Tx, resourceId: string, at: Date): Promise<void>;
 }
 
 export const defaultMeteringOps: MeteringOps = {
@@ -96,6 +102,7 @@ export const defaultMeteringOps: MeteringOps = {
   },
   hasCharge: async (tx, key) => (await findLedgerTransactionByKey(tx, key)) !== null,
   post: postTransaction,
+  markUnpaid: (tx, resourceId, at) => meteringRepo(tx).markUnpaid(resourceId, at),
 };
 
 export interface MeteringDeps {
@@ -209,6 +216,8 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
               if (posted.error !== "insufficient_balance") return "failed" as const;
               // The same grace flow as a renewal (section 11) is a decision for the lifecycle owner (JOURNEY);
               // here the customer gets one notice per resource and day and the next run tries again.
+              // WPU-Y3: the first failure is recorded; the unpaid job then retries every day since.
+              await ops.markUnpaid?.(tx, row.resourceId, now);
               await ops.repo(tx).insertNotification({
                 customerId: row.customerId,
                 channel: "email",

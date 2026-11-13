@@ -32,6 +32,11 @@ export const TEMPLATE_IDS = [
   "waitlist_capacity_available",
   // WPU-D4: a hosted zone whose domain does not point to its name servers (day 7 and day 12).
   "dns_delegation_notice",
+  // WPU-Y3 (DRAFT wording, owner approval needed): the unpaid-usage rule and the low-wallet reminder.
+  "unpaid_warning",
+  "unpaid_suspended",
+  "unpaid_deletion",
+  "wallet_low_before_charge",
 ] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 

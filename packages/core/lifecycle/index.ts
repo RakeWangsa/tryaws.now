@@ -53,3 +53,6 @@ export { completeRestore } from "./restore";
 export { lifecycleHooks, type LifecycleHookEvent } from "./hooks";
 export { LIFECYCLE_LIMIT, runLifecycle, type LifecycleDeps, type LifecycleReport } from "./engine";
 export * from "./polling";
+export * from "./unpaid";
+export * from "./notice";
+export { retainSubscription } from "./engine";

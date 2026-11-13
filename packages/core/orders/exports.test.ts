@@ -162,6 +162,27 @@ const B3 = [
   "runPolling",
 ];
 
+// WPU-Y3: the unpaid-usage rule (pure decisions, the daily job, the notice port).
+const Y3 = [
+  "R13_APPROVAL_UNTIL",
+  "UNPAID_DELETE_AFTER_DAYS",
+  "UNPAID_PAGE",
+  "UNPAID_RUN_PREFIX",
+  "UNPAID_SETTING_KEY",
+  "UNPAID_SUSPEND_AFTER_DAYS",
+  "UNPAID_TEMPLATES",
+  "WALLET_LOW_DAYS",
+  "decideUnpaid",
+  "defaultUnpaidOps",
+  "productOfFamily",
+  "retainSubscription",
+  "runUnpaid",
+  "staticIpHoursSince",
+  "unpaidDayIndex",
+  "unpaidRunKey",
+  "walletLowDue",
+];
+
 // The products seam that Task 9 adds to @tc/core.
 // WP2-T4: the identity check rules of packages/core/kyc.
 const KYC = [
@@ -606,6 +627,7 @@ describe("the public surface of the order flow", () => {
           ...DIGIT_ONE,
           ...BILLING,
           ...B3,
+          ...Y3,
         ]),
       ].sort(),
     );
