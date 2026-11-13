@@ -175,7 +175,8 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
           await refuse(row, rule);
           continue;
         }
-        send = () => deps.sms.send(to, text);
+        // The row id is the reference (WPU-Z3): a retry of the row keeps the gateway's message id.
+        send = () => deps.sms.send(to, text, row.id);
       }
     } catch {
       await refuse(row, "render_failed");

@@ -6,6 +6,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseAllowlist } from "../../infra/lib/allowlist.ts";
 import {
+  ADMIN_SECRETS,
+  ALL_SECRETS,
   FUNCTIONS,
   DB_PASSWORD_SECRET,
   PROXY_ROLES,
@@ -464,7 +466,9 @@ describe("function table", () => {
     const bySecret = new Map();
     for (const f of FUNCTIONS)
       for (const s of f.secrets) bySecret.set(s, [...(bySecret.get(s) ?? []), f.dir]);
+    // WPU-Z3: the two secrets of the SMS gateway (Gennet api_token and sid); the web app links them too
     expect(bySecret.get("SmsApiKey")).toEqual(["notifier"]);
+    expect(bySecret.get("SmsSenderId")).toEqual(["notifier"]);
     for (const name of [
       "EpsMerchantId",
       "EpsStoreId",
@@ -478,6 +482,41 @@ describe("function table", () => {
     for (const name of ["EpsLimitKey", "OrderDraftSecret", "AuthLimitKey", "OtpHashKey"]) {
       expect(bySecret.has(name), name).toBe(false);
     }
+  });
+
+  it("declares the SMS gateway's two secrets and links both to the web app, which sends the phone OTP itself (WPU-Z3)", () => {
+    expect(ALL_SECRETS).toEqual([
+      "EpsMerchantId",
+      "EpsStoreId",
+      "EpsUsername",
+      "EpsPassword",
+      "EpsHashKey",
+      "EpsLimitKey",
+      "OrderDraftSecret",
+      "AuthLimitKey",
+      "OtpHashKey",
+      "SmsApiKey",
+      "SmsSenderId",
+      "AdminIpLimitKey",
+    ]);
+    expect(WEB_SECRETS).toEqual([
+      "EpsMerchantId",
+      "EpsStoreId",
+      "EpsUsername",
+      "EpsPassword",
+      "EpsHashKey",
+      "EpsLimitKey",
+      "OrderDraftSecret",
+      "AuthLimitKey",
+      "OtpHashKey",
+      "SmsApiKey",
+      "SmsSenderId",
+    ]);
+    expect(ADMIN_SECRETS).toEqual(["AdminIpLimitKey"]);
+    // every linked name is declared once
+    expect(new Set(ALL_SECRETS).size).toBe(ALL_SECRETS.length);
+    const linked = [...WEB_SECRETS, ...ADMIN_SECRETS, ...FUNCTIONS.flatMap((f) => f.secrets)];
+    for (const name of linked) expect(ALL_SECRETS, name).toContain(name);
   });
 
   it("matches SecretName of apps/web/server/secrets.ts", () => {

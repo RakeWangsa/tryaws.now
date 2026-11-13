@@ -44,12 +44,10 @@ describe("notify wording (WP9-T5)", () => {
     expect(SHARED.en.awsShort).toBe("100% AWS infrastructure. Built on Amazon Lightsail.");
   });
 
-  it("OTP SMS text: both locales, no link, no AWS name, Bengali has Bengali script", () => {
-    const bn = otpSmsText("bn", "beng", "123456", 5);
-    const en = otpSmsText("en", "latn", "123456", 5);
-    expect(bn).toMatch(/[ঀ-৿]/);
-    for (const text of [bn, en]) {
-      expect(text).not.toMatch(/https?:|AWS|Lightsail/);
-    }
+  it("OTP SMS text: the gateway's English format for every locale (WPU-Z3), with the brand, no link, no AWS name", () => {
+    const text = otpSmsText("123456");
+    expect(text.startsWith("MeghVPS ")).toBe(true);
+    expect(text).not.toMatch(/https?:|AWS|Lightsail/);
+    expect(text).not.toMatch(/[ঀ-৿]/);
   });
 });

@@ -25,6 +25,16 @@ describe("resourceSecrets", () => {
     expect(source("EpsLimitKey")).toBeUndefined();
   });
 
+  it("reads the two secrets of the SMS gateway (WPU-Z3)", () => {
+    const source = resourceSecrets({
+      SST_RESOURCE_SmsApiKey: '{"type":"sst.sst.Secret","value":"fake-sms-token"}',
+      SST_RESOURCE_SmsSenderId: '{"type":"sst.sst.Secret","value":"FAKESENDER"}',
+    });
+    expect(source("SmsApiKey")).toBe("fake-sms-token");
+    expect(source("SmsSenderId")).toBe("FAKESENDER");
+    expect(resourceSecrets({})("SmsSenderId")).toBeUndefined();
+  });
+
   it("the source is a function that reads the environment at the time of use", () => {
     const env: Record<string, string | undefined> = {};
     const source = resourceSecrets(env);

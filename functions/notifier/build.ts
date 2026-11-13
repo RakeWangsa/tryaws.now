@@ -14,19 +14,22 @@ import { createNotifierHandler } from "./handler";
 //
 // Fail closed (R16):
 //   - without an SES transport the run throws before it reads or claims a row, so nothing is burnt;
-//   - the SMS gateway is not chosen (section 17), so SMS rows are not read at all and stay pending
-//     until a gateway exists, instead of using up their attempts against a provider that cannot send.
+//   - without an SMS provider (WPU-Z3: the Gennet gateway needs both of its secrets, index.ts), SMS rows
+//     are not read at all and stay pending until the gateway is configured, instead of using up their
+//     attempts against a provider that cannot send. With one, they are sent like the other channels.
 
 export interface BuildNotifierDeps {
   readonly config: NotifierConfig;
   readonly store: NotifierStore;
   readonly sesTransport: SesTransport | null;
+  // The SMS gateway, or null when it is not configured.
+  readonly sms: SmsProvider | null;
   readonly clock: Clock;
   readonly log: Logger;
 }
 
-// The provider the loop gets for SMS: it can never send. (The store below hides SMS rows, so the loop
-// does not reach it; it stays as the second line.)
+// The provider the loop gets for SMS when there is no gateway: it can never send. (The store is then
+// wrapped to hide SMS rows, so the loop does not reach it; it stays as the second line.)
 const unconfiguredSms: SmsProvider = {
   send: () => Promise.resolve({ ok: false, reason: "unavailable" }),
 };
@@ -65,9 +68,9 @@ export function buildNotifierHandler(
     }
     const getRemaining = context?.getRemainingTimeInMillis;
     const run = createNotifierHandler({
-      store: withoutChannels(deps.store, ["sms"]),
+      store: deps.sms === null ? withoutChannels(deps.store, ["sms"]) : deps.store,
       email: new SesEmailProvider({ transport: deps.sesTransport, from: deps.config.sesFrom }),
-      sms: unconfiguredSms,
+      sms: deps.sms ?? unconfiguredSms,
       clock: deps.clock,
       log: deps.log,
       panelOrigin: deps.config.panelOrigin,

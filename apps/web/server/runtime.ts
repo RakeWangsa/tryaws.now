@@ -9,7 +9,7 @@ import {
   epsReturnUrls,
 } from "@tc/eps";
 import type { Eps, EpsDeps, EpsGateway } from "@tc/eps";
-import { OTP_SEND_RULES } from "@tc/notify";
+import { GatewaySmsProvider, GennetSmsTransport, OTP_SEND_RULES } from "@tc/notify";
 import type { OtpDeps, SmsProvider } from "@tc/notify";
 import { headers } from "next/headers";
 import { readWebConfig } from "./config.ts";
@@ -80,6 +80,18 @@ interface Assembled {
 const MIN_KEY_LENGTH = 32;
 const usableKey = (value: string | undefined): string | null =>
   typeof value === "string" && value.length >= MIN_KEY_LENGTH ? value : null;
+
+type OtpParts = NonNullable<WebRuntime["otp"]>;
+
+// The parts of the phone OTP service. The hashing key is read through `pepper`, a getter that is not
+// an own enumerable property: JSON and inspect of the runtime never show it (R3), now that a real
+// gateway makes these parts exist outside the fakes (WPU-Z3). A spread of the parts drops it, so a
+// caller names the fields it passes on (auth-ports.ts).
+function otpParts(pepper: string, sms: SmsProvider): OtpParts {
+  const parts = { run: withTx, clock: { now: () => new Date() }, sms, limits: OTP_SEND_RULES };
+  Object.defineProperty(parts, "pepper", { get: () => pepper, enumerable: false });
+  return parts as OtpParts;
+}
 
 const EPS_CALL_TIMEOUT_MS = 8000;
 
@@ -194,17 +206,16 @@ export async function assembleRuntime(env: Env): Promise<Assembled> {
   if (process.env.NODE_ENV !== "production" && config.fake.sms) {
     const outbox = await import("./fakes/outbox.ts");
     sms = outbox.getFakeSms();
+  } else if (config.stage === "staging" || config.stage === "production") {
+    // WPU-Z3: the SMS gateway (Gennet) with both of its secrets, or no SMS at all (R16). Never in
+    // stage local or test, where only the fake sends.
+    const apiToken = secret("SmsApiKey");
+    const senderId = secret("SmsSenderId");
+    if (apiToken !== undefined && senderId !== undefined) {
+      sms = new GatewaySmsProvider({ transport: new GennetSmsTransport({ apiToken, senderId }) });
+    }
   }
-  const otp =
-    sms !== null && otpKey !== null
-      ? {
-          run: withTx,
-          clock: { now: () => new Date() },
-          pepper: otpKey,
-          sms,
-          limits: OTP_SEND_RULES,
-        }
-      : null;
+  const otp = sms !== null && otpKey !== null ? otpParts(otpKey, sms) : null;
 
   // The KYC store and the account changes have no real adapter before the staging VERIFY: only the
   // fakes, only in development and test (the literal condition lets the bundler drop the imports).

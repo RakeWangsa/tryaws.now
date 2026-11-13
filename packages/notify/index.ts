@@ -40,4 +40,9 @@ export type {
   SesEmailOptions,
 } from "./email/provider";
 export { GatewaySmsProvider } from "./sms/gateway";
-export type { SmsTransport, SmsTransportResult, GatewaySmsOptions } from "./sms/gateway";
+export type {
+  SmsTransport,
+  SmsTransportRequest,
+  SmsTransportResult,
+  GatewaySmsOptions,
+} from "./sms/gateway";

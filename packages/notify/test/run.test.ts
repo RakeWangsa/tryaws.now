@@ -320,3 +320,33 @@ describe("recipients and language", () => {
     expect(store.rows().every((r) => r.status === "pending")).toBe(true);
   });
 });
+
+describe("the reference of an SMS (WPU-Z3)", () => {
+  it("an SMS row is sent with its row id as the reference, so a retry of the row keeps the gateway's message id", async () => {
+    queue("kyc_approved");
+    await runNotifier(deps());
+    const row = store.rows().find((r) => r.channel === "sms");
+    expect(row?.status).toBe("sent");
+    expect(sms.sent).toHaveLength(1);
+    expect(sms.sent[0]?.reference).toBe(row?.id);
+  });
+
+  it("the row id is the reference again when the row is retried after an unavailable gateway", async () => {
+    queue("kyc_approved");
+    sms.failNext("unavailable");
+    await runNotifier(deps());
+    const row = store.rows().find((r) => r.channel === "sms");
+    expect(row).toMatchObject({ status: "pending", attempts: 1 });
+    const references: (string | undefined)[] = [];
+    const recording = {
+      send: (to: string, text: string, reference?: string) => {
+        references.push(reference);
+        return sms.send(to, text, reference);
+      },
+    };
+    clock.advanceSeconds(3600);
+    await runNotifier(deps({ sms: recording }));
+    expect(references).toEqual([row?.id]);
+    expect(store.rows().find((r) => r.channel === "sms")?.status).toBe("sent");
+  });
+});

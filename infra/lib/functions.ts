@@ -25,8 +25,11 @@ export type SecretName =
   | "AuthLimitKey"
   | "OtpHashKey"
   | "SmsApiKey"
+  | "SmsSenderId"
   | "AdminIpLimitKey";
 
+// WPU-Z3: SmsApiKey holds the api_token and SmsSenderId the sid of the SMS gateway (Gennet). A person
+// sets both with `npx sst secret set` in their own terminal (docs/runbooks/sms-gateway.md).
 export const ALL_SECRETS: readonly SecretName[] = [
   "EpsMerchantId",
   "EpsStoreId",
@@ -38,11 +41,13 @@ export const ALL_SECRETS: readonly SecretName[] = [
   "AuthLimitKey",
   "OtpHashKey",
   "SmsApiKey",
+  "SmsSenderId",
   "AdminIpLimitKey",
 ];
 
-// The nine names of apps/web/server/secrets.ts (SecretName) are the web's. SmsApiKey belongs to the
-// notifier (3.2).
+// The eleven names of apps/web/server/secrets.ts (SecretName) are the web's. The two SMS secrets are
+// the web's and the notifier's (3.2): the web sends the phone OTP itself (`phone_otp` is direct-only),
+// the notifier the notification SMS.
 export const WEB_SECRETS: readonly SecretName[] = [
   "EpsMerchantId",
   "EpsStoreId",
@@ -53,6 +58,8 @@ export const WEB_SECRETS: readonly SecretName[] = [
   "OrderDraftSecret",
   "AuthLimitKey",
   "OtpHashKey",
+  "SmsApiKey",
+  "SmsSenderId",
 ];
 
 // The admin app's own secret (WPU-X1): the HMAC key of its IP rate-limit subject. Linked to the admin
@@ -223,7 +230,7 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     exportExists: true,
     placement: "app",
     dbRole: "worker_rw",
-    secrets: ["SmsApiKey"],
+    secrets: ["SmsApiKey", "SmsSenderId"],
     poolRoles: [],
     trigger: { kind: "cron", schedule: "rate(1 minute)" },
     timeoutSeconds: 55,

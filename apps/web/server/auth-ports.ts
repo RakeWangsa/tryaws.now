@@ -7,15 +7,9 @@ import {
 } from "@tc/auth";
 import type { AuthRuntimeLike, CustomerSession, SignedIn } from "@tc/auth";
 import type { Clock } from "@tc/core";
-import {
-  LAUNCH_MARKET,
-  customerRepos,
-  readMarketBasics,
-  readMarketSettingNumber,
-  withTx,
-} from "@tc/db";
+import { LAUNCH_MARKET, customerRepos, readMarketSettingNumber, withTx } from "@tc/db";
 import { OTP_DAILY_CAP_SETTING, otpSendRules, sendPhoneOtp, verifyPhoneOtp } from "@tc/notify";
-import type { Numerals, SendOtpDeps } from "@tc/notify";
+import type { SendOtpDeps } from "@tc/notify";
 import { enforceAuthLimit } from "./auth/limits.ts";
 import type { AuthPorts } from "./auth/ports.ts";
 import { proxyAuthRuntime } from "./proxy-auth.ts";
@@ -100,18 +94,22 @@ export function productionPorts(runtime: WebRuntime, clock: Clock): AuthPorts {
     async sendOtp(session, input) {
       const otp = runtime.otp;
       if (otp === null) return { ok: false, error: "upstream_unavailable" };
-      // The digits of the SMS are the market's setting, read per request, not at start-up.
-      // The daily cap of the customer is a market setting too (WPU-B6); a missing or bad row is the default.
-      const { numerals, dailyCap } = await withTx(async (tx) => {
+      // The daily cap of the customer is a market setting (WPU-B6), read per request; a missing or bad
+      // row is the default. The text of the SMS is the gateway's fixed format (WPU-Z3): no market digits.
+      const dailyCap = await withTx(async (tx) => {
         const profile = await customerRepos(tx, session.customerId).profile.get();
-        const market = profile === null ? null : await readMarketBasics(tx, profile.market);
-        const cap =
-          profile === null
-            ? null
-            : await readMarketSettingNumber(tx, profile.market, OTP_DAILY_CAP_SETTING);
-        return { numerals: (market?.numerals ?? "beng") as Numerals, dailyCap: cap };
+        return profile === null
+          ? null
+          : await readMarketSettingNumber(tx, profile.market, OTP_DAILY_CAP_SETTING);
       });
-      const deps: SendOtpDeps = { ...otp, numerals, limits: otpSendRules(dailyCap) };
+      // Named fields, no spread: the hashing key of the runtime is a getter that a spread drops.
+      const deps: SendOtpDeps = {
+        run: otp.run,
+        clock: otp.clock,
+        pepper: otp.pepper,
+        sms: otp.sms,
+        limits: otpSendRules(dailyCap),
+      };
       return sendPhoneOtp(deps, session, input);
     },
 

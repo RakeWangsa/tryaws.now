@@ -30,12 +30,11 @@ const sendCount = async (e164: string) =>
 beforeEach(kit.reset);
 afterEach(() => vi.restoreAllMocks());
 
-it.each([
-  ["bn", "MeghVPS যাচাই কোড: "],
-  ["en", "MeghVPS verification code: "],
-] as const)(
-  "sends the code by SMS in %s, answers without it, and stores only its hash",
-  async (locale, prefix) => {
+// WPU-Z3: the text is the gateway's own format, the same for both locales, and the challenge id is the
+// reference of the message.
+it.each(["bn", "en"] as const)(
+  "sends the code by SMS (%s: the gateway's format), with the challenge id as reference, answers without the code, and stores only its hash",
+  async (locale) => {
     const s = await customer(locale);
     const phone = freshPhone();
     const to = normalizeBdMobile(phone)!;
@@ -52,7 +51,10 @@ it.each([
     });
     expect(sms.sent).toHaveLength(1);
     expect(sms.sent[0]!.to).toBe(to);
-    expect(sms.sent[0]!.text.startsWith(prefix)).toBe(true);
+    expect(sms.sent[0]!.text).toBe(
+      `MeghVPS Your OTP is: ${lastCode(sms, to)}. Please do not share your OTP with anyone.`,
+    );
+    expect(sms.sent[0]!.reference).toBe(r.ok ? r.value.challengeId : "no challenge");
     const rows = await rowsOf(s.customerId);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
