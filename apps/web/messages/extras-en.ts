@@ -121,7 +121,7 @@ export const extrasEn: Same<typeof extrasBn> = {
     storage: {
       title: "Block Storage",
       intro:
-        "An additional disk is an Amazon Lightsail block storage disk. A disk that is detached from the server is still billed until it is destroyed.",
+        "An additional disk is an Amazon Lightsail block storage disk. A disk that is detached from the server is still billed until it is destroyed. When the server is destroyed, the disks attached to it are destroyed too; detach a disk first if you want to keep it.",
       caption: "Disks of this server",
       name: "Name",
       size: "Size",
@@ -261,6 +261,12 @@ export const extrasEn: Same<typeof extrasBn> = {
       confirmTitle: "Destroy this server?",
       confirmDescription: "Type the name of the server to continue. You need a recent sign-in.",
       noName: "A server needs a name before it can be destroyed.",
+      disksTitle: "Disks deleted with this server",
+      disksBody:
+        "The attached disks ({names}) are deleted too. A final backup of each disk is taken first, and its subscription ends with the server's, so it is not charged again.",
+      disk: "{name} · {size}",
+      confirmDescriptionWithDisks:
+        "The server and its attached disks ({names}) are deleted. Type the name of the server to continue. You need a recent sign-in.",
     },
   },
   Dashboard: {

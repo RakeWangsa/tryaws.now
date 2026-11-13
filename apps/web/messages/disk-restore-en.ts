@@ -41,4 +41,42 @@ export const diskRestoreEn: Same<typeof diskRestoreBn> = {
       forbidden: "This is not open for you.",
     },
   },
+  DiskList: {
+    meta: { title: "My disks" },
+    heading: "My disks",
+    intro:
+      "All your Amazon Lightsail block storage disks, in every location, attached to a server or not. A disk that is not attached is still billed until it is destroyed. When a server is destroyed, the disks attached to it are destroyed too.",
+    flagOff: {
+      title: "Cloud servers are coming soon",
+      body: "This service is not open in your market yet. You will be able to use it here once it opens.",
+    },
+    empty: {
+      title: "You have no disk",
+      body: "Add a new disk from the Storage tab of a server.",
+    },
+    caption: "All your disks",
+    name: "Name",
+    size: "Size",
+    location: "Location",
+    state: "State",
+    attachedTo: "Attached to",
+    notAttached: "Not attached to a server",
+    renewal: "Subscription",
+    renewalValue: {
+      active: "Active",
+      grace: "Renewal due",
+      retained: "Being deleted",
+      ended: "Ended",
+    },
+    detach: "Detach",
+    stopFirst: "To detach it, unmount the disk first, then stop the server.",
+    attachOn: "Attach on {server}",
+    unnamedServer: "Unnamed server",
+    noTarget: "No server in this location to attach it to.",
+    destroy: "Destroy disk",
+    destroyTitle: "Destroy this disk?",
+    destroyDescription:
+      "A final backup of the disk is kept and the disk is destroyed. Type the name of the disk to continue.",
+    link: "All my disks",
+  },
 };

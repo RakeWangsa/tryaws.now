@@ -8,6 +8,7 @@ export const accountEn: Same<typeof accountBn> = {
     servers: "Servers",
     snapshots: "Snapshots",
     staticIps: "Static IPs",
+    disks: "Disks",
   },
   Snapshots: {
     meta: { title: "Snapshots" },
