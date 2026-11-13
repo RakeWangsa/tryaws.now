@@ -1,6 +1,6 @@
 import type { Clock, Locale, Logger } from "@tc/core";
 import type { EmailProvider } from "../email/provider";
-import type { SmsProvider } from "../sms/provider";
+import { isSmsFailureDetail, type SmsFailureDetail, type SmsProvider } from "../sms/provider";
 import { scanSecrets } from "../text/guards";
 import { isTemplateId, parseTemplateData, renderEmail, renderSms } from "../templates/render";
 import {
@@ -24,7 +24,17 @@ export { MAX_ATTEMPTS };
 // duplicate (open point 4). No network call runs inside a transaction: every store call is its own.
 //
 // R14: the logs hold counts, ids of rows, channel names, template ids and fixed reasons. Never an
-// address, a phone number, a subject, a body or the text of an error.
+// address, a phone number, a subject, a body or the text of an error. A failed SMS adds the gateway's
+// reason word (`detail`, WPU-Z17), only when it is one of the fixed words of the SMS port.
+
+// What a provider answers; only an SMS gateway gives a `detail`.
+type SendResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: "rejected" | "unavailable";
+      readonly detail?: SmsFailureDetail;
+    };
 
 export interface NotifierDeps {
   readonly store: NotifierStore;
@@ -128,7 +138,7 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
     const numerals = recipient?.numerals ?? "beng";
     const ctx = { locale, numerals, panelOrigin: deps.panelOrigin };
 
-    let send: () => Promise<{ ok: true } | { ok: false; reason: "rejected" | "unavailable" }>;
+    let send: () => Promise<SendResult>;
     try {
       if (row.channel === "email") {
         const to = row.email ?? recipient?.email ?? null;
@@ -184,7 +194,7 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
     }
 
     if (!(await store.claim(row.id, row.attempts))) continue;
-    let result: { ok: true } | { ok: false; reason: "rejected" | "unavailable" };
+    let result: SendResult;
     try {
       result = await send();
     } catch {
@@ -195,10 +205,7 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
     await finish(row, result);
   }
 
-  async function finish(
-    row: StoredRow,
-    result: { ok: true } | { ok: false; reason: "rejected" | "unavailable" },
-  ): Promise<void> {
+  async function finish(row: StoredRow, result: SendResult): Promise<void> {
     const attempts = row.attempts + 1;
     if (result.ok) {
       streak.set(row.channel, 0);
@@ -219,6 +226,10 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
       });
       return;
     }
+    // A provider is an interface: anything but a fixed word might hold the number or the text (R14).
+    const detail: Readonly<Record<string, string>> = isSmsFailureDetail(result.detail)
+      ? { detail: result.detail }
+      : {};
     if (result.reason === "rejected" || attempts >= MAX_ATTEMPTS) {
       await store.markFailed(row.id);
       counts.failed += 1;
@@ -229,6 +240,7 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
         template: row.template,
         reason: result.reason,
         attempts,
+        ...detail,
       });
     } else {
       counts.retry += 1;
@@ -238,6 +250,7 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
         channel: row.channel,
         template: row.template,
         attempts,
+        ...detail,
       });
     }
     if (result.reason === "unavailable") {

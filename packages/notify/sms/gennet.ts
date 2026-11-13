@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { SmsTransport, SmsTransportRequest, SmsTransportResult } from "./gateway";
+import type { SmsFailureDetail } from "./provider";
 
 // WPU-Z3: the SMS gateway the owner chose, Gennet, through its white-label "ISMS" API v3: one POST of
 // JSON per message with api_token, sid, msisdn, sms and csms_id. It is the only HTTP call of this package
@@ -7,20 +8,27 @@ import type { SmsTransport, SmsTransportRequest, SmsTransportResult } from "./ga
 // notification SMS, both behind GatewaySmsProvider (gateway.ts: the E.164 and length checks, the time
 // limit).
 //
-// The answer is mapped fail closed. Its format is taken from the public ISMS Plus v3 documentation of SSL
-// Wireless, which has the same field names (VERIFY for Gennet, docs/runbooks/sms-gateway.md): a JSON
-// object with `status` ("SUCCESS" or "FAILED"), a numeric `status_code`, `error_message` and `smsinfo`,
-// an array whose items carry `sms_status` (SUCCESS, INVALID, DUPLICATE, BLOCKED), `status_message`,
-// `csms_id` and `reference_id`, and echo the number and the text.
+// The answer is mapped fail closed and read by its status code (WPU-Z17). Its format is taken from the
+// public ISMS Plus v3 documentation of SSL Wireless, which has the same field names (VERIFY for Gennet,
+// docs/runbooks/sms-gateway.md, docs/analysis/gennet-isms-api-2026-11-13.md): a JSON object with
+// `status` ("SUCCESS" or "FAILED"), a numeric `status_code`, `error_message` and `smsinfo`, an array
+// whose items carry `sms_status` (SUCCESS, INVALID, DUPLICATE, BLOCKED), `status_message`, `csms_id` and
+// `reference_id`, and echo the number and the text. A second shape (the fixtures of a Gennet SDK) has
+// `status_meaning` and `description` instead of `error_message`. Gennet answers a failure with HTTP 200
+// and status FAILED, so the HTTP status alone never refuses.
 //   - accepted: HTTP 2xx, status SUCCESS and, when smsinfo is there, its first item SUCCESS.
-//   - refused: the answer clearly says that the number or the text is invalid. Then the gateway will
-//     never take it, and the caller stops (the OTP form shows a field error, the notifier fails the row).
-//   - failed: everything else. A fault of ours or of the provider (token, sender id, IP whitelist,
-//     balance, limits, duplicates, outage) must never mark a customer's number as bad; the notifier
-//     retries it and pauses the channel.
+//   - refused, reason `invalid_number`: status_code 4025 or 4028, or an smsinfo item INVALID or BLOCKED,
+//     in an answer of HTTP 2xx, 400, 413 or 422. The number or the text is wrong and retrying cannot
+//     help: the caller stops (the OTP form shows a field error, the notifier fails the row).
+//   - failed: everything else, with a reason word for the caller's log: `token` (4001), `sender` (4002),
+//     `ip_not_whitelisted` (4003), `duplicate` (4023, an item DUPLICATE), `rate_limited` (4029, 4031,
+//     4033), `unknown` (any other code, no code, a body that is not JSON, a network error). A fault of
+//     ours or of the provider must never mark a customer's number as bad; the notifier retries it and
+//     pauses the channel.
 //
 // R3, R14: the token and the sender id are private fields (absent from JSON and inspect), and no result,
-// error or log carries them, the number, the text or the body of the answer. Nothing is logged here.
+// error or log carries them, the number, the text or the body of the answer: the messages of the answer
+// are read only to pick a reason word, and the result holds the word. Nothing is logged here.
 
 export const GENNET_SEND_URL = "https://isms.gennet.com.bd/api/v3/send-sms";
 
@@ -46,35 +54,54 @@ const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 // The provider's id of an accepted message becomes our message id only when it is a plain id.
 const PLAIN_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 
-// HTTP statuses about the content of the request. Every other 4xx (auth, payment, forbidden, not found,
-// conflict, rate limit), every 3xx and every 5xx is failed whatever the body says.
+// HTTP statuses of an answer about the content of the request. Besides 2xx, only these may refuse;
+// every other status (3xx, any other 4xx, 5xx) is failed whatever the body says, but its reason word is
+// still read from the body.
 const CONTENT_ERRORS: ReadonlySet<number> = new Set([400, 413, 422]);
 
-// status_code values of the ISMS v3 answer (VERIFY for Gennet). These say that the number or the text is
-// invalid: 4025 Invalid MSISDN, 4027 Message Length Exceeded, 4032 Invalid SMS.
-const NUMBER_OR_TEXT_CODES: ReadonlySet<number> = new Set([4025, 4027, 4032]);
-// These say something else: 4001 Unauthorized, 4002 SID Not Permitted, 4003 IP Blacklisted, 4004 Invalid
-// Request Format, 4005 End Point Not Found, 4020 Invalid CSMS ID, 4022 Required Parameter Missing, 4023
-// Duplicate CMS ID, 4024 Duplicate MSISDN, 4026 Blocked MSISDN, 4028 Invalid Message Data (the number, the
-// body, the sender id or the csms_id), 4029 Too Many Requests, 4030 Limit Exceed, 4031 TPS Exceeded, 4033
-// Too Many OTP Requests, 4034 Unable to Decrypt SMS, 4035 Client Signature Mismatch, 5000 Internal Error.
-const OTHER_CODES: ReadonlySet<number> = new Set([
-  4001, 4002, 4003, 4004, 4005, 4020, 4022, 4023, 4024, 4026, 4028, 4029, 4030, 4031, 4033, 4034,
-  4035, 5000,
+// Every status_code of the ISMS v3 table (VERIFY for Gennet) and its reason word. `invalid_number` is
+// the one refusal.
+const CODE_REASONS: ReadonlyMap<number, SmsFailureDetail> = new Map<number, SmsFailureDetail>([
+  [4001, "token"], // Unauthorized
+  [4002, "sender"], // SID Not Permitted
+  [4003, "ip_not_whitelisted"], // IP Blacklisted
+  [4004, "unknown"], // Invalid Request Format
+  [4005, "unknown"], // End Point Not Found
+  [4020, "unknown"], // Invalid CSMS ID
+  [4022, "unknown"], // Required Parameter Missing
+  [4023, "duplicate"], // Duplicate CMS ID
+  [4024, "unknown"], // Duplicate MSISDN
+  [4025, "invalid_number"], // Invalid MSISDN
+  [4026, "unknown"], // Blocked MSISDN (refused only with an item BLOCKED)
+  [4027, "unknown"], // Message Length Exceeded
+  [4028, "invalid_number"], // Invalid Message Data (the table also names the sender id and the csms_id)
+  [4029, "rate_limited"], // Too Many Requests
+  [4030, "unknown"], // Limit Exceed (more than 100 numbers)
+  [4031, "rate_limited"], // TPS Exceeded
+  [4032, "unknown"], // Invalid SMS body
+  [4033, "rate_limited"], // Too Many OTP Requests
+  [4034, "unknown"], // Unable to Decrypt SMS
+  [4035, "unknown"], // Client Signature Mismatch
+  [5000, "unknown"], // Internal Error
 ]);
 
-// A message with one of these words puts the fault on our side or on the provider's, never on the number.
-const OUR_SIDE =
-  /token|api[\s_-]?key|auth|credential|password|permi(?:t|ss)|forbidden|\bsid\b|sender|\bmask|\bip\b|white[\s-]?list|black[\s-]?list|csms|duplicat|balance|credit|quota|limit|\btps\b|too many|expire|suspend|signature|decrypt|account/i;
-// A message that names the number or the text ...
-const NAMES_NUMBER_OR_TEXT =
-  /\b(?:msisdn|mobile|number|phone|recipient|sms|message|text|body)s?\b/i;
-// ... as invalid.
-const SAYS_INVALID =
-  /\b(?:invalid|not (?:a )?valid|incorrect|wrong|malformed|too long|length|exceed(?:s|ed)?)\b/i;
+// For an answer without a code of the table only: words of its messages that name a fault of ours or of
+// the provider, the most specific first. Words never refuse.
+const REASON_WORDS: ReadonlyArray<readonly [SmsFailureDetail, RegExp]> = [
+  ["duplicate", /duplicat/i],
+  ["rate_limited", /too many|rate[\s_-]?limit|\btps\b|throttl/i],
+  ["ip_not_whitelisted", /white[\s_-]?list|black[\s_-]?list/i],
+  ["sender", /\bsid\b|sender|stakeholder|\bmask/i],
+  ["token", /token|api[\s_-]?key|unauthori[sz]|authenticat/i],
+];
 
-const REFUSED: SmsTransportResult = { status: "refused" };
-const FAILED: SmsTransportResult = { status: "failed" };
+// The messages of both answer shapes, at the top level and in the smsinfo item.
+const MESSAGE_KEYS = ["error_message", "status_message", "status_meaning", "description"] as const;
+
+const REFUSED_NUMBER: SmsTransportResult = { status: "refused", detail: "invalid_number" };
+// An empty text has no reason word (GatewaySmsProvider refuses it before the transport).
+const REFUSED_TEXT: SmsTransportResult = { status: "refused" };
+const FAILED_UNKNOWN: SmsTransportResult = { status: "failed", detail: "unknown" };
 
 type Json = Readonly<Record<string, unknown>>;
 
@@ -141,8 +168,8 @@ export class GennetSmsTransport implements SmsTransport {
     const { to, text, reference } = request;
     // Only a Bangladesh mobile number is sent, and never an empty text: anything else is refused
     // before the network.
-    if (typeof to !== "string" || !BD_MOBILE.test(to)) return REFUSED;
-    if (typeof text !== "string" || text.length === 0) return REFUSED;
+    if (typeof to !== "string" || !BD_MOBILE.test(to)) return REFUSED_NUMBER;
+    if (typeof text !== "string" || text.length === 0) return REFUSED_TEXT;
     const msisdn = to.slice(1);
     const csmsId = csmsIdFor(reference);
     const post = this.#fetch ?? globalThis.fetch;
@@ -165,32 +192,35 @@ export class GennetSmsTransport implements SmsTransport {
     } catch {
       // A network error, a refused redirect or an unreadable body. The error may hold the request: it
       // is dropped (R14).
-      return FAILED;
+      return FAILED_UNKNOWN;
     }
   }
 
   #interpret(httpStatus: number, raw: string, csmsId: string, msisdn: string): SmsTransportResult {
     const ok = httpStatus >= 200 && httpStatus < 300;
-    if (!ok && !CONTENT_ERRORS.has(httpStatus)) return FAILED;
     let body: unknown;
     try {
       body = JSON.parse(raw);
     } catch {
-      return FAILED;
+      return FAILED_UNKNOWN;
     }
-    if (!isObject(body)) return FAILED;
+    if (!isObject(body)) return FAILED_UNKNOWN;
     const info = body.smsinfo;
-    if (info !== undefined && info !== null && !Array.isArray(info)) return FAILED;
+    // A smsinfo that is there but not an array is never a success.
+    const malformed = info !== undefined && info !== null && !Array.isArray(info);
     const first: unknown = Array.isArray(info) ? info[0] : undefined;
     const item = isObject(first) ? first : null;
     if (
       ok &&
+      !malformed &&
       upper(body.status) === "SUCCESS" &&
       (!Array.isArray(info) || upper(item?.sms_status) === "SUCCESS")
     ) {
       return { status: "accepted", messageId: this.#messageId(item?.reference_id, csmsId, msisdn) };
     }
-    return refusedOrFailed(httpStatus, body, item);
+    const reason = reasonOf(body, item);
+    if (reason !== "invalid_number") return { status: "failed", detail: reason };
+    return ok || CONTENT_ERRORS.has(httpStatus) ? REFUSED_NUMBER : FAILED_UNKNOWN;
   }
 
   // The provider's reference_id when it is a plain id that holds neither the number nor a secret;
@@ -208,7 +238,7 @@ export class GennetSmsTransport implements SmsTransport {
 function messagesOf(body: Json, item: Json | null): string[] {
   const out: string[] = [];
   for (const source of item === null ? [body] : [body, item]) {
-    for (const key of ["error_message", "status_message"]) {
+    for (const key of MESSAGE_KEYS) {
       const value = source[key];
       if (typeof value === "string" && value.length > 0) out.push(value);
     }
@@ -216,14 +246,25 @@ function messagesOf(body: Json, item: Json | null): string[] {
   return out;
 }
 
-// Not accepted: refused only when the answer clearly says that the number or the text is invalid.
-function refusedOrFailed(httpStatus: number, body: Json, item: Json | null): SmsTransportResult {
+// The reason word of an answer that is not a success. A signal of a fault of ours or of the provider
+// wins over a refusal, so that such a fault never marks a customer's number as bad:
+//   1. an item DUPLICATE is `duplicate`, whatever the code (the ISMS documentation shows it with 4028);
+//   2. a code of the table that names such a fault (token, sender, IP, duplicate, rate) is its word;
+//   3. an item INVALID or BLOCKED is `invalid_number`;
+//   4. any other code of the table is its word (4025 and 4028 `invalid_number`, the rest `unknown`);
+//   5. without a code of the table, the words of the messages pick one of the faults of step 2;
+//   6. otherwise `unknown`.
+function reasonOf(body: Json, item: Json | null): SmsFailureDetail {
+  const itemStatus = upper(item?.sms_status);
+  if (itemStatus === "DUPLICATE") return "duplicate";
   const code = codeOf(body.status_code);
+  const byCode = code === null ? undefined : CODE_REASONS.get(code);
+  if (byCode !== undefined && byCode !== "invalid_number" && byCode !== "unknown") return byCode;
+  if (itemStatus === "INVALID" || itemStatus === "BLOCKED") return "invalid_number";
+  if (byCode !== undefined) return byCode;
   const messages = messagesOf(body, item);
-  if (code !== null && OTHER_CODES.has(code)) return FAILED;
-  if (messages.some((message) => OUR_SIDE.test(message))) return FAILED;
-  if (code !== null && NUMBER_OR_TEXT_CODES.has(code)) return REFUSED;
-  if (upper(item?.sms_status) === "INVALID") return REFUSED;
-  if (messages.some((m) => NAMES_NUMBER_OR_TEXT.test(m) && SAYS_INVALID.test(m))) return REFUSED;
-  return CONTENT_ERRORS.has(httpStatus) ? REFUSED : FAILED;
+  for (const [reason, words] of REASON_WORDS) {
+    if (messages.some((message) => words.test(message))) return reason;
+  }
+  return "unknown";
 }

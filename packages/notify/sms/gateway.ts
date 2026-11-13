@@ -1,14 +1,22 @@
-import type { SmsProvider, SmsSendResult } from "./provider";
+import {
+  isSmsFailureDetail,
+  type SmsFailureDetail,
+  type SmsProvider,
+  type SmsSendResult,
+} from "./provider";
 
 // The real SmsProvider (WP2-T3 port) over an injected transport. The HTTP call of a gateway is one
 // SmsTransport (WPU-Z3: Gennet, sms/gennet.ts). What is the same for every gateway lives here: the
 // E.164 and length checks, the time limit and the mapping to the port's two failure reasons. No answer
 // and no error carries the number or the text (R14).
+//
+// WPU-Z17: a transport may add the reason word of a failure (`detail`); it goes on to the caller only
+// when it is one of the port's fixed words. The provider's own refusals and a timeout carry none.
 
 export type SmsTransportResult =
   | { readonly status: "accepted"; readonly messageId: string }
-  | { readonly status: "refused" }
-  | { readonly status: "failed" };
+  | { readonly status: "refused"; readonly detail?: SmsFailureDetail }
+  | { readonly status: "failed"; readonly detail?: SmsFailureDetail };
 
 export interface SmsTransportRequest {
   readonly to: string;
@@ -51,7 +59,10 @@ export class GatewaySmsProvider implements SmsProvider {
     try {
       const r = await Promise.race([this.options.transport.send(request), timeout]);
       if (r.status === "accepted") return { ok: true, messageId: r.messageId };
-      return { ok: false, reason: r.status === "refused" ? "rejected" : "unavailable" };
+      const reason = r.status === "refused" ? "rejected" : "unavailable";
+      return isSmsFailureDetail(r.detail)
+        ? { ok: false, reason, detail: r.detail }
+        : { ok: false, reason };
     } catch {
       return { ok: false, reason: "unavailable" };
     } finally {
