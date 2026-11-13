@@ -655,12 +655,13 @@ it("the proof of WPU-B2 exists: the Route 53 Domains client, the three domain ac
   }
 });
 
-it("the journal ends with 0024 at idx 22, after 0023, and its snapshot is the child of 0023 (WPU-B2)", () => {
+it("the journal holds 0024 at idx 22 right after 0023, and its snapshot is the child of 0023 (WPU-B2; later migrations may follow)", () => {
   const dir = "packages/db/migrations";
   const journal = JSON.parse(readFileSync(`${dir}/meta/_journal.json`, "utf8"));
-  const last = journal.entries.at(-1);
-  expect(last).toMatchObject({ idx: 22, tag: "0024_domain_name_active_unique" });
-  expect(journal.entries.at(-2).tag).toBe("0023_invoice_supply_date_and_credit_notes");
+  const at = journal.entries.findIndex((e) => e.tag === "0024_domain_name_active_unique");
+  expect(at).toBeGreaterThan(0);
+  expect(journal.entries[at]).toMatchObject({ idx: 22, tag: "0024_domain_name_active_unique" });
+  expect(journal.entries[at - 1].tag).toBe("0023_invoice_supply_date_and_credit_notes");
   const parent = JSON.parse(readFileSync(`${dir}/meta/0023_snapshot.json`, "utf8"));
   const child = JSON.parse(readFileSync(`${dir}/meta/0024_snapshot.json`, "utf8"));
   expect(child.prevId).toBe(parent.id);
