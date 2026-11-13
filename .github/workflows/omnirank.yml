@@ -3,8 +3,11 @@ name: omnirank
 # WPU-Z16. The SEO, AEO and GEO audit of the public site with OmniRank (https://github.com/bemoshiur/OmniRank,
 # MIT), pinned to tag v0.4.0 by its commit, and the IndexNow ping after a production deploy.
 #
-#   audit     manual dispatch against staging (https://staging.tryaws.now) or production
-#             (https://tryaws.now), and on its own after every successful production deploy. It installs
+#   audit     manual dispatch against staging or production, and on its own after every successful
+#             production deploy. The origin is https:// plus the variable TC_DOMAIN_WEB of the GitHub
+#             environment of the target (staging or production; final review M4, no hard-coded host), read
+#             with `deployment: false` (no deployment record); a value that is not a host name stops the job
+#             (R16). It installs
 #             OmniRank in a virtual environment from a hashed lock of its whole dependency tree
 #             (.github/omnirank/requirements.txt, --require-hashes, --no-deps, no build isolation), runs
 #             `omnirank audit` with omnirank.config.json (site.url replaced by the chosen site) and fails
@@ -13,8 +16,9 @@ name: omnirank
 #             failOn (STAGING_SKIPPED_GATES); they still appear in the report. The scores and every finding
 #             go to the job summary. No cache is read or written (no actions/cache, PIP_NO_CACHE_DIR).
 #   indexnow  after every successful production deploy, or by hand with `indexnow: true` on production:
-#             scripts/indexnow-ping.mjs sends the URLs of the live sitemap.xml to IndexNow. The key is the
-#             public file apps/web/public/<key>.txt (public by design).
+#             scripts/indexnow-ping.mjs sends the URLs of the live sitemap.xml to IndexNow, at the origin of
+#             TC_DOMAIN_WEB of the environment production. The key is the public file
+#             apps/web/public/<key>.txt (public by design).
 #
 # No AWS role, no secret, no write permission: the jobs read the public site only. Inputs reach the shell
 # through env:, never as an expression inside a script. Runbook: docs/runbooks/ai-visibility.md.
@@ -63,6 +67,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # The variables of the target's environment (TC_DOMAIN_WEB); no deployment is created.
+    environment:
+      name: ${{ github.event.inputs.target || 'production' }}
+      deployment: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,12 +79,18 @@ jobs:
       - name: Choose the site
         env:
           TARGET: ${{ github.event.inputs.target || 'production' }}
+          TC_DOMAIN_WEB: ${{ vars.TC_DOMAIN_WEB }}
         run: |
           case "$TARGET" in
-            staging) echo "SITE_URL=https://staging.tryaws.now" >> "$GITHUB_ENV" ;;
-            production) echo "SITE_URL=https://tryaws.now" >> "$GITHUB_ENV" ;;
+            staging | production) ;;
             *) echo "unknown target" >&2; exit 1 ;;
           esac
+          # The host rule of infra/lib/stage.ts (HOST): a host name, nothing else (no scheme, path or port).
+          if ! [[ "$TC_DOMAIN_WEB" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]] || [ "${#TC_DOMAIN_WEB}" -lt 4 ] || [ "${#TC_DOMAIN_WEB}" -gt 253 ]; then
+            echo "TC_DOMAIN_WEB of the environment $TARGET is not a host name" >&2
+            exit 1
+          fi
+          echo "SITE_URL=https://$TC_DOMAIN_WEB" >> "$GITHUB_ENV"
 
       - name: Install OmniRank v0.4.0 in a virtual environment (hashed lock, Python 3.12)
         run: |
@@ -127,6 +141,9 @@ jobs:
       github.event.inputs.indexnow == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment:
+      name: production
+      deployment: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,4 +152,11 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Ping IndexNow with the URLs of the live sitemap
-        run: node scripts/indexnow-ping.mjs --origin https://tryaws.now
+        env:
+          TC_DOMAIN_WEB: ${{ vars.TC_DOMAIN_WEB }}
+        run: |
+          if ! [[ "$TC_DOMAIN_WEB" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]] || [ "${#TC_DOMAIN_WEB}" -lt 4 ] || [ "${#TC_DOMAIN_WEB}" -gt 253 ]; then
+            echo "TC_DOMAIN_WEB of the environment production is not a host name" >&2
+            exit 1
+          fi
+          node scripts/indexnow-ping.mjs --origin "https://$TC_DOMAIN_WEB"
