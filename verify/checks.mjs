@@ -3821,6 +3821,42 @@ TASKS["WPU-Y1"] = [specSync, baselineSync, lint, typecheck, format, core, repo];
 // WPU-Z17: Gennet answers are read by their status code.
 TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];
 
+// WPU-Y3: KYC upload arrival without S3 read rights for the web role. The web tier invokes the "web" alias
+// of kyc-check (no packages/aws import), which HEADs one kyc/ key of the session's customer and answers its
+// size and type. Tests of the core key rule, the function, the web port, action and runtime, and the
+// repository tests (infra rules: the function's grants, the web role's Deny kept). No AWS call.
+const kycCheckFn = {
+  id: "kyc-check",
+  title: "functions/kyc-check: tier, tenant check of the key, HeadObject only, fail closed",
+  command: ["pnpm", "test", "--filter", "@tc/fn-kyc-check", "--no-passWithNoTests"],
+};
+const kycCheckWeb = {
+  id: "kyc-check-web",
+  title: "apps/web: the kyc-check invoke port, the KYC submit core and the runtime",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "server/kyc-check-invoke",
+    "server/kyc-actions",
+    "server/runtime",
+    "--no-passWithNoTests",
+  ],
+};
+TASKS["WPU-Y3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  kycCheckFn,
+  kycCheckWeb,
+  web,
+  repo,
+];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

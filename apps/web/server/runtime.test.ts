@@ -547,3 +547,39 @@ describe("assembleRuntime: the reader of the Metrics tab (WPU-G4)", () => {
     expect(prod.runtime.reader).toBeNull();
   });
 });
+
+describe("assembleRuntime: the KYC arrival check (WPU-Y3)", () => {
+  it("has none without a function name, so a KYC submit refuses (R16)", async () => {
+    const { assembleRuntime } = await load();
+    expect((await assembleRuntime({ ...STAGING, ...SECRETS })).runtime.kycCheck).toBeNull();
+  });
+
+  it("has the kyc-check invoke port when the function name is set, and none for an ARN", async () => {
+    const { assembleRuntime } = await load();
+    const named = await assembleRuntime({
+      ...STAGING,
+      ...SECRETS,
+      KYC_CHECK_FUNCTION_NAME: "tc-staging-kyc-check",
+    });
+    expect(typeof named.runtime.kycCheck?.check).toBe("function");
+    // the store and crypto adapters are not there outside the fakes: the KYC screens stay "not open"
+    expect(named.runtime.kyc).toBeNull();
+    const arn = await assembleRuntime({
+      ...STAGING,
+      ...SECRETS,
+      KYC_CHECK_FUNCTION_NAME: "arn:aws:lambda:ap-southeast-1:123456789012:function:x",
+    });
+    expect(arn.runtime.kycCheck).toBeNull();
+  });
+
+  it("in fake mode the stand-in answers from the fake store", async () => {
+    const { assembleRuntime } = await load();
+    const { runtime } = await assembleRuntime(FAKE);
+    expect(runtime.kyc).not.toBeNull();
+    const key =
+      "kyc/0190aaaa-0000-7000-8000-0000000000c1/0190aaaa-0000-7000-8000-000000000001/0.png";
+    expect(await runtime.kycCheck?.check("0190aaaa-0000-7000-8000-0000000000c1", key)).toEqual({
+      present: false,
+    });
+  });
+});

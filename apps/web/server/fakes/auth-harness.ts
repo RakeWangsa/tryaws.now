@@ -295,6 +295,7 @@ export function makeHarness(): Harness {
     otp: null,
     authLimitKey: LIMIT_KEY,
     kyc: null,
+    kycCheck: null,
     account: null,
     reader: null,
     access: null,

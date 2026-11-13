@@ -3,6 +3,7 @@ import {
   KYC_MAX_FILE_BYTES,
   canSubmitKyc,
   documentTypesFor,
+  kycKeyOwnedBy,
   kycObjectKey,
   nextKycStatus,
   normalizeDocumentNumber,
@@ -107,5 +108,44 @@ describe("kycObjectKey", () => {
     expect(() => kycObjectKey("../x", S, 0, "image/png")).toThrow(TypeError);
     expect(() => kycObjectKey(C, `${S}/../..`, 0, "image/png")).toThrow(TypeError);
     expect(() => kycObjectKey(C, S, 2, "image/png")).toThrow(RangeError);
+  });
+});
+
+describe("kycKeyOwnedBy (WPU-Y3)", () => {
+  const other = "0192f3a0-0000-7000-8000-000000000009";
+  it("accepts every key that kycObjectKey makes for the same customer", () => {
+    for (const type of ["image/jpeg", "image/png", "application/pdf"] as const) {
+      for (const index of [0, 1]) {
+        expect(kycKeyOwnedBy(kycObjectKey(C, S, index, type), C)).toBe(true);
+      }
+    }
+  });
+  it("refuses the key of another customer (R8)", () => {
+    expect(kycKeyOwnedBy(kycObjectKey(other, S, 0, "image/png"), C)).toBe(false);
+    expect(kycKeyOwnedBy(kycObjectKey(C, S, 0, "image/png"), other)).toBe(false);
+  });
+  it("refuses anything kycObjectKey does not make (fail closed, R16)", () => {
+    for (const key of [
+      `kyc/${C}/${S}/2.png`,
+      `kyc/${C}/${S}/0.gif`,
+      `kyc/${C}/${S}/0.PNG`,
+      `kyc/${C}/${S}/../0.png`,
+      `kyc/${C}/${S}/0.png/`,
+      `/kyc/${C}/${S}/0.png`,
+      `kyc/${C}/${S}`,
+      `kyc/${C}/`,
+      `invoices/${C}/${S}.en.pdf`,
+      `kyc/${C.toUpperCase()}/${S}/0.png`,
+      ` kyc/${C}/${S}/0.png`,
+      `kyc/${C}/${S}/0.png\n`,
+      "",
+      undefined,
+      null,
+      42,
+    ]) {
+      expect(kycKeyOwnedBy(key, C), String(key)).toBe(false);
+    }
+    expect(kycKeyOwnedBy(kycObjectKey(C, S, 0, "image/png"), "not-a-uuid")).toBe(false);
+    expect(kycKeyOwnedBy(kycObjectKey(C, S, 0, "image/png"), undefined)).toBe(false);
   });
 });

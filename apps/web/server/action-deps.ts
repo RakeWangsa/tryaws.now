@@ -62,7 +62,7 @@ export function keyActionDeps(): KeyActionDeps {
 }
 
 export async function kycActionDeps(): Promise<KycActionDeps> {
-  const { kyc } = await getRuntime();
+  const { kyc, kycCheck } = await getRuntime();
   return {
     authenticate,
     now: () => new Date(),
@@ -72,7 +72,8 @@ export async function kycActionDeps(): Promise<KycActionDeps> {
         const repos = customerRepos(tx, customerId);
         return fn({ kyc: repos.kyc, audit: repos.audit, rateLimits: repos.rateLimits });
       }),
-    ports: kyc,
+    // WPU-Y3: both the store and the arrival check, or neither (R16).
+    ports: kyc !== null && kycCheck !== null ? { ...kyc, check: kycCheck } : null,
   };
 }
 

@@ -1,7 +1,7 @@
 import type { CustomerSession } from "@tc/auth";
 import type { AuditRepo, KycRepo, RateLimitsRepo } from "@tc/db";
 import { describe, expect, it } from "vitest";
-import { FakeKycCrypto, FakeKycObjectStore } from "./fakes/kyc-fakes.ts";
+import { FakeKycCrypto, FakeKycObjectStore, FakeKycUploadCheck } from "./fakes/kyc-fakes.ts";
 import {
   startKycUploadCore,
   submitKycCore,
@@ -27,12 +27,24 @@ function world(
     status?: CustomerSession["kycStatus"];
     limited?: boolean;
     submit?: "created" | "replayed" | "conflict";
+    checkFails?: boolean;
   } = {},
 ) {
   const calls: string[] = [];
   const logged: unknown[] = [];
   const objects = new FakeKycObjectStore();
   const crypto = new FakeKycCrypto();
+  const fakeCheck = new FakeKycUploadCheck(objects);
+  const checked: { customerId: string; key: string }[] = [];
+  const check = {
+    check: (customerId: string, key: string) => {
+      calls.push("check");
+      checked.push({ customerId, key });
+      return over.checkFails === true
+        ? Promise.reject(new Error("kyc-check: the upload could not be checked"))
+        : fakeCheck.check(customerId, key);
+    },
+  };
   const repos: KycRepos = {
     kyc: {
       latest: async () => null,
@@ -86,13 +98,14 @@ function world(
       expect(customerId).toBe(CUSTOMER);
       return fn(repos);
     },
-    ports: { objects, crypto },
+    ports: { objects, crypto, check },
   };
   return {
     deps,
     calls,
     logged,
     objects,
+    checked,
     setSession: (s: CustomerSession | null) => {
       current = s;
     },
@@ -183,6 +196,7 @@ describe("submitKycCore", () => {
     expect(w.calls).toEqual([
       "authenticate",
       "rateLimit",
+      "check",
       "setType:individual",
       "submit",
       "audit:kyc.submitted",
@@ -254,9 +268,26 @@ describe("submitKycCore", () => {
     expect(replay.calls).not.toContain("audit:kyc.submitted");
   });
 
-  it("answers rate_limited before it reads the object store", async () => {
+  it("answers rate_limited before it asks whether the upload arrived", async () => {
     const w = world({ limited: true });
     expect(await submitKycCore(w.deps, SUBMIT)).toEqual({ ok: false, error: "rate_limited" });
+    expect(w.calls).not.toContain("check");
+  });
+
+  // WPU-Y3: the arrival is asked of the kyc-check function with the session's customer id (R8), never of S3
+  // by the web role, and a check that cannot complete refuses the submission (R16).
+  it("asks the kyc-check port with the session's customer and the server-made key", async () => {
+    const w = world();
+    w.objects.simulateUpload(KEY0, 2048, "image/jpeg");
+    await submitKycCore(w.deps, { ...SUBMIT, customerId: "22222222-2222-4222-8222-222222222222" });
+    expect(w.checked).toEqual([{ customerId: CUSTOMER, key: KEY0 }]);
+  });
+
+  it("answers unavailable and stores nothing when the check cannot complete (R16)", async () => {
+    const w = world({ checkFails: true });
+    w.objects.simulateUpload(KEY0, 2048, "image/jpeg");
+    expect(await submitKycCore(w.deps, SUBMIT)).toEqual({ ok: false, error: "unavailable" });
+    expect(w.calls).not.toContain("submit");
   });
 
   it("refuses a verified customer, and unauthenticated", async () => {
@@ -275,9 +306,9 @@ describe("the object store port", () => {
     const store = new FakeKycObjectStore();
     expect(Object.getOwnPropertyNames(Object.getPrototypeOf(store)).sort()).toEqual([
       "constructor",
-      "head",
       "presignUpload",
       "simulateUpload",
+      "uploaded",
     ]);
   });
 });

@@ -169,6 +169,22 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     memoryMb: 512,
   },
   {
+    // WPU-Y3: tells the web tier whether a KYC upload arrived (size and type, never content). The web role
+    // may not read the kyc bucket; this role may HeadObject on kyc/* and has no grant on the kyc key. In
+    // the isolated subnets: S3 through the gateway endpoint and nothing else.
+    dir: "kyc-check",
+    component: "KycCheck",
+    handlerExport: "handler",
+    exportExists: true,
+    placement: "isolated",
+    dbRole: "none",
+    secrets: [],
+    poolRoles: [],
+    trigger: { kind: "invoke", by: ["web"] },
+    timeoutSeconds: 10,
+    memoryMb: 256,
+  },
+  {
     dir: "invoice-renderer",
     component: "InvoiceRenderer",
     handlerExport: "handler",

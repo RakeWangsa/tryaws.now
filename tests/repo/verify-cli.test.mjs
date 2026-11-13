@@ -216,6 +216,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-T4",
     "WPU-X6",
     "WPU-Y1",
+    "WPU-Y3",
     "WPU-Z0",
     "WPU-Z1",
     "WPU-Z10",
@@ -236,6 +237,24 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-Z7",
     "WPU-Z8",
     "WPU-Z9",
+  ]);
+});
+
+it("task WPU-Y3 is proven by the core, kyc-check, web port and repository tests", () => {
+  expect(TASKS["WPU-Y3"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core", "pnpm test --filter @tc/core --no-passWithNoTests"],
+    ["kyc-check", "pnpm test --filter @tc/fn-kyc-check --no-passWithNoTests"],
+    [
+      "kyc-check-web",
+      "pnpm test --filter @tc/web server/kyc-check-invoke server/kyc-actions server/runtime --no-passWithNoTests",
+    ],
+    ["web", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
 });
 
