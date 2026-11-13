@@ -12,6 +12,7 @@
 //
 // NOT TYPE-CHECKED unless `.sst/platform/config.d.ts` exists (tests/repo/sst-types.test.mjs). The pure
 // parts are in infra/lib/ and are type-checked and tested; the resource declarations are in infra/stacks/.
+import { ciRoleBoundaryArn, instanceProfileName } from "./lib/ci-boundary";
 import { featureFlagDefaults } from "./lib/functions";
 import {
   assertDeployAllowed,
@@ -43,6 +44,24 @@ export function appConfig(stage: string, env: Env) {
 export async function runApp(env: Env) {
   const config = readStageConfig($app.stage, env);
 
+  // WPU-Z11 (VERIFY of 2026-11-13, B2): the CI deploy role of a stage may create or change a role only
+  // when it carries that stage's permissions boundary (infra/org/ci-deploy-<stage>.yaml), and may manage
+  // only instance profiles named tc-<stage>-*. These two transforms are registered before any stack, so
+  // every aws.iam.Role SST creates (functions, Next.js, edge, RDS proxy, Cron, NAT instance) gets the
+  // boundary, and the NAT instance profile of a lean stage gets a name the policy allows. A personal stage
+  // gets no boundary (infra/lib/ci-boundary.ts). $transform of a type outside sst: registers a Pulumi stack
+  // transformation (.sst/platform/src/components/component.ts).
+  const boundaryArn = ciRoleBoundaryArn(config.stage, config.accountId);
+  if (boundaryArn !== null) {
+    $transform(aws.iam.Role, (args) => {
+      args.permissionsBoundary = boundaryArn;
+    });
+    // The args of an InstanceProfile are optional in its type; SST always passes them (vpc.ts).
+    $transform(aws.iam.InstanceProfile, (args, _opts, name) => {
+      if (args !== undefined) args.name ??= instanceProfileName(config.stage, name);
+    });
+  }
+
   // Dynamic imports: the stack files use the `sst` and `aws` globals, which exist only inside run().
   const { secrets } = await import("./stacks/secrets");
   const { network } = await import("./stacks/network");
@@ -55,6 +74,10 @@ export async function runApp(env: Env) {
   const { web } = await import("./stacks/web");
   const { alarms } = await import("./stacks/alarms");
   const { budget } = await import("./stacks/budget");
+  const { logRetention } = await import("./stacks/logs");
+
+  // WPU-Z10: before any stack, so it reaches every sst.aws.Function (one week of logs on staging).
+  logRetention(config);
 
   const secretSet = secrets();
   const net = network(config);
@@ -101,6 +124,8 @@ export async function runApp(env: Env) {
     customerPoolId: identity.customers.id,
     adminPoolId: identity.admins.id,
     alarmTopic: alarm.topic.arn,
+    // WPU-Z10: the single NAT address of a lean stage, for TC_PROBE_SOURCES (docs/runbooks).
+    natAddress: net.natAddress,
     // C.2: read by scripts/post-deploy-check.mjs after a production deploy. R12: every default is
     // false; R1: no policy of the web and admin roles allows sts:AssumeRole.
     featureFlagDefaults: featureFlagDefaults(),

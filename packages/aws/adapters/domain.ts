@@ -242,17 +242,12 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
     });
   }
 
-  async function renewAction(ctx: Ctx): Promise<StepResult> {
-    const port = deps.domains();
-    const { name } = ctx.config;
-    if (ctx.operation.step === "poll") {
-      const operationId = savedId(ctx.resource.config, "renewOperationId");
-      if (operationId === null) throw fail("internal");
-      const { status } = await port.getOperationDetail(operationId);
-      if (status === "failed") throw fail("conflict");
-      if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
-      return renewedExpiry(port, name);
-    }
+  // The checks before RenewDomain, at step null and again at `submit`: the payload, and the live expiry year. A later
+  // live year means that this renewal already went through (a lost answer): done, nothing is renewed twice (R7).
+  async function renewalCheck(
+    port: DomainsPort,
+    ctx: Ctx,
+  ): Promise<{ done: StepResult } | { year: number; years: number }> {
     const payload = recordOf(ctx.operation.payload);
     const year = payload["currentExpiryYear"];
     const years = payload["years"] === undefined ? DOMAIN_YEARS : payload["years"];
@@ -262,23 +257,56 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
     if (typeof years !== "number" || !Number.isInteger(years) || years < 1 || years > 10) {
       throw fail("validation");
     }
-    const detail = await port.getDomainDetail(name);
+    const detail = await port.getDomainDetail(ctx.config.name);
     if (detail === null || detail.expiresAt === null) throw fail("validation");
     const live = detail.expiresAt.getUTCFullYear();
-    // The year in the payload is the one the row had when the customer paid. A later live year means
-    // that this renewal already went through (a lost answer): nothing is renewed twice (R7).
-    if (live > year)
-      return stepDone({ configMerge: { expiresAt: detail.expiresAt.toISOString() } });
+    // The year in the payload is the one the row had when the customer paid.
+    if (live > year) {
+      return { done: stepDone({ configMerge: { expiresAt: detail.expiresAt.toISOString() } }) };
+    }
     // An earlier live year, or a payload that is ahead of AWS, means row and registry disagree (R16).
     if (live !== year) throw fail("validation");
-    const { operationId } = await port.renewDomain({
-      name,
-      years,
-      currentExpiryYear: year,
-    });
-    return stepWait("poll", inSeconds(ctx, POLL_SECONDS), {
-      configMerge: { renewOperationId: operationId },
-    });
+    return { year, years };
+  }
+
+  // WPU-Z13: step null only reads, then moves to `submit` in a write of its own (step.ts records it before the next
+  // run); RenewDomain is sent only at `submit`. So a failure at step null proves that nothing reached the registry
+  // (the charge goes back), and from `submit` on the failure policy of @tc/core (decideFailure,
+  // registryHoldsRenewal) takes the renewal as held: at `submit` it gives the charge back only for an error that
+  // proves nothing was sent, in the first run there (review round 2: a RenewDomain that timed out after it was sent
+  // stays at `submit`); at `poll`, only for `conflict` without an AWS error name, the registry's failed answer. A
+  // give-up or any other error stops in needs_attention (pinned in test/domain-actions.test.ts).
+  async function renewAction(ctx: Ctx): Promise<StepResult> {
+    const port = deps.domains();
+    const { name } = ctx.config;
+    switch (ctx.operation.step) {
+      case null: {
+        const checked = await renewalCheck(port, ctx);
+        return "done" in checked ? checked.done : stepNext("submit");
+      }
+      case "submit": {
+        const checked = await renewalCheck(port, ctx);
+        if ("done" in checked) return checked.done;
+        const { operationId } = await port.renewDomain({
+          name,
+          years: checked.years,
+          currentExpiryYear: checked.year,
+        });
+        return stepWait("poll", inSeconds(ctx, POLL_SECONDS), {
+          configMerge: { renewOperationId: operationId },
+        });
+      }
+      case "poll": {
+        const operationId = savedId(ctx.resource.config, "renewOperationId");
+        if (operationId === null) throw fail("internal");
+        const { status } = await port.getOperationDetail(operationId);
+        if (status === "failed") throw fail("conflict");
+        if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
+        return renewedExpiry(port, name);
+      }
+      default:
+        throw fail("internal");
+    }
   }
 
   function waitOrGiveUp(ctx: Ctx, step: string): StepResult {

@@ -129,9 +129,9 @@ describe("stage", () => {
     expect(() => readStageConfig("production", env)).toThrow(/production/);
   });
 
-  it("retains data stores outside personal stages", () => {
+  it("retains the data stores of production; staging (WPU-Z10, test sessions) and personal stages are removed", () => {
     expect(removalPolicy("production")).toBe("retain");
-    expect(removalPolicy("staging")).toBe("retain");
+    expect(removalPolicy("staging")).toBe("remove");
     expect(removalPolicy("track-b")).toBe("remove");
   });
 

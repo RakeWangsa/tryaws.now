@@ -148,6 +148,60 @@ describe("assembleRuntime: the real gateway", () => {
   });
 });
 
+// WPU-Z11: production goes live before the EPS production keys exist. scripts/golive/stage-secrets.sh
+// stores the placeholder `not-configured` for each EPS value left empty (and a random EpsLimitKey).
+describe("assembleRuntime: EPS not configured yet (WPU-Z11)", () => {
+  const PLACEHOLDER = '{"type":"sst.sst.Secret","value":"not-configured"}';
+  const EPS_FIVE = ["EpsMerchantId", "EpsStoreId", "EpsUsername", "EpsPassword", "EpsHashKey"];
+  const GO_LIVE: Record<string, string> = {
+    ...SECRETS,
+    ...Object.fromEntries(EPS_FIVE.map((name) => [`SST_RESOURCE_${name}`, PLACEHOLDER])),
+  };
+  const PRODUCTION = { ...STAGING, TC_STAGE: "production" };
+
+  it("the web app starts in production with the placeholders, with no EPS and no call to EPS", async () => {
+    const { assembleRuntime } = await load();
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    const built = await assembleRuntime({ ...PRODUCTION, ...GO_LIVE });
+    expect(built.runtime.config.stage).toBe("production");
+    expect(built.runtime.config.epsMode).toBe("production");
+    expect(built.runtime.eps).toBeNull();
+    expect(built.deps).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(state.bridgeLoaded).toBe(0);
+  });
+
+  it("one EPS value on the placeholder is enough for no EPS (all or nothing)", async () => {
+    const { assembleRuntime } = await load();
+    for (const name of EPS_FIVE) {
+      const env = { ...PRODUCTION, ...SECRETS, [`SST_RESOURCE_${name}`]: PLACEHOLDER };
+      const built = await assembleRuntime(env);
+      expect(built.runtime.eps, name).toBeNull();
+      expect(built.deps, name).toBeNull();
+    }
+  });
+
+  it("logs nothing and shows neither the placeholder nor a secret", async () => {
+    const { assembleRuntime } = await load();
+    const lines = [
+      vi.spyOn(console, "log").mockImplementation(() => {}),
+      vi.spyOn(console, "error").mockImplementation(() => {}),
+      vi.spyOn(console, "warn").mockImplementation(() => {}),
+      vi.spyOn(console, "info").mockImplementation(() => {}),
+    ];
+    const { runtime } = await assembleRuntime({ ...PRODUCTION, ...GO_LIVE });
+    for (const spy of lines) expect(spy).not.toHaveBeenCalled();
+    const shown = [
+      JSON.stringify(runtime),
+      inspect(runtime, { depth: 10, showHidden: true }),
+      String(runtime),
+    ].join("\n");
+    expect(shown).not.toContain("not-configured");
+    expect(shown).not.toContain("planted-limitkey-6666");
+  });
+});
+
 describe("assembleRuntime: fake mode", () => {
   it("builds an EPS without secrets, over the dev bridge, with hand-built http return urls", async () => {
     const { assembleRuntime } = await load();

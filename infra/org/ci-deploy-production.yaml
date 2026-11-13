@@ -1,48 +1,96 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  TiCON Cloud CI role TcCiDeployProduction and its permissions boundary. Assumed through GitHub OIDC by the production deploy job only, after approval. Full notes are in the comments at the top of this file.
+  TiCON Cloud CI role TcCiDeployProduction and its permissions boundary TcCiRoleBoundaryProduction. Assumed through GitHub OIDC by the production deploy job only, at a v* tag. Changes the production stage only, also in an account shared with staging. Full notes are in the comments at the top of this file.
 # Description (moved from the Description field: CloudFormation allows at most 1024 characters):
 # TiCON Cloud CI role TcCiDeployProduction (R3, B.1 of docs/analysis/pending-audit.md) and the permissions
-# boundary TcCiRoleBoundary that every role it creates must carry. Assumed by the job `deploy` of
-# .github/workflows/deploy-production.yml through GitHub OIDC, in the PRODUCTION account only. It is the
-# ONLY production deploy role. The trust is the three conditions that workflow documents: aud, sub = the
-# GitHub environment `production` (required reviewers: DevOps), and job_workflow_ref = that workflow at a
-# `v*` tag. A branch, a pull request or any other workflow cannot assume it. Deploy with the DevOps admin role after ci-oidc-provider.yaml. The organisation and
-# repository names are parameters; no account id or name is written here.
-# PRIVILEGE ESCALATION GUARD: the role can create, change and pass only roles named tc-* (the function
-# and platform roles of infra/lib/stage.ts roleName) and ticon-cloud-* (the roles SST names itself), and
-# only when the role carries the boundary below; it can attach only the listed AWS managed policies; it
-# can pass a role only to the listed services; it can never remove or replace the boundary, change the
-# boundary policy, touch the CI roles, mint users or keys, or change CloudTrail, GuardDuty or the
-# organization. A compromised deploy job therefore cannot make itself or any role an administrator.
+# boundary TcCiRoleBoundaryProduction that every role it creates must carry. Assumed by the job `deploy` of
+# .github/workflows/deploy-production.yml through GitHub OIDC. It is the ONLY production deploy role. The
+# trust is the three conditions that workflow documents: aud, sub = the GitHub environment `production`, and
+# job_workflow_ref = that workflow at a `v*` tag. A branch, a pull request or any other workflow cannot
+# assume it. GitHub offers no required reviewers on the owner's plan for a private repository, so the person
+# who pushes the `v*` tag approves the deploy (docs/runbooks/go-live.md). Deployed by
+# scripts/golive/ci-roles.sh (or the DevOps admin role). The role needs the account's GitHub OIDC provider
+# but not the stack of ci-oidc-provider.yaml: the provider ARN is built from the account and the fixed host,
+# so a provider that other projects already created serves too (one per account and URL).
+# The organisation, the repository and their ids are parameters; no account id or name is written here.
+# ONE ACCOUNT (owner decision 2026-11-13): staging and production may share the account. Every fixed name
+# here is unique to production (TcCiRoleBoundaryProduction, TcCiDeployProduction), every IAM write is
+# limited to the names of the production stage (tc-production-*, ticon-cloud-production-*), and the last
+# statements deny every action on the staging stage: on what SST tags sst:stage=staging, on the staging
+# names and on the SST state and passphrase of staging.
+# PRIVILEGE ESCALATION GUARD: the role can create, change and pass only roles named tc-production-* (the
+# function and platform roles of infra/lib/stage.ts roleName) and ticon-cloud-production-* (the roles SST
+# names itself), and only when the role carries the boundary below (infra/app.ts attaches it to every role);
+# it can attach only the listed AWS managed policies; it can pass a role only to the listed services; it can
+# never remove or replace the boundary, change the boundary policy, touch the CI roles, mint users or keys,
+# or change CloudTrail, GuardDuty or the organization. A compromised deploy job therefore cannot make itself
+# or any role an administrator.
 # VERIFY: IAM evaluates the GitHub claim `job_workflow_ref` as the condition key
 # token.actions.githubusercontent.com:job_workflow_ref (current IAM documentation, "Configure a role for
 # GitHub OIDC identity provider"). Its value has NO "repo:" prefix: <org>/<repo>/.github/workflows/<file>@<ref>.
 # If the key is not evaluated the condition never matches and the role fails closed (R16).
 # The condition on job_workflow_ref is StringLike because of the `v*` tag.
-# VERIFY: the `sub` claim of a job that uses `environment: production` is
-# repo:<org>/<repo>:environment:production (GitHub documentation, "OpenID Connect reference").
+# VERIFY result (WPU-Z11, GitHub OIDC reference and changelog 2026-04-23): a repository created, renamed or
+# transferred after 2026-07-15 gets the immutable subject repo:<org>@<owner-id>/<repo>@<repo-id>:... ; the
+# owner and repository ids are always in it. This repository is past the cut-off, so the sub below is
+# repo:<org>@<owner-id>/<repo>@<repo-id>:environment:production. GitHub documents the environment form only by
+# inference from the branch example: confirm the subject in the first AssumeRoleWithWebIdentity event of
+# CloudTrail.
 # VERIFY: the boundary may be too tight (SST creates roles for the Next.js server and image functions,
-# the RDS proxy, the Cron scheduler and the CloudFront edge function). The same boundary was proven at
-# the staging deploy first; read any AccessDenied in the role's CloudTrail, widen the boundary by pull request
-# (never remove the Deny statements) and record it in JOURNEY.md.
-# VERIFY: that SST names its own roles ticon-cloud-<stage>-* (app name `ticon-cloud` in infra/app.ts).
-# Check the role names after the first deploy and correct the prefixes below if they differ.
+# the RDS proxy, the Cron scheduler, the NAT instance and the CloudFront edge function). The same boundary
+# was proven at the staging deploy first; read any AccessDenied in the role's CloudTrail, widen the boundary
+# by pull request (never remove the Deny statements) and record it in JOURNEY.md.
+# VERIFY: SST 4.17.2 names an unnamed role ticon-cloud-<stage>-<logical name>-<random> only while the logical
+# name has at most 32 characters on production (35 on staging): longer names lose the app name
+# (components/naming.ts prefixName). The roles of infra/stacks have fixed names (tc-<stage>-<part>-role);
+# infra/stacks/web.ts gives the two ISR revalidation subscriber roles fixed names too; every other role SST
+# creates today has a short logical name (read in the SST sources). Check the role names after the first
+# deploy.
 # VERIFY: iam:PermissionsBoundary is evaluated for CreateRole, PutRolePolicy, AttachRolePolicy,
 # DetachRolePolicy, DeleteRolePolicy and PutRolePermissionsBoundary (IAM documentation "Delegate
 # permissions management to others by using permissions boundaries"); UpdateAssumeRolePolicy is
 # included here as a precaution, and is checked by the same condition key only if AWS evaluates it.
-# VERIFY: the AWS managed policies and the PassedToService values are what SST attaches and passes today.
+# VERIFY: the AWS managed policies and the PassedToService values are what SST attaches and passes today:
+# AWSLambdaBasicExecutionRole and AWSLambdaVPCAccessExecutionRole (functions), AmazonSSMManagedInstanceCore and
+# ec2.amazonaws.com (the NAT instance of a lean stage, components/aws/vpc.ts), lambda, edgelambda, rds and
+# scheduler. AWSLambdaSQSQueueExecutionRole and events.amazonaws.com are not used by SST 4.17.2 (kept; a later
+# pull request may drop them).
+# VERIFY: SST tags every resource it creates with sst:app and sst:stage (default tags of its AWS provider,
+# platform/src/components/aws/helpers/provider.ts). The tag-based Deny below relies on it; where a service
+# does not evaluate aws:ResourceTag for an action, the name-based Deny is the remaining guard.
+# KNOWN ONE-ACCOUNT RESIDUALS (WPU-Z11 review, Needs decision): this role is NOT confined to its stage for
+# (1) CloudFront distributions, the response headers policy tc-<stage>-security-headers and KeyValueStores:
+# cloudfront:* and the KeyValueStore actions are on "*" and key-value-store/*; their ARNs carry random ids, and whether CloudFront evaluates
+# aws:ResourceTag/sst:stage for distribution actions is a VERIFY (the tag Deny guards them if it does; a
+# KeyValueStore takes no tags); (2) ACM certificates (random ids; guarded only by the tag Deny, VERIFY that
+# SST tags them and ACM evaluates the tag); (3) SES: ses:* on "*" reaches the identity tryaws.now that both
+# stages share; (4) the shared SST asset bucket sst-asset-*: function code objects have keys without the
+# stage (assets/<name>-code-<hash>.zip), so either deploy role can overwrite the code the other stage
+# deploys. WAF web ACLs and IP sets are named tc-<stage>-* and denied by name; CloudFront Functions by name
+# (VERIFY the names). Separate accounts remove these residuals.
+# VERIFY: the KvKeys provider of SST (CloudFront KeyValueStore of the Next.js sites) needs exactly
+# DescribeKeyValueStore, ListKeys and UpdateKeys; the budget of a lean stage needs the five budgets actions
+# below (tags on create need budgets:TagResource, Service Authorization Reference of AWS Budgets).
 
 Parameters:
   GitHubOrg:
     Type: String
     AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
-    Description: GitHub organisation or user that owns the repository. Entered by DevOps; not in the repository.
+    Description: GitHub organisation or user that owns the repository.
+  GitHubOwnerId:
+    Type: String
+    AllowedPattern: "^[0-9]{1,20}$"
+    Description: >-
+      The numeric id of the owner (gh api repos/<org>/<repo> --jq .owner.id). Part of the immutable OIDC
+      subject that GitHub signs for this repository.
   GitHubRepo:
     Type: String
     AllowedPattern: "^[A-Za-z0-9._-]{1,100}$"
-    Description: GitHub repository name. Entered by DevOps; not in the repository.
+    Description: GitHub repository name.
+  GitHubRepoId:
+    Type: String
+    AllowedPattern: "^[0-9]{1,20}$"
+    Description: The numeric id of the repository (gh api repos/<org>/<repo> --jq .id).
   MaxSessionSeconds:
     Type: Number
     Default: 3600
@@ -54,7 +102,7 @@ Resources:
   TcCiRoleBoundary:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: TcCiRoleBoundary
+      ManagedPolicyName: TcCiRoleBoundaryProduction
       Description: >-
         The most a role created by the TiCON CI deploy role may ever do. No IAM, no organization, no
         CloudTrail change, no assume of a role other than the pool and DNS roles (Tc*).
@@ -125,6 +173,37 @@ Resources:
               - cloudtrail:*
               - guardduty:*
             Resource: "*"
+          # ONE ACCOUNT (WPU-Z11, security review): the Allow above is on "*" because SST names many
+          # resources itself; these two Deny statements keep a role of the production stage away from the
+          # data, secrets and functions of the staging stage that shares the account: what SST tags
+          # sst:stage=staging (KMS keys, tables, queues, topics, secrets, functions), and the staging names
+          # where a service does not evaluate resource tags (S3 objects, SSM parameters, the SST state).
+          # Separate accounts remain the stronger isolation (docs/runbooks/go-live.md).
+          - Sid: NeverWhatSstTaggedForTheOtherStage
+            Effect: Deny
+            Action: "*"
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:ResourceTag/sst:stage: staging
+          - Sid: NeverANameOfTheOtherStage
+            Effect: Deny
+            Action: "*"
+            Resource:
+              - arn:aws:s3:::ticon-cloud-staging-*
+              - arn:aws:s3:::sst-state-*/*/ticon-cloud/staging*
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/staging"
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/ticon-cloud/staging/*"
+              - Fn::Sub: "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:dynamodb:*:${AWS::AccountId}:table/ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:sqs:*:${AWS::AccountId}:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:tc-staging-*"
+              - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:tc-staging-*"
+              - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:kms:*:${AWS::AccountId}:alias/tc-staging-*"
+              - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/tc-staging-*"
+              - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/ticon-cloud-staging-*"
   TcCiDeployProduction:
     Type: AWS::IAM::Role
     Properties:
@@ -145,7 +224,7 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
                 token.actions.githubusercontent.com:sub:
-                  Fn::Sub: "repo:${GitHubOrg}/${GitHubRepo}:environment:production"
+                  Fn::Sub: "repo:${GitHubOrg}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:environment:production"
               StringLike:
                 token.actions.githubusercontent.com:job_workflow_ref:
                   Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-production.yml@refs/tags/v*"
@@ -180,6 +259,24 @@ Resources:
                   - ssm:*
                   - wafv2:*
                 Resource: "*"
+              - Sid: KeyValueStoresOfTheSites
+                Effect: Allow
+                Action:
+                  - cloudfront-keyvaluestore:DescribeKeyValueStore
+                  - cloudfront-keyvaluestore:ListKeys
+                  - cloudfront-keyvaluestore:UpdateKeys
+                Resource:
+                  Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:key-value-store/*"
+              - Sid: BudgetOfTheStage
+                Effect: Allow
+                Action:
+                  - budgets:ListTagsForResource
+                  - budgets:ModifyBudget
+                  - budgets:TagResource
+                  - budgets:UntagResource
+                  - budgets:ViewBudget
+                Resource:
+                  Fn::Sub: "arn:aws:budgets::${AWS::AccountId}:budget/tc-production-*"
               - Sid: ReadRolesOfTheStack
                 Effect: Allow
                 Action:
@@ -192,6 +289,11 @@ Resources:
                 Resource:
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-production-*"
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-production-*"
+              - Sid: ReadTheRdsServiceLinkedRole
+                Effect: Allow
+                Action: iam:GetRole
+                Resource:
+                  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"
               - Sid: CreateAndChangeRolesOnlyWithTheBoundary
                 Effect: Allow
                 Action:
@@ -207,7 +309,7 @@ Resources:
                 Condition:
                   StringEquals:
                     iam:PermissionsBoundary:
-                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary"
+                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundaryProduction"
               - Sid: AttachOnlyTheListedManagedPolicies
                 Effect: Allow
                 Action: iam:AttachRolePolicy
@@ -217,8 +319,9 @@ Resources:
                 Condition:
                   StringEquals:
                     iam:PermissionsBoundary:
-                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary"
+                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundaryProduction"
                     iam:PolicyARN:
+                      - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
                       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
                       - arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole
                       - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
@@ -233,6 +336,19 @@ Resources:
                 Resource:
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-production-*"
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-production-*"
+              - Sid: InstanceProfilesOfTheStage
+                Effect: Allow
+                Action:
+                  - iam:AddRoleToInstanceProfile
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:ListInstanceProfileTags
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:TagInstanceProfile
+                  - iam:UntagInstanceProfile
+                Resource:
+                  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:instance-profile/tc-production-*"
               - Sid: PassOnlyToTheServicesThatRunTheStack
                 Effect: Allow
                 Action: iam:PassRole
@@ -242,6 +358,7 @@ Resources:
                 Condition:
                   StringEquals:
                     iam:PassedToService:
+                      - ec2.amazonaws.com
                       - edgelambda.amazonaws.com
                       - events.amazonaws.com
                       - lambda.amazonaws.com
@@ -266,7 +383,7 @@ Resources:
                 Condition:
                   StringNotEquals:
                     iam:PermissionsBoundary:
-                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary"
+                      Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundaryProduction"
               - Sid: NeverChangeTheBoundaryPolicyItself
                 Effect: Deny
                 Action:
@@ -275,7 +392,7 @@ Resources:
                   - iam:DeletePolicyVersion
                   - iam:SetDefaultPolicyVersion
                 Resource:
-                  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundary"
+                  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:policy/TcCiRoleBoundaryProduction"
               - Sid: NeverTheCiRolesNorTheProviderNorUsers
                 Effect: Deny
                 Action: iam:*
@@ -314,3 +431,95 @@ Resources:
                 Effect: Deny
                 Action: sts:AssumeRole
                 Resource: "arn:aws:iam::*:role/Tc*"
+              - Sid: NeverWhatSstTaggedForTheOtherStage
+                Effect: Deny
+                Action: "*"
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/sst:stage: staging
+              - Sid: NeverCreateForTheOtherStage
+                Effect: Deny
+                Action: "*"
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/sst:stage: staging
+              - Sid: NeverANameOfTheOtherStage
+                Effect: Deny
+                Action: "*"
+                Resource:
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-staging-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:instance-profile/tc-staging-*"
+                  - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:tc-staging-*"
+                  - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/tc-staging-*"
+                  - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/ticon-cloud-staging-*"
+                  - arn:aws:s3:::ticon-cloud-staging-*
+                  - arn:aws:s3:::sst-state-*/*/ticon-cloud/staging*
+                  - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/staging"
+                  - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/ticon-cloud/staging/*"
+                  - Fn::Sub: "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:sqs:*:${AWS::AccountId}:ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:tc-staging-*"
+                  - Fn::Sub: "arn:aws:dynamodb:*:${AWS::AccountId}:table/ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:rds:*:${AWS::AccountId}:db:ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:rds:*:${AWS::AccountId}:snapshot:tc-staging-*"
+                  - Fn::Sub: "arn:aws:scheduler:*:${AWS::AccountId}:schedule/*/ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:cloudwatch:*:${AWS::AccountId}:alarm:tc-staging-*"
+                  - Fn::Sub: "arn:aws:kms:*:${AWS::AccountId}:alias/tc-staging-*"
+                  - Fn::Sub: "arn:aws:budgets::${AWS::AccountId}:budget/tc-staging-*"
+                  # VERIFY (fix round 1): SST names a CloudFront Function with physicalName(64), which is
+                  # ticon-cloud-<stage>-<name>-<random> or, when the app name is cut, <app part>-<stage>-<name>
+                  # (components/naming.ts prefixName); both match the two patterns below for the names of
+                  # infra/stacks today. Check the function names after the first deploy.
+                  - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/*-staging-*"
+                  # The WAF web ACL and IP sets of infra/stacks/waf.ts are named tc-<stage>-* (resourceName).
+                  - Fn::Sub: "arn:aws:wafv2:*:${AWS::AccountId}:*/webacl/tc-staging-*"
+                  - Fn::Sub: "arn:aws:wafv2:*:${AWS::AccountId}:*/ipset/tc-staging-*"
+              # The SST bootstrap is SHARED by both stages of the account (/sst/bootstrap, the state bucket
+              # sst-state-*, the asset bucket sst-asset-*). A deploy role uses them but must not change or
+              # remove them; after an SST upgrade one SST command with administrator credentials bootstraps
+              # again (docs/runbooks/go-live.md). Only bucket-level actions are denied here: object access in the shared
+              # asset bucket is known residual (4) above (function code keys carry no stage).
+              - Sid: NeverTheSharedSstBootstrap
+                Effect: Deny
+                Action:
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:DeleteParameters
+                  - ssm:LabelParameterVersion
+                  - ssm:AddTagsToResource
+                  - ssm:RemoveTagsFromResource
+                Resource:
+                  Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/bootstrap"
+              - Sid: NeverTheSharedSstBuckets
+                Effect: Deny
+                Action:
+                  - s3:PutBucket*
+                  - s3:DeleteBucket*
+                  - s3:PutLifecycleConfiguration
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutReplicationConfiguration
+                Resource:
+                  - arn:aws:s3:::sst-state-*
+                  - arn:aws:s3:::sst-asset-*
+              # WPU-Z11 fix round 2: the name-based object denies must not be bypassed through an S3 access
+              # point (its ARN names the access point, not the bucket). SST 4.17.2 and infra/stacks create
+              # no S3 access point (only efs.AccessPoint exists in SST, unused here).
+              - Sid: NeverCreateAnS3AccessPoint
+                Effect: Deny
+                Action:
+                  - s3:CreateAccessPoint
+                  - s3:CreateAccessPointForObjectLambda
+                  - s3:CreateMultiRegionAccessPoint
+                Resource: "*"
+              - Sid: NeverUseAnS3AccessPoint
+                Effect: Deny
+                Action: s3:*
+                Resource: "*"
+                Condition:
+                  "Null":
+                    s3:DataAccessPointArn: "false"

@@ -62,6 +62,21 @@ const DEFAULT_LIMIT = 50;
 // not burn the attempts of every row in one minute.
 const PAUSE_AFTER = 5;
 
+// WPU-Z5: a support_reply row queued before the thread existed has no `audience`. The recipient of the
+// row decides it: no customer is a visitor of the public form, a customer reads the reply in the panel.
+// Every other row, and a row that names an audience, is passed on as it is (the template checks it).
+export function withSupportAudience(row: {
+  template: string;
+  customerId: string | null;
+  payload: unknown;
+}): unknown {
+  const p = row.payload;
+  if (row.template !== "support_reply" || typeof p !== "object" || p === null || Array.isArray(p))
+    return p;
+  if ("audience" in p) return p;
+  return { ...p, audience: row.customerId === null ? "visitor" : "customer" };
+}
+
 export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
   const { store, clock, log } = deps;
   const counts = { sent: 0, retry: 0, failed: 0, skipped: 0 };
@@ -109,7 +124,7 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
     }
     let data;
     try {
-      data = parseTemplateData(row.template, row.payload);
+      data = parseTemplateData(row.template, withSupportAudience(row));
     } catch {
       await refuse(row, "bad_payload");
       continue;

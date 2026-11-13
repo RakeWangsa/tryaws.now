@@ -299,6 +299,15 @@ export const EXPECTED_COLUMNS: Record<string, string[]> = {
     "message text NOT NULL",
     "status text NOT NULL",
     "handled_by uuid NULL",
+    // WPU-Z5 (migration 0027)
+    "last_activity_at timestamptz NOT NULL",
+  ],
+  // WPU-Z5 (migration 0027): the thread of a support request.
+  support_messages: [
+    "request_id uuid NOT NULL",
+    "author_type text NOT NULL",
+    "admin_id uuid NULL",
+    "body text NOT NULL",
   ],
   abuse_cases: [
     "resource_id uuid NOT NULL",

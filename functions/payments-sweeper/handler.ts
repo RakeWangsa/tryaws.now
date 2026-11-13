@@ -26,6 +26,31 @@ function usableLimit(value: unknown): number {
 }
 
 /**
+ * WPU-Z11: the job while EPS is not configured (an EPS secret holds the placeholder). It asks EPS
+ * nothing and reads no row: there is no payment to settle, because the web app opens no top-up then.
+ * One fixed line per run says why the counts are zero (R14: no name, no value).
+ */
+export function createSkippedHandler(deps: {
+  readonly log: Logger;
+  readonly limit?: number;
+}): (event?: unknown) => Promise<SweeperReport> {
+  const limit = usableLimit(deps.limit);
+  return async (): Promise<SweeperReport> => {
+    deps.log({ event: "payments_sweep_skipped", reason: "eps_not_configured" });
+    return {
+      checked: 0,
+      credited: 0,
+      expired: 0,
+      review: 0,
+      unavailable: 0,
+      limit,
+      backlog: false,
+      allUnavailable: false,
+    };
+  };
+}
+
+/**
  * The only thing this job does is call sweep once (R6: the credit path is sweepPayments -> verifyOnce
  * -> settle, nothing here names a payment or an amount). The scheduler's event is never read.
  * Logs counts and booleans only (R14). A throw is logged as a fixed reason and re-thrown with a fixed

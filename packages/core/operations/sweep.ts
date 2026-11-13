@@ -81,6 +81,8 @@ export async function sweepOperations(deps: SweepDeps): Promise<SweepReport> {
               retryable: true,
               poolFull: false,
               awsErrorName: null,
+              // The lost run may have sent anything before it stopped (R16).
+              mayHaveActed: true,
             },
           })
         : decideRefusal("unknown_kind", op.attempts);

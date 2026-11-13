@@ -41,10 +41,16 @@ export type {
 } from "./repositories/customer/orders";
 export type { DomainRow, DomainsRepo, NewDomain } from "./repositories/customer/domains";
 export type {
+  CustomerSupportMessage,
   CustomerSupportRequestRow,
+  CustomerSupportThread,
+  NewSupportMessage,
   NewSupportRequest,
   SupportRepo,
 } from "./repositories/customer/support";
+// WPU-Z5: the thread of a support request, shared by the customer and the admin side.
+export { SUPPORT_THREAD_LIMIT, messageBody } from "./repositories/support-thread";
+export type { SupportAuthorType, SupportStatus } from "./repositories/support-thread";
 export type { DnsZoneRow, DnsZonesRepo, NewDnsZone } from "./repositories/customer/dns-zones";
 export {
   dnsZoneNameHolder,
@@ -175,15 +181,18 @@ export type {
   BooleanSettingTarget,
   SettingsAdminRepo,
 } from "./repositories/admin/settings";
-export { SUPPORT_REPLY_TEMPLATE } from "./repositories/admin/support";
+export { SUPPORT_REPLY_TEMPLATE, supportReplyPayload } from "./repositories/admin/support";
 export type {
   CaseStatus,
   SupportAdminRepo,
   SupportClosed,
+  SupportListInput,
   SupportListResult,
+  SupportReopened,
   SupportReplied,
   SupportRequestDetail,
   SupportRequestRow,
+  SupportThreadMessage,
   SupportTrailRow,
 } from "./repositories/admin/support";
 export type {

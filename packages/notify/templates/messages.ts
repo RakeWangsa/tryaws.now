@@ -57,6 +57,7 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       open_support: "সাপোর্ট পেজ খুলুন",
       open_dns: "ডিএনএস পেজ খুলুন",
       order_now: "এখনই অর্ডার করুন",
+      open_request: "অনুরোধটি খুলুন",
     },
     products: {
       instance: "ক্লাউড সার্ভার",
@@ -99,6 +100,7 @@ export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
       open_support: "Open the support page",
       open_dns: "Open the DNS page",
       order_now: "Order now",
+      open_request: "Open the request",
     },
     products: {
       instance: "Cloud Server",
@@ -297,14 +299,19 @@ export const BN: Catalog = {
     ],
     sms: "TryAWS.now: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। রিনিউ করুন।",
   },
+  // WPU-Z5: a customer reads the reply in the panel ({message} is empty); a visitor gets the text.
   support_reply: {
     subject: "আপনার সাপোর্ট অনুরোধের উত্তর",
     headline: "সাপোর্টের উত্তর",
-    body: [
-      "TryAWS.now সাপোর্ট আপনার অনুরোধের উত্তর দিয়েছে:",
-      "{message}",
-      "আরও সাহায্য লাগলে প্যানেলের সাপোর্ট পেজে জানান।",
-    ],
+    body: ["{lead}", "{message}", "{next}"],
+    extra: {
+      customer_lead:
+        "আমাদের সাপোর্ট টিম আপনার সাপোর্ট অনুরোধের উত্তর দিয়েছে। উত্তরটি প্যানেলে আপনার জন্য অপেক্ষা করছে।",
+      customer_next: "সাইন ইন করে অনুরোধটি খুলুন এবং উত্তরটি পড়ুন। সেখান থেকেই জবাব দিতে পারবেন।",
+      visitor_lead: "আমাদের সাপোর্ট টিম আপনার সাপোর্ট অনুরোধের উত্তর দিয়েছে:",
+      visitor_next:
+        "এই ইমেইলের জবাব পড়া হয় না। উত্তর দিতে বা আরও কিছু জানাতে সাপোর্ট পেজ থেকে নতুন অনুরোধ পাঠান।",
+    },
   },
   dns_delegation_notice: {
     subject: "ডিএনএস জোন {domain}: নেমসার্ভার এখনো বদলানো হয়নি",
@@ -559,14 +566,19 @@ export const EN: Catalog = {
     ],
     sms: "TryAWS.now: {domain} ends in {days} days ({date}). Renew it.",
   },
+  // WPU-Z5: a customer reads the reply in the panel ({message} is empty); a visitor gets the text.
   support_reply: {
     subject: "Reply to your support request",
     headline: "Reply from support",
-    body: [
-      "TryAWS.now support has answered your request:",
-      "{message}",
-      "If you need more help, tell us on the support page of the panel.",
-    ],
+    body: ["{lead}", "{message}", "{next}"],
+    extra: {
+      customer_lead:
+        "Our support team has answered your support request. The reply is waiting for you in the panel.",
+      customer_next: "Sign in and open the request to read the reply. You can answer there too.",
+      visitor_lead: "Our support team has answered your support request:",
+      visitor_next:
+        "Replies to this email are not read. To answer or to ask more, send a new request from the support page.",
+    },
   },
   dns_delegation_notice: {
     subject: "DNS zone {domain}: name servers not changed yet",

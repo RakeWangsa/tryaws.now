@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -9,9 +10,14 @@ import {
   SubmitButton,
   type DataTableColumn,
 } from "@tc/ui";
-import type { SupportListResult, SupportRequestDetail, SupportRequestRow } from "@tc/db";
+import type {
+  SupportListResult,
+  SupportRequestDetail,
+  SupportRequestRow,
+  SupportThreadMessage,
+} from "@tc/db";
 import { localePath, type Locale } from "@tc/ui/runtime";
-import type { CaseQuery, Loaded } from "../../server/case-data.ts";
+import type { Loaded, SupportQuery } from "../../server/case-data.ts";
 import { supportAction } from "../../server/case-actions.ts";
 import {
   Hidden,
@@ -20,6 +26,7 @@ import {
   ResultNote,
   StatusBadge,
   StatusFilter,
+  SUPPORT_FILTER_STATES,
   TrailCard,
   Unavailable,
   type ResultCode,
@@ -31,7 +38,7 @@ function ListTable({
   result,
 }: {
   locale: Locale;
-  query: CaseQuery;
+  query: SupportQuery;
   result: SupportListResult;
 }) {
   const t = useTranslations("AdminCases.support");
@@ -51,6 +58,11 @@ function ListTable({
       key: "status",
       header: t("table.status"),
       cell: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "activity",
+      header: t("table.lastActivity"),
+      cell: (row) => <DateText value={row.lastActivityAt} variant="datetime" />,
     },
     {
       key: "handler",
@@ -79,12 +91,13 @@ function ListTable({
 
 export interface SupportListViewProps {
   locale: Locale;
-  query: CaseQuery;
+  query: SupportQuery;
   list: Loaded<SupportListResult>;
   result: ResultCode | null;
 }
 
-// 16.12 /support: the requests of customers and visitors; the address is masked (R14).
+// 16.12 /support: the requests of customers and visitors, newest activity first; the address is masked
+// (R14). WPU-Z5: open (waits for support), answered (waits for the requester) and closed.
 export function SupportListView({ locale, query, list, result }: SupportListViewProps) {
   const t = useTranslations("AdminCases.support");
   return (
@@ -92,7 +105,11 @@ export function SupportListView({ locale, query, list, result }: SupportListView
       <h2 className="h4 mergecolor">{t("title")}</h2>
       <ResultNote result={result} />
       <Card>
-        <StatusFilter action={localePath(locale, "/support")} query={query} />
+        <StatusFilter
+          action={localePath(locale, "/support")}
+          query={query}
+          states={SUPPORT_FILTER_STATES}
+        />
       </Card>
       {list.kind === "ok" ? (
         <ListTable locale={locale} query={query} result={list.value} />
@@ -100,6 +117,63 @@ export function SupportListView({ locale, query, list, result }: SupportListView
         <Unavailable />
       )}
     </>
+  );
+}
+
+// A text of the thread with its line breaks; React escapes every line (no markup of a requester or an
+// admin becomes HTML).
+function Lines({ text }: { text: string }) {
+  return text.split("\n").map((line, i) => (
+    <Fragment key={i}>
+      {i > 0 ? <br /> : null}
+      {line}
+    </Fragment>
+  ));
+}
+
+function ThreadEntry({ author, at, body }: { author: string; at: Date; body: string }) {
+  return (
+    <li className="mb-3 pb-3 border-bottom">
+      <p className="mb-1">
+        <strong className="mergecolor">{author}</strong>{" "}
+        <span className="seccolor">
+          <DateText value={at} variant="datetime" />
+        </span>
+      </p>
+      <p className="mb-0">
+        <Lines text={body} />
+      </p>
+    </li>
+  );
+}
+
+// WPU-Z5: the whole thread, oldest first. The first entry is the request itself; an admin reply names the
+// admin by the first characters of the id, as the audit trail does.
+function ThreadCard({ request }: { request: SupportRequestDetail }) {
+  const t = useTranslations("AdminCases.support.thread");
+  const requester = request.customerId === null ? t("visitor") : t("customer");
+  const authorOf = (m: SupportThreadMessage): string =>
+    m.authorType === "admin"
+      ? m.adminId === null
+        ? t("admin")
+        : `${t("admin")} ${m.adminId.slice(0, 8)}`
+      : m.authorType === "visitor"
+        ? t("visitor")
+        : t("customer");
+  return (
+    <Card title={t("title")}>
+      <ol className="list-unstyled mb-0">
+        <ThreadEntry author={requester} at={request.createdAt} body={request.message} />
+        {request.hasEarlier ? (
+          <li className="mb-3 pb-3 border-bottom">
+            <p className="mb-0 seccolor">{t("earlier")}</p>
+          </li>
+        ) : null}
+        {request.messages.map((m) => (
+          <ThreadEntry key={m.id} author={authorOf(m)} at={m.createdAt} body={m.body} />
+        ))}
+      </ol>
+    </Card>
   );
 }
 
@@ -113,7 +187,7 @@ export interface SupportDetailViewProps {
   replyId: string;
 }
 
-// 16.12 /support/[id].
+// 16.12 /support/[id]. WPU-Z5: the conversation, the reply form, close, and reopen of a closed request.
 export function SupportDetailView({
   locale,
   request,
@@ -122,7 +196,7 @@ export function SupportDetailView({
   replyId,
 }: SupportDetailViewProps) {
   const t = useTranslations("AdminCases.support");
-  const open = request.status === "open";
+  const closed = request.status === "closed";
   return (
     <>
       <h2 className="h4 mergecolor">{request.subject}</h2>
@@ -172,15 +246,17 @@ export function SupportDetailView({
           <dd>
             <DateText value={request.createdAt} variant="datetime" />
           </dd>
+          <dt>{t("table.lastActivity")}</dt>
+          <dd>
+            <DateText value={request.lastActivityAt} variant="datetime" />
+          </dd>
         </dl>
       </Card>
-      <Card title={t("detail.message")}>
-        <p className="mb-0">{request.message}</p>
-      </Card>
+      <ThreadCard request={request} />
       <div className="row">
         <div className="col-lg-6">
           <Card title={t("reply.title")}>
-            {!open ? (
+            {closed ? (
               <p className="mb-0">{t("reply.closedHint")}</p>
             ) : !replyEnabled ? (
               <p className="mb-0">{t("reply.disabled")}</p>
@@ -205,8 +281,19 @@ export function SupportDetailView({
           </Card>
         </div>
         <div className="col-lg-6">
-          <Card title={t("close.title")}>
-            {open ? (
+          {closed ? (
+            <Card title={t("reopen.title")}>
+              <p>{t("reopen.hint")}</p>
+              <form action={supportAction}>
+                <Hidden locale={locale} kind="reopenRequest" id={request.id} />
+                <ReasonField suffix="reopen" />
+                <SubmitButton variant="primary" size="sm">
+                  {t("reopen.submit")}
+                </SubmitButton>
+              </form>
+            </Card>
+          ) : (
+            <Card title={t("close.title")}>
               <form action={supportAction}>
                 <Hidden locale={locale} kind="closeRequest" id={request.id} />
                 <ReasonField suffix="close" />
@@ -214,10 +301,8 @@ export function SupportDetailView({
                   {t("close.submit")}
                 </SubmitButton>
               </form>
-            ) : (
-              <StatusBadge status={request.status} />
-            )}
-          </Card>
+            </Card>
+          )}
         </div>
       </div>
       <TrailCard

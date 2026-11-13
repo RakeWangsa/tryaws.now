@@ -24,7 +24,18 @@ export type SecretName =
 
 export type SecretSource = (name: SecretName) => string | undefined;
 
-// Each secret is the `value` of its linked sst.Secret when it is a string that is not empty (secretValue).
+// WPU-Z11: the value a person stores for a secret that is deliberately not configured yet. SST needs a
+// value for every declared secret before a deploy, so scripts/golive/stage-secrets.sh stores this
+// literal for each EPS value the owner leaves empty (the EPS production keys come later). It reads as no
+// value: the caller fails closed exactly as for a missing secret, so with an EPS value on the placeholder
+// there is no EPS, every top-up says "not open" and nothing is sent to EPS (R6, R16).
+export const NOT_CONFIGURED = "not-configured";
+
+// Each secret is the `value` of its linked sst.Secret when it is a string that is not empty (secretValue)
+// and not the placeholder.
 export function linkedSecrets(links: LinkSource = sstLinks): SecretSource {
-  return (name) => secretValue(links(name));
+  return (name) => {
+    const value = secretValue(links(name));
+    return value === NOT_CONFIGURED ? undefined : value;
+  };
 }

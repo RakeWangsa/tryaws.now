@@ -31,6 +31,8 @@ const TENANT = [
   "settings",
   "ssh_keys",
   "subscriptions",
+  // WPU-Z5: a message of the thread belongs to the customer of its request.
+  "support_messages",
   "support_requests",
   "usage_records",
   "waitlist_entries",
@@ -94,9 +96,17 @@ it("every table is a tenant table or a named non-tenant table, never both", asyn
   expect([...tenant, ...NON_TENANT_TABLES].sort()).toEqual(await tables());
 });
 
-it("the split is the Ownership map: 27 tenant tables and 10 named non-tenant tables", () => {
+it("the split is the Ownership map: 28 tenant tables and 10 named non-tenant tables", () => {
   expect(Object.keys(TENANT_TABLES).sort()).toEqual(TENANT);
   expect([...NON_TENANT_TABLES].sort()).toEqual(NON_TENANT);
+});
+
+// WPU-Z5: support_messages has no customer_id column; a message is the customer's through its request,
+// in one step like an operation through its resource.
+it("a message of the support thread is owned through its request", () => {
+  expect(TENANT_TABLES["support_messages"]).toBe(
+    "exists (select 1 from support_requests r where r.id = t.request_id and r.customer_id = $1::uuid)",
+  );
 });
 
 it("every table with a customer_id column is owned through that column, nine of them also through a link", async () => {

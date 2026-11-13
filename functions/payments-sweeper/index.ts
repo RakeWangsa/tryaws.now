@@ -6,7 +6,7 @@
 // to EPS, and the IAM role (no pool-account role). Nothing here depends on the cadence for correctness.
 import { randomBytes } from "node:crypto";
 import { withTx } from "@tc/db";
-import { buildSweeperDeps } from "./deps";
+import { buildSweeper } from "./deps";
 import { readConfig } from "./config";
 import type { SweeperReport } from "./handler";
 import { sstSecrets } from "./secrets";
@@ -29,7 +29,8 @@ export const handler = async (event?: unknown): Promise<SweeperReport> => {
   if (inner === undefined) {
     const config = readConfig(process.env);
     const secrets = await sstSecrets(loadSstResource);
-    inner = buildSweeperDeps({
+    // WPU-Z11: an EPS secret on the placeholder (EPS not configured) gives a job that asks EPS nothing.
+    inner = buildSweeper({
       config,
       secrets,
       fetch: globalThis.fetch.bind(globalThis),
@@ -37,7 +38,7 @@ export const handler = async (event?: unknown): Promise<SweeperReport> => {
       runTx: withTx,
       log: (e) => console.log(JSON.stringify(e)),
       randomBytes: (n) => new Uint8Array(randomBytes(n)),
-    }).handler;
+    });
   }
   return inner(event);
 };

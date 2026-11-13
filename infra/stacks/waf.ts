@@ -5,7 +5,7 @@
 // us-east-1 (scope CLOUDFRONT).
 import { parseAllowlist } from "../lib/allowlist";
 import { sizing } from "../lib/lean";
-import { EDGE_REGION, resourceName, type StageConfig } from "../lib/stage";
+import { EDGE_REGION, resourceName, sstTags, type StageConfig } from "../lib/stage";
 
 // Rate-based rules (3.3). They are a coarse net per IP; the main control is the per-account and
 // per-IP limit inside the app (R9, step "rate limit"), so these numbers only stop floods.
@@ -131,7 +131,14 @@ function rateRules(firstPriority: number) {
 
 export function waf(config: StageConfig) {
   const stage = config.stage;
-  const edge = new aws.Provider("EdgeProvider", { region: EDGE_REGION });
+  // WPU-Z10: SST's own providers carry the default tags sst:app and sst:stage (useProvider copies the aws
+  // configuration of the stack, defaultTags included); a provider built by hand does not, and the two web
+  // ACLs (20 USD a month) would escape the tag filter of the budget (budget.ts). So it gets the same tags.
+  // VERIFY (first deploy): the web ACLs and IP sets of us-east-1 show both tags.
+  const edge = new aws.Provider("EdgeProvider", {
+    region: EDGE_REGION,
+    defaultTags: { tags: sstTags($app.name, stage) },
+  });
   const opts = { provider: edge };
   // WPU-B8: lean keeps the Common group only; full keeps the three groups. Rate rules and the admin
   // allowlist are the same in both sizes.

@@ -8,15 +8,21 @@ import {
   type CaseFlowDeps,
 } from "./case-flow-common.ts";
 
-// The two actions of /support (16.12) in the order of R9: authorize, validate, rate limit, execute (one
+// The actions of /support (16.12) in the order of R9: authorize, validate, rate limit, execute (one
 // transaction, every write through `audited`), answer. The roles are support and superadmin. The admin
-// of the answer is the one of the verified session: the request has no field for one.
+// of the answer is the one of the verified session: the request has no field for one. WPU-Z5 (owner
+// decision 2026-11-13, round 3): a reply is a message of the thread of the request (the customer reads it
+// in the panel; a visitor gets it by e-mail), and a closed request can be opened again (reopenRequest).
 
-export type SupportActionKind = "replyByEmail" | "closeRequest";
-export const SUPPORT_ACTION_KINDS: readonly SupportActionKind[] = ["replyByEmail", "closeRequest"];
+export type SupportActionKind = "replyByEmail" | "closeRequest" | "reopenRequest";
+export const SUPPORT_ACTION_KINDS: readonly SupportActionKind[] = [
+  "replyByEmail",
+  "closeRequest",
+  "reopenRequest",
+];
 export const SUPPORT_ROLES: readonly AdminRole[] = ["support", "superadmin"];
 export const MAX_REPLY = 5000;
-// R10 wants a reason on every action; a reply states it itself and the text goes to the customer only.
+// R10 wants a reason on every action; a reply states it itself and the text goes to the requester only.
 export const REPLY_REASON = "reply to support request";
 
 export interface SupportActionRequest {
@@ -53,12 +59,13 @@ export function makeSupportAction(
       }
       const requestId = cleanUuid(id);
       if (requestId === null) return { ok: false, code: "invalid" };
-      const why = kind === "replyByEmail" ? REPLY_REASON : cleanReason(reason);
+      const isReply = kind === "replyByEmail";
+      const why = isReply ? REPLY_REASON : cleanReason(reason);
       if (why === null) return { ok: false, code: "invalid" };
-      const rid = kind === "replyByEmail" ? cleanUuid(replyId) : "";
-      const text = kind === "replyByEmail" ? cleanText(body, MAX_REPLY) : "";
+      const rid = isReply ? cleanUuid(replyId) : "";
+      const text = isReply ? cleanText(body, MAX_REPLY) : "";
       if (rid === null || text === null) return { ok: false, code: "invalid" };
-      if (kind === "replyByEmail" && !deps.replyEnabled) return { ok: false, code: "unavailable" };
+      if (isReply && !deps.replyEnabled) return { ok: false, code: "unavailable" };
       // 4. Rate limit.
       if (!(await deps.limiter(actor, deps.clock.now())))
         return { ok: false, code: "rate_limited" };
@@ -67,9 +74,11 @@ export function makeSupportAction(
         | { ok: true; replayed: boolean }
         | { ok: false; error: "not_found" | "conflict" | "validation" | "forbidden" }
       >(actor, (repos) =>
-        kind === "replyByEmail"
+        isReply
           ? repos.support.reply({ requestId, replyId: rid, body: text }, why)
-          : repos.support.close({ requestId }, why),
+          : kind === "reopenRequest"
+            ? repos.support.reopen({ requestId }, why)
+            : repos.support.close({ requestId }, why),
       );
       if (!written.ok) return { ok: false, code: failureCode(written) };
       return { ok: true, replayed: written.replayed, targetId: requestId, sent: true };

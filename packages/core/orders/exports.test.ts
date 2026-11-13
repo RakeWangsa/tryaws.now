@@ -401,6 +401,11 @@ const LIFECYCLE = [
   "runLifecycle",
 ];
 
+// WPU-Z13: a domain's renewal renews the name at the registry, or the charge goes back. The provisioner's failed
+// hook reverses it, and the failure policy and the rejection both know the kinds whose failure moves money back,
+// and a renewal the registry holds already (review round 1), which only the registry's own refusal refunds.
+const Z13 = ["refundedOnFailure", "registryHoldsRenewal", "reverseFailedDomainRenewal"];
+
 // Names of the bucket and container tasks, merged without a pin.
 const STORAGE_CONTAINER = [
   "CONTAINER_POWERS",
@@ -674,6 +679,7 @@ describe("the public surface of the order flow", () => {
           ...Y3,
 
           ...Y2,
+          ...Z13,
         ]),
       ].sort(),
     );

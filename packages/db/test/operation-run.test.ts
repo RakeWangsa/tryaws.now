@@ -152,13 +152,23 @@ describe("loadRunView", () => {
 });
 
 describe("loadOperationBrief and loadOwnedResource", () => {
-  it("the brief has four columns, is null for an unknown id and a non-UUID, and locks the row", async () => {
+  it("the brief has five columns, is null for an unknown id and a non-UUID, and locks the row", async () => {
     const id = await seed("needs_attention");
     expect(await worker((tx) => loadOperationBrief(tx, id))).toEqual({
       id,
       resourceId,
       kind: "reboot",
       state: "needs_attention",
+      step: null,
+    });
+    // WPU-Z13: the step tells the rejection whether the registry holds a domain renewal already.
+    const held = await seed("needs_attention", { kind: "renew_domain", step: "poll" });
+    expect(await worker((tx) => loadOperationBrief(tx, held))).toEqual({
+      id: held,
+      resourceId,
+      kind: "renew_domain",
+      state: "needs_attention",
+      step: "poll",
     });
     expect(
       await worker((tx) => loadOperationBrief(tx, "01a1c97d-e814-7352-b32c-d3d3ee408ab8")),

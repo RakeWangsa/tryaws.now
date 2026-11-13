@@ -1,0 +1,189 @@
+import { supportReplyPayload } from "@tc/db";
+import type { LogEvent } from "@tc/core";
+import { beforeEach, describe, expect, it } from "vitest";
+import { InMemoryEmailProvider } from "../email/provider";
+import { runNotifier, withSupportAudience, type NotifierDeps } from "../queue/run";
+import { InMemoryNotifierStore } from "../queue/store";
+import { fixedClock } from "./harness";
+import { IDS } from "./samples";
+
+// WPU-Z5: the notifier sends the support_reply rows the admin repository writes (one email row each, the
+// payload of supportReplyPayload). The link of a customer's mail names the request: an id is no secret,
+// but a random id has all digits in its last group about once in 280, which the check of R14 reads as a
+// document number. The check sets aside only an id in the path /support/requests/<id> that no token
+// character follows (text/guards.ts); every other text of the mail is checked as before.
+
+const ORIGIN = "https://my.ticoncloud.test";
+const ALL_DIGITS_ID = "0193f7c6-4d5e-5394-8f82-123456789012";
+
+let store: InMemoryNotifierStore;
+let email: InMemoryEmailProvider;
+let logs: LogEvent[];
+const clock = fixedClock();
+const deps = (): NotifierDeps => ({
+  store,
+  email,
+  sms: { send: async () => ({ ok: true }) } as unknown as NotifierDeps["sms"],
+  clock,
+  log: (e) => logs.push(e),
+  panelOrigin: ORIGIN,
+});
+
+// One row as the admin repository writes it: the template, the payload and the recipient.
+const addRow = (
+  payload: ReturnType<typeof supportReplyPayload>,
+  to: { customerId: string } | { email: string },
+) =>
+  store.add(
+    {
+      customerId: "customerId" in to ? to.customerId : null,
+      email: "email" in to ? to.email : null,
+      channel: "email",
+      template: "support_reply",
+      payload,
+      dedupeKey: `support-reply:${payload.requestId}:${IDS.submission}`,
+    },
+    clock.now(),
+  );
+
+beforeEach(() => {
+  clock.set("2026-11-13T10:00:00.000Z");
+  store = new InMemoryNotifierStore();
+  store.setRecipient(IDS.customer, {
+    email: "rahim.uddin@example.test",
+    phone: null,
+    phoneVerified: false,
+    locale: "en",
+    numerals: "latn",
+  });
+  email = new InMemoryEmailProvider();
+  logs = [];
+});
+
+describe("support_reply through the notifier", () => {
+  it("a customer is told about a reply on a request whose id ends in digits only", async () => {
+    addRow(supportReplyPayload(ALL_DIGITS_ID, "We refunded it.", "customer"), {
+      customerId: IDS.customer,
+    });
+    await runNotifier(deps());
+    expect(store.rows()[0]?.status).toBe("sent");
+    expect(email.sent).toHaveLength(1);
+    expect(email.sent[0]?.to).toBe("rahim.uddin@example.test");
+    expect(email.sent[0]?.text).toContain(`${ORIGIN}/en/support/requests/${ALL_DIGITS_ID}`);
+    expect(email.sent[0]?.text).not.toContain("We refunded it.");
+  });
+
+  it("a visitor gets the reply at the address of the request", async () => {
+    addRow(supportReplyPayload(ALL_DIGITS_ID, "We refunded it.", "visitor"), {
+      email: "visitor@example.test",
+    });
+    await runNotifier(deps());
+    expect(email.sent).toHaveLength(1);
+    expect(email.sent[0]?.to).toBe("visitor@example.test");
+    expect(email.sent[0]?.text).toContain("We refunded it.");
+    expect(email.sent[0]?.text).toContain(`${ORIGIN}/support`);
+  });
+
+  // The text of a reply is still checked: only an id in the request path is set aside.
+  it.each([
+    ["a phone number", "Call us at 01712345678 today.", "phone_number"],
+    ["an address with an id as its name", `Write to ${IDS.request}@example.test`, "email_address"],
+    ["a long token around an id", `key sk_${"a".repeat(30)}_${ALL_DIGITS_ID}`, "long_token"],
+    ["a document number", "Your NID 1234567890123 is checked.", "long_digits"],
+    ["the same id with digits glued to it", `ref ${ALL_DIGITS_ID}0`, "long_digits"],
+    [
+      "an address made of the request path",
+      `${ORIGIN}/support/requests/${ALL_DIGITS_ID}@example.test`,
+      // the id is not set aside, so its digits are the first rule that matches
+      "long_digits",
+    ],
+    [
+      "digits glued to the id of a request path",
+      `/support/requests/${ALL_DIGITS_ID}9`,
+      "long_digits",
+    ],
+  ])("a visitor reply that holds %s is refused, nothing is sent", async (_name, body, rule) => {
+    addRow(supportReplyPayload(IDS.request, body, "visitor"), { email: "visitor@example.test" });
+    await runNotifier(deps());
+    expect(email.sent).toHaveLength(0);
+    expect(store.rows()[0]).toMatchObject({ status: "failed", attempts: 0 });
+    expect(JSON.stringify(logs)).toContain(rule);
+  });
+
+  // Review round 1: a row queued before WPU-Z5 has no audience; the recipient of the row decides it.
+  it("a row written before WPU-Z5 to a customer (no audience) is sent as a customer notice with the link", async () => {
+    store.add(
+      {
+        customerId: IDS.customer,
+        email: null,
+        channel: "email",
+        template: "support_reply",
+        payload: { requestId: IDS.request, body: "Hello there" },
+        dedupeKey: "support-reply:old-customer",
+      },
+      clock.now(),
+    );
+    await runNotifier(deps());
+    expect(store.rows()[0]?.status).toBe("sent");
+    expect(email.sent).toHaveLength(1);
+    expect(email.sent[0]?.text).toContain(`${ORIGIN}/en/support/requests/${IDS.request}`);
+    expect(email.sent[0]?.text).not.toContain("Hello there");
+  });
+
+  it("a row written before WPU-Z5 to a visitor (no audience) is sent with the reply text", async () => {
+    store.add(
+      {
+        customerId: null,
+        email: "visitor@example.test",
+        channel: "email",
+        template: "support_reply",
+        payload: { requestId: IDS.request, body: "Hello there" },
+        dedupeKey: "support-reply:old-visitor",
+      },
+      clock.now(),
+    );
+    await runNotifier(deps());
+    expect(store.rows()[0]?.status).toBe("sent");
+    expect(email.sent[0]?.to).toBe("visitor@example.test");
+    expect(email.sent[0]?.text).toContain("Hello there");
+  });
+
+  it("only a missing audience is filled in: a wrong one and other templates are left as they are", () => {
+    const payload = { requestId: IDS.request, body: "x" };
+    expect(withSupportAudience({ template: "support_reply", customerId: null, payload })).toEqual({
+      ...payload,
+      audience: "visitor",
+    });
+    expect(
+      withSupportAudience({ template: "support_reply", customerId: IDS.customer, payload }),
+    ).toEqual({ ...payload, audience: "customer" });
+    const wrong = { ...payload, audience: "admin" };
+    expect(
+      withSupportAudience({ template: "support_reply", customerId: null, payload: wrong }),
+    ).toBe(wrong);
+    expect(withSupportAudience({ template: "kyc_approved", customerId: null, payload })).toBe(
+      payload,
+    );
+    expect(
+      withSupportAudience({ template: "support_reply", customerId: null, payload: null }),
+    ).toBe(null);
+  });
+
+  it("a row with a wrong audience is still refused, never sent with a guessed text", async () => {
+    store.add(
+      {
+        customerId: IDS.customer,
+        email: null,
+        channel: "email",
+        template: "support_reply",
+        payload: { requestId: IDS.request, body: "Hello", audience: "admin" },
+        dedupeKey: "support-reply:wrong",
+      },
+      clock.now(),
+    );
+    await runNotifier(deps());
+    expect(email.sent).toHaveLength(0);
+    expect(store.rows()[0]?.status).toBe("failed");
+    expect(JSON.stringify(logs)).toContain("bad_payload");
+  });
+});

@@ -7,23 +7,30 @@ name: deploy-production
 #   1. verify  no AWS. The tag must be vX.Y.Z and its commit must be on the protected branch. Gate M5 must pass.
 #   2. plan    environment `production-plan` (no reviewers). A read-only role runs `sst diff` and writes it to
 #              the job summary. DevOps reads the summary here, before approving the next job.
-#   3. deploy  environment `production` (required reviewers: DevOps). A separate role runs `sst diff` again,
-#              `sst deploy`, then the read-only post-deploy check.
+#   3. deploy  environment `production`. A separate role runs `sst diff` again, `sst deploy`, then the
+#              read-only post-deploy check. Required reviewers on `production` need a GitHub plan that offers
+#              them for a private repository; the owner's plan does not (refused 2026-11-13), so pushing the
+#              `v*` tag IS the approval (docs/runbooks/go-live.md). GitHub Pro would add a reviewer gate here.
 #
 # OIDC (R3): no AWS key in GitHub and no `secrets.*` in this file. Role ARNs are variables of the environments.
-# Trust policy conditions DevOps puts on each role (the `sub` claim is the environment name, so a branch, a
-# tag or a pull request cannot assume the role by itself):
+# Trust policy conditions on each role (infra/org/ci-plan-production.yaml, ci-deploy-production.yaml; the
+# `sub` claim carries the environment name, so a branch, a tag or a pull request cannot assume the role):
 #   token.actions.githubusercontent.com:aud = sts.amazonaws.com
-#   deploy role:  token.actions.githubusercontent.com:sub = repo:<org>/<repo>:environment:production
-#   plan role:    token.actions.githubusercontent.com:sub = repo:<org>/<repo>:environment:production-plan
-# REQUIRED (not optional) on BOTH roles: a second condition on the claim `job_workflow_ref`,
-#   token.actions.githubusercontent.com:job_workflow_ref = repo:<org>/<repo>/.github/workflows/deploy-production.yml@refs/tags/v*
+#   deploy role:  token.actions.githubusercontent.com:sub = repo:<org>@<owner-id>/<repo>@<repo-id>:environment:production
+#   plan role:    token.actions.githubusercontent.com:sub = repo:<org>@<owner-id>/<repo>@<repo-id>:environment:production-plan
+# The sub is GitHub's immutable form with the owner and repository ids: every repository created or renamed
+# after 2026-07-15 gets it (GitHub OIDC reference, VERIFY result of WPU-Z11).
+# REQUIRED (not optional) on BOTH roles: a second condition on the claim `job_workflow_ref` (no "repo:" prefix),
+#   token.actions.githubusercontent.com:job_workflow_ref = <org>/<repo>/.github/workflows/deploy-production.yml@refs/tags/v*
 # and on the GitHub side a deployment tag policy on BOTH environments (`production` and `production-plan`):
 # only `v*` tags may deploy to them. `production-plan` has no reviewers, so without the tag policy any
 # branch of the repository could reach the read-only plan role.
+# TC_STAGE_SIZE (lean or full; unset is full) comes from each environment like the other stage values, in the
+# plan job too, so the plan shows the sizing that the deploy job builds.
 # The plan role holds read and `sst diff` permissions only. The deploy role is the only production deploy role.
-# The production account is a different account from staging; its role cannot assume a pool role for
-# customers (R1): the control plane roles do that, not the CI role.
+# Staging and production may share one account (owner decision 2026-11-13); each deploy role can change
+# only its own stage (infra/org/ci-deploy-*.yaml). No CI role can assume a pool role for customers (R1):
+# the control plane roles do that, not the CI role.
 #
 # The guard in infra/lib/stage.ts refuses the production stage unless CI=true and TC_PRODUCTION_DEPLOY=ci-approved.
 # The variable is set per step, only on the steps that run sst, never at workflow or job level. The plan step
@@ -115,6 +122,7 @@ jobs:
       TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
       TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
       TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
+      TC_STAGE_SIZE: ${{ vars.TC_STAGE_SIZE }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -149,7 +157,8 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # Required reviewers (DevOps) are set on this environment. The job waits here for the approval.
+    # Required reviewers wait here where the GitHub plan offers them; on the owner's plan the pushed tag is the
+    # approval (see the top of this file).
     environment: production
     permissions:
       id-token: write
@@ -167,6 +176,7 @@ jobs:
       TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
       TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
       TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
+      TC_STAGE_SIZE: ${{ vars.TC_STAGE_SIZE }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

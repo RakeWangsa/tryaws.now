@@ -17,11 +17,18 @@ export const casesBn = {
     filter: {
       status: "অবস্থা",
       open: "খোলা",
+      // WPU-Z5: a support request that waits for the requester.
+      answered: "উত্তর দেওয়া হয়েছে",
       closed: "বন্ধ",
       all: "সব",
       submit: "দেখান",
     },
-    status: { open: "খোলা", closed: "বন্ধ", resolved: "সমাধান হয়েছে" },
+    status: {
+      open: "খোলা",
+      answered: "উত্তর দেওয়া হয়েছে",
+      closed: "বন্ধ",
+      resolved: "সমাধান হয়েছে",
+    },
     result: {
       ok: "কাজটি সম্পন্ন হয়েছে।",
       replayed: "এই কাজটি আগেই সম্পন্ন হয়েছিল। নতুন কিছু লেখা হয়নি।",
@@ -44,6 +51,7 @@ export const casesBn = {
         category: "বিভাগ",
         status: "অবস্থা",
         created: "পাঠানো হয়েছে",
+        lastActivity: "শেষ কার্যকলাপ",
         handler: "দেখছেন",
         noName: "নাম নেই",
         mine: "একজন অ্যাডমিন",
@@ -51,7 +59,6 @@ export const casesBn = {
       },
       detail: {
         back: "তালিকায় ফিরুন",
-        message: "গ্রাহকের বার্তা",
         info: "অনুরোধ",
         customer: "গ্রাহক",
         visitor: "অতিথি",
@@ -63,18 +70,32 @@ export const casesBn = {
         reasonColumn: "কারণ",
         when: "সময়",
       },
+      // WPU-Z5: the thread of the request; the request itself is its first entry.
+      thread: {
+        title: "কথোপকথন",
+        customer: "গ্রাহক",
+        visitor: "অতিথি",
+        admin: "অ্যাডমিন",
+        earlier: "এর আগের উত্তরগুলো এখানে দেখানো হয়নি।",
+      },
       reply: {
-        title: "ইমেইলে উত্তর দিন",
+        title: "উত্তর দিন",
         label: "উত্তর",
-        hint: "উত্তরটি গ্রাহকের ইমেইলে যাবে। অডিটে শুধু দৈর্ঘ্য থাকে, লেখা থাকে না।",
+        hint: "উত্তরটি এই অনুরোধের কথোপকথনে থাকে। গ্রাহক প্যানেলে উত্তরটি পড়েন এবং ইমেইলে একটি খবর পান; অতিথি পুরো উত্তরটি ইমেইলে পান। অডিটে শুধু দৈর্ঘ্য থাকে, লেখা থাকে না।",
         submit: "উত্তর পাঠান",
         disabled: "ইমেইল টেমপ্লেট এখনো চালু হয়নি, তাই উত্তর পাঠানো বন্ধ আছে।",
-        closedHint: "বন্ধ অনুরোধে উত্তর দেওয়া যায় না।",
+        closedHint: "বন্ধ অনুরোধে উত্তর দেওয়া যায় না। আগে অনুরোধটি আবার খুলুন।",
       },
       close: { title: "অনুরোধ বন্ধ করুন", submit: "বন্ধ করুন" },
+      reopen: {
+        title: "অনুরোধ আবার খুলুন",
+        hint: "অনুরোধটি আবার খোলা অবস্থায় যায় এবং উত্তর দেওয়া যায়। গ্রাহক নিজে উত্তর দিলেও অনুরোধ আবার খোলে।",
+        submit: "আবার খুলুন",
+      },
       actions: {
-        reply: "ইমেইলে উত্তর",
+        reply: "উত্তর",
         close: "অনুরোধ বন্ধ",
+        reopen: "অনুরোধ আবার খোলা",
       },
     },
     abuse: {

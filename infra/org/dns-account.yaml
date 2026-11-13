@@ -4,11 +4,16 @@ Description: >-
   with one permissions boundary. Deploy with the DevOps admin role. Control plane stage: staging or
   production. Separate accounts: deploy once in tc-dns with CreateBillingReader=true. ONE account (owner
   ruling): deploy pool-roles.yaml first, then this with CreateBillingReader=false. No test-zone split yet.
-# VERIFY: the exact Route 53 and Route 53 Domains actions that the real adapter calls (the adapter for
-# the AWS SDK is not in packages/aws yet: only the ports route53-port.ts and domains-port.ts exist).
-# VERIFY: RegisterDomain needs route53:CreateHostedZone, route53:GetHostedZone and
-# route53:ListHostedZonesByName next to route53domains:RegisterDomain (12, "VERIFY in tc-dns with the
-# first real registration"); add or drop actions after that registration.
+# VERIFY result (WPU-Z11, docs/analysis/verify-review-2026-11-13.md): the adapters exist.
+# packages/aws/adapters/route53-client.ts calls ChangeResourceRecordSets, CreateHostedZone,
+# DeleteHostedZone, GetHostedZone, ListHostedZonesByName and ListResourceRecordSets;
+# packages/aws/domains-client.ts calls CheckDomainAvailability, GetContactReachabilityStatus (inside every
+# getDomainDetail), GetDomainDetail, GetOperationDetail, ListPrices, RegisterDomain, RenewDomain,
+# ResendContactReachabilityEmail and UpdateDomainNameservers. The two policies below list them;
+# route53:GetChange stays for the INSYNC poll that JOURNEY.md plans (tests/repo/infra-org.test.mjs pins it).
+# VERIFY result: RegisterDomain is authorized by route53domains:RegisterDomain and route53:CreateHostedZone
+# (AWS service reference); GetHostedZone and ListHostedZonesByName stay for route53-client.ts. Confirm
+# with the first real registration in this account, from the AccessDenied entries of CloudTrail.
 # VERIFY: Route 53 Domains and Route 53 API calls are served from us-east-1, so the Region condition
 # below is us-east-1 only.
 
@@ -145,6 +150,7 @@ Resources:
                 Effect: Allow
                 Action:
                   - route53domains:CheckDomainAvailability
+                  - route53domains:GetContactReachabilityStatus
                   - route53domains:ListPrices
                   - route53domains:RegisterDomain
                   - route53domains:GetOperationDetail
