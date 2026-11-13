@@ -10,7 +10,10 @@ export function generateMetadata({ params }: LocaleParams): Promise<Metadata> {
   return metadataOf(params, "/support", "support");
 }
 
-/** `/support`: the public contact page (WPP-T2). The phone and the address are a Needs decision. */
+/**
+ * `/support`: the public support page (WPP-T2). Support is given through support requests only, with
+ * no support phone and no support e-mail (owner decision 2026-11-13, WPU-Z7).
+ */
 export default async function SupportPage({ params }: LocaleParams) {
   const locale = await localeOf(params);
   const [catalog, nonce, signedIn] = await Promise.all([
@@ -20,13 +23,7 @@ export default async function SupportPage({ params }: LocaleParams) {
   ]);
   return (
     <PublicFrame signedIn={signedIn} locale={locale} path="/support" {...menuOf(catalog)}>
-      <SupportContent
-        locale={locale}
-        origin={publicOrigin()}
-        nonce={nonce}
-        phone={null}
-        email={null}
-      />
+      <SupportContent locale={locale} origin={publicOrigin()} nonce={nonce} />
     </PublicFrame>
   );
 }

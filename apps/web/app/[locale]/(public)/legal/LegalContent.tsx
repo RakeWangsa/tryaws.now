@@ -7,16 +7,69 @@ import { breadcrumbLd } from "../../../../server/public/seo.ts";
 import { JsonLds } from "../_components/JsonLd.tsx";
 import type { Tr } from "../_components/offers.tsx";
 
-// `/legal/[doc]` (legal.html): the sidebar of documents and the document. THE TEXT IS A PLACEHOLDER
-// (JOURNEY.md, Needs decision): every section is a one-line stand-in that ends in a marker, and the
-// page says in a visible notice that it is a draft. The wording is the legal adviser's (16.8).
+// `/legal/[doc]` (legal.html): the sidebar of documents and the document. The texts are DRAFTS (WPU-Z7,
+// messages/legal-bn.ts and legal-en.ts) written only from the specification and the owner decisions:
+// numbered sections in plain language, and a bracketed "to be decided" note where a fact is missing.
+// The page shows the notice "Draft — awaiting final approval" until the owner approves these exact
+// texts (manual proof wp9-t5-legal-final); the legal adviser's wording may replace them (16.8).
 
-const SECTIONS: Readonly<Record<LegalDoc, readonly string[]>> = {
-  terms: ["scope", "payment", "suspension"],
-  "acceptable-use": ["aws", "mining", "transfer", "suspend"],
-  privacy: ["collect", "storage", "rights"],
-  refund: ["wallet", "service"],
+/**
+ * The sections of each document, in order. Each has a numbered `title` and the paragraphs p1, p2, ...
+ * public-pages.test.tsx checks that every section of the messages is rendered, in this order.
+ */
+const LEGAL_SECTIONS: Readonly<Record<LegalDoc, readonly string[]>> = {
+  terms: [
+    "provider",
+    "service",
+    "account",
+    "identity",
+    "wallet",
+    "prices",
+    "orders",
+    "renewal",
+    "notRenewed",
+    "usage",
+    "suspension",
+    "invoices",
+    "support",
+    "liability",
+    "changes",
+    "law",
+  ],
+  "acceptable-use": [
+    "scope",
+    "aws",
+    "mining",
+    "transfer",
+    "cdn",
+    "email",
+    "suspend",
+    "report",
+    "more",
+  ],
+  privacy: [
+    "controller",
+    "collect",
+    "why",
+    "storage",
+    "share",
+    "security",
+    "cookies",
+    "retention",
+    "rights",
+  ],
+  refund: ["wallet", "failed", "period", "reversal", "payout", "review", "ask"],
 };
+
+/** The acceptable use policy passes on the AWS rules, so it opens with the long AWS statement of 16.13. */
+const OPENS_WITH_AWS_STATEMENT: readonly LegalDoc[] = ["acceptable-use"];
+
+/** The keys p1, p2, ... of a section, as far as the messages have them. */
+function paragraphKeys(t: Tr, section: string): string[] {
+  const keys: string[] = [];
+  for (let n = 1; t.has(`${section}.p${n}`); n++) keys.push(`${section}.p${n}`);
+  return keys;
+}
 
 export function LegalContent({
   locale,
@@ -30,6 +83,10 @@ export function LegalContent({
   nonce: string | undefined;
 }) {
   const t = useTranslations("Public") as unknown as Tr;
+  const tAws = useTranslations("Aws");
+  const tShell = useTranslations("Shell");
+  // The provider's name and address are those of the footer (Section 1): one source for both.
+  const provider = { company: tShell("footer.companyName"), address: tShell("footer.address") };
   const title = t(`legal.docs.${doc}.title`);
   return (
     <>
@@ -92,11 +149,24 @@ export function LegalContent({
                         <span className="float-end c-grey seccolor">{t("legal.version")}</span>
                       </h2>
                       <hr />
-                      {SECTIONS[doc].map((section) => (
-                        <div key={section} className="blog-info">
-                          <p className="seccolor">{t(`legal.docs.${doc}.sections.${section}`)}</p>
+                      {OPENS_WITH_AWS_STATEMENT.includes(doc) ? (
+                        <div className="blog-info">
+                          <p className="seccolor">{tAws("long")}</p>
                         </div>
-                      ))}
+                      ) : null}
+                      {LEGAL_SECTIONS[doc].map((section) => {
+                        const base = `legal.docs.${doc}.sections.${section}`;
+                        return (
+                          <div key={section}>
+                            <h3 className="h6 mergecolor mt-4">{t(`${base}.title`)}</h3>
+                            {paragraphKeys(t, base).map((key) => (
+                              <div key={key} className="blog-info">
+                                <p className="seccolor">{t(key, provider)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

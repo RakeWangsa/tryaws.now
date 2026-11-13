@@ -189,7 +189,7 @@ export const PUBLIC_ANCHORS: readonly MockupAnchor[] = [
   {
     state: "support.data",
     mockupFile: "template/contact.html",
-    why: "section#ticket: the card of the contact form, here with the contact details",
+    why: "section#ticket: the card of the contact form, here with the ways to get support",
     classes: [
       "exapath",
       "pb-80",

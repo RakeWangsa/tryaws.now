@@ -1,9 +1,9 @@
+import { legalDocsEn } from "./legal-en.ts";
 import type { publicBn } from "./public-bn.ts";
 
 type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 
-// The legal documents below are PLACEHOLDERS (JOURNEY.md, "Needs decision"): no sentence of them is
-// final legal wording.
+// The legal documents are DRAFTS in `legal-en.ts` (WPU-Z7) that wait for the owner's approval.
 export const publicEn: Same<typeof publicBn> = {
   Public: {
     crumb: { home: "Home" },
@@ -30,7 +30,8 @@ export const publicEn: Same<typeof publicBn> = {
       },
       support: {
         title: "Support and contact",
-        description: "How to reach the MeghVPS support team.",
+        description:
+          "How to get support from MeghVPS: support requests in the panel, or the form on the support page without an account.",
       },
       legal: {
         title: "Legal documents",
@@ -101,7 +102,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         support: {
           title: "MeghVPS bills and supports you",
-          text: "MeghVPS sells, bills and supports the service. Ask us directly.",
+          text: "MeghVPS sells, bills and supports the service. Open a support request when you need help.",
         },
       },
       locationsTitle: "Two locations",
@@ -202,7 +203,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         billing: {
           q: "Who bills me and who supports me?",
-          a: "MeghVPS. We sell, bill and support the service.",
+          a: "MeghVPS. We sell and bill the service, and we support you through support requests in the panel. There is no support phone line.",
         },
         dataLocation: {
           q: "Where is my data?",
@@ -234,7 +235,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         support: {
           q: "Where do I get help?",
-          a: "Contact us from the support page. When you are signed in you can also write to us from the panel.",
+          a: "Open a support request in the panel and read our answers there. Without an account, use the form on the support page and we answer by email. There is no support phone line or support email address.",
         },
         bdt: {
           q: "Are prices in taka?",
@@ -244,15 +245,15 @@ export const publicEn: Same<typeof publicBn> = {
     },
     support: {
       heading: "Support and contact",
-      lead: "MeghVPS sells, bills and supports the service. Reach us in the ways below.",
-      signedInTitle: "If you have an account",
-      signedInText:
-        "Sign in to the panel and send a request from the support page. We then already have your servers and orders at hand.",
-      signedInCta: "Go to the panel",
-      phoneTitle: "Phone",
-      phonePending: "The support phone number will be added here soon.",
-      emailTitle: "Email",
-      emailPending: "The support email address will be added here soon.",
+      lead: "MeghVPS gives support through support requests, and our support team answers every request in writing. There is no support phone line and no support email address.",
+      customerTitle: "If you have an account",
+      customerText:
+        "Open a support request in the panel and follow it there: read our answers and reply in the same place. If you are not signed in, you sign in first.",
+      newCta: "Open a support request",
+      requestsCta: "My support requests",
+      visitorTitle: "If you have no account",
+      visitorText:
+        "Write to us with the form below. We send our answer to the email address you give.",
       faqTitle: "Look at the questions first",
       faqText: "Most answers are there.",
       faqCta: "Questions",
@@ -290,47 +291,12 @@ export const publicEn: Same<typeof publicBn> = {
       heading: "Legal documents",
       sidebarTitle: "Documents",
       sidebarLabel: "List of legal documents",
-      draftTitle: "Draft, not final legal text yet",
+      // WPU-Z7: shown until the owner approves the exact texts (manual proof wp9-t5-legal-final).
+      draftTitle: "Draft — awaiting final approval",
       draftText:
-        "The text on this page is a temporary placeholder. It does not count as terms until wording approved by the legal adviser is in place.",
-      version: "Version: draft 0",
-      docs: {
-        terms: {
-          title: "Terms of use",
-          sections: {
-            scope: "Scope: what MeghVPS provides and who does what. [legal text pending]",
-            payment: "Money, wallet and renewal. [legal text pending]",
-            suspension: "The right to suspend and end the service. [legal text pending]",
-          },
-        },
-        "acceptable-use": {
-          title: "Acceptable use policy",
-          sections: {
-            aws: "The AWS Acceptable Use Policy also binds customers. [legal text pending]",
-            mining: "Cryptocurrency mining is not allowed. [legal text pending]",
-            transfer:
-              "Rules on using Amazon Lightsail to avoid the data fees of other AWS services, on video streaming or very high request volume through CDN, and on outbound port 25. [legal text pending]",
-            suspend:
-              "MeghVPS may suspend a resource at once on a breach or an AWS notice. [legal text pending]",
-          },
-        },
-        privacy: {
-          title: "Privacy policy",
-          sections: {
-            collect: "Which data we collect and why. [legal text pending]",
-            storage:
-              "Where data is kept: account and identity documents in AWS Singapore. [legal text pending]",
-            rights: "Your rights and how to reach us. [legal text pending]",
-          },
-        },
-        refund: {
-          title: "Refund policy",
-          sections: {
-            wallet: "Refund of wallet money. [legal text and rules pending]",
-            service: "Refund of a service price. [legal text and rules pending]",
-          },
-        },
-      },
+        "This text is a draft. It takes effect only after its final approval and may change until then. The points in square brackets are not decided yet.",
+      version: "Version: draft 1, 13 November 2026",
+      docs: legalDocsEn,
     },
     system: {
       maintenanceTitle: "Under maintenance",
