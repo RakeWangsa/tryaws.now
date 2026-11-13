@@ -5,7 +5,8 @@
 // of 2026-11-13, source of sst v4.17.2; tests/repo/sst-config.test.mjs pins it). `app` may be async
 // (platform/src/config.ts: `app(input: AppInput): App | Promise<App>`).
 //
-// The environment is read here only and handed to infra/app.ts.
+// The environment is read here only and handed to infra/app.ts. `sst add <provider>` cannot edit this file
+// (app() returns a function call, not an object literal): add a provider by hand in infra/app.ts appConfig.
 export default $config({
   async app(input) {
     const { appConfig } = await import("./infra/app");

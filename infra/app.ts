@@ -28,7 +28,9 @@ export function appConfig(stage: string, env: Env) {
   assertDeployAllowed(stage, env);
   return {
     name: "ticon-cloud",
-    home: "aws",
+    // `as const`: without it the literal widens to string and the root config fails tsc against the SST
+    // types (App.home is "aws" | "cloudflare" | "local").
+    home: "aws" as const,
     // retain keeps the data stores of staging and production when a stage is removed.
     removal: removalPolicy(stage),
     protect: stageKind(stage) === "production",
