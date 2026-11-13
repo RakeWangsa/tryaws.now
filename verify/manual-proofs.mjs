@@ -180,7 +180,7 @@ export const MANUAL_PROOFS = {
     task: "WP10-T1",
     who: "Moshiur",
     description:
-      "the on-call list, the support phone and the support e-mail are final and confirmed",
+      "the on-call list is final and confirmed; support is the in-app request system (no support phone and no support e-mail, owner decision 2026-11-13)",
   },
   "wp10-t2-first-day-report": {
     gate: "M7",

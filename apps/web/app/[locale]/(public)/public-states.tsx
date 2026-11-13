@@ -73,7 +73,7 @@ export function renderers(
     )),
     "help.data": framed(open, "/help", (locale) => <HelpContent locale={locale} {...base} />),
     "support.data": framed(open, "/support", (locale) => (
-      <SupportContent locale={locale} phone={null} email={null} {...base} />
+      <SupportContent locale={locale} {...base} />
     )),
     "maintenance.data": framed(open, "/", (locale) => <MaintenanceContent locale={locale} />),
   };

@@ -48,7 +48,7 @@ export const LATIN_ONLY_BN: readonly WordingAllow[] = [
     reason: "16.13 AWS name beside the product: Amazon Lightsail object storage bucket",
   },
   {
-    key: "Public.legal.docs.acceptable-use.sections.aws",
+    key: "Public.legal.docs.acceptable-use.sections.aws.p1",
     reason: "title of the AWS policy, a document name",
   },
 ];

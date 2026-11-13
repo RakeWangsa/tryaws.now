@@ -25,7 +25,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-/** `/legal/[doc]`: terms, privacy, acceptable use and refund. The text is a placeholder (WPP-T2). */
+/**
+ * `/legal/[doc]`: terms, privacy, acceptable use and refund (WPP-T2). The texts are drafts that wait
+ * for the owner's approval (WPU-Z7); the page says so in a visible notice.
+ */
 export default async function LegalPage({ params }: Props) {
   const { doc } = await params;
   if (!isLegalDoc(doc)) notFound();

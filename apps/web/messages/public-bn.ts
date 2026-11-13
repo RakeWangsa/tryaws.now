@@ -1,7 +1,9 @@
+import { legalDocsBn } from "./legal-bn.ts";
+
 // Namespace `Public` of the public site (WPP-T1 to WPP-T4). Bengali is written first (rule U5);
 // `public-en.ts` is typed from this tree, so a missing key fails `tsc`. The AWS statements themselves
-// live in the shell messages (`Aws`, 16.13) and are not repeated here. The legal documents below are
-// PLACEHOLDERS (JOURNEY.md, "Needs decision"): no sentence of them is final legal wording.
+// live in the shell messages (`Aws`, 16.13) and are not repeated here. The legal documents are DRAFTS
+// in `legal-bn.ts` (WPU-Z7) that wait for the owner's approval of their exact text.
 export const publicBn = {
   Public: {
     crumb: { home: "হোম" },
@@ -28,7 +30,8 @@ export const publicBn = {
       },
       support: {
         title: "সাপোর্ট ও যোগাযোগ",
-        description: "MeghVPS সাপোর্ট টিমের সঙ্গে যোগাযোগের উপায়।",
+        description:
+          "MeghVPS-এর সাপোর্ট পাওয়ার উপায়: প্যানেলে সাপোর্ট অনুরোধ, আর অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম।",
       },
       legal: {
         title: "আইনি নথি",
@@ -98,7 +101,7 @@ export const publicBn = {
         },
         support: {
           title: "বিল ও সাপোর্ট MeghVPS-এর",
-          text: "বিক্রি, বিল ও সাপোর্ট MeghVPS দেয়। প্রশ্ন থাকলে সরাসরি আমাদের জানান।",
+          text: "বিক্রি, বিল ও সাপোর্ট MeghVPS দেয়। সাহায্য দরকার হলে সাপোর্ট অনুরোধ খুলুন।",
         },
       },
       locationsTitle: "দুটি লোকেশন",
@@ -196,7 +199,7 @@ export const publicBn = {
         },
         billing: {
           q: "বিল ও সাপোর্ট কে দেয়?",
-          a: "MeghVPS। আমরা বিক্রি করি, বিল করি ও সাপোর্ট দিই।",
+          a: "MeghVPS। আমরা বিক্রি করি ও বিল করি, আর প্যানেলের সাপোর্ট অনুরোধের মাধ্যমে সাপোর্ট দিই। সাপোর্টের কোনো ফোন লাইন নেই।",
         },
         dataLocation: {
           q: "আমার ডেটা কোথায় থাকে?",
@@ -228,7 +231,7 @@ export const publicBn = {
         },
         support: {
           q: "সাহায্য কোথায় পাব?",
-          a: "সাপোর্ট পাতা থেকে আমাদের সঙ্গে যোগাযোগ করুন। প্যানেলে ঢুকলে সেখান থেকেও জানাতে পারবেন।",
+          a: "প্যানেলে সাপোর্ট অনুরোধ খুলুন এবং সেখানেই আমাদের উত্তর দেখুন। অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম ব্যবহার করুন, আমরা ইমেইলে উত্তর দেব। সাপোর্টের কোনো ফোন লাইন বা ইমেইল ঠিকানা নেই।",
         },
         bdt: {
           q: "মূল্য কি টাকায়?",
@@ -238,15 +241,14 @@ export const publicBn = {
     },
     support: {
       heading: "সাপোর্ট ও যোগাযোগ",
-      lead: "MeghVPS বিক্রি, বিল ও সাপোর্ট দেয়। নিচের উপায়ে আমাদের জানান।",
-      signedInTitle: "আপনার অ্যাকাউন্ট থাকলে",
-      signedInText:
-        "প্যানেলে ঢুকে সাপোর্ট পাতা থেকে অনুরোধ পাঠান। তাতে আপনার সার্ভার ও অর্ডারের তথ্য আমাদের কাছে আগেই থাকে।",
-      signedInCta: "প্যানেলে যান",
-      phoneTitle: "ফোন",
-      phonePending: "সাপোর্টের ফোন নম্বর শিগগির এখানে যোগ হবে।",
-      emailTitle: "ইমেইল",
-      emailPending: "সাপোর্টের ইমেইল ঠিকানা শিগগির এখানে যোগ হবে।",
+      lead: "MeghVPS সাপোর্ট দেয় সাপোর্ট অনুরোধের মাধ্যমে, এবং প্রতিটি অনুরোধের লিখিত উত্তর দেয় আমাদের সাপোর্ট দল। সাপোর্টের কোনো ফোন লাইন বা ইমেইল ঠিকানা নেই।",
+      customerTitle: "আপনার অ্যাকাউন্ট থাকলে",
+      customerText:
+        "প্যানেলে সাপোর্ট অনুরোধ খুলুন এবং সেখানেই সেটি অনুসরণ করুন: আমাদের উত্তর পড়ুন এবং একই জায়গায় জবাব দিন। সাইন ইন করা না থাকলে আগে সাইন ইন করতে হবে।",
+      newCta: "সাপোর্ট অনুরোধ খুলুন",
+      requestsCta: "আমার সাপোর্ট অনুরোধ",
+      visitorTitle: "অ্যাকাউন্ট না থাকলে",
+      visitorText: "নিচের ফর্মে আমাদের লিখুন। আপনার দেওয়া ইমেইল ঠিকানায় আমরা উত্তর পাঠাব।",
       faqTitle: "আগে সাধারণ প্রশ্ন দেখুন",
       faqText: "বেশিরভাগ প্রশ্নের উত্তর সেখানে আছে।",
       faqCta: "সাধারণ প্রশ্ন",
@@ -284,47 +286,12 @@ export const publicBn = {
       heading: "আইনি নথি",
       sidebarTitle: "নথি",
       sidebarLabel: "আইনি নথির তালিকা",
-      draftTitle: "খসড়া, এখনো চূড়ান্ত আইনি লেখা নয়",
+      // WPU-Z7: shown until the owner approves the exact texts (manual proof wp9-t5-legal-final).
+      draftTitle: "খসড়া — চূড়ান্ত অনুমোদনের অপেক্ষায়",
       draftText:
-        "এই পাতার লেখা অস্থায়ী স্থানধারক। আইনি উপদেষ্টার অনুমোদিত লেখা বসার আগে একে শর্ত হিসেবে ধরা যাবে না।",
-      version: "সংস্করণ: খসড়া ০",
-      docs: {
-        terms: {
-          title: "ব্যবহারের শর্তাবলি",
-          sections: {
-            scope: "পরিসর: MeghVPS সেবার বিবরণ ও কে কী দেয়। [আইনি লেখা বাকি]",
-            payment: "টাকা, ওয়ালেট ও নবায়ন। [আইনি লেখা বাকি]",
-            suspension: "সেবা স্থগিত ও বন্ধ করার অধিকার। [আইনি লেখা বাকি]",
-          },
-        },
-        "acceptable-use": {
-          title: "গ্রহণযোগ্য ব্যবহারের নীতি",
-          sections: {
-            aws: "AWS Acceptable Use Policy-র নিয়ম গ্রাহকের ওপরও প্রযোজ্য হবে। [আইনি লেখা বাকি]",
-            mining: "ক্রিপ্টোকারেন্সি মাইনিং নিষিদ্ধ। [আইনি লেখা বাকি]",
-            transfer:
-              "অন্য AWS সেবার ডেটা ফি এড়াতে Amazon Lightsail ব্যবহার, ভিডিও স্ট্রিমিং বা অতি উচ্চ অনুরোধ-সংখ্যা CDN দিয়ে চালানো এবং বাইরে যাওয়া পোর্ট ২৫ নিয়ে নিয়ম। [আইনি লেখা বাকি]",
-            suspend:
-              "নিয়ম ভাঙলে বা AWS-এর নোটিস এলে MeghVPS তৎক্ষণাৎ রিসোর্স স্থগিত করতে পারবে। [আইনি লেখা বাকি]",
-          },
-        },
-        privacy: {
-          title: "গোপনীয়তা নীতি",
-          sections: {
-            collect: "কোন তথ্য নেওয়া হয় ও কেন। [আইনি লেখা বাকি]",
-            storage:
-              "তথ্য কোথায় থাকে: অ্যাকাউন্ট ও পরিচয়পত্রের নথি AWS Singapore-এ। [আইনি লেখা বাকি]",
-            rights: "আপনার অধিকার ও যোগাযোগ। [আইনি লেখা বাকি]",
-          },
-        },
-        refund: {
-          title: "ফেরতের নীতি",
-          sections: {
-            wallet: "ওয়ালেটের টাকা ফেরত। [আইনি লেখা ও নিয়ম বাকি]",
-            service: "সেবার মূল্য ফেরত। [আইনি লেখা ও নিয়ম বাকি]",
-          },
-        },
-      },
+        "এই লেখা একটি খসড়া। চূড়ান্ত অনুমোদনের পরই এটি কার্যকর হবে, তার আগে এতে পরিবর্তন হতে পারে। তৃতীয় বন্ধনীর ভেতরের বিষয়গুলোর সিদ্ধান্ত এখনো বাকি।",
+      version: "সংস্করণ: খসড়া ১, ১৩ নভেম্বর ২০২৬",
+      docs: legalDocsBn,
     },
     system: {
       maintenanceTitle: "রক্ষণাবেক্ষণ চলছে",

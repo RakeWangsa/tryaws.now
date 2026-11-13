@@ -1,9 +1,12 @@
 import { customerUsd, quote, usdToBdtMinor } from "@tc/core";
 import { formatUsd } from "@tc/ui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import type { Locale } from "@tc/ui/runtime";
+import { webMessages } from "../../../i18n/messages.ts";
 import { publicBn } from "../../../messages/public-bn.ts";
 import { publicEn } from "../../../messages/public-en.ts";
 import type { PublicCatalog } from "../../../server/public/catalog.ts";
+import { HONEYPOT_FIELD } from "../../../server/public/support-form-fields.ts";
 import {
   FIXTURE_FX,
   FIXTURE_ROWS,
@@ -29,8 +32,27 @@ const TRADEMARK =
 const LONG_EN =
   "Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai).";
 
+// The escaping of React's static markup: text is compared as it appears in the HTML.
 const escape = (text: string): string =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+
+/** The `<main>` of a page: its own content, without the menu and the footer of the shell. */
+const mainOf = (page: string): string => /<main[\s>][^]*<\/main>/.exec(page)?.[0] ?? "";
+/** A string leaf of the composed messages of a locale, such as `Shell.footer.address`. */
+const leaf = (locale: Locale, key: string): string =>
+  String(
+    key
+      .split(".")
+      .reduce<unknown>(
+        (node, part) => (node as Record<string, unknown>)[part],
+        webMessages[locale],
+      ),
+  );
 
 let all: Record<string, Renderer>;
 let open: PublicCatalog;
@@ -275,29 +297,82 @@ describe("/help (WPP-T2)", () => {
   });
 });
 
-describe("/support and /legal (WPP-T2)", () => {
-  it("support invents no phone number or address: both say they are coming", () => {
+const LEGAL = ["terms", "privacy", "acceptable-use", "refund"] as const;
+type LegalTree = { title: string; sections: Record<string, Record<string, string>> };
+
+describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
+  // Owner decision 2026-11-13: support is the in-app request system; no support phone, no support
+  // e-mail (a deviation from 16.8). The company name and address stay in the footer of every page.
+  it("support shows no phone, no e-mail address and no address block; it leads to support requests", () => {
     for (const locale of LOCALES) {
       const page = all["support.data"]!(locale);
+      const main = mainOf(page);
+      const text = main.replace(/<[^>]*>/g, " ");
       const t = (locale === "bn" ? publicBn : publicEn).Public.support;
-      expect(page).toContain(escape(t.phonePending));
-      expect(page).toContain(escape(t.emailPending));
-      expect(page).not.toMatch(/href="(tel|mailto):/);
+      expect(main).not.toMatch(/href="(tel|mailto):/);
+      expect(text, "an e-mail address").not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
+      expect(text, "a phone number").not.toMatch(/(?:[\d০-৯][\s-]?){10,}/);
+      expect(main, "the address is not a contact block").not.toContain(
+        escape(leaf(locale, "Shell.footer.address")),
+      );
+      expect(page, "the footer keeps the address").toContain(
+        escape(leaf(locale, "Shell.footer.address")),
+      );
+      // Signed-in customers open and follow requests in the panel; the panel asks for a sign-in first.
+      const prefix = locale === "bn" ? "" : "/en";
+      expect(main).toContain(`href="${prefix}/support/new"`);
+      expect(main).toContain(`href="${prefix}/support/requests"`);
+      for (const key of ["lead", "customerText", "visitorText", "newCta", "requestsCta"] as const) {
+        expect(main, key).toContain(escape(t[key]));
+      }
+      // The visitor form is unchanged: its fields and the honeypot.
+      for (const field of ["email", "name", "category", "subject", "message", HONEYPOT_FIELD]) {
+        expect(main, field).toContain(`name="${field}"`);
+      }
     }
   });
 
-  it("every legal document is marked as a draft placeholder, with the sidebar of all four", () => {
-    for (const doc of ["terms", "privacy", "acceptable-use", "refund"]) {
+  it("every legal document is a draft awaiting approval: the notice, the version, every section in order", () => {
+    for (const doc of LEGAL) {
       for (const locale of LOCALES) {
         const page = all[`legal.${doc}`]!(locale);
+        const main = mainOf(page);
+        const where = `${doc} ${locale}`;
         const t = (locale === "bn" ? publicBn : publicEn).Public.legal;
-        expect(page, `${doc} ${locale}`).toContain(escape(t.draftTitle));
-        expect(page, `${doc} ${locale}`).toContain(escape(t.version));
-        expect(page).toContain('aria-current="page"');
-        for (const other of ["terms", "privacy", "acceptable-use", "refund"]) {
-          expect(page).toContain(other === "terms" ? "/legal/terms" : `/legal/${other}`);
+        expect(main, where).toContain(escape(t.draftTitle));
+        expect(main, where).toContain(escape(t.draftText));
+        expect(main, where).toContain(escape(t.version));
+        expect(main, where).not.toMatch(/\[legal text[^\]]*pending\]|\[আইনি লেখা[^\]]*বাকি\]/i);
+        // Every title and paragraph of the messages is on the page, in their order, with the
+        // provider's name and address filled in from the footer messages.
+        const tree = (t.docs as unknown as Record<string, LegalTree>)[doc]!;
+        const fill = (text: string): string =>
+          text
+            .replace(/\{company\}/g, leaf(locale, "Shell.footer.companyName"))
+            .replace(/\{address\}/g, leaf(locale, "Shell.footer.address"));
+        let from = 0;
+        for (const [key, section] of Object.entries(tree.sections)) {
+          for (const [part, text] of Object.entries(section)) {
+            const at = main.indexOf(escape(fill(text)), from);
+            expect(at, `${where} ${key}.${part}`).toBeGreaterThanOrEqual(0);
+            from = at + 1;
+          }
         }
+        expect(main, where).not.toMatch(/\{(?:company|address)\}/);
+        // One heading per section, under the h2 of the document.
+        expect(count(main, /<h3[\s>]/g), where).toBe(Object.keys(tree.sections).length);
+        expect(page).toContain('aria-current="page"');
+        for (const other of LEGAL) expect(page).toContain(`/legal/${other}`);
       }
+    }
+  });
+
+  it("the acceptable use policy carries the AWS statements of 16.13 word for word", () => {
+    for (const locale of LOCALES) {
+      const page = all["legal.acceptable-use"]!(locale);
+      expect(mainOf(page), locale).toContain(escape(leaf(locale, "Aws.long")));
+      expect(page, locale).toContain(escape(SHORT[locale]));
+      expect(page, locale).toContain(TRADEMARK);
     }
   });
 
