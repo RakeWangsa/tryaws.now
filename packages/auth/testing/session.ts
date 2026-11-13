@@ -45,7 +45,6 @@ export function withRequireCustomerAs(session: CustomerSession): () => void {
           issuedAt: new Date(),
           authTime: session.signedInAt,
           expiresAt: new Date(Date.now() + 3_600_000),
-          amr: [],
         },
       }),
   };
@@ -84,7 +83,6 @@ export function withRequireAdminAs(actor: {
           issuedAt: new Date(),
           authTime: new Date(),
           expiresAt: new Date(Date.now() + 3_600_000),
-          amr: ["pwd", "mfa"],
         },
       }),
   };

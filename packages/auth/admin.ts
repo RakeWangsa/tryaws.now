@@ -9,8 +9,16 @@ import { AuthError, toResult } from "./types";
 import type { AuthReason, Clock, Denied, Result } from "./types";
 
 // 6.1, 6.2, R10: the admin session, one request. Order: the IP allowlist, the admin cookie, the token
-// of the ADMIN pool, the admin row, its status, the second factor in the token, the role. A failure
-// stops the rest; it never throws and never returns an actor unless every step passed (R16).
+// of the ADMIN pool, the admin row, its status, the role. A failure stops the rest; it never throws and
+// never returns an actor unless every step passed (R16).
+//
+// The second factor is not read from the token (WPU-Z15, ruling of 2026-11-13). VERIFY 2026-11-13
+// (Cognito developer guide, "Authentication levels with ACR and AMR claims"): Cognito adds `amr` only
+// when a sign-in asks for an authentication level (TARGET_ACR_VALUES of the USER_AUTH flow, Essentials
+// or Plus plan), which the admin sign-in does not, so its access token has no `amr`. The proof of TOTP
+// is the sign-in flow itself: the admin pool requires TOTP (infra/stacks/auth.ts, mfa "on", TOTP
+// only) and signInAdmin (admin-signin.ts) creates the session only after the SOFTWARE_TOKEN_MFA
+// challenge was answered in the same flow.
 
 export interface AdminRequestInfo {
   // The Cookie header and the CloudFront-Viewer-Address header; nothing else of the request is read.
@@ -28,11 +36,6 @@ export interface AdminSessionDeps {
 }
 
 export type AdminOutcome = { readonly ok: true; readonly actor: AdminActor } | Denied;
-
-// The one place that says what "TOTP was used" means: the token's `amr` list holds "mfa".
-// VERIFY on staging: whether the Cognito access token carries `amr`; if it does not, a pre token
-// generation trigger of the admin pool adds it, and only this constant changes.
-export const MFA_METHOD = "mfa";
 
 const MAX_USER_AGENT = 200;
 
@@ -81,10 +84,7 @@ export async function authenticateAdmin(
     if (admin === null || admin === undefined) return deny("unauthenticated", "unknown_subject");
     if (admin.status !== "active") return deny("forbidden", "disabled");
 
-    // 6. TOTP is required, always: the token must say that the second factor was used.
-    if (!(token.amr ?? []).includes(MFA_METHOD)) return deny("forbidden", "mfa_required");
-
-    // 7. The role guard (R9: authorize). An empty list allows nobody.
+    // 6. The role guard (R9: authorize). An empty list allows nobody.
     if (!roles.includes(admin.role)) return deny("forbidden", "role_not_allowed");
 
     const userAgent =

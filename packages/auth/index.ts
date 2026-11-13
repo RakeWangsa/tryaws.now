@@ -12,7 +12,6 @@ export { requireCustomer, currentCustomer, configureAuth } from "./require";
 export type { AuthRuntime } from "./require";
 export { requireAdmin, currentAdmin, configureAdminAuth, authenticateAdmin } from "./admin";
 export type { AdminAuthRuntime, AdminOutcome, AdminRequestInfo, AdminSessionDeps } from "./admin";
-export { MFA_METHOD } from "./admin";
 export { signInAdmin, cognitoAdminSignInPort, isValidSignInShape } from "./admin-signin";
 export type {
   AdminSignInInput,
