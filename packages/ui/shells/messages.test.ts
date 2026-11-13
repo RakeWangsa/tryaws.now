@@ -33,7 +33,7 @@ function specRow(markdown: string, label: string): { en: string; bn: string } {
   if (en === undefined || bn === undefined) throw new Error(`row has no two statements: ${label}`);
   // WPU-B1, WPU-Z8: docs/spec/16.13 still names the old brand (the plan is edited in its own pull request);
   // the statements are compared with the brand of the product, TryAWS.now (owner decision 2026-11-13).
-  const brand = (text: string): string => text.replaceAll("TiCON Cloud", "TryAWS.now");
+  const brand = (text: string): string => text.replace(/TiCON\s+Cloud/g, "TryAWS.now");
   return { en: brand(en), bn: brand(bn) };
 }
 

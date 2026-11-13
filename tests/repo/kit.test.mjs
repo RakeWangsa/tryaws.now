@@ -19,7 +19,10 @@ it.each([
   [".claude/agents/spec-checker.md", "`.claude/agents/spec-checker.md`"],
   [".github/pull_request_template.md", "Pull request description:"],
 ])("%s is the plan's block, unchanged", (file, marker) => {
-  expect(read(file)).toBe(blockAfter(plan, marker));
+  // WPU-Y6 (owner, 2026-11-14): the first brand name of the plan is TryAWS.now in these files; the plan
+  // itself is edited in its own pull request. Nothing else may differ from the plan's block.
+  const brand = (text) => text.replace(/TiCON\s+Cloud/g, "TryAWS.now");
+  expect(read(file)).toBe(brand(blockAfter(plan, marker)));
 });
 
 it("CLAUDE.md is under 200 lines", () => {

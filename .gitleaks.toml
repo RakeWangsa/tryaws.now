@@ -1,5 +1,5 @@
 # Configuration of the secret scan in .github/workflows/ci.yml.
-title = "TiCON Cloud secret scan"
+title = "TryAWS.now secret scan"
 
 [extend]
 useDefault = true

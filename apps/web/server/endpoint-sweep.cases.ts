@@ -934,7 +934,7 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     proof: [
       proof(
         "apps/web/app/[locale]/(public)/public-pages.test.tsx",
-        "every legal document is a draft awaiting approval",
+        "every legal document is approved: no draft notice",
       ),
     ],
   },

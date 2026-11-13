@@ -1,7 +1,8 @@
 // WPU-B1, WPU-Z8: the product brand is TryAWS.now (owner decision 2026-11-13), after MeghVPS (WPU-B1) and
-// TiCON Cloud before it. No old brand name may return to any text a customer reads. WPU-Y6: the company is
+// the first brand name before it. No old brand name may return to any text a customer reads. WPU-Y6: the company is
 // TryAWS.now too (below). Technical names (tc- prefixes, TiCON-Pools-Dev, ticon-log-protection, @tc/*)
 // stay and are not scanned for.
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -38,7 +39,7 @@ const customerFacing = () => {
   return files.filter((f) => /\.(ts|tsx|svg|json)$/.test(f) && !/\.test\./.test(f));
 };
 
-it("no customer-facing message, template, logo or invoice text says TiCON Cloud", () => {
+it("no customer-facing message, template, logo or invoice text says the first brand name", () => {
   const files = customerFacing();
   expect(files.length).toBeGreaterThan(20);
   const hits = files.filter((f) => OLD.test(readFileSync(f, "utf8")));
@@ -128,4 +129,36 @@ it("the company is TryAWS.now with its BIN and trade licence where the legal ent
     expect(text, file).toContain('tradeLicense: "Trade License: TRAD/DNCC/098737/2020"');
   }
   expect(readFileSync("apps/web/public/facts.json", "utf8")).toContain('"legalName": "TryAWS.now"');
+});
+
+// WPU-Y6 (owner, 2026-11-14): the internal name of the first brand is gone too: the SST app is
+// "tryaws-now" and every text says TryAWS.now. Kept on purpose: the specification and the plans it was
+// split from (docs/spec, TICON_CLOUD_MEGA_PLAN.md and the first Bengali launch plan), the mockup, the
+// JOURNEY.md history, the migrations already on main, and the dated records of earlier sessions
+// (docs/audit, docs/analysis, docs/superpowers). The package scope @tc/*, the AWS names tc-<type>-<id>
+// (R11) and the TC_* variables are other names and are not scanned for.
+const OLD_INTERNAL = /TiCON[ ]Cloud|ticon[-]cloud/i;
+const KEPT = [
+  /^docs\/spec\//,
+  /^TICON_CLOUD_MEGA_PLAN\.md$/,
+  /^TiCON\sCloud Lightsail .*\.md$/,
+  /^design\/mockup\//,
+  /^JOURNEY\.md$/,
+  /^packages\/db\/migrations\//,
+  /^docs\/(audit|analysis|superpowers)\//,
+  // names the first Bengali launch plan by its file name, to prove that prettier leaves it alone
+  /^tests\/repo\/ignored-files\.test\.mjs$/,
+];
+
+it("no file outside the kept records names the first brand or its SST app (WPU-Y6)", () => {
+  const listed = spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" });
+  expect(listed.status).toBe(0);
+  const files = listed.stdout.split("\0").filter((f) => f !== "" && !KEPT.some((k) => k.test(f)));
+  expect(files.length).toBeGreaterThan(500);
+  const hits = files.filter((f) => existsSync(f) && OLD_INTERNAL.test(readFileSync(f, "utf8")));
+  expect(hits).toEqual([]);
+});
+
+it("the SST app is tryaws-now (WPU-Y6)", () => {
+  expect(readFileSync("infra/app.ts", "utf8")).toContain('name: "tryaws-now"');
 });

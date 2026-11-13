@@ -216,6 +216,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-T4",
     "WPU-X6",
     "WPU-Y1",
+    "WPU-Y6",
     "WPU-Z0",
     "WPU-Z1",
     "WPU-Z10",
@@ -1151,7 +1152,7 @@ it("task WPU-B1 is proven by lint, types, format, the core, notify, web, admin a
 
 it("the proof of WPU-B1 exists: the repository test that bans the old brand in customer-facing files", () => {
   expect(readFileSync("tests/repo/brand.test.mjs", "utf8")).toContain(
-    "no customer-facing message, template, logo or invoice text says TiCON Cloud",
+    "no customer-facing message, template, logo or invoice text says the first brand name",
   );
 });
 
@@ -3477,4 +3478,24 @@ it("the manual checks of the new keys exist in the catalogue and are in the gate
       id,
     ).toContain(`manual-${id}`);
   }
+});
+
+it("task WPU-Y6 is proven by the brand, invoice, notify, web, admin, ui, infra and repository tests", () => {
+  expect(TASKS["WPU-Y6"].map((c) => [c.id, c.command.join(" ")])).toEqual([
+    ["spec-sync", "pnpm spec:check"],
+    ["baseline-sync", "pnpm baseline:check"],
+    ["lint", "pnpm lint"],
+    ["typecheck", "pnpm typecheck"],
+    ["format", "pnpm format:check"],
+    ["core-brand", "pnpm test --filter @tc/core invoices --no-passWithNoTests"],
+    ["notify-brand", "pnpm test --filter @tc/notify --no-passWithNoTests"],
+    ["web-brand", "pnpm test --filter @tc/web --no-passWithNoTests"],
+    ["admin", "pnpm test --filter @tc/admin --no-passWithNoTests"],
+    ["ui", "pnpm test --filter @tc/ui"],
+    ["invoice-renderer", TASKS["WPU-Y6"][10].command.join(" ")],
+    ["brand", "pnpm test --filter repo brand --no-passWithNoTests"],
+    ["infra-ci-oidc", "pnpm test --filter repo infra-ci-oidc --no-passWithNoTests"],
+    ["staging-on-demand", "pnpm test --filter repo staging-on-demand --no-passWithNoTests"],
+    ["repo", "pnpm test --filter repo --no-passWithNoTests"],
+  ]);
 });

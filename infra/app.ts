@@ -1,4 +1,4 @@
-// The SST app of TiCON Cloud (WP0-T2, WP0-T3, WP0-T4). Nothing here deploys by itself: a deploy is
+// The SST app of TryAWS.now (WP0-T2, WP0-T3, WP0-T4). Nothing here deploys by itself: a deploy is
 // `npx sst deploy --stage staging` by a person who was asked (CLAUDE.md), or the protected CI job.
 //
 // SST reads `sst.config.ts` at the repository root. SST 4 refuses every static import in a file named
@@ -28,7 +28,7 @@ export function appConfig(stage: string, env: Env) {
   // Refuses production unless the protected CI job set the variable; refuses fake switches.
   assertDeployAllowed(stage, env);
   return {
-    name: "ticon-cloud",
+    name: "tryaws-now",
     // `as const`: without it the literal widens to string and the root config fails tsc against the SST
     // types (App.home is "aws" | "cloudflare" | "local").
     home: "aws" as const,
