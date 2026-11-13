@@ -102,6 +102,7 @@ const GATE_CASES: Record<string, GateCase> = {
     deny: "finance",
   },
   "support.close": { call: (r) => r.support.close({ requestId: ID() }, "r"), deny: "finance" },
+  "support.reopen": { call: (r) => r.support.reopen({ requestId: ID() }, "r"), deny: "finance" },
   "capacity.pending": {
     call: (r) =>
       r.capacity.pending({
@@ -382,6 +383,8 @@ async function counts(): Promise<Record<string, number>> {
     "settings",
     "wallet_adjustments",
     "discrepancies",
+    // WPU-Z5: the thread of a support request (support.reply writes here)
+    "support_messages",
   ];
   return Object.fromEntries(await Promise.all(tables.map(async (x) => [x, await n(x)])));
 }

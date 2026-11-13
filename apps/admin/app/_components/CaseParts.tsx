@@ -11,7 +11,6 @@ import {
   type DataTableColumn,
 } from "@tc/ui";
 import { localePath, type Locale } from "@tc/ui/runtime";
-import type { CaseQuery } from "../../server/case-data.ts";
 
 // What the three case screens (/support, /abuse, /reconciliation) share. Server-rendered pieces only.
 export const RESULT_CODES = [
@@ -91,13 +90,32 @@ export function Hidden({
   );
 }
 
+// The state is a word in the badge, never a color alone (U11). `answered` is a state of a support request
+// (WPU-Z5): it waits for the requester.
 export function StatusBadge({ status }: { status: string }) {
   const t = useTranslations("AdminCases.status");
-  const known = status === "open" || status === "closed" || status === "resolved";
-  return <Badge tone={status === "open" ? "dark" : "grey"}>{known ? t(status) : status}</Badge>;
+  const known =
+    status === "open" || status === "answered" || status === "closed" || status === "resolved";
+  return (
+    <Badge tone={status === "open" ? "dark" : status === "answered" ? "purple" : "grey"}>
+      {known ? t(status) : status}
+    </Badge>
+  );
 }
 
-export function StatusFilter({ action, query }: { action: string; query: CaseQuery }) {
+// The states a queue can be filtered by, each a key of AdminCases.filter; "all" is always offered.
+export const CASE_FILTER_STATES = ["open", "closed"] as const;
+export const SUPPORT_FILTER_STATES = ["open", "answered", "closed"] as const;
+
+export function StatusFilter({
+  action,
+  query,
+  states = CASE_FILTER_STATES,
+}: {
+  action: string;
+  query: { readonly status: string | null };
+  states?: readonly (typeof SUPPORT_FILTER_STATES)[number][];
+}) {
   const t = useTranslations("AdminCases.filter");
   return (
     <form method="get" action={action} className="mb-4">
@@ -112,8 +130,11 @@ export function StatusFilter({ action, query }: { action: string; query: CaseQue
             className="form-control"
             defaultValue={query.status ?? "all"}
           >
-            <option value="open">{t("open")}</option>
-            <option value="closed">{t("closed")}</option>
+            {states.map((state) => (
+              <option key={state} value={state}>
+                {t(state)}
+              </option>
+            ))}
             <option value="all">{t("all")}</option>
           </select>
         </div>
@@ -128,7 +149,7 @@ export function StatusFilter({ action, query }: { action: string; query: CaseQue
 export function listHref(
   locale: Locale,
   path: string,
-  query: CaseQuery,
+  query: { readonly status: string | null },
   after: string | null,
 ): string {
   const params = new URLSearchParams();

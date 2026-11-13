@@ -1167,6 +1167,32 @@
       "selectColumns": null
     }
   },
+  "support_messages": {
+    "web_rw": {
+      "table": [],
+      "insertColumns": ["id", "request_id", "author_type", "body"],
+      "updateColumns": null,
+      "selectColumns": ["id", "request_id", "author_type", "body", "created_at"]
+    },
+    "admin_rw": {
+      "table": ["SELECT"],
+      "insertColumns": ["id", "request_id", "author_type", "admin_id", "body"],
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "worker_rw": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    },
+    "report_ro": {
+      "table": [],
+      "insertColumns": null,
+      "updateColumns": null,
+      "selectColumns": null
+    }
+  },
   "support_requests": {
     "web_rw": {
       "table": [],
@@ -1180,7 +1206,7 @@
         "subject",
         "message"
       ],
-      "updateColumns": null,
+      "updateColumns": ["status", "last_activity_at"],
       "selectColumns": [
         "id",
         "customer_id",
@@ -1189,13 +1215,14 @@
         "subject",
         "message",
         "status",
-        "created_at"
+        "created_at",
+        "last_activity_at"
       ]
     },
     "admin_rw": {
       "table": ["SELECT"],
       "insertColumns": null,
-      "updateColumns": ["status", "handled_by"],
+      "updateColumns": ["status", "handled_by", "last_activity_at"],
       "selectColumns": null
     },
     "worker_rw": {

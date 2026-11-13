@@ -8,6 +8,7 @@ import type {
   ReconciliationOverview,
   SupportListResult,
   SupportRequestDetail,
+  SupportStatus,
 } from "@tc/db";
 import type { AdminActor } from "@tc/db";
 import { read, type Loaded } from "./customers-data.ts";
@@ -22,6 +23,12 @@ export interface CaseQuery {
   readonly after: string | null;
 }
 
+// WPU-Z5: a support request is open, answered or closed.
+export interface SupportQuery {
+  readonly status: SupportStatus | null;
+  readonly after: string | null;
+}
+
 export interface ReconciliationQuery {
   readonly kind: DiscrepancyKind | null;
   readonly status: DiscrepancyState | null;
@@ -30,6 +37,7 @@ export interface ReconciliationQuery {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CASE_STATUS = ["open", "closed"] as const;
+const SUPPORT_STATUS = ["open", "answered", "closed"] as const;
 const KINDS = ["orphan", "missing", "cost", "payment"] as const;
 const STATES = ["open", "resolved"] as const;
 
@@ -55,6 +63,22 @@ export function caseQueryOf(raw: Raw): CaseQuery {
   };
 }
 
+// The support queue: the same rules with the three states of a request. The default is the open rows,
+// the requests that wait for support.
+export function supportQueryOf(raw: Raw): SupportQuery {
+  const status = one(raw["status"]);
+  const after = one(raw["after"]);
+  return {
+    status:
+      status === "all"
+        ? null
+        : (SUPPORT_STATUS as readonly string[]).includes(status)
+          ? (status as SupportStatus)
+          : "open",
+    after: UUID.test(after) ? after : null,
+  };
+}
+
 export function reconciliationQueryOf(raw: Raw): ReconciliationQuery {
   const kind = one(raw["kind"]);
   const status = one(raw["status"]);
@@ -71,7 +95,7 @@ export function reconciliationQueryOf(raw: Raw): ReconciliationQuery {
   };
 }
 
-export const loadSupportList = (admin: AdminActor, query: CaseQuery) =>
+export const loadSupportList = (admin: AdminActor, query: SupportQuery) =>
   read<SupportListResult>(admin, (repos) =>
     repos.support.list({
       ...(query.status === null ? {} : { status: query.status }),

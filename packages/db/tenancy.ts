@@ -1,4 +1,4 @@
-// Who owns the rows of every table (WP1-T2). Each of the 37 tables of the schema is either a tenant
+// Who owns the rows of every table (WP1-T2). Each of the 38 tables of the schema is either a tenant
 // table, with the predicate that selects the rows of one customer, or a named non-tenant table.
 // test/tenancy.test.ts compares both lists with the tables of the real schema, so a table that
 // is added without a classification here fails the build.
@@ -30,6 +30,10 @@ const OWN_OR_RELATED_RESOURCE = `${OWN} or exists (select 1 from resources p whe
 const OWN_OR_PARENT_RESOURCE = `${OWN} or exists (select 1 from resources p where p.id = t.parent_resource_id and p.customer_id = $1::uuid)`;
 const OWN_OR_ORDER = `${OWN} or exists (select 1 from orders o where o.id = t.order_id and o.customer_id = $1::uuid)`;
 const OWN_OR_LEDGER_TRANSACTION = `${OWN} or exists (select 1 from ledger_entries e join ledger_accounts a on a.id = e.account_id where e.transaction_id = t.ledger_transaction_id and a.customer_id = $1::uuid)`;
+// WPU-Z5: the row is a message of a support request, and the request belongs to the customer (the same
+// one-step path as VIA_RESOURCE: the request's own customer, not the owner of its related resource).
+const VIA_SUPPORT_REQUEST =
+  "exists (select 1 from support_requests r where r.id = t.request_id and r.customer_id = $1::uuid)";
 
 export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   customers: "t.id = $1::uuid",
@@ -58,6 +62,7 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   notifications: OWN,
   waitlist_entries: OWN,
   support_requests: OWN_OR_RELATED_RESOURCE,
+  support_messages: VIA_SUPPORT_REQUEST,
   abuse_cases: VIA_RESOURCE,
   audit_log: "t.actor_type = 'customer' and t.actor_id = $1::uuid",
   // The id is compared as text, written the way uuid::text writes it, so that the case of the id
@@ -83,6 +88,7 @@ export const TENANT_TABLES: Readonly<Record<string, string>> = Object.freeze({
 //
 // Known blind spots of the snapshot, one per line, with the work package that adds the path:
 //   - notifications, waitlist_entries, support_requests with a null customer_id name the customer by e-mail: WP5-T5, WP4-T3, WP9-T4
+//     (and the support_messages of such a request of a visitor: WPU-Z5)
 //   - audit_log rows ABOUT a customer, written by an admin or the system (the predicate is the actor path only): WP8-T1
 //   - ledger_transactions whose actor or reference is the customer but that have no line on its account: WP3-T4
 //   - discrepancies, whose details can name a customer or a payment, and which customers cannot read: WP7-T6, WP8-T7

@@ -568,6 +568,111 @@ it("web_rw can report a discrepancy and cannot change or remove one", async () =
   expect(reported.rowCount).toBe(1);
 });
 
+// WPU-Z5 (migration 0027): the thread of a support request. The customer panel never reads or names the
+// admin of a message and never sets the handler; the admin app writes admin messages and moves the last
+// activity; the functions and the reports see no message. Each statement runs in its own rolled-back
+// transaction (asRole), so the rows seeded here by the owner are the only ones.
+it("support thread: web_rw reads and writes no admin of a message and no handler; worker_rw and report_ro see nothing", async () => {
+  const customer = await newCustomer(t.pool);
+  const admin = await newAdmin(t.pool, "support");
+  const request = await insertRow(t.pool, "support_requests", {
+    customer_id: customer,
+    category: "billing",
+    subject: "s",
+    message: "m",
+  });
+  await insertRow(t.pool, "support_messages", {
+    request_id: request,
+    author_type: "admin",
+    admin_id: admin,
+    body: "answer",
+  });
+
+  // refused
+  await refused("web_rw", "select admin_id from support_messages");
+  await refused("web_rw", "select handled_by from support_requests");
+  await refused(
+    "web_rw",
+    "insert into support_messages (id, request_id, author_type, admin_id, body) values ($1, $2, 'admin', $3, 'x')",
+    [uuidv7(), request, admin],
+  );
+  await refused("web_rw", "update support_messages set body = 'x' where false");
+  await refused("web_rw", "update support_requests set handled_by = $1 where id = $2", [
+    admin,
+    request,
+  ]);
+  await refused("web_rw", "update support_requests set subject = 'x' where id = $1", [request]);
+  await refused("admin_rw", "update support_messages set body = 'x' where false");
+  await refused("admin_rw", "update support_requests set message = 'x' where id = $1", [request]);
+  for (const role of ["worker_rw", "report_ro"] as const) {
+    await refused(role, "select id from support_messages");
+    await refused(
+      role,
+      "insert into support_messages (id, request_id, author_type, body) values ($1, $2, 'customer', 'x')",
+      [uuidv7(), request],
+    );
+    await refused(role, "update support_requests set last_activity_at = now() where false");
+  }
+
+  // allowed: the customer's reply, which reopens its request, and the reads of the thread
+  const reply = await allowed(
+    "web_rw",
+    "insert into support_messages (id, request_id, author_type, body) values ($1, $2, 'customer', 'more')",
+    [uuidv7(), request],
+  );
+  expect(reply.rowCount).toBe(1);
+  // an admin message without its admin is refused by the check (web_rw cannot name one)
+  await expectSqlError(
+    allowed(
+      "web_rw",
+      "insert into support_messages (id, request_id, author_type, body) values ($1, $2, 'admin', 'x')",
+      [uuidv7(), request],
+    ),
+    "23514",
+    { constraint: "support_messages_admin_check" },
+  );
+  const reopened = await allowed(
+    "web_rw",
+    "update support_requests set status = 'open', last_activity_at = now() where id = $1 and customer_id = $2",
+    [request, customer],
+  );
+  expect(reopened.rowCount).toBe(1);
+  const thread = await allowed(
+    "web_rw",
+    "select id, request_id, author_type, body, created_at from support_messages where request_id = $1",
+    [request],
+  );
+  expect(thread.rows.map((r) => r.author_type)).toEqual(["admin"]);
+  expect(
+    (
+      await allowed("web_rw", "select last_activity_at from support_requests where id = $1", [
+        request,
+      ])
+    ).rowCount,
+  ).toBe(1);
+
+  // allowed: the admin's reply, the state and the handler
+  const answer = await allowed(
+    "admin_rw",
+    "insert into support_messages (id, request_id, author_type, admin_id, body) values ($1, $2, 'admin', $3, 'done')",
+    [uuidv7(), request, admin],
+  );
+  expect(answer.rowCount).toBe(1);
+  const answered = await allowed(
+    "admin_rw",
+    "update support_requests set status = 'answered', last_activity_at = now(), handled_by = $1 where id = $2",
+    [admin, request],
+  );
+  expect(answered.rowCount).toBe(1);
+  expect(
+    (
+      await allowed("admin_rw", "select admin_id from support_messages where request_id = $1", [
+        request,
+      ])
+    ).rows,
+  ).toEqual([{ admin_id: admin }]);
+});
+
 // ---------------------------------------------------------------------------------------------
 // C. What each role cannot do and what its flows can
 

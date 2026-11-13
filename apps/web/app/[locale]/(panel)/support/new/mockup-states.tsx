@@ -22,6 +22,7 @@ const REQUESTS: readonly CustomerSupportRequestRow[] = [
     subject: "Top-up not shown",
     status: "open",
     createdAt: new Date("2026-11-10T04:00:00Z"),
+    lastActivityAt: new Date("2026-11-10T04:00:00Z"),
   },
   {
     id: "0190aaaa-0000-7000-8000-000000000002",
@@ -29,6 +30,7 @@ const REQUESTS: readonly CustomerSupportRequestRow[] = [
     subject: "সার্ভার ধীর",
     status: "closed",
     createdAt: new Date("2026-11-01T04:00:00Z"),
+    lastActivityAt: new Date("2026-11-02T04:00:00Z"),
   },
 ];
 

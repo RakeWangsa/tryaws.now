@@ -14,8 +14,9 @@ const ctx = (locale: "bn" | "en") =>
   }) as const;
 
 describe("support_reply", () => {
+  // WPU-Z5: the visitor's mail is the one that carries the text.
   const data = (body: string) =>
-    parseTemplateData("support_reply", { requestId: IDS.request, body });
+    parseTemplateData("support_reply", { requestId: IDS.request, body, audience: "visitor" });
 
   it("is a queued template (not direct only)", () => {
     expect(TEMPLATE_IDS).toContain("support_reply");
@@ -83,7 +84,7 @@ describe("support_reply", () => {
       planRows({
         customerId: IDS.customer,
         template: "support_reply",
-        data: { requestId: IDS.request, body: "your password: hunter2" },
+        data: { requestId: IDS.request, body: "your password: hunter2", audience: "customer" },
         dedupeKey: "k",
       }),
     ).toThrow(NotifyError);

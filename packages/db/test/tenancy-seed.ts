@@ -3,7 +3,7 @@ import { v7 as uuidv7 } from "uuid";
 import { inTransaction, insertRow } from "./sql";
 import { newAdmin, newPoolAccount, seedSeller, systemAccount, uniqueSuffix } from "./fixtures";
 
-// Seeds for test/tenancy*.test.ts: a row in every one of the 27 tenant tables for a customer, and the
+// Seeds for test/tenancy*.test.ts: a row in every one of the 28 tenant tables for a customer, and the
 // rows of one customer that point at the rows of another. The seed reads like the Ownership map: a
 // new tenant table has no seed, and the test that compares the seeded table names with the map fails
 // until this file has one.
@@ -60,7 +60,7 @@ export async function seedShared(pool: pg.Pool): Promise<SeedShared> {
   };
 }
 
-// One row in each of the 27 tenant tables for the customer, which must exist. Every row is the
+// One row in each of the 28 tenant tables for the customer, which must exist. Every row is the
 // customer's own (customer_id, or the resource, account or actor that the owner predicate follows).
 export async function seedCustomer(
   pool: pg.Pool,
@@ -243,12 +243,14 @@ export async function seedCustomer(
     region: "ap-south-1",
     reason: "capacity",
   });
-  await add("support_requests", {
+  const request = await add("support_requests", {
     customer_id: customerId,
     category: "general",
     subject: "s",
     message: "m",
   });
+  // WPU-Z5: a reply of the customer in the thread of its own request.
+  await add("support_messages", { request_id: request, author_type: "customer", body: "b" });
   await add("audit_log", { actor_type: "customer", actor_id: customerId, action: "x" });
   // WPU-I1: the seller of the market, so that an invoice can be issued in the cross-tenant cases. The
   // row is market data (scope 'market'), shared by all customers of BD; a second call leaves it alone.

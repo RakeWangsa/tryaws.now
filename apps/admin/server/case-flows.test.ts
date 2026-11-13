@@ -36,7 +36,11 @@ function rig(over: Over = {}) {
     return answer;
   };
   const repos = {
-    support: { reply: record("reply"), close: record("closeRequest") },
+    support: {
+      reply: record("reply"),
+      close: record("closeRequest"),
+      reopen: record("reopenRequest"),
+    },
     abuse: {
       open: record("open"),
       addNote: record("addNote"),
@@ -117,6 +121,46 @@ describe("support actions in the order of R9", () => {
     const r = rig();
     expect(await r.support(close())).toMatchObject({ ok: true });
     expect(r.calls).toEqual([["closeRequest", { requestId: ID }, "solved by phone"]]);
+  });
+
+  // WPU-Z5: a closed request is opened again by an admin, with a reason (R10), in the order of R9.
+  it("a reopen authorizes, validates, limits and passes the request and the reason of the admin", async () => {
+    const r = rig();
+    expect(
+      await r.support({ kind: "reopenRequest", id: ID.toUpperCase(), reason: " customer wrote " }),
+    ).toEqual({ ok: true, replayed: false, targetId: ID, sent: true });
+    expect(r.steps).toEqual(["authorize", "limit", "execute", "committed"]);
+    expect(r.asked).toEqual([["support", "superadmin"]]);
+    expect(r.calls).toEqual([["reopenRequest", { requestId: ID }, "customer wrote"]]);
+  });
+
+  it("a reopen needs a reason and a request id; a refusal of the repository is a fixed code", async () => {
+    for (const request of [
+      { kind: "reopenRequest", id: ID, reason: "" },
+      { kind: "reopenRequest", id: ID, reason: "x".repeat(501) },
+      { kind: "reopenRequest", id: "x", reason: "r" },
+    ] as SupportActionRequest[]) {
+      const r = rig();
+      expect(await r.support(request)).toEqual({ ok: false, code: "invalid" });
+      expect(r.steps).toEqual(["authorize"]);
+    }
+    const missing = rig({ answer: { ok: false, error: "not_found" } });
+    expect(await missing.support({ kind: "reopenRequest", id: ID, reason: "r" })).toEqual({
+      ok: false,
+      code: "not_found",
+    });
+    const replay = rig({ answer: OK({}, true) });
+    expect(await replay.support({ kind: "reopenRequest", id: ID, reason: "r" })).toMatchObject({
+      ok: true,
+      replayed: true,
+    });
+  });
+
+  it("a reopen is not a reply: it runs while the reply template is switched off", async () => {
+    const r = rig({ replyEnabled: false });
+    expect(await r.support({ kind: "reopenRequest", id: ID, reason: "r" })).toMatchObject({
+      ok: true,
+    });
   });
 
   it("the form cannot name the acting admin: an extra field changes nothing", async () => {

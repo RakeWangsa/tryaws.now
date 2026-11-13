@@ -44,7 +44,8 @@ export const supportBn = {
       sentOn: "পাঠানোর তারিখ",
       empty: { title: "এখনও কোনো অনুরোধ নেই", body: "অনুরোধ পাঠালে এখানে দেখা যাবে।" },
     },
-    status: { open: "খোলা", closed: "বন্ধ" },
+    // WPU-Z5: a request that support has answered and that waits for the customer.
+    status: { open: "খোলা", answered: "উত্তর দেওয়া হয়েছে", closed: "বন্ধ" },
     error: {
       unauthenticated: "আপনার সেশন শেষ হয়েছে। আবার সাইন ইন করুন।",
       validation: "কিছু তথ্য ঠিক নয়। চিহ্নিত ঘর ঠিক করে আবার চেষ্টা করুন।",
