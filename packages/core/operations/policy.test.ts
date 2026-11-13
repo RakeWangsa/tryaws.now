@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  REGISTRY_CHECK_FRESH_MS,
+  registryCheckedAt,
+  registryUnrenewedError,
+  rejectionAllowed,
   LEASE_SECONDS,
   MAX_ATTEMPTS,
   RETRY_DELAYS_SECONDS,
@@ -150,25 +154,73 @@ describe("a domain renewal the registry holds (step poll)", () => {
     }
   });
 
-  it("the registry's own refusal (GetOperationDetail FAILED: conflict without an AWS error name) fails it, so the charge goes back", () => {
+  // WPU-Y2 fix round 1: the registry's FAILED answer for the exact saved RenewDomain operation (the adapter's
+  // `registry_failed`) is final "not renewed": failed, with the refund. ERROR and a give-up with the expiry unchanged
+  // (`registry_unrenewed`), and a conflict without that verdict, stop in needs_attention.
+  it("the registry's FAILED answer at step poll (registry_failed) fails it: the charge goes back", () => {
     expect(
       decideFailure({
         kind: "renew_domain",
         step: "poll",
         attempts: 3,
         now: NOW,
-        facts: final("conflict"),
+        facts: { ...final("conflict"), registryVerdict: "failed" },
       }),
-    ).toEqual({ to: "failed", attempts: 4, lastError: "conflict" });
+    ).toEqual({ to: "failed", attempts: 4, lastError: "conflict:registry_failed" });
   });
 
-  it("a step that is not known is taken as held (R16): only the registry's refusal fails it", () => {
+  it("ERROR with the expiry unchanged (registry_unrenewed), or a bare conflict: needs attention, no refund", () => {
+    expect(
+      decideFailure({
+        kind: "renew_domain",
+        step: "poll",
+        attempts: 0,
+        now: NOW,
+        facts: { ...final("upstream_unavailable"), registryVerdict: "unrenewed" },
+      }),
+      // WPU-Y2 fix round 2: the time of the check is recorded with it, by the provisioner's clock
+    ).toEqual({
+      to: "needs_attention",
+      attempts: 1,
+      lastError: `upstream_unavailable:registry_unrenewed:${Math.floor(NOW.getTime() / 1000)}`,
+    });
+    expect(
+      decideFailure({
+        kind: "renew_domain",
+        step: "poll",
+        attempts: 0,
+        now: NOW,
+        facts: final("conflict"),
+      }).to,
+    ).toBe("needs_attention");
+    // the verdict counts only at poll and only with conflict
+    expect(
+      decideFailure({
+        kind: "renew_domain",
+        step: "poll",
+        attempts: 0,
+        now: NOW,
+        facts: { ...final("upstream_unavailable"), registryVerdict: "failed" },
+      }).to,
+    ).toBe("needs_attention");
+    expect(
+      decideFailure({
+        kind: "renew_domain",
+        step: "start",
+        attempts: 0,
+        now: NOW,
+        facts: { ...final("conflict"), registryVerdict: "failed" },
+      }).to,
+    ).toBe("needs_attention");
+  });
+
+  it("a step that is not known is taken as held (R16): nothing fails it", () => {
     expect(
       decideFailure({ kind: "renew_domain", attempts: 0, now: NOW, facts: final("validation") }).to,
     ).toBe("needs_attention");
     expect(
       decideFailure({ kind: "renew_domain", attempts: 0, now: NOW, facts: final("conflict") }).to,
-    ).toBe("failed");
+    ).toBe("needs_attention");
   });
 
   it("an error that passes still waits, and the fifth failure needs attention, as for any kind", () => {
@@ -371,4 +423,51 @@ it("a refusal needs attention, keeps the attempt count and records the code", ()
     lastError: "approval_flag_missing",
   });
   expect(decideRefusal("no_adapter", 3).attempts).toBe(3);
+});
+
+// WPU-Y2 fix round 2: an admin may refund a renewal at poll only on a recorded ERROR check, with its own check time.
+describe("rejectionAllowed: the admin refund of a renewal the registry may hold", () => {
+  const checked = registryUnrenewedError(NOW);
+  const at = (ms: number) => new Date(NOW.getTime() + ms);
+  const target = (over: Record<string, unknown> = {}) => ({
+    kind: "renew_domain",
+    step: "poll",
+    lastError: checked,
+    ...over,
+  });
+  it("the check time round-trips; any other text has none", () => {
+    expect(registryCheckedAt(checked)?.getTime()).toBe(Math.floor(NOW.getTime() / 1000) * 1000);
+    for (const text of [
+      null,
+      "upstream_unavailable",
+      "upstream_unavailable:registry_unrenewed",
+      "upstream_unavailable:registry_unrenewed:abc",
+      `conflict:registry_unrenewed:${Math.floor(NOW.getTime() / 1000)}`,
+      `${checked}0`,
+    ]) {
+      expect(registryCheckedAt(text), String(text)).toBeNull();
+    }
+  });
+  it("allowed within 60 minutes of the recorded check (ERROR and the expiry unchanged)", () => {
+    expect(rejectionAllowed(target(), at(0))).toBe(true);
+    expect(rejectionAllowed(target(), at(REGISTRY_CHECK_FRESH_MS))).toBe(true);
+    expect(rejectionAllowed(target(), at(REGISTRY_CHECK_FRESH_MS + 1000))).toBe(false);
+    // a check far ahead of this clock is not believed
+    expect(rejectionAllowed(target(), at(-10 * 60_000))).toBe(false);
+  });
+  it("never for a give-up while in progress (a plain error), a retry's new error, a step move (null), or submit", () => {
+    for (const over of [
+      { lastError: "upstream_unavailable" },
+      { lastError: "lease_expired" },
+      { lastError: null },
+      { step: "submit" },
+      { step: "start" },
+    ]) {
+      expect(rejectionAllowed(target(over), at(0)), JSON.stringify(over)).toBe(false);
+    }
+  });
+  it("every other kind, and a renewal that sent nothing (step null), keep the plain rejection", () => {
+    expect(rejectionAllowed(target({ kind: "create", lastError: null }), at(0))).toBe(true);
+    expect(rejectionAllowed(target({ step: null, lastError: null }), at(0))).toBe(true);
+  });
 });

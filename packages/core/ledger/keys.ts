@@ -6,6 +6,8 @@ import { isUuid } from "./uuid";
 const DRAFT_HASH = /^[A-Za-z0-9_+/=-]{16,128}$/;
 const METRIC = /^[a-z][a-z0-9_]{0,39}$/;
 const PERIOD = /^\d{4}-\d{2}-\d{2}(T\d{2})?$/;
+/** WPU-Y2: the highest attempt of a renewal key (a retry after a reversed domain renewal). */
+export const MAX_RENEWAL_ATTEMPT = 99;
 
 function uuidPart(fn: string, part: string, value: unknown): string {
   if (!isUuid(value)) throw new TypeError(`ledgerKey.${fn}: ${part} is not a UUID`);
@@ -28,12 +30,21 @@ export const ledgerKey = Object.freeze({
   orderReversal(orderId: string): string {
     return `order-reversal:${uuidPart("orderReversal", "orderId", orderId)}`;
   },
-  renewal(subscriptionId: string, periodStart: Date): string {
+  /**
+   * The renewal of one period. `attempt` (WPU-Y2) is 0 for the charge of the period; a domain renewal whose charge
+   * was reversed because the registry refused it before anything reached it (domain-renewal.ts) may be charged again,
+   * under attempt 1, 2, ... (`:a<n>`), so the reversed charge's key does not block a legitimate retry.
+   */
+  renewal(subscriptionId: string, periodStart: Date, attempt = 0): string {
     const sub = uuidPart("renewal", "subscriptionId", subscriptionId);
     if (!(periodStart instanceof Date) || Number.isNaN(periodStart.getTime())) {
       throw new TypeError("ledgerKey.renewal: periodStart is not a valid Date");
     }
-    return `renew:${sub}:${periodStart.toISOString()}`;
+    if (!Number.isInteger(attempt) || attempt < 0 || attempt > MAX_RENEWAL_ATTEMPT) {
+      throw new TypeError("ledgerKey.renewal: attempt is not a whole number from 0 to 99");
+    }
+    const base = `renew:${sub}:${periodStart.toISOString()}`;
+    return attempt === 0 ? base : `${base}:a${attempt}`;
   },
   metered(resourceId: string, metric: string, period: string): string {
     const res = uuidPart("metered", "resourceId", resourceId);

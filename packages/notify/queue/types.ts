@@ -38,6 +38,8 @@ export const TEMPLATE_IDS = [
   "unpaid_deletion",
   "unpaid_snapshot_released",
   "wallet_low_before_charge",
+  // WPU-Y2 fix round 1 (wording ruled 2026-11-14): a domain renewal the registry did not make, refunded.
+  "domain_renewal_refunded",
 ] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 

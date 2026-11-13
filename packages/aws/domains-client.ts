@@ -163,7 +163,9 @@ function operationStatusOf(value: unknown, operation: string): DomainOperationSt
       return "in_progress";
     case "SUCCESSFUL":
       return "successful";
+    // WPU-Y2 fix round 1: the API reference lists both words without defining them; only FAILED is final.
     case "ERROR":
+      return "error";
     case "FAILED":
       return "failed";
     default:

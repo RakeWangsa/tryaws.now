@@ -5,6 +5,7 @@ import {
   decideDomainRenewalReversal,
   domainRenewalKey,
   domainRenewalOperation,
+  domainRenewalRefused,
   readDomainRenewalPayload,
   type ReversalFacts,
 } from "./domain-renewal";
@@ -41,6 +42,13 @@ describe("the key of a registry renewal", () => {
     );
     expect(domainRenewalKey(SUB, new Date(START.getTime()))).toBe(domainRenewalKey(SUB, START));
   });
+
+  it("WPU-Y2: a retry after a reversed renewal of the period has a key of its own (`:a<n>`)", () => {
+    expect(domainRenewalKey(SUB, START, 0)).toBe(domainRenewalKey(SUB, START));
+    expect(domainRenewalKey(SUB, START, 2)).toBe(
+      `lifecycle:renew-domain:${SUB}:2027-11-11T06:00:00.000Z:a2`,
+    );
+  });
 });
 
 describe("the operation a domain's renewal charge queues", () => {
@@ -52,11 +60,20 @@ describe("the operation a domain's renewal charge queues", () => {
         subscriptionId: SUB,
         periodStart: "2027-11-11T06:00:00.000Z",
         currentExpiryYear: 2027,
+        // WPU-Y2 fix round 2: the exact pre-renewal expiry, compared to the millisecond after an ERROR
+        currentExpiresAt: "2027-11-12T08:00:00.000Z",
         years: 1,
         // WPU-Z19: RenewDomain's Consent.MaxPrice: the registry may not charge more than the customer paid.
         maxPriceUsd: "13.0000",
       },
       idempotencyKey: domainRenewalKey(SUB, START),
+    });
+  });
+
+  it("WPU-Y2: the retry of a reversed renewal names its attempt in the payload and the key", () => {
+    expect(domainRenewalOperation(domain(), START, USD, 1)).toMatchObject({
+      payload: { subscriptionId: SUB, periodStart: START.toISOString(), attempt: 1 },
+      idempotencyKey: domainRenewalKey(SUB, START, 1),
     });
   });
 
@@ -118,12 +135,61 @@ describe("the operation a domain's renewal charge queues", () => {
   });
 });
 
+// WPU-Y2 fix round 1 (ruling 3): the marker of a refused period, with the refused USD price.
+describe("domainRenewalRefused: whether the lifecycle charges a refused period by itself", () => {
+  const config = (marker: unknown) => ({ domainRenewalRefused: marker });
+  const refused = { periodStart: START.toISOString(), maxPriceUsd: "15.0000" };
+  it("no marker, or a marker of another period: not refused", () => {
+    expect(domainRenewalRefused({}, START)).toBe(false);
+    expect(domainRenewalRefused(config(null), START)).toBe(false);
+    expect(
+      domainRenewalRefused(
+        config({ ...refused, periodStart: "2026-11-11T06:00:00.000Z" }),
+        START,
+        "15",
+      ),
+    ).toBe(false);
+  });
+  it("the same period at the same price (any spelling), or no price known today: refused", () => {
+    for (const today of [null, "15", "15.0", "15.0000"]) {
+      expect(domainRenewalRefused(config(refused), START, today), String(today)).toBe(true);
+    }
+  });
+  it("another renewal price today: tried once more by itself", () => {
+    expect(domainRenewalRefused(config(refused), START, "16.5000")).toBe(false);
+    expect(domainRenewalRefused(config(refused), START, "1.5")).toBe(false);
+  });
+  it("a marker without a readable price, or one that cannot be read at all: refused (R16)", () => {
+    for (const marker of [
+      { periodStart: START.toISOString() },
+      { periodStart: START.toISOString(), maxPriceUsd: "1e3" },
+      { periodStart: "x", maxPriceUsd: "15" },
+      "refused",
+      [],
+    ]) {
+      expect(domainRenewalRefused(config(marker), START, "16"), JSON.stringify(marker)).toBe(true);
+    }
+    expect(domainRenewalRefused(config(refused), START, "not a price")).toBe(true);
+  });
+});
+
 describe("the payload a failed renewal is read back from", () => {
   it("gives the subscription and the period of the charge", () => {
     const input = domainRenewalOperation(domain(), START, USD);
     expect(readDomainRenewalPayload(input?.payload)).toEqual({
       subscriptionId: SUB,
       periodStart: START,
+      attempt: 0,
+      maxPriceUsd: USD,
+    });
+    // WPU-Y2: the attempt of a retry, so the reversal finds the charge of that attempt
+    expect(
+      readDomainRenewalPayload(domainRenewalOperation(domain(), START, USD, 3)?.payload),
+    ).toEqual({
+      subscriptionId: SUB,
+      periodStart: START,
+      attempt: 3,
+      maxPriceUsd: USD,
     });
   });
 
@@ -140,6 +206,11 @@ describe("the payload a failed renewal is read back from", () => {
       { subscriptionId: SUB, periodStart: "2027-11-11" },
       { subscriptionId: SUB, periodStart: "2027-11-11T06:00:00Z" },
       { subscriptionId: SUB, periodStart: START },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: 0 },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: -1 },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: 1.5 },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: 100 },
+      { subscriptionId: SUB, periodStart: START.toISOString(), attempt: "1" },
     ]) {
       expect(readDomainRenewalPayload(payload), JSON.stringify(payload)).toBeNull();
     }
@@ -162,6 +233,7 @@ describe("the reversal decision", () => {
       termDays: 365,
     },
     charge: { id: CHARGE, kind: "renewal", referenceId: SUB },
+    alreadyReversed: false,
     ...over,
   });
 
@@ -173,14 +245,22 @@ describe("the reversal decision", () => {
     });
   });
 
-  it("a repeat after the move back reverses again (a replay of the keyed reversal) and moves nothing", () => {
+  it("a repeat after the reversal is a replay of the keyed reversal and moves nothing, wherever the period is now", () => {
     const back = {
       ...facts().subscription!,
-      status: "ended" as const,
+      status: "active" as const,
       periodStart: new Date(START.getTime() - 365 * DAY),
       periodEnd: START,
     };
-    expect(decideDomainRenewalReversal(facts({ subscription: back }))).toEqual({
+    expect(
+      decideDomainRenewalReversal(facts({ subscription: back, alreadyReversed: true })),
+    ).toEqual({
+      action: "reverse",
+      chargeId: CHARGE,
+      rollBack: null,
+    });
+    // WPU-Y2: the customer renewed the period again since (attempt 1): a late repeat must not move it back.
+    expect(decideDomainRenewalReversal(facts({ alreadyReversed: true }))).toEqual({
       action: "reverse",
       chargeId: CHARGE,
       rollBack: null,
@@ -229,7 +309,7 @@ describe("the reversal decision", () => {
     for (const subscription of [
       // A later period was charged since.
       { ...sub, periodStart: renewedEnd, periodEnd: new Date(renewedEnd.getTime() + 365 * DAY) },
-      // Back at the paid period but not ended: not the state this module leaves.
+      // Back at the paid period while the charge was never reversed: not the state this module leaves.
       {
         ...sub,
         periodStart: new Date(START.getTime() - 365 * DAY),

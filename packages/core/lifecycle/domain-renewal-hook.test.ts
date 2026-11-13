@@ -14,6 +14,8 @@ const {
   lock,
   setPeriod,
   findCharge,
+  findReversal,
+  patchResource,
   lockWallet,
   reverseTransaction,
 } = vi.hoisted(() => {
@@ -31,6 +33,8 @@ const {
     lock: vi.fn(),
     setPeriod: vi.fn(),
     findCharge: vi.fn(),
+    findReversal: vi.fn(),
+    patchResource: vi.fn(),
     lockWallet: vi.fn(),
     reverseTransaction: vi.fn(),
   };
@@ -40,6 +44,8 @@ vi.mock("@tc/db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tc/db")>()),
   insertOperation: track("insertOperation", insertOperation),
   findLedgerTransactionByKey: track("findCharge", findCharge),
+  findReversalOf: track("findReversal", findReversal),
+  patchResource: track("patchResource", patchResource),
   lifecycleRepo: () => ({
     operationPayload: track("operationPayload", operationPayload),
     lock: track("lock", lock),
@@ -106,6 +112,8 @@ beforeEach(() => {
     lock,
     setPeriod,
     findCharge,
+    findReversal,
+    patchResource,
     lockWallet,
     reverseTransaction,
   ]) {
@@ -251,19 +259,25 @@ describe("reverseFailedDomainRenewal: the failed hook of a registry renewal", ()
     operationPayload.mockResolvedValue(payload);
     lock.mockResolvedValue(row());
     findCharge.mockResolvedValue({ id: CHARGE, kind: "renewal", referenceId: SUB });
+    findReversal.mockResolvedValue(null);
+    patchResource.mockResolvedValue(undefined);
     lockWallet.mockResolvedValue(0n);
     reverseTransaction.mockResolvedValue({ ok: true, value: { transactionId: REVERSAL } });
     setPeriod.mockResolvedValue(undefined);
   });
 
-  it("reverses the charge of the period once and ends the subscription at the period that was paid", async () => {
+  // WPU-Y2 (owner rule c): a refund never ends the subscription for good. It goes back, active, to the period that was
+  // paid, so the customer can renew again (renewNow, under the next attempt's key); the marker stops the automatic
+  // renewal of that period from charging the same refusal again on every sweep.
+  it("reverses the charge of the period once and moves the subscription back, active, to the period that was paid", async () => {
     expect(await reverseFailedDomainRenewal(TX, deps, event)).toEqual({
       reversalId: REVERSAL,
-      ended: true,
+      rolledBack: true,
     });
     expect(operationPayload).toHaveBeenCalledWith(RES, OP);
     expect(lock).toHaveBeenCalledWith(SUB);
     expect(findCharge).toHaveBeenCalledWith(TX, `renew:${SUB}:${P.toISOString()}`);
+    expect(findReversal).toHaveBeenCalledWith(TX, CHARGE);
     expect(lockWallet).toHaveBeenCalledWith(TX, CUS);
     expect(reverseTransaction).toHaveBeenCalledTimes(1);
     expect(reverseTransaction).toHaveBeenCalledWith(TX, {
@@ -272,18 +286,25 @@ describe("reverseFailedDomainRenewal: the failed hook of a registry renewal", ()
       memo: "automatic reversal of a failed domain renewal",
     });
     expect(setPeriod).toHaveBeenCalledWith(SUB, {
-      status: "ended",
+      status: "active",
       periodStart: new Date(P.getTime() - 365 * DAY),
       periodEnd: P,
+    });
+    expect(patchResource).toHaveBeenCalledWith(TX, RES, {
+      configMerge: {
+        domainRenewalRefused: { periodStart: P.toISOString(), maxPriceUsd: "13.0000" },
+      },
     });
     // The lock order of the lifecycle and of renewNow: the subscription row, then the wallet.
     expect(calls).toEqual([
       "operationPayload",
       "lock",
       "findCharge",
+      "findReversal",
       "lockWallet",
       "reverseTransaction",
       "setPeriod",
+      "patchResource",
     ]);
     // Ids and a fixed word only (R14).
     expect(logs).toEqual([
@@ -293,24 +314,78 @@ describe("reverseFailedDomainRenewal: the failed hook of a registry renewal", ()
         resourceId: RES,
         subscriptionId: SUB,
         reversalId: REVERSAL,
-        ended: true,
+        rolledBack: true,
       },
     ]);
   });
 
-  it("a repeat after the move back is a replay of the keyed reversal and moves nothing", async () => {
-    lock.mockResolvedValue({
-      ...row(),
-      status: "ended",
-      periodStart: new Date(P.getTime() - 365 * DAY),
-      periodEnd: P,
+  it("WPU-Y2 fix round 1: the customer is told once, in a savepoint; a message that fails never holds the refund back", async () => {
+    const notice = vi.fn(async () => undefined);
+    const sp = { savepoint: true } as unknown as Tx;
+    const tx = {
+      ...TX,
+      transaction: async <T>(fn: (inner: Tx) => Promise<T>) => fn(sp),
+    } as unknown as Tx;
+    lock.mockResolvedValue(
+      row("domain", { name: "shop.com", expiresAt: "2027-11-12T08:00:00.000Z" }),
+    );
+    await reverseFailedDomainRenewal(
+      tx,
+      { log: (e: unknown) => logs.push(e), notice } as never,
+      event,
+    );
+    expect(notice).toHaveBeenCalledWith(sp, {
+      customerId: CUS,
+      template: "domain_renewal_refunded",
+      data: { domain: "shop.com", expiresAt: "2027-11-12T08:00:00.000Z" },
+      dedupeKey: `domain-renewal-refunded:${OP}`,
     });
+    // a throwing writer is logged by name and the refund stands
+    const throwing = vi.fn(async () => {
+      throw new TypeError("bad");
+    });
+    findReversal.mockResolvedValue(null);
+    logs.length = 0;
+    await expect(
+      reverseFailedDomainRenewal(
+        tx,
+        { log: (e: unknown) => logs.push(e), notice: throwing } as never,
+        event,
+      ),
+    ).resolves.toMatchObject({ rolledBack: true });
+    expect(logs).toContainEqual({
+      event: "domain_renewal_notice_failed",
+      operationId: OP,
+      error: "TypeError",
+    });
+    // a replay sends nothing
+    notice.mockClear();
+    findReversal.mockResolvedValue("r");
+    await reverseFailedDomainRenewal(
+      tx,
+      { log: (e: unknown) => logs.push(e), notice } as never,
+      event,
+    );
+    expect(notice).not.toHaveBeenCalled();
+  });
+
+  it("WPU-Y2: the failed retry of a period reverses the charge of its own attempt", async () => {
+    operationPayload.mockResolvedValue(domainRenewalOperation(row(), P, "13.0000", 2)?.payload);
+    await reverseFailedDomainRenewal(TX, deps, event);
+    expect(findCharge).toHaveBeenCalledWith(TX, `renew:${SUB}:${P.toISOString()}:a2`);
+    expect(setPeriod).toHaveBeenCalledTimes(1);
+  });
+
+  it("a repeat after the reversal is a replay of the keyed reversal and moves nothing", async () => {
+    findReversal.mockResolvedValue({ id: REVERSAL });
+    // even when the customer has renewed the period again since (a later attempt)
     expect(await reverseFailedDomainRenewal(TX, deps, event)).toEqual({
       reversalId: REVERSAL,
-      ended: false,
+      rolledBack: false,
     });
     expect(reverseTransaction).toHaveBeenCalledTimes(1);
     expect(setPeriod).not.toHaveBeenCalled();
+    expect(patchResource).not.toHaveBeenCalled();
   });
 
   it("refuses what does not fit before any money moves: the failed move rolls back (R16)", async () => {
@@ -339,6 +414,7 @@ describe("reverseFailedDomainRenewal: the failed hook of a registry renewal", ()
     expect(lockWallet).not.toHaveBeenCalled();
     expect(reverseTransaction).not.toHaveBeenCalled();
     expect(setPeriod).not.toHaveBeenCalled();
+    expect(patchResource).not.toHaveBeenCalled();
     expect(logs).toEqual([]);
   });
 
@@ -348,5 +424,6 @@ describe("reverseFailedDomainRenewal: the failed hook of a registry renewal", ()
       DomainRenewalError,
     );
     expect(setPeriod).not.toHaveBeenCalled();
+    expect(patchResource).not.toHaveBeenCalled();
   });
 });

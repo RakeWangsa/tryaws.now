@@ -70,12 +70,15 @@ const SALE: Shape = {
 
 // A key is accepted only when `ledgerKey` makes exactly this text from its parts. A prefix check would let
 // `renew:<id>:<anything>` through, so one request could post twice under two spellings of one period.
+// WPU-Y2: or the same key with the attempt of a retry (`:a<n>`), again only in the exact text of ledgerKey.
 function renewalKeyOk(key: string, subscriptionId: string): boolean {
   const prefix = `renew:${subscriptionId}:`;
   if (!key.startsWith(prefix)) return false;
-  const period = key.slice(prefix.length);
-  const at = new Date(period);
-  return !Number.isNaN(at.getTime()) && ledgerKey.renewal(subscriptionId, at) === key;
+  const parts = /^(.+?)(?::a([1-9]\d?))?$/.exec(key.slice(prefix.length));
+  if (parts === null) return false;
+  const at = new Date(parts[1]!);
+  const attempt = parts[2] === undefined ? 0 : Number(parts[2]);
+  return !Number.isNaN(at.getTime()) && ledgerKey.renewal(subscriptionId, at, attempt) === key;
 }
 
 function meteredKeyOk(key: string, resourceId: string): boolean {

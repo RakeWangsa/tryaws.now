@@ -408,6 +408,17 @@ const LIFECYCLE = [
 // hook reverses it, and the failure policy and the rejection both know the kinds whose failure moves money back,
 // and a renewal the registry holds already (review round 1), which only the registry's own refusal refunds.
 const Z13 = ["refundedOnFailure", "registryHoldsRenewal", "reverseFailedDomainRenewal"];
+// WPU-Y2 fix round 1: the rejection of a renewal with a fresh registry check, and the refund message.
+const Y2_FIX = [
+  "DOMAIN_NOTICE_TEMPLATES",
+  "REGISTRY_CHECK_FRESH_MS",
+  "registryCheckedAt",
+  "registryUnrenewedError",
+  "rejectionAllowed",
+];
+
+// Exported on main (invoices/seller.ts, BIN display) without a pin in this list; pinned here at the merge of WPU-Y2.
+const MAIN_UNPINNED = ["formatBin"];
 
 // WPU-Y5 (c): the rejection of a dns_zone create whose hosted zone exists is refused. (e): the SSH keys that
 // Lightsail ImportKeyPair takes (ssh-rsa, 2048 to 16384 bits).
@@ -683,6 +694,8 @@ describe("the public surface of the order flow", () => {
           ...WP7,
           ...WPU_Y1,
           ...WPU_Y4,
+          ...Y2_FIX,
+          ...MAIN_UNPINNED,
           ...STORAGE_CONTAINER,
           ...KYC,
           ...RECONCILE,

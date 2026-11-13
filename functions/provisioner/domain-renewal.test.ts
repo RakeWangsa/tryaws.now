@@ -11,6 +11,7 @@ import {
   type StepResult,
 } from "@tc/core";
 import { rejectOperation, runTransaction } from "@tc/db/testing";
+import { notify } from "@tc/notify";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createAdapterRegistry } from "./adapters";
 import { composeHooks } from "./hooks";
@@ -21,11 +22,11 @@ import { NOW, useHarness } from "./test/harness";
 import { operationRow, seedOperation } from "./test/seed";
 
 // WPU-Z13: a renew_domain through the real provisioner path. A registry that refuses moves it to failed and the
-// renewal charge of its period goes back in the same transaction (one reversal, the subscription ended at the
-// period that was paid); an error that passes waits and moves no money; a reversal that cannot be made rolls the
+// renewal charge of its period goes back in the same transaction (one reversal, the subscription back, active, at the
+// period that was paid: WPU-Y2); an error that passes waits and moves no money; a reversal that cannot be made rolls the
 // move to failed back; an admin's rejection after the retries gives the money back too while the registry does
-// not hold the renewal. Once it does (step poll, review round 1) only the registry's own refusal gives it back: a
-// poll that gives up stops in needs_attention and a rejection is refused. At step submit (review round 2) only a
+// not hold the renewal. Once it does (step poll, review round 1) nothing gives it back (WPU-Y2: the registry's own
+// refusal too): every final error stops in needs_attention and a rejection is refused. At step submit (review round 2) only a
 // failure that proves nothing was sent gives it back. The domain adapter is a fake here (its
 // RenewDomain call and its errors are proved in packages/aws/test/domain-actions.test.ts).
 const { t, world, setup, message } = useHarness();
@@ -192,7 +193,20 @@ const refusing = () =>
       operation: "RenewDomain",
     });
   });
-const hooks = () => composeHooks(orderHooks({ clock }), renewalHooks({}));
+// WPU-Y2 fix round 1: the refund message goes through @tc/notify, as in index.ts.
+const hooks = () =>
+  composeHooks(
+    orderHooks({ clock }),
+    renewalHooks({
+      notice: (tx, n) =>
+        notify(tx, {
+          customerId: n.customerId,
+          template: n.template,
+          data: n.data,
+          dedupeKey: n.dedupeKey,
+        }),
+    }),
+  );
 
 describe("a registry renewal that the registry refuses", () => {
   it("reaches failed and gives the renewal charge back in the same transaction", async () => {
@@ -212,8 +226,9 @@ describe("a registry renewal that the registry refuses", () => {
     });
     expect(await reversalsOf(d.chargeId)).toBe(1);
     expect(await balance()).toBe(start + PRICE);
+    // WPU-Y2 (owner rule c): back, active, at the period that was paid; the customer can renew again.
     const s = await subscriptionOf(d.subscriptionId);
-    expect(s.status).toBe("ended");
+    expect(s.status).toBe("active");
     expect((s.period_start as Date).getTime()).toBe(at.getTime() - 365 * DAY);
     expect((s.period_end as Date).toISOString()).toBe(at.toISOString());
   });
@@ -288,12 +303,21 @@ describe("a registry renewal that the registry holds (step poll)", () => {
     expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
   });
 
-  it("the registry answers failed: failed, and the charge goes back once", async () => {
+  // WPU-Y2 fix round 1: GetOperationDetail FAILED for the saved RenewDomain operation is final "not renewed": failed,
+  // the charge back once, the subscription active at the paid period, the period marked with the refused price, the
+  // customer told. ERROR (registry_unrenewed) stops for an admin, who may then reject it with the refund.
+  it("the registry answers FAILED: failed, the charge back once, active at the paid period, marked, the customer told", async () => {
     const at = new Date("2026-11-16T09:00:00.000Z");
     const d = await held(at);
+    await t.pool.query(
+      `update operations set payload = payload || '{"maxPriceUsd":"13.0000"}'::jsonb where id = $1`,
+      [d.operationId],
+    );
     const start = await balance();
     const { deps } = setup({
-      adapters: throwing(new AwsError({ code: "conflict", retryable: false })),
+      adapters: throwing(
+        new AwsError({ code: "conflict", retryable: false, reason: "registry_failed" }),
+      ),
       hooks: hooks(),
     });
     expect(await runStep(deps, message(d.operationId, d.resourceId))).toMatchObject({
@@ -301,11 +325,65 @@ describe("a registry renewal that the registry holds (step poll)", () => {
     });
     expect(await operationRow(t.pool, d.operationId)).toMatchObject({
       state: "failed",
-      last_error: "conflict",
+      last_error: "conflict:registry_failed",
     });
     expect(await reversalsOf(d.chargeId)).toBe(1);
     expect(await balance()).toBe(start + PRICE);
-    expect((await subscriptionOf(d.subscriptionId)).status).toBe("ended");
+    const s = await subscriptionOf(d.subscriptionId);
+    expect(s.status).toBe("active");
+    expect((s.period_end as Date).toISOString()).toBe(at.toISOString());
+    const marker = await one(
+      "select config->'domainRenewalRefused' as m from resources where id = $1",
+      [d.resourceId],
+    );
+    expect(marker.m).toEqual({ periodStart: at.toISOString(), maxPriceUsd: "13.0000" });
+    const told = await t.pool.query(
+      "select template from notifications where customer_id = $1 and template = 'domain_renewal_refunded'",
+      [world.customerId],
+    );
+    expect(told.rows.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("the registry answers ERROR (expiry unchanged): needs_attention, no money moves; a fresh check lets an admin reject it with the refund", async () => {
+    const at = new Date("2026-11-18T09:00:00.000Z");
+    const d = await held(at);
+    const start = await balance();
+    const { deps } = setup({
+      adapters: throwing(
+        new AwsError({
+          code: "upstream_unavailable",
+          retryable: false,
+          reason: "registry_unrenewed",
+        }),
+      ),
+      hooks: hooks(),
+    });
+    expect(await runStep(deps, message(d.operationId, d.resourceId))).toMatchObject({
+      to: "needs_attention",
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "needs_attention",
+      // WPU-Y2 fix round 2: with the time the provisioner recorded the check
+      last_error: expect.stringMatching(/^upstream_unavailable:registry_unrenewed:\d{10}$/),
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(0);
+    expect(await balance()).toBe(start);
+    // the admin rejects it within the hour of that check: failed, refunded
+    const out = await runTransaction(
+      t.db,
+      (tx) => rejectOperation(tx, { operationId: d.operationId, at: NOW }),
+      { role: "admin_rw" },
+    );
+    if (!out.ok || !out.message) throw new Error("reject did not queue an operation");
+    const rejecting = setup({
+      adapters: throwing(new AwsError({ code: "internal", retryable: false })),
+      hooks: hooks(),
+    });
+    expect(await runStep(rejecting.deps, out.message)).toMatchObject({ to: "succeeded" });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({ state: "failed" });
+    expect(await reversalsOf(d.chargeId)).toBe(1);
+    expect(await balance()).toBe(start + PRICE);
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
   });
 
   it("an admin's rejection is refused (renewal_submitted): the renewal stays for a retry, no money moves", async () => {
@@ -407,7 +485,7 @@ describe("a registry renewal at step submit (RenewDomain may have been sent)", (
     expect(await reversalsOf(d.chargeId)).toBe(1);
     expect(await balance()).toBe(start + PRICE);
     const s = await subscriptionOf(d.subscriptionId);
-    expect(s.status).toBe("ended");
+    expect(s.status).toBe("active");
     expect((s.period_end as Date).toISOString()).toBe(at.toISOString());
   });
 
@@ -487,6 +565,6 @@ describe("a registry renewal that ran out of retries before RenewDomain was acce
     });
     expect(await reversalsOf(d.chargeId)).toBe(1);
     expect(await balance()).toBe(start + PRICE);
-    expect((await subscriptionOf(d.subscriptionId)).status).toBe("ended");
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
   });
 });

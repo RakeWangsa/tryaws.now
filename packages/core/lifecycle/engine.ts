@@ -17,7 +17,8 @@ import type { Logger, RunTx } from "../operations/types";
 import type { Clock, Result } from "../types";
 import { DEFAULT_LIFECYCLE_CONFIG, readLifecycleConfig, type LifecycleConfig } from "./config";
 import { decideSubscription, type LifecycleAction } from "./decide";
-import { queueDomainRenewal, renewWithRegistry } from "./domain-renewal";
+import { domainRenewalRefused, queueDomainRenewal, renewWithRegistry } from "./domain-renewal";
+import { RENEW_LEAD_DAYS_BY_FAMILY, renewLeadDaysOf } from "../domains/renewal";
 import { productOfFamily, type NoticeWriter } from "./notice";
 import { walletLowDue } from "./unpaid";
 import { resumeAfterRenewalAllowed, retentionKeyNeedsSalt } from "./resume-rule";
@@ -28,6 +29,7 @@ import { holdReasonOf, nextHoldMarker, staleHoldMarkers, type HoldReason } from 
 import { walkCandidates } from "./candidate-walk";
 
 const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
 // The rows of one page of the pass's candidate list. WPU-Z12: a page, no longer the most rows of a pass.
 export const LIFECYCLE_LIMIT = 500;
 // WPU-Z12 review: the upper bound of a pass, in ms from its clock reading. No row starts after it. About a third of the
@@ -187,8 +189,12 @@ async function holdRenewal(
   if (marker !== null) {
     await patchResource(work.tx, row.resourceId, { configMerge: { [FX_HOLD_KEY]: marker } });
   }
-  // Ids and fixed words only (R14): the error is a code of ErrorCode, never a message. The line with
-  // reason price_unavailable alarms (infra/stacks/alarms.ts): a person has to repair the price.
+  logHeld(deps, row, where, why);
+}
+
+// Ids and fixed words only (R14): the error is a code of ErrorCode, never a message. The line with
+// reason price_unavailable alarms (infra/stacks/alarms.ts): a person has to repair the price.
+function logHeld(deps: LifecycleDeps, row: LifecycleRow, where: string, why: HoldReason): void {
   deps.log({
     event: "lifecycle_renewal_held",
     ...(why.reason === "fx_rate"
@@ -242,12 +248,28 @@ async function clearStaleMarkers(tx: Tx, row: LifecycleRow, now: Date): Promise<
 // (renewWithRegistry). A domain whose renewal cannot be queued comes back as `conflict` with the charge rolled
 // back; holdReasonOf then holds it for price_unavailable, so the marker is written and the alarm fires (final
 // review M2).
+// WPU-Y2 (owner rule c): a domain whose registry refused the renewal of this very period (domainRenewalRefused) is
+// not charged again by the lifecycle: the same refusal would come back on every sweep, a charge and a reversal each
+// time. It comes back as `conflict` too, so it is held with the alarm (no grace, no retention); the customer can renew
+// by hand (renewNow), or a person looks.
 async function renewCharge(
   work: Work,
   clock: Clock,
   log: Logger,
 ): Promise<Result<Renewed & { readonly registry: QueueMessage | null }>> {
   const { row } = work;
+  if (
+    row.resource.family === "domain" &&
+    domainRenewalRefused(row.resource.config, row.periodEnd)
+  ) {
+    // WPU-Y2 fix round 1 (ruling 3): refused at its stored price; today's renewal price, when it is another, is
+    // tried once by itself (a refusal of that try stores its own price).
+    const quoted = await renewalQuote(work.tx, row, clock);
+    const today = quoted.ok ? quoted.value.awsPriceUsd : null;
+    if (domainRenewalRefused(row.resource.config, row.periodEnd, today)) {
+      return { ok: false, error: "conflict", fields: { domainRenewal: "refused" } };
+    }
+  }
   return renewWithRegistry(work.tx, async (sp) => {
     const renewed = await renewSubscription(sp, row, clock, log);
     if (!renewed.ok) return renewed;
@@ -257,6 +279,7 @@ async function renewCharge(
       renewed.value.periodStart,
       work.now,
       renewed.value.awsPriceUsd,
+      renewed.value.attempt,
     );
     return { ok: true, value: { ...renewed.value, registry } };
   });
@@ -352,6 +375,11 @@ async function end(work: Work): Promise<void> {
   });
 }
 
+/** WPU-Y2. When the renewal of the row is charged: its period end, less the lead time of its family. */
+function chargeDateOf(row: LifecycleRow): Date {
+  return new Date(row.periodEnd.getTime() - renewLeadDaysOf(row.resource.family) * DAY_MS);
+}
+
 async function remind(work: Work, day: number, deps: LifecycleDeps): Promise<boolean> {
   const { row, config } = work;
   const balance = await walletBalance(work.tx, row.customerId);
@@ -368,7 +396,8 @@ async function remind(work: Work, day: number, deps: LifecycleDeps): Promise<boo
           resourceId: row.resourceId,
           product,
           days: day,
-          chargeDate: row.periodEnd.toISOString(),
+          // WPU-Y2: the day of the charge (a domain is charged its lead time before the period end).
+          chargeDate: chargeDateOf(row).toISOString(),
           amountMinor: amount,
           balanceMinor: balance.toString(),
         },
@@ -415,6 +444,8 @@ async function process(
       resourceState: row.resource.state,
       destroyedAt: row.resource.deletedAt,
       graceFrom: graceFromOf(row),
+      // WPU-Y2: a domain is charged 30 days before its period end (the registry expiry).
+      renewLeadDays: renewLeadDaysOf(row.resource.family),
     },
     now,
     config,
@@ -431,7 +462,11 @@ async function process(
   // the next sweep asks again, for at most PLAN_APPLY_WAIT_HOURS past the due time. After that the
   // renewal goes on at the applied plan, ops are told once, and the late apply is skipped by the
   // adapter because the period has moved. Renewals that cannot be paid enter grace as before.
-  if ((action.type === "period_end" && action.tryRenew) || action.type === "retry_renew") {
+  if (
+    (action.type === "period_end" && action.tryRenew) ||
+    action.type === "retry_renew" ||
+    action.type === "early_renew"
+  ) {
     const gate = await planApplyWait(tx, row, now);
     if (gate.wait) return { step: "none", messages: work.messages };
     if (
@@ -462,6 +497,23 @@ async function process(
       // A repeat of the same reminder writes no row (dedupe key) and is no step (R7).
       if (await remind(work, action.day, deps)) step = "reminded";
       break;
+    case "early_renew": {
+      // WPU-Y2. Inside the lead time before the period end (a domain: 30 days before the registry expiry). The new
+      // period still starts at the old period end (renewSubscription), so the customer pays one year per year.
+      const renewed = await renewCharge(work, clock, deps.log);
+      if (renewed.ok) {
+        await afterRenewal(work, renewed.value, false);
+        step = "renewed";
+        break;
+      }
+      // Not the wallet: the alarm line of a held renewal, without the marker. The period end is still ahead, so the
+      // marker would be stale (hold-rule.ts) and cleared on the next sweep; the hold of the period end writes it.
+      const why = holdReasonOf(renewed);
+      if (why !== null) logHeld(deps, row, "early_renew", why);
+      // A short wallet: nothing happens. The subscription stays active, every sweep tries again until the period
+      // end, and only then does the usual path (grace) begin.
+      break;
+    }
     case "period_end": {
       if (action.tryRenew) {
         const renewed = await renewCharge(work, clock, deps.log);
@@ -632,7 +684,10 @@ export async function runLifecycle(deps: LifecycleDeps): Promise<LifecycleReport
   const walked = await walkCandidates({
     pageSize,
     readPage: (after) =>
-      deps.runTx((tx) => lifecycleRepo(tx).listCandidates(now, horizon, pageSize, after)),
+      // WPU-Y2: a family with a lead time (a domain) is a candidate that many days earlier.
+      deps.runTx((tx) =>
+        lifecycleRepo(tx).listCandidates(now, horizon, pageSize, after, RENEW_LEAD_DAYS_BY_FAMILY),
+      ),
     visit,
     pastDeadline,
   });

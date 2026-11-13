@@ -184,7 +184,7 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
     if (operationId === null) throw fail("internal");
     const { status } = await deps.domains().getOperationDetail(operationId);
     if (status === "successful") return stepNext("adopt");
-    if (status === "failed") throw fail("conflict");
+    if (status === "failed" || status === "error") throw fail("conflict");
     if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
       throw fail("upstream_unavailable");
     }
@@ -241,7 +241,7 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
       const operationId = savedId(ctx.resource.config, "nameServerOperationId");
       if (operationId === null) throw fail("internal");
       const { status } = await port.getOperationDetail(operationId);
-      if (status === "failed") throw fail("conflict");
+      if (status === "failed" || status === "error") throw fail("conflict");
       if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
       const detail = await port.getDomainDetail(name);
       if (detail === null) throw fail("upstream_unavailable", true);
@@ -293,8 +293,8 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
   // (the charge goes back), and from `submit` on the failure policy of @tc/core (decideFailure,
   // registryHoldsRenewal) takes the renewal as held: at `submit` it gives the charge back only for an error that
   // proves nothing was sent, in the first run there (review round 2: a RenewDomain that timed out after it was sent
-  // stays at `submit`); at `poll`, only for `conflict` without an AWS error name, the registry's failed answer. A
-  // give-up or any other error stops in needs_attention (pinned in test/domain-actions.test.ts).
+  // stays at `submit`); at `poll`, never (WPU-Y2: the registry's failed answer, which a MaxPrice refusal may be, stops
+  // in needs_attention for an admin like a give-up or any other error; pinned in test/domain-actions.test.ts).
   async function renewAction(ctx: Ctx): Promise<StepResult> {
     const port = deps.domains();
     const { name } = ctx.config;
@@ -320,9 +320,17 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
         const operationId = savedId(ctx.resource.config, "renewOperationId");
         if (operationId === null) throw fail("internal");
         const { status } = await port.getOperationDetail(operationId);
-        if (status === "failed") throw fail("conflict");
+        // WPU-Y2 fix round 1: FAILED for the exact RenewDomain operation id that was saved is the registry's final
+        // "not renewed": the failure policy refunds it (registry_failed).
+        if (status === "failed") {
+          throw new AwsError({ code: "conflict", retryable: false, reason: "registry_failed" });
+        }
+        if (status === "successful") return renewedExpiry(port, name);
+        // WPU-Y2 fix round 2: an operation still SUBMITTED or IN_PROGRESS may still renew (and AWS may still charge):
+        // past the give-up it stops in needs_attention with a plain error that never allows a refund.
         if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
-        return renewedExpiry(port, name);
+        // ERROR, a final answer that is not SUCCESSFUL (not defined by the API reference): a fresh GetDomainDetail.
+        return afterRegistryError(port, ctx, name);
       }
       default:
         throw fail("internal");
@@ -334,6 +342,41 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
       throw fail("upstream_unavailable");
     }
     return stepWait(step, inSeconds(ctx, POLL_SECONDS));
+  }
+
+  // WPU-Y2 fix round 2. After an ERROR for the saved RenewDomain operation: a later live expiry year is a renewal that
+  // went through (done). `registry_unrenewed`, the one verdict on which an admin may reject the renewal with its
+  // refund (functions/provisioner/reject.ts), only when the live expiry is to the millisecond the expiry the row held
+  // before the renewal (`currentExpiresAt` of the payload). Anything else (no such instant, a different instant in the
+  // same year, an earlier year) is a plain error: needs_attention, never a refund (R16).
+  async function afterRegistryError(
+    port: DomainsPort,
+    ctx: Ctx,
+    name: string,
+  ): Promise<StepResult> {
+    const payload = recordOf(ctx.operation.payload);
+    const year = payload["currentExpiryYear"];
+    if (typeof year !== "number" || !Number.isInteger(year)) throw fail("validation");
+    const before = exactInstant(payload["currentExpiresAt"]);
+    const detail = await port.getDomainDetail(name);
+    if (detail === null || detail.expiresAt === null) throw fail("upstream_unavailable");
+    if (detail.expiresAt.getUTCFullYear() > year) {
+      return stepDone({ configMerge: { expiresAt: detail.expiresAt.toISOString() } });
+    }
+    if (before !== null && detail.expiresAt.getTime() === before.getTime()) {
+      throw new AwsError({
+        code: "upstream_unavailable",
+        retryable: false,
+        reason: "registry_unrenewed",
+      });
+    }
+    throw fail("upstream_unavailable");
+  }
+
+  function exactInstant(value: unknown): Date | null {
+    if (typeof value !== "string") return null;
+    const at = new Date(value);
+    return Number.isNaN(at.getTime()) || at.toISOString() !== value ? null : at;
   }
 
   async function renewedExpiry(port: DomainsPort, name: string): Promise<StepResult> {

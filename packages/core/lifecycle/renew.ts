@@ -1,4 +1,7 @@
-import { lifecycleRepo, type LifecycleRow, type Tx } from "@tc/db";
+import { lifecycleRepo, readTld, type LifecycleRow, type Tx } from "@tc/db";
+import { DOMAIN_YEARS } from "../domains/resolve";
+import { domainRenewalUsd } from "../domains/renewal";
+import { renewalAttempt } from "./domain-renewal";
 import { issueChargeInvoice } from "../invoices/charge";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
@@ -12,11 +15,12 @@ import { buildChargeSnapshot } from "../pricing/charge-snapshot";
 import type { Clock, Result } from "../types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // What a renewal would cost today: the stored snapshot gives the AWS price and the quantity; the
 // rate and the rule are the ones in force at the clock (section 11: "the renewal amount at today's
 // rate"). A snapshot that does not parse, or no rate or rule in force, gives a failure and the
-// caller does not charge (R16).
+// caller does not charge (R16). WPU-Y2: a domain's AWS price is the renewal price of its TLD row instead.
 export async function renewalQuote(
   tx: Tx,
   row: Pick<LifecycleRow, "market" | "priceSnapshot" | "resource">,
@@ -37,6 +41,26 @@ async function renewalPriced(
     stored = parseSnapshot(row.priceSnapshot);
   } catch {
     return { ok: false, error: "internal", fields: { priceSnapshot: "invalid" } };
+  }
+  // WPU-Y2 (owner rule a, 2026-11-14): a domain renews at tlds.renewal_price_usd of its TLD, read today, through the
+  // same engine as a purchase (rate of the renewal day, markup, fees, VAT, rounding). Never the registration price
+  // of the purchase snapshot. No usable renewal price refuses (R16): the engine holds the renewal with an alarm.
+  if (row.resource.family === "domain") {
+    const productId = row.resource.config["productId"];
+    const tld =
+      typeof productId === "string" && UUID.test(productId) ? await readTld(tx, productId) : null;
+    const usd = domainRenewalUsd(row.resource.config, tld);
+    if (!usd.ok) return usd;
+    return quoteInForce(
+      tx,
+      {
+        market: row.market,
+        productFamily: row.resource.family,
+        awsPriceUsd: usd.value,
+        quantity: String(DOMAIN_YEARS),
+      },
+      clock,
+    );
   }
   // WPU-G8: an applied plan change is priced from its catalog row, by the same engine.
   const plan = await planPriceFor(tx, row);
@@ -65,6 +89,8 @@ export type Renewed = {
   readonly totalMinor: bigint;
   /** WPU-Z19: the USD price this renewal charged (awsPriceUsd of its price snapshot, decimal text, R4). */
   readonly awsPriceUsd: string;
+  /** WPU-Y2: the attempt of the charge (its ledger key); above 0 only for a domain charged again after a refusal. */
+  readonly attempt: number;
 };
 
 // Charges the wallet once and moves the period: the new period starts at the OLD period end (also
@@ -104,10 +130,13 @@ export async function renewSubscription(
 
   const periodStart = row.periodEnd;
   const periodEnd = new Date(periodStart.getTime() + row.termDays * DAY_MS);
+  // WPU-Y2: the first attempt of the period whose charge was not reversed (attempt 0 for every family but a domain).
+  const attempt = await renewalAttempt(tx, row.resource.family, row.id, periodStart);
+  if (attempt === null) return { ok: false, error: "conflict", fields: { renewal: "attempts" } };
   const posted = await postTransaction(tx, {
     kind: "renewal",
     reference: { type: "subscription", id: row.id },
-    idempotencyKey: ledgerKey.renewal(row.id, periodStart),
+    idempotencyKey: ledgerKey.renewal(row.id, periodStart, attempt),
     actor: { type: "system" },
     priceSnapshot: charge,
     postings,
@@ -127,6 +156,6 @@ export async function renewSubscription(
   });
   return {
     ok: true,
-    value: { periodStart, periodEnd, totalMinor: total, awsPriceUsd: fresh.awsPriceUsd },
+    value: { periodStart, periodEnd, totalMinor: total, awsPriceUsd: fresh.awsPriceUsd, attempt },
   };
 }

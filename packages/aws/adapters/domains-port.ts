@@ -34,7 +34,9 @@ import type { TldPrice } from "../catalog";
 
 export type DomainAvailability = "available" | "unavailable" | "premium" | "unknown";
 
-export type DomainOperationStatus = "in_progress" | "successful" | "failed";
+// WPU-Y2 fix round 1: ERROR is kept apart from FAILED. FAILED of a renewal is taken as final "not renewed" (refund);
+// ERROR is not defined by the API reference, so it is not taken as a refusal (needs_attention).
+export type DomainOperationStatus = "in_progress" | "successful" | "failed" | "error";
 
 /** The state of the registrant's e-mail check (ICANN): until it is done the registry may suspend the name. */
 export type ContactReachability = "pending" | "done" | "expired" | "unknown";

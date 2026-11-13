@@ -216,6 +216,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-T4",
     "WPU-X6",
     "WPU-Y1",
+    "WPU-Y2",
     "WPU-Y3",
     "WPU-Y5",
     "WPU-Y6",

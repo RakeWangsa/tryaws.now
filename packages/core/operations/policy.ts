@@ -19,6 +19,12 @@ export interface FailureFacts {
    * connection or a 5xx after the request was sent). Not given means not known, which counts as true (R16).
    */
   readonly mayHaveActed?: boolean;
+  /**
+   * WPU-Y2 fix round 1. What the domain adapter learned of a renewal at `poll` (AwsError.reason): `failed` is the
+   * registry's FAILED answer for the exact RenewDomain operation (final "not renewed"); `unrenewed` is an ERROR answer
+   * or a poll that gave up, with a fresh GetDomainDetail showing the expiry unchanged. Not given: nothing learned.
+   */
+  readonly registryVerdict?: "failed" | "unrenewed";
 }
 
 export type FailureDecision =
@@ -35,7 +41,7 @@ const PLAIN_ERROR_NAME = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
 
 // 10.1: an error that can never succeed on a retry ends these kinds in `failed`, where the failed hook gives the
 // money back in the same transaction: a create its order (WP4-T4), a domain renewal its renewal charge (WPU-Z13),
-// the renewal only while the registry does not hold it (below). Every other kind stops in needs_attention for an
+// the renewal only when nothing can have reached the registry (below, WPU-Y2). Every other kind stops in needs_attention for an
 // admin. An admin's rejection runs the same hook (reject.ts).
 const REFUNDED_KINDS: readonly string[] = Object.freeze(["create", "renew_domain"]);
 
@@ -52,12 +58,13 @@ export function refundedOnFailure(kind: string): kind is "create" | "renew_domai
 // still complete, however long the registry takes (review round 2: a RenewDomain that timed out after it was sent
 // is still at `submit`, not at `poll`).
 const RENEWAL_SUBMIT_STEP = "submit";
+const RENEWAL_POLL_STEP = "poll";
 
 /**
  * Whether the registry may hold the renewal of this operation: a `renew_domain` at any step but null (`submit`,
  * `poll`, or a step that is not known, R16). Such a renewal gives no money back on a final error unless the failure
- * proves that nothing reached the registry or the registry itself reported it failed (decideFailure), and an
- * admin's rejection of it is refused (reject.ts, `renewal_submitted`): a refund waits for the registry's answer.
+ * proves that nothing reached the registry (decideFailure; WPU-Y2: the registry's own refusal is no longer enough),
+ * and an admin's rejection of it is refused (reject.ts, `renewal_submitted`).
  */
 export function registryHoldsRenewal(kind: string, step: string | null): boolean {
   return kind === "renew_domain" && step !== null;
@@ -91,13 +98,6 @@ export function dnsZoneMayExist(
   return !(previous.attempts === 0 && previous.lastError === null);
 }
 
-// The registry's own answer that a renewal failed (GetOperationDetail FAILED or ERROR): the domain adapter throws
-// `conflict` with no AWS error name. An AWS error of a read at that step carries its name (domains-client.ts) and
-// says nothing about the renewal itself.
-function registryRefused(facts: FailureFacts): boolean {
-  return facts.code === "conflict" && facts.awsErrorName === null;
-}
-
 // At `submit`: the failure proves that this run sent nothing the registry may act on (AwsError.mayHaveActed false:
 // a refusal of RenewDomain itself such as TLDRulesViolation, a request that never left the machine, or a local
 // check), and no earlier run at this step can have sent one. The adapter enters the step with attempts 0 and
@@ -124,16 +124,76 @@ function endsFailed(
   if (!refundedOnFailure(kind)) return false;
   if (kind !== "renew_domain" || step === null) return true;
   if (step === RENEWAL_SUBMIT_STEP) return provedNotSent(previous, facts);
-  // At `poll`, and at a step that is not known (R16): only the registry's own refusal. A poll that gave up after
-  // three days, a lost operation id or a bad answer stops in needs_attention, no money moved.
-  return registryRefused(facts);
+  // At `poll` RenewDomain reached the registry. WPU-Y2 fix round 1 (coordinator ruling for the owner, 2026-11-14):
+  // only the registry's FAILED answer for the exact saved RenewDomain operation (the adapter's `registry_failed`) is
+  // final "not renewed" and ends it failed with the refund. ERROR, a poll that gave up, a lost operation id or a bad
+  // answer stop in needs_attention, no money moved; an admin may reject the `registry_unrenewed` one (reject.ts).
+  // At a step that is not known (R16): nothing ends it failed.
+  return (
+    step === RENEWAL_POLL_STEP && facts.code === "conflict" && facts.registryVerdict === "failed"
+  );
 }
 
-// No AWS text ever reaches last_error (R14): a code, and a plain error name when there is one.
+// No AWS text ever reaches last_error (R14): a code, and a plain error name when there is one. WPU-Y2 fix round 1:
+// without an AWS error name, the registry verdict of a renewal (`registry_failed`, `registry_unrenewed`).
 export function lastErrorText(facts: FailureFacts): string {
   const name = facts.awsErrorName;
-  return name !== null && PLAIN_ERROR_NAME.test(name) ? `${facts.code}:${name}` : facts.code;
+  if (name !== null && PLAIN_ERROR_NAME.test(name)) return `${facts.code}:${name}`;
+  return facts.registryVerdict === undefined
+    ? facts.code
+    : `${facts.code}:registry_${facts.registryVerdict}`;
 }
+
+/**
+ * WPU-Y2 fix round 2. The last_error of a renewal whose registry answered ERROR (final, not SUCCESSFUL) and whose
+ * fresh GetDomainDetail showed the pre-renewal expiry to the millisecond, with the time the provisioner recorded that
+ * check (`checkedAt`, epoch seconds): `upstream_unavailable:registry_unrenewed:<seconds>`. A digit count of 10 only.
+ */
+const REGISTRY_UNRENEWED_PREFIX = "upstream_unavailable:registry_unrenewed:";
+const REGISTRY_UNRENEWED = /^upstream_unavailable:registry_unrenewed:(\d{10})$/;
+
+export function registryUnrenewedError(checkedAt: Date): string {
+  return `${REGISTRY_UNRENEWED_PREFIX}${Math.floor(checkedAt.getTime() / 1000)}`;
+}
+
+/** The check time of such a last_error; null for any other text. */
+export function registryCheckedAt(lastError: string | null): Date | null {
+  const found = lastError === null ? null : REGISTRY_UNRENEWED.exec(lastError);
+  return found === null ? null : new Date(Number(found[1]) * 1000);
+}
+
+/** WPU-Y2 fix round 1: how old the registry check of a renewal may be when an admin rejects it with its refund. */
+export const REGISTRY_CHECK_FRESH_MS = 60 * 60 * 1000;
+
+/**
+ * WPU-Y2 fix round 1 (the safe minimum of the coordinator's ruling 2), round 2 (an explicit check time). Whether an
+ * admin's rejection of a stuck operation may move it to failed, with the refund of its hook. Every kind but a domain
+ * renewal the registry may hold: yes. A domain renewal at `poll`: only when its last run recorded the provisioner's
+ * check (registryUnrenewedError: ERROR for the saved operation and the expiry unchanged to the millisecond) and that
+ * check is at most REGISTRY_CHECK_FRESH_MS old (and not more than 5 minutes ahead of this clock). The check lives in
+ * last_error, so it is gone as soon as the operation runs again: a retry, a move to another step (which writes
+ * last_error null) or any other failure (which writes its own) clears it; a rejection needs the state
+ * needs_attention, which only a run that ended again reaches. A poll that gave up while the operation was still in
+ * progress records a plain error: never a refund. At `submit` (an answer may be lost): never.
+ */
+export function rejectionAllowed(
+  target: {
+    readonly kind: string;
+    readonly step: string | null;
+    readonly lastError: string | null;
+  },
+  now: Date,
+): boolean {
+  if (!registryHoldsRenewal(target.kind, target.step)) return true;
+  if (target.step !== RENEWAL_POLL_STEP) return false;
+  const checkedAt = registryCheckedAt(target.lastError);
+  if (checkedAt === null) return false;
+  const age = now.getTime() - checkedAt.getTime();
+  // A time that cannot be read is not fresh (R16).
+  return Number.isFinite(age) && age >= -CLOCK_SKEW_MS && age <= REGISTRY_CHECK_FRESH_MS;
+}
+
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 // `attempts` is the count before this failure.
 export function decideFailure(input: {
@@ -153,7 +213,13 @@ export function decideFailure(input: {
   facts: FailureFacts;
 }): FailureDecision {
   const { kind, step, attempts, now, facts } = input;
-  const lastError = lastErrorText(facts);
+  // WPU-Y2 fix round 2: the registry check of a renewal at poll carries the time the provisioner recorded it.
+  const lastError =
+    facts.registryVerdict === "unrenewed" &&
+    step === RENEWAL_POLL_STEP &&
+    facts.awsErrorName === null
+      ? registryUnrenewedError(now)
+      : lastErrorText(facts);
   const failures = attempts + 1;
   if (facts.poolFull) return { to: "needs_attention", attempts: failures, lastError };
   if (!facts.retryable) {

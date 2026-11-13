@@ -27,7 +27,7 @@ beforeEach(() => {
 
 describe("renewalHooks", () => {
   it("a failed renew_domain reverses its charge, with the ids of the operation", async () => {
-    reverse.mockResolvedValue({ reversalId: "r", ended: true });
+    reverse.mockResolvedValue({ reversalId: "r", rolledBack: true });
     const log = () => undefined;
     await renewalHooks({ log }).failed?.(TX, EVENT("renew_domain"));
     expect(reverse).toHaveBeenCalledTimes(1);

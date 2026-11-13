@@ -240,7 +240,7 @@ describe("getOperationDetail", () => {
     ["SUBMITTED", "in_progress"],
     ["IN_PROGRESS", "in_progress"],
     ["SUCCESSFUL", "successful"],
-    ["ERROR", "failed"],
+    ["ERROR", "error"],
     ["FAILED", "failed"],
   ];
   for (const [aws, ours] of words) {

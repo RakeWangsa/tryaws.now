@@ -357,6 +357,14 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
       date: h.d(d.expiresAt),
     }),
   },
+  // WPU-Y2 fix round 1: the registry did not renew the domain; the charge went back to the wallet.
+  domain_renewal_refunded: {
+    spec: { domain: f.domain, expiresAt: f.instant },
+    channels: () => ek,
+    path: (d) => `/domains/${s(d.domain).toLowerCase()}`,
+    cta: "open_domain",
+    vars: (d, h) => ({ domain: s(d.domain).toLowerCase(), expiry: h.d(d.expiresAt) }),
+  },
   // WPU-D4: the text is written by an admin. WPU-Z5 (owner decision 2026-11-13, round 3: support is an
   // in-app ticket system, there is no support inbox): a customer reads the reply in the panel, so the mail
   // says a reply waits and links to the request (the panel page of WPU-Z6) without the text; a visitor has

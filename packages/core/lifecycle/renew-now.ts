@@ -3,6 +3,7 @@ import type { Logger } from "../operations/types";
 import type { Clock, Result } from "../types";
 import { DEFAULT_LIFECYCLE_CONFIG } from "./config";
 import { queueDomainRenewal } from "./domain-renewal";
+import { renewLeadDaysOf } from "../domains/renewal";
 import { planApplyWait } from "./plan-change";
 import { renewSubscription, type Renewed } from "./renew";
 import { resumeAfterRenewalAllowed } from "./resume-rule";
@@ -50,10 +51,13 @@ export async function renewNow(tx: Tx, input: RenewNowInput): Promise<Result<Ren
   if (!LIVE_STATES.includes(row.resource.state) || row.resource.deletedAt !== null) {
     return { ok: false, error: "conflict", fields: { subscription: "not_renewable" } };
   }
+  // WPU-Y2: the window leads the charge day (a domain: its 30 days of lead time before the period end too). A domain
+  // whose registry renewal was refused and reversed is active at the period that was paid again: it is due here, and
+  // the customer's renewal is charged under the next attempt (renewSubscription).
+  const windowDays = RENEW_NOW_WINDOW_DAYS + renewLeadDaysOf(row.resource.family);
   const due =
     row.status === "grace" ||
-    (row.status === "active" &&
-      row.periodEnd.getTime() - now.getTime() <= RENEW_NOW_WINDOW_DAYS * DAY_MS);
+    (row.status === "active" && row.periodEnd.getTime() - now.getTime() <= windowDays * DAY_MS);
   if (!due) return { ok: false, error: "conflict", fields: { subscription: "not_due" } };
 
   // WPU-S7: while the apply of a pending plan for this period is queued or running, the charge would
@@ -67,7 +71,14 @@ export async function renewNow(tx: Tx, input: RenewNowInput): Promise<Result<Ren
   if (!renewed.ok) return renewed;
   // WPU-Z13: a domain's charge pays the registry. The engine's key, so one renew_domain per period whoever renews;
   // no queue here: the scheduler's sweep sends the queued row within minutes (3.4).
-  await queueDomainRenewal(tx, row, renewed.value.periodStart, now, renewed.value.awsPriceUsd);
+  await queueDomainRenewal(
+    tx,
+    row,
+    renewed.value.periodStart,
+    now,
+    renewed.value.awsPriceUsd,
+    renewed.value.attempt,
+  );
 
   let resumeQueued = false;
   // WPU-Y3b: not while an unpaid usage charge is open; the unpaid job resumes after that is paid.

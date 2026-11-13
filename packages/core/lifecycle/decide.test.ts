@@ -46,6 +46,48 @@ describe("decideSubscription: active", () => {
   });
 });
 
+// WPU-Y2 (owner, 2026-11-14): a domain is charged, and its RenewDomain sent, 30 days before the period end (which
+// tracks the registry expiry). A short wallet then has those 30 days of retries before the period end.
+describe("decideSubscription: a renewal lead time (WPU-Y2)", () => {
+  const lead = (over: Partial<DecisionView> = {}) => view({ renewLeadDays: 30, ...over });
+  it("charges early from the exact instant of the lead, while auto-renew is on", () => {
+    const v = lead({ autoRenew: true });
+    expect(decideSubscription(v, at(-30 * DAY - 1), cfg)).toEqual({ type: "remind", day: 1 });
+    expect(decideSubscription(v, at(-30 * DAY), cfg)).toEqual({ type: "early_renew" });
+    // every run of the 30 days retries (a short wallet, a price that comes back)
+    expect(decideSubscription(v, at(-1), cfg)).toEqual({ type: "early_renew" });
+    // at the period end the usual path: renew, else grace
+    expect(decideSubscription(v, at(0), cfg)).toEqual({ type: "period_end", tryRenew: true });
+  });
+  it("sends the reminders before the charge day, not before the period end", () => {
+    const v = lead({ autoRenew: true });
+    expect(decideSubscription(v, at(-37 * DAY - 1), cfg)).toEqual({ type: "none" });
+    expect(decideSubscription(v, at(-37 * DAY), cfg)).toEqual({ type: "remind", day: 7 });
+    expect(decideSubscription(v, at(-33 * DAY), cfg)).toEqual({ type: "remind", day: 3 });
+    expect(decideSubscription(v, at(-31 * DAY), cfg)).toEqual({ type: "remind", day: 1 });
+  });
+  it("without auto-renew nothing is charged early; the reminders still lead the renewal by hand", () => {
+    const v = lead({ autoRenew: false });
+    expect(decideSubscription(v, at(-37 * DAY), cfg)).toEqual({ type: "remind", day: 7 });
+    expect(decideSubscription(v, at(-30 * DAY), cfg)).toEqual({ type: "remind", day: 1 });
+    expect(decideSubscription(v, at(0), cfg)).toEqual({ type: "period_end", tryRenew: false });
+  });
+  it("a lead that is not a whole number of days from 0 to 365 decides nothing (R16)", () => {
+    for (const renewLeadDays of [-1, 1.5, Number.NaN, 366, Number.POSITIVE_INFINITY]) {
+      expect(
+        decideSubscription(lead({ autoRenew: true, renewLeadDays }), at(-30 * DAY), cfg),
+        String(renewLeadDays),
+      ).toEqual({ type: "none" });
+    }
+  });
+  it("no lead (every other family) is the table of section 11 unchanged", () => {
+    const v = view({ autoRenew: true, renewLeadDays: 0 });
+    expect(decideSubscription(v, at(-30 * DAY), cfg)).toEqual({ type: "none" });
+    expect(decideSubscription(v, at(-1 * DAY), cfg)).toEqual({ type: "remind", day: 1 });
+    expect(decideSubscription(v, at(0), cfg)).toEqual({ type: "period_end", tryRenew: true });
+  });
+});
+
 describe("decideSubscription: grace", () => {
   it("waits during the 48 hours when auto-renew is off", () => {
     expect(decideSubscription(view({ status: "grace" }), at(47 * HOUR), cfg)).toEqual({

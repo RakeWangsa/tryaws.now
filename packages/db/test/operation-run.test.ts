@@ -161,6 +161,7 @@ describe("loadOperationBrief and loadOwnedResource", () => {
       state: "needs_attention",
       step: null,
       attempts: 0,
+      // WPU-Y2 fix round 1: what the rejection of a renewal at poll reads (its fresh registry check)
       lastError: null,
     });
     // WPU-Z13: the step tells the rejection whether the registry holds a domain renewal already.

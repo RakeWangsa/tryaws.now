@@ -19,6 +19,11 @@ export interface DecisionView {
    * the period end.
    */
   readonly graceFrom?: Date | null;
+  /**
+   * WPU-Y2. Days before the period end at which the renewal is charged (renewLeadDaysOf of the family: 30 for a
+   * domain). Absent or 0: at the period end (section 11). The reminders lead the charge day.
+   */
+  readonly renewLeadDays?: number;
 }
 
 export type LifecycleAction =
@@ -26,12 +31,16 @@ export type LifecycleAction =
   | { readonly type: "remind"; readonly day: number }
   // Period end: renew when tryRenew (the engine then falls back to grace if the wallet is short).
   | { readonly type: "period_end"; readonly tryRenew: boolean }
+  // WPU-Y2: inside the lead time before the period end, auto-renew on: charge now; a short wallet only retries.
+  | { readonly type: "early_renew" }
   | { readonly type: "retry_renew" }
   | { readonly type: "retain" }
   | { readonly type: "ensure_retention_operations" }
   | { readonly type: "end" };
 
 const NONE: LifecycleAction = { type: "none" };
+/** A lead time longer than a year is no lead time (R16). */
+const MAX_LEAD_DAYS = 365;
 
 // Resource states in which a customer resource still lives and a period can run out.
 const LIVE_STATES = ["active", "stopped", "suspended"] as const;
@@ -53,11 +62,16 @@ export function decideSubscription(
 
     case "active": {
       if (!(LIVE_STATES as readonly string[]).includes(view.resourceState)) return NONE;
+      const lead = view.renewLeadDays ?? 0;
+      if (!Number.isInteger(lead) || lead < 0 || lead > MAX_LEAD_DAYS) return NONE;
       if (nowMs >= endMs) return { type: "period_end", tryRenew: view.autoRenew };
+      // WPU-Y2: the charge day is the lead time before the period end.
+      const chargeMs = endMs - lead * DAY_MS;
+      if (lead > 0 && view.autoRenew && nowMs >= chargeMs) return { type: "early_renew" };
       // The smallest reminder day that is due: a late run sends one mail, not three.
       const due = [...config.reminderDays]
         .sort((a, b) => a - b)
-        .find((day) => nowMs >= endMs - day * DAY_MS);
+        .find((day) => nowMs >= chargeMs - day * DAY_MS);
       return due === undefined ? NONE : { type: "remind", day: due };
     }
 

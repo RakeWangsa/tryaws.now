@@ -8,6 +8,8 @@ import {
   RENEWAL_REMINDER_DAYS,
   RENEW_LEAD_DAYS,
   domainRenewalAction,
+  domainRenewalUsd,
+  renewLeadDaysOf,
   type RenewalFacts,
 } from "./renewal";
 
@@ -200,11 +202,12 @@ describe("domainRenewalAction", () => {
     });
   });
   it("renews only when auto-renew is on and the lead time is reached", () => {
-    expect(RENEW_LEAD_DAYS).toBe(35);
-    expect(domainRenewalAction(facts(36, { autoRenew: true, remindersSent: [60] }))).toEqual({
+    // WPU-Y2 (owner, 2026-11-14): RenewDomain at least 30 days before the registry expiry.
+    expect(RENEW_LEAD_DAYS).toBe(30);
+    expect(domainRenewalAction(facts(31, { autoRenew: true, remindersSent: [60] }))).toEqual({
       kind: "none",
     });
-    expect(domainRenewalAction(facts(35, { autoRenew: true, remindersSent: [60] }))).toEqual({
+    expect(domainRenewalAction(facts(30, { autoRenew: true, remindersSent: [60] }))).toEqual({
       kind: "renew",
     });
     expect(domainRenewalAction(facts(20, { autoRenew: false, remindersSent: [60, 30] }))).toEqual({
@@ -213,6 +216,64 @@ describe("domainRenewalAction", () => {
   });
   it("does nothing for a name that has already expired", () => {
     expect(domainRenewalAction(facts(-1, { autoRenew: true }))).toEqual({ kind: "expired" });
+  });
+});
+
+describe("WPU-Y2: the lead time of a renewal charge", () => {
+  it("is 30 days for a domain and none for every other family", () => {
+    expect(renewLeadDaysOf("domain")).toBe(30);
+    for (const family of ["linux_instance", "windows_instance", "dns_zone", "bucket", "cdn", ""]) {
+      expect(renewLeadDaysOf(family), family).toBe(0);
+    }
+  });
+});
+
+describe("WPU-Y2: the USD price of a domain renewal", () => {
+  const TLD_ID = "0190a000-0000-7000-8000-0000000000aa";
+  const config = { productId: TLD_ID, tld: "com" };
+  const tld = {
+    id: TLD_ID,
+    tld: "com",
+    registrationPriceUsd: "13.0000",
+    renewalPriceUsd: "15.5000",
+    needsExtraParams: false,
+  };
+  const refused = { ok: false, error: "internal", fields: { renewalPrice: "unavailable" } };
+
+  it("is the renewal price of the TLD row, not the registration price (owner rule a)", () => {
+    expect(domainRenewalUsd(config, tld)).toEqual({ ok: true, value: "15.5000" });
+    // a TLD whose renewal costs more than the registration renews at the renewal price
+    expect(
+      domainRenewalUsd(config, {
+        ...tld,
+        registrationPriceUsd: "5.0000",
+        renewalPriceUsd: "48.0000",
+      }),
+    ).toEqual({ ok: true, value: "48.0000" });
+  });
+
+  it("still renews a TLD that is no longer sold for registration, while it has a renewal price", () => {
+    expect(domainRenewalUsd(config, { ...tld, registrationPriceUsd: null })).toEqual({
+      ok: true,
+      value: "15.5000",
+    });
+  });
+
+  it("refuses without a readable positive renewal price, or a row that is not the domain's TLD (R16)", () => {
+    for (const renewalPriceUsd of [null, "", "0", "0.0000", "-1", "1e3", "15.00001", " 15"]) {
+      expect(
+        domainRenewalUsd(config, { ...tld, renewalPriceUsd }),
+        String(renewalPriceUsd),
+      ).toEqual(refused);
+    }
+    expect(domainRenewalUsd(config, null)).toEqual(refused);
+    expect(
+      domainRenewalUsd(config, { ...tld, id: "0190a000-0000-7000-8000-0000000000bb" }),
+    ).toEqual(refused);
+    expect(domainRenewalUsd(config, { ...tld, tld: "net" })).toEqual(refused);
+    for (const bad of [{}, { productId: TLD_ID }, { tld: "com" }, { productId: 7, tld: "com" }]) {
+      expect(domainRenewalUsd(bad, tld), JSON.stringify(bad)).toEqual(refused);
+    }
   });
 });
 

@@ -3,7 +3,7 @@ import {
   dnsZoneMayExist,
   isUuid,
   refundedOnFailure,
-  registryHoldsRenewal,
+  rejectionAllowed,
   transitionOperation,
   type LocalFailure,
 } from "@tc/core";
@@ -34,8 +34,9 @@ function targetOf(payload: unknown): string | null {
 // first: already renewed is done; at `poll` the operation: successful is done, failed is the refund of
 // the registry's refusal). The reject operation needs attention with `renewal_submitted`; the target
 // and the money stay as they are. Only a renewal at step null (reads only, nothing sent) is rejected
-// with its refund. Whether a person may refund a held one without that answer is the owner's decision
-// (JOURNEY, Needs decision).
+// with its refund. WPU-Y2 fix round 1: and a renewal at `poll` whose last run (at most an hour ago) recorded the
+// provisioner's check `registry_unrenewed:<checked at>` (ERROR for the saved operation, the expiry unchanged to the
+// millisecond; round 2: never a give-up while it is in progress): rejectionAllowed.
 // WPU-Y5 (c): the same for a dns_zone create whose hosted zone may exist (dnsZoneMayExist: at `create_zone` once an
 // attempt may have sent CreateHostedZone, and past it): a rejection would refund the order while the zone stays. The reject operation needs attention with
 // `zone_created`; the target and the money stay. A person retries the create, or destroys the zone first
@@ -79,7 +80,8 @@ export async function runReject(
     }
     // An admin who retried the target, or an earlier run, left nothing to reject: a no-op.
     const rejectable = target.state === "needs_attention";
-    if (rejectable && registryHoldsRenewal(target.kind, target.step)) {
+    // WPU-Y2 fix round 1: a renewal at `poll` whose last run recorded a fresh "expiry unchanged" check may be rejected.
+    if (rejectable && !rejectionAllowed(target, deps.clock.now())) {
       return refuse(tx, "renewal_submitted");
     }
     if (rejectable && dnsZoneMayExist(resource.family, target.kind, target.step, target)) {

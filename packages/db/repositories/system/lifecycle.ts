@@ -106,6 +106,9 @@ function toRow(r: Raw): LifecycleRow {
 const COLUMNS = sql`s.id, s.resource_id, s.customer_id, s.term_days, s.price_snapshot, s.period_start,
   s.period_end, s.auto_renew, s.status, r.family, r.state, r.config, r.deleted_at, c.market`;
 
+/** A family name as the catalog writes it (WPU-Y2: a key of the lead times of listCandidates). */
+const FAMILY = /^[a-z][a-z0-9_]{0,39}$/;
+
 function assertUuid(value: string, what: string): void {
   if (typeof value !== "string" || !isUuid(value)) {
     throw new TypeError(`lifecycle: ${what} is not a UUID`);
@@ -130,19 +133,32 @@ export function lifecycleRepo(tx: Tx) {
     // in (period_end, id) order, strictly after the cursor `after` (the key of the last row of the page before; null
     // for the first page). Keys only; each row is then read again under its lock. `reminderHorizonDays` is the
     // largest reminder day. A cursor that is not a key of this list is refused before any statement (R16).
+    // WPU-Y2: `leadDays` (family -> days) makes an active row of such a family a candidate that many days before the
+    // reminder horizon (a domain is charged 30 days before its period end); every other family keeps the horizon.
     async listCandidates(
       now: Date,
       reminderHorizonDays: number,
       limit: number,
       after: CandidateKey | null = null,
+      leadDays: Readonly<Record<string, number>> = {},
     ): Promise<CandidateKey[]> {
       if (!Number.isInteger(limit) || limit < 1 || limit > 5000) {
         throw new RangeError("lifecycle: limit must be from 1 to 5000");
+      }
+      const leads = Object.entries(leadDays);
+      for (const [family, days] of leads) {
+        if (!FAMILY.test(family) || !Number.isInteger(days) || days < 1 || days > 365) {
+          throw new RangeError("lifecycle: a lead time of the candidate list is not valid");
+        }
       }
       if (after !== null && !isCandidateKey(after)) {
         throw new TypeError("lifecycle: the cursor is not a key of the candidate list");
       }
       const horizon = new Date(now.getTime() + reminderHorizonDays * 86_400_000);
+      const early = leads.map(
+        ([family, days]) =>
+          sql` or (s.status = 'active' and s.period_end <= ${new Date(horizon.getTime() + days * 86_400_000).toISOString()}::timestamptz and exists (select 1 from resources lr where lr.id = s.resource_id and lr.family = ${family}))`,
+      );
       // The cursor holds the period end as it was read, never the row's period end now: a renewal of that row in the
       // same pass moves it forward, and a cursor that read it again would skip every row in between.
       const cursor =
@@ -154,7 +170,7 @@ export function lifecycleRepo(tx: Tx) {
         select s.id,
           to_char(s.period_end at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as period_end
         from subscriptions s
-        where ((s.status = 'active' and s.period_end <= ${horizon.toISOString()}::timestamptz)
+        where ((s.status = 'active' and s.period_end <= ${horizon.toISOString()}::timestamptz)${sql.join(early, sql``)}
            or s.status in ('grace', 'retained'))
           ${cursor}
         order by s.period_end, s.id limit ${limit}`);
