@@ -16,7 +16,10 @@ import { AwsError } from "../errors";
 import type { R53Change, R53RecordSet, Route53Port } from "./route53-port";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
 import { splitChangeBatches } from "./route53-limits";
-import { checkWaitBudget, pollAt } from "./shared";
+import { MAX_WAIT_MS, pollAt } from "./shared";
+
+const pastWaitBudget = (ctx: OpCtx<unknown>): boolean =>
+  ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS;
 
 // WPU-Z19: the id of a Route 53 change as the create saved it (route53-client.ts strips "/change/").
 const CHANGE_ID = /^[A-Z0-9]{1,32}$/;
@@ -38,6 +41,14 @@ export interface DnsZoneDeps {
 
 function fail(code: "validation" | "internal"): AwsError {
   return new AwsError({ code, retryable: false });
+}
+
+// Final review Z19 I-1. After CreateHostedZone the hosted zone exists (and is billed), so a create that cannot finish
+// its wait must never end `failed`: the failed hook of a create refunds the order while the zone stays. These errors
+// are retryable, so the policy (packages/core/operations/policy.ts decideFailure) retries a few times and then stops
+// in needs_attention for an admin, with no refund; a later run that finds the change INSYNC still finishes.
+function attention(code: "upstream_unavailable" | "internal"): AwsError {
+  return new AwsError({ code, retryable: true });
 }
 
 function isNotFound(error: unknown): boolean {
@@ -290,7 +301,8 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
       // WPU-Z19 (verify review, JOURNEY.md:1796): two steps. A new zone is PENDING until its NS and SOA records are
       // on every Route 53 name server ("Changes generally propagate to all Route 53 name servers within 60
       // seconds"); `wait_insync` follows GetChange and the zone becomes active, and the customer is told to set
-      // the name servers, only at INSYNC. The wait is bounded (checkWaitBudget).
+      // the name servers, only at INSYNC. The wait is bounded (MAX_WAIT_MS); past it the create stops in
+      // needs_attention, never failed (final review Z19 I-1, attention()).
       async create(ctx: OpCtx<DnsZoneConfig>): Promise<StepResult> {
         const port = deps.route53();
         if (ctx.operation.step === null || ctx.operation.step === "create_zone") {
@@ -305,7 +317,7 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
             configMerge: { hostedZoneId: zone.id, route53ChangeId: changeId },
           });
         }
-        if (ctx.operation.step !== "wait_insync") throw fail("internal");
+        if (ctx.operation.step !== "wait_insync") throw attention("internal");
         const id = savedZoneId(ctx.resource.config);
         const changeId = (ctx.resource.config as Record<string, unknown> | null)?.[
           "route53ChangeId"
@@ -314,10 +326,10 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
           id === null ||
           (changeId !== null && (typeof changeId !== "string" || !CHANGE_ID.test(changeId)))
         ) {
-          throw fail("internal");
+          throw attention("internal");
         }
         if (changeId !== null && (await port.getChangeStatus(changeId)) === "pending") {
-          checkWaitBudget(ctx);
+          if (pastWaitBudget(ctx)) throw attention("upstream_unavailable");
           return stepWait("wait_insync", pollAt(ctx));
         }
         const zone = await port.getHostedZone(id);
