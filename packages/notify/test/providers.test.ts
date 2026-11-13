@@ -100,6 +100,19 @@ describe("GatewaySmsProvider", () => {
     expect(send).toHaveBeenCalledWith({ to: "+8801712345678", text: "hello" });
   });
 
+  it("passes the caller's reference to the transport, and no reference field without one (WPU-Z3)", async () => {
+    const send = vi.fn().mockResolvedValue({ status: "accepted", messageId: "g-1" });
+    const p = make(send);
+    await p.send("+8801712345678", "hello", "row-1");
+    await p.send("+8801712345678", "hello");
+    expect(send.mock.calls[0]?.[0]).toStrictEqual({
+      to: "+8801712345678",
+      text: "hello",
+      reference: "row-1",
+    });
+    expect(send.mock.calls[1]?.[0]).toStrictEqual({ to: "+8801712345678", text: "hello" });
+  });
+
   it("rejects a number that is not E.164 and a text that is empty or too long, without the transport", async () => {
     const send = vi.fn();
     const p = make(send);

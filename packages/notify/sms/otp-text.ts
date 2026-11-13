@@ -1,35 +1,19 @@
-import type { Locale } from "@tc/core";
-
-// The market setting `numerals` of 16.13: Bengali or Latin digits for counts.
+// The market setting `numerals` of 16.13: Bengali or Latin digits for counts (the templates and the
+// formatters use it; the OTP text below has no count).
 export type Numerals = "beng" | "latn";
 
-const BENGALI_DIGITS = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"] as const;
-
-const toBengali = (n: number): string =>
-  String(n).replace(/[0-9]/g, (d) => BENGALI_DIGITS[Number(d)] as string);
-
-// One message: no link (an unregistered A2P SMS with a link is filtered by operators) and no AWS
-// name (16.13). The code is always in Latin digits: it is a technical value (16.13), and Latin
-// digits keep the one-time-code autofill of phones working. Fixed TypeError texts: they never hold
-// the code (R14).
-export function otpSmsText(
-  locale: Locale,
-  numerals: Numerals,
-  code: string,
-  minutes: number,
-): string {
-  if (locale !== "bn" && locale !== "en") throw new TypeError("otpSmsText: unknown locale");
-  if (numerals !== "beng" && numerals !== "latn")
-    throw new TypeError("otpSmsText: unknown numerals");
+// WPU-Z3: the gateway (Gennet) requires its own OTP format with the brand in the body, "(BRAND Name) Your
+// OTP is: 111111. Please do not share your OTP with anyone.". Ruling: English for every locale, so that
+// the operator's template matches. The brand TryAWS.now is an owner decision (2026-11-13) that overrides
+// the 16.13 rule "no AWS mark inside a product, company or domain name" for the SMS brand; the exception
+// is this exact token and no other AWS mark (trademark risk recorded for the owner in JOURNEY.md). The
+// text is 73 characters, still one GSM 7-bit message, with no URL (an unregistered A2P SMS with a link is
+// filtered by operators); the brand is its only word that reads as a domain name (VERIFY in
+// docs/runbooks/sms-gateway.md). The code is a technical value in Latin digits, which keeps the
+// one-time-code autofill of phones working. The fixed TypeError text never holds the code (R14).
+export function otpSmsText(code: string): string {
   if (typeof code !== "string" || !/^[0-9]{6}$/.test(code)) {
     throw new TypeError("otpSmsText: the code is not six digits");
   }
-  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
-    throw new TypeError("otpSmsText: minutes must be an integer from 1 to 60");
-  }
-  if (locale === "en") {
-    return `MeghVPS verification code: ${code}. Valid for ${minutes} minutes. Do not share it.`;
-  }
-  const shown = numerals === "beng" ? toBengali(minutes) : String(minutes);
-  return `MeghVPS যাচাই কোড: ${code}। মেয়াদ ${shown} মিনিট। কাউকে জানাবেন না।`;
+  return `TryAWS.now Your OTP is: ${code}. Please do not share your OTP with anyone.`;
 }

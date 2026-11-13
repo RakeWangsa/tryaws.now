@@ -5,7 +5,7 @@
 //   the function URL gets 403 and no request can skip the WAF or the admin allowlist.
 // - R1: the web and admin roles have NO sts:AssumeRole permission. A static test reads this file
 //   and fails if "sts:" appears in a permission list below.
-// - The web function links only its own nine secrets and the web_rw password. It is never linked to
+// - The web function links only its own eleven secrets and the web_rw password. It is never linked to
 //   the Postgres component (the master user).
 // - HSTS comes from the CloudFront response headers policy (waf.ts), not from application code.
 //
@@ -104,7 +104,8 @@ export function web(inputs: WebInputs) {
     protection: "oac-with-edge-signing",
     vpc,
     domain: config.webDomain,
-    // Nine secrets of apps/web/server/secrets.ts and the web_rw password. Not the Postgres component.
+    // Eleven secrets of apps/web/server/secrets.ts (WPU-Z3: with the two of the SMS gateway) and the
+    // web_rw password. Not the Postgres component.
     link: [...WEB_SECRETS.map((name) => secrets.app[name]), secrets.db.web_rw],
     environment: {
       TC_STAGE: config.tcStage,

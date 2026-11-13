@@ -1,5 +1,13 @@
 import type { LogEvent } from "@tc/core";
-import { InMemoryNotifierStore, planRows, type SesRequest, type SesTransport } from "@tc/notify";
+import {
+  GatewaySmsProvider,
+  GennetSmsTransport,
+  InMemoryNotifierStore,
+  planRows,
+  type SesRequest,
+  type SesTransport,
+  type SmsProvider,
+} from "@tc/notify";
 import { expect, it } from "vitest";
 import { buildNotifierHandler } from "./build";
 
@@ -48,16 +56,33 @@ const fakeTransport = () => {
   return { transport, requests };
 };
 
-const build = (store: InMemoryNotifierStore, transport: SesTransport | null) => {
+const build = (
+  store: InMemoryNotifierStore,
+  transport: SesTransport | null,
+  sms: SmsProvider | null = null,
+) => {
   const logs: LogEvent[] = [];
   const handler = buildNotifierHandler({
     config,
     store,
     sesTransport: transport,
+    sms,
     clock: { now: () => new Date("2026-11-11T10:00:00.000Z") },
     log: (e) => logs.push(e),
   });
   return { handler, logs };
+};
+
+// A gateway that records what it is given and accepts everything.
+const recordingSms = () => {
+  const sent: { to: string; text: string; reference: string | undefined }[] = [];
+  const sms: SmsProvider = {
+    send: (to, text, reference) => {
+      sent.push({ to, text, reference });
+      return Promise.resolve({ ok: true, messageId: `sms-${sent.length}` });
+    },
+  };
+  return { sms, sent };
 };
 
 it("sends the pending e-mail through the SES transport port with the configured sender", async () => {
@@ -125,4 +150,77 @@ it("a transport that throws is retried later and its error text is dropped", asy
   expect(report.retry).toBe(1);
   expect(store.rows().find((r) => r.channel === "email")!.status).toBe("pending");
   expect(JSON.stringify(logs)).not.toContain(ADDRESS);
+});
+
+it("with an SMS gateway the SMS rows are no longer hidden: they are sent with the row id as the reference (WPU-Z3)", async () => {
+  const { transport } = fakeTransport();
+  const store = seeded(["kyc_approved"]);
+  const { sms, sent } = recordingSms();
+  const { handler, logs } = build(store, transport, sms);
+  await handler({});
+  const row = store.rows().find((r) => r.channel === "sms");
+  expect(row?.status).toBe("sent");
+  expect(sent).toEqual([{ to: "+8801712345678", text: expect.any(String), reference: row?.id }]);
+  expect(JSON.stringify(logs)).not.toContain("+8801712345678");
+});
+
+it("without an SMS gateway nothing reaches an SMS provider and the rows keep their attempts", async () => {
+  const { transport } = fakeTransport();
+  const store = seeded(["kyc_approved"]);
+  const { handler } = build(store, transport, null);
+  const report = await handler({});
+  expect(report.failed).toBe(0);
+  expect(store.rows().find((r) => r.channel === "sms")).toMatchObject({
+    status: "pending",
+    attempts: 0,
+  });
+});
+
+it("end to end over the Gennet transport (fake fetch): a failed send is retried with the same csms_id, and nothing secret is logged", async () => {
+  const TOKEN = "fake-token-for-the-notifier-test";
+  const SENDER = "FAKESENDERID";
+  const bodies: Record<string, unknown>[] = [];
+  const answers = [
+    { status: "FAILED", status_code: 5000, error_message: "Internal Error" },
+    {
+      status: "SUCCESS",
+      status_code: 200,
+      error_message: "",
+      smsinfo: [{ sms_status: "SUCCESS", status_message: "Success", reference_id: "gw-1" }],
+    },
+  ];
+  const fetch = (async (_url: unknown, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return new Response(JSON.stringify(answers[bodies.length - 1]), { status: 200 });
+  }) as unknown as typeof globalThis.fetch;
+  const sms = new GatewaySmsProvider({
+    transport: new GennetSmsTransport({ apiToken: TOKEN, senderId: SENDER, fetch }),
+  });
+  const store = seeded(["kyc_approved"]);
+  const logs: LogEvent[] = [];
+  let now = new Date("2026-11-11T10:00:00.000Z");
+  const handler = buildNotifierHandler({
+    config,
+    store,
+    sesTransport: fakeTransport().transport,
+    sms,
+    clock: { now: () => now },
+    log: (e) => logs.push(e),
+  });
+  await handler({});
+  expect(store.rows().find((r) => r.channel === "sms")).toMatchObject({
+    status: "pending",
+    attempts: 1,
+  });
+  now = new Date("2026-11-11T11:00:00.000Z");
+  await handler({});
+  expect(store.rows().find((r) => r.channel === "sms")?.status).toBe("sent");
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0]).toMatchObject({ api_token: TOKEN, sid: SENDER, msisdn: "8801712345678" });
+  expect(bodies[0]?.csms_id).toMatch(/^[A-Z0-9]{20}$/);
+  expect(bodies[1]?.csms_id).toBe(bodies[0]?.csms_id);
+  const logged = JSON.stringify(logs);
+  for (const value of [TOKEN, SENDER, "8801712345678", String(bodies[0]?.sms)]) {
+    expect(logged).not.toContain(value);
+  }
 });

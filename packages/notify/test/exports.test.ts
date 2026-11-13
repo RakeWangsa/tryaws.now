@@ -13,9 +13,15 @@ it("@tc/notify exports the OTP service, the SMS port, the client-address helper 
     "InMemorySmsProvider",
     "ipSubject",
     "emailSubject",
+    // WPU-Z3: the web app and the notifier build the Gennet gateway from these two
+    "GatewaySmsProvider",
+    "GennetSmsTransport",
   ]) {
     expect(typeof (entry as Record<string, unknown>)[n], n).toBe("function");
   }
+  expect((entry as Record<string, unknown>)["GENNET_SEND_URL"]).toBe(
+    "https://isms.gennet.com.bd/api/v3/send-sms",
+  );
   expect(entry.OTP.maxAttempts).toBe(5);
   expect(entry.OTP_SEND_RULES).toHaveLength(3);
   for (const n of [
@@ -25,6 +31,7 @@ it("@tc/notify exports the OTP service, the SMS port, the client-address helper 
     "challengeIdFor",
     "phoneSubject",
     "limitAddress",
+    "csmsIdFor",
   ]) {
     expect(Object.keys(entry), n).not.toContain(n);
   }

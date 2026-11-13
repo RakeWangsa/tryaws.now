@@ -4,6 +4,8 @@ export interface SentSms {
   readonly to: string;
   readonly text: string;
   readonly messageId: string;
+  // The caller's reference (WPU-Z3), present only when one was given.
+  readonly reference?: string;
 }
 
 export type FailureMode = "rejected" | "unavailable" | "throw" | "hang";
@@ -39,7 +41,7 @@ export class InMemorySmsProvider implements SmsProvider {
     this.counter = 0;
   }
 
-  send(to: string, text: string): Promise<SmsSendResult> {
+  send(to: string, text: string, reference?: string): Promise<SmsSendResult> {
     // A gateway refuses these before it looks at anything else.
     if (!E164.test(to) || text.length === 0 || text.length > MAX_TEXT) {
       return Promise.resolve({ ok: false, reason: "rejected" });
@@ -54,7 +56,9 @@ export class InMemorySmsProvider implements SmsProvider {
     if (mode === "hang") return new Promise<SmsSendResult>(() => {});
     this.counter += 1;
     const messageId = `fake-${this.counter}`;
-    this.sent.push({ to, text, messageId });
+    this.sent.push(
+      reference === undefined ? { to, text, messageId } : { to, text, messageId, reference },
+    );
     return Promise.resolve({ ok: true, messageId });
   }
 }

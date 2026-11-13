@@ -16,6 +16,16 @@ it("records what was sent, numbers the messages, and answers ok", async () => {
   expect(sms.sent).toEqual([]);
 });
 
+it("records the caller's reference when one is given (WPU-Z3)", async () => {
+  const sms = new InMemorySmsProvider();
+  await sms.send(TO, "a", "row-1");
+  await sms.send(TO, "b");
+  expect(sms.sent).toStrictEqual([
+    { to: TO, text: "a", messageId: "fake-1", reference: "row-1" },
+    { to: TO, text: "b", messageId: "fake-2" },
+  ]);
+});
+
 it("reset clears the recorded messages, the queued failures and the numbering", async () => {
   const sms = new InMemorySmsProvider();
   await sms.send(TO, "a");

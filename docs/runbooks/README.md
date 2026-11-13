@@ -27,6 +27,7 @@ Commands cited in these pages: `pnpm verify --task <id>`, `pnpm db:up`, `pnpm db
 | [kyc-review.md](kyc-review.md)                                                   | KYC review                                    |
 | [bucket-access-key-orphan.md](bucket-access-key-orphan.md)                       | bucket access key, orphan after a lost answer |
 | [secret-rotation.md](secret-rotation.md)                                         | secret rotation                               |
+| [sms-gateway.md](sms-gateway.md)                                                 | SMS gateway (Gennet), secrets, test send      |
 | [incident.md](incident.md)                                                       | incident                                      |
 | [support-requests.md](support-requests.md)                                       | support inbox                                 |
 | [restore-drill.md](restore-drill.md)                                             | database restore (written in WP9-T3)          |
@@ -54,6 +55,7 @@ Filled in by the owner when a person has read the page against the admin app and
 | [kyc-review.md](kyc-review.md)                                                   |                                |
 | [bucket-access-key-orphan.md](bucket-access-key-orphan.md)                       |                                |
 | [secret-rotation.md](secret-rotation.md)                                         |                                |
+| [sms-gateway.md](sms-gateway.md)                                                 |                                |
 | [incident.md](incident.md)                                                       |                                |
 | [support-requests.md](support-requests.md)                                       |                                |
 | [restore-drill.md](restore-drill.md)                                             |                                |

@@ -1,5 +1,6 @@
 import { inspect } from "node:util";
 import type { InitializeRequest } from "@tc/eps";
+import { OTP_SEND_RULES } from "@tc/notify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -62,6 +63,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -193,16 +195,92 @@ describe("assembleRuntime: the auth parts", () => {
     expect(typeof ok.runtime.identity?.signUp).toBe("function");
   });
 
-  it("outside fakes there is no OTP service yet (no SMS gateway)", async () => {
+  // WPU-Z3: the SMS gateway (Gennet). Planted values, never real ones (R3).
+  const SMS = {
+    SST_RESOURCE_SmsApiKey: '{"type":"sst.sst.Secret","value":"planted-smstoken-9999"}',
+    SST_RESOURCE_SmsSenderId: '{"type":"sst.sst.Secret","value":"PLANTEDSENDER0000"}',
+  };
+
+  it("outside fakes the OTP service needs the hashing key and both secrets of the SMS gateway (WPU-Z3)", async () => {
     const { assembleRuntime } = await load();
     expect((await assembleRuntime({ ...STAGING, ...POOL, ...KEYS })).runtime.otp).toBeNull();
+    for (const name of [...Object.keys(SMS), "SST_RESOURCE_OtpHashKey"]) {
+      const env: Record<string, string | undefined> = { ...STAGING, ...POOL, ...KEYS, ...SMS };
+      delete env[name];
+      expect((await assembleRuntime(env)).runtime.otp, name).toBeNull();
+    }
+    for (const stage of ["staging", "production"]) {
+      const { runtime } = await assembleRuntime({
+        ...STAGING,
+        TC_STAGE: stage,
+        ...POOL,
+        ...KEYS,
+        ...SMS,
+      });
+      expect(runtime.otp?.sms.constructor.name, stage).toBe("GatewaySmsProvider");
+      expect(runtime.otp?.pepper, stage).toBe("planted-otpkey-8888-0123456789abcdef");
+      // vi.resetModules gives the runtime its own copy of @tc/notify: equal, not the same array
+      expect(runtime.otp?.limits, stage).toEqual(OTP_SEND_RULES);
+    }
   });
 
-  it("the runtime never shows the OTP key, in JSON or in inspect", async () => {
+  it("in stage local or test without the fake switch no gateway is built, even with its secrets", async () => {
     const { assembleRuntime } = await load();
-    const { runtime } = await assembleRuntime({ ...STAGING, ...POOL, ...KEYS });
-    const shown = [JSON.stringify(runtime), inspect(runtime, { depth: 10, showHidden: true })];
-    expect(shown.join("\n")).not.toContain("planted-otpkey-8888");
+    for (const stage of ["local", "test"]) {
+      const { runtime } = await assembleRuntime({
+        TC_STAGE: stage,
+        APP_ORIGIN: "http://localhost:3000",
+        NODE_ENV: "test",
+        ...POOL,
+        ...KEYS,
+        ...SMS,
+      });
+      expect(runtime.otp, stage).toBeNull();
+    }
+  });
+
+  it("the gateway of the runtime posts to Gennet with the two secrets and the reference (fetch stubbed)", async () => {
+    const { assembleRuntime } = await load();
+    const { runtime } = await assembleRuntime({ ...STAGING, ...POOL, ...KEYS, ...SMS });
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      const answer = {
+        status: "SUCCESS",
+        status_code: 200,
+        error_message: "",
+        smsinfo: [{ sms_status: "SUCCESS", status_message: "Success", reference_id: "gw-1" }],
+      };
+      return new Response(JSON.stringify(answer), { status: 200 });
+    });
+    const text = "TryAWS.now Your OTP is: 123456. Please do not share your OTP with anyone.";
+    expect(await runtime.otp?.sms.send("+8801712345678", text, "challenge-1")).toEqual({
+      ok: true,
+      messageId: "gw-1",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("https://isms.gennet.com.bd/api/v3/send-sms");
+    expect(calls[0]?.body).toMatchObject({
+      api_token: "planted-smstoken-9999",
+      sid: "PLANTEDSENDER0000",
+      msisdn: "8801712345678",
+      sms: text,
+    });
+    expect(calls[0]?.body["csms_id"]).toMatch(/^[A-Z0-9]{20}$/);
+  });
+
+  it("the runtime never shows the OTP key or the SMS secrets, in JSON or in inspect", async () => {
+    const { assembleRuntime } = await load();
+    for (const env of [
+      { ...STAGING, ...POOL, ...KEYS },
+      { ...STAGING, ...POOL, ...KEYS, ...SMS },
+    ]) {
+      const { runtime } = await assembleRuntime(env);
+      const shown = [JSON.stringify(runtime), inspect(runtime, { depth: 10, showHidden: true })];
+      for (const planted of ["planted-otpkey-8888", "planted-smstoken-9999", "PLANTEDSENDER0000"]) {
+        expect(shown.join("\n")).not.toContain(planted);
+      }
+    }
   });
 
   it("fake mode builds the in-memory identity provider, the SMS provider and random keys", async () => {

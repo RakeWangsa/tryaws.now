@@ -13,7 +13,7 @@ DevOps (a person). A Claude Code session does not read, print or rotate secrets 
 ## Where secrets live
 
 - EPS credentials: SST Secrets `EpsMerchantId`, `EpsStoreId`, `EpsUsername`, `EpsPassword`, `EpsHashKey`. They reach the `payments-sweeper` and the web payment code only through the secret port (`functions/payments-sweeper/secrets.ts`). Errors name the secret, never the value.
-- SMS gateway key: SST Secret `SmsApiKey`, read by the `notifier`.
+- SMS gateway (Gennet): SST Secrets `SmsApiKey` (the API token) and `SmsSenderId` (the sender id), read by the `notifier` and by the web app for the phone OTP. See [sms-gateway.md](sms-gateway.md); to stop every send at once, revoke the token in the Gennet portal.
 - Database: per-role credentials in RDS Proxy (`web_rw`, `admin_rw`, `worker_rw`, `report_ro`); `migrator` alone uses the master user (Section 3.3).
 - Cognito: user pool settings; no shared password.
 - AWS cross-account access: STS AssumeRole only. There are no long-lived access keys to rotate; if one exists, that is itself an incident (see [incident.md](incident.md)).

@@ -44,11 +44,12 @@ type Outcome =
 type GatewayAnswer = "ok" | "rejected" | "unavailable";
 
 // A thrown error, a timeout and any unknown answer are "unavailable"; nothing of the error is read
-// (R14). The timer is always cleared.
+// (R14). The timer is always cleared. The challenge id is the reference of the message (WPU-Z3).
 async function callGateway(
   sms: SmsProvider,
   to: string,
   text: string,
+  reference: string,
   timeoutMs: number,
 ): Promise<GatewayAnswer> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -57,7 +58,7 @@ async function callGateway(
   });
   const call = (async (): Promise<GatewayAnswer> => {
     try {
-      const result = await sms.send(to, text);
+      const result = await sms.send(to, text, reference);
       if (result.ok) return "ok";
       return result.reason === "rejected" ? "rejected" : "unavailable";
     } catch {
@@ -107,7 +108,8 @@ export async function sendPhoneOtp(
   const id = challengeIdFor(deps.pepper, session.customerId, input.idempotencyKey);
   const code = generateCode(deps.randomInt);
   const codeHash = hashCode(deps.pepper, id, phone, code);
-  const text = otpSmsText(session.locale, deps.numerals ?? "beng", code, OTP.ttlSeconds / 60);
+  // The gateway's own format, the same for every locale (WPU-Z3).
+  const text = otpSmsText(code);
 
   // 4. The one transaction that can refuse.
   const customerLimits = deps.limits.filter((rule) => rule.kind === "customer");
@@ -189,7 +191,13 @@ export async function sendPhoneOtp(
   }
 
   // 6. The gateway, after the commit.
-  const answer = await callGateway(deps.sms, phone, text, deps.sendTimeoutMs ?? OTP.sendTimeoutMs);
+  const answer = await callGateway(
+    deps.sms,
+    phone,
+    text,
+    id,
+    deps.sendTimeoutMs ?? OTP.sendTimeoutMs,
+  );
   if (answer === "ok") {
     return {
       ok: true,
