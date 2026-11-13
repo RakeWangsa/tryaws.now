@@ -28,8 +28,9 @@ name: deploy-production
 # TC_STAGE_SIZE (lean or full; unset is full) comes from each environment like the other stage values, in the
 # plan job too, so the plan shows the sizing that the deploy job builds.
 # The plan role holds read and `sst diff` permissions only. The deploy role is the only production deploy role.
-# The production account is a different account from staging; its role cannot assume a pool role for
-# customers (R1): the control plane roles do that, not the CI role.
+# Staging and production may share one account (owner decision 2026-11-13); each deploy role can change
+# only its own stage (infra/org/ci-deploy-*.yaml). No CI role can assume a pool role for customers (R1):
+# the control plane roles do that, not the CI role.
 #
 # The guard in infra/lib/stage.ts refuses the production stage unless CI=true and TC_PRODUCTION_DEPLOY=ci-approved.
 # The variable is set per step, only on the steps that run sst, never at workflow or job level. The plan step

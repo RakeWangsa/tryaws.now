@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   TiCON Cloud CI role TcCiPlanProduction (R3, B.1 of docs/analysis/pending-audit.md): READ-ONLY and
   MINIMAL. Assumed by the job `plan` of .github/workflows/deploy-production.yml through GitHub OIDC, in
-  the PRODUCTION account only, to run `sst diff` so DevOps reads the plan before approving the deploy
+  the account of the production stage, to run `sst diff` so DevOps reads the plan before approving the deploy
   job. The trust is the three conditions that workflow documents: aud, sub = the GitHub environment
   `production-plan`, and job_workflow_ref = that workflow at a `v*` tag. The GitHub side must also set a
   deployment tag policy (`v*`) on the environment `production-plan`, because it has no reviewers. The
@@ -11,17 +11,19 @@ Description: >-
   ReadOnlyAccess policy, which reads data (objects, log events, queue messages, table items, secrets).
   Organisation and repository are parameters; no account id or name is written here.
 # NOTE on the SST passphrase: `sst diff` decrypts the state, so the plan role must read the SSM
-# parameter /sst/passphrase/* (SecureString). That is the encryption passphrase of the SST secrets of the
-# production stage: this role can therefore read every sst.Secret value of production through the state.
-# It is granted because the plan cannot run without it; it is why the role is reachable only from a
+# parameter /sst/passphrase/ticon-cloud/production (SecureString). That is the encryption passphrase of
+# the SST secrets of the production stage: this role can therefore read every sst.Secret value of
+# production through the state. It is granted because the plan cannot run without it; it is why the role is reachable only from a
 # `v*` tag of the one workflow, in an environment with a tag policy, and why the workflow must never print
 # state. Accepted risk, recorded in JOURNEY.md (WPU-D2 Rulings).
 # The passphrase is a SecureString under the AWS managed key aws/ssm, and Parameter Store decrypts it with
 # kms:Decrypt of the caller (Parameter Store documentation, "Restricting access to Parameter Store
 # parameters": any principal that retrieves the decrypted value needs kms:Decrypt on that key). So the
 # deny of kms:Decrypt below exempts exactly that decryption: the encryption context PARAMETER_ARN that
-# Parameter Store sends must name /sst/passphrase/* of this account (VERIFY result of WPU-Z11, report
-# docs/analysis/verify-review-2026-11-13.md item ci-plan-production.yaml:22). Every other decrypt is denied.
+# Parameter Store sends must name /sst/passphrase/ticon-cloud/production of this account (VERIFY result of
+# WPU-Z11, report docs/analysis/verify-review-2026-11-13.md item ci-plan-production.yaml:22). Every other
+# decrypt is denied. ONE ACCOUNT: the report allows /sst/passphrase/*; this template narrows it to the
+# production passphrase, so the plan role cannot decrypt the staging state that shares the state bucket.
 # Two parameters must exist before the first plan job, because this role writes nothing: /sst/bootstrap
 # (written by any SST command run with administrator credentials in the account, for example
 # scripts/golive/stage-secrets.sh) and /sst/passphrase/ticon-cloud/production (written by SST at the first
@@ -214,7 +216,7 @@ Resources:
               - ssm:GetParameter
               - ssm:GetParameters
             Resource:
-              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/*"
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/production"
               - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/bootstrap"
           - Fn::If:
               - HasStateKey
@@ -252,7 +254,7 @@ Resources:
                 Condition:
                   StringNotLike:
                     kms:EncryptionContext:PARAMETER_ARN:
-                      Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/*"
+                      Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/production"
               - Sid: NoDecryptExceptTheSstPassphrase
                 Effect: Deny
                 Action: kms:Decrypt
@@ -260,7 +262,7 @@ Resources:
                 Condition:
                   StringNotLike:
                     kms:EncryptionContext:PARAMETER_ARN:
-                      Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/*"
+                      Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/production"
           - Sid: NoLogsMessagesItemsOrDatabaseData
             Effect: Deny
             Action:

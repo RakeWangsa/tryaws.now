@@ -5,8 +5,9 @@ Description: >-
   the Region of the trail (ap-southeast-1), BEFORE cloudtrail-trail.yaml. Nobody can delete a log
   object: the bucket policy denies delete to everyone, versions are kept and Object Lock holds them.
 # VERIFY: CloudTrail delivery to a bucket with Object Lock, with SSE-KMS and with an organization
-# trail: the bucket policy and key policy below follow the documented forms (aws:SourceArn of the
-# trail; AWSLogs/<management account>/ and AWSLogs/<organization id>/ prefixes). Check with
+# trail: the bucket policy follows the documented form (aws:SourceArn of the trail;
+# AWSLogs/<management account>/ and AWSLogs/<organization id>/ prefixes); the key policy got the
+# documented kms:Decrypt for the S3 Bucket Key (WPU-Z11). Check with
 # `aws cloudtrail get-trail-status` after the trail exists, and look for the first log file.
 # VERIFY: COMPLIANCE retention cannot be shortened or removed by anyone, root included, until it
 # expires, and the bucket cannot be emptied meanwhile. Pick the retention days with the owner (the audit
@@ -96,6 +97,15 @@ Resources:
             Principal:
               Service: cloudtrail.amazonaws.com
             Action: kms:DescribeKey
+            Resource: "*"
+          # VERIFY result (WPU-Z11, CloudTrail "Configure AWS KMS key policies for CloudTrail"): with an
+          # S3 Bucket Key (BucketKeyEnabled below) CloudTrail needs kms:Decrypt to create or update a trail
+          # with SSE-KMS. Prove it with `aws cloudtrail get-trail-status` (LatestDeliveryError empty).
+          - Sid: CloudTrailDecryptsForTheBucketKey
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: kms:Decrypt
             Resource: "*"
   TrailKeyAlias:
     Type: AWS::KMS::Alias
