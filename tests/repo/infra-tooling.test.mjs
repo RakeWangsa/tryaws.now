@@ -63,11 +63,19 @@ describe("tooling", () => {
 
   // WPU-Z10: the one public 12-digit number allowed is the AWS account that publishes the fck-nat images
   // (NAT_INSTANCE.amiOwner of infra/lib/lean.ts, the AMI owner filter of SST 4.17.2 vpc.ts), there only.
+  // WPU-Z18: the one sst.Secret with a placeholder is the optional FirstAdminSub (the placeholder is the
+  // literal not-configured of infra/lib/functions.ts, not a value), in infra/stacks/secrets.ts only.
   it("writes no account id, ARN of an account, key or secret value in infra/", () => {
     const FCK_NAT_PUBLISHER = `amiOwner: "568608671756"`;
+    const FIRST_ADMIN_SUB = "new sst.Secret(FIRST_ADMIN_SUB_SECRET, OPTIONAL_SECRET_PLACEHOLDER)";
     for (const file of ours) {
       const raw = readFileSync(resolve(root, file), "utf8");
-      const allowed = file === join("infra", "lib", "lean.ts") ? FCK_NAT_PUBLISHER : null;
+      const allowed =
+        file === join("infra", "lib", "lean.ts")
+          ? FCK_NAT_PUBLISHER
+          : file === join("infra", "stacks", "secrets.ts")
+            ? FIRST_ADMIN_SUB
+            : null;
       const text = allowed === null ? raw : raw.replace(allowed, "");
       expect(text, file).not.toMatch(/\b\d{12}\b/);
       expect(text, file).not.toMatch(/arn:aws:[a-z0-9-]*:[a-z0-9-]*:\d{12}/);

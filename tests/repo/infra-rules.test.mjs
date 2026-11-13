@@ -406,7 +406,15 @@ describe("WP0-T3: database, proxy and roles", () => {
 
   it("keeps all declared secrets without values", () => {
     expect(secrets).toContain("new sst.Secret(name)");
-    expect(secrets).not.toMatch(/new sst\.Secret\(\w+,/);
+    // Every sst.Secret with a second argument (a placeholder). WPU-Z18: exactly one, the optional
+    // FirstAdminSub, whose placeholder is not a value (the migrator reads it as "no secret");
+    // tests/repo/first-admin.test.mjs holds the rest of its rules.
+    const placeholders = [...secrets.matchAll(/new sst\.Secret\(([^)]*),([^)]*)\)/g)].map((m) =>
+      m[0].replace(/\s+/g, " "),
+    );
+    expect(placeholders).toEqual([
+      "new sst.Secret(FIRST_ADMIN_SUB_SECRET, OPTIONAL_SECRET_PLACEHOLDER)",
+    ]);
   });
 });
 

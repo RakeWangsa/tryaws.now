@@ -24,10 +24,17 @@ export const DB_PASSWORD_SECRETS = {
 export type RoleName = keyof typeof DB_PASSWORD_SECRETS;
 export type RolePasswords = Readonly<Record<RoleName, string>>;
 
+// WPU-Z18: the optional sst.Secret with the Cognito `sub` of the first superadmin. A test compares it
+// with FIRST_ADMIN_SUB_SECRET of infra/lib/functions.ts. Its raw value is handed on unchecked; runMigrator
+// decides (firstAdminDecision of @tc/db) and never logs it.
+export const FIRST_ADMIN_SUB_SECRET = "FirstAdminSub";
+
 export interface MigratorConfig {
   readonly masterUrl: string;
   readonly rolePasswords: RolePasswords;
   readonly migrationsDir: string;
+  /** The raw value of FirstAdminSub; undefined when it is not linked, not a string or empty. */
+  readonly firstAdminSub?: string | undefined;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -85,5 +92,7 @@ export function readMigratorConfig(env: Env, links: LinkSource = sstLinks): Migr
     masterUrl: `postgres://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}/${database}?sslmode=${sslmode}`,
     rolePasswords,
     migrationsDir,
+    // Optional: a missing or unreadable link is "no secret", never a failure of the migrations.
+    firstAdminSub: secretValue(links(FIRST_ADMIN_SUB_SECRET)),
   };
 }

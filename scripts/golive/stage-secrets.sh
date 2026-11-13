@@ -15,6 +15,11 @@
 #                                         hidden prompt; an empty answer stores the literal
 #                                         `not-configured`: the platform then has no EPS and every top-up
 #                                         says "not available", nothing is sent to EPS (R6, R16)
+#   FirstAdminSub (WPU-Z18, optional)     visible prompt: the Cognito `sub` (a UUID, not a secret) of the
+#                                         first superadmin. Leave it empty until the Cognito admin exists:
+#                                         an empty answer sets nothing (the stack's placeholder applies and
+#                                         the migrator writes no admin); a value that is not a UUID is
+#                                         refused. docs/runbooks/go-live.md step 9.2.
 # A secret that already has a value is skipped unless --force is given. Only the NAMES of the existing
 # secrets are read (`sst secret list | cut -d= -f1`); values never reach the terminal or a file.
 # A value is handed to sst on standard input (`sst secret set <name> < value`), never on the command
@@ -30,6 +35,7 @@ readonly DB_PASSWORD_SECRETS="DbPasswordWebRw DbPasswordAdminRw DbPasswordWorker
 readonly EPS_SECRETS="EpsMerchantId EpsStoreId EpsUsername EpsPassword EpsHashKey"
 readonly SMS_TOKEN_SECRET="SmsApiKey"
 readonly SMS_SENDER_SECRET="SmsSenderId"
+readonly FIRST_ADMIN_SECRET="FirstAdminSub"
 
 die() {
   echo "stage-secrets: $1" >&2
@@ -151,5 +157,20 @@ for name in $EPS_SECRETS; do
     unset EPS_VALUE
   fi
 done
+
+# 6. WPU-Z18: the Cognito sub of the first superadmin, optional and last. An empty answer (or the end of
+# the input) sets nothing. The value is checked here and again by the migrator, and never printed.
+if should_set "$FIRST_ADMIN_SECRET"; then
+  read -r -p "Cognito sub of the first superadmin for ${STAGE} (leave empty until the Cognito admin exists): " FIRST_ADMIN_SUB || FIRST_ADMIN_SUB=""
+  if [[ -z "$FIRST_ADMIN_SUB" ]]; then
+    echo "skipped ${FIRST_ADMIN_SECRET} (empty: leave empty until the Cognito admin exists)"
+  elif [[ "$FIRST_ADMIN_SUB" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    set_secret "$FIRST_ADMIN_SECRET" "$(printf '%s' "$FIRST_ADMIN_SUB" | tr 'A-F' 'a-f')"
+  else
+    unset FIRST_ADMIN_SUB
+    die "${FIRST_ADMIN_SECRET} is not a Cognito sub (a UUID); nothing set for it"
+  fi
+  unset FIRST_ADMIN_SUB
+fi
 
 echo "done: stage ${STAGE}"
