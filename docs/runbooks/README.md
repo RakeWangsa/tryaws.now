@@ -8,29 +8,30 @@ Commands cited in these pages: `pnpm verify --task <id>`, `pnpm db:up`, `pnpm db
 
 ## Index
 
-| Runbook                                                                          | Section M topic                               |
-| -------------------------------------------------------------------------------- | --------------------------------------------- |
-| [payment-stuck-or-disputed.md](payment-stuck-or-disputed.md)                     | payment stuck or disputed                     |
-| [eps-unavailable-manual-topup.md](eps-unavailable-manual-topup.md)               | EPS unavailable, manual top-up                |
-| [ledger-check-failed.md](ledger-check-failed.md)                                 | reconciliation mismatch, ledger check failed  |
-| [refund.md](refund.md)                                                           | refund                                        |
-| [fx-rate-change.md](fx-rate-change.md)                                           | FX rate change                                |
-| [provisioning-failed-and-dead-letter.md](provisioning-failed-and-dead-letter.md) | provisioning failed, dead-letter queue        |
-| [capacity-full-and-quota.md](capacity-full-and-quota.md)                         | capacity full, quota request                  |
-| [lifecycle-approval.md](lifecycle-approval.md)                                   | lifecycle approval                            |
-| [unpaid-usage-switch.md](unpaid-usage-switch.md)                                 | turning the unpaid usage rule on or off       |
-| [pool-account-onboarding.md](pool-account-onboarding.md)                         | adding a pool account                         |
-| [pool-account-single.md](pool-account-single.md)                                 | launch on one pool account                    |
-| [single-account-lean.md](single-account-lean.md)                                 | one account, lean stage under 50 USD a month  |
-| [domain-registration-problem.md](domain-registration-problem.md)                 | domain registration problem                   |
-| [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 | abuse notice                                  |
-| [kyc-review.md](kyc-review.md)                                                   | KYC review                                    |
-| [bucket-access-key-orphan.md](bucket-access-key-orphan.md)                       | bucket access key, orphan after a lost answer |
-| [secret-rotation.md](secret-rotation.md)                                         | secret rotation                               |
-| [sms-gateway.md](sms-gateway.md)                                                 | SMS gateway (Gennet), secrets, test send      |
-| [incident.md](incident.md)                                                       | incident                                      |
-| [support-requests.md](support-requests.md)                                       | support inbox                                 |
-| [restore-drill.md](restore-drill.md)                                             | database restore (written in WP9-T3)          |
+| Runbook                                                                          | Section M topic                                         |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [payment-stuck-or-disputed.md](payment-stuck-or-disputed.md)                     | payment stuck or disputed                               |
+| [eps-unavailable-manual-topup.md](eps-unavailable-manual-topup.md)               | EPS unavailable, manual top-up                          |
+| [ledger-check-failed.md](ledger-check-failed.md)                                 | reconciliation mismatch, ledger check failed            |
+| [refund.md](refund.md)                                                           | refund                                                  |
+| [fx-rate-change.md](fx-rate-change.md)                                           | FX rate change                                          |
+| [provisioning-failed-and-dead-letter.md](provisioning-failed-and-dead-letter.md) | provisioning failed, dead-letter queue                  |
+| [capacity-full-and-quota.md](capacity-full-and-quota.md)                         | capacity full, quota request                            |
+| [lifecycle-approval.md](lifecycle-approval.md)                                   | lifecycle approval                                      |
+| [unpaid-usage-switch.md](unpaid-usage-switch.md)                                 | turning the unpaid usage rule on or off                 |
+| [pool-account-onboarding.md](pool-account-onboarding.md)                         | adding a pool account                                   |
+| [pool-account-single.md](pool-account-single.md)                                 | launch on one pool account                              |
+| [single-account-lean.md](single-account-lean.md)                                 | one account, lean stage under 50 USD a month            |
+| [go-live.md](go-live.md)                                                         | go-live in one account: CI roles, secrets, first deploy |
+| [domain-registration-problem.md](domain-registration-problem.md)                 | domain registration problem                             |
+| [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 | abuse notice                                            |
+| [kyc-review.md](kyc-review.md)                                                   | KYC review                                              |
+| [bucket-access-key-orphan.md](bucket-access-key-orphan.md)                       | bucket access key, orphan after a lost answer           |
+| [secret-rotation.md](secret-rotation.md)                                         | secret rotation                                         |
+| [sms-gateway.md](sms-gateway.md)                                                 | SMS gateway (Gennet), secrets, test send                |
+| [incident.md](incident.md)                                                       | incident                                                |
+| [support-requests.md](support-requests.md)                                       | support inbox                                           |
+| [restore-drill.md](restore-drill.md)                                             | database restore (written in WP9-T3)                    |
 
 ## Walked through once
 
@@ -50,6 +51,7 @@ Filled in by the owner when a person has read the page against the admin app and
 | [pool-account-onboarding.md](pool-account-onboarding.md)                         |                                |
 | [pool-account-single.md](pool-account-single.md)                                 |                                |
 | [single-account-lean.md](single-account-lean.md)                                 |                                |
+| [go-live.md](go-live.md)                                                         |                                |
 | [domain-registration-problem.md](domain-registration-problem.md)                 |                                |
 | [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 |                                |
 | [kyc-review.md](kyc-review.md)                                                   |                                |
