@@ -3591,6 +3591,44 @@ TASKS["WPU-M8"] = [
   repo,
 ];
 
+// WPU-Z0: the root sst.config.ts has no static import (SST 4 refuses them); the app lives in infra/app.ts.
+TASKS["WPU-Z0"] = [specSync, baselineSync, lint, typecheck, format, repo];
+
+// WPU-Z1: a renewal that cannot be priced for a platform reason is held; stale hold markers are cleared; the
+// price-hold alarm. core and scheduler include database tests (pnpm db:up).
+TASKS["WPU-Z1"] = [specSync, baselineSync, lint, typecheck, format, core, scheduler, repo];
+
+// WPU-Z2: auto-renew on at purchase where the panel can switch it off; the signed-in panel shows BDT only.
+TASKS["WPU-Z2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  crossTenant,
+  web,
+  repo,
+];
+
+// WPU-Z3: the Gennet SMS gateway (ISMS API v3) for the phone OTP and the notification SMS.
+TASKS["WPU-Z3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  notifyAll,
+  notifierFn,
+  web,
+  infraLib,
+  repo,
+];
+
+// WPU-Z7: the public support page without phone or e-mail, the FAQ, the legal drafts, the on-call proof text.
+TASKS["WPU-Z7"] = [...wppBase, wppPages, wppAnchors, wppMessages, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

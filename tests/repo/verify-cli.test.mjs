@@ -215,7 +215,34 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-T3",
     "WPU-T4",
     "WPU-X6",
+    "WPU-Z0",
+    "WPU-Z1",
+    "WPU-Z2",
+    "WPU-Z3",
+    "WPU-Z7",
   ]);
+});
+
+it("tasks WPU-Z0 to WPU-Z3 and WPU-Z7 (owner decisions round 3) name their proofs", () => {
+  const ids = (task) => TASKS[task].map((c) => c.id);
+  expect(ids("WPU-Z0")).toEqual([
+    "spec-sync",
+    "baseline-sync",
+    "lint",
+    "typecheck",
+    "format",
+    "repo",
+  ]);
+  expect(ids("WPU-Z1")).toEqual(expect.arrayContaining(["core", "scheduler", "repo"]));
+  expect(ids("WPU-Z2")).toEqual(
+    expect.arrayContaining(["core", "db", "cross-tenant", "web", "repo"]),
+  );
+  expect(ids("WPU-Z3")).toEqual(
+    expect.arrayContaining(["notify", "notifier-fn", "web", "infra-lib", "repo"]),
+  );
+  expect(ids("WPU-Z7")).toEqual(
+    expect.arrayContaining(["wpp-pages", "wpp-mockup-anchors", "wpp-messages", "web", "repo"]),
+  );
 });
 
 it("task WPU-X6 is proven by lint, types, format, the axe browser smoke and the repository tests; the smoke fails when it cannot run", () => {
