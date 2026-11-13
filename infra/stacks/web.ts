@@ -123,7 +123,6 @@ export function web(inputs: WebInputs) {
       // (apps/web/server/renderer-invoke.ts); the role may invoke its "web" alias only.
       INVOICE_RENDERER_FUNCTION_NAME: workers.invoked["invoice-renderer"]?.name,
       KYC_BUCKET: storage.kyc.name,
-      INVOICES_BUCKET: storage.invoices.name,
       EXPORTS_BUCKET: storage.exports.name,
     },
     // Least privilege of web (3.2): enqueue, presign KYC uploads (PutObject only), read its own

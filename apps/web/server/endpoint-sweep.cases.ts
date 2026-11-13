@@ -47,6 +47,13 @@ const CUSTOMER_REPOS = proof(
   "packages/db/test/cross-tenant.test.ts",
   "every method of customerRepos has a cross-tenant case",
 );
+// Security review 2 (R8): the real-database proof of the access-details function for the three actions
+// beyond the Windows password. B asks for A's resource, gets the answer of a missing id, and AWS is
+// never called (functions/access-details/test/proof-cross-tenant.test.ts; it runs where PostgreSQL is).
+const ACCESS_DETAILS_REAL_DB = proof(
+  "functions/access-details/test/proof-cross-tenant.test.ts",
+  "R8: %s, customer B against customer A",
+);
 const SETTINGS_ORDER = proof(
   `${W}settings-actions.test.ts`,
   "authenticates, validates, rate limits, writes and audits, in that order",
@@ -138,6 +145,7 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
         `${W}databases-access.test.ts`,
         "another customer's database and a missing one give one answer and never reach the port (R8)",
       ),
+      ACCESS_DETAILS_REAL_DB,
     ],
   },
   "app/[locale]/(panel)/databases/[id]/actions.ts#destroyDatabaseAction": {
@@ -785,6 +793,7 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
         "functions/access-details/handler.test.ts",
         "customer B asking for A's server gets the answer of a missing resource, and AWS is not called",
       ),
+      ACCESS_DETAILS_REAL_DB,
     ],
   },
   "app/[locale]/(panel)/storage/new/actions.ts#createBucketDraftAction": {
@@ -1050,6 +1059,8 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
         `${W}loaders-tenancy.test.ts`,
         "the loaders of the pages with an id answer another customer's id like a missing row",
       ),
+      // The page lists the bucket keys through the access-details function (bucketKeyList).
+      ACCESS_DETAILS_REAL_DB,
     ],
   },
   "app/[locale]/(panel)/wallet/topup/[paymentId]/page.tsx": {

@@ -59,7 +59,7 @@ const GATE_CASES: Record<string, GateCase> = {
   },
   "audit.search": { call: (r) => r.audit.search(), deny: null },
   "audit.detail": { call: (r) => r.audit.detail(ID()), deny: null },
-  "audit.export": { call: (r) => r.audit.export(), deny: "ops" },
+  "audit.export": { call: (r) => r.audit.export(undefined, "r"), deny: "ops" },
   "abuse.list": { call: (r) => r.abuse.list({} as never), deny: "finance" },
   "abuse.detail": { call: (r) => r.abuse.detail(ID()), deny: "finance" },
   "abuse.open": {
@@ -158,7 +158,7 @@ const GATE_CASES: Record<string, GateCase> = {
     deny: "support",
   },
   "customers.documentRead": {
-    call: (r) => r.customers.documentRead({ submissionId: ID(), index: 0 }),
+    call: (r) => r.customers.documentRead({ submissionId: ID(), index: 0 }, "id check"),
     deny: "finance",
   },
   "featureFlags.set": {

@@ -89,6 +89,9 @@ describe("revealDatabasePasswordCore", () => {
     for (const w of [none, stale, bad]) expect(w.calls).toEqual([]);
   });
 
+  // The real-database proof of the same sentence, through the access-details function with the grants
+  // of the worker role, is functions/access-details/test/proof-cross-tenant.test.ts (registered in
+  // endpoint-sweep.cases.ts). This test is the web tier's half: the port is never called.
   it("another customer's database and a missing one give one answer and never reach the port (R8)", async () => {
     const { deps, calls } = world({ owned: null });
     expect(await revealDatabasePasswordCore(deps, { resourceId: DB })).toEqual({

@@ -20,6 +20,14 @@ export const INVOICE_DOCUMENT_HEADERS: Readonly<Record<string, string>> = Object
   "Referrer-Policy": "no-referrer",
 });
 
+// R9: the printable page is a render of the stored snapshots on each click; sixty a minute for each
+// customer is far above a person printing and stops a script from using it as a read loop.
+export const INVOICE_DOCUMENT_RATE_LIMITS = Object.freeze([
+  Object.freeze({ action: "invoice.document", limit: 60, windowSeconds: 60 }),
+]);
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export interface DocumentDeps {
   /** The session of the request, or null (R9 step 1). */
   session: CustomerSession | null;
@@ -29,6 +37,34 @@ export interface DocumentDeps {
 
 export type DocumentAnswer =
   { status: 200; html: string } | { status: 401 | 404 | 500 | 503; html?: undefined };
+
+export interface PrintDeps extends DocumentDeps {
+  rateLimit(session: CustomerSession): Promise<{ allowed: boolean }>;
+}
+
+export type PrintAnswer = DocumentAnswer | { status: 429; html?: undefined };
+
+/**
+ * The answer of the printable-invoice route, in the order of R9: the session (401), the id (404), the
+ * rate limit (429; a limiter that cannot answer is 503, R16), then the invoice read for the session's
+ * customer. The PDF route does its own limiting and calls `invoiceDocument` below, so a render is not
+ * counted twice.
+ */
+export async function printableInvoice(
+  deps: PrintDeps,
+  locale: Locale,
+  id: string,
+): Promise<PrintAnswer> {
+  const session = deps.session;
+  if (session === null) return { status: 401 };
+  if (!UUID.test(id)) return { status: 404 };
+  try {
+    if (!(await deps.rateLimit(session)).allowed) return { status: 429 };
+  } catch {
+    return { status: 503 };
+  }
+  return invoiceDocument(deps, locale, id);
+}
 
 export async function invoiceDocument(
   deps: DocumentDeps,

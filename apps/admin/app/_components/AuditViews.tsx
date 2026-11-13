@@ -15,7 +15,8 @@ import { localePath, type Locale } from "@tc/ui/runtime";
 import { auditParams, type AuditQuery } from "../../server/audit-query.ts";
 import type { Loaded } from "../../server/money-data.ts";
 
-// 16.12 /audit and /audit/[id]. Read only: there is no form that posts, only GET filters and links.
+// 16.12 /audit and /audit/[id]. Nothing here posts: the filter and the CSV export are GET forms. The
+// export form carries the filter as hidden fields and asks for the reason of R10; the route audits it.
 // The rows are masked by the repository before they get here (R14).
 const ACTOR_TYPES = ["admin", "customer", "system"] as const;
 
@@ -191,9 +192,7 @@ export interface AuditViewProps {
 
 export function AuditView({ locale, query, list, canExport }: AuditViewProps) {
   const t = useTranslations("AdminAudit");
-  const exportHref = `/api/audit-export${
-    auditParams(query, null).toString() === "" ? "" : `?${auditParams(query, null).toString()}`
-  }`;
+  const exportFilter = [...auditParams(query, null).entries()];
   return (
     <>
       <h2 className="h4 mergecolor">{t("title")}</h2>
@@ -201,10 +200,26 @@ export function AuditView({ locale, query, list, canExport }: AuditViewProps) {
       <Card>
         <FilterForm locale={locale} query={query} />
         {canExport ? (
-          <p className="mb-0">
-            <a href={exportHref}>{t("export.link")}</a>
+          <form method="get" action="/api/audit-export" className="mb-0">
+            {exportFilter.map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={value} />
+            ))}
+            <FormBlock>
+              <Field
+                name="reason"
+                id="audit-export-reason"
+                label={t("export.reasonLabel")}
+                hint={t("export.reasonHint")}
+                required
+                maxLength={500}
+                autoComplete="off"
+              />
+            </FormBlock>
+            <Button type="submit" variant="tertiary" size="sm" icon="fas fa-download">
+              {t("export.link")}
+            </Button>
             <span className="form-text seccolor d-block">{t("export.hint")}</span>
-          </p>
+          </form>
         ) : null}
       </Card>
       {list.kind === "ok" ? (

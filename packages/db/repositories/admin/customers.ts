@@ -17,7 +17,6 @@ const MAX_QUERY = 100;
 const MAX_NOTE = 500;
 const MAX_PAGE = 100;
 const DEFAULT_PAGE = 25;
-const DOCUMENT_VIEW_REASON = "kyc document review";
 
 export type RiskTier = (typeof RISK_TIERS)[number];
 export type KycFilter = "none" | "pending" | "verified" | "rejected";
@@ -135,8 +134,9 @@ export interface CustomersAdminRepo {
   setRiskTier(input: RiskTierInput, reason: string): Promise<Written<CustomerChanged>>;
   suspend(input: CustomerStateInput, reason: string): Promise<Written<CustomerChanged>>;
   resume(input: CustomerStateInput, reason: string): Promise<Written<CustomerChanged>>;
-  // Every view of a document leaves an audit row; the key is returned for the presigner.
-  documentRead(input: KycDocumentInput): Promise<Written<KycDocumentRead>>;
+  // Every view of a document leaves an audit row with the reason the admin gave (R10); the key is
+  // returned for the presigner.
+  documentRead(input: KycDocumentInput, reason: string): Promise<Written<KycDocumentRead>>;
 }
 
 // "abcd@example.com" -> "a***@example.com". Text that is not an address is fully hidden.
@@ -516,7 +516,7 @@ export function customersAdminRepo(scope: AdminScope): CustomersAdminRepo {
       }));
     },
 
-    async documentRead(input) {
+    async documentRead(input, reason) {
       const { submissionId, index } = input;
       if (!canRead) return refused("forbidden");
       if (
@@ -537,7 +537,7 @@ export function customersAdminRepo(scope: AdminScope): CustomersAdminRepo {
             action: "kyc.document_view",
             targetType: "customer",
             targetId: owner,
-            reason: DOCUMENT_VIEW_REASON,
+            reason,
           },
           async () => {
             const { rows } = await scope.tx.execute<{ customer_id: string; key: string | null }>(

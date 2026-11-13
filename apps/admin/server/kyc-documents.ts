@@ -37,6 +37,8 @@ export function fakeKycDocumentStore(): KycDocumentStore & {
 export interface KycDocumentRequest {
   readonly submissionId: unknown;
   readonly index: unknown;
+  // R10: the short reason the admin gives for looking at the document.
+  readonly reason: unknown;
 }
 
 export type KycDocumentAnswer =
@@ -59,14 +61,15 @@ const NO_CACHE: Record<string, string> = {
   "Referrer-Policy": "no-referrer",
 };
 
-// R9 in order: authenticate and authorize, validate, rate limit, execute (the audit row of the view is
-// written by the repository inside the transaction, before the URL exists), answer. Every refusal has
+// R9 in order: authenticate and authorize, validate (the ids and the reason of R10), rate limit,
+// execute (the audit row of the view, with that reason, is written by the repository inside the
+// transaction, before the URL exists), answer. Every refusal has
 // the same no-store headers and no body text.
 export function makeKycDocumentHandler(
   deps: KycDocumentDeps,
 ): (request: KycDocumentRequest) => Promise<KycDocumentAnswer> {
   return async (request) => {
-    const { submissionId, index: rawIndex } = request;
+    const { submissionId, index: rawIndex, reason } = request;
     let actor: AdminActor;
     try {
       actor = await deps.authorize();
@@ -74,7 +77,7 @@ export function makeKycDocumentHandler(
       return { status: 403, headers: NO_CACHE };
     }
     try {
-      const params = kycDocumentParams.safeParse({ submissionId, index: rawIndex });
+      const params = kycDocumentParams.safeParse({ submissionId, index: rawIndex, reason });
       if (!params.success) return { status: 400, headers: NO_CACHE };
       const index = params.data.index;
       const documentSubmissionId = params.data.submissionId;
@@ -82,7 +85,10 @@ export function makeKycDocumentHandler(
         return { status: 429, headers: NO_CACHE };
       }
       const read = await deps.run(actor, (repos) =>
-        repos.customers.documentRead({ submissionId: documentSubmissionId, index }),
+        repos.customers.documentRead(
+          { submissionId: documentSubmissionId, index },
+          params.data.reason,
+        ),
       );
       if (!read.ok) {
         if (read.error === "forbidden") return { status: 403, headers: NO_CACHE };

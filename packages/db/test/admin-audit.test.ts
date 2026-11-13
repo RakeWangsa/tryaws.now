@@ -209,19 +209,23 @@ it("every role reads; export is superadmin only and capped with a truncated flag
   }
   for (const role of ["support", "finance", "ops"] as const) {
     const a = await actorOf(role);
-    expect(await asAdmin(a, (r) => r.audit.export({ actorId: actor1 }))).toEqual({
+    expect(await asAdmin(a, (r) => r.audit.export({ actorId: actor1 }, "yearly review"))).toEqual({
       ok: false,
       error: "forbidden",
     });
   }
   const s = await actorOf("superadmin");
-  const full = await asAdmin(s, (r) => r.audit.export({ actorId: actor1 }));
+  const full = await asAdmin(s, (r) => r.audit.export({ actorId: actor1 }, "yearly review"));
   expect(full.ok && full.value).toMatchObject({ truncated: false });
   expect(full.ok && full.value.rows).toHaveLength(4);
-  const capped = await asAdmin(s, (r) => r.audit.export({ actorId: actor1 }, { cap: 3 }));
+  const capped = await asAdmin(s, (r) =>
+    r.audit.export({ actorId: actor1 }, "capped review", { cap: 3 }),
+  );
   expect(capped.ok && capped.value.rows).toHaveLength(3);
   expect(capped.ok && capped.value.truncated).toBe(true);
-  expect(await asAdmin(s, (r) => r.audit.export({ actorId: actor1 }, { cap: 0 }))).toEqual({
+  expect(
+    await asAdmin(s, (r) => r.audit.export({ actorId: actor1 }, "capped review", { cap: 0 })),
+  ).toEqual({
     ok: false,
     error: "validation",
   });
@@ -241,22 +245,62 @@ it("a disabled admin, an unknown admin and a wrong role claim read nothing (fail
       ok: false,
       error: "forbidden",
     });
-    expect(await asAdmin(who, (r) => r.audit.export({}))).toEqual({
+    expect(await asAdmin(who, (r) => r.audit.export({}, "yearly review"))).toEqual({
       ok: false,
       error: "forbidden",
     });
   }
 });
 
-it("reading writes no audit row, and the repository has no write method", async () => {
+it("searching and reading write no audit row, and an export writes exactly its own (R10)", async () => {
   const a = await actorOf("superadmin");
-  const before = Number((await t.pool.query("select count(*) as n from audit_log")).rows[0].n);
+  const count = async () =>
+    Number((await t.pool.query("select count(*) as n from audit_log")).rows[0].n);
+  const before = await count();
   await asAdmin(a, (r) => r.audit.search({}));
-  await asAdmin(a, (r) => r.audit.export({}));
-  const after = Number((await t.pool.query("select count(*) as n from audit_log")).rows[0].n);
-  expect(after).toBe(before);
+  await asAdmin(a, (r) => r.audit.detail(uuidv7()));
+  expect(await count()).toBe(before);
+  const out = await asAdmin(a, (r) =>
+    r.audit.export(
+      { action: "payment.", from: new Date("2026-01-01T00:00:00Z") },
+      "year-end review",
+    ),
+  );
+  expect(out.ok).toBe(true);
+  expect(await count()).toBe(before + 1);
+  const rows = await t.pool.query(
+    "select actor_type, actor_id, action, target_type, target_id, host(ip) as ip, metadata from audit_log where action = 'audit.export'",
+  );
+  expect(rows.rows).toHaveLength(1);
+  const [row] = rows.rows;
+  expect(row).toMatchObject({
+    actor_type: "admin",
+    actor_id: a.adminId,
+    action: "audit.export",
+    target_type: "audit_log",
+    ip: "203.0.113.9",
+    metadata: {
+      reason: "year-end review",
+      before: { action: "payment.", from: "2026-01-01T00:00:00.000Z" },
+      after: { rowCount: out.ok ? out.value.rows.length : -1, truncated: false },
+    },
+  });
   const repos = adminRepos({} as never, { adminId: uuidv7(), role: "ops", ip: "203.0.113.9" });
   expect(Object.keys(repos.audit).sort()).toEqual(["detail", "export", "search"]);
+});
+
+it("an export without a reason is refused, returns no rows and writes no audit row (R10, R16)", async () => {
+  const a = await actorOf("superadmin");
+  const count = async () =>
+    Number((await t.pool.query("select count(*) as n from audit_log")).rows[0].n);
+  const before = await count();
+  for (const bad of ["", "   ", "x".repeat(501)]) {
+    expect(await asAdmin(a, (r) => r.audit.export({}, bad))).toEqual({
+      ok: false,
+      error: "validation",
+    });
+  }
+  expect(await count()).toBe(before);
 });
 
 it("masks by normalised key for every type, separator-tolerant phones and long digit runs in text, and keeps ids (R14)", async () => {
@@ -383,6 +427,6 @@ it("the export carries the same masked rows", async () => {
   const s = await actorOf("superadmin");
   const actor1 = uuidv7();
   await seed({ actorId: actor1, metadata: { reason: "x", after: { phone: 8801712345678 } } });
-  const out = await asAdmin(s, (r) => r.audit.export({ actorId: actor1 }));
+  const out = await asAdmin(s, (r) => r.audit.export({ actorId: actor1 }, "yearly review"));
   expect(JSON.stringify(out)).not.toContain("8801712345678");
 });

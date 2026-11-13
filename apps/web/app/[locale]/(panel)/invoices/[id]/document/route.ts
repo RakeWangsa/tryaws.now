@@ -2,13 +2,15 @@ import { currentCustomer } from "@tc/auth";
 import { customerRepos, withTx } from "@tc/db";
 import {
   INVOICE_DOCUMENT_HEADERS,
-  invoiceDocument,
+  INVOICE_DOCUMENT_RATE_LIMITS,
+  printableInvoice,
 } from "../../../../../../server/invoice-document.ts";
 import { getRuntime } from "../../../../../../server/runtime.ts";
 
 // The printable invoice of one of the customer's own invoices (WPU-G4): the same HTML as the PDF. The
-// runtime is started first (it configures sign-in); then the session is read (R9 step 1). The answers
-// are fixed and carry no text of an error (U6).
+// runtime is started first (it configures sign-in); then the session is read (R9 step 1), the id is
+// checked and the customer's rate limit is consumed before the invoice is read. The answers are fixed
+// and carry no text of an error (U6).
 export const dynamic = "force-dynamic";
 
 const plain = (status: number): Response =>
@@ -28,9 +30,16 @@ export async function GET(
   } catch {
     return plain(500);
   }
-  const answer = await invoiceDocument(
+  const answer = await printableInvoice(
     {
       session,
+      rateLimit: (s) =>
+        withTx((tx) =>
+          customerRepos(tx, s.customerId).rateLimits.consume(
+            INVOICE_DOCUMENT_RATE_LIMITS,
+            new Date(),
+          ),
+        ),
       customerName: (s) =>
         withTx(async (tx) => (await customerRepos(tx, s.customerId).profile.get())?.name ?? ""),
     },

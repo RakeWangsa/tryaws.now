@@ -278,7 +278,9 @@ it("finance reads nothing and acts on nothing", async () => {
   expect(await asAdmin(a, (r) => r.customers.detail(c))).toEqual(forbidden);
   expect(await asAdmin(a, (r) => r.customers.kycQueue())).toEqual(forbidden);
   expect(
-    await asAdmin(a, (r) => r.customers.documentRead({ submissionId: uuidv7(), index: 0 })),
+    await asAdmin(a, (r) =>
+      r.customers.documentRead({ submissionId: uuidv7(), index: 0 }, "id check"),
+    ),
   ).toEqual(forbidden);
 });
 
@@ -356,24 +358,48 @@ it("documentRead returns the key for the presigner and leaves an audit row; a ba
   const a = await actorOf("support");
   const c = await newCustomer(t.pool);
   const s = await submission(c);
-  expect(await asAdmin(a, (r) => r.customers.documentRead({ submissionId: s, index: 1 }))).toEqual({
+  expect(
+    await asAdmin(a, (r) =>
+      r.customers.documentRead({ submissionId: s, index: 1 }, "id check for case 12"),
+    ),
+  ).toEqual({
     ok: true,
     replayed: false,
     value: { customerId: c, key: "kyc/c/back.jpg" },
   });
-  expect(await asAdmin(a, (r) => r.customers.documentRead({ submissionId: s, index: 2 }))).toEqual({
+  expect(
+    await asAdmin(a, (r) =>
+      r.customers.documentRead({ submissionId: s, index: 2 }, "id check for case 12"),
+    ),
+  ).toEqual({
     ok: false,
     error: "not_found",
   });
-  expect(await asAdmin(a, (r) => r.customers.documentRead({ submissionId: s, index: -1 }))).toEqual(
-    {
-      ok: false,
-      error: "validation",
-    },
-  );
+  expect(
+    await asAdmin(a, (r) =>
+      r.customers.documentRead({ submissionId: s, index: -1 }, "id check for case 12"),
+    ),
+  ).toEqual({
+    ok: false,
+    error: "validation",
+  });
   const rows = await auditRowsOf(t.pool, a.adminId);
   expect(rows.map((x) => [x.action, x.target_id])).toEqual([["kyc.document_view", c]]);
   expect(JSON.stringify(rows[0]?.metadata)).not.toContain("back.jpg");
+  // R10: the audit row holds the reason the admin gave, not a constant.
+  expect(rows[0]?.metadata.reason).toBe("id check for case 12");
+});
+
+it("documentRead with a blank or over-long reason is refused and writes no audit row (R10)", async () => {
+  const a = await actorOf("support");
+  const c = await newCustomer(t.pool);
+  const s = await submission(c);
+  for (const bad of ["", "   ", "x".repeat(501)]) {
+    expect(
+      await asAdmin(a, (r) => r.customers.documentRead({ submissionId: s, index: 0 }, bad)),
+    ).toEqual({ ok: false, error: "validation" });
+  }
+  expect(await auditRowsOf(t.pool, a.adminId)).toEqual([]);
 });
 
 it("a disabled admin cannot read the queue either", async () => {

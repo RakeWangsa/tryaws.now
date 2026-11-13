@@ -41,6 +41,8 @@ export const auditEn: Same<typeof auditBn> = {
     },
     next: "Next page",
     export: {
+      reasonLabel: "Why do you need this export?",
+      reasonHint: "Recorded in the audit log with the filter and the number of rows. Required.",
       link: "Download as CSV",
       hint: "Up to 5000 rows of the current filters. Only a superadmin can download.",
     },

@@ -2,13 +2,16 @@ import { sql, type SQL } from "drizzle-orm";
 import { AUDIT_ACTOR_TYPES } from "../../schema/service";
 import { refused, type Written } from "../result";
 import { isUuid } from "../scope";
-import { isActiveAdmin } from "./audited";
+import { audited, isActiveAdmin } from "./audited";
 import { maskEmail, maskPhone } from "./customers";
 import type { AdminRole, AdminScope } from "./index";
 
-// 16.12 /audit: search the audit log. READ ONLY, by construction: this repository has no method that
-// writes, and the grants of admin_rw for audit_log are SELECT and INSERT (append-only, triggers of
-// 0005). Every read begins with the role check and the active-admin check (H1, R16). Whatever leaves
+// 16.12 /audit: search the audit log. Searching and reading one row write nothing. The export is the
+// one method that writes, and only its own audit row (R10): `export` runs through `audited`, so it
+// needs a reason and leaves one `audit.export` row with actor, IP, reason, the filter and the row
+// count, in the same transaction as the read. When that row cannot be written the transaction fails
+// and the caller gets no data (R16). The grants of admin_rw for audit_log are SELECT and INSERT
+// (append-only, triggers of 0005). Every read begins with the role check and the active-admin check (H1, R16). Whatever leaves
 // this file is masked (R14): the screen and the export cannot show a password, token, secret, document
 // number, full phone number or email even when an older row holds one.
 const READ_ROLES: readonly AdminRole[] = ["support", "finance", "ops", "superadmin"];
@@ -76,8 +79,13 @@ export interface AuditExportResult {
 export interface AuditAdminRepo {
   search(input?: AuditSearchInput): Promise<Written<AuditSearchResult>>;
   detail(id: string): Promise<Written<AuditRow>>;
-  // `options.cap` is for tests and for a smaller export; it can never exceed AUDIT_EXPORT_CAP.
-  export(filter?: AuditFilter, options?: { cap?: number }): Promise<Written<AuditExportResult>>;
+  // R10: an export leaves one `audit.export` row, so it takes the reason of the admin. `options.cap` is
+  // for tests and for a smaller export; it can never exceed AUDIT_EXPORT_CAP.
+  export(
+    filter: AuditFilter | undefined,
+    reason: string,
+    options?: { cap?: number },
+  ): Promise<Written<AuditExportResult>>;
 }
 
 type AuditDbRow = {
@@ -226,6 +234,16 @@ function whereOf(filter: AuditFilter | undefined): SQL[] | null {
   return where;
 }
 
+// The filter as the audit row keeps it: only the keys that are set, dates as ISO text.
+function filterRecord(filter: AuditFilter | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(filter ?? {})) {
+    if (value === undefined) continue;
+    out[key] = value instanceof Date ? value.toISOString() : String(value);
+  }
+  return out;
+}
+
 export function auditAdminRepo(scope: AdminScope): AuditAdminRepo {
   const role = scope.actor.role;
   const { tx } = scope;
@@ -269,7 +287,7 @@ export function auditAdminRepo(scope: AdminScope): AuditAdminRepo {
       return { ok: true, replayed: false, value: toRow(row) };
     },
 
-    async export(filter, options) {
+    async export(filter, reason, options) {
       if (!EXPORT_ROLES.includes(role) || !(await isActiveAdmin(scope)))
         return refused("forbidden");
       const cap = options?.cap ?? AUDIT_EXPORT_CAP;
@@ -277,14 +295,25 @@ export function auditAdminRepo(scope: AdminScope): AuditAdminRepo {
       if (where === null || !Number.isInteger(cap) || cap < 1 || cap > AUDIT_EXPORT_CAP) {
         return refused("validation");
       }
-      const result = await tx.execute<AuditDbRow>(
-        sql`select ${COLUMNS} from audit_log where ${sql.join(where, sql` and `)} order by id desc limit ${cap + 1}`,
+      return audited(
+        scope,
+        { action: "audit.export", targetType: "audit_log", targetId: "export", reason },
+        async () => {
+          const result = await tx.execute<AuditDbRow>(
+            sql`select ${COLUMNS} from audit_log where ${sql.join(where, sql` and `)} order by id desc limit ${cap + 1}`,
+          );
+          const value = {
+            rows: result.rows.slice(0, cap).map(toRow),
+            truncated: result.rows.length > cap,
+          };
+          return {
+            value,
+            replayed: false,
+            before: filterRecord(filter),
+            after: { rowCount: value.rows.length, truncated: value.truncated, cap },
+          };
+        },
       );
-      return {
-        ok: true,
-        replayed: false,
-        value: { rows: result.rows.slice(0, cap).map(toRow), truncated: result.rows.length > cap },
-      };
     },
   };
 }

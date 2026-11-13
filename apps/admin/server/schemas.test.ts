@@ -11,6 +11,7 @@ import {
   isBlueprintId,
   isMarket,
   isUuid,
+  auditExportParams,
   kycDocumentParams,
   manualRefund,
   optionalText,
@@ -211,15 +212,32 @@ describe("capacity", () => {
 });
 
 describe("routes and sign-in", () => {
-  it("the KYC document route takes a UUID and an index of one or two digits", () => {
-    expect(check(kycDocumentParams, { submissionId: ID, index: "3" })).toEqual({
+  it("the KYC document route takes a UUID, an index of one or two digits and a reason (R10)", () => {
+    const reason = "id check for case 12";
+    expect(check(kycDocumentParams, { submissionId: ID, index: "3", reason })).toEqual({
       submissionId: ID,
       index: 3,
+      reason,
     });
     for (const index of ["", "100", "-1", "1.5", "a", undefined]) {
-      expect(check(kycDocumentParams, { submissionId: ID, index })).toBeNull();
+      expect(check(kycDocumentParams, { submissionId: ID, index, reason })).toBeNull();
     }
-    expect(check(kycDocumentParams, { submissionId: "x", index: "1" })).toBeNull();
+    expect(check(kycDocumentParams, { submissionId: "x", index: "1", reason })).toBeNull();
+    // no reason, a blank one, a list and an over-long one are refused; the reason is trimmed
+    for (const bad of [undefined, "", "   ", ["a", "b"], "x".repeat(501)]) {
+      expect(check(kycDocumentParams, { submissionId: ID, index: "1", reason: bad })).toBeNull();
+    }
+    expect(
+      check(kycDocumentParams, { submissionId: ID, index: "1", reason: "  look  " }),
+    ).toMatchObject({ reason: "look" });
+  });
+  it("the audit export takes a reason, trimmed, and nothing else is required (R10)", () => {
+    expect(check(auditExportParams, { reason: "  quarterly review " })).toEqual({
+      reason: "quarterly review",
+    });
+    for (const bad of [undefined, "", "   ", ["a"], "x".repeat(501)]) {
+      expect(check(auditExportParams, { reason: bad })).toBeNull();
+    }
   });
   it("a CSP report is an object or a list; a scalar is refused", () => {
     expect(check(cspReportBody, { "csp-report": {} })).toEqual({ "csp-report": {} });

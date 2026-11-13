@@ -77,6 +77,8 @@ export const customersEn: Same<typeof customersBn> = {
       note: "Note shown to the customer",
       documents: "Document images",
       view: "View image {n}",
+      viewReasonLabel: "Reason for viewing",
+      viewReasonHint: "A short reason, recorded with every view. Required.",
       viewHint:
         "An image opens through a link that lives for seconds and is never cached. Every view is recorded.",
       onlyLatest: "Only the latest submission can be decided.",

@@ -20,7 +20,9 @@ const CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
   "customers.setRiskTier": (r) =>
     r.customers.setRiskTier({ customerId: uuidv7(), tier: "trusted" }, "known"),
   "customers.suspend": (r) => r.customers.suspend({ customerId: uuidv7(), at: AT }, "abuse"),
-  "customers.documentRead": (r) => r.customers.documentRead({ submissionId: uuidv7(), index: 0 }),
+  "customers.documentRead": (r) =>
+    r.customers.documentRead({ submissionId: uuidv7(), index: 0 }, "id check"),
+  "audit.export": (r) => r.audit.export({}, "yearly review"),
   "featureFlags.set": (r) =>
     r.featureFlags.set({ key: "linux_instance", market: "BD", enabled: true }, "launch"),
   "fxRates.set": (r) =>
