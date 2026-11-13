@@ -144,9 +144,9 @@ describe("createOrderDraft: the plan must reach the minimum power of the image",
         kit.input({ blueprintId: "wordpress_ls_1_0", productId: small }),
       );
     expect(await ask()).toEqual(TOO_SMALL);
-    await setSwitches({ v: 1, on: [], off: [], minPower: { wordpress: 500 } });
+    await setSwitches({ v: 1, on: [], off: [], minPower: { wordpress_ls_1_0: 500 } });
     expect((await ask()).ok).toBe(true);
-    await setSwitches({ v: 1, on: [], off: [], minPower: { wordpress: 2000 } });
+    await setSwitches({ v: 1, on: [], off: [], minPower: { wordpress_ls_1_0: 2000 } });
     expect(await ask()).toEqual(TOO_SMALL);
   });
 });
@@ -157,7 +157,7 @@ describe("runPurchase: the minimum is checked again, before any write", () => {
     await image("wordpress_ls_1_0", { kind: "app", minPower: 500 });
     const small = await plan(kit, 500);
     const { token } = await kit.draft({ blueprintId: "wordpress_ls_1_0", productId: small });
-    await setSwitches({ v: 1, on: [], off: [], minPower: { wordpress: 2000 } });
+    await setSwitches({ v: 1, on: [], off: [], minPower: { wordpress_ls_1_0: 2000 } });
     const verdict = verifyDraft(kit.secrets, token, kit.clock.now());
     if (!verdict.ok) throw new Error("the token does not verify");
     const before = await snapshotRows(t);
