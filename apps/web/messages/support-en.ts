@@ -48,7 +48,7 @@ export const supportEn: Same<typeof supportBn> = {
       sentOn: "Sent on",
       empty: { title: "No requests yet", body: "Your requests show here once you send one." },
     },
-    status: { open: "Open", closed: "Closed" },
+    status: { open: "Open", answered: "Answered", closed: "Closed" },
     error: {
       unauthenticated: "Your session has ended. Sign in again.",
       validation: "Some details are wrong. Correct the marked fields and try again.",
