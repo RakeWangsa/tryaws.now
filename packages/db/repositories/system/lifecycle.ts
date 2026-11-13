@@ -140,6 +140,17 @@ export function lifecycleRepo(tx: Tx) {
       return rows.map((r) => ({ id: String(r.id), kind: String(r.kind), state: String(r.state) }));
     },
 
+    // WPU-Z13: the payload of one operation of this resource (the failed hook of a domain renewal reads
+    // which subscription and period the operation was queued for). null when the operation is not of
+    // this resource. The payload is the stored jsonb: the caller reads it field by field.
+    async operationPayload(resourceId: string, operationId: string): Promise<unknown> {
+      assertUuid(resourceId, "resource id");
+      assertUuid(operationId, "operation id");
+      const { rows } = await tx.execute<{ payload: unknown }>(sql`
+        select payload from operations where id = ${operationId} and resource_id = ${resourceId}`);
+      return rows[0] === undefined ? null : rows[0].payload;
+    },
+
     // WPU-S7: the period end the apply operation was queued for (its payload) and the one its
     // subscription has now. null when the operation is not of this resource.
     async planApplyPeriod(

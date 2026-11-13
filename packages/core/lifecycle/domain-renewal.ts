@@ -1,5 +1,18 @@
-import type { LifecycleRow, OperationInput, SubscriptionStatus } from "@tc/db";
+import {
+  findLedgerTransactionByKey,
+  insertOperation,
+  lifecycleRepo,
+  type LifecycleRow,
+  type OperationInput,
+  type SubscriptionStatus,
+  type Tx,
+} from "@tc/db";
 import { DOMAIN_YEARS } from "../domains/resolve";
+import { lockWallet } from "../ledger/balance";
+import { ledgerKey } from "../ledger/keys";
+import { reverseTransaction } from "../ledger/reverse";
+import { firstMessage, type QueueMessage } from "../operations/queue";
+import type { Logger } from "../operations/types";
 
 // WPU-Z13. A domain's renewal charge (the lifecycle at the period end, or renewNow) pays for a renewal at the
 // registry: in the transaction of the charge one `renew_domain` operation is queued for the period (R7), and the
@@ -154,4 +167,99 @@ export function decideDomainRenewalReversal(facts: ReversalFacts): ReversalDecis
     return { action: "reverse", chargeId: charge.id, rollBack: null };
   }
   return { action: "refuse", reason: "period" };
+}
+
+/**
+ * The hook of a renewal charge (engine.ts afterRenewal, renew-now.ts), in the transaction of the charge, after
+ * it: the `renew_domain` of the period for a domain, nothing for any other family. R1: only an operation row; the
+ * returned message (a new queued row only) goes out after the commit, or the sweeper sends the row within minutes.
+ * A replay of the period finds the stored row and returns null (R7). Throws for a domain whose expiry is not known.
+ */
+export async function queueDomainRenewal(
+  tx: Tx,
+  row: LifecycleRow,
+  periodStart: Date,
+  now: Date,
+): Promise<QueueMessage | null> {
+  const input = domainRenewalOperation(row, periodStart);
+  if (input === null) return null;
+  const inserted = await insertOperation(tx, input, now);
+  return inserted.created && inserted.state === "queued"
+    ? firstMessage(inserted.operationId, row.resourceId)
+    : null;
+}
+
+export interface DomainRenewalFailure {
+  readonly operationId: string;
+  readonly resourceId: string;
+  readonly customerId: string;
+}
+
+export interface DomainRenewalReversed {
+  /** The reversing ledger transaction: posted by this call or found (an earlier call's, R7). */
+  readonly reversalId: string;
+  /** This call moved the subscription back to the period that was paid and ended it. */
+  readonly ended: boolean;
+}
+
+/**
+ * The failed hook of a `renew_domain` (functions/provisioner), run as worker_rw in the transaction that moves the
+ * operation to `failed`: a throw rolls that move back and the sweeper recovers the run. The renewal charge of the
+ * period is reversed under its key (`reversal:<charge>`, R5, R7); reverseTransaction writes the credit-note notice
+ * where the charge had an invoice, and the scheduler issues the credit note (WPU-C1). The subscription goes back to
+ * the period that was paid and ends. The customer message waits for its wording (no template fits; JOURNEY).
+ */
+export async function reverseFailedDomainRenewal(
+  tx: Tx,
+  deps: { readonly log?: Logger },
+  event: DomainRenewalFailure,
+): Promise<DomainRenewalReversed> {
+  const repo = lifecycleRepo(tx);
+  const payload = readDomainRenewalPayload(
+    await repo.operationPayload(event.resourceId, event.operationId),
+  );
+  // The lock order of the lifecycle and of renewNow: the subscription row first, then the wallet.
+  const subscription = payload === null ? null : await repo.lock(payload.subscriptionId);
+  const charge =
+    payload === null
+      ? null
+      : await findLedgerTransactionByKey(
+          tx,
+          ledgerKey.renewal(payload.subscriptionId, payload.periodStart),
+        );
+  const decision = decideDomainRenewalReversal({
+    resourceId: event.resourceId,
+    customerId: event.customerId,
+    payload,
+    subscription,
+    charge,
+  });
+  if (decision.action === "refuse" || subscription === null) {
+    throw new DomainRenewalError("lifecycle: a failed domain renewal cannot be reversed");
+  }
+
+  await lockWallet(tx, event.customerId);
+  const reversal = await reverseTransaction(tx, {
+    transactionId: decision.chargeId,
+    actor: { type: "system" },
+    memo: "automatic reversal of a failed domain renewal",
+  });
+  // A reversal that exists already (this key or an admin's) comes back ok and posts nothing.
+  if (!reversal.ok) {
+    throw new DomainRenewalError("lifecycle: the reversal of a domain renewal was refused");
+  }
+  if (decision.rollBack !== null) {
+    await repo.setPeriod(subscription.id, { status: "ended", ...decision.rollBack });
+  }
+  const ended = decision.rollBack !== null;
+  // Ids and a fixed word only (R14).
+  deps.log?.({
+    event: "domain_renewal_reversed",
+    operationId: event.operationId,
+    resourceId: event.resourceId,
+    subscriptionId: subscription.id,
+    reversalId: reversal.value.transactionId,
+    ended,
+  });
+  return { reversalId: reversal.value.transactionId, ended };
 }
