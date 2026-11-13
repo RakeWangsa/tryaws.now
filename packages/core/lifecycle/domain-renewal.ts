@@ -161,6 +161,8 @@ export function domainRenewalOperation(
       subscriptionId: row.id,
       periodStart: periodStart.toISOString(),
       currentExpiryYear: expiry.getUTCFullYear(),
+      // WPU-Y2 fix round 2: the exact expiry before the renewal, which the adapter compares to the millisecond.
+      currentExpiresAt: expiry.toISOString(),
       years: DOMAIN_YEARS,
       maxPriceUsd,
       ...(attempt === 0 ? {} : { attempt }),

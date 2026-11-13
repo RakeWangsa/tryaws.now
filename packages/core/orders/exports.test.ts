@@ -409,7 +409,8 @@ const Z13 = ["refundedOnFailure", "registryHoldsRenewal", "reverseFailedDomainRe
 const Y2_FIX = [
   "DOMAIN_NOTICE_TEMPLATES",
   "REGISTRY_CHECK_FRESH_MS",
-  "REGISTRY_UNRENEWED_ERROR",
+  "registryCheckedAt",
+  "registryUnrenewedError",
   "rejectionAllowed",
 ];
 

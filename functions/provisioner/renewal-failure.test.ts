@@ -188,6 +188,33 @@ describe("runStep: the failure policy reads the step of the renewal", () => {
     }
   });
 
+  it("the ERROR check is recorded with the provisioner's time; a later run of the operation replaces it", async () => {
+    const { outcome } = await runWith(
+      "poll",
+      new AwsError({
+        code: "upstream_unavailable",
+        retryable: false,
+        reason: "registry_unrenewed",
+      }),
+    );
+    expect(outcome).toMatchObject({ to: "needs_attention" });
+    expect(transition).toHaveBeenCalledWith(
+      TX,
+      "worker",
+      expect.objectContaining({
+        lastError: `upstream_unavailable:registry_unrenewed:${Math.floor(NOW.getTime() / 1000)}`,
+      }),
+    );
+    // a retry that ends in another error writes that error: the check (and its time) is gone
+    transition.mockClear();
+    await runWith("poll", new AwsError({ code: "upstream_unavailable", retryable: false }));
+    expect(transition).toHaveBeenCalledWith(
+      TX,
+      "worker",
+      expect.objectContaining({ lastError: "upstream_unavailable" }),
+    );
+  });
+
   it("a refusal before RenewDomain was accepted (step null) still fails it with its refund", async () => {
     const { outcome, failed } = await runWith(
       null,
@@ -324,7 +351,6 @@ describe("runReject: an admin's rejection of a stuck renewal", () => {
     state: "needs_attention",
     step: null,
     lastError: null,
-    nextRunAt: LEASE,
     ...over,
   });
 
@@ -413,17 +439,13 @@ describe("runReject: an admin's rejection of a stuck renewal", () => {
     expect(failed).toHaveBeenCalledWith(TX, expect.objectContaining({ kind: "create" }));
   });
 
-  // WPU-Y2 fix round 1 (ruling 2, safe minimum): the provisioner recorded a fresh "expiry unchanged" check on its last
-  // run (ERROR or a give-up): an admin may reject it with the refund, within an hour of that run.
-  it("a renewal at poll with a fresh registry_unrenewed check is rejected, and its charge goes back", async () => {
+  // WPU-Y2 fix rounds 1 and 2: the provisioner recorded, with its time, a check after a final ERROR whose expiry was
+  // unchanged to the millisecond: an admin may reject it with the refund within an hour of that check.
+  const checkedAt = (ms: number) =>
+    `upstream_unavailable:registry_unrenewed:${Math.floor((NOW.getTime() + ms) / 1000)}`;
+  it("a renewal at poll with a recorded ERROR check of at most an hour is rejected, and its charge goes back", async () => {
     const { deps, failed } = setup();
-    brief.mockResolvedValue(
-      target({
-        step: "poll",
-        lastError: "upstream_unavailable:registry_unrenewed",
-        nextRunAt: LEASE,
-      }),
-    );
+    brief.mockResolvedValue(target({ step: "poll", lastError: checkedAt(-59 * 60_000) }));
     expect(await runReject(deps, rejectView, LEASE)).toMatchObject({ to: "succeeded" });
     expect(failed).toHaveBeenCalledWith(
       TX,
@@ -431,16 +453,16 @@ describe("runReject: an admin's rejection of a stuck renewal", () => {
     );
   });
 
-  it("a stale check (over an hour), another last error, or the check at submit: renewal_submitted, no refund", async () => {
+  it("a stale check, a give-up while in progress, a retry's new error, a step move, or submit: renewal_submitted, no refund", async () => {
     for (const over of [
-      {
-        step: "poll",
-        lastError: "upstream_unavailable:registry_unrenewed",
-        nextRunAt: new Date(NOW.getTime() - 60 * 60_000 - 1),
-      },
+      { step: "poll", lastError: checkedAt(-61 * 60_000) },
+      // a give-up while the registry still works on it records a plain error
       { step: "poll", lastError: "upstream_unavailable" },
-      { step: "poll", lastError: "conflict" },
-      { step: "submit", lastError: "upstream_unavailable:registry_unrenewed" },
+      // round 1's form without a check time
+      { step: "poll", lastError: "upstream_unavailable:registry_unrenewed" },
+      { step: "poll", lastError: "lease_expired" },
+      { step: "poll", lastError: null },
+      { step: "submit", lastError: checkedAt(0) },
     ]) {
       transition.mockClear();
       const { deps, failed } = setup();

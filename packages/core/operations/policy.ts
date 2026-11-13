@@ -116,36 +116,56 @@ export function lastErrorText(facts: FailureFacts): string {
     : `${facts.code}:registry_${facts.registryVerdict}`;
 }
 
-/** WPU-Y2 fix round 1: the last_error of a renewal whose fresh registry check showed the expiry unchanged. */
-export const REGISTRY_UNRENEWED_ERROR = "upstream_unavailable:registry_unrenewed";
+/**
+ * WPU-Y2 fix round 2. The last_error of a renewal whose registry answered ERROR (final, not SUCCESSFUL) and whose
+ * fresh GetDomainDetail showed the pre-renewal expiry to the millisecond, with the time the provisioner recorded that
+ * check (`checkedAt`, epoch seconds): `upstream_unavailable:registry_unrenewed:<seconds>`. A digit count of 10 only.
+ */
+const REGISTRY_UNRENEWED_PREFIX = "upstream_unavailable:registry_unrenewed:";
+const REGISTRY_UNRENEWED = /^upstream_unavailable:registry_unrenewed:(\d{10})$/;
+
+export function registryUnrenewedError(checkedAt: Date): string {
+  return `${REGISTRY_UNRENEWED_PREFIX}${Math.floor(checkedAt.getTime() / 1000)}`;
+}
+
+/** The check time of such a last_error; null for any other text. */
+export function registryCheckedAt(lastError: string | null): Date | null {
+  const found = lastError === null ? null : REGISTRY_UNRENEWED.exec(lastError);
+  return found === null ? null : new Date(Number(found[1]) * 1000);
+}
 
 /** WPU-Y2 fix round 1: how old the registry check of a renewal may be when an admin rejects it with its refund. */
 export const REGISTRY_CHECK_FRESH_MS = 60 * 60 * 1000;
 
 /**
- * WPU-Y2 fix round 1 (the safe minimum of the coordinator's ruling 2). Whether an admin's rejection of a stuck
- * operation may move it to failed, with the refund of its hook. Every kind but a domain renewal the registry may hold:
- * yes. A domain renewal at `poll`: only when its last run recorded the provisioner's fresh check (`registry_unrenewed`:
- * an ERROR answer or a give-up, the operation not SUCCESSFUL, GetDomainDetail showing the expiry unchanged), and that
- * run is at most REGISTRY_CHECK_FRESH_MS old (`nextRunAt` is the lease end of the run, which the move to
- * needs_attention keeps). An admin's retry runs the check again. At `submit` (an answer may be lost): never.
+ * WPU-Y2 fix round 1 (the safe minimum of the coordinator's ruling 2), round 2 (an explicit check time). Whether an
+ * admin's rejection of a stuck operation may move it to failed, with the refund of its hook. Every kind but a domain
+ * renewal the registry may hold: yes. A domain renewal at `poll`: only when its last run recorded the provisioner's
+ * check (registryUnrenewedError: ERROR for the saved operation and the expiry unchanged to the millisecond) and that
+ * check is at most REGISTRY_CHECK_FRESH_MS old (and not more than 5 minutes ahead of this clock). The check lives in
+ * last_error, so it is gone as soon as the operation runs again: a retry, a move to another step (which writes
+ * last_error null) or any other failure (which writes its own) clears it; a rejection needs the state
+ * needs_attention, which only a run that ended again reaches. A poll that gave up while the operation was still in
+ * progress records a plain error: never a refund. At `submit` (an answer may be lost): never.
  */
 export function rejectionAllowed(
   target: {
     readonly kind: string;
     readonly step: string | null;
     readonly lastError: string | null;
-    readonly nextRunAt: Date;
   },
   now: Date,
 ): boolean {
   if (!registryHoldsRenewal(target.kind, target.step)) return true;
-  if (target.step !== RENEWAL_POLL_STEP || target.lastError !== REGISTRY_UNRENEWED_ERROR)
-    return false;
-  const age = now.getTime() - target.nextRunAt.getTime();
+  if (target.step !== RENEWAL_POLL_STEP) return false;
+  const checkedAt = registryCheckedAt(target.lastError);
+  if (checkedAt === null) return false;
+  const age = now.getTime() - checkedAt.getTime();
   // A time that cannot be read is not fresh (R16).
-  return Number.isFinite(age) && age <= REGISTRY_CHECK_FRESH_MS;
+  return Number.isFinite(age) && age >= -CLOCK_SKEW_MS && age <= REGISTRY_CHECK_FRESH_MS;
 }
+
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 // `attempts` is the count before this failure.
 export function decideFailure(input: {
@@ -165,7 +185,13 @@ export function decideFailure(input: {
   facts: FailureFacts;
 }): FailureDecision {
   const { kind, step, attempts, now, facts } = input;
-  const lastError = lastErrorText(facts);
+  // WPU-Y2 fix round 2: the registry check of a renewal at poll carries the time the provisioner recorded it.
+  const lastError =
+    facts.registryVerdict === "unrenewed" &&
+    step === RENEWAL_POLL_STEP &&
+    facts.awsErrorName === null
+      ? registryUnrenewedError(now)
+      : lastErrorText(facts);
   const failures = attempts + 1;
   if (facts.poolFull) return { to: "needs_attention", attempts: failures, lastError };
   if (!facts.retryable) {

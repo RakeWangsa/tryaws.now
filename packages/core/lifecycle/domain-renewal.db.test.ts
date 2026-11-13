@@ -419,7 +419,10 @@ describe("a registry renewal that failed gives the charge back once", () => {
       "select config->'domainRenewalRefused' as refused from resources where id = $1",
       [d.resourceId],
     );
-    expect(marker!.refused).toEqual({ periodStart: d.end.toISOString() });
+    // WPU-Y2 fix round 1: the marker keeps the refused Consent.MaxPrice (the renewal price that was charged)
+    const refusedUsd = (op!.payload as { maxPriceUsd?: unknown }).maxPriceUsd;
+    expect(refusedUsd).toMatch(/^15(\.0+)?$/);
+    expect(marker!.refused).toEqual({ periodStart: d.end.toISOString(), maxPriceUsd: refusedUsd });
 
     // The lifecycle does not charge the refused period again by itself: held, with the alarm line, no grace.
     const logged: Record<string, unknown>[] = [];
@@ -502,7 +505,10 @@ describe("a registry renewal that failed gives the charge back once", () => {
       "select config->'domainRenewalRefused' as refused from resources where id = $1",
       [d.resourceId],
     );
-    expect(marker!.refused).toMatchObject({ periodStart: d.end.toISOString() });
+    expect(marker!.refused).toEqual({
+      periodStart: d.end.toISOString(),
+      maxPriceUsd: (op!.payload as { maxPriceUsd?: unknown }).maxPriceUsd,
+    });
     // same price: held, nothing charged
     await run();
     expect(await renewals(d.subscriptionId)).toHaveLength(1);

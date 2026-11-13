@@ -363,7 +363,8 @@ describe("a registry renewal that the registry holds (step poll)", () => {
     });
     expect(await operationRow(t.pool, d.operationId)).toMatchObject({
       state: "needs_attention",
-      last_error: "upstream_unavailable:registry_unrenewed",
+      // WPU-Y2 fix round 2: with the time the provisioner recorded the check
+      last_error: expect.stringMatching(/^upstream_unavailable:registry_unrenewed:\d{10}$/),
     });
     expect(await reversalsOf(d.chargeId)).toBe(0);
     expect(await balance()).toBe(start);

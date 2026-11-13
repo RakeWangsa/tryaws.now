@@ -292,36 +292,52 @@ describe("renew_domain", () => {
         resourceConfig: { renewOperationId: opId },
         ...more,
       });
-    // WPU-Y2 fix round 1: a give-up reads the live expiry; still the same year: registry_unrenewed.
+    // WPU-Y2 fix round 2: still in progress past the give-up may still renew: a plain error, never the refund verdict.
     await expect(poll({ now: new Date("2030-01-10T00:00:00.000Z") })).rejects.toMatchObject({
       code: "upstream_unavailable",
-      retryable: false,
-      reason: "registry_unrenewed",
+      reason: null,
     });
     await fake.finish(opId, "failed");
     await expect(poll()).rejects.toMatchObject({ code: "conflict", reason: "registry_failed" });
   });
 
-  it("WPU-Y2 fix round 1: ERROR is not FAILED: a fresh GetDomainDetail decides, renewed is done, unchanged is registry_unrenewed", async () => {
+  it("WPU-Y2 fix round 2: after ERROR only the exact pre-renewal expiry is registry_unrenewed; renewed is done", async () => {
     const { adapter, fake } = await registered();
-    const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031 };
-    const started = await run(adapter, "renew_domain", payload, { step: "submit" });
+    const before = "2031-01-01T00:00:00.000Z";
+    const payloadOf = (currentExpiresAt?: string) => ({
+      maxPriceUsd: PRICE,
+      currentExpiryYear: 2031,
+      ...(currentExpiresAt === undefined ? {} : { currentExpiresAt }),
+    });
+    const started = await run(adapter, "renew_domain", payloadOf(before), { step: "submit" });
     const opId = configOf(started)["renewOperationId"] as string;
-    const poll = () =>
-      run(adapter, "renew_domain", payload, {
+    const poll = (currentExpiresAt?: string) =>
+      run(adapter, "renew_domain", payloadOf(currentExpiresAt), {
         step: "poll",
         resourceConfig: { renewOperationId: opId },
       });
     await fake.finish(opId, "error");
-    await expect(poll()).rejects.toMatchObject({
+    await expect(poll(before)).rejects.toMatchObject({
       code: "upstream_unavailable",
       retryable: false,
       reason: "registry_unrenewed",
     });
+    // compared at full precision: another instant of the same year, or none, is never the refund verdict
+    for (const other of [
+      "2031-01-01T00:00:00.001Z",
+      "2031-06-01T00:00:00.000Z",
+      "2031-01-01T00:00:00Z",
+      undefined,
+    ]) {
+      await expect(poll(other), String(other)).rejects.toMatchObject({
+        code: "upstream_unavailable",
+        reason: null,
+      });
+    }
     // the same ERROR while the live expiry moved a year on: the renewal went through
     await fake.finish(opId, "successful");
     await fake.finish(opId, "error");
-    expect(configOf(await poll())).toEqual({ expiresAt: "2032-01-01T00:00:00.000Z" });
+    expect(configOf(await poll(before))).toEqual({ expiresAt: "2032-01-01T00:00:00.000Z" });
   });
 
   // WPU-Z13: the contract between this adapter and the failure policy of @tc/core. The error the adapter throws is

@@ -34,7 +34,8 @@ function targetOf(payload: unknown): string | null {
 // the registry's refusal). The reject operation needs attention with `renewal_submitted`; the target
 // and the money stay as they are. Only a renewal at step null (reads only, nothing sent) is rejected
 // with its refund. WPU-Y2 fix round 1: and a renewal at `poll` whose last run (at most an hour ago) recorded the
-// provisioner's fresh check `registry_unrenewed` (ERROR or a give-up, the expiry unchanged): rejectionAllowed.
+// provisioner's check `registry_unrenewed:<checked at>` (ERROR for the saved operation, the expiry unchanged to the
+// millisecond; round 2: never a give-up while it is in progress): rejectionAllowed.
 export async function runReject(
   deps: StepDeps,
   view: RunView,

@@ -152,7 +152,7 @@ describe("loadRunView", () => {
 });
 
 describe("loadOperationBrief and loadOwnedResource", () => {
-  it("the brief has seven columns, is null for an unknown id and a non-UUID, and locks the row", async () => {
+  it("the brief has six columns, is null for an unknown id and a non-UUID, and locks the row", async () => {
     const id = await seed("needs_attention");
     expect(await worker((tx) => loadOperationBrief(tx, id))).toEqual({
       id,
@@ -162,7 +162,6 @@ describe("loadOperationBrief and loadOwnedResource", () => {
       step: null,
       // WPU-Y2 fix round 1: what the rejection of a renewal at poll reads (its fresh registry check)
       lastError: null,
-      nextRunAt: expect.any(Date),
     });
     // WPU-Z13: the step tells the rejection whether the registry holds a domain renewal already.
     const held = await seed("needs_attention", { kind: "renew_domain", step: "poll" });
@@ -173,7 +172,6 @@ describe("loadOperationBrief and loadOwnedResource", () => {
       state: "needs_attention",
       step: "poll",
       lastError: null,
-      nextRunAt: expect.any(Date),
     });
     expect(
       await worker((tx) => loadOperationBrief(tx, "01a1c97d-e814-7352-b32c-d3d3ee408ab8")),

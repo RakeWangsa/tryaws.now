@@ -326,43 +326,57 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
           throw new AwsError({ code: "conflict", retryable: false, reason: "registry_failed" });
         }
         if (status === "successful") return renewedExpiry(port, name);
-        if (status === "in_progress" && !gaveUp(ctx))
-          return stepWait("poll", inSeconds(ctx, POLL_SECONDS));
-        // ERROR (not defined by the API reference) or no answer after three days: a fresh GetDomainDetail. A later
-        // expiry year is a renewal that went through; the same year is recorded as `registry_unrenewed`, the one
-        // last_error on which an admin may reject the renewal with its refund (functions/provisioner/reject.ts).
-        return unrenewedOrDone(port, ctx, name);
+        // WPU-Y2 fix round 2: an operation still SUBMITTED or IN_PROGRESS may still renew (and AWS may still charge):
+        // past the give-up it stops in needs_attention with a plain error that never allows a refund.
+        if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
+        // ERROR, a final answer that is not SUCCESSFUL (not defined by the API reference): a fresh GetDomainDetail.
+        return afterRegistryError(port, ctx, name);
       }
       default:
         throw fail("internal");
     }
   }
 
-  function gaveUp(ctx: Ctx): boolean {
-    return ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS;
-  }
-
   function waitOrGiveUp(ctx: Ctx, step: string): StepResult {
-    if (gaveUp(ctx)) throw fail("upstream_unavailable");
+    if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
+      throw fail("upstream_unavailable");
+    }
     return stepWait(step, inSeconds(ctx, POLL_SECONDS));
   }
 
-  async function unrenewedOrDone(port: DomainsPort, ctx: Ctx, name: string): Promise<StepResult> {
-    const year = recordOf(ctx.operation.payload)["currentExpiryYear"];
+  // WPU-Y2 fix round 2. After an ERROR for the saved RenewDomain operation: a later live expiry year is a renewal that
+  // went through (done). `registry_unrenewed`, the one verdict on which an admin may reject the renewal with its
+  // refund (functions/provisioner/reject.ts), only when the live expiry is to the millisecond the expiry the row held
+  // before the renewal (`currentExpiresAt` of the payload). Anything else (no such instant, a different instant in the
+  // same year, an earlier year) is a plain error: needs_attention, never a refund (R16).
+  async function afterRegistryError(
+    port: DomainsPort,
+    ctx: Ctx,
+    name: string,
+  ): Promise<StepResult> {
+    const payload = recordOf(ctx.operation.payload);
+    const year = payload["currentExpiryYear"];
     if (typeof year !== "number" || !Number.isInteger(year)) throw fail("validation");
+    const before = exactInstant(payload["currentExpiresAt"]);
     const detail = await port.getDomainDetail(name);
     if (detail === null || detail.expiresAt === null) throw fail("upstream_unavailable");
-    const live = detail.expiresAt.getUTCFullYear();
-    if (live > year) {
+    if (detail.expiresAt.getUTCFullYear() > year) {
       return stepDone({ configMerge: { expiresAt: detail.expiresAt.toISOString() } });
     }
-    // The same year: not renewed (as of this read). An earlier year is row and registry disagreeing (R16).
-    if (live !== year) throw fail("validation");
-    throw new AwsError({
-      code: "upstream_unavailable",
-      retryable: false,
-      reason: "registry_unrenewed",
-    });
+    if (before !== null && detail.expiresAt.getTime() === before.getTime()) {
+      throw new AwsError({
+        code: "upstream_unavailable",
+        retryable: false,
+        reason: "registry_unrenewed",
+      });
+    }
+    throw fail("upstream_unavailable");
+  }
+
+  function exactInstant(value: unknown): Date | null {
+    if (typeof value !== "string") return null;
+    const at = new Date(value);
+    return Number.isNaN(at.getTime()) || at.toISOString() !== value ? null : at;
   }
 
   async function renewedExpiry(port: DomainsPort, name: string): Promise<StepResult> {

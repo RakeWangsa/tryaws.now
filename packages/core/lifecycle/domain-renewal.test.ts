@@ -60,6 +60,8 @@ describe("the operation a domain's renewal charge queues", () => {
         subscriptionId: SUB,
         periodStart: "2027-11-11T06:00:00.000Z",
         currentExpiryYear: 2027,
+        // WPU-Y2 fix round 2: the exact pre-renewal expiry, compared to the millisecond after an ERROR
+        currentExpiresAt: "2027-11-12T08:00:00.000Z",
         years: 1,
         // WPU-Z19: RenewDomain's Consent.MaxPrice: the registry may not charge more than the customer paid.
         maxPriceUsd: "13.0000",
