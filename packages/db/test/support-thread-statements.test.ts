@@ -37,10 +37,13 @@ interface World {
   existing: { request_id: string; author_type: string; body: string } | undefined;
   /** The replies of the thread, latest first, as the database orders them. */
   latestFirst: Message[];
+  /** Answer every timestamptz as text, as a raw tx.execute does on main (WPU-Z6). */
+  textTimes?: boolean;
 }
 
 function rig(over: Partial<World> = {}) {
   const world: World = { status: "answered", existing: undefined, latestFirst: [], ...over };
+  const time = (d: Date): Date | string => (world.textTimes === true ? d.toISOString() : d);
   const sent: Sent[] = [];
   const tx = {
     execute: async (query: SQL) => {
@@ -69,15 +72,19 @@ function rig(over: Partial<World> = {}) {
                     subject: "Charged twice",
                     message: "I was charged twice.",
                     status: world.status,
-                    created_at: AT,
-                    last_activity_at: AT,
+                    created_at: time(AT),
+                    last_activity_at: time(AT),
                   },
                 ],
         };
       }
       if (text.startsWith("select m.id, m.author_type")) {
         const limit = Number(rendered.params[rendered.params.length - 1]);
-        return { rows: world.latestFirst.slice(0, limit) };
+        return {
+          rows: world.latestFirst
+            .slice(0, limit)
+            .map((m) => ({ ...m, created_at: time(m.created_at) })),
+        };
       }
       return { rows: [], rowCount: 1 };
     },
@@ -372,5 +379,25 @@ describe("customerRepos.support.thread", () => {
     const bad = rig();
     expect(await bad.repo.thread("../x")).toEqual(NOT_FOUND);
     expect(bad.sent).toEqual([]);
+  });
+
+  // WPU-Z6: a raw tx.execute answers timestamptz as text on main (the driver has no type parser for it);
+  // the page formats the times in the customer's locale, so the repository hands out Date objects.
+  it("answers every time as a Date when the driver answers timestamptz as text", async () => {
+    const r = rig({
+      status: "answered",
+      textTimes: true,
+      latestFirst: [message(2), message(1, "customer")],
+    });
+    const out = await r.repo.thread(REQUEST);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.value.createdAt).toBeInstanceOf(Date);
+    expect(out.value.lastActivityAt).toBeInstanceOf(Date);
+    expect(out.value.createdAt.toISOString()).toBe(AT.toISOString());
+    for (const m of out.value.messages) expect(m.createdAt).toBeInstanceOf(Date);
+    expect(out.value.messages[0]?.createdAt.toISOString()).toBe(
+      message(1).created_at.toISOString(),
+    );
   });
 });

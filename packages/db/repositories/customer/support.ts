@@ -114,10 +114,14 @@ type ThreadRequestRow = {
   subject: string;
   message: string;
   status: string;
-  created_at: Date;
-  last_activity_at: Date;
+  created_at: Date | string;
+  last_activity_at: Date | string;
 };
-type ThreadMessageRow = { id: string; author_type: string; body: string; created_at: Date };
+type ThreadMessageRow = { id: string; author_type: string; body: string; created_at: Date | string };
+
+// A raw tx.execute answers timestamptz as text (no type parser for it on main); the thread hands out Date
+// objects like list() does, so the page can format the times in the customer's locale (WPU-Z6).
+const asDate = (v: Date | string): Date => (v instanceof Date ? v : new Date(v));
 
 export function supportRepo(scope: TenantScope): SupportRepo {
   const { tx, customerId } = scope;
@@ -215,14 +219,14 @@ export function supportRepo(scope: TenantScope): SupportRepo {
           category: request.category,
           subject: request.subject,
           status: request.status as SupportStatus,
-          createdAt: request.created_at,
-          lastActivityAt: request.last_activity_at,
+          createdAt: asDate(request.created_at),
+          lastActivityAt: asDate(request.last_activity_at),
           message: request.message,
           messages: page.messages.map((m) => ({
             id: m.id,
             authorType: m.author_type as SupportAuthorType,
             body: m.body,
-            createdAt: m.created_at,
+            createdAt: asDate(m.created_at),
           })),
           hasEarlier: page.hasEarlier,
         },

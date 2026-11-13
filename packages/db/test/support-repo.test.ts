@@ -161,6 +161,10 @@ it("thread answers the request and its replies oldest first; the customer never 
     ["customer", "Thanks!"],
   ]);
   expect(JSON.stringify(out.value)).not.toContain(admin);
+  // WPU-Z6: the page formats the times in the customer's locale; every time is a Date.
+  expect(out.value.createdAt).toBeInstanceOf(Date);
+  expect(out.value.lastActivityAt).toBeInstanceOf(Date);
+  for (const m of out.value.messages) expect(m.createdAt).toBeInstanceOf(Date);
   expect(Object.keys(out.value.messages[0]!).sort()).toEqual([
     "authorType",
     "body",
