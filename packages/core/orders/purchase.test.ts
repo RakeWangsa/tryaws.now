@@ -123,13 +123,13 @@ describe("runPurchase: the happy path", () => {
       ],
     });
 
-    // the subscription: 30 days
+    // the subscription: 30 days, auto-renew on (WPU-Z2, owner decision of 2026-11-13)
     const [sub] = await rows(
-      `select term_days, extract(epoch from (period_end - period_start))::int as seconds
+      `select term_days, extract(epoch from (period_end - period_start))::int as seconds, auto_renew
          from subscriptions where resource_id = $1`,
       [done.resourceId],
     );
-    expect(sub).toEqual({ term_days: 30, seconds: 30 * 86_400 });
+    expect(sub).toEqual({ term_days: 30, seconds: 30 * 86_400, auto_renew: true });
 
     // the operation: create, queued, no approval, the order in the payload
     const [op] = await rows(

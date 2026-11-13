@@ -1,4 +1,4 @@
-import { customerRepos, findLedgerTransactionByKey, type Tx } from "@tc/db";
+import { customerRepos, findLedgerTransactionByKey, type NewSubscription, type Tx } from "@tc/db";
 import { reserveCapacity, type Reservation } from "../capacity/reserve";
 import { DNS_ZONE_TERM_DAYS } from "../dns/zone";
 import { DOMAIN_TERM_DAYS } from "../domains/resolve";
@@ -36,6 +36,35 @@ const TERM_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type Repos = ReturnType<typeof customerRepos>;
+
+/**
+ * The subscription a purchase opens: the term of the family, from the purchase, with auto-renew ON
+ * (WPU-Z2, owner decision of 2026-11-13: the next period is paid from the wallet when this one ends,
+ * until the customer turns it off). Pure, so the rule is proven for every family without a database.
+ */
+export function purchaseSubscription(args: {
+  readonly orderId: string;
+  readonly resourceId: string;
+  readonly family: string;
+  readonly priceSnapshot: unknown;
+  readonly now: Date;
+}): NewSubscription {
+  const termDays =
+    args.family === "domain"
+      ? DOMAIN_TERM_DAYS
+      : args.family === "dns_zone"
+        ? DNS_ZONE_TERM_DAYS
+        : TERM_DAYS;
+  return {
+    id: childId(args.orderId, "subscription"),
+    resourceId: args.resourceId,
+    termDays,
+    priceSnapshot: args.priceSnapshot,
+    periodStart: args.now,
+    periodEnd: new Date(args.now.getTime() + termDays * DAY_MS),
+    autoRenew: true,
+  };
+}
 
 /** A unique violation (23505) of any statement of the writes, whatever layer wrapped it. */
 function isUniqueViolation(error: unknown): boolean {
@@ -197,12 +226,6 @@ export async function runPurchase(
   try {
     result = await tx.transaction(async (sp) => {
       const spRepos = customerRepos(sp, customerId);
-      const termDays =
-        product.family === "domain"
-          ? DOMAIN_TERM_DAYS
-          : product.family === "dns_zone"
-            ? DNS_ZONE_TERM_DAYS
-            : TERM_DAYS;
 
       // 8. Capacity, last of the checks. No waitlist argument: the page offers it (open point 12).
       // A domain and a DNS zone live in tc-dns: no pool account, no capacity cell, no catalog product
@@ -262,14 +285,15 @@ export async function runPurchase(
       });
       if (!order.ok || order.replayed) throw new Error("orders: the order was not created");
 
-      const subscription = await spRepos.orders.createSubscription({
-        id: childId(orderId, "subscription"),
-        resourceId,
-        termDays: termDays,
-        priceSnapshot: fresh,
-        periodStart: now,
-        periodEnd: new Date(now.getTime() + termDays * DAY_MS),
-      });
+      const subscription = await spRepos.orders.createSubscription(
+        purchaseSubscription({
+          orderId,
+          resourceId,
+          family: product.family,
+          priceSnapshot: fresh,
+          now,
+        }),
+      );
       if (!subscription.ok) throw new Error("orders: the subscription was not created");
 
       // The registrant contact stays sealed: the row holds the envelope the action made (R14).

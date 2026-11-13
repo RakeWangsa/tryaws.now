@@ -80,11 +80,13 @@ describe("a domain order", () => {
 
     const sub = (
       await t.pool.query(
-        "select term_days, period_end - period_start as span from subscriptions where resource_id = $1",
+        "select term_days, period_end - period_start as span, auto_renew from subscriptions where resource_id = $1",
         [resource["id"]],
       )
-    ).rows[0] as { term_days: number };
+    ).rows[0] as { term_days: number; auto_renew: boolean };
     expect(sub.term_days).toBe(365);
+    // WPU-Z2: a purchase turns auto-renew on, for a domain too.
+    expect(sub.auto_renew).toBe(true);
 
     const op = (
       await t.pool.query("select kind, state from operations where resource_id = $1", [

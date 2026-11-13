@@ -199,46 +199,71 @@ it("refuses a pool account or product that is not a UUID with a TypeError", asyn
   ).rejects.toBeInstanceOf(TypeError);
 });
 
-it("creates a subscription for the customer's own resource", async () => {
+// WPU-Z2: a purchase turns auto-renew on. The value given is stored, not the column default (false),
+// so both values are written and read back.
+it("creates a subscription for the customer's own resource, with the auto-renew it is given", async () => {
   const a = await newCustomer(t.pool);
-  const resourceId = uuidv7();
-  await as(a, (r) =>
-    r.orders.createResource({
-      id: resourceId,
-      family: "instance",
-      productId,
-      poolAccountId,
-      region: "ap-south-1",
-      config: {},
-    }),
-  );
-  const id = uuidv7();
   const periodStart = new Date("2026-11-11T10:00:00.000Z");
   const periodEnd = new Date("2026-12-11T10:00:00.000Z");
+  for (const autoRenew of [true, false]) {
+    const resourceId = uuidv7();
+    await as(a, (r) =>
+      r.orders.createResource({
+        id: resourceId,
+        family: "instance",
+        productId,
+        poolAccountId,
+        region: "ap-south-1",
+        config: {},
+      }),
+    );
+    const id = uuidv7();
+    const result = await as(a, (r) =>
+      r.orders.createSubscription({
+        id,
+        resourceId,
+        termDays: 30,
+        priceSnapshot: { v: 1 },
+        periodStart,
+        periodEnd,
+        autoRenew,
+      }),
+    );
+    expect(result).toEqual({ ok: true, replayed: false, value: { id } });
+    const { rows } = await t.pool.query(
+      "select customer_id, resource_id, term_days, status, auto_renew, period_start, period_end from subscriptions where id = $1",
+      [id],
+    );
+    expect(rows[0]).toEqual({
+      customer_id: a,
+      resource_id: resourceId,
+      term_days: 30,
+      status: "active",
+      auto_renew: autoRenew,
+      period_start: periodStart,
+      period_end: periodEnd,
+    });
+  }
+});
+
+it("refuses an auto-renew that is not a boolean before any query, and writes nothing (R16)", async () => {
+  const a = await newCustomer(t.pool);
+  const resourceId = await insertRow(t.pool, "resources", { customer_id: a, family: "instance" });
   const result = await as(a, (r) =>
     r.orders.createSubscription({
-      id,
+      id: uuidv7(),
       resourceId,
       termDays: 30,
-      priceSnapshot: { v: 1 },
-      periodStart,
-      periodEnd,
+      priceSnapshot: {},
+      periodStart: new Date("2026-11-11T10:00:00.000Z"),
+      periodEnd: new Date("2026-12-11T10:00:00.000Z"),
+      autoRenew: "true" as unknown as boolean,
     }),
   );
-  expect(result).toEqual({ ok: true, replayed: false, value: { id } });
-  const { rows } = await t.pool.query(
-    "select customer_id, resource_id, term_days, status, auto_renew, period_start, period_end from subscriptions where id = $1",
-    [id],
-  );
-  expect(rows[0]).toEqual({
-    customer_id: a,
-    resource_id: resourceId,
-    term_days: 30,
-    status: "active",
-    auto_renew: false,
-    period_start: periodStart,
-    period_end: periodEnd,
-  });
+  expect(result).toEqual({ ok: false, error: "validation" });
+  expect(
+    (await t.pool.query("select 1 from subscriptions where resource_id = $1", [resourceId])).rows,
+  ).toHaveLength(0);
 });
 
 it("refuses a subscription for another customer's resource, or a missing one, as not_found", async () => {
@@ -252,6 +277,7 @@ it("refuses a subscription for another customer's resource, or a missing one, as
     priceSnapshot: {},
     periodStart: new Date("2026-11-11T10:00:00.000Z"),
     periodEnd: new Date("2026-12-11T10:00:00.000Z"),
+    autoRenew: true,
   });
   expect(await as(b, (r) => r.orders.createSubscription(input(resourceId)))).toEqual({
     ok: false,
