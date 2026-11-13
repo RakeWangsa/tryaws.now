@@ -160,6 +160,23 @@ describe("legal drafts (WPU-Z7)", () => {
     expect(notes).toBeGreaterThan(0);
   });
 
+  // WPU-Z8: like {company} and {address}, the brand comes from one place (Shell.brand) through {brand}.
+  it("names the brand only through the {brand} value, never as a literal", () => {
+    for (const [locale, tree] of LOCALES) {
+      let uses = 0;
+      for (const key of messageKeys(tree.Public.legal.docs)) {
+        const value = String(
+          key
+            .split(".")
+            .reduce<unknown>((n, p) => (n as Record<string, unknown>)[p], tree.Public.legal.docs),
+        );
+        expect(value, `${locale} ${key}`).not.toMatch(/TryAWS\.now|MeghVPS|TiCON\s+Cloud/i);
+        uses += (value.match(/\{brand\}/g) ?? []).length;
+      }
+      expect(uses, locale).toBeGreaterThanOrEqual(10);
+    }
+  });
+
   it("shows the notice 'Draft — awaiting final approval' until the owner approves the texts", () => {
     expect(publicEn.Public.legal.draftTitle).toBe("Draft — awaiting final approval");
     expect(publicBn.Public.legal.draftTitle).toBe("খসড়া — চূড়ান্ত অনুমোদনের অপেক্ষায়");
