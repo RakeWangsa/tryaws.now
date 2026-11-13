@@ -302,9 +302,12 @@ export const serversEn: Same<typeof serversBn> = {
       termValue: "30 days",
       renewal:
         "At the end of the term the renewal is paid from your wallet. You can turn automatic renewal off; the server is then suspended.",
+      // WPU-Z2: a purchase turns auto-renew on (owner decision of 2026-11-13).
+      autoRenew:
+        "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the Billing tab.",
+      // WPU-Z2: the panel shows BDT only (owner decision of 2026-11-13); today's rate stays.
       fx: {
-        caption: "Price in US dollars, exchange rate and amount in taka",
-        usd: "Price in US dollars",
+        caption: "Exchange rate and amount in taka",
         rate: "Exchange rate",
         rateValue: "1 USD = ৳{rate}, set on {date}",
         rateValueNoDate: "1 USD = ৳{rate}",

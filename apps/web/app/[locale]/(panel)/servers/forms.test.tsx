@@ -38,6 +38,12 @@ const readyReview = review({ balanceMinor: 150000n }) as Extract<
   ReturnType<typeof review>,
   { state: "ready" }
 >;
+// A dollar sign followed by a digit, Latin or Bengali: how formatUsd prints a USD amount ("$5.75", "$৫.৭৫").
+const USD_AMOUNT = /\$\s*[\d০-৯]/;
+const AUTO_RENEW_EN =
+  "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the Billing tab.";
+const AUTO_RENEW_BN =
+  "স্বয়ংক্রিয় নবায়ন চালু আছে: এই মেয়াদ শেষ হলে পরবর্তী মেয়াদ আপনার ওয়ালেট থেকে পরিশোধ হবে। বিলিং ট্যাবে যেকোনো সময় এটি বন্ধ করতে পারবেন।";
 const place = (locale: Locale, over = readyReview) =>
   intl(
     <PlaceForm
@@ -61,24 +67,53 @@ describe("PlaceForm (placeOrder)", () => {
     expect(html).toContain('name="idempotencyKey" value="0190aaaa-0000-7000-8000-0000000000e1"');
   });
 
-  it("WPU-Y4: shows the USD price, today's rate with the day it was set, and the BDT debited", () => {
+  // WPU-Z2 (owner decision of 2026-11-13): the panel shows BDT only. The draft still carries a USD text
+  // ("5.75"); the review does not print it. Today's rate and the day it was set stay (the owner's
+  // transparency rule).
+  it("WPU-Z2: shows today's rate with the day it was set and the BDT debited, and no USD amount", () => {
     const en = place("en");
-    expect(en).toContain("Price in US dollars");
-    expect(en).toContain("$5.75");
+    expect(en).not.toContain("Price in US dollars");
+    expect(en).not.toMatch(USD_AMOUNT);
     expect(en).toContain("1 USD = ৳120, set on");
     expect(en).toContain("Nov 10, 2026");
     expect(en).toContain("Amount debited from your wallet (taka)");
     expect(en).toContain("৳690.00");
     expect(en).toContain("exactly what is taken from your wallet");
     const bn = place("bn");
-    expect(bn).toContain("$৫.৭৫");
+    expect(bn).not.toContain("মার্কিন ডলারে মূল্য");
+    expect(bn).not.toMatch(USD_AMOUNT);
     expect(bn).toContain("১ USD = ৳১২০");
     expect(bn).toContain("৳৬৯০.০০");
     // a draft signed before the rate was carried has no date, and says no date
     expect(place("en", { ...readyReview, fxSetAt: null })).toContain("1 USD = ৳120<");
   });
 
-  it("WPU-Y4: after a rate change the new USD price, the new rate and the new BDT replace the old and ask to confirm again", () => {
+  it("WPU-Z2: before the customer confirms, says auto-renew is on, after the total and before the terms, in bn and en", () => {
+    const en = place("en");
+    expect(en).toContain(AUTO_RENEW_EN);
+    expect(en.indexOf(AUTO_RENEW_EN)).toBeGreaterThan(en.indexOf("Price details"));
+    expect(en.indexOf(AUTO_RENEW_EN)).toBeLessThan(en.indexOf("I have read and accept the terms"));
+    const bn = place("bn");
+    expect(bn).toContain(AUTO_RENEW_BN);
+    expect(bn.indexOf(AUTO_RENEW_BN)).toBeGreaterThan(bn.indexOf("মূল্যের বিবরণ"));
+    expect(bn.indexOf(AUTO_RENEW_BN)).toBeLessThan(bn.indexOf("আমি শর্তাবলি"));
+    // A changed price is confirmed again: the line is there too.
+    hold.state = {
+      error: "price_changed",
+      draft: {
+        token: "fresh.token",
+        totalMinor: "75000",
+        expiresAt: "2026-11-12T01:30:00.000Z",
+        usdText: "5.00",
+        fxRate: "150",
+        fxSetAt: "2026-11-12T04:00:00.000Z",
+      },
+    } satisfies FormState;
+    expect(place("en")).toContain(AUTO_RENEW_EN);
+    expect(place("bn")).toContain(AUTO_RENEW_BN);
+  });
+
+  it("WPU-Y4, WPU-Z2: after a rate change the new rate and the new BDT replace the old and ask to confirm again, without a USD amount", () => {
     hold.state = {
       error: "price_changed",
       draft: {
@@ -93,7 +128,8 @@ describe("PlaceForm (placeOrder)", () => {
     const en = place("en");
     expect(en).toContain("1 USD = ৳150, set on");
     expect(en).toContain("Nov 12, 2026");
-    expect(en).toContain("$5.00");
+    expect(en).not.toMatch(USD_AMOUNT);
+    expect(place("bn")).not.toMatch(USD_AMOUNT);
     expect(en).not.toContain("1 USD = ৳120");
     expect(en).toContain("The price changed");
     expect(en).toContain("৳750.00");

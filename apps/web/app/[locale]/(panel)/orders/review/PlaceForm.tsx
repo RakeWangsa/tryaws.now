@@ -9,7 +9,6 @@ import {
   formatDate,
   formatDecimalText,
   formatMoney,
-  formatUsd,
 } from "@tc/ui";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
@@ -51,9 +50,10 @@ export function PlaceForm({
   const changed = state.draft;
   const token = changed?.token ?? review.token;
   const totalMinor = changed !== undefined ? BigInt(changed.totalMinor) : review.totalMinor;
-  // WPU-Y4: what the customer sees is exactly what is charged: the USD price, the rate and its day, and the
-  // BDT amount, all from the signed draft (or from the new one after a change). Nothing is computed here.
-  const usdText = changed?.usdText ?? review.usdText;
+  // WPU-Y4: what the customer sees is exactly what is charged: the rate and its day, and the BDT amount, all
+  // from the signed draft (or from the new one after a change). Nothing is computed here. WPU-Z2: the panel
+  // shows BDT only (owner decision of 2026-11-13), so the USD text of the draft is not printed; the rate line
+  // stays, because the owner's transparency rule is "today's dollar rate".
   const fxRate = changed?.fxRate ?? review.fxRate;
   const fxSetAt = changed !== undefined ? changed.fxSetAt : review.fxSetAt;
   const shortfallMinor = totalMinor > review.balanceMinor ? totalMinor - review.balanceMinor : null;
@@ -83,8 +83,7 @@ export function PlaceForm({
           <b>{t("priceChanged.title")}</b> {t("priceChanged.body")}{" "}
           <span className="d-block">
             {t("priceChanged.old")}: <MoneyText minor={review.totalMinor} /> ·{" "}
-            {t("priceChanged.new")}: <MoneyText minor={totalMinor} /> (
-            {formatUsd(usdText, { locale })})
+            {t("priceChanged.new")}: <MoneyText minor={totalMinor} />
           </span>
         </div>
       ) : null}
@@ -127,12 +126,6 @@ export function PlaceForm({
             <table className="table compare">
               <caption className="visually-hidden">{t("fx.caption")}</caption>
               <tbody>
-                <tr className="seccolor">
-                  <th scope="row" className="title border-start-0">
-                    {t("fx.usd")}
-                  </th>
-                  <td>{formatUsd(usdText, { locale })}</td>
-                </tr>
                 <tr className="seccolor">
                   <th scope="row" className="title border-start-0">
                     {t("fx.rate")}
@@ -178,6 +171,8 @@ export function PlaceForm({
             </div>
           ) : null}
 
+          {/* WPU-Z2: a purchase turns auto-renew on; the customer reads it before confirming. */}
+          <p className="seccolor">{t("autoRenew")}</p>
           <p className="seccolor">{t("renewal")}</p>
 
           {shortfallTaka !== null ? (
