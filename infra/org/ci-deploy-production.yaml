@@ -44,7 +44,7 @@ Description: >-
 # name has at most 32 characters on production (35 on staging): longer names lose the app name
 # (components/naming.ts prefixName). The roles of infra/stacks have fixed names (tc-<stage>-<part>-role);
 # infra/stacks/web.ts gives the two ISR revalidation subscriber roles fixed names too; every other role SST
-# creates today has a short logical name (tests/repo/golive.test.mjs). Check the role names after the first
+# creates today has a short logical name (read in the SST sources). Check the role names after the first
 # deploy.
 # VERIFY: iam:PermissionsBoundary is evaluated for CreateRole, PutRolePolicy, AttachRolePolicy,
 # DetachRolePolicy, DeleteRolePolicy and PutRolePermissionsBoundary (IAM documentation "Delegate
