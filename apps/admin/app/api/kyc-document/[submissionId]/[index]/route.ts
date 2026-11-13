@@ -1,4 +1,5 @@
 import { adminGate } from "../../../../../server/gate.ts";
+import { isSameOriginRequest } from "../../../../../server/same-origin.ts";
 import { kycDocumentDeps } from "../../../../../server/runtime.ts";
 import { makeKycDocumentHandler } from "../../../../../server/kyc-documents.ts";
 
@@ -10,6 +11,10 @@ type Params = { params: Promise<{ submissionId: string; index: string }> };
 
 export async function GET(request: Request, { params }: Params): Promise<Response> {
   if (!adminGate(request.headers.get("cloudfront-viewer-address"), process.env)) {
+    return new Response(null, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
+  // The view writes an audit row: only the review page of the admin app may ask, not a link elsewhere.
+  if (!isSameOriginRequest(request.headers, process.env)) {
     return new Response(null, { status: 403, headers: { "Cache-Control": "no-store" } });
   }
   const { submissionId, index } = await params;
