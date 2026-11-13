@@ -19,7 +19,7 @@ import {
   provisionerNetworkEnvironment,
   type FunctionSpec,
 } from "../lib/functions";
-import { logRetentionOf } from "../lib/lean";
+import { workerLogRetention } from "../lib/lean";
 import { assumableRoleArns, roleName, type StageConfig } from "../lib/stage";
 import type { Database } from "./database";
 import type { Messaging } from "./messaging";
@@ -164,15 +164,19 @@ function rendererArgs(spec: FunctionSpec): Partial<sst.aws.FunctionArgs> {
   };
 }
 
+// The functions whose aliases (below) point at a published, numbered version.
+const PUBLISHED_VERSIONS: readonly string[] = ["reader", "access-details", "invoice-renderer"];
+
 // Typed as sst.aws.Function takes it; without that, `timeout` and `memory` widen to string.
 export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs): sst.aws.FunctionArgs {
   return {
     ...rendererArgs(spec),
     handler: `functions/${spec.dir}/index.${spec.handlerExport}`,
-    // WPU-B8: log groups expire (7 days lean, 14 full).
-    // VERIFY: `logging.retention` of sst.aws.Function and its accepted strings; the Next.js servers
-    // (web.ts) are not covered here, their log retention is a separate VERIFY.
-    logging: { retention: logRetentionOf(inputs.config.size) },
+    // WPU-B8: log groups expire (7 days lean, 14 full). WPU-Z10: one week on staging whatever the size
+    // (workerLogRetention); the functions that SST components build get theirs from infra/stacks/logs.ts.
+    // VERIFY result (WPU-Z9, SST 4.17.2 components/aws/logging.ts RETENTION): "1 week" is 7 days and
+    // "2 weeks" 14 days.
+    logging: { retention: workerLogRetention(inputs.config.kind, inputs.config.size) },
     timeout: `${spec.timeoutSeconds} seconds`,
     memory: `${spec.memoryMb} MB`,
     // VERIFY: `copyFiles` of sst.aws.Function copies the folder into the deployment package; the
@@ -185,10 +189,13 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs): sst.aws.
     permissions: permissionsOf(spec, inputs),
     environment: environmentOf(spec, inputs),
     transform: {
-      // Only the reader and the invoice renderer publish versions: their aliases need a numbered
-      // version (WPU-S6, WPU-B7 L3).
+      // The three functions with aliases publish versions (reader WPU-S6, invoice renderer WPU-B7 L3,
+      // access-details WPU-N2): publishing pins each alias to an immutable numbered version per deploy.
+      // WPU-Z10, VERIFY review 2026-11-13 (docs/analysis/verify-review-2026-11-13.md, B1
+      // infra/stacks/workers.ts:230 and :250, lines 156 to 177): an alias CAN point to $LATEST (only a
+      // weighted alias cannot), and access-details did not publish, so its alias pointed at $LATEST.
       // Transform<lambda.FunctionArgs> and Transform<iam.RoleArgs>, as SST passes them.
-      ...(spec.dir === "reader" || spec.dir === "invoice-renderer"
+      ...(PUBLISHED_VERSIONS.includes(spec.dir)
         ? {
             function: (args: aws.lambda.FunctionArgs) => {
               args.publish = true;
@@ -235,8 +242,9 @@ export function workers(inputs: WorkerInputs) {
   // WPU-S6: the reader has one alias per tier. The handler takes the tier from the alias in the invoked
   // ARN (functions/reader/invoke.ts) and accepts customerId only on "web" and adminId only on "admin";
   // web.ts grants each role lambda:InvokeFunction on its own alias ARN and on no other.
-  // VERIFY: `transform.function` reaches the aws.lambda.Function of sst.aws.Function (publish makes a
-  // numbered version; an alias cannot point to $LATEST) and `nodes.function.version` is that version.
+  // VERIFY result (verify review 2026-11-13, B1 workers.ts:230): `transform.function` reaches the
+  // aws.lambda.Function of sst.aws.Function, publish makes a numbered version, and
+  // `nodes.function.version` is that version; each alias is pinned to it (PUBLISHED_VERSIONS).
   // `as`: FUNCTIONS holds an invoke row for reader, access-details and invoice-renderer
   // (infra/lib/functions.ts); without one, the property reads below stop the deploy.
   const reader = invoked["reader"] as sst.aws.Function;
@@ -255,7 +263,7 @@ export function workers(inputs: WorkerInputs) {
   // WPU-N2: access-details has one alias, "web". The function accepts customerId only on it
   // (functions/access-details/invoke.ts) and web.ts grants the web role lambda:InvokeFunction on
   // this alias ARN and on nothing else, so the unaliased function cannot be invoked by web.
-  // VERIFY: same alias mechanics as the reader above.
+  // WPU-Z10: the same mechanics as the reader above (it publishes now, PUBLISHED_VERSIONS).
   const accessDetails = invoked["access-details"] as sst.aws.Function;
   const accessAliases = {
     web: new aws.lambda.Alias("AccessAliasWeb", {

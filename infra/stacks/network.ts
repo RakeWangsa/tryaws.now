@@ -66,7 +66,8 @@ function singleNatInstance(config: StageConfig, vpc: sst.aws.Vpc) {
     vpcSecurityGroupIds: [securityGroup.id],
     // A NAT forwards traffic that is neither from nor to itself.
     sourceDestCheck: false,
-    tags: { Name: resourceName(stage, "nat") },
+    // sst:is-nat as SST tags its own NAT instances (vpc.ts), so the runbooks' EC2 filter finds it.
+    tags: { Name: resourceName(stage, "nat"), "sst:is-nat": "true" },
   });
   const elasticIp = new aws.ec2.Eip("NatElasticIp", {
     domain: "vpc",
@@ -219,6 +220,9 @@ export function network(config: StageConfig) {
     databaseSecurityGroup,
     isolatedSecurityGroup,
     isolatedSubnetIds: isolated.map((subnet) => subnet.id),
+    // The one public address of a lean stage's NAT (TC_PROBE_SOURCES is this address as /32); undefined
+    // on a full stage (two NAT gateways, read in the console). Output `natAddress` of infra/app.ts.
+    natAddress: singleNat?.elasticIp.publicIp,
   };
 }
 

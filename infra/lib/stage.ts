@@ -334,36 +334,38 @@ export interface RemovalRules {
   // RDS deletion protection, and a final snapshot when the instance is deleted (3.3, R13).
   readonly databaseDeletionProtection: boolean;
   readonly databaseFinalSnapshot: boolean;
-  // S3 forceDestroy: a removal empties the bucket (every object version) and deletes it.
-  readonly bucketForceDestroy: boolean;
+  // true: the stack sets S3 forceDestroy itself, so a removal empties each bucket (every object version)
+  // and deletes it. false: the stack leaves the bucket arguments as SST builds them (SST 4.17.2
+  // bucket.ts createBucket already sets forceDestroy true), so nothing changes for that stage.
+  readonly forceEmptyBuckets: boolean;
   // The two Cognito user pools survive a removal (Pulumi retainOnDelete) and are adopted again by the next
   // deploy (UserPoolIds above): free to keep, and their admin users and TOTP are painful to recreate.
   readonly retainUserPools: boolean;
 }
 
-// - production: exactly as before WPU-Z10 (protection, final snapshot, pools as SST builds them); its
-//   buckets are never emptied by a delete (SST's Bucket defaults to forceDestroy true, bucket.ts).
+// - production: exactly as before WPU-Z10 (`retain`, protection, final snapshot, buckets and pools as SST
+//   builds them).
 // - staging: nothing that costs money survives a removal: no deletion protection, no final snapshot (the
 //   test data is wiped by decision), buckets emptied; the user pools (and the SST secrets, which `sst
 //   remove` leaves alone unless the app sets state.purge) are kept.
-// - personal: unchanged (protection and final snapshot on, SST's own forceDestroy, pools not kept).
+// - personal: unchanged (protection and final snapshot on, buckets and pools as SST builds them).
 const REMOVAL_RULES: Readonly<Record<StageKind, RemovalRules>> = {
   production: Object.freeze({
     databaseDeletionProtection: true,
     databaseFinalSnapshot: true,
-    bucketForceDestroy: false,
+    forceEmptyBuckets: false,
     retainUserPools: false,
   }),
   staging: Object.freeze({
     databaseDeletionProtection: false,
     databaseFinalSnapshot: false,
-    bucketForceDestroy: true,
+    forceEmptyBuckets: true,
     retainUserPools: true,
   }),
   personal: Object.freeze({
     databaseDeletionProtection: true,
     databaseFinalSnapshot: true,
-    bucketForceDestroy: true,
+    forceEmptyBuckets: false,
     retainUserPools: false,
   }),
 };

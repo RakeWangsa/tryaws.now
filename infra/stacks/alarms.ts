@@ -65,6 +65,24 @@ export function alarms(
     fn: { name: $util.Input<string> } | undefined,
   ): Record<string, $util.Input<string>> => (fn === undefined ? {} : { FunctionName: fn.name });
 
+  // WPU-Z10, VERIFY review 2026-11-13 (docs/analysis/verify-review-2026-11-13.md, B1
+  // infra/stacks/alarms.ts:79 and :144, lines 82 to 107): an sst.aws.Function does NOT log to
+  // /aws/lambda/<function name>. SST 4.17.2 function.ts names its log group with a second random suffix
+  // and points the function's loggingConfig at it, so a filter on /aws/lambda/<name> named a group that
+  // never exists and PutMetricFilter failed the deploy. The filters take the group from the function
+  // (`nodes.logGroup`, "The CloudWatch Log Group the function logs are stored"). Fail closed (R16): a
+  // function without its own log group (logging false) stops the deploy instead of a filter on nothing.
+  const logGroupOf = (fn: $util.Input<sst.aws.Function> | undefined): $util.Output<string> =>
+    $output(fn)
+      .apply((f) => {
+        if (f === undefined) throw new Error("a log metric filter has no function");
+        return f.nodes.logGroup;
+      })
+      .apply((group) => {
+        if (group === undefined) throw new Error("a filtered function has no log group of its own");
+        return group.name;
+      });
+
   const schedulerFunction = workers.crons["scheduler"]?.nodes.function;
   const schedulerAlarm = new aws.cloudwatch.MetricAlarm("SchedulerAlarm", {
     name: resourceName(stage, "scheduler-stopped"),
@@ -85,21 +103,21 @@ export function alarms(
   // functions that run the check (the daily ledger-check and the hourly reconciler) are filtered.
   // ledger_mismatch and ledger_check_failed are errors (R16: a check that could not finish is not a pass);
   // the silence of ledger_check_ok for 26 hours is an alarm too.
-  // VERIFY: the JSON filter pattern syntax of CloudWatch Logs metric filters and that an sst.aws.Function
-  // logs to /aws/lambda/<function name>.
+  // VERIFY result (verify review 2026-11-13, B1 alarms.ts:79): the JSON filter pattern syntax with `||`
+  // holds; the log group comes from logGroupOf above.
   const ledgerFunctions = [
     workers.crons["ledger-check"]?.nodes.function,
     workers.crons["reconciler"]?.nodes.function,
   ];
   const ledgerFilter = (
     id: string,
-    fn: { name: unknown } | undefined,
+    fn: $util.Input<sst.aws.Function> | undefined,
     pattern: string,
     metric: string,
   ) =>
     new aws.cloudwatch.LogMetricFilter(id, {
       name: resourceName(stage, id.toLowerCase()),
-      logGroupName: $interpolate`/aws/lambda/${fn?.name}`,
+      logGroupName: logGroupOf(fn),
       pattern,
       metricTransformation: {
         name: metric,
@@ -150,18 +168,18 @@ export function alarms(
 
   // WPU-B3 (audit items 14, 15, 36). Alerts from structured log lines, and a function-error alarm for every
   // function that runs on a schedule or from the queue and for the two Next.js servers.
-  // VERIFY (first `sst diff`): the log group of an sst.aws.Function is /aws/lambda/<function name>; the
-  // JSON filter syntax with `||`; `queues.provisioning.subscribe` returns an object with
-  // nodes.function; the server function of sst.aws.Nextjs is at nodes.server.
+  // VERIFY results (verify review 2026-11-13, B1 alarms.ts:144): the JSON filter syntax with `||` holds;
+  // `queues.provisioning.subscribe` returns an object with nodes.function; the server function of
+  // sst.aws.Nextjs is at nodes.server. The log group comes from logGroupOf above (WPU-Z10).
   const alertFilter = (
     id: string,
-    fn: { name: unknown } | undefined,
+    fn: $util.Input<sst.aws.Function> | undefined,
     events: readonly string[],
     metric: string,
   ) =>
     new aws.cloudwatch.LogMetricFilter(id, {
       name: resourceName(stage, id.toLowerCase()),
-      logGroupName: $interpolate`/aws/lambda/${fn?.name}`,
+      logGroupName: logGroupOf(fn),
       pattern: `{ ${events.map((e) => `$.event = "${e}"`).join(" || ")} }`,
       metricTransformation: {
         name: metric,
@@ -230,10 +248,10 @@ export function alarms(
   // retained while it lasts, so a person has to repair it: one line in 5 minutes alarms. The event AND the reason are
   // matched, so the lines of a rate hold (reason fx_rate_unavailable) stay with FxRateStaleAlarm.
   // Checked 2026-11-13 against the CloudWatch Logs page "Filter pattern syntax": a JSON pattern joins conditions with
-  // `&&` without parentheses (order () > && > ||). The VERIFY of the log group above applies here too.
+  // `&&` without parentheses (order () > && > ||). Its log group comes from logGroupOf (WPU-Z10).
   new aws.cloudwatch.LogMetricFilter("RenewalPriceHoldFilter", {
     name: resourceName(stage, "renewalpriceholdfilter"),
-    logGroupName: $interpolate`/aws/lambda/${schedulerFunction?.name}`,
+    logGroupName: logGroupOf(schedulerFunction),
     pattern: `{ $.event = "${ALERT_LOG_EVENTS.lifecycleRenewalHeld}" && $.reason = "${ALERT_LOG_REASONS.renewalPriceUnavailable}" }`,
     metricTransformation: {
       name: "RenewalPriceHold",
