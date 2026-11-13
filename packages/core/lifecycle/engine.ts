@@ -17,6 +17,7 @@ import type { Logger, RunTx } from "../operations/types";
 import type { Clock } from "../types";
 import { DEFAULT_LIFECYCLE_CONFIG, readLifecycleConfig, type LifecycleConfig } from "./config";
 import { decideSubscription, type LifecycleAction } from "./decide";
+import { queueDomainRenewal } from "./domain-renewal";
 import { productOfFamily, type NoticeWriter } from "./notice";
 import { walletLowDue } from "./unpaid";
 import { resumeAfterRenewalAllowed, retentionKeyNeedsSalt } from "./resume-rule";
@@ -228,6 +229,9 @@ async function afterRenewal(
   if (fromGrace && resumeAfterRenewalAllowed(row)) {
     await work.enqueue("resume", renewed.periodStart);
   }
+  // WPU-Z13: a domain's charge pays the registry: its renew_domain of the period, in this transaction (R7).
+  const registry = await queueDomainRenewal(work.tx, row, renewed.periodStart, work.now);
+  if (registry !== null) work.messages.push(registry);
   await work.notify("lifecycle_renewed", renewed.periodStart.toISOString(), {
     subscriptionId: row.id,
     resourceId: row.resourceId,
