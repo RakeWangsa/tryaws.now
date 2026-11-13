@@ -19,6 +19,7 @@ import { DEFAULT_LIFECYCLE_CONFIG, readLifecycleConfig, type LifecycleConfig } f
 import { decideSubscription, type LifecycleAction } from "./decide";
 import { productOfFamily, type NoticeWriter } from "./notice";
 import { walletLowDue } from "./unpaid";
+import { resumeAfterRenewalAllowed, retentionKeyNeedsSalt } from "./resume-rule";
 import { SNAPSHOT_FAMILIES } from "./guard";
 import { planApplyWait, queuePlanApply } from "./plan-change";
 import { renewalQuote, renewSubscription } from "./renew";
@@ -71,20 +72,30 @@ class Work {
     readonly row: LifecycleRow,
     readonly now: Date,
     readonly config: LifecycleConfig,
+    /** WPU-Y3b. The unpaid episode (its start in ms) when the unpaid job retains the subscription. */
+    readonly episode?: number,
   ) {}
 
   // R1: only an operation row. The queue message goes out after the commit.
   async enqueue(kind: OperationKind, keyAt: Date): Promise<void> {
-    const inserted = await insertOperation(
-      this.tx,
-      {
-        resourceId: this.row.resourceId,
-        kind,
-        payload: { subscriptionId: this.row.id },
-        idempotencyKey: opKey(kind.replaceAll("_", "-"), this.row, keyAt),
-      },
-      this.now,
-    );
+    const request = (key: string) => ({
+      resourceId: this.row.resourceId,
+      kind,
+      payload: { subscriptionId: this.row.id },
+      idempotencyKey: key,
+    });
+    const key = opKey(kind.replaceAll("_", "-"), this.row, keyAt);
+    let inserted = await insertOperation(this.tx, request(key), this.now);
+    // WPU-Y3b. A second unpaid episode in the same period must not get the dead (or finished) row of
+    // the first one back: when the stored row is such, the episode takes a key of its own.
+    if (
+      this.episode !== undefined &&
+      !inserted.created &&
+      retentionKeyNeedsSalt(inserted.state) &&
+      (kind === "destroy" || kind === "final_snapshot")
+    ) {
+      inserted = await insertOperation(this.tx, request(`${key}:u${this.episode}`), this.now);
+    }
     if (inserted.created && inserted.state === "queued") {
       this.messages.push(firstMessage(inserted.operationId, this.row.resourceId));
     }
@@ -161,12 +172,9 @@ async function afterRenewal(
   if (isHeld(row)) {
     await patchResource(work.tx, row.resourceId, { configMerge: { [FX_HOLD_KEY]: null } });
   }
-  // 11: an admin's suspension is never lifted by a renewal; only an admin action lifts it.
-  if (
-    fromGrace &&
-    row.resource.state === "suspended" &&
-    row.resource.config.adminSuspended !== true
-  ) {
+  // 11: an admin's suspension is never lifted by a renewal; only an admin action lifts it. WPU-Y3b: nor
+  // is a suspension that holds an unpaid usage charge: the unpaid job resumes after that is paid.
+  if (fromGrace && resumeAfterRenewalAllowed(row)) {
     await work.enqueue("resume", renewed.periodStart);
   }
   await work.notify("lifecycle_renewed", renewed.periodStart.toISOString(), {
@@ -214,8 +222,10 @@ export async function retainSubscription(
   tx: Tx,
   row: LifecycleRow,
   now: Date,
+  /** WPU-Y3b. The start of the unpaid episode in ms, for the keys of the destroy and the final snapshot. */
+  episode?: number,
 ): Promise<QueueMessage[]> {
-  const work = new Work(tx, row, now, DEFAULT_LIFECYCLE_CONFIG);
+  const work = new Work(tx, row, now, DEFAULT_LIFECYCLE_CONFIG, episode);
   await retain(work);
   return work.messages;
 }

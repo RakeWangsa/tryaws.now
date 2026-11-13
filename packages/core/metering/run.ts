@@ -91,7 +91,12 @@ export interface MeteringOps {
    * recorded), so the daily unpaid job retries every period back to it, with no window. Optional so a
    * test world without it needs nothing.
    */
-  markUnpaid?(tx: Tx, resourceId: string, at: Date): Promise<void>;
+  markUnpaid?(tx: Tx, resourceId: string, at: Date, ipHour?: string): Promise<void>;
+  /**
+   * WPU-Y3b. True when the unpaid job (`lifecycle_unpaid_enabled`) is on. It is then the single source of
+   * unpaid emails, and the old `lifecycle_metered_unpaid` notice is not written. Optional: absent means off.
+   */
+  unpaidJobEnabled?(tx: Tx): Promise<boolean>;
 }
 
 export const defaultMeteringOps: MeteringOps = {
@@ -119,7 +124,11 @@ export const defaultMeteringOps: MeteringOps = {
   },
   hasCharge: async (tx, key) => (await findLedgerTransactionByKey(tx, key)) !== null,
   post: postTransaction,
-  markUnpaid: (tx, resourceId, at) => meteringRepo(tx).markUnpaid(resourceId, at),
+  markUnpaid: (tx, resourceId, at, ipHour) => meteringRepo(tx).markUnpaid(resourceId, at, ipHour),
+  unpaidJobEnabled: async (tx) =>
+    (await lifecycleRepo(tx).readSettings(["lifecycle_unpaid_enabled"])).get(
+      "lifecycle_unpaid_enabled",
+    ) === true,
 };
 
 export interface MeteringDeps {
@@ -262,13 +271,16 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
               // here the customer gets one notice per resource and day and the next run tries again.
               // WPU-Y3: the first failure is recorded; the unpaid job then retries every day since.
               await ops.markUnpaid?.(tx, row.resourceId, now);
-              await ops.repo(tx).insertNotification({
-                customerId: row.customerId,
-                channel: "email",
-                template: UNPAID_TEMPLATE,
-                payload: { resourceId: row.resourceId, period: day, metric: SNAPSHOT_METRIC },
-                dedupeKey: `lifecycle:${UNPAID_TEMPLATE}:${row.resourceId}:${day}:email`,
-              });
+              // WPU-Y3b: with the unpaid job on, its daily message is the only unpaid email.
+              if (!((await ops.unpaidJobEnabled?.(tx)) ?? false)) {
+                await ops.repo(tx).insertNotification({
+                  customerId: row.customerId,
+                  channel: "email",
+                  template: UNPAID_TEMPLATE,
+                  payload: { resourceId: row.resourceId, period: day, metric: SNAPSHOT_METRIC },
+                  dedupeKey: `lifecycle:${UNPAID_TEMPLATE}:${row.resourceId}:${day}:email`,
+                });
+              }
               return "unpaid" as const;
             });
             count[outcome] += 1;

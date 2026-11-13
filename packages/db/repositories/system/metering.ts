@@ -46,7 +46,10 @@ export interface UnpaidResourceRow {
   readonly unpaidSince: Date | null;
 }
 
-export type UnpaidFlagKey = "unpaidSuspended" | "unpaidRetained";
+export type UnpaidFlagKey = "unpaidSuspended" | "unpaidRetained" | "unpaidRetainedFrom";
+
+// A Dhaka hour bucket as the static IP charge keys it: YYYY-MM-DDTHH.
+const IP_HOUR = /^\d{4}-\d{2}-\d{2}T\d{2}$/;
 
 const METRIC = /^[a-z][a-z0-9_]{0,39}$/;
 const PERIOD = /^\d{4}-\d{2}(-\d{2}(T\d{2})?)?$/;
@@ -168,13 +171,29 @@ export function meteringRepo(tx: Tx) {
     // WPU-Y3. The first failed charge of a resource: written once and never moved (the clock of the
     // 1 day and the 7 days starts here). A later failure of the same episode changes nothing. `||` on
     // jsonb replaces one top-level key and keeps the others, so it cannot undo a concurrent patch.
-    async markUnpaid(resourceId: string, at: Date): Promise<void> {
+    async markUnpaid(resourceId: string, at: Date, ipHour?: string): Promise<void> {
       if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
       if (Number.isNaN(at.getTime())) throw new TypeError("metering: the instant is not a date");
+      if (ipHour === undefined) {
+        await tx.execute(sql`
+          update resources
+          set config = config || jsonb_build_object('unpaidSince', ${at.toISOString()}::text)
+          where id = ${resourceId} and (config ->> 'unpaidSince') is null`);
+        return;
+      }
+      // WPU-Y3b. A failed static IP hour also widens the hour range of the mark, so the daily job
+      // retries those hours whatever the attach state is by then. The first failure keeps its instant.
+      if (!IP_HOUR.test(ipHour)) throw new TypeError("metering: the hour has the wrong form");
       await tx.execute(sql`
         update resources
-        set config = config || jsonb_build_object('unpaidSince', ${at.toISOString()}::text)
-        where id = ${resourceId} and (config ->> 'unpaidSince') is null`);
+        set config = config
+          || case when (config ->> 'unpaidSince') is null
+               then jsonb_build_object('unpaidSince', ${at.toISOString()}::text)
+               else '{}'::jsonb end
+          || jsonb_build_object(
+               'unpaidIpFrom', least(coalesce(config ->> 'unpaidIpFrom', ${ipHour}::text), ${ipHour}::text),
+               'unpaidIpTo', greatest(coalesce(config ->> 'unpaidIpTo', ${ipHour}::text), ${ipHour}::text))
+        where id = ${resourceId}`);
     },
 
     // WPU-Y3. Everything is paid: the episode ends and its marks go (`-` removes a top-level key).
@@ -183,19 +202,66 @@ export function meteringRepo(tx: Tx) {
       await tx.execute(sql`
         update resources
         set config = config - 'unpaidSince' - 'unpaidSuspended' - 'unpaidRetained'
+          - 'unpaidRetainedFrom' - 'unpaidIpFrom' - 'unpaidIpTo'
         where id = ${resourceId}`);
     },
 
     // WPU-Y3. The two marks of what the unpaid job itself did, so that a payment undoes only that (an
     // admin's suspension is never lifted by it, section 11).
-    async setUnpaidFlag(resourceId: string, key: UnpaidFlagKey, value: boolean): Promise<void> {
+    async setUnpaidFlag(
+      resourceId: string,
+      key: UnpaidFlagKey,
+      value: boolean | "active" | "grace",
+    ): Promise<void> {
       if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
-      if (key !== "unpaidSuspended" && key !== "unpaidRetained") {
+      if (key === "unpaidRetainedFrom") {
+        // The subscription status before the job retained it: two words, nothing else (R16).
+        if (value !== "active" && value !== "grace") {
+          throw new TypeError("metering: the status to return to is not active or grace");
+        }
+        await tx.execute(sql`
+          update resources set config = config || jsonb_build_object(${key}::text, ${value}::text)
+          where id = ${resourceId}`);
+        return;
+      }
+      if ((key !== "unpaidSuspended" && key !== "unpaidRetained") || typeof value !== "boolean") {
         throw new TypeError("metering: the flag is not one of the unpaid marks");
       }
       await tx.execute(sql`
         update resources set config = config || jsonb_build_object(${key}::text, ${value}::boolean)
         where id = ${resourceId}`);
+    },
+
+    // WPU-Y3b. The ledger keys from `lo` to `hi` (both inclusive) that start with `prefix`: one query
+    // for all the periods of a resource and metric instead of one lookup for each hour. The unique
+    // index on the key serves the range.
+    async chargedKeys(prefix: string, lo: string, hi: string, limit: number): Promise<string[]> {
+      if (!/^meter:[0-9a-fA-F-]{36}:[a-z][a-z0-9_]{0,39}:$/.test(prefix)) {
+        throw new TypeError("metering: the key prefix has the wrong form");
+      }
+      if (!lo.startsWith(prefix) || !hi.startsWith(prefix)) {
+        throw new TypeError("metering: the range is outside the prefix");
+      }
+      checkLimit(limit);
+      const { rows } = await tx.execute<{ key: string }>(sql`
+        select idempotency_key as key from ledger_transactions
+        where idempotency_key >= ${lo} and idempotency_key <= ${hi}
+          and starts_with(idempotency_key, ${prefix})
+        order by idempotency_key limit ${limit}`);
+      return rows.map((r) => r.key);
+    },
+
+    // WPU-Y3b. A restore ends the retention (spec 11): the final snapshots of this resource stop being
+    // final and become ordinary backups (the customer may delete them; delete_backup is allowed for
+    // them). Returns their ids so the caller can queue their removal. Idempotent: a second call finds none.
+    async supersedeFinalBackups(parentResourceId: string): Promise<string[]> {
+      if (!isUuid(parentResourceId)) throw new TypeError("metering: resourceId is not a UUID");
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        update resources set config = config || '{"final": false}'::jsonb
+        where parent_resource_id = ${parentResourceId} and family = 'backup'
+          and config ->> 'final' = 'true' and state <> 'destroyed'
+        returning id`);
+      return rows.map((r) => r.id);
     },
 
     // WPU-Y3. The resources that still exist on AWS and have an unpaid charge, in id order after

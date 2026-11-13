@@ -98,7 +98,9 @@ export interface StaticIpOps {
    * recorded), so the daily unpaid job retries every period back to it. Optional so a test world
    * without it needs nothing.
    */
-  markUnpaid?(tx: Tx, resourceId: string, at: Date): Promise<void>;
+  markUnpaid?(tx: Tx, resourceId: string, at: Date, ipHour?: string): Promise<void>;
+  /** WPU-Y3b. As MeteringOps.unpaidJobEnabled: true stops the old unpaid notice (the unpaid job writes the mail). */
+  unpaidJobEnabled?(tx: Tx): Promise<boolean>;
 }
 
 export const defaultStaticIpOps: StaticIpOps = {
@@ -108,7 +110,8 @@ export const defaultStaticIpOps: StaticIpOps = {
   hasCharge: async (tx, key) => (await findLedgerTransactionByKey(tx, key)) !== null,
   post: postTransaction,
   notify: (tx, notice) => lifecycleRepo(tx).insertNotification(notice),
-  markUnpaid: (tx, resourceId, at) => meteringRepo(tx).markUnpaid(resourceId, at),
+  markUnpaid: (tx, resourceId, at, ipHour) => meteringRepo(tx).markUnpaid(resourceId, at, ipHour),
+  unpaidJobEnabled: defaultMeteringOps.unpaidJobEnabled!,
 };
 
 export interface StaticIpMeteringDeps {
@@ -205,14 +208,18 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
             if (posted.error !== "insufficient_balance") return "failed" as const;
             // The snapshot behaviour: nothing is posted, one notice for each resource and day, and the
             // next run tries again. The wallet is never taken below zero (R16).
-            await ops.markUnpaid?.(tx, row.resourceId, now);
-            await ops.notify(tx, {
-              customerId: row.customerId,
-              channel: "email",
-              template: UNPAID_TEMPLATE,
-              payload: { resourceId: row.resourceId, period: hour, metric: STATIC_IP_METRIC },
-              dedupeKey: `lifecycle:${UNPAID_TEMPLATE}:${row.resourceId}:${STATIC_IP_NOTICE_PREFIX}:${dhakaDay(now)}:email`,
-            });
+            // WPU-Y3b: the failed hour goes into the mark, so the daily job retries it whatever the
+            // attach state is by then.
+            await ops.markUnpaid?.(tx, row.resourceId, now, hour);
+            if (!((await ops.unpaidJobEnabled?.(tx)) ?? false)) {
+              await ops.notify(tx, {
+                customerId: row.customerId,
+                channel: "email",
+                template: UNPAID_TEMPLATE,
+                payload: { resourceId: row.resourceId, period: hour, metric: STATIC_IP_METRIC },
+                dedupeKey: `lifecycle:${UNPAID_TEMPLATE}:${row.resourceId}:${STATIC_IP_NOTICE_PREFIX}:${dhakaDay(now)}:email`,
+              });
+            }
             return "unpaid" as const;
           });
           count[outcome] += 1;

@@ -56,3 +56,4 @@ export * from "./polling";
 export * from "./unpaid";
 export * from "./notice";
 export { retainSubscription } from "./engine";
+export { resumeAfterRenewalAllowed, retentionKeyNeedsSalt } from "./resume-rule";

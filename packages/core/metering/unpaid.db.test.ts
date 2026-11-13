@@ -1,7 +1,7 @@
 // WPU-Y3 against a real database: the first failure is recorded, the daily job retries every hour back
 // to it (no 3-hour window), suspends after 1 day, stays off until the setting says true, and ends the
 // episode when the wallet pays. Needs the local PostgreSQL (pnpm db:up).
-import type { Tx } from "@tc/db";
+import { meteringRepo, type Tx } from "@tc/db";
 import { runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Notice } from "../lifecycle/notice";
@@ -95,5 +95,36 @@ describe("the unpaid static IP charge", () => {
       charged: 0,
       examined: 0,
     });
+  });
+});
+
+// WPU-Y3b. The new statements (written without a database in this session; NOT RUN here, run with pnpm db:up).
+describe("the marks and the range read of WPU-Y3b", () => {
+  it("keeps the first and last failed static IP hour, and clears them with the episode", async () => {
+    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const { resourceId } = await placeOne(kit, buyer);
+    const at = (ms: number) => new Date(T0.getTime() + ms);
+    await worker((tx) => meteringRepo(tx).markUnpaid(resourceId, T0, "2026-11-11T13"));
+    await worker((tx) => meteringRepo(tx).markUnpaid(resourceId, at(3_600_000), "2026-11-11T15"));
+    await worker((tx) => meteringRepo(tx).markUnpaid(resourceId, at(7_200_000), "2026-11-11T14"));
+    const rows = await q("select config from resources where id = $1", [resourceId]);
+    const config = rows[0]!.config as Record<string, string>;
+    expect(config.unpaidSince).toBe(T0.toISOString());
+    expect(config.unpaidIpFrom).toBe("2026-11-11T13");
+    expect(config.unpaidIpTo).toBe("2026-11-11T15");
+    await worker((tx) => meteringRepo(tx).clearUnpaid(resourceId));
+    const after = await q("select config from resources where id = $1", [resourceId]);
+    const left = Object.keys(after[0]!.config as object).filter((k) => k.startsWith("unpaid"));
+    expect(left).toEqual([]);
+  });
+
+  it("reads the charged keys of a range in one statement", async () => {
+    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const { resourceId } = await placeOne(kit, buyer);
+    const prefix = `meter:${resourceId}:static_ip_hour:`;
+    const keys = await worker((tx) =>
+      meteringRepo(tx).chargedKeys(prefix, `${prefix}2026-11-11T00`, `${prefix}2026-11-11T23`, 100),
+    );
+    expect(keys).toEqual([]);
   });
 });

@@ -10,6 +10,7 @@ import {
   runPolling,
   runStaticIpMetering,
   runUnpaid,
+  unpaidDue,
   sweepOperations,
   runDnsDelegation,
   type DnsDelegationReport,
@@ -137,17 +138,21 @@ export function createHandler(
     // payment and writes one message for each resource and unpaid day. Off until the setting
     // `lifecycle_unpaid_enabled` is true (R12). The run key is `unpaid:<Dhaka day>`; every effect has a
     // key of its own, so a repeat of the run on the same day changes nothing (R7).
-    await job("unpaid", async () => {
-      unpaid = await runUnpaid({
-        runTx: deps.runTx,
-        clock: deps.clock,
-        queue: deps.queue,
-        log: deps.log,
-        notice: noticeWriter,
+    // WPU-Y3b: once a Dhaka day (the first minutes of 07:00), not every minute, so the cost does not grow
+    // with the time a charge has been unpaid. Repeats inside the window are replays by the keys.
+    if (unpaidDue(deps.clock.now())) {
+      await job("unpaid", async () => {
+        unpaid = await runUnpaid({
+          runTx: deps.runTx,
+          clock: deps.clock,
+          queue: deps.queue,
+          log: deps.log,
+          notice: noticeWriter,
+        });
+        deps.log({ event: "unpaid_run", ...unpaid });
+        if (unpaid.failed > 0) throw new Error("scheduler: unpaid rows failed");
       });
-      deps.log({ event: "unpaid_run", ...unpaid });
-      if (unpaid.failed > 0) throw new Error("scheduler: unpaid rows failed");
-    });
+    }
     // WPU-I2: the tax invoices that were owed while the seller details were missing, oldest first. A seller
     // that is still missing is not a failure of the job (the notice is in the admin queue); an invoice
     // that was refused for another reason, or a queue row that cannot be read, is.
