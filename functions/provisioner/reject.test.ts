@@ -153,6 +153,38 @@ describe("reject_operation, run by the provisioner as worker_rw", () => {
     ]);
   });
 
+  it("WPU-Z13 review round 2: a domain renewal at step submit (RenewDomain may have been sent, its answer lost) is not rejected either: renewal_submitted, the target stays and no hook runs", async () => {
+    const events: unknown[] = [];
+    const { deps } = setup({
+      hooks: {
+        failed: async (_tx, e) => {
+          events.push(e);
+        },
+      },
+    });
+    const target = await create({
+      kind: "renew_domain",
+      state: "needs_attention",
+      step: "submit",
+      attempts: 5,
+      last_error: "upstream_unavailable:TimeoutError",
+      payload: { currentExpiryYear: 2027, years: 1 },
+    });
+    const m = await reject(target.id);
+    expect(await runStep(deps, m)).toMatchObject({ outcome: "advanced", to: "needs_attention" });
+    expect(await operationRow(t.pool, m.operationId)).toMatchObject({
+      state: "needs_attention",
+      last_error: "renewal_submitted",
+    });
+    expect(await operationRow(t.pool, target.id)).toMatchObject({
+      state: "needs_attention",
+      step: "submit",
+      attempts: 5,
+      last_error: "upstream_unavailable:TimeoutError",
+    });
+    expect(events).toEqual([]);
+  });
+
   it("WPU-Z13: a rejected domain renewal that the registry does not hold yet (no step) reaches failed and calls the failed hook (its charge goes back); without the hook it is not rejected", async () => {
     const events: unknown[] = [];
     const { deps } = setup({

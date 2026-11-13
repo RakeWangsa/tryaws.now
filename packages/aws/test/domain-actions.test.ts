@@ -1,7 +1,8 @@
 import { decideFailure, registryHoldsRenewal, type FailureFacts } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { createDomainAdapter, type DomainAdapterConfig } from "../adapters/domain";
-import { AwsError } from "../errors";
+import { AwsError, toAwsError } from "../errors";
+import type { DomainsPort } from "../adapters/domains-port";
 import type { OpCtx } from "../adapters/types";
 import { createFakeDomains } from "./fake-domains";
 import { createFakeRoute53 } from "./fake-route53";
@@ -27,11 +28,12 @@ const RAW = { name: "example.com", tld: "com", years: 1, contactSealed: SEALED }
 
 type Kind = "renew_domain" | "resend_verification" | "set_name_servers";
 
-async function registered() {
+/** `renewDomain`: replaces the fake's RenewDomain (an AWS error that the real client can throw). */
+async function registered(renewDomain?: DomainsPort["renewDomain"]) {
   const r53 = createFakeRoute53();
   const fake = createFakeDomains({ route53: r53.port, now: () => NOW });
   const adapter = createDomainAdapter({
-    domains: () => fake.port,
+    domains: () => (renewDomain === undefined ? fake.port : { ...fake.port, renewDomain }),
     route53: () => r53.port,
     unsealContact: async (sealed) => JSON.parse(Buffer.from(sealed).toString("utf8")) as unknown,
     holdsName: async () => true,
@@ -199,11 +201,18 @@ describe("set_name_servers", () => {
 });
 
 describe("renew_domain", () => {
-  it("renews with the expiry year of the payload, waits, and saves the new expiry", async () => {
+  const renewCalls = (fake: Registered["fake"]) =>
+    fake.calls.filter((c) => c.op === "renewDomain").length;
+
+  it("checks, moves to submit in a write of its own, renews there with the expiry year, waits, and saves the new expiry", async () => {
     const { adapter, fake } = await registered();
     const payload = { currentExpiryYear: 2031, years: 1 };
-    const started = await run(adapter, "renew_domain", payload);
+    // Step null only reads: nothing is sent to the registry before `submit` is recorded (review round 2).
+    expect(await run(adapter, "renew_domain", payload)).toEqual({ kind: "next", step: "submit" });
+    expect(renewCalls(fake)).toBe(0);
+    const started = await run(adapter, "renew_domain", payload, { step: "submit" });
     expect(started).toMatchObject({ kind: "wait", step: "poll" });
+    expect(renewCalls(fake)).toBe(1);
     const opId = configOf(started)["renewOperationId"] as string;
     await fake.finish(opId, "successful");
     const done = await run(adapter, "renew_domain", payload, {
@@ -214,42 +223,54 @@ describe("renew_domain", () => {
     expect(configOf(done)).toEqual({ expiresAt: "2032-01-01T00:00:00.000Z" });
   });
 
-  it("a repeat of the start after the renewal went through renews nothing a second time", async () => {
+  it("a repeat of the start after the renewal went through renews nothing a second time, at submit and at step null", async () => {
     const { adapter, fake } = await registered();
     const payload = { currentExpiryYear: 2031, years: 1 };
-    const started = await run(adapter, "renew_domain", payload);
+    const started = await run(adapter, "renew_domain", payload, { step: "submit" });
     await fake.finish(configOf(started)["renewOperationId"] as string, "successful");
-    // The first answer was lost: the start runs again with the same payload.
-    const again = await run(adapter, "renew_domain", payload);
-    expect(again).toMatchObject({ kind: "done" });
-    expect(configOf(again)).toEqual({ expiresAt: "2032-01-01T00:00:00.000Z" });
-    expect(fake.calls.filter((c) => c.op === "renewDomain")).toHaveLength(1);
+    // The first answer was lost: the step runs again with the same payload, and so does step null.
+    for (const step of ["submit", null]) {
+      const again = await run(adapter, "renew_domain", payload, { step });
+      expect(again).toMatchObject({ kind: "done" });
+      expect(configOf(again)).toEqual({ expiresAt: "2032-01-01T00:00:00.000Z" });
+    }
+    expect(renewCalls(fake)).toBe(1);
   });
 
-  it("validates the payload, and refuses a year the domain does not have", async () => {
+  it("validates the payload, and refuses a year the domain does not have, at step null and at submit", async () => {
     const { adapter, fake } = await registered();
-    for (const bad of [
-      null,
-      {},
-      { currentExpiryYear: "2031" },
-      { currentExpiryYear: 2031.5 },
-      { currentExpiryYear: 1999 },
-      { currentExpiryYear: 2031, years: 0 },
-      { currentExpiryYear: 2031, years: 11 },
-      // The payload names a later year than the live expiry: the row and AWS disagree (R16).
-      { currentExpiryYear: 2040 },
-    ]) {
-      await expect(run(adapter, "renew_domain", bad)).rejects.toMatchObject({
-        code: "validation",
-      });
+    for (const step of [null, "submit"]) {
+      for (const bad of [
+        null,
+        {},
+        { currentExpiryYear: "2031" },
+        { currentExpiryYear: 2031.5 },
+        { currentExpiryYear: 1999 },
+        { currentExpiryYear: 2031, years: 0 },
+        { currentExpiryYear: 2031, years: 11 },
+        // The payload names a later year than the live expiry: the row and AWS disagree (R16).
+        { currentExpiryYear: 2040 },
+      ]) {
+        await expect(run(adapter, "renew_domain", bad, { step })).rejects.toMatchObject({
+          code: "validation",
+        });
+      }
     }
-    expect(fake.calls.filter((c) => c.op === "renewDomain")).toHaveLength(0);
+    expect(renewCalls(fake)).toBe(0);
+  });
+
+  it("a step it does not know is refused", async () => {
+    const { adapter, fake } = await registered();
+    await expect(
+      run(adapter, "renew_domain", { currentExpiryYear: 2031 }, { step: "start" }),
+    ).rejects.toMatchObject({ code: "internal" });
+    expect(renewCalls(fake)).toBe(0);
   });
 
   it("fails when the registry says failed, and when the wait is too long", async () => {
     const { adapter, fake } = await registered();
     const payload = { currentExpiryYear: 2031 };
-    const started = await run(adapter, "renew_domain", payload);
+    const started = await run(adapter, "renew_domain", payload, { step: "submit" });
     const opId = configOf(started)["renewOperationId"] as string;
     const poll = (more: Extra = {}) =>
       run(adapter, "renew_domain", payload, {
@@ -264,31 +285,38 @@ describe("renew_domain", () => {
     await expect(poll()).rejects.toMatchObject({ code: "conflict" });
   });
 
-  // WPU-Z13 review round 1: the contract between this adapter and the failure policy of @tc/core. After RenewDomain
-  // the registry holds the renewal (TiCON pays for it, it may still complete): a poll that gives up or cannot poll
-  // moves no money (needs_attention), and only the registry's own FAILED answer fails the operation, refunded.
+  // WPU-Z13: the contract between this adapter and the failure policy of @tc/core. The error the adapter throws is
+  // turned into facts as functions/provisioner/step.ts does (factsOf) and decided by the real decideFailure.
+  const decide = async (
+    attempt: Promise<unknown>,
+    step: string | null,
+    previous: { attempts: number; lastError: string | null } = { attempts: 0, lastError: null },
+  ) => {
+    const error: unknown = await attempt.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    if (!(error instanceof AwsError)) throw new Error("expected an AwsError");
+    const facts: FailureFacts = {
+      code: error.code,
+      retryable: error.retryable,
+      poolFull: error.poolFull,
+      awsErrorName: error.awsErrorName,
+      mayHaveActed: error.mayHaveActed,
+    };
+    return decideFailure({ kind: "renew_domain", step, ...previous, now: NOW, facts }).to;
+  };
+
+  // Review round 1: after RenewDomain was accepted the registry holds the renewal (TiCON pays for it, it may still
+  // complete): a poll that gives up or cannot poll moves no money (needs_attention), and only the registry's own
+  // FAILED answer fails the operation, refunded.
   it("from the step after RenewDomain only the registry's failed answer is a refusal that gives the charge back", async () => {
     const { adapter, fake } = await registered();
     const payload = { currentExpiryYear: 2031 };
-    const started = await run(adapter, "renew_domain", payload);
+    const started = await run(adapter, "renew_domain", payload, { step: "submit" });
     const step = started.kind === "wait" ? started.step : null;
     expect(registryHoldsRenewal("renew_domain", step)).toBe(true);
     const opId = configOf(started)["renewOperationId"] as string;
-    const decide = async (attempt: Promise<unknown>) => {
-      const error: unknown = await attempt.then(
-        () => null,
-        (e: unknown) => e,
-      );
-      if (!(error instanceof AwsError)) throw new Error("expected an AwsError");
-      // The facts that functions/provisioner/step.ts builds from an AwsError.
-      const facts: FailureFacts = {
-        code: error.code,
-        retryable: error.retryable,
-        poolFull: error.poolFull,
-        awsErrorName: error.awsErrorName,
-      };
-      return decideFailure({ kind: "renew_domain", step, attempts: 0, now: NOW, facts }).to;
-    };
     const poll = (more: Extra = {}) =>
       run(adapter, "renew_domain", payload, {
         step,
@@ -296,13 +324,95 @@ describe("renew_domain", () => {
         ...more,
       });
     // Still in progress three days after the operation was created: the registry may still renew the name.
-    expect(await decide(poll({ now: new Date("2030-01-10T00:00:00.000Z") }))).toBe(
+    expect(await decide(poll({ now: new Date("2030-01-10T00:00:00.000Z") }), step)).toBe(
       "needs_attention",
     );
     // A poll without the registry's operation id.
-    expect(await decide(run(adapter, "renew_domain", payload, { step }))).toBe("needs_attention");
+    expect(await decide(run(adapter, "renew_domain", payload, { step }), step)).toBe(
+      "needs_attention",
+    );
     await fake.finish(opId, "failed");
-    expect(await decide(poll())).toBe("failed");
+    expect(await decide(poll(), step)).toBe("failed");
+  });
+
+  // Review round 2: RenewDomain is sent only at `submit`, which step null records first. A call that may have
+  // reached the registry (a time-out, a reset connection, a 5xx after the request was sent) leaves the renewal at
+  // `submit`, so `submit` is held: only an error that proves nothing was sent, in the first run there, refunds.
+  it("at submit a RenewDomain that may have reached the registry gives nothing back; one refused for sure does", async () => {
+    const payload = { currentExpiryYear: 2031 };
+    const throwingRenew = async (error: unknown) => {
+      const { adapter, fake } = await registered(async (input) => {
+        fake.calls.push({ op: "renewDomain", name: input.name });
+        throw error;
+      });
+      expect(await run(adapter, "renew_domain", payload)).toEqual({ kind: "next", step: "submit" });
+      expect(registryHoldsRenewal("renew_domain", "submit")).toBe(true);
+      return {
+        adapter,
+        fake,
+        attempt: () => run(adapter, "renew_domain", payload, { step: "submit" }),
+      };
+    };
+    // The SDK's errors go through the real mapping of the client (toAwsError): a time-out after the request was
+    // sent and a 503 may have acted, final or not.
+    const timeout = toAwsError(
+      Object.assign(new Error("x"), { name: "TimeoutError", code: "ETIMEDOUT" }),
+      "RenewDomain",
+    );
+    const unavailable = toAwsError(
+      Object.assign(new Error("x"), {
+        name: "ServiceUnavailable",
+        $metadata: { httpStatusCode: 503 },
+      }),
+      "RenewDomain",
+    );
+    expect(timeout.mayHaveActed && unavailable.mayHaveActed).toBe(true);
+    const finalActed = new AwsError({
+      code: "internal",
+      retryable: false,
+      operation: "RenewDomain",
+      mayHaveActed: true,
+    });
+    {
+      const { attempt, fake } = await throwingRenew(finalActed);
+      expect(await decide(attempt(), "submit")).toBe("needs_attention");
+      expect(renewCalls(fake)).toBe(1);
+    }
+    for (const error of [timeout, unavailable]) {
+      const { attempt } = await throwingRenew(error);
+      // Retryable: waits at `submit`, which keeps the count; the next run's refusal proves nothing.
+      expect(await decide(attempt(), "submit")).toBe("waiting");
+    }
+    // A refusal of RenewDomain itself (the client maps it with mayHaveActed false).
+    const refused = new AwsError({
+      code: "conflict",
+      retryable: false,
+      awsErrorName: "TLDRulesViolation",
+      operation: "RenewDomain",
+      mayHaveActed: false,
+    });
+    {
+      const { attempt } = await throwingRenew(refused);
+      expect(await decide(attempt(), "submit")).toBe("failed");
+      // The same refusal after an earlier run at `submit` whose RenewDomain timed out: held.
+      expect(
+        await decide(attempt(), "submit", {
+          attempts: 1,
+          lastError: "upstream_unavailable:ETIMEDOUT",
+        }),
+      ).toBe("needs_attention");
+    }
+    // A request that never left the machine (ECONNREFUSED) proves nothing was sent: final or not, its own
+    // decision, and a check of the adapter at step null (before anything is sent) refunds as before.
+    const refusedConnection = toAwsError(
+      Object.assign(new Error("x"), { name: "Error", code: "ECONNREFUSED" }),
+      "RenewDomain",
+    );
+    expect(refusedConnection.mayHaveActed).toBe(false);
+    const { adapter } = await registered();
+    expect(await decide(run(adapter, "renew_domain", { currentExpiryYear: 2040 }), null)).toBe(
+      "failed",
+    );
   });
 });
 

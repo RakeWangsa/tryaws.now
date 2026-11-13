@@ -27,12 +27,15 @@ function targetOf(payload: unknown): string | null {
 // operation; a throwing hook rolls everything back and the sweeper recovers the run like an expired
 // lease. Inside the transaction the fenced update of the reject operation comes first (the order is
 // not visible outside), so a stale run writes nothing for the target.
-// WPU-Z13 (review round 1): a domain renewal the registry holds (RenewDomain accepted, step poll) is
-// not rejected. TiCON pays the registry for that renewal and it may still complete, so a refund
-// waits for the registry's own answer: a retry polls it (successful: done; failed: the refund of the
-// registry's refusal). The reject operation needs attention with `renewal_submitted`; the target and
-// the money stay as they are. Whether a person may refund it without that answer is the owner's
-// decision (JOURNEY, Needs decision).
+// WPU-Z13 (review rounds 1 and 2): a domain renewal the registry may hold (registryHoldsRenewal: any
+// step but null, i.e. `submit`, where RenewDomain may have been sent and its answer lost, and `poll`,
+// after it was accepted) is not rejected. TiCON pays the registry for that renewal and it may still
+// complete, so a refund waits for the registry's answer: a retry reads it (at `submit` the live expiry
+// first: already renewed is done; at `poll` the operation: successful is done, failed is the refund of
+// the registry's refusal). The reject operation needs attention with `renewal_submitted`; the target
+// and the money stay as they are. Only a renewal at step null (reads only, nothing sent) is rejected
+// with its refund. Whether a person may refund a held one without that answer is the owner's decision
+// (JOURNEY, Needs decision).
 export async function runReject(
   deps: StepDeps,
   view: RunView,

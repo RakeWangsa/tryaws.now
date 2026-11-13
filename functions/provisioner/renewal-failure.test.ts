@@ -46,6 +46,7 @@ function viewOf(operation: Record<string, unknown>): RunView {
       state: "running",
       step: null,
       attempts: 0,
+      lastError: null,
       payload: {},
       createdAt: NOW,
       ...operation,
@@ -119,9 +120,17 @@ beforeEach(() => {
 });
 
 describe("runStep: the failure policy reads the step of the renewal", () => {
-  const runWith = async (step: string | null, error: AwsError) => {
+  const runWith = async (
+    step: string | null,
+    error: AwsError,
+    previous: { attempts: number; lastError: string | null } = { attempts: 0, lastError: null },
+  ) => {
     const s = setup(throwing(error));
-    claim.mockResolvedValue({ status: "run", view: viewOf({ step }), leaseUntil: LEASE });
+    claim.mockResolvedValue({
+      status: "run",
+      view: viewOf({ step, ...previous }),
+      leaseUntil: LEASE,
+    });
     const outcome = await runStep(s.deps, { operationId: OP, resourceId: RESOURCE, enqueueSeq: 1 });
     return { ...s, outcome };
   };
@@ -183,6 +192,108 @@ describe("runStep: the failure policy reads the step of the renewal", () => {
   });
 });
 
+// Review round 2: RenewDomain is sent only at `submit`, which the adapter records before the call. runStep carries
+// AwsError.mayHaveActed, the count and the last_error of the operation into decideFailure.
+describe("runStep: a renewal at step submit (RenewDomain may have reached the registry)", () => {
+  const runAt = async (
+    error: AwsError,
+    previous: { attempts: number; lastError: string | null } = { attempts: 0, lastError: null },
+  ) => {
+    const s = setup(throwing(error));
+    claim.mockResolvedValue({
+      status: "run",
+      view: viewOf({ step: "submit", ...previous }),
+      leaseUntil: LEASE,
+    });
+    const outcome = await runStep(s.deps, { operationId: OP, resourceId: RESOURCE, enqueueSeq: 1 });
+    return { ...s, outcome };
+  };
+  const tldRefusal = new AwsError({
+    code: "conflict",
+    retryable: false,
+    awsErrorName: "TLDRulesViolation",
+    operation: "RenewDomain",
+    mayHaveActed: false,
+  });
+
+  it("a final error of a RenewDomain that may have acted stops in needs_attention: no refund", async () => {
+    const { outcome, failed, needsAttention } = await runAt(
+      new AwsError({
+        code: "internal",
+        retryable: false,
+        operation: "RenewDomain",
+        mayHaveActed: true,
+      }),
+    );
+    expect(outcome).toEqual({ outcome: "advanced", to: "needs_attention", sent: false });
+    expect(transition).toHaveBeenCalledTimes(1);
+    expect(transition).toHaveBeenCalledWith(TX, "worker", {
+      id: OP,
+      from: "running",
+      fence: LEASE,
+      to: "needs_attention",
+      attempts: 1,
+      lastError: "internal",
+    });
+    expect(failed).not.toHaveBeenCalled();
+    expect(needsAttention).toHaveBeenCalledTimes(1);
+  });
+
+  it("a time-out after the request was sent waits at submit and moves no money", async () => {
+    const { outcome, failed } = await runAt(
+      new AwsError({
+        code: "upstream_unavailable",
+        retryable: true,
+        awsErrorName: "TimeoutError",
+        operation: "RenewDomain",
+        mayHaveActed: true,
+      }),
+    );
+    expect(outcome).toEqual({ outcome: "advanced", to: "waiting", sent: false });
+    expect(transition).toHaveBeenCalledWith(
+      TX,
+      "worker",
+      expect.objectContaining({
+        to: "waiting",
+        attempts: 1,
+        lastError: "upstream_unavailable:TimeoutError",
+      }),
+    );
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it("a definite refusal of RenewDomain at the first run of the step fails it, and the hook gives the charge back once", async () => {
+    const { outcome, failed } = await runAt(tldRefusal);
+    expect(outcome).toEqual({ outcome: "advanced", to: "failed", sent: false });
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(failed).toHaveBeenCalledWith(TX, {
+      operationId: OP,
+      resourceId: RESOURCE,
+      customerId: CUSTOMER,
+      kind: "renew_domain",
+      code: "conflict:TLDRulesViolation",
+    });
+  });
+
+  it("the same refusal after an earlier run at the step whose RenewDomain timed out: needs_attention, no refund", async () => {
+    const { outcome, failed } = await runAt(tldRefusal, {
+      attempts: 1,
+      lastError: "upstream_unavailable:TimeoutError",
+    });
+    expect(outcome).toEqual({ outcome: "advanced", to: "needs_attention", sent: false });
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it("an error that is not an AwsError counts as acted: it waits, then needs attention, never refunds", async () => {
+    const { outcome, failed } = await runAt(new Error("boom") as unknown as AwsError, {
+      attempts: 4,
+      lastError: "internal",
+    });
+    expect(outcome).toEqual({ outcome: "advanced", to: "needs_attention", sent: false });
+    expect(failed).not.toHaveBeenCalled();
+  });
+});
+
 describe("runReject: an admin's rejection of a stuck renewal", () => {
   const rejectView = viewOf({
     id: REJECT,
@@ -224,6 +335,27 @@ describe("runReject: an admin's rejection of a stuck renewal", () => {
       code: "renewal_submitted",
     });
     expect(logged).toEqual([expect.objectContaining({ code: "renewal_submitted" })]);
+  });
+
+  it("a renewal at step submit (RenewDomain may have been sent) is not rejected either: renewal_submitted, no refund", async () => {
+    const { deps, failed } = setup();
+    brief.mockResolvedValue(target({ step: "submit" }));
+    expect(await runReject(deps, rejectView, LEASE)).toEqual({
+      outcome: "advanced",
+      to: "needs_attention",
+      sent: false,
+    });
+    expect(transition).toHaveBeenCalledTimes(1);
+    expect(transition).toHaveBeenCalledWith(
+      TX,
+      "worker",
+      expect.objectContaining({
+        id: REJECT,
+        to: "needs_attention",
+        lastError: "renewal_submitted",
+      }),
+    );
+    expect(failed).not.toHaveBeenCalled();
   });
 
   it("the admin is told the same without a failed hook: the registry holds the renewal", async () => {

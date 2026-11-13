@@ -14,6 +14,11 @@ export interface FailureFacts {
   readonly retryable: boolean;
   readonly poolFull: boolean;
   readonly awsErrorName: string | null;
+  /**
+   * Whether AWS may already have acted on the call that failed (AwsError.mayHaveActed: a time-out, a reset
+   * connection or a 5xx after the request was sent). Not given means not known, which counts as true (R16).
+   */
+  readonly mayHaveActed?: boolean;
 }
 
 export type FailureDecision =
@@ -39,19 +44,23 @@ export function refundedOnFailure(kind: string): kind is "create" | "renew_domai
   return REFUNDED_KINDS.includes(kind);
 }
 
-// WPU-Z13 (review round 1): the step of a `renew_domain` after RenewDomain was accepted. The domain adapter moves
-// there in the same record as the registry's operation id (packages/aws/adapters/domain.ts renewAction; the
-// contract is pinned in packages/aws/test/domain-actions.test.ts). From here on the registry holds a renewal that
-// TiCON pays for and that may still complete, however long the registry takes.
-const RENEWAL_HELD_STEP = "poll";
+// WPU-Z13: the steps of a `renew_domain` (packages/aws/adapters/domain.ts renewAction; the contract is pinned in
+// packages/aws/test/domain-actions.test.ts). At step null the adapter only reads (the payload, GetDomainDetail) and
+// moves to `submit` in a write of its own; RenewDomain is called only at `submit`, and once it was accepted the
+// adapter moves to `poll` in the same record as the registry's operation id. So a renewal at step null has sent
+// nothing to the registry; from `submit` on the registry may hold a renewal that TiCON pays for and that may
+// still complete, however long the registry takes (review round 2: a RenewDomain that timed out after it was sent
+// is still at `submit`, not at `poll`).
+const RENEWAL_SUBMIT_STEP = "submit";
 
 /**
- * Whether the registry holds the renewal of this operation: a `renew_domain` at the step after RenewDomain. Such a
- * renewal gives no money back on a final error unless the registry itself reported it failed (decideFailure), and
- * an admin's rejection of it is refused (reject.ts, `renewal_submitted`): a refund waits for the registry's answer.
+ * Whether the registry may hold the renewal of this operation: a `renew_domain` at any step but null (`submit`,
+ * `poll`, or a step that is not known, R16). Such a renewal gives no money back on a final error unless the failure
+ * proves that nothing reached the registry or the registry itself reported it failed (decideFailure), and an
+ * admin's rejection of it is refused (reject.ts, `renewal_submitted`): a refund waits for the registry's answer.
  */
 export function registryHoldsRenewal(kind: string, step: string | null): boolean {
-  return kind === "renew_domain" && step === RENEWAL_HELD_STEP;
+  return kind === "renew_domain" && step !== null;
 }
 
 // The registry's own answer that a renewal failed (GetOperationDetail FAILED or ERROR): the domain adapter throws
@@ -61,15 +70,35 @@ function registryRefused(facts: FailureFacts): boolean {
   return facts.code === "conflict" && facts.awsErrorName === null;
 }
 
+// At `submit`: the failure proves that this run sent nothing the registry may act on (AwsError.mayHaveActed false:
+// a refusal of RenewDomain itself such as TLDRulesViolation, a request that never left the machine, or a local
+// check), and no earlier run at this step can have sent one. The adapter enters the step with attempts 0 and
+// last_error null (its own write, step.ts updateFor), and every run at the step that does not leave it records a
+// failure (a retryable error, a refusal, a lost lease through the sweeper) that an admin's retry keeps. So a
+// RenewDomain that may have reached the registry in an earlier run always leaves attempts above 0 or a last_error.
+function provedNotSent(previous: Previous, facts: FailureFacts): boolean {
+  return previous.attempts === 0 && previous.lastError === null && facts.mayHaveActed === false;
+}
+
+interface Previous {
+  readonly attempts: number;
+  /** undefined: not known, which proves nothing (R16). */
+  readonly lastError: string | null | undefined;
+}
+
 // Whether a final error (not retryable, no full pool) ends the operation `failed`, with the refund of its hook.
-function endsFailed(kind: string, step: string | null | undefined, facts: FailureFacts): boolean {
+function endsFailed(
+  kind: string,
+  step: string | null | undefined,
+  previous: Previous,
+  facts: FailureFacts,
+): boolean {
   if (!refundedOnFailure(kind)) return false;
-  // A renewal at a step that is not known is taken as held (R16): no refund without the registry's answer. A poll
-  // that gave up after three days, a lost operation id or a bad answer stops in needs_attention, no money moved.
-  if (kind === "renew_domain" && (step === undefined || registryHoldsRenewal(kind, step))) {
-    return registryRefused(facts);
-  }
-  return true;
+  if (kind !== "renew_domain" || step === null) return true;
+  if (step === RENEWAL_SUBMIT_STEP) return provedNotSent(previous, facts);
+  // At `poll`, and at a step that is not known (R16): only the registry's own refusal. A poll that gave up after
+  // three days, a lost operation id or a bad answer stops in needs_attention, no money moved.
+  return registryRefused(facts);
 }
 
 // No AWS text ever reaches last_error (R14): a code, and a plain error name when there is one.
@@ -83,10 +112,15 @@ export function decideFailure(input: {
   kind: OperationKind;
   /**
    * The step the operation is at (null before its first one). Only a domain renewal reads it, to know whether the
-   * registry holds the renewal; not given means not known, which counts as held (R16).
+   * registry may hold the renewal; not given means not known, which counts as held (R16).
    */
   step?: string | null;
   attempts: number;
+  /**
+   * The operation's last_error before this run. Only a domain renewal at `submit` reads it (with `attempts`), to
+   * know that no earlier run at the step can have sent RenewDomain; not given proves nothing (R16).
+   */
+  lastError?: string | null;
   now: Date;
   facts: FailureFacts;
 }): FailureDecision {
@@ -96,7 +130,9 @@ export function decideFailure(input: {
   if (facts.poolFull) return { to: "needs_attention", attempts: failures, lastError };
   if (!facts.retryable) {
     return {
-      to: endsFailed(kind, step, facts) ? "failed" : "needs_attention",
+      to: endsFailed(kind, step, { attempts, lastError: input.lastError }, facts)
+        ? "failed"
+        : "needs_attention",
       attempts: failures,
       lastError,
     };

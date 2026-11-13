@@ -25,7 +25,8 @@ import { operationRow, seedOperation } from "./test/seed";
 // period that was paid); an error that passes waits and moves no money; a reversal that cannot be made rolls the
 // move to failed back; an admin's rejection after the retries gives the money back too while the registry does
 // not hold the renewal. Once it does (step poll, review round 1) only the registry's own refusal gives it back: a
-// poll that gives up stops in needs_attention and a rejection is refused. The domain adapter is a fake here (its
+// poll that gives up stops in needs_attention and a rejection is refused. At step submit (review round 2) only a
+// failure that proves nothing was sent gives it back. The domain adapter is a fake here (its
 // RenewDomain call and its errors are proved in packages/aws/test/domain-actions.test.ts).
 const { t, world, setup, message } = useHarness();
 const PRICE = 150_000n;
@@ -330,6 +331,131 @@ describe("a registry renewal that the registry holds (step poll)", () => {
     expect(await operationRow(t.pool, d.operationId)).toMatchObject({
       state: "needs_attention",
       step: "poll",
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(0);
+    expect(await balance()).toBe(start);
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
+  });
+});
+
+// WPU-Z13 review round 2: RenewDomain is sent only at step submit, which the adapter records on its own before the
+// call. A RenewDomain that may have reached the registry (a time-out, a reset connection, a 5xx after the request
+// was sent) leaves the renewal at submit: it is held, and only a failure that proves nothing was sent gives back.
+describe("a registry renewal at step submit (RenewDomain may have been sent)", () => {
+  const submitting = async (at: Date, previous?: { attempts: number; lastError: string }) => {
+    const d = await renewedDomain(at);
+    await t.pool.query(
+      "update operations set step = 'submit', attempts = $2, last_error = $3 where id = $1",
+      [d.operationId, previous?.attempts ?? 0, previous?.lastError ?? null],
+    );
+    return d;
+  };
+  const throwing = (error: AwsError) =>
+    domainRegistry(async () => {
+      throw error;
+    });
+  const refusal = () =>
+    new AwsError({
+      code: "conflict",
+      retryable: false,
+      awsErrorName: "TLDRulesViolation",
+      operation: "RenewDomain",
+      mayHaveActed: false,
+    });
+
+  it("a final error of a RenewDomain that may have acted: needs_attention, no money moves", async () => {
+    const d = await submitting(new Date("2026-11-18T09:00:00.000Z"));
+    const start = await balance();
+    const { deps } = setup({
+      adapters: throwing(
+        new AwsError({
+          code: "internal",
+          retryable: false,
+          operation: "RenewDomain",
+          mayHaveActed: true,
+        }),
+      ),
+      hooks: hooks(),
+    });
+    expect(await runStep(deps, message(d.operationId, d.resourceId))).toEqual({
+      outcome: "advanced",
+      to: "needs_attention",
+      sent: false,
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "needs_attention",
+      step: "submit",
+      last_error: "internal",
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(0);
+    expect(await balance()).toBe(start);
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
+  });
+
+  it("a definite refusal at the first run of the step (nothing sent): failed, and the charge goes back once", async () => {
+    const at = new Date("2026-11-19T09:00:00.000Z");
+    const d = await submitting(at);
+    const start = await balance();
+    const { deps } = setup({ adapters: throwing(refusal()), hooks: hooks() });
+    expect(await runStep(deps, message(d.operationId, d.resourceId))).toMatchObject({
+      to: "failed",
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "failed",
+      last_error: "conflict:TLDRulesViolation",
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(1);
+    expect(await balance()).toBe(start + PRICE);
+    const s = await subscriptionOf(d.subscriptionId);
+    expect(s.status).toBe("ended");
+    expect((s.period_end as Date).toISOString()).toBe(at.toISOString());
+  });
+
+  it("the same refusal after an earlier run whose RenewDomain timed out: needs_attention, no money moves", async () => {
+    const d = await submitting(new Date("2026-11-20T09:00:00.000Z"), {
+      attempts: 1,
+      lastError: "upstream_unavailable:TimeoutError",
+    });
+    const start = await balance();
+    const { deps } = setup({ adapters: throwing(refusal()), hooks: hooks() });
+    expect(await runStep(deps, message(d.operationId, d.resourceId))).toMatchObject({
+      to: "needs_attention",
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "needs_attention",
+      step: "submit",
+      attempts: 2,
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(0);
+    expect(await balance()).toBe(start);
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
+  });
+
+  it("an admin's rejection is refused (renewal_submitted): no money moves", async () => {
+    const d = await submitting(new Date("2026-11-21T09:00:00.000Z"), {
+      attempts: 5,
+      lastError: "upstream_unavailable:TimeoutError",
+    });
+    await t.pool.query("update operations set state = 'needs_attention' where id = $1", [
+      d.operationId,
+    ]);
+    const start = await balance();
+    const out = await runTransaction(
+      t.db,
+      (tx) => rejectOperation(tx, { operationId: d.operationId, at: NOW }),
+      { role: "admin_rw" },
+    );
+    if (!out.ok || !out.message) throw new Error("reject did not queue an operation");
+    const { deps } = setup({ adapters: refusing(), hooks: hooks() });
+
+    expect(await runStep(deps, out.message)).toMatchObject({ to: "needs_attention" });
+    expect(await operationRow(t.pool, out.message.operationId)).toMatchObject({
+      state: "needs_attention",
+      last_error: "renewal_submitted",
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "needs_attention",
+      step: "submit",
     });
     expect(await reversalsOf(d.chargeId)).toBe(0);
     expect(await balance()).toBe(start);
