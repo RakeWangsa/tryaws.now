@@ -193,7 +193,7 @@ describe("one charge, one registry renewal", () => {
     const again = await worker(async (tx) => {
       const locked = await lifecycleRepo(tx).lock(d.subscriptionId);
       if (locked === null) throw new Error("fixture: no subscription");
-      return queueDomainRenewal(tx, locked, d.end, kit.clock.now());
+      return queueDomainRenewal(tx, locked, d.end, kit.clock.now(), "13.0000");
     });
     expect(again).toBeNull();
     expect(await renewOps(d.resourceId)).toEqual([op]);
@@ -215,6 +215,8 @@ describe("one charge, one registry renewal", () => {
       state: "queued",
       idempotency_key: domainRenewalKey(d.subscriptionId, d.end),
     });
+    // WPU-Z19: the USD price this renewal charged (its price snapshot) is RenewDomain's Consent.MaxPrice.
+    expect((ops[0]!.payload as { maxPriceUsd?: unknown }).maxPriceUsd).toMatch(/^13(\.0+)?$/);
     // A second click is refused (the period moved) and the engine at the old end has nothing to renew.
     const second = await web((tx) =>
       renewNow(tx, { customerId: d.customerId, resourceId: d.resourceId, clock: kit.clock }),

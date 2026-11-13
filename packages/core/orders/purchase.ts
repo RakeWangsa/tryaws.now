@@ -372,6 +372,9 @@ export async function runPurchase(
         // A restore names its backup; the adapter reads it from the payload (WP5-T1).
         payload: {
           orderId,
+          // WPU-Z19: a domain's create carries the USD price this order charged (the snapshot's awsPriceUsd, the
+          // TLD's registration price for one year): RegisterDomain sends it as Consent.MaxPrice (decimal text, R4).
+          ...(isDomain ? { maxPriceUsd: fresh.awsPriceUsd } : {}),
           ...(product.restoreFromBackupId === undefined
             ? {}
             : { restoreFromBackupId: product.restoreFromBackupId }),

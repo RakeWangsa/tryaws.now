@@ -58,7 +58,13 @@ const MARK = { registrationMarker: RID };
 
 function ctxFor(
   config: DomainAdapterConfig,
-  extra: { step?: string | null; resourceConfig?: unknown; now?: Date; createdAt?: Date } = {},
+  extra: {
+    step?: string | null;
+    resourceConfig?: unknown;
+    now?: Date;
+    createdAt?: Date;
+    payload?: unknown;
+  } = {},
 ): OpCtx<DomainAdapterConfig> {
   const now = extra.now ?? NOW;
   return {
@@ -68,7 +74,11 @@ function ctxFor(
       step: extra.step ?? null,
       attempt: 1,
       createdAt: extra.createdAt ?? NOW,
-      payload: {},
+      // WPU-Z19: the purchase writes the USD price the order charged; RegisterDomain sends it as Consent.MaxPrice.
+      payload: extra.payload ?? {
+        orderId: "0190a000-0000-7000-8000-0000000000cc",
+        maxPriceUsd: "13.0000",
+      },
     },
     stepKey: "k",
     resource: {
@@ -158,6 +168,17 @@ describe("create", () => {
     expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
   });
 
+  it("WPU-Z19: a create without the USD price of the order is refused before RegisterDomain (R16)", async () => {
+    const { adapter, fake } = setup();
+    const config = adapter.parseConfig(RAW);
+    for (const payload of [{}, { maxPriceUsd: 13 }, { maxPriceUsd: "-1" }, { maxPriceUsd: "0" }]) {
+      await expect(
+        adapter.aws.create(ctxFor(config, { step: "register", resourceConfig: MARK, payload })),
+      ).rejects.toMatchObject({ code: "validation" });
+    }
+    expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
+  });
+
   it("registers once, waits, and adopts the zone that the registration made", async () => {
     const { adapter, fake, r53 } = setup();
     const config = adapter.parseConfig(RAW);
@@ -169,6 +190,8 @@ describe("create", () => {
     const operationId = started.patch?.configMerge?.["route53OperationId"] as string;
     expect(operationId).toMatch(/^fake-op-/);
     expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(1);
+    // WPU-Z19: the USD price the order charged went as Consent.MaxPrice.
+    expect(fake.calls.find((c) => c.op === "registerDomain")?.maxPriceUsd).toBe("13.0000");
     // The contact went to the registry unsealed, and only there.
     expect(fake.contactOf(operationId)).toEqual(
       parseRegistrantContact(CONTACT).ok ? CONTACT : null,
@@ -234,6 +257,7 @@ describe("create", () => {
       name: "example.com",
       years: 1,
       contact: CONTACT as never,
+      maxPriceUsd: "13.0000",
     });
     await fake.finish(foreign.operationId, "successful");
     await expect(step(adapter, config, null)).rejects.toMatchObject({
@@ -439,6 +463,7 @@ describe("describe", () => {
       name: "example.com",
       years: 1,
       contact: CONTACT as never,
+      maxPriceUsd: "13.0000",
     });
     await fake.finish(reg.operationId, "successful");
     expect(await adapter.aws.describe(ctx)).toEqual({ state: "active" });
@@ -452,16 +477,20 @@ describe("renewal and verification helpers", () => {
       name: "example.com",
       years: 1,
       contact: CONTACT as never,
+      maxPriceUsd: "13.0000",
     });
     await fake.finish(reg.operationId, "successful");
-    const renewed = await renewDomainOnce(fake.port, { name: "example.com" });
+    const renewed = await renewDomainOnce(fake.port, {
+      name: "example.com",
+      maxPriceUsd: "13.0000",
+    });
     await fake.finish(renewed.operationId, "successful");
     expect(fake.domains.get("example.com")?.expiresAt.toISOString()).toBe(
       "2032-01-01T00:00:00.000Z",
     );
-    await expect(renewDomainOnce(fake.port, { name: "missing.com" })).rejects.toBeInstanceOf(
-      AwsError,
-    );
+    await expect(
+      renewDomainOnce(fake.port, { name: "missing.com", maxPriceUsd: "13.0000" }),
+    ).rejects.toBeInstanceOf(AwsError);
   });
 
   it("resends the e-mail only while the check is open", async () => {
@@ -470,6 +499,7 @@ describe("renewal and verification helpers", () => {
       name: "example.com",
       years: 1,
       contact: CONTACT as never,
+      maxPriceUsd: "13.0000",
     });
     await fake.finish(reg.operationId, "successful");
     expect(await resendVerification(fake.port, "example.com")).toBe("sent");

@@ -19,6 +19,8 @@ const CUS = "0190a000-0000-7000-8000-000000000003";
 const CHARGE = "0190a000-0000-7000-8000-000000000004";
 const DAY = 24 * 3_600_000;
 const START = new Date("2027-11-11T06:00:00.000Z");
+/** The USD price the renewal charged (awsPriceUsd of its price snapshot). */
+const USD = "13.0000";
 
 const row = (family: string, config: Record<string, unknown>) => ({
   id: SUB,
@@ -43,7 +45,7 @@ describe("the key of a registry renewal", () => {
 
 describe("the operation a domain's renewal charge queues", () => {
   it("renews one year at the registry with the expiry year the row holds", () => {
-    expect(domainRenewalOperation(domain(), START)).toEqual({
+    expect(domainRenewalOperation(domain(), START, USD)).toEqual({
       resourceId: RES,
       kind: "renew_domain",
       payload: {
@@ -51,6 +53,8 @@ describe("the operation a domain's renewal charge queues", () => {
         periodStart: "2027-11-11T06:00:00.000Z",
         currentExpiryYear: 2027,
         years: 1,
+        // WPU-Z19: RenewDomain's Consent.MaxPrice: the registry may not charge more than the customer paid.
+        maxPriceUsd: "13.0000",
       },
       idempotencyKey: domainRenewalKey(SUB, START),
     });
@@ -58,13 +62,23 @@ describe("the operation a domain's renewal charge queues", () => {
 
   it("takes the UTC year of the stored expiry, the year Route 53 compares (not the Dhaka date)", () => {
     // 23:30 UTC on 31 December is already 1 January in Dhaka.
-    const late = domainRenewalOperation(domain({ expiresAt: "2027-12-31T23:30:00.000Z" }), START);
+    const late = domainRenewalOperation(
+      domain({ expiresAt: "2027-12-31T23:30:00.000Z" }),
+      START,
+      USD,
+    );
     expect((late?.payload as { currentExpiryYear: number }).currentExpiryYear).toBe(2027);
+  });
+
+  it("WPU-Z19: refuses a USD price that is not plain positive decimal text (R4, R16)", () => {
+    for (const bad of ["", "0", "0.0000", "-13", "1e3", "13.00001", " 13"]) {
+      expect(() => domainRenewalOperation(domain(), START, bad), bad).toThrow(DomainRenewalError);
+    }
   });
 
   it("is nothing for every other family: their renewal has no registry", () => {
     for (const family of ["linux_instance", "windows_instance", "dns_zone", "bucket", "cdn"]) {
-      expect(domainRenewalOperation(row(family, {}), START), family).toBeNull();
+      expect(domainRenewalOperation(row(family, {}), START, USD), family).toBeNull();
     }
   });
 
@@ -80,14 +94,14 @@ describe("the operation a domain's renewal charge queues", () => {
       { year: 2027 },
     ]) {
       const config = expiresAt === undefined ? {} : { expiresAt };
-      expect(() => domainRenewalOperation(domain(config), START), String(expiresAt)).toThrow(
+      expect(() => domainRenewalOperation(domain(config), START, USD), String(expiresAt)).toThrow(
         DomainRenewalError,
       );
     }
   });
 
   it("is a plain, non-destructive operation: queued at once, no admin approval before 2026-12-01 (R13)", () => {
-    const input = domainRenewalOperation(domain(), START);
+    const input = domainRenewalOperation(domain(), START, USD);
     if (input === null) throw new Error("expected an operation");
     const values = operationInsertValues(
       input,
@@ -106,7 +120,7 @@ describe("the operation a domain's renewal charge queues", () => {
 
 describe("the payload a failed renewal is read back from", () => {
   it("gives the subscription and the period of the charge", () => {
-    const input = domainRenewalOperation(domain(), START);
+    const input = domainRenewalOperation(domain(), START, USD);
     expect(readDomainRenewalPayload(input?.payload)).toEqual({
       subscriptionId: SUB,
       periodStart: START,

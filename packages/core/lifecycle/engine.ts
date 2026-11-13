@@ -240,7 +240,7 @@ async function clearStaleMarkers(tx: Tx, row: LifecycleRow, now: Date): Promise<
 
 async function afterRenewal(
   work: Work,
-  renewed: { periodStart: Date; totalMinor: bigint; periodEnd: Date },
+  renewed: { periodStart: Date; totalMinor: bigint; periodEnd: Date; awsPriceUsd: string },
   fromGrace: boolean,
 ): Promise<void> {
   const { row } = work;
@@ -255,7 +255,13 @@ async function afterRenewal(
     await work.enqueue("resume", renewed.periodStart);
   }
   // WPU-Z13: a domain's charge pays the registry: its renew_domain of the period, in this transaction (R7).
-  const registry = await queueDomainRenewal(work.tx, row, renewed.periodStart, work.now);
+  const registry = await queueDomainRenewal(
+    work.tx,
+    row,
+    renewed.periodStart,
+    work.now,
+    renewed.awsPriceUsd,
+  );
   if (registry !== null) work.messages.push(registry);
   await work.notify("lifecycle_renewed", renewed.periodStart.toISOString(), {
     subscriptionId: row.id,

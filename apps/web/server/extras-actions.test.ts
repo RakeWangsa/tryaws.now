@@ -454,7 +454,7 @@ describe("storage and billing", () => {
     expect(attached.calls.some((c) => c.startsWith("op:detach_disk"))).toBe(true);
   });
   it("WPU-Z19: detach needs the server stopped (DetachDisk detaches a stopped disk); nothing is queued otherwise", async () => {
-    for (const state of ["active", "suspended", "creating"]) {
+    for (const state of ["active", "suspended", "creating"] as const) {
       const w = world({
         rows: [
           row({ state }),

@@ -43,6 +43,7 @@ async function registered(renewDomain?: DomainsPort["renewDomain"]) {
     name: "example.com",
     years: 1,
     contact: CONTACT as never,
+    maxPriceUsd: "13.0000",
   });
   await fake.finish(reg.operationId, "successful");
   return { adapter, fake };
@@ -200,19 +201,22 @@ describe("set_name_servers", () => {
   });
 });
 
+const PRICE = "13.0000";
+
 describe("renew_domain", () => {
   const renewCalls = (fake: Registered["fake"]) =>
     fake.calls.filter((c) => c.op === "renewDomain").length;
 
   it("checks, moves to submit in a write of its own, renews there with the expiry year, waits, and saves the new expiry", async () => {
     const { adapter, fake } = await registered();
-    const payload = { currentExpiryYear: 2031, years: 1 };
+    const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031, years: 1 };
     // Step null only reads: nothing is sent to the registry before `submit` is recorded (review round 2).
     expect(await run(adapter, "renew_domain", payload)).toEqual({ kind: "next", step: "submit" });
     expect(renewCalls(fake)).toBe(0);
     const started = await run(adapter, "renew_domain", payload, { step: "submit" });
     expect(started).toMatchObject({ kind: "wait", step: "poll" });
     expect(renewCalls(fake)).toBe(1);
+    expect(fake.calls.find((c) => c.op === "renewDomain")?.maxPriceUsd).toBe(PRICE);
     const opId = configOf(started)["renewOperationId"] as string;
     await fake.finish(opId, "successful");
     const done = await run(adapter, "renew_domain", payload, {
@@ -225,7 +229,7 @@ describe("renew_domain", () => {
 
   it("a repeat of the start after the renewal went through renews nothing a second time, at submit and at step null", async () => {
     const { adapter, fake } = await registered();
-    const payload = { currentExpiryYear: 2031, years: 1 };
+    const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031, years: 1 };
     const started = await run(adapter, "renew_domain", payload, { step: "submit" });
     await fake.finish(configOf(started)["renewOperationId"] as string, "successful");
     // The first answer was lost: the step runs again with the same payload, and so does step null.
@@ -243,13 +247,18 @@ describe("renew_domain", () => {
       for (const bad of [
         null,
         {},
-        { currentExpiryYear: "2031" },
-        { currentExpiryYear: 2031.5 },
-        { currentExpiryYear: 1999 },
-        { currentExpiryYear: 2031, years: 0 },
-        { currentExpiryYear: 2031, years: 11 },
+        { maxPriceUsd: PRICE, currentExpiryYear: "2031" },
+        { maxPriceUsd: PRICE, currentExpiryYear: 2031.5 },
+        { maxPriceUsd: PRICE, currentExpiryYear: 1999 },
+        { maxPriceUsd: PRICE, currentExpiryYear: 2031, years: 0 },
+        { maxPriceUsd: PRICE, currentExpiryYear: 2031, years: 11 },
+        // WPU-Z19: the USD price the renewal charged is Consent.MaxPrice: missing or not a plain decimal is refused.
+        { currentExpiryYear: 2031 },
+        { maxPriceUsd: 13, currentExpiryYear: 2031 },
+        { maxPriceUsd: "-1", currentExpiryYear: 2031 },
+        { maxPriceUsd: "0", currentExpiryYear: 2031 },
         // The payload names a later year than the live expiry: the row and AWS disagree (R16).
-        { currentExpiryYear: 2040 },
+        { maxPriceUsd: PRICE, currentExpiryYear: 2040 },
       ]) {
         await expect(run(adapter, "renew_domain", bad, { step })).rejects.toMatchObject({
           code: "validation",
@@ -262,14 +271,19 @@ describe("renew_domain", () => {
   it("a step it does not know is refused", async () => {
     const { adapter, fake } = await registered();
     await expect(
-      run(adapter, "renew_domain", { currentExpiryYear: 2031 }, { step: "start" }),
+      run(
+        adapter,
+        "renew_domain",
+        { maxPriceUsd: PRICE, currentExpiryYear: 2031 },
+        { step: "start" },
+      ),
     ).rejects.toMatchObject({ code: "internal" });
     expect(renewCalls(fake)).toBe(0);
   });
 
   it("fails when the registry says failed, and when the wait is too long", async () => {
     const { adapter, fake } = await registered();
-    const payload = { currentExpiryYear: 2031 };
+    const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031 };
     const started = await run(adapter, "renew_domain", payload, { step: "submit" });
     const opId = configOf(started)["renewOperationId"] as string;
     const poll = (more: Extra = {}) =>
@@ -312,7 +326,7 @@ describe("renew_domain", () => {
   // FAILED answer fails the operation, refunded.
   it("from the step after RenewDomain only the registry's failed answer is a refusal that gives the charge back", async () => {
     const { adapter, fake } = await registered();
-    const payload = { currentExpiryYear: 2031 };
+    const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031 };
     const started = await run(adapter, "renew_domain", payload, { step: "submit" });
     const step = started.kind === "wait" ? started.step : null;
     expect(registryHoldsRenewal("renew_domain", step)).toBe(true);
@@ -339,7 +353,7 @@ describe("renew_domain", () => {
   // reached the registry (a time-out, a reset connection, a 5xx after the request was sent) leaves the renewal at
   // `submit`, so `submit` is held: only an error that proves nothing was sent, in the first run there, refunds.
   it("at submit a RenewDomain that may have reached the registry gives nothing back; one refused for sure does", async () => {
-    const payload = { currentExpiryYear: 2031 };
+    const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031 };
     const throwingRenew = async (error: unknown) => {
       const { adapter, fake } = await registered(async (input) => {
         fake.calls.push({ op: "renewDomain", name: input.name });
@@ -410,9 +424,12 @@ describe("renew_domain", () => {
     );
     expect(refusedConnection.mayHaveActed).toBe(false);
     const { adapter } = await registered();
-    expect(await decide(run(adapter, "renew_domain", { currentExpiryYear: 2040 }), null)).toBe(
-      "failed",
-    );
+    expect(
+      await decide(
+        run(adapter, "renew_domain", { maxPriceUsd: PRICE, currentExpiryYear: 2040 }),
+        null,
+      ),
+    ).toBe("failed");
   });
 });
 

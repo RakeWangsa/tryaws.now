@@ -95,6 +95,13 @@ describe("a domain order", () => {
       ])
     ).rows;
     expect(op).toEqual([{ kind: "create", state: "queued" }]);
+    // WPU-Z19: the create carries the USD price the order charged (the registration price of the TLD row, one
+    // year): RegisterDomain sends it as Consent.MaxPrice, so the registry never charges more than was paid.
+    const payload = (
+      await t.pool.query("select payload from operations where resource_id = $1", [resource["id"]])
+    ).rows[0] as { payload: Record<string, unknown> };
+    expect(payload.payload["maxPriceUsd"]).toMatch(/^13(\.0+)?$/);
+    expect(typeof payload.payload["orderId"]).toBe("string");
   });
 
   it("sends a TLD with extra parameters to admin review: the operation waits for approval", async () => {
