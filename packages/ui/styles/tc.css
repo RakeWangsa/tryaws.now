@@ -835,3 +835,11 @@ div.tc-modal-open {
 [data-color="pink"] .tc-locale-link[aria-current="true"] {
   background-color: var(--tc-accent-pink-aa) !important;
 }
+/* The current sign-in tab is pink with white text (3.34:1). The theme paints it with
+   [data-color=pink] .tabs-header .btn-secondary:not(:disabled):not(.disabled).active, which counts as six
+   classes and is !important. The repeated class below reaches the same weight (seven, with the attribute)
+   and, linked last, wins, without naming a theme class (U1). */
+[data-color="pink"]
+  .tc-auth-tab-current.tc-auth-tab-current.tc-auth-tab-current.tc-auth-tab-current.tc-auth-tab-current.tc-auth-tab-current {
+  background-color: var(--tc-accent-pink-aa) !important;
+}

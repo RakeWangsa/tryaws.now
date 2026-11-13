@@ -43,6 +43,7 @@ describe("tc.css section 10: contrast on the dark page", () => {
     expect(css).toContain(".tc-muted {");
     expect(css).toContain('[data-color="pink"] .tc-btn-pink');
     expect(css).toContain('[data-color="pink"] .tc-locale-link[aria-current="true"]');
+    expect(css).toContain(".tc-auth-tab-current.tc-auth-tab-current");
     expect(css).toContain("var(--tc-accent-pink-aa)");
   });
 });

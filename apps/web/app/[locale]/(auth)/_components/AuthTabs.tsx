@@ -32,7 +32,7 @@ export function AuthTabs({
           {items.map((item) => (
             <li
               key={item.id}
-              className={`btn btn-secondary tc-auth-tab${item.id === active ? " active" : ""} mb-2`}
+              className={`btn btn-secondary tc-auth-tab${item.id === active ? " active tc-auth-tab-current" : ""} mb-2`}
             >
               <a href={item.href} aria-current={item.id === active ? "page" : undefined}>
                 {t(item.id)}

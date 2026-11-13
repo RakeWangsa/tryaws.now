@@ -45,7 +45,7 @@ describe("AuthTabs", () => {
     const out = html(<AuthTabs active="login" locale="bn" />, "bn");
     expect(out.match(/<li class="btn btn-secondary tc-auth-tab/g)).toHaveLength(2);
     expect(out).toContain(
-      '<li class="btn btn-secondary tc-auth-tab active mb-2"><a href="/login" aria-current="page">',
+      '<li class="btn btn-secondary tc-auth-tab active tc-auth-tab-current mb-2"><a href="/login" aria-current="page">',
     );
     expect(out).toContain('<li class="btn btn-secondary tc-auth-tab mb-2"><a href="/signup">');
   });
