@@ -3,6 +3,7 @@ import { readApprovalUntil } from "../../operations/approval";
 import { operationInsertValues } from "../../operations/insert";
 import { customerOperationKey } from "./operations";
 import { created, refused, replayed, type Written } from "../result";
+import { retainAttachedDisks } from "../system/attached-disks";
 import { isUuid, type TenantScope } from "../scope";
 
 // The subscription of one of the customer's resources, as the Billing tab, the dashboard and the
@@ -44,7 +45,8 @@ export interface SubscriptionsRepo {
   // 11 and R13, the customer's own destroy: the subscription becomes `retained`, the final snapshot
   // is queued where the family has one, then the destroy (which waits for an admin before the end
   // date of R13, and which the guard checks again when it is claimed). One transaction, one key:
-  // a repeat answers with the stored operations.
+  // a repeat answers with the stored operations. WPU-Y4: the disks attached to the resource are retained
+  // with it and get their own final snapshot and destroy (retainAttachedDisks).
   requestDestroy(input: DestroyRequest): Promise<Written<DestroyQueued>>;
 }
 
@@ -184,6 +186,8 @@ export function subscriptionsRepo(scope: TenantScope): SubscriptionsRepo {
       await tx.execute(sql`
         update subscriptions set status = 'retained'
         where resource_id = ${input.resourceId} and customer_id = ${customerId}`);
+      // WPU-Y4: the disks attached to a server end with it, in this transaction, for this customer only (R8).
+      await retainAttachedDisks(tx, { customerId, serverId: input.resourceId }, now);
       return created({
         destroyOperationId: d.id,
         finalSnapshotOperationId: snapshotId,

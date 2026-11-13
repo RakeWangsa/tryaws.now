@@ -1,7 +1,9 @@
 import {
   insertOperation,
+  lifecycleOperationKey,
   lifecycleRepo,
   patchResource,
+  retainAttachedDisks,
   type LifecycleRow,
   type OperationKind,
   type Tx,
@@ -87,8 +89,8 @@ interface StepResult {
 
 // The key of an operation of the lifecycle: one per subscription, kind and period, so a repeat of
 // any run is a replay of the stored row (R7) and a new period starts afresh.
-function opKey(kind: string, row: LifecycleRow, at: Date): string {
-  return `lifecycle:${kind}:${row.id}:${at.toISOString()}`;
+function opKey(kind: OperationKind, row: LifecycleRow, at: Date): string {
+  return lifecycleOperationKey(kind, row.id, at);
 }
 
 class Work {
@@ -110,7 +112,7 @@ class Work {
       payload: { subscriptionId: this.row.id },
       idempotencyKey: key,
     });
-    const key = opKey(kind.replaceAll("_", "-"), this.row, keyAt);
+    const key = opKey(kind, this.row, keyAt);
     let inserted = await insertOperation(this.tx, request(key), this.now);
     // WPU-Y3b. A second unpaid episode in the same period must not get the dead (or finished) row of
     // the first one back: when the stored row is such, the episode takes a key of its own.
@@ -335,11 +337,29 @@ export async function retainSubscription(
   return work.messages;
 }
 
+// WPU-Y4: the families a block storage disk is attached to (config.attachedInstanceId).
+const SERVER_FAMILIES: readonly string[] = ["linux_instance", "windows_instance"];
+
 async function queueRetentionOperations(work: Work): Promise<void> {
   if (SNAPSHOT_FAMILIES.includes(work.row.resource.family)) {
     await work.enqueue("final_snapshot", work.row.periodEnd);
   }
   await work.enqueue("destroy", work.row.periodEnd);
+  // WPU-Y4 (owner decision 2026-11-14): a server's disks end with it. Their subscriptions become `retained` in this
+  // transaction and their final snapshot and destroy are queued under their own lifecycle keys (a replay on every
+  // later pass, R7). The disk's destroy waits for the server's destroy to stop the server.
+  if (SERVER_FAMILIES.includes(work.row.resource.family)) {
+    const disks = await retainAttachedDisks(
+      work.tx,
+      { customerId: work.row.customerId, serverId: work.row.resourceId },
+      work.now,
+    );
+    for (const op of disks) {
+      if (op.created && op.state === "queued") {
+        work.messages.push(firstMessage(op.operationId, op.diskId));
+      }
+    }
+  }
 }
 
 async function end(work: Work): Promise<void> {
