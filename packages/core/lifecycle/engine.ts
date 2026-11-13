@@ -24,8 +24,10 @@ import { SNAPSHOT_FAMILIES } from "./guard";
 import { planApplyWait, queuePlanApply } from "./plan-change";
 import { renewalQuote, renewSubscription } from "./renew";
 import { holdReasonOf, nextHoldMarker, staleHoldMarkers, type HoldReason } from "./hold-rule";
+import { walkCandidates } from "./candidate-walk";
 
 const HOUR_MS = 3_600_000;
+// The rows of one page of the pass's candidate list. WPU-Z12: a page, no longer the most rows of a pass.
 export const LIFECYCLE_LIMIT = 500;
 
 export interface LifecycleDeps {
@@ -36,7 +38,9 @@ export interface LifecycleDeps {
   // With a queue the new operations are sent after the commit; without one the sweeper sends them
   // within minutes (3.4). A lost send is found again by the sweeper either way.
   readonly queue?: OperationQueue;
-  readonly limit?: number;
+  // WPU-Z12: the rows of one page of the candidate list (LIFECYCLE_LIMIT by default). Not a cap: the pass
+  // reads every page.
+  readonly pageSize?: number;
   // WPU-Y3: writes the "your wallet is low for the charge on <date>" message (a template of @tc/notify).
   // Without it that reminder is not sent; the renewal reminder is not affected.
   readonly notice?: NoticeWriter;
@@ -525,24 +529,24 @@ async function process(
   return { step, messages: work.messages };
 }
 
-// The scheduler's lifecycle pass (section 11). One clock reading for the whole pass. A failure of
-// one subscription is counted and logged by id and does not stop the others; a config that cannot
-// be read stops the pass (R16).
+// The scheduler's lifecycle pass (section 11). One clock reading for the whole pass. WPU-Z12: the pass
+// walks EVERY candidate, page after page with a keyset cursor over (period_end, id) (candidate-walk.ts),
+// until a page is short. A held subscription keeps its old period end and so stays at the head of the
+// list: one page alone never reached the rows behind more than a page of held ones. Every pass starts at
+// the head again; a row processed again is a replay (R7). A failure of one subscription is counted and
+// logged by id and does not stop the others. A config or a page that cannot be read, or a list that does
+// not move past its cursor, stops the pass (R16), after the messages of what it did were sent.
 export async function runLifecycle(deps: LifecycleDeps): Promise<LifecycleReport> {
   const now = deps.clock.now();
   if (Number.isNaN(now.getTime())) throw new Error("lifecycle: the clock gave no valid time");
-  const limit = deps.limit ?? LIFECYCLE_LIMIT;
+  const pageSize = deps.pageSize ?? LIFECYCLE_LIMIT;
 
-  const { config, ids } = await deps.runTx(async (tx) => {
-    const config = await readLifecycleConfig(tx);
-    const horizon = Math.max(...config.reminderDays);
-    const page = await lifecycleRepo(tx).listCandidates(now, horizon, limit);
-    return { config, ids: page.map((k) => k.id) };
-  });
+  const config = await deps.runTx((tx) => readLifecycleConfig(tx));
+  const horizon = Math.max(...config.reminderDays);
 
   const counts = { reminded: 0, renewed: 0, graced: 0, retained: 0, ended: 0, failed: 0 };
   const outbox: QueueMessage[] = [];
-  for (const id of ids) {
+  const visit = async (id: string): Promise<void> => {
     try {
       // runTx can run its callback again: everything built here is local to one run.
       const result = await deps.runTx((tx) => process(tx, id, now, config, deps));
@@ -561,10 +565,21 @@ export async function runLifecycle(deps: LifecycleDeps): Promise<LifecycleReport
         error: error instanceof Error ? error.name : "unknown",
       });
     }
-  }
+  };
 
-  if (deps.queue !== undefined) {
-    for (const message of outbox) await sendAfterCommit(deps.queue, message);
+  try {
+    const examined = await walkCandidates({
+      pageSize,
+      readPage: (after) =>
+        deps.runTx((tx) => lifecycleRepo(tx).listCandidates(now, horizon, pageSize, after)),
+      visit,
+    });
+    return { examined, ...counts };
+  } finally {
+    // Also when the walk stopped: the operations of the rows done are committed. sendAfterCommit
+    // never throws, so the error that stopped the pass is the one that leaves here.
+    if (deps.queue !== undefined) {
+      for (const message of outbox) await sendAfterCommit(deps.queue, message);
+    }
   }
-  return { examined: ids.length, ...counts };
 }
