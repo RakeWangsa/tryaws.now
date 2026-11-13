@@ -10,6 +10,10 @@ The owner has one pool account (roles `TcProvisioner`, `TcReader`, `TcAccessDeta
 
 DevOps with the table-owner database URL of the stage. A Claude Code session does not run this and never sees the URL.
 
+## Roles when the account also holds DNS
+
+If this one account is also the DNS account ([single-account-lean.md](single-account-lean.md)), deploy `pool-roles.yaml` first and `dns-account.yaml` second with `CreateBillingReader=false` (`TcBillingReader` exists once, owned by the pool stack). `ControlPlaneStage` is `staging` or `production` in both and must match the stage that runs the functions. No account id is written down.
+
 ## Steps
 
 1. Record the real Lightsail quotas of the account in the three launch Regions (`ap-southeast-1`, `ap-south-1`, `us-east-1`). A limit above the real quota sells what AWS then refuses (gap P3).

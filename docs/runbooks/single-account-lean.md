@@ -34,6 +34,15 @@ The owner or DevOps with the deploy rights of the stage. A Claude Code session n
    - Budget: an AWS Budgets monthly cost budget with a limit of 50 USD and two notifications on ACTUAL spend, at 40 USD and at 50 USD, sent to the alarm SNS topic.
 7. After the deploy, confirm every e-mail subscription of the alarm topic, then run the safe checks.
 
+## Role stacks in the one account
+
+Both role templates go into the same account, in this order, with the DevOps admin role (never a StackSet, never a Claude Code session). The account id and ExternalId are typed at deploy time only.
+
+1. `infra/org/pool-roles.yaml`: `ControlPlaneAccountId` (the same account), `ExternalId`, `ControlPlaneStage` (`staging` for a staging control plane, `production` otherwise). It creates `TcProvisioner`, `TcReader`, `TcAccessDetails`, `TcBillingReader` and `TcPoolPermissionsBoundary`.
+2. `infra/org/dns-account.yaml`: the same three parameters, the same `ControlPlaneStage`, and `CreateBillingReader=false`. It creates `TcDnsProvisioner`, `TcDnsReader` and `TcDnsPermissionsBoundary`. With the default `true` the stack fails, because `TcBillingReader` already exists.
+
+`TcBillingReader` of step 1 is the only billing role. Its `ce:GetCostAndUsage` on every resource reads the cost of the whole account, Route 53 included, so the reconciler needs no second role. Both stacks may use one ExternalId or two; the pool and DNS rows of the database must hold the value of their own stack. A test (`tests/repo/infra-org.test.mjs`, WPU-Y7) pins that no role or policy name is in both stacks with `CreateBillingReader=false`. Deleting the pool stack removes `TcBillingReader`; delete the DNS stack first.
+
 ## Cost per line item
 
 Estimate, not measured: check the AWS pricing pages and Cost Explorer after 7 days. No price below is a quote. The 50 USD is the ceiling the alarm watches, not a forecast that the lines add up to it.
