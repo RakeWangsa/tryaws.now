@@ -34,6 +34,10 @@ export async function runMigrations(
   try {
     await migrate(db, { migrationsFolder: folder });
   } finally {
+    // pool.end() resolves before the sockets are closed; if the server drops the connection in that
+    // moment (a test database dropped with FORCE), the pool emits "error", and a pool nobody listens
+    // to makes Node throw it as an uncaught exception (57P01). The pool is being closed: ignore it.
+    pool.on("error", () => undefined);
     await pool.end();
   }
 }
