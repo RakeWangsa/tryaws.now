@@ -3,7 +3,7 @@
 // their final snapshot and destroy are queued under the engine's own keys, so every later pass replays them (R7).
 import type { Tx } from "@tc/db";
 import { lifecycleOperationKey } from "@tc/db";
-import { runTransaction, useTempDatabase } from "@tc/db/testing";
+import { newAdmin, runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, expect, it } from "vitest";
 import { makeKit, placeOne, START, type Kit } from "../test/orders-kit";
 import type { QueueMessage } from "../operations/queue";
@@ -253,8 +253,9 @@ it("a disk whose destroy waits for the server (approved, started) is still given
   await kit.refreshFx();
   await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
   await q(
-    "update operations set state = 'waiting', step = 'wait_server', attempts = 1 where resource_id = $1 and kind = 'destroy'",
-    [d.id],
+    // operations_unapproved_state_check: a flagged destroy (R13) runs only after an admin approved it.
+    "update operations set state = 'waiting', step = 'wait_server', attempts = 1, approved_by = case when needs_approval then $2::uuid end where resource_id = $1 and kind = 'destroy'",
+    [d.id, await newAdmin(t.pool, "ops")],
   );
   const serverSub = String(
     (await q("select id from subscriptions where resource_id = $1", [s.serverId]))[0]!.id,
@@ -276,8 +277,9 @@ it("a disk whose destroy reached the DeleteDisk step stays retained, with an att
   await kit.refreshFx();
   await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
   await q(
-    "update operations set state = 'running', step = 'delete_disk', attempts = 1 where resource_id = $1 and kind = 'destroy'",
-    [d.id],
+    // operations_unapproved_state_check: a flagged destroy (R13) runs only after an admin approved it.
+    "update operations set state = 'running', step = 'delete_disk', attempts = 1, approved_by = case when needs_approval then $2::uuid end where resource_id = $1 and kind = 'destroy'",
+    [d.id, await newAdmin(t.pool, "ops")],
   );
   const serverSub = String(
     (await q("select id from subscriptions where resource_id = $1", [s.serverId]))[0]!.id,

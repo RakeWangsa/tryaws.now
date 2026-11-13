@@ -13,7 +13,7 @@ import { withCustomerRepos } from "../testing/repos";
 import type { Tx } from "../client";
 import { runTransaction } from "../tx";
 import { insertFreshOperation } from "../operations/insert";
-import { newCustomer, newResource } from "./fixtures";
+import { newAdmin, newCustomer, newResource } from "./fixtures";
 import { insertRow } from "./sql";
 import { useTempDatabase } from "./temp-db";
 
@@ -312,9 +312,12 @@ it("insertFreshOperation moves past an ended row to <key>:after:<id>, replays a 
   const again = await worker((tx) => insertFreshOperation(tx, input, new Date()));
   expect(again).toMatchObject({ created: false, operationId: second.operationId });
   // Ended again: the chain goes on from the base key.
-  await t.pool.query("update operations set state = 'succeeded' where id = $1", [
-    second.operationId,
-  ]);
+  // operations_unapproved_state_check: a flagged destroy (R13) runs only after an admin approved it.
+  const admin = await newAdmin(t.pool, "ops");
+  await t.pool.query(
+    "update operations set state = 'succeeded', approved_by = case when needs_approval then $2::uuid end where id = $1",
+    [second.operationId, admin],
+  );
   const third = await worker((tx) => insertFreshOperation(tx, input, new Date()));
   expect(await keyOf(third.operationId)).toBe(`${key}:after:${second.operationId}`);
 });
@@ -355,8 +358,8 @@ it("listDisksRetainedWithServer ignores ended destroys and disks no longer attac
   // A disk moved to another server whose live destroy still names srv.
   const moved = await disk(a, other, "retained");
   await t.pool.query(
-    `insert into operations (id, resource_id, kind, state, idempotency_key, payload)
-     values (gen_random_uuid(), $1, 'destroy', 'needs_approval', $2, $3::jsonb)`,
+    `insert into operations (id, resource_id, kind, state, idempotency_key, payload, needs_approval)
+     values (gen_random_uuid(), $1, 'destroy', 'needs_approval', $2, $3::jsonb, true)`,
     [moved.id, `test:moved:${moved.id}`, JSON.stringify({ withServer: srv, from: "active" })],
   );
   const listed = await worker((tx) =>
