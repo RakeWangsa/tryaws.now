@@ -31,6 +31,10 @@ async function fresh(balanceMinor = 50_000_000n): Promise<Fresh> {
   )[0]!;
   await q("update resources set state = 'active' where id = $1", [resourceId]);
   await q("update operations set state = 'succeeded' where resource_id = $1", [resourceId]);
+  // A purchase stores auto_renew = false (the column default); the hold is about a renewal the scheduler would
+  // charge, so it is switched on here as in every other lifecycle fixture. Without it the period end goes
+  // straight to grace (no renewal is tried) and the hold is never reached.
+  await q("update subscriptions set auto_renew = true where id = $1", [s.id]);
   return { resourceId, subscriptionId: String(s.id), end: s.period_end as Date };
 }
 
@@ -111,7 +115,10 @@ describe("a renewal that cannot be priced because the rate is stale", () => {
   // WPU-Y9 finding 8 (NOT RUN here, no database): the grace starts when the hold is released.
   it("a wallet that is short when the hold ends gets the whole grace from that moment, not from the old period end", async () => {
     const f = await fresh(PLAN_TOTAL); // exactly the price of the plan: the wallet is empty for the renewal
-    kit.clock.set(new Date(f.end.getTime() + 10 * DAY)); // held for ten days
+    // Held for eight days (far beyond the 48 grace hours). Not ten: fx_rates is shared by this file and the case
+    // above re-entered the rate AT f.end + 10 days, so at that instant the rate would be fresh and nothing held.
+    // At f.end + 8 days the rate in force is the one entered at f.end + 1 minute (case 2): 8 days old, stale.
+    kit.clock.set(new Date(f.end.getTime() + 8 * DAY));
     await sweep();
     expect(await status(f.subscriptionId)).toBe("active");
     await kit.refreshFx();

@@ -147,10 +147,10 @@ describe("a wallet that is short", () => {
 describe("the price of today", () => {
   it("a renewal charges the rate in force at the clock, not the rate of the purchase", async () => {
     const f = await fresh(10_000_000n, true);
-    await kit.changeFxRate("200");
-    const quoted = await run();
-    expect(quoted.examined).toBeGreaterThanOrEqual(0);
-    kit.clock.set(f.end);
+    // fx_rates is shared by this file: the cases above ran at f.end, so `run()` re-entered the rate 127 AT f.end,
+    // and that row (newer than any rate set near START) is the one in force at the period end. The new rate is
+    // therefore set just after f.end, and the renewal runs at the clock that changeFxRate leaves (still due).
+    await kit.changeFxRate("200", new Date(f.end.getTime() + 60_000));
     const before = await kit.balance(f.customerId);
     expect(await run()).toMatchObject({ renewed: 1 });
     const charged = before - (await kit.balance(f.customerId));
