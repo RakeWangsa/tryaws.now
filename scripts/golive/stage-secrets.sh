@@ -73,7 +73,10 @@ fi
 # infra/lib/stage.ts refuses the stage production outside the protected CI job for EVERY sst command,
 # `sst secret` included. `sst secret` cannot deploy, so the two variables are set for those sst calls
 # only, and only for production (Assumption recorded in the WPU-Z11 report).
+# The wrapper runs `sst secret list` and `sst secret set` only; any other sst command is refused, so the
+# guard variables can never reach a deploy, a remove or a diff from this script.
 sst() {
+  [[ "${1:-}" == secret && ( "${2:-}" == list || "${2:-}" == set ) ]] || die "only sst secret list and sst secret set are allowed here"
   if [[ "$STAGE" == "production" ]]; then
     CI=true TC_PRODUCTION_DEPLOY=ci-approved npx --no-install sst "$@"
   else

@@ -9,6 +9,7 @@ name: deploy-staging
 #   token.actions.githubusercontent.com:aud = sts.amazonaws.com
 #   token.actions.githubusercontent.com:sub = repo:<org>@<owner-id>/<repo>@<repo-id>:environment:staging
 #   token.actions.githubusercontent.com:job_workflow_ref = <org>/<repo>/.github/workflows/deploy-staging.yml@refs/heads/main
+#     (or remove-staging.yml@refs/heads/main, the other staging workflow of the same role)
 # The sub is GitHub's immutable form with the owner and repository ids: every repository created or renamed
 # after 2026-07-15 gets it (GitHub OIDC reference, VERIFY result of WPU-Z11).
 # TC_STAGE_SIZE (lean or full; unset is full) comes from the environment like the other stage values.
@@ -95,6 +96,8 @@ jobs:
       TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
       TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
       TC_STAGE_SIZE: ${{ vars.TC_STAGE_SIZE }}
+      TC_COGNITO_CUSTOMER_POOL_ID: ${{ vars.TC_COGNITO_CUSTOMER_POOL_ID }}
+      TC_COGNITO_ADMIN_POOL_ID: ${{ vars.TC_COGNITO_ADMIN_POOL_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

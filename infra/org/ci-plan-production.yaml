@@ -202,14 +202,17 @@ Resources:
               - wafv2:ListTagsForResource
               - wafv2:ListWebACLs
             Resource: "*"
+          # WPU-Z11 fix round 1: the state bucket is shared with staging in one account; the plan reads
+          # only the objects of the production stage (SST keeps them under <kind>/ticon-cloud/production*).
+          # VERIFY with the first plan job that sst diff reads nothing outside this prefix.
           - Sid: TheSstStateBucketOnly
             Effect: Allow
-            Action:
-              - s3:GetObject
-              - s3:ListBucket
-            Resource:
-              - arn:aws:s3:::sst-state-*
-              - arn:aws:s3:::sst-state-*/*
+            Action: s3:ListBucket
+            Resource: arn:aws:s3:::sst-state-*
+          - Sid: TheProductionStateObjectsOnly
+            Effect: Allow
+            Action: s3:GetObject
+            Resource: arn:aws:s3:::sst-state-*/*/ticon-cloud/production*
           - Sid: TheSstPassphraseAndBootstrapParameterOnly
             Effect: Allow
             Action:
@@ -229,7 +232,7 @@ Resources:
           - Sid: NoObjectReadOutsideTheStateBucket
             Effect: Deny
             Action: s3:GetObject
-            NotResource: arn:aws:s3:::sst-state-*/*
+            NotResource: arn:aws:s3:::sst-state-*/*/ticon-cloud/production*
           - Sid: NoParameterReadOutsideSst
             Effect: Deny
             Action:

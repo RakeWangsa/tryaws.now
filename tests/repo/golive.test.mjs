@@ -233,6 +233,17 @@ describe("scripts/golive/stage-secrets.sh", () => {
     expect(text).toContain('sst secret list --stage "$STAGE" 2>/dev/null | cut -d= -f1');
   });
 
+  // WPU-Z11 fix round 1: the production guard variables can reach `sst secret list|set` only.
+  it("runs only sst secret list and sst secret set through its sst wrapper", () => {
+    expect(text).toContain(
+      '[[ "${1:-}" == secret && ( "${2:-}" == list || "${2:-}" == set ) ]] || die',
+    );
+    // every sst call of the script (outside comments) is `sst secret list` or `sst secret set`
+    for (const m of text.matchAll(/^[^#\n]*\bsst (secret \w+|deploy|remove|diff|refresh)/gm))
+      expect(m[1], m[0]).toMatch(/^secret (list|set)$/);
+    expect(text).not.toMatch(/\bsst (deploy|remove|diff|refresh)\b/);
+  });
+
   it("refuses without exported AWS keys, before any sst call", () => {
     const r = run(STAGE_SECRETS, ["staging"], {
       env: { AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "" },

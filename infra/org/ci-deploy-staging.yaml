@@ -4,9 +4,9 @@ Description: >-
 # Description (moved from the Description field: CloudFormation allows at most 1024 characters):
 # TiCON Cloud CI role TcCiDeployStaging (R3, B.1 of docs/analysis/pending-audit.md) and the permissions
 # boundary TcCiRoleBoundaryStaging that every role it creates must carry. Assumed by the job `deploy` of
-# .github/workflows/deploy-staging.yml through GitHub OIDC. The trust is the three conditions that workflow
-# documents: aud, sub = the GitHub environment `staging`, and job_workflow_ref = that workflow on the
-# protected branch. A pull request, a fork or any other workflow cannot assume it. Deployed by
+# .github/workflows/deploy-staging.yml (and the job `remove` of remove-staging.yml) through GitHub OIDC. The
+# trust is the three conditions those workflows document: aud, sub = the GitHub environment `staging`, and
+# job_workflow_ref = one of the two workflows on the protected branch (StringEquals on a list: either). A pull request, a fork or any other workflow cannot assume it. Deployed by
 # scripts/golive/ci-roles.sh (or the DevOps admin role). The role needs the account's GitHub OIDC provider
 # but not the stack of ci-oidc-provider.yaml: the provider ARN is built from the account and the fixed host,
 # so a provider that other projects already created serves too (one per account and URL).
@@ -55,6 +55,14 @@ Description: >-
 # VERIFY: SST tags every resource it creates with sst:app and sst:stage (default tags of its AWS provider,
 # platform/src/components/aws/helpers/provider.ts). The tag-based Deny below relies on it; where a service
 # does not evaluate aws:ResourceTag for an action, the name-based Deny is the remaining guard.
+# KNOWN ONE-ACCOUNT RESIDUALS (WPU-Z11 review, Needs decision): this role is NOT confined to its stage for
+# (1) CloudFront distributions and KeyValueStores: cloudfront:* and the KeyValueStore actions are on "*" and
+# key-value-store/*; distributions and stores have random ids, and whether CloudFront evaluates
+# aws:ResourceTag/sst:stage for distribution actions is a VERIFY (the tag Deny guards them if it does; a
+# KeyValueStore takes no tags); (2) ACM certificates (random ids; guarded only by the tag Deny, VERIFY that
+# SST tags them and ACM evaluates the tag); (3) SES: ses:* on "*" reaches the identity tryaws.now that both
+# stages share. WAF web ACLs and IP sets are named tc-<stage>-* and denied by name; CloudFront Functions by
+# name (VERIFY the names). Separate accounts remove these residuals.
 # VERIFY: the KvKeys provider of SST (CloudFront KeyValueStore of the Next.js sites) needs exactly
 # DescribeKeyValueStore, ListKeys and UpdateKeys; the budget of a lean stage needs the five budgets actions
 # below (tags on create need budgets:TagResource, Service Authorization Reference of AWS Budgets).
@@ -229,8 +237,10 @@ Resources:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
                 token.actions.githubusercontent.com:sub:
                   Fn::Sub: "repo:${GitHubOrg}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:environment:staging"
+                # WPU-Z11: the two staging workflows, each at the protected branch: deploy and remove.
                 token.actions.githubusercontent.com:job_workflow_ref:
-                  Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-staging.yml@refs/heads/${ProtectedBranch}"
+                  - Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-staging.yml@refs/heads/${ProtectedBranch}"
+                  - Fn::Sub: "${GitHubOrg}/${GitHubRepo}/.github/workflows/remove-staging.yml@refs/heads/${ProtectedBranch}"
       Policies:
         - PolicyName: SstDeployOfTheStack
           PolicyDocument:
@@ -473,6 +483,41 @@ Resources:
                   - Fn::Sub: "arn:aws:cloudwatch:*:${AWS::AccountId}:alarm:tc-production-*"
                   - Fn::Sub: "arn:aws:kms:*:${AWS::AccountId}:alias/tc-production-*"
                   - Fn::Sub: "arn:aws:budgets::${AWS::AccountId}:budget/tc-production-*"
+                  # VERIFY (fix round 1): SST names a CloudFront Function with physicalName(64), which is
+                  # ticon-cloud-<stage>-<name>-<random> or, when the app name is cut, <app part>-<stage>-<name>
+                  # (components/naming.ts prefixName); both match the two patterns below for the names of
+                  # infra/stacks today. Check the function names after the first deploy.
+                  - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/ticon-cloud-production-*"
+                  - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/*-production-*"
+                  # The WAF web ACL and IP sets of infra/stacks/waf.ts are named tc-<stage>-* (resourceName).
+                  - Fn::Sub: "arn:aws:wafv2:*:${AWS::AccountId}:*/webacl/tc-production-*"
+                  - Fn::Sub: "arn:aws:wafv2:*:${AWS::AccountId}:*/ipset/tc-production-*"
+              # The SST bootstrap is SHARED by both stages of the account (/sst/bootstrap, the state bucket
+              # sst-state-*, the asset bucket sst-asset-*). A deploy role uses them but must not change or
+              # remove them; after an SST upgrade one SST command with administrator credentials bootstraps
+              # again (docs/runbooks/go-live.md). Only bucket-level actions are denied; objects stay usable.
+              - Sid: NeverTheSharedSstBootstrap
+                Effect: Deny
+                Action:
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:DeleteParameters
+                  - ssm:LabelParameterVersion
+                  - ssm:AddTagsToResource
+                  - ssm:RemoveTagsFromResource
+                Resource:
+                  Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/bootstrap"
+              - Sid: NeverTheSharedSstBuckets
+                Effect: Deny
+                Action:
+                  - s3:PutBucket*
+                  - s3:DeleteBucket*
+                  - s3:PutLifecycleConfiguration
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutReplicationConfiguration
+                Resource:
+                  - arn:aws:s3:::sst-state-*
+                  - arn:aws:s3:::sst-asset-*
               - Sid: OnlyTheDnsRecordsOfTheStage
                 Effect: Deny
                 Action: route53:ChangeResourceRecordSets

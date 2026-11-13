@@ -423,3 +423,19 @@ describe("the workflows document the OIDC subject that GitHub sends today (WPU-Z
     });
   }
 });
+
+// WPU-Z11 fix round 1: both staging workflows run sst for the staging stage, which adopts the Cognito pools
+// kept between test sessions (WPU-Z10), so each passes TC_STAGE_SIZE and the two pool ids from vars.*.
+describe("the staging sst jobs pass the stage size and the kept Cognito pool ids", () => {
+  for (const [file, jobId] of [
+    ["deploy-staging.yml", "deploy"],
+    ["remove-staging.yml", "remove"],
+  ]) {
+    it(`${file}:${jobId}`, () => {
+      const env = load(file).workflow.jobs[jobId].env;
+      expect(env.TC_STAGE_SIZE).toBe("${{ vars.TC_STAGE_SIZE }}");
+      expect(env.TC_COGNITO_CUSTOMER_POOL_ID).toBe("${{ vars.TC_COGNITO_CUSTOMER_POOL_ID }}");
+      expect(env.TC_COGNITO_ADMIN_POOL_ID).toBe("${{ vars.TC_COGNITO_ADMIN_POOL_ID }}");
+    });
+  }
+});

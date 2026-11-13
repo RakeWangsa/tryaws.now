@@ -58,6 +58,14 @@ Description: >-
 # VERIFY: SST tags every resource it creates with sst:app and sst:stage (default tags of its AWS provider,
 # platform/src/components/aws/helpers/provider.ts). The tag-based Deny below relies on it; where a service
 # does not evaluate aws:ResourceTag for an action, the name-based Deny is the remaining guard.
+# KNOWN ONE-ACCOUNT RESIDUALS (WPU-Z11 review, Needs decision): this role is NOT confined to its stage for
+# (1) CloudFront distributions and KeyValueStores: cloudfront:* and the KeyValueStore actions are on "*" and
+# key-value-store/*; distributions and stores have random ids, and whether CloudFront evaluates
+# aws:ResourceTag/sst:stage for distribution actions is a VERIFY (the tag Deny guards them if it does; a
+# KeyValueStore takes no tags); (2) ACM certificates (random ids; guarded only by the tag Deny, VERIFY that
+# SST tags them and ACM evaluates the tag); (3) SES: ses:* on "*" reaches the identity tryaws.now that both
+# stages share. WAF web ACLs and IP sets are named tc-<stage>-* and denied by name; CloudFront Functions by
+# name (VERIFY the names). Separate accounts remove these residuals.
 # VERIFY: the KvKeys provider of SST (CloudFront KeyValueStore of the Next.js sites) needs exactly
 # DescribeKeyValueStore, ListKeys and UpdateKeys; the budget of a lean stage needs the five budgets actions
 # below (tags on create need budgets:TagResource, Service Authorization Reference of AWS Budgets).
@@ -460,3 +468,38 @@ Resources:
                   - Fn::Sub: "arn:aws:cloudwatch:*:${AWS::AccountId}:alarm:tc-staging-*"
                   - Fn::Sub: "arn:aws:kms:*:${AWS::AccountId}:alias/tc-staging-*"
                   - Fn::Sub: "arn:aws:budgets::${AWS::AccountId}:budget/tc-staging-*"
+                  # VERIFY (fix round 1): SST names a CloudFront Function with physicalName(64), which is
+                  # ticon-cloud-<stage>-<name>-<random> or, when the app name is cut, <app part>-<stage>-<name>
+                  # (components/naming.ts prefixName); both match the two patterns below for the names of
+                  # infra/stacks today. Check the function names after the first deploy.
+                  - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/*-staging-*"
+                  # The WAF web ACL and IP sets of infra/stacks/waf.ts are named tc-<stage>-* (resourceName).
+                  - Fn::Sub: "arn:aws:wafv2:*:${AWS::AccountId}:*/webacl/tc-staging-*"
+                  - Fn::Sub: "arn:aws:wafv2:*:${AWS::AccountId}:*/ipset/tc-staging-*"
+              # The SST bootstrap is SHARED by both stages of the account (/sst/bootstrap, the state bucket
+              # sst-state-*, the asset bucket sst-asset-*). A deploy role uses them but must not change or
+              # remove them; after an SST upgrade one SST command with administrator credentials bootstraps
+              # again (docs/runbooks/go-live.md). Only bucket-level actions are denied; objects stay usable.
+              - Sid: NeverTheSharedSstBootstrap
+                Effect: Deny
+                Action:
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:DeleteParameters
+                  - ssm:LabelParameterVersion
+                  - ssm:AddTagsToResource
+                  - ssm:RemoveTagsFromResource
+                Resource:
+                  Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/bootstrap"
+              - Sid: NeverTheSharedSstBuckets
+                Effect: Deny
+                Action:
+                  - s3:PutBucket*
+                  - s3:DeleteBucket*
+                  - s3:PutLifecycleConfiguration
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutReplicationConfiguration
+                Resource:
+                  - arn:aws:s3:::sst-state-*
+                  - arn:aws:s3:::sst-asset-*

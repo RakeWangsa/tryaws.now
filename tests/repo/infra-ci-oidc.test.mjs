@@ -134,18 +134,25 @@ describe.each(ROLES)("$name", ({ file, name, environment, workflow }) => {
     expect(equals[`${KEY}:sub`]).toEqual({
       "Fn::Sub": `repo:\${GitHubOrg}@\${GitHubOwnerId}/\${GitHubRepo}@\${GitHubRepoId}:environment:${environment}`,
     });
-    const ref = production
-      ? statement.Condition.StringLike?.[`${KEY}:job_workflow_ref`]
-      : equals[`${KEY}:job_workflow_ref`];
-    const value = ref["Fn::Sub"];
-    expect(value.startsWith("${GitHubOrg}/${GitHubRepo}/.github/workflows/" + workflow + "@")).toBe(
-      true,
-    );
-    expect(value).not.toMatch(/^repo:/);
-    if (production) expect(value.endsWith("@refs/tags/v*")).toBe(true);
-    else {
-      expect(value.endsWith("@refs/heads/${ProtectedBranch}")).toBe(true);
-      expect(value).not.toContain("*");
+    if (production) {
+      const value = statement.Condition.StringLike?.[`${KEY}:job_workflow_ref`]["Fn::Sub"];
+      expect(value).toBe(
+        "${GitHubOrg}/${GitHubRepo}/.github/workflows/" + workflow + "@refs/tags/v*",
+      );
+    } else {
+      // WPU-Z11 fix round 1: the staging role serves deploy-staging.yml and remove-staging.yml, each at the
+      // protected branch, as two exact values under StringEquals (no wildcard).
+      expect(equals[`${KEY}:job_workflow_ref`]).toEqual([
+        {
+          "Fn::Sub":
+            "${GitHubOrg}/${GitHubRepo}/.github/workflows/deploy-staging.yml@refs/heads/${ProtectedBranch}",
+        },
+        {
+          "Fn::Sub":
+            "${GitHubOrg}/${GitHubRepo}/.github/workflows/remove-staging.yml@refs/heads/${ProtectedBranch}",
+        },
+      ]);
+      expect(JSON.stringify(equals[`${KEY}:job_workflow_ref`])).not.toMatch(/\*|repo:/);
     }
   });
 
@@ -158,8 +165,11 @@ describe.each(ROLES)("$name", ({ file, name, environment, workflow }) => {
   });
 
   it("names a GitHub environment and a workflow that exist in .github/workflows", () => {
-    const wf = read(join(root, ".github", "workflows", workflow));
-    expect(wf).toMatch(new RegExp(`^\\s+environment:\\s+${environment}\\s*$`, "m"));
+    const files = production ? [workflow] : [workflow, "remove-staging.yml"];
+    for (const f of files) {
+      const wf = read(join(root, ".github", "workflows", f));
+      expect(wf, f).toMatch(new RegExp(`^\\s+environment:\\s+${environment}\\s*$`, "m"));
+    }
   });
 });
 
@@ -455,6 +465,51 @@ describe("one account: fixed names are unique and each deploy role stays in its 
       }
       expect(text).not.toContain(`-${stage}-`);
     });
+
+    // WPU-Z11 fix round 1: CloudFront Functions and the WAF of the other stage, by name.
+    it(`denies the CloudFront Functions and the WAF of the ${other} stage by name`, () => {
+      const text = resourceText(statements.find((s) => s.Sid === "NeverANameOfTheOtherStage"));
+      for (const part of [
+        `cloudfront::\${AWS::AccountId}:function/ticon-cloud-${other}-*`,
+        `cloudfront::\${AWS::AccountId}:function/*-${other}-*`,
+        `:*/webacl/tc-${other}-*`,
+        `:*/ipset/tc-${other}-*`,
+      ]) {
+        expect(text, part).toContain(part);
+      }
+    });
+
+    // WPU-Z11 fix round 1: the SST bootstrap is shared by both stages; neither deploy role may change it.
+    it("never changes the shared SST bootstrap parameter or the SST state and asset buckets", () => {
+      const param = statements.find((s) => s.Sid === "NeverTheSharedSstBootstrap");
+      expect(param.Effect).toBe("Deny");
+      expect(list(param.Action)).toEqual(
+        expect.arrayContaining([
+          "ssm:PutParameter",
+          "ssm:DeleteParameter",
+          "ssm:DeleteParameters",
+          "ssm:LabelParameterVersion",
+          "ssm:AddTagsToResource",
+        ]),
+      );
+      expect(param.Resource).toEqual({
+        "Fn::Sub": "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/bootstrap",
+      });
+      const buckets = statements.find((s) => s.Sid === "NeverTheSharedSstBuckets");
+      expect(buckets.Effect).toBe("Deny");
+      expect(list(buckets.Action)).toEqual(
+        expect.arrayContaining([
+          "s3:PutBucket*",
+          "s3:DeleteBucket*",
+          "s3:PutLifecycleConfiguration",
+          "s3:PutEncryptionConfiguration",
+          "s3:PutReplicationConfiguration",
+        ]),
+      );
+      // bucket-level actions only: objects (state files, assets) stay usable
+      for (const a of list(buckets.Action)) expect(a).not.toMatch(/Object/);
+      expect(buckets.Resource).toEqual(["arn:aws:s3:::sst-state-*", "arn:aws:s3:::sst-asset-*"]);
+    });
   });
 
   // WPU-Z11 (security review): a role CREATED by one stage (it carries that stage's boundary) cannot read
@@ -571,13 +626,18 @@ describe("plan role: minimal customer-managed read policy, no data-plane reads",
   });
 
   it("limits object reads to the SST state bucket and parameter reads to the SST passphrase", () => {
-    const objects = statements.find((s) => s.Sid === "TheSstStateBucketOnly");
-    expect(list(objects.Resource).every((r) => r.startsWith("arn:aws:s3:::sst-state-"))).toBe(true);
+    const bucket = statements.find((s) => s.Sid === "TheSstStateBucketOnly");
+    expect(bucket.Action).toBe("s3:ListBucket");
+    expect(bucket.Resource).toBe("arn:aws:s3:::sst-state-*");
+    // WPU-Z11 fix round 1: objects of the production stage only (the bucket is shared with staging).
+    const objects = statements.find((s) => s.Sid === "TheProductionStateObjectsOnly");
+    expect(objects.Action).toBe("s3:GetObject");
+    expect(objects.Resource).toBe("arn:aws:s3:::sst-state-*/*/ticon-cloud/production*");
     const params = statements.find((s) => s.Sid === "TheSstPassphraseAndBootstrapParameterOnly");
     for (const r of list(params.Resource)) expect(JSON.stringify(r)).toContain("parameter/sst/");
     expect(JSON.stringify(params.Resource)).not.toContain("parameter/*");
     const noObject = statements.find((s) => s.Sid === "NoObjectReadOutsideTheStateBucket");
-    expect(noObject.NotResource).toBe("arn:aws:s3:::sst-state-*/*");
+    expect(noObject.NotResource).toBe("arn:aws:s3:::sst-state-*/*/ticon-cloud/production*");
     const noParam = statements.find((s) => s.Sid === "NoParameterReadOutsideSst");
     expect(JSON.stringify(noParam.NotResource)).toContain("parameter/sst/*");
   });
