@@ -495,9 +495,10 @@ describe("WPU-Z2: the Billing tab switch belongs to a Linux server only", () => 
         await setAutoRenewCore(w.deps, { serverId: SERVER, autoRenew: "off" }),
         family,
       ).toEqual({ ok: false, error: "not_found" });
-      expect(w.calls.some((c) => c.startsWith("autoRenew") || c.startsWith("audit")), family).toBe(
-        false,
-      );
+      expect(
+        w.calls.some((c) => c.startsWith("autoRenew") || c.startsWith("audit")),
+        family,
+      ).toBe(false);
     }
   });
 });

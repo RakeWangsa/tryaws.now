@@ -9,7 +9,10 @@ import { loadResourceHistory } from "../../../../../server/resource-history.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { loadAutoRenew } from "../../../../../server/auto-renew-view.ts";
 import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
-import { setDiskAutoRenewAction, setWindowsAutoRenewAction } from "../../_family/auto-renew-actions.ts";
+import {
+  setDiskAutoRenewAction,
+  setWindowsAutoRenewAction,
+} from "../../_family/auto-renew-actions.ts";
 import { getReaderPort } from "../../../../../server/reader-port.ts";
 import { loadServerManage } from "../../../../../server/server-manage-view.ts";
 import { loadServerDetail } from "../../../../../server/servers-view.ts";

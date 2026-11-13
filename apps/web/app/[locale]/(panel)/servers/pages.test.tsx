@@ -465,17 +465,20 @@ describe("/orders/review", () => {
     "cdn",
     "dns_zone",
     "domain",
-  ])("WPU-Z14: the review of a %s says auto-renew is on and where to turn it off, in bn and en", async (fam) => {
-    state.verdict = { ok: true, claims: { ...claims, fam } };
-    const en = await renderPage(ReviewPage as never, "en", {}, { d: "payload.mac" });
-    expect(en).toContain(
-      "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the page of this service in the panel.",
-    );
-    expect(en).not.toContain("Billing tab");
-    const bn = await renderPage(ReviewPage as never, "bn", {}, { d: "payload.mac" });
-    expect(bn).toContain("স্বয়ংক্রিয় নবায়ন চালু আছে");
-    expect(bn).toContain("প্যানেলে এই সেবার পাতায়");
-  });
+  ])(
+    "WPU-Z14: the review of a %s says auto-renew is on and where to turn it off, in bn and en",
+    async (fam) => {
+      state.verdict = { ok: true, claims: { ...claims, fam } };
+      const en = await renderPage(ReviewPage as never, "en", {}, { d: "payload.mac" });
+      expect(en).toContain(
+        "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the page of this service in the panel.",
+      );
+      expect(en).not.toContain("Billing tab");
+      const bn = await renderPage(ReviewPage as never, "bn", {}, { d: "payload.mac" });
+      expect(bn).toContain("স্বয়ংক্রিয় নবায়ন চালু আছে");
+      expect(bn).toContain("প্যানেলে এই সেবার পাতায়");
+    },
+  );
 
   // A family with no subscription or switch of its own (a static IP, a backup) is bought with it off: its
   // review must not say it is on.

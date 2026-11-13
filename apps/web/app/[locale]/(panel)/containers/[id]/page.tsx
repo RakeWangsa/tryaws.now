@@ -48,7 +48,8 @@ export default async function ContainerDetailPage({ params, searchParams }: Prop
   const panel = await startPanelPage(path);
   const service = await loadContainerDetail(panel.session, id);
   // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
-  const renew = service === null ? null : await loadAutoRenew(panel.session, "container_service", id);
+  const renew =
+    service === null ? null : await loadAutoRenew(panel.session, "container_service", id);
   const tab = one(query["tab"]);
   return (
     <PanelFrame locale={locale} path={path} currentId="containers" panel={panel}>
