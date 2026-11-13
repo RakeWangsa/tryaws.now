@@ -42,6 +42,13 @@ export const DOMAIN_STATUSES = [
   "expired",
 ] as const;
 export const CASE_STATUSES = ["open", "closed"] as const;
+// WPU-Z5 (owner decision 2026-11-13, round 3): a support request is a ticket with a thread. `open` waits
+// for support, `answered` waits for the requester, `closed` is done (a new message opens it again).
+export const SUPPORT_STATUSES = ["open", "answered", "closed"] as const;
+// Who wrote a message of the thread: the signed-in customer, a visitor of the public form, or an admin.
+export const SUPPORT_AUTHOR_TYPES = ["customer", "visitor", "admin"] as const;
+// The longest message of a thread, in characters (the CHECK of support_messages.body).
+export const SUPPORT_MESSAGE_MAX = 5000;
 export const DISCREPANCY_KINDS = ["orphan", "missing", "cost", "payment"] as const;
 // 16.12: resolveDiscrepancy.
 export const DISCREPANCY_STATUSES = ["open", "resolved"] as const;
@@ -192,6 +199,8 @@ export const supportRequests = pgTable(
     status: text("status").notNull().default("open"),
     handledBy: uuid("handled_by").references(() => adminUsers.id),
     createdAt: createdAt(),
+    // WPU-Z5: the time of the last message of the thread (the request itself counts as the first one).
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("support_requests_customer_id_idx").on(t.customerId),
@@ -199,7 +208,34 @@ export const supportRequests = pgTable(
       "support_requests_recipient_check",
       sql`${t.customerId} IS NOT NULL OR ${t.email} IS NOT NULL`,
     ),
-    check("support_requests_status_check", inList(t.status, CASE_STATUSES)),
+    check("support_requests_status_check", inList(t.status, SUPPORT_STATUSES)),
+  ],
+);
+
+// WPU-Z5: the thread of a support request. The first entry of a thread is support_requests.message; this
+// table holds the replies after it, oldest first by (created_at, id). An admin message names its admin, and
+// only an admin message does. Grants in 0027_support_thread.sql: web_rw never reads or writes admin_id.
+export const supportMessages = pgTable(
+  "support_messages",
+  {
+    id: id(),
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => supportRequests.id),
+    authorType: text("author_type").notNull(),
+    adminId: uuid("admin_id").references(() => adminUsers.id),
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("support_messages_request_id_created_at_idx").on(t.requestId, t.createdAt),
+    check("support_messages_author_type_check", inList(t.authorType, SUPPORT_AUTHOR_TYPES)),
+    check(
+      "support_messages_admin_check",
+      sql`(${t.authorType} = 'admin') = (${t.adminId} IS NOT NULL)`,
+    ),
+    // The number is SUPPORT_MESSAGE_MAX, written out: a CHECK holds text, not a parameter.
+    check("support_messages_body_check", sql`char_length(${t.body}) between 1 and 5000`),
   ],
 );
 

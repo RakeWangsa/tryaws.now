@@ -13,6 +13,7 @@ columnTests(
     "notifications",
     "waitlist_entries",
     "support_requests",
+    "support_messages",
     "abuse_cases",
     "discrepancies",
     "audit_log",
@@ -166,6 +167,94 @@ it("audit_log: a system actor has no id; IPv6 is accepted; metadata defaults to 
     }),
     "23514",
     { constraint: "audit_log_actor_check" },
+  );
+});
+
+// WPU-Z5 (migration 0027): the thread of a support request.
+it("a support request may be answered; an abuse case may not; the last activity defaults to now", async () => {
+  const c = await newCustomer(t.pool);
+  const s = await insertRow(t.pool, "support_requests", {
+    customer_id: c,
+    category: "billing",
+    subject: "s",
+    message: "m",
+    status: "answered",
+  });
+  const row = (
+    await t.pool.query(
+      "select status, last_activity_at >= now() - interval '1 minute' as recent from support_requests where id = $1",
+      [s],
+    )
+  ).rows[0];
+  expect(row).toEqual({ status: "answered", recent: true });
+  await expectSqlError(
+    insertRow(t.pool, "support_requests", {
+      customer_id: c,
+      category: "billing",
+      subject: "s",
+      message: "m",
+      status: "pending",
+    }),
+    "23514",
+    { constraint: "support_requests_status_check" },
+  );
+  await expectSqlError(
+    insertRow(t.pool, "abuse_cases", {
+      resource_id: await newResource(t.pool, c),
+      source: "monitoring",
+      status: "answered",
+    }),
+    "23514",
+    { constraint: "abuse_cases_status_check" },
+  );
+});
+
+it("support_messages: an admin message names its admin and only an admin message does; 1 to 5000 characters; a known request", async () => {
+  const c = await newCustomer(t.pool);
+  const admin = await newAdmin(t.pool, "support");
+  const request = await insertRow(t.pool, "support_requests", {
+    customer_id: c,
+    category: "billing",
+    subject: "s",
+    message: "m",
+  });
+  await insertRow(t.pool, "support_messages", {
+    request_id: request,
+    author_type: "customer",
+    body: "Any news?",
+  });
+  await insertRow(t.pool, "support_messages", {
+    request_id: request,
+    author_type: "admin",
+    admin_id: admin,
+    body: "x".repeat(5000),
+  });
+  await insertRow(t.pool, "support_messages", {
+    request_id: request,
+    author_type: "visitor",
+    body: "বাংলা",
+  });
+  for (const [values, constraint] of [
+    [{ author_type: "admin", body: "b" }, "support_messages_admin_check"],
+    [{ author_type: "customer", admin_id: admin, body: "b" }, "support_messages_admin_check"],
+    [{ author_type: "staff", body: "b" }, "support_messages_author_type_check"],
+    [{ author_type: "customer", body: "" }, "support_messages_body_check"],
+    [{ author_type: "customer", body: "x".repeat(5001) }, "support_messages_body_check"],
+  ] as const) {
+    await expectSqlError(
+      insertRow(t.pool, "support_messages", { request_id: request, ...values }),
+      "23514",
+      { constraint },
+    );
+  }
+  await expectSqlError(
+    insertRow(t.pool, "support_messages", {
+      request_id: "00000000-0000-7000-8000-000000000000",
+      author_type: "customer",
+      body: "b",
+    }),
+    "23503",
+    { constraint: "support_messages_request_id_support_requests_id_fk" },
   );
 });
 
