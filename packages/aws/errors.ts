@@ -12,6 +12,7 @@ export type LocalReason =
   | "catalog_pages_exceeded"
   | "usage_response_invalid"
   | "usage_pages_exceeded"
+  | "reader_response_invalid"
   | "not_configured";
 
 const LOCAL_REASONS: readonly string[] = [
@@ -23,6 +24,7 @@ const LOCAL_REASONS: readonly string[] = [
   "catalog_pages_exceeded",
   "usage_response_invalid",
   "usage_pages_exceeded",
+  "reader_response_invalid",
   "not_configured",
 ];
 

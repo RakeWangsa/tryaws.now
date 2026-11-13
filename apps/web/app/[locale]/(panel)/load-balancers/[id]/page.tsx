@@ -5,6 +5,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
 import { loadLoadBalancerDetail } from "../../../../../server/load-balancers-view.ts";
+import { getReaderPort } from "../../../../../server/reader-port.ts";
+import { loadTargetHealth } from "../../../../../server/reader-reads-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import { CertificateChange } from "../../_console/CertificateChange.tsx";
@@ -48,6 +50,16 @@ export default async function LoadBalancerDetailPage({ params, searchParams }: P
   const panel = await startPanelPage(path);
   const balancer = await loadLoadBalancerDetail(panel.session, id);
   const tab = one(query["tab"]);
+  // WPU-Y8: read once on page load, only for a balancer that exists for this customer (R8).
+  const targetHealth =
+    balancer === null
+      ? undefined
+      : await loadTargetHealth(
+          panel.session,
+          balancer.id,
+          new Map(balancer.targets.map((x) => [x.id, x.name])),
+          await getReaderPort(),
+        );
   return (
     <PanelFrame locale={locale} path={path} currentId="loadBalancers" panel={panel}>
       <LoadBalancerDetailContent
@@ -57,6 +69,7 @@ export default async function LoadBalancerDetailPage({ params, searchParams }: P
         requestId={newUuidV7()}
         destroyAction={destroyLoadBalancerAction}
         targetsAction={setLoadBalancerTargetsAction}
+        {...(targetHealth !== undefined ? { targetHealth } : {})}
         {...(balancer !== null && balancer.state === "active"
           ? {
               extra: (

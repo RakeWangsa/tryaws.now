@@ -161,7 +161,24 @@ export const databasesEn: Same<typeof databasesBn> = {
       metrics: {
         unavailable: {
           title: "Metrics cannot be shown now",
-          body: "The CPU and connection charts of a database are not in this panel yet. They are coming soon.",
+          body: "Look again in a moment. Your database is not affected.",
+        },
+        empty: {
+          title: "No metrics yet",
+          body: "Data arrives a few minutes after the database starts.",
+        },
+        rangeLabel: "Time range",
+        range: { "1h": "1 hour", "1d": "1 day", "1w": "1 week" },
+        series: {
+          cpu: "CPU use",
+          connections: "Connections",
+          freeStorage: "Free storage",
+          diskQueue: "Disk queue",
+        },
+        note: {
+          average: "Each point is the average over {minutes} minutes.",
+          maximum: "Each point is the highest value in {minutes} minutes.",
+          minimum: "Each point is the lowest value in {minutes} minutes.",
         },
       },
       switch: {

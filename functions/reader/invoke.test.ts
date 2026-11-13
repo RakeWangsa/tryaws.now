@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { readConfig } from "./config";
 import { createInvoke, readerTierOf } from "./invoke";
-import { ADMIN, CUSTOMER_A, CUSTOMER_B, GHOST, RESOURCE_A, RESOURCE_B, setup } from "./test/kit";
+import {
+  ADMIN,
+  CUSTOMER_A,
+  CUSTOMER_B,
+  DB_A,
+  DB_B,
+  GHOST,
+  LB_A,
+  LB_B,
+  RESOURCE_A,
+  RESOURCE_B,
+  setup,
+} from "./test/kit";
 
 describe("invoke", () => {
   it("routes describe and metrics to the reader", async () => {
@@ -193,5 +205,67 @@ describe("tier of the invocation (WPU-S6)", () => {
       "admin",
     );
     expect(loads.length).toBe(1);
+  });
+});
+
+describe("invoke: targetHealth and databaseMetrics (WPU-Y8)", () => {
+  it("routes both actions, for the web tier with a customer and the admin tier with an admin", async () => {
+    const { reader } = setup();
+    const invoke = createInvoke(reader);
+    const th = await invoke(
+      { action: "targetHealth", resourceId: LB_A, caller: { customerId: CUSTOMER_A } },
+      "web",
+    );
+    expect(th.ok).toBe(true);
+    const dm = await invoke(
+      {
+        action: "databaseMetrics",
+        resourceId: DB_A,
+        caller: { customerId: CUSTOMER_A },
+        range: "1w",
+      },
+      "web",
+    );
+    expect(dm.ok).toBe(true);
+    const adm = await invoke(
+      { action: "targetHealth", resourceId: LB_B, caller: { adminId: ADMIN } },
+      "admin",
+    );
+    expect(adm.ok).toBe(true);
+  });
+
+  it("refuses a caller of the wrong tier, a missing range, and hides foreign resources", async () => {
+    const { reader, calls } = setup();
+    const invoke = createInvoke(reader);
+    expect(
+      await invoke(
+        { action: "targetHealth", resourceId: LB_A, caller: { customerId: CUSTOMER_A } },
+        "admin",
+      ),
+    ).toEqual({ ok: false, error: "unauthenticated" });
+    expect(
+      await invoke(
+        { action: "databaseMetrics", resourceId: DB_A, caller: { customerId: CUSTOMER_A } },
+        "web",
+      ),
+    ).toEqual({ ok: false, error: "validation" });
+    expect(
+      await invoke(
+        { action: "targetHealth", resourceId: LB_B, caller: { customerId: CUSTOMER_A } },
+        "web",
+      ),
+    ).toEqual({ ok: false, error: "not_found" });
+    expect(
+      await invoke(
+        {
+          action: "databaseMetrics",
+          resourceId: DB_B,
+          caller: { customerId: CUSTOMER_A },
+          range: "1h",
+        },
+        "web",
+      ),
+    ).toEqual({ ok: false, error: "not_found" });
+    expect(calls).toEqual([]);
   });
 });

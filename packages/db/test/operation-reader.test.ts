@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Tx } from "../client";
-import { loadReadTarget } from "../operations/reader";
+import { loadReadTarget, loadRecordedTargets } from "../operations/reader";
 import { runTransaction } from "../tx";
 import { insertRow } from "./sql";
 import { newAdmin, newCustomer, newResource, uniqueSuffix } from "./fixtures";
@@ -80,6 +80,25 @@ describe("loadReadTarget", () => {
       await worker((tx) => loadReadTarget(tx, { adminId: adminDisabled }, resourceA)),
     ).toBeNull();
     expect(await worker((tx) => loadReadTarget(tx, { adminId: ghost }, resourceA))).toBeNull();
+  });
+
+  it("loadRecordedTargets keeps only the owner's servers named in config.targetIds (WPU-Y8, R8)", async () => {
+    const ownServer = await newResource(t.pool, customerA);
+    const foreignServer = await newResource(t.pool, customerB);
+    const db = await newResource(t.pool, customerA, { family: "database" });
+    const mk = async (config: unknown) => {
+      const id = await newResource(t.pool, customerA, {
+        family: "load_balancer",
+        config: JSON.stringify(config),
+      });
+      const res = await t.pool.query("select * from resources where id = $1", [id]);
+      return { resource: { ...res.rows[0], customerId: customerA, config } } as never;
+    };
+    const run = (target: never) => worker((tx) => loadRecordedTargets(tx, target));
+    expect(await run(await mk({ targetIds: [ownServer, foreignServer, db] }))).toEqual([ownServer]);
+    expect(await run(await mk({}))).toEqual([]);
+    expect(await run(await mk({ targetIds: "x" }))).toBeNull();
+    expect(await run(await mk({ targetIds: ["not-a-uuid"] }))).toBeNull();
   });
 
   it("refuses a caller that holds both or neither identity (R16)", async () => {

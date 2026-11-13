@@ -7,6 +7,13 @@ import type { Reader, ReaderResult } from "./handler";
 // two known keys only, so that nothing else the event holds reaches the reader. Whether the caller
 // owns the resource is the reader's own check, not this file's.
 export type ReaderEvent =
+  | { readonly action: "targetHealth"; readonly resourceId: string; readonly caller: ReadCaller }
+  | {
+      readonly action: "databaseMetrics";
+      readonly resourceId: string;
+      readonly caller: ReadCaller;
+      readonly range: MetricRange;
+    }
   | { readonly action: "describe"; readonly resourceId: string; readonly caller: ReadCaller }
   | {
       readonly action: "metrics";
@@ -66,13 +73,24 @@ export function createInvoke(
     const e = event as Record<string, unknown>;
     const action = e["action"];
     const resourceId = e["resourceId"];
-    if (action !== "describe" && action !== "metrics") return refused("validation");
+    if (
+      action !== "describe" &&
+      action !== "metrics" &&
+      action !== "targetHealth" &&
+      action !== "databaseMetrics"
+    ) {
+      return refused("validation");
+    }
     if (typeof resourceId !== "string") return refused("validation");
     const caller = rebuildCaller(e["caller"]);
     if (caller === null || !callerFitsTier(caller, tier)) return refused("unauthenticated");
     if (action === "describe") return reader.describe(resourceId, caller);
+    if (action === "targetHealth") return reader.targetHealth(resourceId, caller);
     const range = e["range"];
     if (typeof range !== "string") return refused("validation");
+    if (action === "databaseMetrics") {
+      return reader.databaseMetrics(resourceId, caller, range as MetricRange);
+    }
     return reader.metrics(resourceId, caller, range as MetricRange);
   };
 }

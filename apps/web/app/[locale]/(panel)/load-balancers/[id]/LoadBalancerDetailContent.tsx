@@ -8,13 +8,14 @@ import type { LoadBalancerDetail } from "../../../../../server/load-balancers-vi
 import { DestroyPanel } from "../../_family/FamilyForms.tsx";
 import { FamilyState } from "../../_family/FamilyParts.tsx";
 import { useRegionLabel } from "../../servers/ServerParts.tsx";
+import type { TargetHealthScreen } from "../../../../../server/reader-reads-view.ts";
 import { LoadBalancerTargetsForm } from "./LoadBalancerTargetsForm.tsx";
+import { TargetHealthPanel } from "./TargetHealthPanel.tsx";
 
 // The content of /load-balancers/[id] (16.10): a header and the tabs Overview, Target servers, Health
 // and HTTPS, and Delete. A balancer of another customer and a missing one give the same answer (R8).
 // Nothing here shows an account id, an ARN or a generated AWS name (R11). Health and the HTTPS
-// certificate are shown as "not available yet": the web tier cannot read them (R1) and the backend has
-// no certificate step.
+// certificate come from the reader (WPU-Y8), the web tier has no AWS client (R1).
 
 type Numerals = "beng" | "latn";
 type Action = (previous: FormState, form: FormData) => Promise<FormState>;
@@ -31,6 +32,7 @@ export function LoadBalancerDetailContent({
   targetsAction,
   defaultTab,
   extra = null,
+  targetHealth,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -43,6 +45,8 @@ export function LoadBalancerDetailContent({
   defaultTab?: string;
   /** The settings and certificate forms (WPU-G7), built by the page. */
   extra?: ReactNode;
+  /** WPU-Y8. The health read; without it (the static mockup states) the tab says it is not available. */
+  targetHealth?: TargetHealthScreen;
 }) {
   const t = useTranslations("LoadBalancers");
   const regionLabel = useRegionLabel();
@@ -139,9 +143,10 @@ export function LoadBalancerDetailContent({
   const health = (
     <>
       <h3 className="mergecolor h4">{t("detail.health.title")}</h3>
-      <EmptyState
-        title={t("detail.health.unavailable.title")}
-        description={t("detail.health.unavailable.body")}
+      <TargetHealthPanel
+        screen={targetHealth ?? { state: "unavailable" }}
+        locale={locale}
+        numerals={numerals}
       />
       <h3 className="mergecolor h4 mt-4">{t("detail.health.https.title")}</h3>
       {extra === null ? (

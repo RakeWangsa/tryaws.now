@@ -4,7 +4,7 @@ export * from "./operations/kinds";
 export * from "./operations/approval";
 export * from "./operations/insert";
 export * from "./operations/run";
-export { loadReadTarget } from "./operations/reader";
+export { loadReadTarget, loadRecordedTargets } from "./operations/reader";
 export type { ReadCaller, ReadTarget } from "./operations/reader";
 export { createDatabase } from "./client";
 export type { Database, Tx } from "./client";

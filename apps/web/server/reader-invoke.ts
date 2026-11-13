@@ -1,6 +1,13 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { z } from "zod";
-import type { MetricRangeKey, MetricSeriesView, ReaderPort } from "./extras-view.ts";
+import { TARGET_HEALTH_WORDS, TARGET_REASON_WORDS } from "./extras-view.ts";
+import type {
+  DatabaseSeriesView,
+  MetricRangeKey,
+  MetricSeriesView,
+  ReaderPort,
+  TargetHealthReportView,
+} from "./extras-view.ts";
 
 // WPU-G4. The invoke port of the `reader` function (WP5-T3) for the Metrics tab. The contract of F is
 // the function itself: `metrics(resourceId, caller, range)` with `caller = { customerId }`, and the
@@ -42,6 +49,49 @@ const answer = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(false), error: z.string() }),
 ]);
 
+// WPU-Y8. The two added reads. Closed word lists: a word the platform does not know fails the parse and
+// the tab shows "not available" (R16). At most 20 targets (the product limit).
+const healthWord = z.enum(TARGET_HEALTH_WORDS as [string, ...string[]]);
+const targetHealthAnswer = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    value: z.object({
+      live: z.boolean(),
+      checkedAt: z.string().refine((s) => !Number.isNaN(Date.parse(s))),
+      targets: z
+        .array(
+          z.object({
+            targetResourceId: z.string().regex(UUID),
+            health: healthWord,
+            reason: z.enum(TARGET_REASON_WORDS).nullable(),
+          }),
+        )
+        .max(20),
+      counts: z.object(
+        Object.fromEntries(
+          TARGET_HEALTH_WORDS.map((w) => [w, z.number().int().min(0).max(20)]),
+        ) as Record<string, z.ZodNumber>,
+      ),
+      unresolved: z.number().int().min(0).max(1000),
+    }),
+  }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+]);
+const dbSeries = z.object({
+  metric: z.enum(["cpu", "connections", "freeStorage", "diskQueue"]),
+  unit: z.enum(["percent", "bytes", "count"]),
+  statistic: z.enum(["average", "maximum", "minimum"]),
+  periodSeconds: z.number().int().min(60).max(86_400),
+  points: z.array(point).max(MAX_POINTS),
+});
+const databaseAnswer = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    value: z.object({ series: z.array(dbSeries).max(MAX_SERIES) }),
+  }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+]);
+
 const READER_CODES = [
   "unauthenticated",
   "not_found",
@@ -54,8 +104,72 @@ const READER_CODES = [
 type MetricsAnswer = Awaited<ReturnType<ReaderPort["metrics"]>>;
 const UNAVAILABLE: MetricsAnswer = Object.freeze({ ok: false, error: "unavailable" });
 
+/** One call of the reader: the payload goes out, JSON comes back, anything else is null (R16). */
+async function callReader(invoker: ReaderInvoker, payload: Record<string, unknown>) {
+  let raw: { functionError: boolean; payload: string };
+  try {
+    raw = await invoker.invoke(JSON.stringify(payload));
+  } catch {
+    return null;
+  }
+  if (raw.functionError) return null;
+  try {
+    return JSON.parse(raw.payload) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+const codeOf = (error: string): string => READER_CODES.find((c) => c === error) ?? "unavailable";
+
 export function readerPortFromInvoker(invoker: ReaderInvoker): ReaderPort {
   return {
+    async targetHealth(resourceId, caller) {
+      if (!UUID.test(resourceId)) return { ok: false, error: "validation" };
+      const json = await callReader(invoker, {
+        action: "targetHealth",
+        resourceId,
+        caller: { customerId: caller.customerId },
+      });
+      const parsed = targetHealthAnswer.safeParse(json);
+      if (!parsed.success) return { ok: false, error: "unavailable" };
+      if (!parsed.data.ok) return { ok: false, error: codeOf(parsed.data.error) };
+      const v = parsed.data.value;
+      const report: TargetHealthReportView = {
+        live: v.live,
+        checkedAt: v.checkedAt,
+        targets: v.targets.map((x) => ({
+          targetResourceId: x.targetResourceId,
+          health: x.health as TargetHealthReportView["targets"][number]["health"],
+          reason: x.reason,
+        })),
+        counts: v.counts as TargetHealthReportView["counts"],
+        unresolved: v.unresolved,
+      };
+      return { ok: true, report };
+    },
+
+    async databaseMetrics(resourceId, caller, range) {
+      if (!UUID.test(resourceId)) return { ok: false, error: "validation" };
+      const json = await callReader(invoker, {
+        action: "databaseMetrics",
+        resourceId,
+        caller: { customerId: caller.customerId },
+        range,
+      });
+      const parsed = databaseAnswer.safeParse(json);
+      if (!parsed.success) return { ok: false, error: "unavailable" };
+      if (!parsed.data.ok) return { ok: false, error: codeOf(parsed.data.error) };
+      const series: DatabaseSeriesView[] = parsed.data.value.series.map((s) => ({
+        metric: s.metric,
+        unit: s.unit,
+        statistic: s.statistic,
+        periodSeconds: s.periodSeconds,
+        points: s.points.map((p) => ({ at: p.at, value: p.value })),
+      }));
+      return { ok: true, series };
+    },
+
     async metrics(
       resourceId: string,
       caller: { customerId: string },
