@@ -3693,6 +3693,9 @@ TASKS["WPU-Z5"] = [
   repo,
 ];
 
+// WPU-Z6: support tickets in the customer panel (list, thread, reply, close); db includes PostgreSQL.
+TASKS["WPU-Z6"] = [specSync, baselineSync, lint, typecheck, format, db, crossTenant, ui, web, repo];
+
 // WPU-Z10: staging on demand (one NAT instance, one week of logs, a stage that removes cleanly).
 TASKS["WPU-Z10"] = [
   specSync,

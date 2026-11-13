@@ -229,6 +229,7 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-Z3",
     "WPU-Z4",
     "WPU-Z5",
+    "WPU-Z6",
     "WPU-Z7",
     "WPU-Z8",
     "WPU-Z9",
@@ -266,6 +267,9 @@ it("the WPU-Z tasks of the owner decisions round 3 name their proofs", () => {
   expect(ids("WPU-Z12")).toEqual(expect.arrayContaining(["core", "db", "scheduler", "repo"]));
   expect(ids("WPU-Z5")).toEqual(
     expect.arrayContaining(["db", "cross-tenant", "admin", "web", "repo"]),
+  );
+  expect(ids("WPU-Z6")).toEqual(
+    expect.arrayContaining(["db", "cross-tenant", "ui", "web", "repo"]),
   );
   expect(ids("WPU-Z10")).toEqual(expect.arrayContaining(["sst-types", "infra-rules", "repo"]));
   expect(ids("WPU-Z11")).toEqual(expect.arrayContaining(["web", "repo"]));
