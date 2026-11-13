@@ -2,7 +2,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { webMessages } from "../../../../../i18n/messages.ts";
-import { SupportForm } from "./SupportForm.tsx";
+import { SupportDone, SupportForm } from "./SupportForm.tsx";
 
 // WPU-B6: the "related resource" picker of /support/new. Names are customer text: React escapes them.
 const never = async (): Promise<never> => {
@@ -34,5 +34,22 @@ describe("the related resource picker", () => {
     const out = html("en", [{ id: "0190aaaa-0000-7000-8000-000000000009", name: "<b>x</b>" }]);
     expect(out).not.toContain("<b>x</b>");
     expect(out).toContain("&lt;b&gt;x&lt;/b&gt;");
+  });
+});
+
+// WPU-Z6: after a successful create the done state links to the thread of the new request.
+describe("the done state", () => {
+  it.each(["bn", "en"] as const)("links to the new request's thread in %s", (l) => {
+    const out = renderToStaticMarkup(
+      <NextIntlClientProvider locale={l} messages={webMessages[l]} timeZone="Asia/Dhaka">
+        <SupportDone
+          id="0190aaaa-0000-7000-8000-000000000001"
+          replayed={false}
+          onAgain={() => {}}
+        />
+      </NextIntlClientProvider>,
+    );
+    const prefix = l === "en" ? "/en" : "";
+    expect(out).toContain(`href="${prefix}/support/requests/0190aaaa-0000-7000-8000-000000000001"`);
   });
 });

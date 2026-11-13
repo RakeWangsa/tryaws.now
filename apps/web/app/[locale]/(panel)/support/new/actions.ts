@@ -17,6 +17,9 @@ export async function createSupportRequestAction(input: unknown): Promise<Suppor
   if (!(await guardAction())) return { ok: false, error: "forbidden" };
   const result = await createSupportRequestCore(supportActionDeps(), input);
   // The list of earlier requests shows the new one straight away.
-  if (result.ok) revalidatePath("/[locale]/support/new", "page");
+  if (result.ok) {
+    revalidatePath("/[locale]/support/new", "page");
+    revalidatePath("/[locale]/support/requests", "page");
+  }
   return result;
 }

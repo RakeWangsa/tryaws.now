@@ -1,7 +1,8 @@
 "use client";
 
-import { Button, Field, OptionGroup, SubmitButton } from "@tc/ui";
-import { useTranslations } from "next-intl";
+import { Button, Field, OptionGroup, SubmitButton, toLocale } from "@tc/ui";
+import { localePath } from "@tc/ui/runtime";
+import { useLocale, useTranslations } from "next-intl";
 import { useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { SupportActionResult } from "./actions.ts";
@@ -32,6 +33,7 @@ export function SupportDone({
   onAgain: () => void;
 }) {
   const t = useTranslations("SupportForm");
+  const locale = toLocale(useLocale());
   return (
     <div className="alert alert-info text-start" role="status">
       <i className="fas fa-check-circle me-2" aria-hidden="true" />
@@ -40,7 +42,15 @@ export function SupportDone({
       <p className="mb-3">
         {t("done.reference")}: <code className="text-break">{id}</code>
       </p>
-      <Button variant="default" onClick={onAgain}>
+      {/* WPU-Z6: the new request has its own page with the thread. */}
+      <Button
+        variant="primary"
+        className="me-2 mb-2"
+        href={localePath(locale, `/support/requests/${encodeURIComponent(id)}`)}
+      >
+        {t("done.open")}
+      </Button>
+      <Button variant="default" className="mb-2" onClick={onAgain}>
         {t("done.again")}
       </Button>
     </div>

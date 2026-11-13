@@ -35,3 +35,41 @@ describe("support form messages (WP9-T4b)", () => {
     expect((webMessages.bn["SupportForm"] as Messages)["heading"] as string).toMatch(/[ঀ-৿]/);
   });
 });
+
+describe("support request messages (WPU-Z6)", () => {
+  it("has a text for every error the thread actions can answer with", () => {
+    expect(Object.keys(supportBn.SupportRequests.error).sort()).toEqual(
+      [
+        "unauthenticated",
+        "validation",
+        "not_found",
+        "conflict",
+        "rate_limited",
+        "forbidden",
+        "unavailable",
+      ].sort(),
+    );
+  });
+
+  it("signs support's replies with the brand only, never a person, in both locales", () => {
+    expect(supportEn.SupportRequests.thread.author).toEqual({
+      customer: "You",
+      visitor: "You",
+      admin: "TryAWS.now support",
+    });
+    expect(supportBn.SupportRequests.thread.author.admin).toBe("TryAWS.now সাপোর্ট");
+  });
+
+  it("states that a reply opens a closed request again, in both locales", () => {
+    expect(supportEn.SupportRequests.reply.rule).toMatch(/opens a closed/);
+    expect(supportEn.SupportRequests.thread.closed).toMatch(/opens it again/);
+    expect(supportBn.SupportRequests.reply.rule).toMatch(/আবার খোলা/);
+    expect(supportBn.SupportRequests.thread.closed).toMatch(/আবার খুলবে/);
+  });
+
+  it("is composed in both locales with Bengali text in bn", () => {
+    for (const locale of ["bn", "en"] as const)
+      expect(webMessages[locale]["SupportRequests"]).toBeDefined();
+    expect((webMessages.bn["SupportRequests"] as Messages)["heading"] as string).toMatch(/[ঀ-৿]/);
+  });
+});
