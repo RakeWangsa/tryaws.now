@@ -143,6 +143,15 @@ beforeAll(async () => {
     `insert into feature_flags (id, key, market, enabled) values (gen_random_uuid(), 'domain', 'BD', true)
      on conflict (key, market) do update set enabled = excluded.enabled`,
   );
+  // The seller is in place before the first charge of the file. A charge without it is queued to the invoice
+  // backlog, and a queued charge holds every later charge of the market behind it (WPU-I5,
+  // invoice_backlog_blocked): the renewal of the reversal case would get no invoice of its own.
+  await t.pool.query("delete from settings where key = 'invoice_seller' and market = 'BD'");
+  await t.pool.query(
+    `insert into settings (id, key, market, scope, value)
+     values (gen_random_uuid(), 'invoice_seller', 'BD', 'market', $1::jsonb)`,
+    [JSON.stringify(SELLER)],
+  );
 });
 
 describe("one charge, one registry renewal", () => {
@@ -248,12 +257,6 @@ describe("one charge, one registry renewal", () => {
 
 describe("a registry renewal that failed gives the charge back once", () => {
   it("one reversal, the wallet as before the charge, the subscription ended at the period that was paid, a credit note", async () => {
-    await t.pool.query("delete from settings where key = 'invoice_seller' and market = 'BD'");
-    await t.pool.query(
-      `insert into settings (id, key, market, scope, value)
-       values (gen_random_uuid(), 'invoice_seller', 'BD', 'market', $1::jsonb)`,
-      [JSON.stringify(SELLER)],
-    );
     const d = await boughtDomain();
     const before = await kit.balance(d.customerId);
     kit.clock.set(d.end);
