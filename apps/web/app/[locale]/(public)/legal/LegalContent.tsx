@@ -9,9 +9,9 @@ import { useSiteLd } from "../_components/site-ld.ts";
 import type { Tr } from "../_components/offers.tsx";
 
 // `/legal/[doc]` (legal.html): the sidebar of documents and the document. The texts (WPU-Z7,
-// messages/legal-bn.ts and legal-en.ts) are written from the specification and the owner decisions:
-// numbered sections in plain language, and a bracketed "to be decided" note where a fact is open.
-// WPU-Y6: the owner approved the texts on 2026-11-14; the page shows no draft notice.
+// messages/legal-bn.ts and legal-en.ts) are written from the specification and the owner decisions, in
+// numbered sections in plain language. WPU-Y6: the owner approved the texts on 2026-11-14 and removed the
+// points that were still open; the page shows no draft notice and no open note.
 
 /**
  * The sections of each document, in order. Each has a numbered `title` and the paragraphs p1, p2, ...
@@ -32,32 +32,10 @@ const LEGAL_SECTIONS: Readonly<Record<LegalDoc, readonly string[]>> = {
     "suspension",
     "invoices",
     "support",
-    "liability",
     "changes",
-    "law",
   ],
-  "acceptable-use": [
-    "scope",
-    "aws",
-    "mining",
-    "transfer",
-    "cdn",
-    "email",
-    "suspend",
-    "report",
-    "more",
-  ],
-  privacy: [
-    "controller",
-    "collect",
-    "why",
-    "storage",
-    "share",
-    "security",
-    "cookies",
-    "retention",
-    "rights",
-  ],
+  "acceptable-use": ["scope", "aws", "mining", "transfer", "cdn", "email", "suspend", "report"],
+  privacy: ["controller", "collect", "why", "storage", "share", "security", "cookies", "rights"],
   refund: ["wallet", "failed", "period", "reversal", "payout", "review", "ask"],
 };
 

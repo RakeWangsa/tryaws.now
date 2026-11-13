@@ -367,6 +367,11 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
         }
         expect(main, where).not.toMatch(/\{(?:company|address|bin|tradeLicense|brand)\}/);
         expect(main, where).not.toMatch(/TiCON System/i);
+        // WPU-Y6 (owner, 2026-11-14): the open points are removed; no note and no unfilled value.
+        expect(page, where).not.toMatch(
+          /\[To be decided|\[সিদ্ধান্ত বাকি|সিদ্ধান্ত বাকি|To be decided/,
+        );
+        expect(page, where).not.toMatch(/\{[A-Za-z]+\}/);
         if (doc === "terms" || doc === "privacy") {
           // WPU-Y6: the provider is TryAWS.now with its BIN and trade licence, exactly as given.
           expect(main, where).toContain("BIN: 008073062-0507");

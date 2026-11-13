@@ -3,7 +3,7 @@ import type { legalDocsBn } from "./legal-bn.ts";
 type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 
 // `Public.legal.docs` in English: the texts of WPU-Z7 (see legal-bn.ts), approved by the owner on
-// 2026-11-14 (WPU-Y6). A fact still open is a note "[To be decided: …]".
+// 2026-11-14 (WPU-Y6), who also removed the points that were still open.
 export const legalDocsEn: Same<typeof legalDocsBn> = {
   terms: {
     title: "Terms of service",
@@ -23,7 +23,6 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         title: "3. Your account",
         p1: "To open an account you give your full name, your email address, a Bangladesh mobile number and a password, and you choose the account type. A business also gives its company name.",
         p2: "You confirm your email address and your mobile number with the codes we send you. Keep your password secret; we never send your password by email.",
-        p3: "[To be decided: who may open an account, for example a minimum age, and whether people and businesses outside Bangladesh may.]",
       },
       identity: {
         title: "4. Identity check",
@@ -67,7 +66,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       usage: {
         title: "10. Charges by use and unpaid charges",
         p1: "Some items are charged by use from your wallet, for example the storage of the backups you keep, by the day, and a static IP that is not attached to a server, by the hour after the first hour.",
-        p2: "Each plan includes an amount of data transfer for its period, which can differ by location. We tell you when 80% and when 100% of it is used. [To be decided: the handling of data transfer above the included amount is not available yet. The rule planned for it: above 100%, 50 GB packs are bought from your wallet if you have switched this on; otherwise the public ports of the resource are closed until the next period.]",
+        p2: "Each plan includes an amount of data transfer for its period, which can differ by location. We tell you when 80% and when 100% of it is used.",
         p3: "If a charge by use cannot be taken from your wallet, we try again every day. If it is still unpaid after 1 day, the resource is suspended. While the charge is unpaid we email you every day, with the days left before the deletion.",
         p4: "After 7 days unpaid we request the deletion of the resource. Where the product has backups, a final backup is made before anything is deleted. If you top up before the deletion, the charge is taken and the resource starts again.",
       },
@@ -80,24 +79,15 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         title: "12. Invoices",
         p1: "For each purchase and renewal you get a tax invoice (Mushak-6.3) in taka, issued by {company}. Invoices show no amounts in US dollars.",
         p2: "When we cancel a purchase or a renewal and return the whole amount to your wallet, you get a credit note in taka for its invoice. You find your invoices, receipts and credit notes in the panel, and we email each invoice.",
-        p3: "[To be decided: whether and how charges by use get a tax invoice, and a credit note when one is cancelled.]",
       },
       support: {
         title: "13. Support",
         p1: "We give support through support requests. Open a request in the panel and follow our answers there. Without an account, use the form on the support page; we answer by email.",
         p2: "There is no support phone line and no support email address.",
       },
-      liability: {
-        title: "14. Liability",
-        p1: "[To be decided: the service levels, the compensation if the service fails, and the limits of our liability.]",
-      },
       changes: {
-        title: "15. Changes to these terms",
-        p1: "The version of these terms is shown above. [To be decided: how and how early we tell you about a change, and how you accept it.]",
-      },
-      law: {
-        title: "16. Governing law and disputes",
-        p1: "[To be decided: the law that governs these terms and the courts that hear disputes.]",
+        title: "14. Changes to these terms",
+        p1: "The version of these terms is shown above.",
       },
     },
   },
@@ -138,10 +128,6 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         title: "8. Reporting abuse",
         p1: "To report abuse of a {brand} resource, use the form on the support page and choose “Report abuse”.",
       },
-      more: {
-        title: "9. Other rules",
-        p1: "[To be decided: rules of {brand} beyond the AWS rules above, and what happens to an account after repeated breaches.]",
-      },
     },
   },
   privacy: {
@@ -177,7 +163,6 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         title: "5. Who receives your data",
         p1: "AWS runs the infrastructure on which {brand} and your resources run. EPS processes your payments. Our email and SMS providers deliver the messages we send you.",
         p2: "Our staff see your data in their work: support, the identity check, finance and operations.",
-        p3: "[To be decided: whether and when we give data to authorities, and any other recipients.]",
       },
       security: {
         title: "6. How we protect it",
@@ -189,14 +174,9 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         title: "7. Cookies and scripts",
         p1: "The site uses only the cookies it needs to work, such as the cookie that keeps you signed in. It loads no analytics, advertising or chat scripts, and nothing from other websites.",
       },
-      retention: {
-        title: "8. How long we keep it",
-        p1: "[To be decided: how long we keep account data, identity documents, invoices and support requests, and what happens to them when an account is closed.]",
-      },
       rights: {
-        title: "9. Your rights and how to reach us",
+        title: "8. Your rights and how to reach us",
         p1: "You can see and change your profile and your billing details in the panel.",
-        p2: "[To be decided: the data protection rights that apply by law; how you ask for a copy of your data, a correction or the deletion of your data (proposed: a support request in the panel, or the form on the support page without an account); and how fast we answer a request.]",
       },
     },
   },
@@ -214,17 +194,16 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       period: {
         title: "3. Periods already paid",
-        p1: "A 30-day period is charged in full when it starts. [To be decided: whether the unused days of a period are refunded when you delete a resource before the period ends.]",
+        p1: "A 30-day period is charged in full when it starts.",
       },
       reversal: {
         title: "4. Cancelled charges and partial refunds",
-        p1: "When we cancel a purchase or a renewal, we cancel all of it: the whole amount goes back to your wallet and you get a credit note in taka for its invoice. [To be decided: whether a charge by use gets a credit note when it is cancelled.]",
-        p2: "A refund of part of a charge is only made by hand, after two members of our staff have approved it, and the reason is recorded. [To be decided: when a partial refund is given.]",
+        p1: "When we cancel a purchase or a renewal, we cancel all of it: the whole amount goes back to your wallet and you get a credit note in taka for its invoice.",
+        p2: "A refund of part of a charge is only made by hand, after two members of our staff have approved it, and the reason is recorded.",
       },
       payout: {
         title: "5. Paying out wallet money",
         p1: "EPS has no automatic refund at present. When money from your wallet is paid back to you, our finance staff pay it through EPS by hand and record it in your wallet.",
-        p2: "[To be decided: when wallet money can be paid back, to which account, any minimum amount, and how long it takes.]",
       },
       review: {
         title: "6. Payments under review",
