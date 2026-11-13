@@ -10,8 +10,8 @@ import { IDS } from "./samples";
 // WPU-Z5: the notifier sends the support_reply rows the admin repository writes (one email row each, the
 // payload of supportReplyPayload). The link of a customer's mail names the request: an id is no secret,
 // but a random id has all digits in its last group about once in 280, which the check of R14 reads as a
-// document number. The link is built by the template from the panel origin and checked fields, so the
-// check reads the mail without it; every text of the mail is still checked.
+// document number. The check sets aside only an id in the path /support/requests/<id> that no token
+// character follows (text/guards.ts); every other text of the mail is checked as before.
 
 const ORIGIN = "https://my.ticoncloud.test";
 const ALL_DIGITS_ID = "0193f7c6-4d5e-5394-8f82-123456789012";
@@ -84,13 +84,24 @@ describe("support_reply through the notifier", () => {
     expect(email.sent[0]?.text).toContain(`${ORIGIN}/support`);
   });
 
-  // The text of a reply is still checked: only the link that the template built is set aside.
+  // The text of a reply is still checked: only an id in the request path is set aside.
   it.each([
     ["a phone number", "Call us at 01712345678 today.", "phone_number"],
     ["an address with an id as its name", `Write to ${IDS.request}@example.test`, "email_address"],
     ["a long token around an id", `key sk_${"a".repeat(30)}_${ALL_DIGITS_ID}`, "long_token"],
     ["a document number", "Your NID 1234567890123 is checked.", "long_digits"],
     ["the same id with digits glued to it", `ref ${ALL_DIGITS_ID}0`, "long_digits"],
+    [
+      "an address made of the request path",
+      `${ORIGIN}/support/requests/${ALL_DIGITS_ID}@example.test`,
+      // the id is not set aside, so its digits are the first rule that matches
+      "long_digits",
+    ],
+    [
+      "digits glued to the id of a request path",
+      `/support/requests/${ALL_DIGITS_ID}9`,
+      "long_digits",
+    ],
   ])("a visitor reply that holds %s is refused, nothing is sent", async (_name, body, rule) => {
     addRow(supportReplyPayload(IDS.request, body, "visitor"), { email: "visitor@example.test" });
     await runNotifier(deps());

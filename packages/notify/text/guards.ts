@@ -36,8 +36,16 @@ const RULES: ReadonlyArray<readonly [string, RegExp]> = [
   ["email_address", /[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/],
 ];
 
+// WPU-Z5: the id of a support request in the panel path of a reply notice (/support/requests/<uuid>) is the
+// id of a row, never a secret, but a random id has an all-digit last group about once in 280, which reads
+// as a document number. Only that id, in that path, and only when no token character follows it, is set
+// aside: `prefix_<uuid>`, `<uuid>@domain`, `<uuid>0` and a UUID anywhere else are checked as before, so a
+// token glued to an id is never split.
+const SUPPORT_REQUEST_PATH_ID =
+  /\/support\/requests\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![A-Za-z0-9_+/@.-])/gi;
+
 export function scanSecrets(text: string): string | null {
-  const t = latin(text);
+  const t = latin(text).replace(SUPPORT_REQUEST_PATH_ID, "/support/requests/id");
   for (const [name, re] of RULES) if (re.test(t)) return name;
   return null;
 }

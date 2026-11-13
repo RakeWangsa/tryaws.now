@@ -2,7 +2,7 @@ import { supportReplyPayload } from "@tc/db";
 import { describe, expect, it } from "vitest";
 import { NotifyError } from "../queue/types";
 import { BN, EN, SHARED } from "../templates/messages";
-import { linkOf, parseTemplateData, renderEmail } from "../templates/render";
+import { parseTemplateData, renderEmail } from "../templates/render";
 import { scanSecrets } from "../text/guards";
 import { IDS } from "./samples";
 
@@ -51,9 +51,9 @@ describe("support_reply to a customer", () => {
   });
 
   // The notifier refuses a mail whose text looks like a secret (R14). A request id is in the link, and a
-  // random id has all digits in its last group about once in 280: the notifier checks the mail without
-  // the link the template built (queue/run.ts; the whole path is in wpu-z5-notifier.test.ts).
-  it("the request id is only in the link, and the mail without the link passes the check", () => {
+  // random id has all digits in its last group about once in 280: the check sets aside only an id in the
+  // path /support/requests/<id> (text/guards.ts; the whole path is in wpu-z5-notifier.test.ts).
+  it("a request id whose last group is all digits still passes the check of the whole mail", () => {
     const requestId = "0193f7c6-4d5e-5394-8f82-123456789012";
     for (const locale of ["bn", "en"] as const) {
       const data = parseTemplateData(
@@ -61,11 +61,10 @@ describe("support_reply to a customer", () => {
         supportReplyPayload(requestId, BODY, "customer"),
       );
       const m = renderEmail("support_reply", data, ctx(locale));
-      const link = linkOf("support_reply", data, ctx(locale));
-      expect(link).toBe(`${ORIGIN}${locale === "en" ? "/en" : ""}/support/requests/${requestId}`);
-      const said = `${m.subject}\n${m.text.replaceAll(link, "")}`;
-      expect(said).not.toContain(requestId);
-      expect(scanSecrets(said)).toBeNull();
+      expect(m.text).toContain(
+        `${ORIGIN}${locale === "en" ? "/en" : ""}/support/requests/${requestId}`,
+      );
+      expect(scanSecrets(`${m.subject}\n${m.text}`)).toBeNull();
     }
   });
 });
