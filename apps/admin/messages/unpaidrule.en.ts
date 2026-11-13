@@ -11,7 +11,7 @@ export const unpaidRuleEn: Same<typeof unpaidRuleBn> = {
     about: {
       title: "What the rule does",
       retry:
-        "When it is on, a daily job tries every unpaid usage charge again (snapshot storage, static IPs and other metered use).",
+        "When it is on, a daily job tries every unpaid usage charge again (snapshot storage and static IP hours).",
       suspend: "A resource whose charge is still unpaid after 1 day is suspended.",
       delete:
         "At day 7 the job requests the deletion of the resource; where the product has snapshots, a final snapshot is made first.",
