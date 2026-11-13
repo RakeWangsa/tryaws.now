@@ -146,6 +146,9 @@ describe("the marks and the range read of WPU-Y3b", () => {
   it("markHeld keeps the hour range without unpaidSince, and the job lists such a resource", async () => {
     const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
     const { resourceId } = await placeOne(kit, buyer);
+    // A placed order leaves the resource 'creating'; static IP hours (and so held hours) exist only for a
+    // live resource, and both the metering list and the unpaid list read 'active', 'stopped', 'suspended'.
+    await q("update resources set state = 'active' where id = $1", [resourceId]);
     await worker((tx) => meteringRepo(tx).markHeld(resourceId, "2026-11-11T15"));
     await worker((tx) => meteringRepo(tx).markHeld(resourceId, "2026-11-11T13"));
     const rows = await q("select config from resources where id = $1", [resourceId]);
