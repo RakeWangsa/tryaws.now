@@ -68,6 +68,9 @@ importers:
       react-dom:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
+      sst:
+        specifier: 4.17.2
+        version: 4.17.2
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -120,6 +123,9 @@ importers:
       react-dom:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
+      sst:
+        specifier: 4.17.2
+        version: 4.17.2
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -190,6 +196,9 @@ importers:
       '@tc/db':
         specifier: workspace:*
         version: link:../../packages/db
+      sst:
+        specifier: 4.17.2
+        version: 4.17.2
 
   functions/notifier:
     dependencies:
@@ -205,6 +214,9 @@ importers:
       '@tc/notify':
         specifier: workspace:*
         version: link:../../packages/notify
+      sst:
+        specifier: 4.17.2
+        version: 4.17.2
 
   functions/payments-sweeper:
     dependencies:
@@ -334,6 +346,9 @@ importers:
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      sst:
+        specifier: 4.17.2
+        version: 4.17.2
       uuid:
         specifier: ^14.0.3
         version: 14.0.3

@@ -17,6 +17,7 @@
   "dependencies": {
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1",
+    "sst": "4.17.2",
     "uuid": "^14.0.3"
   },
   "devDependencies": {
