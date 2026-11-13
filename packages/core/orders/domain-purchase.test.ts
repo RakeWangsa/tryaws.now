@@ -80,11 +80,14 @@ describe("a domain order", () => {
 
     const sub = (
       await t.pool.query(
-        "select term_days, period_end - period_start as span from subscriptions where resource_id = $1",
+        "select term_days, period_end - period_start as span, auto_renew from subscriptions where resource_id = $1",
         [resource["id"]],
       )
-    ).rows[0] as { term_days: number };
+    ).rows[0] as { term_days: number; auto_renew: boolean };
     expect(sub.term_days).toBe(365);
+    // WPU-Z2: a domain is bought with auto-renew OFF. A renewal would charge the wallet, but nothing renews
+    // the name at the registry yet (spec 17, open item 79), so it must not be charged by itself.
+    expect(sub.auto_renew).toBe(false);
 
     const op = (
       await t.pool.query("select kind, state from operations where resource_id = $1", [

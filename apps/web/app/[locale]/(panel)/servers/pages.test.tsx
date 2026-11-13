@@ -436,6 +436,41 @@ describe("/orders/review", () => {
     expect(bn).not.toContain("alert-warning");
   });
 
+  it("WPU-Z2: says auto-renew is on before the customer confirms, and prints no USD amount, in bn and en", async () => {
+    // The signed draft prices 690 taka at 120 a dollar: the page has a USD text it must not print.
+    const usdAmount = /\$\s*[\d০-৯]/;
+    const bn = await renderPage(ReviewPage as never, "bn", {}, { d: "payload.mac" });
+    expect(bn).toContain("স্বয়ংক্রিয় নবায়ন চালু আছে: এই মেয়াদ শেষ হলে পরবর্তী মেয়াদ");
+    expect(bn).toContain("৳৬৯০.০০");
+    expect(bn).not.toMatch(usdAmount);
+    expect(bn).not.toContain("মার্কিন ডলারে মূল্য");
+    const en = await renderPage(ReviewPage as never, "en", {}, { d: "payload.mac" });
+    expect(en).toContain(
+      "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the Billing tab.",
+    );
+    expect(en).toContain("৳690.00");
+    expect(en).not.toMatch(usdAmount);
+    expect(en).not.toContain("Price in US dollars");
+  });
+
+  // WPU-Z2: only a Linux server is bought with auto-renew on. A domain (nothing renews the name at the
+  // registry yet) and a family without a switch in the panel (a DNS zone, a database, a Windows server) are
+  // bought with it off, so their review must not say it is on or point to a Billing tab.
+  it.each(["domain", "dns_zone", "database", "windows_instance"])(
+    "WPU-Z2: the review of a %s says nothing about auto-renew being on, in bn and en",
+    async (fam) => {
+      state.verdict = { ok: true, claims: { ...claims, fam } };
+      const en = await renderPage(ReviewPage as never, "en", {}, { d: "payload.mac" });
+      expect(en).toContain("৳690.00");
+      expect(en).not.toContain("Auto-renew is on");
+      expect(en).not.toContain("Billing tab");
+      const bn = await renderPage(ReviewPage as never, "bn", {}, { d: "payload.mac" });
+      expect(bn).toContain("৳৬৯০.০০");
+      expect(bn).not.toContain("স্বয়ংক্রিয় নবায়ন চালু আছে");
+      expect(bn).not.toContain("বিলিং ট্যাবে");
+    },
+  );
+
   it("shows the shortfall in whole taka and a top-up link that returns to the review (16.11 step 4)", async () => {
     state.balance = 50001n;
     const en = await renderPage(ReviewPage as never, "en", {}, { d: "payload.mac" });

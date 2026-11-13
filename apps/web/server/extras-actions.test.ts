@@ -1,4 +1,5 @@
 import type { CustomerSession } from "@tc/auth";
+import { FEATURE_FLAGS, autoRenewAtPurchase } from "@tc/core";
 import type { ResourceSummary } from "@tc/db";
 import { describe, expect, it } from "vitest";
 import {
@@ -470,6 +471,33 @@ describe("storage and billing", () => {
       done: "autoRenewOn",
     });
     expect(w.calls.at(-1)).toBe("audit:subscription.auto_renew_on");
+  });
+});
+
+// WPU-Z2. The order review tells the buyer of every family that a purchase opens with auto-renew on: "You
+// can turn it off at any time on the Billing tab". This pins that promise to the switch: the Billing tab's
+// setAutoRenew accepts each such family. A family added to autoRenewAtPurchase without a switch fails here.
+describe("WPU-Z2: every family bought with auto-renew on can turn it off on the Billing tab", () => {
+  it("the Billing tab switch turns it off for each of them", async () => {
+    const on = FEATURE_FLAGS.filter((family) => autoRenewAtPurchase(family));
+    expect(on).toContain("linux_instance");
+    for (const family of on) {
+      const w = world({ rows: [row({ family })] });
+      expect(
+        await setAutoRenewCore(w.deps, { serverId: SERVER, autoRenew: "off" }),
+        family,
+      ).toEqual({ ok: true, done: "autoRenewOff" });
+      expect(w.calls, family).toContain("autoRenew:false");
+      expect(w.calls.at(-1), family).toBe("audit:subscription.auto_renew_off");
+    }
+  });
+
+  it("a family the Billing tab refuses is bought with auto-renew off", async () => {
+    for (const family of FEATURE_FLAGS) {
+      const w = world({ rows: [row({ family })] });
+      const answer = await setAutoRenewCore(w.deps, { serverId: SERVER, autoRenew: "off" });
+      if (!answer.ok) expect(autoRenewAtPurchase(family), family).toBe(false);
+    }
   });
 });
 

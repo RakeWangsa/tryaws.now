@@ -300,9 +300,13 @@ export const serversBn = {
       termValue: "৩০ দিন",
       renewal:
         "মেয়াদ শেষে নবায়ন ওয়ালেট থেকে হয়। স্বয়ংক্রিয় নবায়ন বন্ধ করা যায়, বন্ধ করলে সার্ভার স্থগিত হয়।",
+      // WPU-Z2: shown only for a family that a purchase opens with auto-renew on, a Linux server (owner
+      // decision of 2026-11-13; autoRenewAtPurchase of @tc/core). Its Billing tab has the switch.
+      autoRenew:
+        "স্বয়ংক্রিয় নবায়ন চালু আছে: এই মেয়াদ শেষ হলে পরবর্তী মেয়াদ আপনার ওয়ালেট থেকে পরিশোধ হবে। বিলিং ট্যাবে যেকোনো সময় এটি বন্ধ করতে পারবেন।",
+      // WPU-Z2: the panel shows BDT only (owner decision of 2026-11-13); today's rate stays.
       fx: {
-        caption: "মার্কিন ডলারে মূল্য, বিনিময় হার ও টাকার পরিমাণ",
-        usd: "মার্কিন ডলারে মূল্য",
+        caption: "বিনিময় হার ও টাকার পরিমাণ",
         rate: "বিনিময় হার",
         rateValue: "১ USD = ৳{rate}, {date} তারিখে নির্ধারিত",
         rateValueNoDate: "১ USD = ৳{rate}",

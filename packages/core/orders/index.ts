@@ -9,5 +9,6 @@ export { verifyDraft } from "./token";
 export { draftHash, orderIdFor } from "./ids";
 export { comparePrice } from "./compare";
 export { DEFAULT_TIER_LIMITS, checkCustomer, checkLimits } from "./gates";
-export { runPurchase } from "./purchase";
+// WPU-Z2: the review shows the auto-renew line by the same rule that the purchase stores.
+export { autoRenewAtPurchase, runPurchase } from "./purchase";
 export { compensateFailedCreate, type Compensated } from "./compensate";

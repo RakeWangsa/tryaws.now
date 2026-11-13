@@ -91,11 +91,14 @@ describe("a DNS zone order", () => {
     expect(row).toEqual([{ name, status: "pending", hosted_zone_id: null }]);
 
     const sub = (
-      await t.pool.query("select term_days from subscriptions where resource_id = $1", [
+      await t.pool.query("select term_days, auto_renew from subscriptions where resource_id = $1", [
         resource["id"],
       ])
-    ).rows[0] as { term_days: number };
+    ).rows[0] as { term_days: number; auto_renew: boolean };
     expect(sub.term_days).toBe(30);
+    // WPU-Z2: a DNS zone is bought with auto-renew OFF: the panel has no switch that turns it off, so the
+    // wallet must not be charged every period by itself.
+    expect(sub.auto_renew).toBe(false);
 
     const op = (
       await t.pool.query("select kind, state from operations where resource_id = $1", [

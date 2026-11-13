@@ -8,6 +8,8 @@ const ORDERS_VALUES = [
   "CLIENT_KEY",
   "DEFAULT_TIER_LIMITS",
   "DRAFT_TTL_SECONDS",
+  // WPU-Z2: the families a purchase opens with auto-renew on; the order review shows its line from it.
+  "autoRenewAtPurchase",
   "checkCustomer",
   "checkLimits",
   "comparePrice",

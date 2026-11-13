@@ -108,6 +108,7 @@ export const ordersCases: CaseSet = defineCaseSet<Seed>({
             priceSnapshot: {},
             periodStart: new Date("2026-11-11T10:00:00.000Z"),
             periodEnd: new Date("2026-12-11T10:00:00.000Z"),
+            autoRenew: true,
           }),
         ).then((w) => (w.ok ? { ok: true as const } : w)),
     },

@@ -45,6 +45,12 @@ export interface NewSubscription {
   priceSnapshot: unknown;
   periodStart: Date;
   periodEnd: Date;
+  /**
+   * WPU-Z2: stored as given; the column default (false) is never relied on. A purchase passes true only
+   * for a family the customer can switch off in the panel (packages/core/orders/purchase.ts; owner
+   * decision of 2026-11-13).
+   */
+  autoRenew: boolean;
 }
 
 // The three creates are the writes of the purchase transaction (WP4-T4). They run as web_rw, whose
@@ -167,7 +173,11 @@ export function ordersRepo(scope: TenantScope): OrdersRepo {
     createSubscription: async (input) => {
       requireUuid(input.id, "id");
       if (!isUuid(input.resourceId)) return refused("not_found");
-      if (!Number.isSafeInteger(input.termDays) || input.termDays <= 0) {
+      if (
+        !Number.isSafeInteger(input.termDays) ||
+        input.termDays <= 0 ||
+        typeof input.autoRenew !== "boolean"
+      ) {
         return refused("validation");
       }
       // The resource is selected by id and customer in the same statement as the insert: a resource
@@ -175,11 +185,12 @@ export function ordersRepo(scope: TenantScope): OrdersRepo {
       // is the resource's own, which the same condition ties to the scope.
       const inserted = await tx.execute(sql`
         insert into subscriptions (id, resource_id, customer_id, term_days, price_snapshot,
-                                   period_start, period_end)
+                                   period_start, period_end, auto_renew)
         select ${input.id}, r.id, r.customer_id, ${input.termDays},
                ${JSON.stringify(input.priceSnapshot)}::jsonb,
                ${input.periodStart.toISOString()}::timestamptz,
-               ${input.periodEnd.toISOString()}::timestamptz
+               ${input.periodEnd.toISOString()}::timestamptz,
+               ${input.autoRenew}
         from resources r
         where r.id = ${input.resourceId} and r.customer_id = ${customerId}`);
       return inserted.rowCount === 1 ? created({ id: input.id }) : refused("not_found");

@@ -27,7 +27,8 @@ async function fresh() {
   )[0]!;
   await q("update resources set state = 'active' where id = $1", [resourceId]);
   await q("update operations set state = 'succeeded' where resource_id = $1", [resourceId]);
-  // auto_renew stays false (the purchase default): that is the case under test.
+  // A purchase of a Linux server (the kit's family) turns auto-renew on (WPU-Z2); the case under test is a
+  // subscription without it, so the customer's switch to off is played here.
   await q("update subscriptions set auto_renew = false where id = $1", [s.id]);
   return {
     resourceId,
