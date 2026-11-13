@@ -1,0 +1,90 @@
+// WPU-Z12. The pure rules of the lifecycle pass's walk over its candidate list (engine.ts, runLifecycle). The list is
+// read page after page with a keyset cursor over (period_end, id) until a page is short, so the held subscriptions at
+// its head never hide the rows behind them, and the walk stops between rows at a deadline (the review of WPU-Z12: a
+// pass with no upper bound could outlast the scheduler's run). Keys in, a decision out; the engine reads the pages,
+// processes the rows and keeps the time.
+import { isCandidateKey, type CandidateKey } from "@tc/db";
+
+/** A page that does not move strictly past its cursor: the list is unsound, so the walk stops there (R16). */
+export class CandidateCursorError extends Error {
+  constructor() {
+    // Fixed words only (R14): no id and no date.
+    super("lifecycle: the candidate list did not move past its cursor");
+    this.name = "CandidateCursorError";
+  }
+}
+
+/** -1, 0 or 1: the order of the list (period end, then id). Keys in the form of the list compare as text. */
+export function compareCandidateKeys(a: CandidateKey, b: CandidateKey): number {
+  if (a.periodEnd !== b.periodEnd) return a.periodEnd < b.periodEnd ? -1 : 1;
+  if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+  return 0;
+}
+
+/**
+ * The cursor of the page after `page`, or null when the walk is over: a page shorter than `pageSize`, and an empty
+ * page whatever `pageSize` is, is the last. Every key of the page must be in the exact form of the list and strictly
+ * after the cursor and the key before it, so a cursor that is returned always moved forward: no row is read twice or
+ * skipped by the cursor, and the walk ends. A page that breaks this throws CandidateCursorError, short or not (R16).
+ */
+export function nextCandidateCursor(
+  after: CandidateKey | null,
+  page: readonly CandidateKey[],
+  pageSize: number,
+): CandidateKey | null {
+  let last = after;
+  for (const key of page) {
+    if (!isCandidateKey(key) || (last !== null && compareCandidateKeys(last, key) >= 0)) {
+      throw new CandidateCursorError();
+    }
+    last = key;
+  }
+  return page.length === 0 || page.length < pageSize ? null : last;
+}
+
+export interface CandidateWalk {
+  /** The rows of a full page: a page with fewer is the last. */
+  readonly pageSize: number;
+  /** At most `pageSize` keys of the list strictly after `after` (null: from the head), in the order of the list. */
+  readonly readPage: (after: CandidateKey | null) => Promise<readonly CandidateKey[]>;
+  /** One candidate. It handles the failure of its own row; an error that escapes it stops the walk. */
+  readonly visit: (id: string) => Promise<void>;
+  /**
+   * True once the time of the walk is up (WPU-Z12 review: the walk has an upper bound). Asked before each row that is
+   * left to visit, never during a visit: a row that was started is finished. An error that escapes it stops the walk.
+   */
+  readonly pastDeadline: () => boolean;
+}
+
+export interface CandidateWalkResult {
+  /** The distinct rows visited. */
+  readonly visited: number;
+  /** False when the deadline stopped the walk before a row that was left; true when it reached the end of the list. */
+  readonly complete: boolean;
+}
+
+/**
+ * Visits every candidate of the list once, one at a time, in the order of the list, until the list ends or the
+ * deadline is past. A row whose period end moved forward during the walk (a renewal) can come back on a later page
+ * under its new key; it is not visited twice and is no row left. The rows of a page are visited before the page is
+ * checked, so a list that turns out unsound stops the walk after them; a page that cannot be read stops it with its
+ * own error. A deadline that passes when no row is left (after a short last page, or before an empty one) is no cut.
+ * No cursor outlives a walk: the next one starts at the head again, so a row visited again is a replay (R7).
+ */
+export async function walkCandidates(walk: CandidateWalk): Promise<CandidateWalkResult> {
+  const seen = new Set<string>();
+  let after: CandidateKey | null = null;
+  for (;;) {
+    const page = await walk.readPage(after);
+    for (const { id } of page) {
+      if (seen.has(id)) continue;
+      // Between rows, never during one. This row and the rest of the list are left to the next walk; the rows of this
+      // page after it are neither visited nor checked.
+      if (walk.pastDeadline()) return { visited: seen.size, complete: false };
+      seen.add(id);
+      await walk.visit(id);
+    }
+    after = nextCandidateCursor(after, page, walk.pageSize);
+    if (after === null) return { visited: seen.size, complete: true };
+  }
+}

@@ -443,10 +443,11 @@ export {
   type ConfigPriceInput,
   type ConfigPriceKey,
 } from "./seed/config-prices";
-export { lifecycleRepo } from "./repositories/system/lifecycle";
+export { isCandidateKey, lifecycleRepo } from "./repositories/system/lifecycle";
 export { pollingRepo } from "./repositories/system/polling";
 export type { PollingRepo } from "./repositories/system/polling";
 export type {
+  CandidateKey,
   GuardFacts,
   LifecycleRepo,
   LifecycleRow,

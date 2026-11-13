@@ -48,6 +48,33 @@ export interface NewLifecycleNotification {
   readonly dedupeKey: string;
 }
 
+/**
+ * WPU-Z12. One row of the candidate list of the lifecycle pass, and the keyset cursor of the next page: the list is
+ * ordered by (period_end, id) and a page holds the rows strictly after its cursor. `periodEnd` is the stored period
+ * end to the microsecond, in UTC, at a fixed width (`2026-11-10T06:00:00.123456Z`): a JavaScript Date keeps only
+ * milliseconds, so a cursor built from one could read a row twice or skip one. Two keys of this form compare as text
+ * in the order of the list (the id is lower-case hex, whose text order is PostgreSQL's uuid order).
+ */
+export interface CandidateKey {
+  readonly id: string;
+  readonly periodEnd: string;
+}
+
+const LOWER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const PERIOD_END_KEY = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+
+/** True for a key in the exact form that listCandidates returns: the only form that is a cursor (R16). */
+export function isCandidateKey(value: unknown): value is CandidateKey {
+  if (typeof value !== "object" || value === null) return false;
+  const { id, periodEnd } = value as Record<string, unknown>;
+  return (
+    typeof id === "string" &&
+    LOWER_UUID.test(id) &&
+    typeof periodEnd === "string" &&
+    PERIOD_END_KEY.test(periodEnd)
+  );
+}
+
 type Raw = Record<string, unknown>;
 
 function toRow(r: Raw): LifecycleRow {
@@ -99,19 +126,39 @@ export function lifecycleRepo(tx: Tx) {
       return out;
     },
 
-    // The subscriptions the clock may have something to do for. Ids only; each one is then read
-    // again under its lock. `reminderHorizonDays` is the largest reminder day.
-    async listCandidates(now: Date, reminderHorizonDays: number, limit: number): Promise<string[]> {
+    // The subscriptions the clock may have something to do for, one page at a time (WPU-Z12): at most `limit` rows
+    // in (period_end, id) order, strictly after the cursor `after` (the key of the last row of the page before; null
+    // for the first page). Keys only; each row is then read again under its lock. `reminderHorizonDays` is the
+    // largest reminder day. A cursor that is not a key of this list is refused before any statement (R16).
+    async listCandidates(
+      now: Date,
+      reminderHorizonDays: number,
+      limit: number,
+      after: CandidateKey | null = null,
+    ): Promise<CandidateKey[]> {
       if (!Number.isInteger(limit) || limit < 1 || limit > 5000) {
         throw new RangeError("lifecycle: limit must be from 1 to 5000");
       }
+      if (after !== null && !isCandidateKey(after)) {
+        throw new TypeError("lifecycle: the cursor is not a key of the candidate list");
+      }
       const horizon = new Date(now.getTime() + reminderHorizonDays * 86_400_000);
-      const { rows } = await tx.execute<{ id: string }>(sql`
-        select s.id from subscriptions s
-        where (s.status = 'active' and s.period_end <= ${horizon.toISOString()}::timestamptz)
-           or s.status in ('grace', 'retained')
+      // The cursor holds the period end as it was read, never the row's period end now: a renewal of that row in the
+      // same pass moves it forward, and a cursor that read it again would skip every row in between.
+      const cursor =
+        after === null
+          ? sql``
+          : sql`and (s.period_end, s.id) > (${after.periodEnd}::timestamptz, ${after.id}::uuid)`;
+      // to_char gives no text for an infinite period end; it comes back as "", which is no cursor.
+      const { rows } = await tx.execute<{ id: string; period_end: string | null }>(sql`
+        select s.id,
+          to_char(s.period_end at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as period_end
+        from subscriptions s
+        where ((s.status = 'active' and s.period_end <= ${horizon.toISOString()}::timestamptz)
+           or s.status in ('grace', 'retained'))
+          ${cursor}
         order by s.period_end, s.id limit ${limit}`);
-      return rows.map((r) => r.id);
+      return rows.map((r) => ({ id: String(r.id), periodEnd: r.period_end ?? "" }));
     },
 
     // The row, locked FOR UPDATE: two scheduler runs never act on one subscription together.
