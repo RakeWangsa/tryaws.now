@@ -14,16 +14,16 @@ import {
   type QueueMessage,
 } from "../operations/queue";
 import type { Logger, RunTx } from "../operations/types";
-import type { Clock } from "../types";
+import type { Clock, Result } from "../types";
 import { DEFAULT_LIFECYCLE_CONFIG, readLifecycleConfig, type LifecycleConfig } from "./config";
 import { decideSubscription, type LifecycleAction } from "./decide";
-import { queueDomainRenewal } from "./domain-renewal";
+import { queueDomainRenewal, renewWithRegistry } from "./domain-renewal";
 import { productOfFamily, type NoticeWriter } from "./notice";
 import { walletLowDue } from "./unpaid";
 import { resumeAfterRenewalAllowed, retentionKeyNeedsSalt } from "./resume-rule";
 import { SNAPSHOT_FAMILIES } from "./guard";
 import { planApplyWait, queuePlanApply } from "./plan-change";
-import { renewalQuote, renewSubscription } from "./renew";
+import { renewalQuote, renewSubscription, type Renewed } from "./renew";
 import { holdReasonOf, nextHoldMarker, staleHoldMarkers, type HoldReason } from "./hold-rule";
 import { walkCandidates } from "./candidate-walk";
 
@@ -238,9 +238,33 @@ async function clearStaleMarkers(tx: Tx, row: LifecycleRow, now: Date): Promise<
   return { ...row, resource: { ...row.resource, config: { ...config, ...cleared } } };
 }
 
+// The renewal charge of the period and, for a domain, its registry renewal (WPU-Z13) in one savepoint
+// (renewWithRegistry). A domain whose renewal cannot be queued comes back as `conflict` with the charge rolled
+// back; holdReasonOf then holds it for price_unavailable, so the marker is written and the alarm fires (final
+// review M2).
+async function renewCharge(
+  work: Work,
+  clock: Clock,
+  log: Logger,
+): Promise<Result<Renewed & { readonly registry: QueueMessage | null }>> {
+  const { row } = work;
+  return renewWithRegistry(work.tx, async (sp) => {
+    const renewed = await renewSubscription(sp, row, clock, log);
+    if (!renewed.ok) return renewed;
+    const registry = await queueDomainRenewal(
+      sp,
+      row,
+      renewed.value.periodStart,
+      work.now,
+      renewed.value.awsPriceUsd,
+    );
+    return { ok: true, value: { ...renewed.value, registry } };
+  });
+}
+
 async function afterRenewal(
   work: Work,
-  renewed: { periodStart: Date; totalMinor: bigint; periodEnd: Date; awsPriceUsd: string },
+  renewed: Renewed & { readonly registry: QueueMessage | null },
   fromGrace: boolean,
 ): Promise<void> {
   const { row } = work;
@@ -254,15 +278,8 @@ async function afterRenewal(
   if (fromGrace && resumeAfterRenewalAllowed(row)) {
     await work.enqueue("resume", renewed.periodStart);
   }
-  // WPU-Z13: a domain's charge pays the registry: its renew_domain of the period, in this transaction (R7).
-  const registry = await queueDomainRenewal(
-    work.tx,
-    row,
-    renewed.periodStart,
-    work.now,
-    renewed.awsPriceUsd,
-  );
-  if (registry !== null) work.messages.push(registry);
+  // WPU-Z13: a domain's charge pays the registry: its renew_domain of the period, queued with the charge (R7).
+  if (renewed.registry !== null) work.messages.push(renewed.registry);
   await work.notify("lifecycle_renewed", renewed.periodStart.toISOString(), {
     subscriptionId: row.id,
     resourceId: row.resourceId,
@@ -447,7 +464,7 @@ async function process(
       break;
     case "period_end": {
       if (action.tryRenew) {
-        const renewed = await renewSubscription(tx, row, clock, deps.log);
+        const renewed = await renewCharge(work, clock, deps.log);
         if (renewed.ok) {
           await afterRenewal(work, renewed.value, false);
           step = "renewed";
@@ -480,7 +497,7 @@ async function process(
       break;
     }
     case "retry_renew": {
-      const renewed = await renewSubscription(tx, row, clock, deps.log);
+      const renewed = await renewCharge(work, clock, deps.log);
       if (renewed.ok) {
         await afterRenewal(work, renewed.value, true);
         step = "renewed";
@@ -517,7 +534,7 @@ async function process(
       }
       if (row.autoRenew) {
         if (isHeld(row)) {
-          const renewed = await renewSubscription(tx, row, clock, deps.log);
+          const renewed = await renewCharge(work, clock, deps.log);
           if (renewed.ok) {
             await afterRenewal(work, renewed.value, true);
             step = "renewed";

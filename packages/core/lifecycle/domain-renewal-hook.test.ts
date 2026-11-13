@@ -61,8 +61,10 @@ import {
   domainRenewalKey,
   domainRenewalOperation,
   queueDomainRenewal,
+  renewWithRegistry,
   reverseFailedDomainRenewal,
 } from "./domain-renewal";
+import { holdReasonOf } from "./hold-rule";
 
 const TX = { tx: true } as unknown as Tx;
 const SUB = "0190a000-0000-7000-8000-000000000001";
@@ -168,6 +170,73 @@ describe("queueDomainRenewal: the hook of a renewal charge", () => {
   it("lets an error of the insert reach the caller, whose transaction rolls the charge back", async () => {
     insertOperation.mockRejectedValue(new Error("db"));
     await expect(queueDomainRenewal(TX, row(), P, NOW, "13.0000")).rejects.toThrow("db");
+  });
+});
+
+// Final review M2: the engine charges a domain and queues its registry renewal in one savepoint. A domain whose
+// renewal cannot be queued rolls the savepoint (the charge) back and comes out as a failed Result, which the
+// engine holds for price_unavailable (hold-rule.ts): the marker and its alarm, instead of a run that fails and
+// rolls back on every sweep for ever.
+describe("renewWithRegistry: the charge and the registry renewal in one savepoint", () => {
+  // A transaction whose savepoint records whether it was released or rolled back.
+  function savepointTx() {
+    const events: string[] = [];
+    const sp = { savepoint: true } as unknown as Tx;
+    const tx = {
+      async transaction<T>(fn: (inner: Tx) => Promise<T>): Promise<T> {
+        events.push("savepoint");
+        try {
+          const value = await fn(sp);
+          events.push("release");
+          return value;
+        } catch (error) {
+          events.push("rollback");
+          throw error;
+        }
+      },
+    } as unknown as Tx;
+    return { tx, sp, events };
+  }
+
+  it("runs the charge in a savepoint and returns its result", async () => {
+    const { tx, sp, events } = savepointTx();
+    const charge = vi.fn(async (inner: Tx) => {
+      expect(inner).toBe(sp);
+      return { ok: true as const, value: 7 };
+    });
+    expect(await renewWithRegistry(tx, charge)).toEqual({ ok: true, value: 7 });
+    expect(charge).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(["savepoint", "release"]);
+  });
+
+  it("a failed charge (the wallet, a price) is returned as it is, nothing rolled back", async () => {
+    const { tx, events } = savepointTx();
+    const failed = { ok: false as const, error: "insufficient_balance" as const };
+    expect(await renewWithRegistry(tx, async () => failed)).toEqual(failed);
+    expect(events).toEqual(["savepoint", "release"]);
+  });
+
+  it("a domain whose renewal cannot be queued rolls the charge back and is a conflict to hold", async () => {
+    const { tx, events } = savepointTx();
+    const result = await renewWithRegistry(tx, async (inner) => {
+      await queueDomainRenewal(inner, row("domain", { expiresAt: null }), P, NOW, "13.0000");
+      return { ok: true as const, value: 1 };
+    });
+    expect(result).toEqual({ ok: false, error: "conflict" });
+    expect(events).toEqual(["savepoint", "rollback"]);
+    expect(insertOperation).not.toHaveBeenCalled();
+    // the engine's rule turns it into the price_unavailable hold, whose log line alarms
+    expect(holdReasonOf(result)).toEqual({ reason: "price_unavailable", error: "conflict" });
+  });
+
+  it("any other error still reaches the caller, whose transaction rolls back (R16)", async () => {
+    const { tx, events } = savepointTx();
+    await expect(
+      renewWithRegistry(tx, async () => {
+        throw new Error("db");
+      }),
+    ).rejects.toThrow("db");
+    expect(events).toEqual(["savepoint", "rollback"]);
   });
 });
 
