@@ -1,3 +1,4 @@
+import { autoRenewAtPurchase } from "@tc/core";
 import { Button, EmptyState } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
@@ -51,6 +52,9 @@ export function ReviewContent({
     <PlaceForm
       locale={locale}
       review={review}
+      // WPU-Z2: the line "Auto-renew is on" by the rule the purchase stores; a draft without a family says
+      // nothing (R16).
+      autoRenew={review.family !== undefined && autoRenewAtPurchase(review.family)}
       idempotencyKey={idempotencyKey}
       configureHref={configureHref}
       action={action}

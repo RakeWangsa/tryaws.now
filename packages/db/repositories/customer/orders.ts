@@ -46,8 +46,9 @@ export interface NewSubscription {
   periodStart: Date;
   periodEnd: Date;
   /**
-   * WPU-Z2: stored as given; the column default (false) is never relied on. A purchase passes true
-   * (owner decision of 2026-11-13).
+   * WPU-Z2: stored as given; the column default (false) is never relied on. A purchase passes true only
+   * for a family the customer can switch off in the panel (packages/core/orders/purchase.ts; owner
+   * decision of 2026-11-13).
    */
   autoRenew: boolean;
 }

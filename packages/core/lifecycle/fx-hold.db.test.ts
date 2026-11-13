@@ -32,9 +32,9 @@ async function fresh(balanceMinor = 50_000_000n): Promise<Fresh> {
   )[0]!;
   await q("update resources set state = 'active' where id = $1", [resourceId]);
   await q("update operations set state = 'succeeded' where resource_id = $1", [resourceId]);
-  // The hold is about a renewal the scheduler would charge, so auto-renew must be on. A purchase stores it on
-  // (WPU-Z2); it is still set here, as in every other lifecycle fixture, so the case does not depend on the
-  // purchase default. Without it the period end goes straight to grace (no renewal is tried) and the hold is
+  // The hold is about a renewal the scheduler would charge, so auto-renew must be on. A purchase of a Linux
+  // server (the kit's family) stores it on (WPU-Z2); it is still set here, as in every other lifecycle
+  // fixture, so the case does not depend on the purchase default. Without it the period end goes straight to grace (no renewal is tried) and the hold is
   // never reached.
   await q("update subscriptions set auto_renew = true where id = $1", [s.id]);
   return {

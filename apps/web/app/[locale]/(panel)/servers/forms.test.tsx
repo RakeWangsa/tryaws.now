@@ -44,11 +44,13 @@ const AUTO_RENEW_EN =
   "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the Billing tab.";
 const AUTO_RENEW_BN =
   "স্বয়ংক্রিয় নবায়ন চালু আছে: এই মেয়াদ শেষ হলে পরবর্তী মেয়াদ আপনার ওয়ালেট থেকে পরিশোধ হবে। বিলিং ট্যাবে যেকোনো সময় এটি বন্ধ করতে পারবেন।";
-const place = (locale: Locale, over = readyReview) =>
+// The review of a server: a purchase of a Linux server turns auto-renew on (WPU-Z2), so the line is shown.
+const place = (locale: Locale, over = readyReview, autoRenew = true) =>
   intl(
     <PlaceForm
       locale={locale}
       review={over}
+      autoRenew={autoRenew}
       idempotencyKey="0190aaaa-0000-7000-8000-0000000000e1"
       configureHref="/servers/new"
       action={noopAction}
@@ -111,6 +113,30 @@ describe("PlaceForm (placeOrder)", () => {
     } satisfies FormState;
     expect(place("en")).toContain(AUTO_RENEW_EN);
     expect(place("bn")).toContain(AUTO_RENEW_BN);
+  });
+
+  it("WPU-Z2: a family bought with auto-renew off gets no auto-renew line, so nothing promises a switch it does not have", () => {
+    const en = place("en", readyReview, false);
+    expect(en).not.toContain("Auto-renew is on");
+    expect(en).not.toContain("Billing tab");
+    expect(en).toContain("Price details");
+    const bn = place("bn", readyReview, false);
+    expect(bn).not.toContain("স্বয়ংক্রিয় নবায়ন চালু আছে");
+    expect(bn).not.toContain("বিলিং ট্যাবে");
+    // nor after a price change
+    hold.state = {
+      error: "price_changed",
+      draft: {
+        token: "fresh.token",
+        totalMinor: "75000",
+        expiresAt: "2026-11-12T01:30:00.000Z",
+        usdText: "5.00",
+        fxRate: "150",
+        fxSetAt: "2026-11-12T04:00:00.000Z",
+      },
+    } satisfies FormState;
+    expect(place("en", readyReview, false)).not.toContain("Auto-renew is on");
+    expect(place("bn", readyReview, false)).not.toContain("স্বয়ংক্রিয় নবায়ন চালু আছে");
   });
 
   it("WPU-Y4, WPU-Z2: after a rate change the new rate and the new BDT replace the old and ask to confirm again, without a USD amount", () => {

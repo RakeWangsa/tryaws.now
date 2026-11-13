@@ -28,12 +28,18 @@ type Ready = Extract<ReviewScreen, { state: "ready" }>;
 export function PlaceForm({
   locale,
   review,
+  autoRenew,
   idempotencyKey,
   configureHref,
   action,
 }: {
   locale: Locale;
   review: Ready;
+  /**
+   * WPU-Z2: the purchase of this family turns auto-renew on (`autoRenewAtPurchase` of @tc/core, read by
+   * ReviewContent on the server). Only then is the auto-renew line shown.
+   */
+  autoRenew: boolean;
   /** One key for each view of the page: a double click sends the same key twice (R7). */
   idempotencyKey: string;
   configureHref: string;
@@ -171,8 +177,10 @@ export function PlaceForm({
             </div>
           ) : null}
 
-          {/* WPU-Z2: a purchase turns auto-renew on; the customer reads it before confirming. */}
-          <p className="seccolor">{t("autoRenew")}</p>
+          {/* WPU-Z2: the customer reads it before confirming, only for a family that a purchase opens with
+              auto-renew on (a Linux server): the line points to the Billing tab switch, which no other
+              family has. */}
+          {autoRenew ? <p className="seccolor">{t("autoRenew")}</p> : null}
           <p className="seccolor">{t("renewal")}</p>
 
           {shortfallTaka !== null ? (

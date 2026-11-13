@@ -123,7 +123,8 @@ describe("runPurchase: the happy path", () => {
       ],
     });
 
-    // the subscription: 30 days, auto-renew on (WPU-Z2, owner decision of 2026-11-13)
+    // the subscription: 30 days, auto-renew on (WPU-Z2, owner decision of 2026-11-13: a Linux server,
+    // whose Billing tab can turn it off)
     const [sub] = await rows(
       `select term_days, extract(epoch from (period_end - period_start))::int as seconds, auto_renew
          from subscriptions where resource_id = $1`,

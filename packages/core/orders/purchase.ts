@@ -38,9 +38,29 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 type Repos = ReturnType<typeof customerRepos>;
 
 /**
- * The subscription a purchase opens: the term of the family, from the purchase, with auto-renew ON
- * (WPU-Z2, owner decision of 2026-11-13: the next period is paid from the wallet when this one ends,
- * until the customer turns it off). Pure, so the rule is proven for every family without a database.
+ * WPU-Z2. The families whose purchase opens the subscription with auto-renew ON (owner decision of
+ * 2026-11-13: the next period is paid from the wallet when this one ends, until the customer turns it
+ * off). A family is listed only when both hold:
+ * - the customer can turn auto-renew off in the panel: the Billing tab of a Linux server
+ *   (`setAutoRenewCore` of apps/web, which accepts no other family). Without a switch the wallet would be
+ *   charged every period with no way to stop it but deleting the resource.
+ * - the renewal gives the next period of the service. A domain is NOT listed: the lifecycle renewal charges
+ *   the wallet, but nothing renews the name at the registry (no `renew_domain` is enqueued, and
+ *   RegisterDomain is sent with AutoRenew=false), and spec 17 open item 79 keeps a domain from renewing by
+ *   itself until the domain renewal rule is decided.
+ * Every other family is bought with auto-renew off, as before WPU-Z2, until it has both. The order review
+ * shows its auto-renew line exactly for these families (apps/web ReviewContent).
+ */
+const AUTO_RENEW_AT_PURCHASE: ReadonlySet<string> = new Set(["linux_instance"]);
+
+/** WPU-Z2: whether a purchase of this family turns auto-renew on. Pure; an unknown family is off (R16). */
+export function autoRenewAtPurchase(family: string): boolean {
+  return AUTO_RENEW_AT_PURCHASE.has(family);
+}
+
+/**
+ * The subscription a purchase opens: the term of the family, from the purchase, with the auto-renew of
+ * `autoRenewAtPurchase` (WPU-Z2). Pure, so the rule is proven for every family without a database.
  */
 export function purchaseSubscription(args: {
   readonly orderId: string;
@@ -62,7 +82,7 @@ export function purchaseSubscription(args: {
     priceSnapshot: args.priceSnapshot,
     periodStart: args.now,
     periodEnd: new Date(args.now.getTime() + termDays * DAY_MS),
-    autoRenew: true,
+    autoRenew: autoRenewAtPurchase(args.family),
   };
 }
 
