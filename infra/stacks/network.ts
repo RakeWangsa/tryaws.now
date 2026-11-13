@@ -180,6 +180,8 @@ export function network(config: StageConfig) {
   // The migrator runs as a function in the app subnets and reaches the proxy like any other function.
 
   // invoice-renderer: two isolated subnets without a NAT route (3.3), S3 only through a gateway endpoint.
+  // WPU-Y3: kyc-check runs here too (placement "isolated"); the group's description keeps its old text,
+  // since a new description would replace the group.
   // VERIFY: sst.aws.Vpc has no isolated subnet type, so these are raw subnets in the high octets
   // (200 and 201) that the component's own layout should not use.
   const isolated = isolatedSubnets(config.kind).map(

@@ -1,5 +1,6 @@
 import {
   decideRefusal,
+  dnsZoneMayExist,
   isUuid,
   refundedOnFailure,
   rejectionAllowed,
@@ -36,6 +37,10 @@ function targetOf(payload: unknown): string | null {
 // with its refund. WPU-Y2 fix round 1: and a renewal at `poll` whose last run (at most an hour ago) recorded the
 // provisioner's check `registry_unrenewed:<checked at>` (ERROR for the saved operation, the expiry unchanged to the
 // millisecond; round 2: never a give-up while it is in progress): rejectionAllowed.
+// WPU-Y5 (c): the same for a dns_zone create whose hosted zone may exist (dnsZoneMayExist: at `create_zone` once an
+// attempt may have sent CreateHostedZone, and past it): a rejection would refund the order while the zone stays. The reject operation needs attention with
+// `zone_created`; the target and the money stay. A person retries the create, or destroys the zone first
+// (docs/runbooks/dns-zone.md).
 export async function runReject(
   deps: StepDeps,
   view: RunView,
@@ -78,6 +83,9 @@ export async function runReject(
     // WPU-Y2 fix round 1: a renewal at `poll` whose last run recorded a fresh "expiry unchanged" check may be rejected.
     if (rejectable && !rejectionAllowed(target, deps.clock.now())) {
       return refuse(tx, "renewal_submitted");
+    }
+    if (rejectable && dnsZoneMayExist(resource.family, target.kind, target.step, target)) {
+      return refuse(tx, "zone_created");
     }
     const refunded = refundedOnFailure(target.kind);
     if (rejectable && refunded && deps.hooks?.failed === undefined) {

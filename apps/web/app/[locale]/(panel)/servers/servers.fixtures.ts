@@ -49,7 +49,7 @@ export function configurator(
       }),
     ],
     regions: ["ap-south-1", "ap-southeast-1"],
-    keys: [{ id: KEY_ID, name: "Laptop", fingerprint: "SHA256:abc" }],
+    keys: [{ id: KEY_ID, name: "Laptop", fingerprint: "SHA256:abc", usable: true }],
     images: {
       "ap-south-1": [
         {

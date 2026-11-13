@@ -3,7 +3,7 @@ import type { publicBn } from "./public-bn.ts";
 
 type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 
-// The legal documents are DRAFTS in `legal-en.ts` (WPU-Z7) that wait for the owner's approval.
+// The legal documents are in `legal-en.ts` (WPU-Z7), approved by the owner on 2026-11-14 (WPU-Y6).
 export const publicEn: Same<typeof publicBn> = {
   Public: {
     crumb: { home: "Home" },
@@ -41,8 +41,7 @@ export const publicEn: Same<typeof publicBn> = {
       legal: {
         title: "Legal documents",
         description: "TryAWS.now terms, privacy, acceptable use and refund policy.",
-        descriptionOf:
-          "{title} of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.",
+        descriptionOf: "{title} of TryAWS.now, the prepaid cloud panel for Bangladesh.",
       },
       soon: {
         description:
@@ -254,7 +253,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         vatInvoice: {
           q: "Do I get a VAT invoice?",
-          a: "Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.",
+          a: "Yes. For each purchase and renewal TryAWS.now gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.",
         },
         refunds: {
           q: "Can I get a refund?",
@@ -310,11 +309,9 @@ export const publicEn: Same<typeof publicBn> = {
       heading: "Legal documents",
       sidebarTitle: "Documents",
       sidebarLabel: "List of legal documents",
-      // WPU-Z7: shown until the owner approves the exact texts (manual proof wp9-t5-legal-final).
-      draftTitle: "Draft — awaiting final approval",
-      draftText:
-        "This text is a draft. It takes effect only after its final approval and may change until then. The points in square brackets are not decided yet.",
-      version: "Version: draft 1, 13 November 2026",
+      // WPU-Y6: the texts are approved by the owner (2026-11-14); no draft notice. The version line and
+      // LEGAL_VERSIONS (server/auth/legal.ts) move together.
+      version: "Version 1, 14 November 2026",
       docs: legalDocsEn,
     },
     system: {

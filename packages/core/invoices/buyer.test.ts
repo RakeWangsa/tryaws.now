@@ -78,7 +78,7 @@ it("parseBuyerSnapshot reads a stored snapshot and refuses anything malformed (R
 
 // The render: the Mushak 6.3 buyer block prints the stored address, BIN or NID, escaped (R11).
 const seller = {
-  legalNameBn: "টিকন ক্লাউড লিমিটেড",
+  legalNameBn: "উদাহরণ সার্ভিসেস লিমিটেড",
   legalNameEn: "Test Seller Ltd",
   bin: "0000000000000",
   addressBn: "ঢাকা",

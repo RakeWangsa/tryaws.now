@@ -79,9 +79,9 @@ describe("support through support requests, no phone and no e-mail (WPU-Z7)", ()
 });
 
 // WPU-Z7: the legal pages are full drafts in place of the one-line placeholders. Every section is
-// numbered from 1, has a title and the paragraphs p1, p2, ...; a missing fact is a bracketed note in
-// one form; nothing of the old placeholders is left. The owner approves the exact texts (manual proof
-// wp9-t5-legal-final); until then the page shows the draft notice.
+// numbered from 1, has a title and the paragraphs p1, p2, ...; nothing of the old placeholders is left.
+// WPU-Y6: the owner approved the texts on 2026-11-14 and removed the open points; the page shows no
+// draft notice and no open note.
 type LegalSection = Record<string, string>;
 type LegalDocTree = { title: string; sections: Record<string, LegalSection> };
 const legalDocs = (tree: typeof publicBn | typeof publicEn): Record<string, LegalDocTree> =>
@@ -90,7 +90,6 @@ const LOCALES = [
   ["bn", publicBn],
   ["en", publicEn],
 ] as const;
-const GAP = { bn: /\[সিদ্ধান্ত বাকি: [^\]]+\]/g, en: /\[To be decided: [^\]]+\]/g } as const;
 const OLD_PLACEHOLDER = /\[legal text[^\]]*pending\]|\[আইনি লেখা[^\]]*বাকি\]/i;
 const latinDigits = (text: string): string =>
   text.replace(/[০-৯]/g, (d) => String(d.charCodeAt(0) - "০".charCodeAt(0)));
@@ -140,24 +139,40 @@ describe("legal drafts (WPU-Z7)", () => {
     }
   });
 
-  it("marks every missing fact with one bracketed note form, the same notes in bn and en", () => {
-    let notes = 0;
+  // WPU-Y6 (owner decision 2026-11-14): the open points are removed. No text holds a bracketed note, in
+  // either form, nor any other bracket; bn and en have the same paragraphs.
+  it("holds no open note and no bracket, the same paragraphs in bn and en", () => {
     for (const [name, doc] of Object.entries(legalDocs(publicEn))) {
       for (const [key, section] of Object.entries(doc.sections)) {
+        const bnSection = legalDocs(publicBn)[name]!.sections[key]!;
+        expect(Object.keys(bnSection), `${name}.${key}`).toEqual(Object.keys(section));
         for (const [part, en] of Object.entries(section)) {
-          const bn = legalDocs(publicBn)[name]!.sections[key]![part] as string;
+          const bn = bnSection[part] as string;
           const where = `${name}.${key}.${part}`;
-          const enNotes = en.match(GAP.en) ?? [];
-          const bnNotes = bn.match(GAP.bn) ?? [];
-          expect(bnNotes.length, where).toBe(enNotes.length);
-          // No other bracket: a gap note is the only bracketed text of a document.
-          expect(en.replace(GAP.en, ""), where).not.toMatch(/[[\]]/);
-          expect(bn.replace(GAP.bn, ""), where).not.toMatch(/[[\]]/);
-          notes += enNotes.length;
+          expect(en, where).not.toMatch(/To be decided|[[\]]/);
+          expect(bn, where).not.toMatch(/সিদ্ধান্ত বাকি|[[\]]/);
         }
       }
     }
-    expect(notes).toBeGreaterThan(0);
+  });
+
+  // WPU-Y6: no legal message holds an open note, and every {value} is one that LegalContent fills.
+  it("holds no open note and only the values the page fills, in every legal message", () => {
+    const FILLED = new Set(["{brand}", "{company}", "{address}", "{bin}", "{tradeLicense}"]);
+    for (const [locale, tree] of LOCALES) {
+      for (const key of messageKeys(tree.Public.legal)) {
+        const value = String(
+          key
+            .split(".")
+            .reduce<unknown>((n, p) => (n as Record<string, unknown>)[p], tree.Public.legal),
+        );
+        const where = `${locale} ${key}`;
+        expect(value, where).not.toMatch(/To be decided|সিদ্ধান্ত বাকি/);
+        for (const value_ of value.match(/\{[^}]*\}/g) ?? []) {
+          expect(FILLED.has(value_), `${where} ${value_}`).toBe(true);
+        }
+      }
+    }
   });
 
   // WPU-Z8: like {company} and {address}, the brand comes from one place (Shell.brand) through {brand}.
@@ -177,11 +192,18 @@ describe("legal drafts (WPU-Z7)", () => {
     }
   });
 
-  it("shows the notice 'Draft — awaiting final approval' until the owner approves the texts", () => {
-    expect(publicEn.Public.legal.draftTitle).toBe("Draft — awaiting final approval");
-    expect(publicBn.Public.legal.draftTitle).toBe("খসড়া — চূড়ান্ত অনুমোদনের অপেক্ষায়");
-    expect(publicEn.Public.legal.version).toMatch(/draft/i);
-    expect(publicBn.Public.legal.version).toContain("খসড়া");
+  // WPU-Y6 (owner, 2026-11-14): the legal texts are APPROVED. No draft notice, no "draft" in the
+  // version line or the page descriptions. A deliberate deviation from the draft notice of the spec.
+  it("has no draft notice: the texts are approved by the owner", () => {
+    for (const [locale, tree] of LOCALES) {
+      const legal = tree.Public.legal as Record<string, unknown>;
+      expect(legal["draftTitle"], locale).toBeUndefined();
+      expect(legal["draftText"], locale).toBeUndefined();
+      expect(tree.Public.legal.version, locale).not.toMatch(/draft|খসড়া/i);
+      expect(tree.Public.meta.legal.descriptionOf, locale).not.toMatch(/draft|খসড়া|অনুমোদন/i);
+    }
+    expect(publicEn.Public.legal.version).toBe("Version 1, 14 November 2026");
+    expect(publicBn.Public.legal.version).toBe("সংস্করণ ১, ১৪ নভেম্বর ২০২৬");
   });
 
   it("says where the data is kept in the words of the FAQ (16.8), and names the abuse category of the form", () => {
@@ -231,11 +253,11 @@ describe("legal drafts (WPU-Z7)", () => {
     }
   });
 
-  it("promises a tax invoice and a credit note only for purchases and renewals; charges by use are a gap note", () => {
+  it("promises a tax invoice and a credit note only for purchases and renewals, nothing for charges by use", () => {
     // Spec 9.3 and packages/core/invoices: a tax invoice for each purchase and each renewal, and a credit
     // note only for the full reversal of a charge with an issued invoice (credit-note.ts). Charges by use
     // (backup storage by the day, a static IP by the hour) get neither: an open owner decision (JOURNEY,
-    // WPU-I2 ruling 5 and WPU-I5), so the drafts carry a gap note there instead of a promise.
+    // WPU-I2 ruling 5 and WPU-I5): the texts make no promise there (WPU-Y6: the open note is removed).
     const words = {
       en: { purchase: "purchase", renewal: "renewal", byUse: /charges? by use/ },
       bn: { purchase: "কেনা", renewal: "নবায়ন", byUse: /ব্যবহারভিত্তিক/ },
@@ -249,7 +271,7 @@ describe("legal drafts (WPU-Z7)", () => {
         "refund.reversal.p1": refund!.sections["reversal"]!["p1"]!,
       };
       for (const [where, text] of Object.entries(promises)) {
-        const promise = text.replace(GAP[locale], "");
+        const promise = text;
         expect(promise, `${locale} ${where}`).toContain(words[locale].purchase);
         expect(promise, `${locale} ${where}`).toContain(words[locale].renewal);
         expect(promise, `${locale} ${where}`).not.toMatch(words[locale].byUse);
@@ -258,11 +280,9 @@ describe("legal drafts (WPU-Z7)", () => {
         "terms.invoices": terms!.sections["invoices"]!,
         "refund.reversal": refund!.sections["reversal"]!,
       })) {
-        const notes = Object.values(section).flatMap((text) => text.match(GAP[locale]) ?? []);
-        expect(
-          notes.some((note) => words[locale].byUse.test(note)),
-          `${locale} ${where}: a gap note on charges by use`,
-        ).toBe(true);
+        for (const text of Object.values(section).slice(1)) {
+          expect(text, `${locale} ${where}`).not.toMatch(words[locale].byUse);
+        }
       }
     }
   });
@@ -302,47 +322,27 @@ describe("legal drafts, the review items of WPU-Z7 (WPU-Z8)", () => {
     expect(bn).toContain("স্ট্যাটিক আইপি প্রথম ঘণ্টার পর ঘণ্টা হিসেবে");
   });
 
-  it("says in the gap note on data transfer that it is not available yet, with the rule of spec 11", () => {
-    // Spec 11: "above 100% buy 50 GB packs from the wallet if the customer enabled it, otherwise close
-    // public ports until the next period". Not built yet, so it stays inside the note.
-    const noteOf = (locale: "bn" | "en", tree: typeof publicBn | typeof publicEn): string => {
+  // WPU-Y6: the rule above 100% of data transfer (spec 11) is not built; with the open note removed, the
+  // terms promise only the notices at 80% and 100%, and no pack or port closure.
+  it("promises only the 80% and 100% notices for data transfer, no 50 GB pack and no port closure", () => {
+    for (const [locale, tree] of LOCALES) {
       const p2 = legalDocs(tree)["terms"]!.sections["usage"]!["p2"]!;
-      const notes = p2.match(GAP[locale]) ?? [];
-      expect(notes, locale).toHaveLength(1);
-      expect(p2.replace(GAP[locale], ""), locale).not.toMatch(/50 GB|৫০ GB/);
-      return notes[0] as string;
-    };
-    const en = noteOf("en", publicEn);
-    for (const part of [
-      "is not available yet",
-      "above 100%, 50 GB packs are bought from your wallet if you have switched this on",
-      "otherwise the public ports of the resource are closed until the next period",
-    ]) {
-      expect(en, part).toContain(part);
-    }
-    const bn = noteOf("bn", publicBn);
-    for (const part of [
-      "এখনো চালু হয়নি",
-      "১০০% পার হলে, আপনি চালু করে থাকলে ওয়ালেট থেকে 50 GB-এর প্যাক কেনা হবে",
-      "না হলে পরের মেয়াদ পর্যন্ত রিসোর্সের পাবলিক পোর্ট বন্ধ থাকবে",
-    ]) {
-      expect(bn, part).toContain(part);
+      expect(p2, locale).toMatch(/80%|৮০%/);
+      expect(p2, locale).not.toMatch(/50 GB|৫০ GB|port|পোর্ট/);
     }
   });
 
-  it("puts the way to ask for a copy, a correction or the deletion of data into the gap note of privacy 9", () => {
+  // WPU-Y6: the open note on data protection rights is removed; privacy 8 says only what the panel does.
+  it("makes no promise on copies, corrections or deletion of data in privacy 8", () => {
     const words = {
-      en: [/support request/, /copy/, /correction/, /deletion/],
-      bn: [/সাপোর্ট অনুরোধ/, /কপি/, /সংশোধন/, /মুছে ফেলার/],
+      en: [/copy/, /correction/, /deletion/],
+      bn: [/কপি/, /সংশোধন/, /মুছে ফেলার/],
     } as const;
     for (const [locale, tree] of LOCALES) {
       const rights = Object.values(legalDocs(tree)["privacy"]!.sections["rights"]!).slice(1);
-      const promise = rights.map((text) => text.replace(GAP[locale], "")).join(" ");
-      const notes = rights.flatMap((text) => text.match(GAP[locale]) ?? []).join(" ");
-      for (const word of words[locale]) {
-        expect(promise, `${locale} promise ${word}`).not.toMatch(word);
-        expect(notes, `${locale} note ${word}`).toMatch(word);
-      }
+      expect(rights.length, locale).toBeGreaterThanOrEqual(1);
+      for (const word of words[locale])
+        expect(rights.join(" "), `${locale} ${word}`).not.toMatch(word);
     }
   });
 

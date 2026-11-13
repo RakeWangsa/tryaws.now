@@ -5,7 +5,7 @@ import {
   parseKycStart,
   parseKycSubmit,
 } from "@tc/core";
-import type { KycCrypto, KycObjectStore, KycContentType } from "@tc/core";
+import type { KycCrypto, KycObjectStore, KycContentType, KycUploadCheck } from "@tc/core";
 import type { CustomerSession } from "@tc/auth";
 import type { AuditRepo, CustomerLimit, KycRepo, RateLimitsRepo } from "@tc/db";
 
@@ -24,6 +24,11 @@ export interface KycRepos {
 export interface KycPorts {
   objects: KycObjectStore;
   crypto: KycCrypto;
+  /**
+   * WPU-Y3: whether an upload arrived, asked of the kyc-check function (kyc-check-invoke.ts). The web role
+   * has no S3 read on the kyc bucket, and HeadObject needs s3:GetObject.
+   */
+  check: KycUploadCheck;
 }
 
 export interface KycActionDeps {
@@ -125,7 +130,7 @@ export async function submitKycCore(deps: KycActionDeps, raw: unknown): Promise<
   const parsed = parseKycSubmit(raw);
   if (!parsed.ok) return { ok: false, error: "validation", fields: parsed.fields };
   if (deps.ports === null) return { ok: false, error: "unavailable" };
-  const { objects, crypto } = deps.ports;
+  const { check, crypto } = deps.ports;
   const input = parsed.value;
 
   try {
@@ -136,7 +141,9 @@ export async function submitKycCore(deps: KycActionDeps, raw: unknown): Promise<
     if (!allowed) return { ok: false, error: "rate_limited" };
 
     // The keys come from the session and the ids; every file must be there, in the type it was
-    // signed for and inside the size limit. Only the size and type are read, never the content.
+    // signed for and inside the size limit. Only the size and type are read, never the content: the
+    // kyc-check function answers them for the session's customer and checks the key again (R8). A check
+    // that cannot complete throws and the submission is refused as unavailable (R16).
     const keys: string[] = [];
     for (const [index, type] of input.fileTypes.entries()) {
       const key = kycObjectKey(
@@ -145,9 +152,9 @@ export async function submitKycCore(deps: KycActionDeps, raw: unknown): Promise<
         index,
         type as KycContentType,
       );
-      const head = await objects.head(key);
+      const head = await check.check(session.customerId, key);
       if (
-        head === null ||
+        !head.present ||
         head.contentType !== type ||
         head.size < 1 ||
         head.size > KYC_MAX_FILE_BYTES

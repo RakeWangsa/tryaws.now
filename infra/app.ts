@@ -1,4 +1,4 @@
-// The SST app of TiCON Cloud (WP0-T2, WP0-T3, WP0-T4). Nothing here deploys by itself: a deploy is
+// The SST app of TryAWS.now (WP0-T2, WP0-T3, WP0-T4). Nothing here deploys by itself: a deploy is
 // `npx sst deploy --stage staging` by a person who was asked (CLAUDE.md), or the protected CI job.
 //
 // SST reads `sst.config.ts` at the repository root. SST 4 refuses every static import in a file named
@@ -13,7 +13,7 @@
 // NOT TYPE-CHECKED unless `.sst/platform/config.d.ts` exists (tests/repo/sst-types.test.mjs). The pure
 // parts are in infra/lib/ and are type-checked and tested; the resource declarations are in infra/stacks/.
 import { ciRoleBoundaryArn, instanceProfileName } from "./lib/ci-boundary";
-import { featureFlagDefaults } from "./lib/functions";
+import { featureFlagDefaults, OPTIONAL_SMS_SECRETS, smsConfigured } from "./lib/functions";
 import {
   assertDeployAllowed,
   readStageConfig,
@@ -28,7 +28,7 @@ export function appConfig(stage: string, env: Env) {
   // Refuses production unless the protected CI job set the variable; refuses fake switches.
   assertDeployAllowed(stage, env);
   return {
-    name: "ticon-cloud",
+    name: "tryaws-now",
     // `as const`: without it the literal widens to string and the root config fails tsc against the SST
     // types (App.home is "aws" | "cloudflare" | "local").
     home: "aws" as const,
@@ -130,5 +130,14 @@ export async function runApp(env: Env) {
     // false; R1: no policy of the web and admin roles allows sts:AssumeRole.
     featureFlagDefaults: featureFlagDefaults(),
     webRolePolicies: apps.webRolePolicies,
+    // WPU-Y5 (a): read by scripts/post-deploy-check.mjs, which fails production when it is false. A boolean only:
+    // the secret values stay inside the apply. SST 4.17.2 writes stack outputs to .sst/outputs.json in plain text
+    // (pkg/project getCompletedEvent decrypts Pulumi secrets), so nothing but this boolean may be returned here;
+    // unsecret only drops the secret mark that the apply inherits from sst.Secret.value.
+    smsConfigured: $util.unsecret(
+      $util
+        .all(OPTIONAL_SMS_SECRETS.map((name) => secretSet.app[name].value))
+        .apply((values) => smsConfigured(values)),
+    ),
   };
 }

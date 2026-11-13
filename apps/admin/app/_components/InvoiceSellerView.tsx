@@ -165,6 +165,14 @@ function Editor({ locale, screen }: { locale: Locale; screen: InvoiceSellerScree
           autoComplete="off"
         />
         <Field
+          name="tradeLicense"
+          id="seller-tradeLicense"
+          label={t("tradeLicense")}
+          defaultValue={text(s?.tradeLicense)}
+          maxLength={60}
+          autoComplete="off"
+        />
+        <Field
           name="signatoryName"
           id="seller-signatoryName"
           label={t("signatoryName")}

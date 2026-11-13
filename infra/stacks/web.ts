@@ -136,12 +136,16 @@ export function web(inputs: WebInputs) {
       // WPU-N1: the function name of the invoice renderer, for "Download PDF"
       // (apps/web/server/renderer-invoke.ts); the role may invoke its "web" alias only.
       INVOICE_RENDERER_FUNCTION_NAME: functionOf("invoice-renderer").name,
+      // WPU-Y3: the function name of kyc-check, which answers whether a KYC upload arrived
+      // (apps/web/server/kyc-check-invoke.ts); the role may invoke its "web" alias only. The web role
+      // itself keeps no read of the kyc bucket (storage.ts denies it).
+      KYC_CHECK_FUNCTION_NAME: functionOf("kyc-check").name,
       // Final review M5: no KYC_BUCKET or EXPORTS_BUCKET: no code of apps/, packages/ or functions/ reads them.
       // The grants below stay for the code that will use the buckets; that code adds its variable with it.
     },
     // Least privilege of web (3.2): enqueue, presign KYC uploads (PutObject only), read its own
-    // invoices and exports, invoke reader, access-details and invoice-renderer, sign out its own
-    // pool's users. No sts:AssumeRole, no kms:Decrypt on the kyc key, no s3:GetObject on kyc.
+    // invoices and exports, invoke reader, access-details, invoice-renderer and kyc-check, sign out
+    // its own pool's users. No sts:AssumeRole, no kms:Decrypt on the kyc key, no s3:GetObject on kyc.
     permissions: record([
       { actions: ["sqs:SendMessage"], resources: [queues.provisioning.arn] },
       {
@@ -152,6 +156,8 @@ export function web(inputs: WebInputs) {
           workers.readerAliases.web.arn,
           workers.rendererAliasWeb.arn,
           workers.accessAliases.web.arn,
+          // WPU-Y3: kyc-check likewise (customerId is accepted only on its "web" alias).
+          workers.kycCheckAliases.web.arn,
         ],
       },
       {
@@ -171,7 +177,7 @@ export function web(inputs: WebInputs) {
     transform: {
       server: fixedServerRole(roleName(stage, "web")),
       // WPU-Z11 (VERIFY of 2026-11-13, B2): SST names the ISR revalidation subscriber role from a long
-      // logical name that loses the ticon-cloud-<stage>- prefix, which the CI deploy policy refuses.
+      // logical name that loses the tryaws-now-<stage>- prefix, which the CI deploy policy refuses.
       revalidationEventsSubscriber: fixedServerRole(roleName(stage, "web-revalidation")),
       cdn: cdnTransform(waf.customerAclArn, waf.securityHeadersPolicyId),
     },
@@ -236,7 +242,7 @@ export function web(inputs: WebInputs) {
     transform: {
       server: fixedServerRole(roleName(stage, "admin")),
       // WPU-Z11 (VERIFY of 2026-11-13, B2): SST names the ISR revalidation subscriber role from a long
-      // logical name that loses the ticon-cloud-<stage>- prefix, which the CI deploy policy refuses.
+      // logical name that loses the tryaws-now-<stage>- prefix, which the CI deploy policy refuses.
       revalidationEventsSubscriber: fixedServerRole(roleName(stage, "admin-revalidation")),
       cdn: cdnTransform(waf.adminAclArn, waf.securityHeadersPolicyId),
     },

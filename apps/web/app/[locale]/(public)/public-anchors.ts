@@ -241,12 +241,7 @@ export const PUBLIC_ANCHORS: readonly MockupAnchor[] = [
       "c-grey",
     ],
   },
-  {
-    state: "legal.refund",
-    mockupFile: "order-form/antler/error.tpl",
-    why: "the draft notice is an alert box of the theme",
-    classes: ["alert"],
-  },
+  // WPU-Y6: the legal texts are approved (owner, 2026-11-14); the draft notice and its alert box are gone.
 
   // ---- system pages and the coming soon page
   {

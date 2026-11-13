@@ -136,9 +136,9 @@ describe("runPurchase: the image is checked again, before any write", () => {
 
   it("an image switched off between the draft and the purchase is refused and nothing changes", async () => {
     const kit = await makeKit(t);
-    await image("nodejs", { specs: JSON.stringify({ name: "Node", kind: "app" }) });
-    const { token } = await kit.draft({ blueprintId: "nodejs" });
-    await setSwitches({ v: 1, on: [], off: ["nodejs"] });
+    await image("node_ls_1_0", { specs: JSON.stringify({ name: "Node", kind: "app" }) });
+    const { token } = await kit.draft({ blueprintId: "node_ls_1_0" });
+    await setSwitches({ v: 1, on: [], off: ["node_ls_1_0"] });
     const before = await snapshotRows(t);
     expect(await purchase(kit, token)).toEqual(refusal);
     expect(await snapshotRows(t)).toEqual(before);
@@ -146,14 +146,14 @@ describe("runPurchase: the image is checked again, before any write", () => {
 
   it("carries the chosen image into the resource configuration", async () => {
     const kit = await makeKit(t);
-    await image("wordpress", { specs: JSON.stringify({ name: "WP", kind: "app" }) });
-    const { token } = await kit.draft({ blueprintId: "wordpress" });
+    await image("wordpress_ls_1_0", { specs: JSON.stringify({ name: "WP", kind: "app" }) });
+    const { token } = await kit.draft({ blueprintId: "wordpress_ls_1_0" });
     const placed = await purchase(kit, token);
     expect(placed.ok).toBe(true);
     const row = await t.pool.query(
       "select config->>'blueprintId' as b from resources where customer_id = $1 and family = 'linux_instance'",
       [kit.customerId],
     );
-    expect(row.rows.map((r) => r.b)).toContain("wordpress");
+    expect(row.rows.map((r) => r.b)).toContain("wordpress_ls_1_0");
   });
 });

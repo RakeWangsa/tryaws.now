@@ -70,6 +70,34 @@ export function registryHoldsRenewal(kind: string, step: string | null): boolean
   return kind === "renew_domain" && step !== null;
 }
 
+// WPU-Y5 (c): the step of a dns_zone create that sends CreateHostedZone (packages/aws/adapters/dns-zone.ts). Step null
+// only moves there, with no AWS call, so a create at null has sent nothing. Once CreateHostedZone answered, the
+// operation moves to `wait_insync` with the zone id saved: the hosted zone exists (and is billed).
+const DNS_ZONE_CREATE_STEP = "create_zone";
+// The last_error of createHostedZone's own input check (route53-client.ts validation(): code validation, no AWS
+// error name). The input (zone name, caller reference = operation id, generated comment) is the same at every
+// attempt, so that error proves no attempt ever sent CreateHostedZone.
+const LOCAL_INPUT_REFUSAL = "validation";
+
+/**
+ * Whether the hosted zone of a `dns_zone` create may exist (fix round 1 of WPU-Y5, the renewal design of
+ * registryHoldsRenewal and provedNotSent): at `create_zone` once an attempt may have sent CreateHostedZone (attempts
+ * above 0 or a last_error, unless that error is the local input check), and at any step past it (`wait_insync`, or a
+ * step that is not known, R16). An admin's rejection of such a create is refused (reject.ts, `zone_created`): the
+ * failed hook would refund the order while the zone stays. The runbook says retry it, or destroy the zone first.
+ */
+export function dnsZoneMayExist(
+  family: string,
+  kind: string,
+  step: string | null,
+  previous: { readonly attempts: number; readonly lastError: string | null | undefined },
+): boolean {
+  if (family !== "dns_zone" || kind !== "create" || step === null) return false;
+  if (step !== DNS_ZONE_CREATE_STEP) return true;
+  if (previous.lastError === LOCAL_INPUT_REFUSAL) return false;
+  return !(previous.attempts === 0 && previous.lastError === null);
+}
+
 // At `submit`: the failure proves that this run sent nothing the registry may act on (AwsError.mayHaveActed false:
 // a refusal of RenewDomain itself such as TLDRulesViolation, a request that never left the machine, or a local
 // check), and no earlier run at this step can have sent one. The adapter enters the step with attempts 0 and

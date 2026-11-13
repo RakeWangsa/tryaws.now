@@ -7,6 +7,7 @@ import {
   type DnsZoneConfig,
 } from "../adapters/dns-zone";
 import type { OpCtx } from "../adapters/types";
+import { AwsError } from "../errors";
 import { createFakeRoute53 } from "./fake-route53";
 
 const NOW = new Date("2030-01-01T00:00:00.000Z");
@@ -19,7 +20,8 @@ function ctxFor(
     operation: {
       id: extra.opId ?? "0190a000-0000-7000-8000-000000000001",
       kind: "create",
-      step: extra.step ?? null,
+      // WPU-Y5 (c): CreateHostedZone runs at create_zone; step null only moves there.
+      step: "step" in extra ? (extra.step ?? null) : "create_zone",
       attempt: 1,
       createdAt: NOW,
       payload: {},
@@ -258,6 +260,20 @@ describe("the zone adapter", () => {
     expect(fake.calls.filter((c) => c.op === "createHostedZone")).toHaveLength(1);
   });
 
+  it("WPU-Y5: step null only moves to create_zone, with no AWS call; CreateHostedZone runs at create_zone", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    expect(await adapter.aws.create(ctxFor({ zoneName: "example.com" }, { step: null }))).toEqual({
+      kind: "next",
+      step: "create_zone",
+    });
+    expect(fake.calls).toEqual([]);
+    expect(
+      await adapter.aws.create(ctxFor({ zoneName: "example.com" }, { step: "create_zone" })),
+    ).toMatchObject({ kind: "wait", step: "wait_insync" });
+    expect(fake.calls.filter((c) => c.op === "createHostedZone")).toHaveLength(1);
+  });
+
   it("WPU-Z19: a step without a saved zone or with a foreign change id is refused (R16)", async () => {
     const fake = createFakeRoute53();
     const adapter = createDnsZoneAdapter({ route53: () => fake.port });
@@ -355,6 +371,66 @@ describe("the zone adapter", () => {
       expect(error, JSON.stringify(extra)).toMatchObject({ code: "internal", retryable: true });
       expectAttention(error);
     }
+  });
+
+  // WPU-Y5 (b): at wait_insync the hosted zone exists. A final (non-retryable) answer of GetChange, GetHostedZone or
+  // ListResourceRecordSets (NoSuchChange or NoSuchHostedZone -> not_found, a validation, a conflict) must not end
+  // the create `failed` (its hook refunds the order while the zone may stay): it becomes attention().
+  it("a final error of GetChange, GetHostedZone or ListResourceRecordSets at wait_insync ends needs_attention", async () => {
+    const finals = [
+      new AwsError({ code: "not_found", retryable: false, awsErrorName: "NoSuchChange" }),
+      new AwsError({ code: "not_found", retryable: false, awsErrorName: "NoSuchHostedZone" }),
+      new AwsError({ code: "validation", retryable: false, awsErrorName: "InvalidInput" }),
+      new AwsError({ code: "conflict", retryable: false, awsErrorName: "InvalidChangeBatch" }),
+    ];
+    for (const call of ["getChangeStatus", "getHostedZone", "listRecordSets"] as const) {
+      for (const final of finals) {
+        const fake = createFakeRoute53();
+        const first = await createDnsZoneAdapter({ route53: () => fake.port }).aws.create(
+          ctxFor({ zoneName: "example.com" }),
+        );
+        const merge = (first as { patch?: { configMerge?: Record<string, unknown> } }).patch
+          ?.configMerge;
+        fake.changes.set("CZ000001", "insync");
+        const port = { ...fake.port, [call]: () => Promise.reject(final) };
+        const error = await createDnsZoneAdapter({ route53: () => port })
+          .aws.create(
+            ctxFor({ zoneName: "example.com" }, { step: "wait_insync", resourceConfig: merge }),
+          )
+          .then(
+            () => null,
+            (e: unknown) => e,
+          );
+        const label = `${call} ${final.awsErrorName}`;
+        expect(error, label).toBeInstanceOf(AwsError);
+        expect(error, label).toMatchObject({
+          code: "upstream_unavailable",
+          retryable: true,
+          awsErrorName: final.awsErrorName,
+        });
+        expectAttention(error);
+      }
+    }
+  });
+
+  it("a retryable error at wait_insync is passed on unchanged", async () => {
+    const fake = createFakeRoute53();
+    const first = await createDnsZoneAdapter({ route53: () => fake.port }).aws.create(
+      ctxFor({ zoneName: "example.com" }),
+    );
+    const merge = (first as { patch?: { configMerge?: Record<string, unknown> } }).patch
+      ?.configMerge;
+    const throttled = new AwsError({
+      code: "rate_limited",
+      retryable: true,
+      awsErrorName: "Throttling",
+    });
+    const port = { ...fake.port, getChangeStatus: () => Promise.reject(throttled) };
+    await expect(
+      createDnsZoneAdapter({ route53: () => port }).aws.create(
+        ctxFor({ zoneName: "example.com" }, { step: "wait_insync", resourceConfig: merge }),
+      ),
+    ).rejects.toBe(throttled);
   });
 
   it("destroy without a hosted zone id is done (nothing was made)", async () => {

@@ -310,6 +310,31 @@ describe("stack outputs featureFlagDefaults and webRolePolicies", () => {
   });
 });
 
+// WPU-Y5 (a): the stack output smsConfigured, a boolean computed from the two SMS secrets, never a value.
+describe("stack output smsConfigured", () => {
+  it("is true only when both SMS secrets are set to something other than the placeholder", async () => {
+    const { smsConfigured, OPTIONAL_SECRET_PLACEHOLDER } =
+      await import("../../infra/lib/functions.ts");
+    expect(smsConfigured(["fake-token", "FAKESID"])).toBe(true);
+    expect(smsConfigured([OPTIONAL_SECRET_PLACEHOLDER, "FAKESID"])).toBe(false);
+    expect(smsConfigured(["fake-token", OPTIONAL_SECRET_PLACEHOLDER])).toBe(false);
+    expect(smsConfigured([OPTIONAL_SECRET_PLACEHOLDER, OPTIONAL_SECRET_PLACEHOLDER])).toBe(false);
+    expect(smsConfigured(["", "FAKESID"])).toBe(false);
+    expect(smsConfigured(["  ", "FAKESID"])).toBe(false);
+    expect(smsConfigured([` ${OPTIONAL_SECRET_PLACEHOLDER} `, "FAKESID"])).toBe(false);
+    expect(smsConfigured(["fake-token"])).toBe(false);
+    expect(smsConfigured([])).toBe(false);
+    expect(smsConfigured([undefined, "FAKESID"])).toBe(false);
+  });
+
+  it("is returned by the SST app as an unsecret boolean of the two SMS secrets", () => {
+    const config = readFileSync(resolve(root, "infra/app.ts"), "utf8");
+    expect(config).toMatch(/smsConfigured: \$util\.unsecret\(/);
+    expect(config).toContain("OPTIONAL_SMS_SECRETS.map((name) => secretSet.app[name].value)");
+    expect(config).toContain(".apply((values) => smsConfigured(values))");
+  });
+});
+
 // C.13: the ledger check at 02:00 Asia/Dhaka and its alarms.
 describe("ledger check schedule and alarms", () => {
   it("runs every day at 20:00 UTC, which is 02:00 in Dhaka (UTC+6, no daylight saving)", async () => {
@@ -457,6 +482,7 @@ describe("function table", () => {
       "migrator",
       "invoice-renderer",
       "cognito-messages",
+      "kyc-check",
     ]) {
       expect(roles[dir], dir).toEqual([]);
     }
@@ -529,11 +555,24 @@ describe("function table", () => {
   it("gives only the migrator the master user and every other database function worker_rw", () => {
     for (const f of FUNCTIONS) {
       if (f.dir === "migrator") expect(f.dbRole).toBe("migrator");
-      else if (["invoice-renderer", "cognito-messages"].includes(f.dir))
+      else if (["invoice-renderer", "cognito-messages", "kyc-check"].includes(f.dir))
         expect(f.dbRole).toBe("none");
       else expect(f.dbRole, f.dir).toBe("worker_rw");
     }
-    // 3.2: invoice-renderer and cognito-messages read no database
+    // 3.2: invoice-renderer and cognito-messages read no database; WPU-Y3: nor does kyc-check
+  });
+
+  it("runs kyc-check isolated, invoked by web only, with no database, secret or pool role (WPU-Y3)", () => {
+    const spec = FUNCTIONS.find((f) => f.dir === "kyc-check");
+    expect(spec).toMatchObject({
+      component: "KycCheck",
+      handlerExport: "handler",
+      placement: "isolated",
+      dbRole: "none",
+      secrets: [],
+      poolRoles: [],
+      trigger: { kind: "invoke", by: ["web"] },
+    });
   });
 
   it("lists the four proxy roles of 3.3 and five password secrets", () => {

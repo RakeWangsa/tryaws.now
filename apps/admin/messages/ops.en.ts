@@ -106,6 +106,8 @@ export const opsEn: Same<typeof opsBn> = {
       failed_hook_missing: "No handler for the failure",
       renewal_submitted:
         "The renewal may already be at the registry, so a rejection cannot refund it yet. Retry it: if the registry answers that the renewal failed, it is refunded; if it answers ERROR and the expiry is unchanged, you can reject it within the hour of that check. A renewal still in progress cannot be refunded",
+      zone_created:
+        "The hosted zone already exists, so a rejection cannot refund it; retry the create, or destroy the zone first",
       invalid_step_result: "A step answered with an invalid result",
       lease_expired: "The time for the operation ran out",
       other: "Another error. Details are in the log",

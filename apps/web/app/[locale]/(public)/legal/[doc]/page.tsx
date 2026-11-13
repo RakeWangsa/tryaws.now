@@ -27,8 +27,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 /**
- * `/legal/[doc]`: terms, privacy, acceptable use and refund (WPP-T2). The texts are drafts that wait
- * for the owner's approval (WPU-Z7); the page says so in a visible notice.
+ * `/legal/[doc]`: terms, privacy, acceptable use and refund (WPP-T2). The texts of WPU-Z7 are approved
+ * by the owner (WPU-Y6, 2026-11-14); the page shows no draft notice.
  */
 export default async function LegalPage({ params }: Props) {
   const { doc } = await params;

@@ -39,6 +39,7 @@ describe("the log events of the alerts exist in the code that writes them", () =
     reconcileStaleOperations: "functions/reconciler/reconcile.ts",
     reconcileUsageFailed: "functions/reconciler/reconcile.ts",
     reconcileOk: "functions/reconciler/reconcile.ts",
+    notifierSmsOff: "functions/notifier/build.ts",
   };
 
   it("names exactly the events that have a writer in this test", () => {
@@ -199,6 +200,25 @@ describe("the wiring", () => {
     expect(workers).toMatch(
       /return \{ invoked, readerAliases, accessAliases, rendererAliasWeb, crons, provisioner,/,
     );
+  });
+
+  // WPU-Y5 (a), fix round 1: the notifier logs notifier_sms_off at the start of a run without the SMS gateway. The
+  // metric has no stage dimension and staging runs with SMS off by design (one account), so the filter and the alarm
+  // are both created in production only: staging must never feed the production alarm.
+  it("counts notifier_sms_off from the notifier's log and alarms on it, both in production only", () => {
+    expect(alarms).toContain('const notifierFunction = workers.crons["notifier"]?.nodes.function;');
+    const guard = alarms.indexOf('if (stageKind(stage) === "production") {');
+    expect(guard).toBeGreaterThan(-1);
+    const end = alarms.indexOf("}", alarms.indexOf("notifierSmsOffAlarm = alertAlarm(", guard));
+    const block = alarms.slice(guard, end);
+    expect(block).toMatch(
+      /alertFilter\( "NotifierSmsOffFilter", notifierFunction, \[ALERT_LOG_EVENTS\.notifierSmsOff\], "NotifierSmsOff", \)/,
+    );
+    expect(block).toContain('alertAlarm( "NotifierSmsOffAlarm", "NotifierSmsOff",');
+    // nowhere else: one filter and one alarm, both inside the guard
+    expect(alarms.split('"NotifierSmsOffFilter"')).toHaveLength(2);
+    expect(alarms.split('"NotifierSmsOffAlarm"')).toHaveLength(2);
+    expect(alarms).toContain("notifierSmsOffAlarm,");
   });
 
   it("infra/app.ts hands the web components to the alarms", () => {

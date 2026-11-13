@@ -18,7 +18,7 @@ import {
 // Answers are fixed codes and the NAMES of fields, never a value (R14, R16). Nothing is seeded or
 // defaulted here: the owner types the values.
 
-const OPTIONAL = ["vatCircle", "phone", "email"] as const;
+const OPTIONAL = ["vatCircle", "tradeLicense", "phone", "email"] as const;
 const REQUIRED = [
   "legalNameBn",
   "legalNameEn",
@@ -37,6 +37,8 @@ export interface SaveInvoiceSellerRequest {
   readonly addressBn: unknown;
   readonly addressEn: unknown;
   readonly vatCircle: unknown;
+  /** WPU-Y6: optional; an older form without the field leaves it out. */
+  readonly tradeLicense?: unknown;
   readonly signatoryName: unknown;
   readonly signatoryDesignation: unknown;
   readonly phone: unknown;

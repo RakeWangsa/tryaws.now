@@ -3175,7 +3175,7 @@ TASKS["WPU-B7"] = [
 // WPU-B8: the lean stage size (TC_STAGE_SIZE, budget alarm). Local proof only, no AWS call.
 TASKS["WPU-B8"] = [specSync, baselineSync, lint, typecheck, format, repo];
 
-// WPU-B1: the brand rename from TiCON Cloud to MeghVPS. Messages, mail and SMS text, invoice text, page titles
+// WPU-B1: the brand rename from the first brand name to MeghVPS. Messages, mail and SMS text, invoice text, page titles
 // and the site name (web, admin, ui, notify, core invoices) and the repository test that fails when the old
 // name returns to a customer-facing file. No AWS call.
 const brandWeb = {
@@ -3815,8 +3815,88 @@ TASKS["WPU-Z19"] = [
   repo,
 ];
 
+// WPU-Y1: app images move to the Lightsail-packaged blueprints (core tables and defaults; no DB change).
+TASKS["WPU-Y1"] = [specSync, baselineSync, lint, typecheck, format, core, repo];
+
+// WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now with its BIN and trade licence on every page, e-mail,
+// invoice, GEO file and JSON-LD; the legal pages are approved (no draft notice); the SST app and every text of
+// the first brand name are TryAWS.now (tryaws-now). brandNotify and brandWeb include PostgreSQL tests.
+TASKS["WPU-Y6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  brandCore,
+  brandNotify,
+  brandWeb,
+  admin,
+  ui,
+  invoiceRenderer,
+  infraTest(
+    "brand",
+    "WPU-Y6: no old company or first brand name outside the kept records",
+    "brand",
+  ),
+  infraTest("infra-ci-oidc", "the CI roles name the SST app tryaws-now", "infra-ci-oidc"),
+  infraTest("staging-on-demand", "the SST tags name the app tryaws-now", "staging-on-demand"),
+  repo,
+];
+
 // WPU-Z17: Gennet answers are read by their status code.
 TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];
+
+// WPU-Y3: KYC upload arrival without S3 read rights for the web role. The web tier invokes the "web" alias
+// of kyc-check (no packages/aws import), which HEADs one kyc/ key of the session's customer and answers its
+// size and type. Tests of the core key rule, the function, the web port, action and runtime, and the
+// repository tests (infra rules: the function's grants, the web role's Deny kept). No AWS call.
+const kycCheckFn = {
+  id: "kyc-check",
+  title: "functions/kyc-check: tier, tenant check of the key, HeadObject only, fail closed",
+  command: ["pnpm", "test", "--filter", "@tc/fn-kyc-check", "--no-passWithNoTests"],
+};
+const kycCheckWeb = {
+  id: "kyc-check-web",
+  title: "apps/web: the kyc-check invoke port, the KYC submit core and the runtime",
+  command: [
+    "pnpm",
+    "test",
+    "--filter",
+    "@tc/web",
+    "server/kyc-check-invoke",
+    "server/kyc-actions",
+    "server/runtime",
+    "--no-passWithNoTests",
+  ],
+};
+// WPU-Y5 (round 4): SMS-off production check, DNS zone lost-answer safety, tag ruleset script, RSA-only key import.
+TASKS["WPU-Y5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  web,
+  admin,
+  repo,
+];
+
+TASKS["WPU-Y3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  kycCheckFn,
+  kycCheckWeb,
+  web,
+  repo,
+];
 
 // WPU-Y2 (owner round 4): a domain renewal at the TLD's renewal price, charged 30 days before the registry
 // expiry, and a refused renewal that never ends the subscription for good; core and db include PostgreSQL.

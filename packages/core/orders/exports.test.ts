@@ -215,6 +215,8 @@ const KYC = [
   "KYC_UPLOAD_TTL_SECONDS",
   "canSubmitKyc",
   "documentTypesFor",
+  // WPU-Y3: the owner check of a KYC key (kyc-check and the web port).
+  "kycKeyOwnedBy",
   "kycObjectKey",
   "nextKycStatus",
   "normalizeDocumentNumber",
@@ -412,6 +414,19 @@ const Y2_FIX = [
   "registryCheckedAt",
   "registryUnrenewedError",
   "rejectionAllowed",
+];
+
+// Exported on main (invoices/seller.ts, BIN display) without a pin in this list; pinned here at the merge of WPU-Y2.
+const MAIN_UNPINNED = ["formatBin"];
+
+// WPU-Y5 (c): the rejection of a dns_zone create whose hosted zone exists is refused. (e): the SSH keys that
+// Lightsail ImportKeyPair takes (ssh-rsa, 2048 to 16384 bits).
+const Y5 = [
+  "dnsZoneMayExist",
+  "isImportableSshKey",
+  "sshRsaKeyBits",
+  "SSH_RSA_MAX_BITS",
+  "SSH_RSA_MIN_BITS",
 ];
 
 // Names of the bucket and container tasks, merged without a pin.
@@ -679,6 +694,7 @@ describe("the public surface of the order flow", () => {
           ...WPU_Y1,
           ...WPU_Y4,
           ...Y2_FIX,
+          ...MAIN_UNPINNED,
           ...STORAGE_CONTAINER,
           ...KYC,
           ...RECONCILE,
@@ -694,6 +710,7 @@ describe("the public surface of the order flow", () => {
 
           ...Y2,
           ...Z13,
+          ...Y5,
           ...SHARED_UUID,
         ]),
       ].sort(),

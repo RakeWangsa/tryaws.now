@@ -199,6 +199,24 @@ export function kycObjectKey(
   return `kyc/${customerId}/${submissionId}/${index}.${EXTENSION[contentType]}`;
 }
 
+const UUID_PART = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const KYC_KEY = new RegExp(
+  `^kyc/(${UUID_PART})/${UUID_PART}/[0-${KYC_MAX_FILES - 1}]\\.(?:${Object.values(EXTENSION).join("|")})$`,
+);
+
+/**
+ * WPU-Y3. Whether `key` is exactly a key that kycObjectKey makes for `customerId`. The kyc-check function
+ * asks this again before it looks at an object (R8): the web server derives the key from the session's
+ * customer, and the function trusts neither the key nor the id alone. Anything else is false (R16).
+ */
+export function kycKeyOwnedBy(key: unknown, customerId: unknown): boolean {
+  if (typeof key !== "string" || typeof customerId !== "string" || !UUID.test(customerId)) {
+    return false;
+  }
+  const match = KYC_KEY.exec(key);
+  return match !== null && match[1] === customerId;
+}
+
 /** A document number as it may appear in a log or an audit entry: never the number (R14). */
 export function redactDocumentNumber(): string {
   return "[redacted]";

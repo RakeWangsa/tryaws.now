@@ -120,7 +120,8 @@ describe("the printable invoice", () => {
     const html = en.html as string;
     expect(html).toContain("Mushak-6.3");
     expect(html).toContain("Seller &lt;Ltd&gt;");
-    expect(html).toContain("1234567890123");
+    // WPU-Y6: the seller BIN prints in the grouping 9 and 4 ("008073062-0507" form).
+    expect(html).toContain("123456789-0123");
     expect(html).toContain("Dhaka");
     expect(html).toContain("Karim");
     expect(html).toContain("Rahim");
@@ -128,7 +129,7 @@ describe("the printable invoice", () => {
     expect(html).toMatch(/Address:<\/strong> -</);
     const bn = (await invoiceDocument(deps(A), "bn", INV)).html as string;
     expect(bn).toContain("বিক্রেতা লিমিটেড");
-    expect(unwrapDigitOneHtml(bn)).toContain("১২৩৪৫৬৭৮৯০১২৩");
+    expect(unwrapDigitOneHtml(bn)).toContain("১২৩৪৫৬৭৮৯-০১২৩");
   });
 
   it("WPU-I2: a reprint shows the seller of the day of issue, not the current setting", async () => {

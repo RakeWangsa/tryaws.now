@@ -28,8 +28,37 @@ const LOGIN_USERS: readonly (readonly [string, string])[] = [
   ["plesk", "ubuntu"],
 ];
 
+/**
+ * WPU-Y1. Lightsail-packaged app images carry the suffix `_ls_<major>_<minor>` (wordpress_ls_1_0, lamp_ls_1_0,
+ * node_ls_1_0, nginx_ls_1_0). The Bitnami ids (wordpress, lamp_8_bitnami, nodejs, nginx) do not.
+ */
+export function isLightsailPackaged(blueprintId: unknown): boolean {
+  return (
+    typeof blueprintId === "string" && /^[a-z0-9]+(?:_[a-z0-9]+)*_ls_\d+_\d+$/.test(blueprintId)
+  );
+}
+
+/**
+ * WPU-Y1. Where the default application password lives on the instance, from the Lightsail guides: Bitnami images
+ * `~/bitnami_application_password`; Lightsail-packaged LAMP and Node.js `~/application_credentials`. The
+ * Lightsail-packaged WordPress password is read with the console's "Retrieve default password" command and the
+ * Lightsail-packaged Nginx page names no file, so those are null: nothing is guessed (R16).
+ */
+export function appPasswordFileOf(blueprintId: unknown): string | null {
+  if (typeof blueprintId !== "string") return null;
+  if (isLightsailPackaged(blueprintId)) {
+    return blueprintId.startsWith("lamp_") || blueprintId.startsWith("node_")
+      ? "~/application_credentials"
+      : null;
+  }
+  const bitnami = ["wordpress", "lamp", "nodejs", "mean", "joomla", "drupal", "magento", "nginx"];
+  return bitnami.some((p) => blueprintId.startsWith(p)) ? "~/bitnami_application_password" : null;
+}
+
 export function loginUserOf(blueprintId: unknown): string | null {
   if (typeof blueprintId !== "string") return null;
+  // WPU-Y1: "Lightsail packaged versions of WordPress, Nginx, WordPress Multisite, LAMP, Node.js instances: admin".
+  if (isLightsailPackaged(blueprintId)) return "admin";
   // The Bitnami stacks all log in as `bitnami` (VERIFY with GetInstanceAccessDetails in tc-pool-dev).
   if (blueprintId.includes("bitnami")) return "bitnami";
   for (const [prefix, user] of LOGIN_USERS) {

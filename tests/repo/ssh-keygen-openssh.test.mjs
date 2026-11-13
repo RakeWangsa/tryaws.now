@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { generateEd25519KeyPair } from "../../apps/web/app/[locale]/(panel)/servers/new/ssh-keygen.ts";
+import { generateRsaKeyPair } from "../../apps/web/app/[locale]/(panel)/servers/new/ssh-keygen.ts";
 
 // WPU-G10. The key pair that the create wizard makes in the browser is read by the real OpenSSH tool: the
 // private file is accepted by `ssh-keygen -y` and gives the public key of the line that the server stores.
@@ -14,7 +14,7 @@ const hasKeygen = spawnSync("ssh-keygen", ["-h"], { stdio: "ignore" }).error ===
 it.skipIf(!hasKeygen)(
   "the private key file of a generated pair is read by ssh-keygen and gives the same public key",
   async () => {
-    const pair = await generateEd25519KeyPair("agree");
+    const pair = await generateRsaKeyPair("agree");
     const dir = mkdtempSync(join(tmpdir(), "tc-keygen-"));
     try {
       const file = join(dir, "id");

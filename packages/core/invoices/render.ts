@@ -6,7 +6,7 @@ import type { Locale, Minor } from "../types";
 import { roundedShareMinor } from "../pricing/vat-check";
 import { amountInWords } from "./words";
 import { BENGALI_DIGIT_FONT, DIGIT_ONE_CLASS, wrapDigitOneHtml } from "./digit-one";
-import type { SellerDetails } from "./seller";
+import { formatBin, type SellerDetails } from "./seller";
 import {
   InvoiceError,
   formatMinor,
@@ -139,6 +139,7 @@ const MUSHAK = {
     bin: "BIN",
     address: "Address",
     circle: "VAT circle / commissionerate",
+    tradeLicense: "Trade License",
     buyer: "Buyer",
     invoiceNo: "Challan / invoice no.",
     issued: "Date and time of issue",
@@ -192,6 +193,7 @@ const MUSHAK = {
     bin: "বিআইএন",
     address: "ঠিকানা",
     circle: "ভ্যাট সার্কেল / কমিশনারেট",
+    tradeLicense: "ট্রেড লাইসেন্স",
     buyer: "ক্রেতা",
     invoiceNo: "চালান / ইনভয়েস নম্বর",
     issued: "ইস্যুর তারিখ ও সময়",
@@ -449,7 +451,11 @@ function renderMushak(doc: InvoiceDocument, locale: Locale): string {
       `<h1>${esc(title)}</h1>${credit ? "" : `<div>${esc(t.rule)}</div>`}</div>`,
       `<div class="grid"><div><h2>${t.seller}</h2>`,
       `<div><strong>${t.sellerName}:</strong> ${esc(name)}</div>`,
-      `<div><strong>${t.bin}:</strong> ${num(esc(seller.bin))}</div>`,
+      // WPU-Y6: the seller BIN in the grouping the owner gives it (9 and 4 digits, "008073062-0507").
+      `<div><strong>${t.bin}:</strong> ${num(esc(formatBin(seller.bin)))}</div>`,
+      seller.tradeLicense !== undefined
+        ? `<div><strong>${t.tradeLicense}:</strong> ${esc(seller.tradeLicense)}</div>`
+        : "",
       `<div><strong>${t.address}:</strong> ${esc(address)}</div>`,
       seller.vatCircle !== undefined
         ? `<div><strong>${t.circle}:</strong> ${esc(seller.vatCircle)}</div>`

@@ -185,6 +185,15 @@ importers:
         specifier: 25.16.0
         version: 25.16.0
 
+  functions/kyc-check:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: 3.1166.0
+        version: 3.1166.0
+      '@tc/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
   functions/migrator:
     dependencies:
       '@tc/core':

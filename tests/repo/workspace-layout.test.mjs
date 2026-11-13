@@ -22,6 +22,7 @@ const packages = {
   "functions/reconciler": "@tc/fn-reconciler",
   "functions/migrator": "@tc/fn-migrator",
   "functions/invoice-renderer": "@tc/fn-invoice-renderer",
+  "functions/kyc-check": "@tc/fn-kyc-check",
   "functions/notifier": "@tc/fn-notifier",
   "functions/cognito-messages": "@tc/fn-cognito-messages",
 };

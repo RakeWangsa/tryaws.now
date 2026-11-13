@@ -3,7 +3,7 @@
 //
 // infra/org/ci-deploy-<stage>.yaml lets its role create or change a role only when the role carries the
 // permissions boundary of that stage (iam:PermissionsBoundary condition), and only under the names
-// tc-<stage>-* and ticon-cloud-<stage>-*. The two stages may share one account (owner decision
+// tc-<stage>-* and tryaws-now-<stage>-*. The two stages may share one account (owner decision
 // 2026-11-13), so each stage has its own boundary policy name. A personal stage is deployed by a person
 // with administrator credentials and gets no boundary (the policies exist only where ci-roles.sh ran).
 

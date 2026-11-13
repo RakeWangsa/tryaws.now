@@ -4,6 +4,7 @@ import {
   DNS_RECORD_TYPES,
   checkChange,
   stepDone,
+  stepNext,
   stepWait,
   validateRecord,
   validateRecordKey,
@@ -47,8 +48,22 @@ function fail(code: "validation" | "internal"): AwsError {
 // its wait must never end `failed`: the failed hook of a create refunds the order while the zone stays. These errors
 // are retryable, so the policy (packages/core/operations/policy.ts decideFailure) retries a few times and then stops
 // in needs_attention for an admin, with no refund; a later run that finds the change INSYNC still finishes.
-function attention(code: "upstream_unavailable" | "internal"): AwsError {
-  return new AwsError({ code, retryable: true });
+function attention(
+  code: "upstream_unavailable" | "internal",
+  awsErrorName?: string | null,
+): AwsError {
+  return new AwsError({ code, retryable: true, awsErrorName });
+}
+
+// WPU-Y5 (b): at wait_insync the zone exists. A final answer of a read there (NoSuchChange or NoSuchHostedZone ->
+// not_found, a validation, a conflict) is turned into attention(): the create is retried a few times, then stops in
+// needs_attention for an admin, never `failed` with a refund. The AWS error name is kept for last_error (R14: a
+// plain name only). A retryable error is passed on as it is.
+function keepZone(error: unknown): unknown {
+  if (error instanceof AwsError && !error.retryable) {
+    return attention("upstream_unavailable", error.awsErrorName);
+  }
+  return error;
 }
 
 function isNotFound(error: unknown): boolean {
@@ -305,7 +320,11 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
       // needs_attention, never failed (final review Z19 I-1, attention()).
       async create(ctx: OpCtx<DnsZoneConfig>): Promise<StepResult> {
         const port = deps.route53();
-        if (ctx.operation.step === null || ctx.operation.step === "create_zone") {
+        // WPU-Y5 (c), fix round 1: step null only moves to `create_zone`, with no AWS call, like the renewal's
+        // `submit`. So a create at null has sent nothing, and at `create_zone` attempts and last_error tell whether an
+        // earlier attempt may have sent CreateHostedZone (dnsZoneMayExist of @tc/core, used by reject.ts).
+        if (ctx.operation.step === null) return stepNext("create_zone");
+        if (ctx.operation.step === "create_zone") {
           const { zone, changeId } = await port.createHostedZone({
             name: ctx.config.zoneName,
             callerReference: ctx.operation.id,
@@ -328,22 +347,26 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
         ) {
           throw attention("internal");
         }
-        if (changeId !== null && (await port.getChangeStatus(changeId)) === "pending") {
-          if (pastWaitBudget(ctx)) throw attention("upstream_unavailable");
-          return stepWait("wait_insync", pollAt(ctx));
+        try {
+          if (changeId !== null && (await port.getChangeStatus(changeId)) === "pending") {
+            if (pastWaitBudget(ctx)) throw attention("upstream_unavailable");
+            return stepWait("wait_insync", pollAt(ctx));
+          }
+          const zone = await port.getHostedZone(id);
+          if (zone === null) throw new AwsError({ code: "upstream_unavailable", retryable: true });
+          // WPU-G6: the list is saved with the zone (apex NS and SOA, read-only), so the record editor of a
+          // zone that was never changed shows what exists and can add the first record.
+          return stepDone({
+            state: "active",
+            configMerge: {
+              hostedZoneId: zone.id,
+              nameServers: [...zone.nameServers],
+              ...(await mirrorPatch(port, zone.id, ctx.config.zoneName)),
+            },
+          });
+        } catch (error) {
+          throw keepZone(error);
         }
-        const zone = await port.getHostedZone(id);
-        if (zone === null) throw new AwsError({ code: "upstream_unavailable", retryable: true });
-        // WPU-G6: the list is saved with the zone (apex NS and SOA, read-only), so the record editor of a
-        // zone that was never changed shows what exists and can add the first record.
-        return stepDone({
-          state: "active",
-          configMerge: {
-            hostedZoneId: zone.id,
-            nameServers: [...zone.nameServers],
-            ...(await mirrorPatch(port, zone.id, ctx.config.zoneName)),
-          },
-        });
       },
       // A zone has nothing to suspend: its records stay (spec 11: DNS keeps its configuration).
       suspend: async () => stepDone(),

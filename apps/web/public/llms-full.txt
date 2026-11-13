@@ -3,6 +3,8 @@
 > TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in US dollars and include VAT and fees; you pay in taka from a wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.
 
 Canonical site: https://tryaws.now
+Published by TryAWS.now, Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230
+Identifiers: BIN: 008073062-0507, Trade License: TRAD/DNCC/098737/2020
 Last updated: 2026-11-14
 
 ## English
@@ -51,25 +53,25 @@ TryAWS.now gives support through support requests only, and our support team ans
 
 URL: https://tryaws.now/en/legal/terms
 
-Terms of service of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+Terms of service of TryAWS.now, the prepaid cloud panel for Bangladesh.
 
 ### Privacy policy
 
 URL: https://tryaws.now/en/legal/privacy
 
-Privacy policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+Privacy policy of TryAWS.now, the prepaid cloud panel for Bangladesh.
 
 ### Acceptable use policy
 
 URL: https://tryaws.now/en/legal/acceptable-use
 
-Acceptable use policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+Acceptable use policy of TryAWS.now, the prepaid cloud panel for Bangladesh.
 
 ### Refund policy
 
 URL: https://tryaws.now/en/legal/refund
 
-Refund policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+Refund policy of TryAWS.now, the prepaid cloud panel for Bangladesh.
 
 ### Frequently asked questions
 
@@ -110,7 +112,7 @@ Q: Are prices in taka?
 A: Prices are shown in US dollars. Your wallet, top-ups and invoices are in Bangladeshi taka (BDT); the taka amount of an order is worked out at checkout with the exchange rate of the day.
 
 Q: Do I get a VAT invoice?
-A: Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.
+A: Yes. For each purchase and renewal TryAWS.now gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.
 
 Q: Can I get a refund?
 A: If a resource cannot be created after you paid, the full amount goes back to your wallet automatically. When we cancel a purchase or a renewal, the whole amount goes back to your wallet and you get a credit note in taka. For anything else, open a billing support request; the refund policy has the details.
@@ -167,25 +169,25 @@ TryAWS.now সাপোর্ট দেয় শুধু সাপোর্ট
 
 URL: https://tryaws.now/legal/terms
 
-সেবার শর্তাবলি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+সেবার শর্তাবলি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।
 
 ### গোপনীয়তা নীতি
 
 URL: https://tryaws.now/legal/privacy
 
-গোপনীয়তা নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+গোপনীয়তা নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।
 
 ### গ্রহণযোগ্য ব্যবহারের নীতি
 
 URL: https://tryaws.now/legal/acceptable-use
 
-গ্রহণযোগ্য ব্যবহারের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+গ্রহণযোগ্য ব্যবহারের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।
 
 ### টাকা ফেরতের নীতি
 
 URL: https://tryaws.now/legal/refund
 
-টাকা ফেরতের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+টাকা ফেরতের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।
 
 ### সাধারণ প্রশ্ন
 
@@ -226,7 +228,7 @@ Q: মূল্য কি টাকায়?
 A: মূল্য মার্কিন ডলারে দেখানো হয়। ওয়ালেট, টপ আপ ও ইনভয়েস বাংলাদেশি টাকায় (BDT); অর্ডারের টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয়।
 
 Q: আমি কি VAT সহ কর চালানপত্র পাব?
-A: হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।
+A: হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TryAWS.now আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।
 
 Q: টাকা ফেরত পাওয়া যায় কি?
 A: পেমেন্টের পর কোনো resource তৈরি না হলে পুরো টাকা নিজে থেকেই ওয়ালেটে ফেরত যায়। আমরা কোনো কেনা বা নবায়ন বাতিল করলে পুরো টাকা ওয়ালেটে ফেরত যায় এবং আপনি টাকায় ক্রেডিট নোট পান। অন্য কিছুর জন্য বিল বিষয়ে সাপোর্ট অনুরোধ খুলুন; বিস্তারিত ফেরতের নীতিতে আছে।
@@ -239,5 +241,5 @@ Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of
 
 ## How to cite us
 
-Content is licensed CC-BY-4.0. When quoting, attribute to TryAWS.now (TiCON System Limited) and link the source URL.
+Content is licensed CC-BY-4.0. When quoting, attribute to TryAWS.now and link the source URL.
 When quoting a page, prefer that page's AnswerBlock — it is written to be lifted verbatim.

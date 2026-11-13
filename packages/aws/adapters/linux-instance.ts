@@ -22,6 +22,7 @@ import {
 } from "@aws-sdk/client-lightsail";
 import {
   awsResourceName,
+  isImportableSshKey,
   parseFirewallRules,
   parseInstanceConfig,
   parseServerDisplayName,
@@ -179,6 +180,10 @@ export function createLinuxInstanceAdapter(
       region: ctx.region,
     });
     if (spec === null || spec.publicKey === null) throw fail("validation");
+    // WPU-Y5 (e): ImportKeyPair documents publicKeyBase64 as "a base64-encoded public key of the ssh-rsa type". The
+    // web accepts only such keys (2048 bits or more); a stored key of another type or size is refused here before
+    // any AWS call (fail closed, R16). The create then ends failed with its refund: nothing was made yet.
+    if (!isImportableSshKey(spec.publicKey)) throw fail("validation");
     const keyName = awsResourceName("keypair", ctx.config.keyPairId);
     const lightsail = client(ctx);
     const existing = await orNull(() =>

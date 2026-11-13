@@ -27,8 +27,8 @@ export function flatLeaves(tree: Messages): Map<string, string> {
 
 const BENGALI = /[ঀ-৿]/;
 // WPU-Z8, owner decision 2026-11-13: the brand is "TryAWS.now", a deliberate deviation from 16.13 ("no AWS
-// mark inside a product name, a company name or a domain name"; the trademark risk is recorded in
-// JOURNEY.md). The exception is this exact token, standing alone: "TryAWS", "TryAWS.com", the token in other
+// mark inside a product name, a company name or a domain name"). The trademark question is closed by the
+// owner (WPU-Y6, 2026-11-14: "TryAWS.now is a different name"). The exception is this exact token, standing alone: "TryAWS", "TryAWS.com", the token in other
 // letter cases, "TryAWS.nowhere" or "MyTryAWS.now" are not the brand, and "aws-in-name" below catches them.
 const BRAND_TOKEN = /(?<![A-Za-z0-9][.-]?)TryAWS\.now(?![.-]?[A-Za-z0-9])/g;
 // Brand and product marks that stay in Latin script inside Bengali text (16.13).

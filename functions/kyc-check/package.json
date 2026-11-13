@@ -1,0 +1,16 @@
+{
+  "name": "@tc/fn-kyc-check",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1166.0",
+    "@tc/core": "workspace:*"
+  }
+}

@@ -88,6 +88,18 @@ export const OPTIONAL_SECRET_PLACEHOLDER = "not-configured";
 // stage deploys without an SMS contract; the readers (apps/web/server/secrets.ts, functions/notifier/secrets.ts)
 // treat the placeholder as "SMS off" and never send it to Gennet.
 export const OPTIONAL_SMS_SECRETS: readonly SecretName[] = ["SmsApiKey", "SmsSenderId"];
+// WPU-Y5 (a): the stack output `smsConfigured` (infra/app.ts). True only when every SMS secret holds a value that
+// is not empty and not the placeholder, the same rule as the readers (configuredSecretValue of @tc/db/links). It
+// answers a boolean and nothing else: no value of a secret leaves this function (R3). scripts/post-deploy-check.mjs
+// fails a production deploy when it is false.
+export function smsConfigured(values: readonly (string | undefined)[]): boolean {
+  if (values.length !== OPTIONAL_SMS_SECRETS.length) return false;
+  return values.every((value) => {
+    if (typeof value !== "string") return false;
+    const trimmed = value.trim();
+    return trimmed !== "" && trimmed !== OPTIONAL_SECRET_PLACEHOLDER;
+  });
+}
 
 // 3.3: these four are listed in the proxy credentials; migrator uses the master user to create roles.
 export const PROXY_ROLES: readonly DbRoleName[] = ["web_rw", "admin_rw", "worker_rw", "report_ro"];
@@ -167,6 +179,22 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     trigger: { kind: "invoke", by: ["web"] },
     timeoutSeconds: 30,
     memoryMb: 512,
+  },
+  {
+    // WPU-Y3: tells the web tier whether a KYC upload arrived (size and type, never content). The web role
+    // may not read the kyc bucket; this role may HeadObject on kyc/* and has no grant on the kyc key. In
+    // the isolated subnets: S3 through the gateway endpoint and nothing else.
+    dir: "kyc-check",
+    component: "KycCheck",
+    handlerExport: "handler",
+    exportExists: true,
+    placement: "isolated",
+    dbRole: "none",
+    secrets: [],
+    poolRoles: [],
+    trigger: { kind: "invoke", by: ["web"] },
+    timeoutSeconds: 10,
+    memoryMb: 256,
   },
   {
     dir: "invoice-renderer",
@@ -330,6 +358,9 @@ export const ALERT_LOG_EVENTS = {
   reconcileUsageFailed: "reconcile_usage_failed",
   // The healthy line of a run: its silence is an alarm too.
   reconcileOk: "reconcile_ok",
+  // functions/notifier/build.ts (the notifier, every minute): WPU-Y5 (a), a run started without the SMS gateway
+  // (an SMS secret on the placeholder). Counted and alarmed in production only (staging runs with SMS off).
+  notifierSmsOff: "notifier_sms_off",
 } as const;
 // WPU-Z1: the value of the field `reason` that an alert matches next to its event, written by the same code (the
 // repo test checks it there too).

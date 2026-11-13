@@ -69,6 +69,20 @@ describe("llms.txt", () => {
     expect(text).toContain(publicEn.Public.support.lead);
   });
 
+  // WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now with its BIN and trade licence, never the old
+  // legal name, in every GEO file.
+  it("names the company TryAWS.now with its BIN and trade licence, never the old legal name", () => {
+    expect(text).toContain("- Company: TryAWS.now, ");
+    expect(text).toContain(
+      "- Identifiers: BIN: 008073062-0507, Trade License: TRAD/DNCC/098737/2020",
+    );
+    expect(llmsFullTxt()).toContain(
+      "Identifiers: BIN: 008073062-0507, Trade License: TRAD/DNCC/098737/2020",
+    );
+    for (const file of [text, llmsFullTxt(), factsJson()])
+      expect(file).not.toMatch(/TiCON System/i);
+  });
+
   it("links every public page in both locales, and never the panel or a product family behind a flag", () => {
     for (const locale of ["bn", "en"] as const) {
       for (const page of geoPages(locale)) {
@@ -88,7 +102,8 @@ describe("llms.txt", () => {
     expect(text).toContain(
       `Content is licensed ${GEO_LICENSE}. When quoting, attribute to ${geoAttribution()} and link the source URL.`,
     );
-    expect(geoAttribution()).toBe("TryAWS.now (TiCON System Limited)");
+    // WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now; the attribution is the brand alone.
+    expect(geoAttribution()).toBe("TryAWS.now");
   });
 });
 
@@ -131,7 +146,8 @@ describe("facts.json", () => {
       entityType: "Organization",
       license: GEO_LICENSE,
       attribution: geoAttribution(),
-      legalName: "TiCON System Limited",
+      legalName: "TryAWS.now",
+      identifiers: { bin: "008073062-0507", tradeLicense: "TRAD/DNCC/098737/2020" },
       dateModified: CONTENT_UPDATED,
     });
     expect(facts.sameAs).toBeUndefined();

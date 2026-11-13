@@ -323,11 +323,11 @@ describe("requirements 5, 9 and 10: the monthly budget of a lean stage", () => {
   });
 
   it("filters on the tags SST puts on every resource: the app AND the stage", () => {
-    expect(sstTags("ticon-cloud", "staging")).toEqual({
-      "sst:app": "ticon-cloud",
+    expect(sstTags("tryaws-now", "staging")).toEqual({
+      "sst:app": "tryaws-now",
       "sst:stage": "staging",
     });
-    expect(Object.isFrozen(sstTags("ticon-cloud", "production"))).toBe(true);
+    expect(Object.isFrozen(sstTags("tryaws-now", "production"))).toBe(true);
   });
 });
 
@@ -517,8 +517,9 @@ describe("requirement 11: the VERIFY fixes in the stacks", () => {
 
   it("workers.ts publishes a version of access-details for its alias", () => {
     const workers = code("infra/stacks/workers.ts");
-    expect(workers).toContain(
-      'const PUBLISHED_VERSIONS: readonly string[] = ["reader", "access-details", "invoice-renderer"]',
+    // WPU-Y3: and kyc-check, for its "web" alias.
+    expect(workers).toMatch(
+      /const PUBLISHED_VERSIONS: readonly string\[\] = \[ "reader", "access-details", "invoice-renderer", "kyc-check",? \]/,
     );
     expect(workers).not.toContain("an alias cannot point to $LATEST");
   });
