@@ -33,13 +33,17 @@ export interface WebInputs {
   readonly workers: Workers;
 }
 
+// The callback form of SST's Transform<T> (.sst/platform/src/components/component.ts): it changes
+// the arguments in place and returns undefined. A callback built away from its call site needs it.
+type TransformFn<T> = (args: T) => undefined;
+
 // A fixed role name for the Next.js server function, and the edge function's role is SST's own.
 // VERIFY: transform.server of sst.aws.Nextjs is FunctionArgs, so its own transform.role can set the name.
-function fixedServerRole(name: string) {
-  return (args: { transform?: { role?: unknown } }) => {
+function fixedServerRole(name: string): TransformFn<sst.aws.FunctionArgs> {
+  return (args) => {
     args.transform = {
       ...(args.transform ?? {}),
-      role: (role: { name?: string }) => {
+      role: (role) => {
         role.name = name;
       },
     };
@@ -49,25 +53,24 @@ function fixedServerRole(name: string) {
 // WAF and the response headers policy are attached through transform.cdn (3.3: `webAclArn`).
 // VERIFY: that setting defaultCacheBehavior.responseHeadersPolicyId inside transform.distribution
 // keeps the behaviour that SST built for the origin.
-function cdnTransform(aclArn: unknown, headersPolicyId: unknown) {
-  return (args: { webAclArn?: unknown; transform?: Record<string, unknown> }) => {
+function cdnTransform(
+  aclArn: $util.Input<string>,
+  headersPolicyId: $util.Input<string>,
+): TransformFn<sst.aws.CdnArgs> {
+  return (args) => {
     args.webAclArn = aclArn;
     args.transform = {
       ...(args.transform ?? {}),
-      distribution: (distribution: {
-        defaultCacheBehavior?: unknown;
-        orderedCacheBehaviors?: unknown;
-      }) => {
-        const withPolicy = (behavior: Record<string, unknown>) => ({
+      distribution: (distribution) => {
+        const withPolicy = <T extends object>(behavior: T) => ({
           ...behavior,
           responseHeadersPolicyId: headersPolicyId,
         });
         distribution.defaultCacheBehavior = $output(distribution.defaultCacheBehavior).apply(
-          (behavior) => withPolicy(behavior as Record<string, unknown>),
+          (behavior) => withPolicy(behavior),
         );
         distribution.orderedCacheBehaviors = $output(distribution.orderedCacheBehaviors).apply(
-          (behaviors) =>
-            ((behaviors as Record<string, unknown>[] | undefined) ?? []).map(withPolicy),
+          (behaviors) => (behaviors ?? []).map(withPolicy),
         );
       },
     };
@@ -81,17 +84,25 @@ export function web(inputs: WebInputs) {
   // C.2: the permission lists of the web and admin roles, kept as IAM policy documents for the stack
   // output `webRolePolicies` that scripts/post-deploy-check.mjs reads (R1: none allows sts:AssumeRole).
   // They are built from the same lists the Nextjs components receive, so they cannot drift apart.
-  const recorded: { actions: string[]; resources: unknown[] }[][] = [];
-  const record = <T extends { actions: string[]; resources: unknown[] }>(permissions: T[]): T[] => {
+  const recorded: sst.aws.FunctionPermissionArgs[][] = [];
+  const record = (permissions: sst.aws.FunctionPermissionArgs[]) => {
     recorded.push(permissions);
     return permissions;
   };
-  const invoke = (...dirs: string[]) => dirs.map((dir) => workers.invoked[dir]?.arn);
+  // The function of a folder that the web tier calls by name (workers.invoked). WPU-Z9, fail closed
+  // (R16): a folder without a function stops the deploy here, never an undefined name later.
+  const functionOf = (dir: string) => {
+    const fn = workers.invoked[dir];
+    if (fn === undefined) throw new Error(`no function for ${dir}`);
+    return fn;
+  };
   // WPU-S6: each tier may invoke only its own alias of the reader (customerId on "web", adminId on
   // "admin"); the handler reads the tier from the alias in the invoked ARN.
   const dbEnvironment = (role: "web_rw" | "admin_rw") => ({
     DB_HOST: db.connection.host,
-    DB_PORT: db.connection.port,
+    // WPU-Z9: the port is a number output; a Lambda environment value must be a string
+    // (FunctionArgs.environment, components/aws/function.ts).
+    DB_PORT: $interpolate`${db.connection.port}`,
     DB_NAME: db.connection.name,
     DB_USER: role,
     // The name of the linked secret that holds this role's password (packages/db/env.ts).
@@ -116,13 +127,13 @@ export function web(inputs: WebInputs) {
       PROVISIONING_QUEUE_URL: queues.provisioning.url,
       // WPU-G4: the function name (not the ARN) of the reader, for the Metrics tab. The role may
       // invoke it (permissions below); apps/web/server/reader-invoke.ts builds the client lazily.
-      READER_FUNCTION_NAME: workers.invoked["reader"]?.name,
+      READER_FUNCTION_NAME: functionOf("reader").name,
       // WPU-N2: the function name of access-details (one-time secrets). The client invokes the "web"
       // alias only (apps/web/server/access-invoke.ts) and the role may invoke that alias only.
-      ACCESS_DETAILS_FUNCTION_NAME: workers.invoked["access-details"]?.name,
+      ACCESS_DETAILS_FUNCTION_NAME: functionOf("access-details").name,
       // WPU-N1: the function name of the invoice renderer, for "Download PDF"
       // (apps/web/server/renderer-invoke.ts); the role may invoke its "web" alias only.
-      INVOICE_RENDERER_FUNCTION_NAME: workers.invoked["invoice-renderer"]?.name,
+      INVOICE_RENDERER_FUNCTION_NAME: functionOf("invoice-renderer").name,
       KYC_BUCKET: storage.kyc.name,
       EXPORTS_BUCKET: storage.exports.name,
     },
@@ -180,16 +191,18 @@ export function web(inputs: WebInputs) {
       KYC_BUCKET: storage.kyc.name,
       EXPORTS_BUCKET: storage.exports.name,
     },
-    // Admin reads KYC objects (the only role that may), invokes catalog-sync, calls the Cognito admin
-    // API of the admin pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
+    // Admin reads KYC objects (the only role that may) and calls the Cognito admin API of the admin
+    // pool only. No sts:AssumeRole. No grant on the invoices bucket and no invoke of
     // invoice-renderer (WPU-S8): an invoice PDF holds the buyer's BIN or NID and address; the renderer
     // function writes it and the customer's own web path reads it.
     // WPU-B7 (L1): no sqs:SendMessage and no queue URL: the admin app has no queue client, it writes
     // operation rows and the scheduler enqueues them (R1).
+    // WPU-Z9 (least privilege): no invoke of catalog-sync, which 3.2 allows: nothing in apps/admin
+    // calls it (its daily CronV2 runs it). An admin "sync now" adds the grant with its invoker.
     permissions: record([
       {
         actions: ["lambda:InvokeFunction"],
-        resources: [workers.readerAliases.admin.arn, ...invoke("catalog-sync")],
+        resources: [workers.readerAliases.admin.arn],
       },
       { actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/*`] },
       { actions: ["kms:Decrypt"], resources: [storage.kycKey.arn] },

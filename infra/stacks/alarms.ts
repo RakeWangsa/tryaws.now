@@ -25,7 +25,7 @@ export function alarms(
   workers: Workers,
   // The Next.js components, for the server-function error alarms (5xx). Optional so that a caller that
   // has no web tier (a test of this file) still builds the rest.
-  web?: { customer: unknown; admin: unknown },
+  web?: { customer: sst.aws.Nextjs; admin: sst.aws.Nextjs },
 ) {
   const stage = config.stage;
 
@@ -57,6 +57,14 @@ export function alarms(
     alarmDescription: "A provisioning message reached the dead-letter queue",
   });
 
+  // The FunctionName dimension of a function alarm; none for a target without a function (a Next.js
+  // server with no web tier or under `sst dev`). Pulumi drops a key whose value is undefined
+  // (@pulumi/pulumi runtime/rpc.js), so this sends exactly what `{ FunctionName: fn?.name }`
+  // sent; it only gives the value the type that `dimensions` takes (WPU-Z9).
+  const functionDimension = (
+    fn: { name: $util.Input<string> } | undefined,
+  ): Record<string, $util.Input<string>> => (fn === undefined ? {} : { FunctionName: fn.name });
+
   const schedulerFunction = workers.crons["scheduler"]?.nodes.function;
   const schedulerAlarm = new aws.cloudwatch.MetricAlarm("SchedulerAlarm", {
     name: resourceName(stage, "scheduler-stopped"),
@@ -68,7 +76,7 @@ export function alarms(
     threshold: SCHEDULER_ALARM.threshold,
     comparisonOperator: SCHEDULER_ALARM.comparison,
     treatMissingData: SCHEDULER_ALARM.treatMissingData,
-    dimensions: { FunctionName: schedulerFunction?.name },
+    dimensions: functionDimension(schedulerFunction),
     alarmActions: [topic.arn],
     alarmDescription: "The scheduler ran less than once in 5 minutes",
   });
@@ -285,11 +293,9 @@ export function alarms(
   // NOT BUILT, Needs decision: the CloudFront 5xxErrorRate of the two distributions. CloudFront metrics
   // live in us-east-1 and an alarm may only act on a topic of its own Region, so it needs a second topic
   // and e-mail subscriptions there.
-  const customerServer = (web?.customer as { nodes?: { server?: { name: unknown } } } | undefined)
-    ?.nodes?.server;
-  const adminServer = (web?.admin as { nodes?: { server?: { name: unknown } } } | undefined)?.nodes
-    ?.server;
-  const errorTargets: [string, { name: unknown } | undefined][] = [
+  const customerServer = web?.customer.nodes.server;
+  const adminServer = web?.admin.nodes.server;
+  const errorTargets: [string, { name: $util.Input<string> } | undefined][] = [
     ["Provisioner", provisionerFunction],
     ["Scheduler", schedulerFunction],
     ["Reconciler", reconcilerFunction],
@@ -312,7 +318,7 @@ export function alarms(
         threshold: 1,
         comparisonOperator: "GreaterThanOrEqualToThreshold",
         treatMissingData: "notBreaching",
-        dimensions: { FunctionName: fn?.name },
+        dimensions: functionDimension(fn),
         alarmActions: [topic.arn],
         alarmDescription: `The ${label} function failed an invocation (5xx for a web server)`,
       }),

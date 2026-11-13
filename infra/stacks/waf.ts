@@ -90,7 +90,10 @@ function managedGroup(name: string, priority: number) {
   };
 }
 
-function rateRule(name: string, priority: number, limit: number, statements: unknown[]) {
+// A nestable WAF statement as Pulumi AWS 7.20.0 types it (wafv2.WebAclRuleStatement).
+type Statement = aws.types.input.wafv2.WebAclRuleStatement;
+
+function rateRule(name: string, priority: number, limit: number, statements: Statement[]) {
   return {
     name: `rate-${name}`,
     priority,
@@ -172,20 +175,24 @@ export function waf(config: StageConfig) {
     },
     opts,
   );
+  // WPU-Z9: Pulumi AWS 7.20.0 names the negated statement `statements`, a list that holds the one
+  // statement (wafv2.WebAclRuleStatementNotStatement in types/input.d.ts); there is no `statement`.
   const outsideAllowlist = {
     name: "block-outside-allowlist",
     priority: 0,
     action: { block: {} },
     statement: {
       notStatement: {
-        statement: {
-          orStatement: {
-            statements: [
-              { ipSetReferenceStatement: { arn: ipSet4.arn } },
-              { ipSetReferenceStatement: { arn: ipSet6.arn } },
-            ],
+        statements: [
+          {
+            orStatement: {
+              statements: [
+                { ipSetReferenceStatement: { arn: ipSet4.arn } },
+                { ipSetReferenceStatement: { arn: ipSet6.arn } },
+              ],
+            },
           },
-        },
+        ],
       },
     },
     visibilityConfig: visibility("block-outside-allowlist"),

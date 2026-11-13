@@ -1,7 +1,12 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // WPU-Z9: this program also compiles SST's own sources (.sst/platform/src, reached through
+    // config.d.ts). SST builds them without noUncheckedIndexedAccess (.sst/platform/tsconfig.json:
+    // @tsconfig/node18, strict) and about 130 of their lines fail under it, so it is off here only.
+    // All other options of tsconfig.base.json stay; infra/tsconfig.json keeps the flag (infra/lib).
+    "noUncheckedIndexedAccess": false
   },
   "include": [
     "app.ts",

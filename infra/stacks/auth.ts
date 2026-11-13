@@ -32,7 +32,8 @@ export function auth(config: StageConfig) {
     timeout: "5 seconds",
     memory: "256 MB",
     transform: {
-      role: (args: { name?: string }) => {
+      // Transform<iam.RoleArgs>, as SST passes it (.sst/platform/src/components/aws/function.ts).
+      role: (args: aws.iam.RoleArgs) => {
         args.name = roleName(stage, "cognito-messages");
       },
     },
@@ -45,14 +46,18 @@ export function auth(config: StageConfig) {
     softwareToken: true,
     triggers: { customMessage: messages.arn },
     transform: {
-      userPool: (args: Record<string, unknown>) => {
+      // Transform<cognito.UserPoolArgs>, as SST passes it (components/aws/cognito-user-pool.ts).
+      userPool: (args: aws.cognito.UserPoolArgs) => {
         args.name = resourceName(stage, "customers");
         args.passwordPolicy = PASSWORD_POLICY;
         args.autoVerifiedAttributes = ["email"];
         // A changed e-mail stays unverified, and the old one stays valid, until the new address
-        // proves itself. VERIFY: Pulumi aws.cognito.UserPool property userAttributeUpdateSettings
-        // { attributesRequireVerificationBeforeUpdate: ["email"] }.
-        args.userAttributeUpdateSettings = { attributesRequireVerificationBeforeUpdate: ["email"] };
+        // proves itself. WPU-Z9: the field is attributesRequireVerificationBeforeUpdates, plural
+        // (@pulumi/aws 7.20.0 types/input.d.ts, UserPoolUserAttributeUpdateSettings); the singular
+        // name of before is not a Pulumi argument.
+        args.userAttributeUpdateSettings = {
+          attributesRequireVerificationBeforeUpdates: ["email"],
+        };
         args.emailConfiguration = email;
         args.deletionProtection = "ACTIVE";
         args.accountRecoverySetting = {
@@ -65,7 +70,8 @@ export function auth(config: StageConfig) {
   });
   const customerClient = customers.addClient("Web", {
     transform: {
-      client: (args: Record<string, unknown>) => {
+      // Transform<cognito.UserPoolClientArgs> (components/aws/cognito-user-pool-client.ts).
+      client: (args: aws.cognito.UserPoolClientArgs) => {
         // No client secret: the Next.js server uses the SRP or password flow of the SDK.
         // VERIFY: transform.client key of CognitoUserPool.addClient and the auth flows 6.1 needs.
         args.generateSecret = false;
@@ -92,11 +98,13 @@ export function auth(config: StageConfig) {
     softwareToken: true,
     triggers: { customMessage: messages.arn },
     transform: {
-      userPool: (args: Record<string, unknown>) => {
+      userPool: (args: aws.cognito.UserPoolArgs) => {
         args.name = resourceName(stage, "admins");
         args.passwordPolicy = PASSWORD_POLICY;
         args.autoVerifiedAttributes = ["email"];
-        args.userAttributeUpdateSettings = { attributesRequireVerificationBeforeUpdate: ["email"] };
+        args.userAttributeUpdateSettings = {
+          attributesRequireVerificationBeforeUpdates: ["email"],
+        };
         args.emailConfiguration = email;
         args.deletionProtection = "ACTIVE";
         // No self sign-up (6.2): only an administrator creates users.
@@ -108,7 +116,7 @@ export function auth(config: StageConfig) {
   });
   const adminClient = admins.addClient("Admin", {
     transform: {
-      client: (args: Record<string, unknown>) => {
+      client: (args: aws.cognito.UserPoolClientArgs) => {
         args.generateSecret = false;
         // No self-service attribute writes for admins: an empty allowlist. Admin users are created
         // and changed only through the admin API (IAM) of the admin pool.

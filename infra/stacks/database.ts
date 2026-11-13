@@ -32,7 +32,8 @@ export function database(config: StageConfig, net: Network, secrets: Secrets) {
     instance: size.instance,
     // 3.3: Multi-AZ in production
     multiAz: size.multiAz,
-    storage: size.storage,
+    // lib/lean.ts types it as a string; both sizes hold "20 GB" (SizeGbTb, components/size.ts).
+    storage: size.storage as `${number} GB`,
     // 3.3: list web_rw, admin_rw, worker_rw and report_ro; the component does not create these users.
     // The migrator function creates every role (workers.ts), with the passwords of the sst.Secret
     // values below. No password is written in code.
@@ -42,8 +43,9 @@ export function database(config: StageConfig, net: Network, secrets: Secrets) {
         password: secrets.db[role].value,
       })),
     },
+    // Transform<rds.*Args>, as SST passes them (.sst/platform/src/components/aws/postgres.ts).
     transform: {
-      instance: (args: Record<string, unknown>) => {
+      instance: (args: aws.rds.InstanceArgs) => {
         // R2: private only. 3.3: 14 days (7 in lean), deletion protection, KMS storage encryption, a final
         // snapshot, and the instance's own security group (never the VPC default group).
         args.publiclyAccessible = false;
@@ -58,16 +60,16 @@ export function database(config: StageConfig, net: Network, secrets: Secrets) {
         // VERIFY: that these aws.rds.Instance argument names match Pulumi AWS v7 and that the
         // component's own values (set before this callback runs) are overwritten, not merged.
       },
-      parameterGroup: (args: { parameters?: unknown }) => {
+      parameterGroup: (args: aws.rds.ParameterGroupArgs) => {
         // TLS forced for the instance: rds.force_ssl = 1.
         // VERIFY: rds.force_ssl is a dynamic parameter (applyMethod immediate) for the chosen
         // parameter group family, and the component's default parameters keep their shape.
-        args.parameters = $output(args.parameters).apply((existing: unknown) => [
-          ...((existing as unknown[] | undefined) ?? []),
+        args.parameters = $output(args.parameters).apply((existing) => [
+          ...(existing ?? []),
           { name: "rds.force_ssl", value: "1", applyMethod: "immediate" },
         ]);
       },
-      proxy: (args: Record<string, unknown>) => {
+      proxy: (args: aws.rds.ProxyArgs) => {
         // TLS forced for the proxy: requireTls true. Own security group (proxy -> database only).
         args.requireTls = true;
         args.vpcSecurityGroupIds = [net.proxySecurityGroup.id];
@@ -80,10 +82,11 @@ export function database(config: StageConfig, net: Network, secrets: Secrets) {
     postgres,
     // Non-secret connection facts for the functions. The password comes from the linked secret of
     // the function's own role (DB_PASSWORD_SECRET), never from here.
-    // VERIFY: that `host` is the proxy endpoint when `proxy` is on (the docs show host, port,
-    // database, username, password, but not which endpoint host names).
+    // `host` is the proxy endpoint when `proxy` is on (WPU-Z9: SST 4.17.2 postgres.ts `get host`
+    // returns proxy?.endpoint, else the instance endpoint). `as`: under noUncheckedIndexedAccess
+    // SST infers Output<string | undefined> there (endpoint.split(":")[0]); it is always a string.
     connection: {
-      host: postgres.host,
+      host: postgres.host as $util.Output<string>,
       port: postgres.port,
       name: postgres.database,
     },

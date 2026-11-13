@@ -205,7 +205,7 @@ export const FUNCTIONS: readonly FunctionSpec[] = [
     dbRole: "worker_rw",
     secrets: [],
     poolRoles: ["TcReader", "TcDnsReader"],
-    // daily and on demand (admin invokes it)
+    // daily; no app role may invoke it (WPU-Z9: no admin grant until an admin invoker exists)
     trigger: { kind: "cron", schedule: "rate(1 day)" },
     timeoutSeconds: 300,
     memoryMb: 512,
