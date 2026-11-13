@@ -175,19 +175,37 @@ function SubmissionCard({
         ) : null}
       </dl>
       <p className="mb-1">{t("kyc.documents")}</p>
-      <ul className="list-unstyled mb-2">
-        {images.map((index) => (
-          <li key={index}>
-            <a
-              href={`/api/kyc-document/${submission.id}/${index}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {t("kyc.view", { n: index + 1 })}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <form
+        method="get"
+        action={`/api/kyc-document/${submission.id}/0`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <Field
+          name="reason"
+          id={`kyc-view-reason-${submission.id}`}
+          label={t("kyc.viewReasonLabel")}
+          hint={t("kyc.viewReasonHint")}
+          required
+          maxLength={500}
+          autoComplete="off"
+        />
+        <ul className="list-unstyled mb-2">
+          {images.map((index) => (
+            <li key={index}>
+              <Button
+                type="submit"
+                variant="tertiary"
+                size="sm"
+                formAction={`/api/kyc-document/${submission.id}/${index}`}
+                formTarget="_blank"
+              >
+                {t("kyc.view", { n: index + 1 })}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </form>
       <p className="form-text seccolor">{t("kyc.viewHint")}</p>
       {submission.status === "pending" && canAct && latest ? (
         <div className="row">

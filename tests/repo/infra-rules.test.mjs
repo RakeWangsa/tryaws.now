@@ -519,6 +519,9 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     // no read of the invoices bucket, only of exports
     const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
     expect(customer).not.toContain("${storage.invoices.arn}");
+    // security review 2: nothing in apps/web reads INVOICES_BUCKET (the PDF comes back in the renderer's
+    // answer), so the variable is not set on the customer app either
+    expect(customer).not.toContain("INVOICES_BUCKET");
     expect(customer).toContain("$interpolate`${storage.exports.arn}/*`");
     expect(customer).toContain("workers.rendererAliasWeb.arn");
     // WPU-N2: access-details only through its "web" alias, never the bare function

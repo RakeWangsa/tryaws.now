@@ -178,18 +178,26 @@ describe("/audit", () => {
       inProvider(await AuditPage(listParams("en", { action: "payment." })), "en"),
     ).not.toContain("/api/audit-export");
     as("superadmin");
-    expect(inProvider(await AuditPage(listParams("en", { action: "payment." })), "en")).toContain(
-      "/api/audit-export?action=payment.",
-    );
+    const html = inProvider(await AuditPage(listParams("en", { action: "payment." })), "en");
+    // R10: a GET form that carries the filter and asks for the reason; a bare link would skip it.
+    expect(html).toContain('action="/api/audit-export"');
+    expect(html).toContain('<input type="hidden" name="action" value="payment."/>');
+    expect(html).toMatch(/<input[^>]*required=""[^>]*name="reason"/);
+    expect(html).not.toContain('href="/api/audit-export');
   });
 
-  it("has no form that writes: nothing on the screen can create an audit row", async () => {
+  it("has no form that posts: the filter and the export are GET forms", async () => {
     as("superadmin");
     for (const locale of LOCALES) {
       const html = inProvider(await AuditPage(listParams(locale)), locale);
-      expect(html.match(/<form/g)).toHaveLength(1);
-      expect(html).not.toContain('type="hidden"');
+      expect(html.match(/<form/g)).toHaveLength(2);
+      expect(html.match(/method="get"/g)).toHaveLength(2);
+      expect(html).not.toMatch(/method="post"/i);
     }
+    as("support");
+    const html = inProvider(await AuditPage(listParams("en")), "en");
+    expect(html.match(/<form/g)).toHaveLength(1);
+    expect(html).not.toContain('type="hidden"');
   });
 
   it("links to the next page with the same filter", async () => {

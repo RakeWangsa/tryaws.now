@@ -13,9 +13,12 @@ export async function GET(request: Request, { params }: Params): Promise<Respons
     return new Response(null, { status: 403, headers: { "Cache-Control": "no-store" } });
   }
   const { submissionId, index } = await params;
+  // R10: the reason comes from the review page as ?reason=. A repeated field counts as missing.
+  const reasons = new URL(request.url).searchParams.getAll("reason");
+  const reason = reasons.length === 1 ? reasons[0] : undefined;
   let answer;
   try {
-    answer = await makeKycDocumentHandler(kycDocumentDeps())({ submissionId, index });
+    answer = await makeKycDocumentHandler(kycDocumentDeps())({ submissionId, index, reason });
   } catch {
     return new Response(null, { status: 503, headers: { "Cache-Control": "no-store" } });
   }

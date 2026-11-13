@@ -1,10 +1,13 @@
 import type { AdminActor, AdminRepos, AuditRow } from "@tc/db";
 import { auditFilterOf, auditQueryOf } from "./audit-query.ts";
+import { auditExportParams } from "./schemas.ts";
 
 // The CSV export of the filtered /audit view (16.12). R9 in order: authenticate and authorize
-// (superadmin; the repository checks again), validate (the same query parser as the page), rate limit,
-// execute (the repository cuts the view at its hard cap and masks every row, R14), answer. The export
-// is a read: it writes nothing, in particular no row to the audit log. Every refusal has the same
+// (superadmin; the repository checks again), validate (the same query parser as the page, plus the
+// required `reason` of R10), rate limit, execute (the repository cuts the view at its hard cap and
+// masks every row, R14), audit. The export is itself audited (R10): the repository appends one
+// `audit.export` row with actor, IP, reason, the filter and the row count in the same transaction as
+// the read; when that row cannot be written nothing is sent (R16). Every refusal has the same
 // no-store headers and no body text.
 
 export interface AuditExportDeps {
@@ -89,12 +92,17 @@ export function makeAuditExport(
       return { status: 403, headers: NO_CACHE };
     }
     try {
+      const params = auditExportParams.safeParse({ reason: query?.reason });
+      if (!params.success) return { status: 400, headers: NO_CACHE };
       const filter = auditFilterOf(auditQueryOf(query ?? {}));
       const at = deps.clock.now();
       if (!(await deps.limiter(actor, at))) return { status: 429, headers: NO_CACHE };
-      const out = await deps.run(actor, (repos) => repos.audit.export(filter));
+      // The repository reads the rows and appends the audit.export row in one transaction (R10). If
+      // the row cannot be written the transaction fails, `run` throws and no file leaves (R16).
+      const out = await deps.run(actor, (repos) => repos.audit.export(filter, params.data.reason));
       if (!out.ok) {
-        return { status: out.error === "forbidden" ? 403 : 503, headers: NO_CACHE };
+        const status = out.error === "forbidden" ? 403 : out.error === "validation" ? 400 : 503;
+        return { status, headers: NO_CACHE };
       }
       return {
         status: 200,

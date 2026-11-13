@@ -128,7 +128,7 @@ async function seedReviewPayment(): Promise<string> {
 
 // The money writes are for finance; the discrepancy queue is for ops too.
 const roleOf = (name: string): AdminActor["role"] =>
-  name.startsWith("adminUsers.")
+  name.startsWith("adminUsers.") || name === "audit.export"
     ? "superadmin"
     : name.startsWith("support.")
       ? "support"
@@ -225,7 +225,8 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
   "customers.resume": async (r) =>
     r.customers.resume({ customerId: await newCustomer(t.pool), at: AT }, "cleared"),
   "customers.documentRead": async (r) =>
-    r.customers.documentRead({ submissionId: await seedKyc(), index: 0 }),
+    r.customers.documentRead({ submissionId: await seedKyc(), index: 0 }, "id check for case 12"),
+  "audit.export": (r) => r.audit.export({}, "yearly review"),
   "featureFlags.set": (r) =>
     r.featureFlags.set(
       { key: "linux_instance", market: "BD", enabled: true },
@@ -469,7 +470,6 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "adminUsers.detail",
   "adminUsers.list",
   "audit.detail",
-  "audit.export",
   "audit.search",
   "blueprints.list",
   "abuse.detail",

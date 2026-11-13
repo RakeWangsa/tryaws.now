@@ -203,8 +203,13 @@ export const capacityWaitlist = z.object({
 });
 
 // ---- the two routes with a request of their own ----
-// /api/kyc-document/[submissionId]/[index]: a UUID and a one or two digit index.
+// /api/audit-export: the filter of the audit view is parsed by audit-query.ts; the export needs, in
+// addition, the reason of R10 (one text, never a list).
+export const auditExportParams = z.object({ reason });
+
+// /api/kyc-document/[submissionId]/[index]: a UUID, a one or two digit index and the reason of R10.
 export const kycDocumentParams = z.object({
+  reason,
   submissionId: uuidText,
   index: z.union([
     z

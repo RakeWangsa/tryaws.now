@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { unwrapDigitOneHtml } from "@tc/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -49,7 +51,12 @@ vi.mock("@tc/db", async () => ({
   }),
 }));
 
-const { INVOICE_DOCUMENT_HEADERS, invoiceDocument } = await import("./invoice-document.ts");
+const {
+  INVOICE_DOCUMENT_HEADERS,
+  INVOICE_DOCUMENT_RATE_LIMITS,
+  invoiceDocument,
+  printableInvoice,
+} = await import("./invoice-document.ts");
 
 const A = "0190aaaa-0000-7000-8000-0000000000c1";
 const B = "0190aaaa-0000-7000-8000-0000000000c2";
@@ -275,5 +282,79 @@ describe("the printable invoice", () => {
     expect(csp).not.toMatch(/script-src|https?:/);
     expect(INVOICE_DOCUMENT_HEADERS["Cache-Control"]).toBe("private, no-store");
     expect(INVOICE_DOCUMENT_HEADERS["X-Robots-Tag"]).toContain("noindex");
+  });
+});
+
+// Item 3 of security review 2 (R9): the printable invoice route has a rate limit, like the PDF route.
+describe("the printable invoice route (rate limit, R9)", () => {
+  const limited = (customerId: string | null, allowed: boolean | "throws") => {
+    const calls: string[] = [];
+    return {
+      calls,
+      deps: {
+        ...deps(customerId),
+        rateLimit: async () => {
+          calls.push("limit");
+          if (allowed === "throws") throw new Error("db down");
+          return { allowed };
+        },
+      },
+    };
+  };
+
+  it("limits to 60 a minute for each customer under the action invoice.document", () => {
+    expect(INVOICE_DOCUMENT_RATE_LIMITS).toEqual([
+      { action: "invoice.document", limit: 60, windowSeconds: 60 },
+    ]);
+  });
+
+  it("order: 401 before the limiter, 404 for a malformed id before the limiter, then the limiter, then the read", async () => {
+    state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n }];
+    const anon = limited(null, true);
+    expect(await printableInvoice(anon.deps, "en", INV)).toEqual({ status: 401 });
+    expect(anon.calls).toEqual([]);
+    const bad = limited(A, true);
+    expect(await printableInvoice(bad.deps, "en", "../../x")).toEqual({ status: 404 });
+    expect(bad.calls).toEqual([]);
+    const ok = limited(A, true);
+    expect((await printableInvoice(ok.deps, "en", INV)).status).toBe(200);
+    expect(ok.calls).toEqual(["limit"]);
+  });
+
+  it("answers 429 over the limit and reads and prints nothing", async () => {
+    state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n }];
+    const over = limited(A, false);
+    expect(await printableInvoice(over.deps, "en", INV)).toEqual({ status: 429 });
+  });
+
+  it("fails closed with 503 when the limiter cannot answer (R16)", async () => {
+    state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n }];
+    expect(await printableInvoice(limited(A, "throws").deps, "en", INV)).toEqual({ status: 503 });
+  });
+
+  it("keeps the cross-tenant answer: another customer's invoice is a 404 after the limiter (R8)", async () => {
+    state.rows = [{ id: INV, customerId: A, lines: LINES, totalMinor: 69000n }];
+    expect(await printableInvoice(limited(B, true).deps, "en", INV)).toEqual({ status: 404 });
+  });
+
+  it("the route calls printableInvoice with the rate limit of the session's customer, not the bare invoiceDocument", () => {
+    const route = readFileSync(
+      join(
+        __dirname,
+        "..",
+        "app",
+        "[locale]",
+        "(panel)",
+        "invoices",
+        "[id]",
+        "document",
+        "route.ts",
+      ),
+      "utf8",
+    );
+    expect(route).toContain("printableInvoice(");
+    expect(route).not.toMatch(/\binvoiceDocument\(/);
+    expect(route).toContain("INVOICE_DOCUMENT_RATE_LIMITS");
+    expect(route).toMatch(/customerRepos\(tx, s\.customerId\)\.rateLimits\.consume/);
   });
 });

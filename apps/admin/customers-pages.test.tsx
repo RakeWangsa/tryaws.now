@@ -223,7 +223,9 @@ describe("/customers/[id]", () => {
       expect(html).toContain(`/api/kyc-document/${SUBMISSION_ID}/0`);
       expect(html).toContain(`/api/kyc-document/${SUBMISSION_ID}/1`);
       expect(html).toContain("customer.set_risk_tier");
-      expect(html).not.toContain('name="reason"');
+      // R10: the only reason field is the one that comes with the document view (one submission).
+      expect(html.match(/name="reason"/g)).toHaveLength(1);
+      expect(html).toContain(`formAction="/api/kyc-document/${SUBMISSION_ID}/1"`);
       expect(html).not.toContain('value="approveKyc"');
     },
   );
@@ -236,7 +238,8 @@ describe("/customers/[id]", () => {
       for (const kind of ["approveKyc", "rejectKyc", "setRiskTier", "suspend"]) {
         expect(html).toContain(`name="kind" value="${kind}"`);
       }
-      expect(html.match(/name="reason"/g)?.length).toBe(4);
+      // Four decisions, and the reason of the document view.
+      expect(html.match(/name="reason"/g)?.length).toBe(5);
       expect(html).toContain(`name="customerId" value="${CUSTOMER_ID}"`);
       expect(html).toContain(msgs("en").account.suspendHint);
     },

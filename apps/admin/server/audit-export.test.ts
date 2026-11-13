@@ -9,6 +9,8 @@ const actor: AdminActor = {
   ip: "203.0.113.5",
 };
 
+const REASON = "quarterly access review";
+
 const row = (over: Partial<AuditRow> = {}): AuditRow => ({
   id: "0191a000-0000-7000-8000-0000000000b1",
   createdAt: new Date("2026-11-12T00:00:00Z"),
@@ -35,6 +37,7 @@ function harness(
 ) {
   const log: string[] = [];
   const filters: unknown[] = [];
+  const reasons: unknown[] = [];
   const deps: AuditExportDeps = {
     authorize: async () => {
       log.push("authorize");
@@ -48,8 +51,10 @@ function harness(
       log.push("run");
       return fn({
         audit: {
-          export: async (filter: unknown) => (
+          export: async (filter: unknown, reason: unknown) => (
             filters.push(filter),
+            reasons.push(reason),
+            log.push("export"),
             over.exported ?? {
               ok: true,
               replayed: false,
@@ -61,7 +66,7 @@ function harness(
     },
     clock: { now: () => new Date("2026-11-12T01:00:00Z") },
   };
-  return { deps, log, filters };
+  return { deps, log, filters, reasons };
 }
 
 describe("the CSV", () => {
@@ -89,8 +94,8 @@ describe("the CSV", () => {
 describe("makeAuditExport", () => {
   it("authorizes, validates, rate limits and runs, in that order (R9), and sends the file with no-store headers", async () => {
     const h = harness();
-    const out = await makeAuditExport(h.deps)({ actor: actor.adminId });
-    expect(h.log).toEqual(["authorize", "limit", "run"]);
+    const out = await makeAuditExport(h.deps)({ actor: actor.adminId, reason: REASON });
+    expect(h.log).toEqual(["authorize", "limit", "run", "export"]);
     expect(out.status).toBe(200);
     if (out.status !== 200) return;
     expect(out.headers["Content-Type"]).toBe("text/csv; charset=utf-8");
@@ -101,45 +106,97 @@ describe("makeAuditExport", () => {
     expect(out.headers["X-Export-Truncated"]).toBe("false");
     expect(out.body.split("\r\n")).toHaveLength(3);
     expect(h.filters).toEqual([{ actorId: actor.adminId }]);
+    // R10: the reason travels to the repository, which writes the audit.export row with it.
+    expect(h.reasons).toEqual([REASON]);
+  });
+
+  it("refuses a missing, blank or over-long reason with 400 before the limiter and the database (R9, R10)", async () => {
+    for (const query of [
+      {},
+      { reason: "" },
+      { reason: "   " },
+      { reason: "x".repeat(501) },
+      { reason: ["a", "b"] },
+    ]) {
+      const h = harness();
+      const out = await makeAuditExport(h.deps)(query);
+      expect(out.status).toBe(400);
+      expect("body" in out).toBe(false);
+      expect(out.headers["Cache-Control"]).toContain("no-store");
+      expect(h.log).toEqual(["authorize"]);
+    }
+  });
+
+  it("trims the reason and does not put it in the filter", async () => {
+    const h = harness();
+    await makeAuditExport(h.deps)({ reason: `  ${REASON}  `, action: "payment." });
+    expect(h.reasons).toEqual([REASON]);
+    expect(h.filters).toEqual([{ action: "payment." }]);
+  });
+
+  it("sends no file when the audit row cannot be written: a failing or refusing repository gives no body (R16)", async () => {
+    const throwing = harness();
+    throwing.deps = {
+      ...throwing.deps,
+      run: async () => {
+        throw new Error("insert into audit_log failed");
+      },
+    };
+    const a = await makeAuditExport(throwing.deps)({ reason: REASON });
+    expect(a.status).toBe(503);
+    expect("body" in a).toBe(false);
+    const refusing = harness({ exported: { ok: false, error: "validation" } });
+    const b = await makeAuditExport(refusing.deps)({ reason: REASON });
+    expect(b.status).toBe(400);
+    expect("body" in b).toBe(false);
   });
 
   it("says when the cap cut the view", async () => {
     const h = harness({
       exported: { ok: true, replayed: false, value: { rows: [row()], truncated: true } },
     });
-    const out = await makeAuditExport(h.deps)({});
+    const out = await makeAuditExport(h.deps)({ reason: REASON });
     expect(out.status === 200 && out.headers["X-Export-Truncated"]).toBe("true");
   });
 
   it("answers 403 without a superadmin session and touches nothing", async () => {
     const h = harness({ authorize: async () => Promise.reject(new Error("no")) });
-    expect((await makeAuditExport(h.deps)({})).status).toBe(403);
+    expect((await makeAuditExport(h.deps)({ reason: REASON })).status).toBe(403);
     expect(h.log).toEqual(["authorize"]);
   });
 
   it("answers 429 over the limit, 503 when the limiter or the database fails, 403 when the repository refuses", async () => {
-    expect((await makeAuditExport(harness({ limiter: async () => false }).deps)({})).status).toBe(
-      429,
-    );
+    expect(
+      (await makeAuditExport(harness({ limiter: async () => false }).deps)({ reason: REASON }))
+        .status,
+    ).toBe(429);
     expect(
       (
         await makeAuditExport(
           harness({ limiter: async () => Promise.reject(new Error("db")) }).deps,
-        )({})
+        )({ reason: REASON })
       ).status,
     ).toBe(503);
     expect(
-      (await makeAuditExport(harness({ exported: { ok: false, error: "forbidden" } }).deps)({}))
-        .status,
+      (
+        await makeAuditExport(harness({ exported: { ok: false, error: "forbidden" } }).deps)({
+          reason: REASON,
+        })
+      ).status,
     ).toBe(403);
     expect(
-      (await makeAuditExport(harness({ exported: { ok: false, error: "conflict" } }).deps)({}))
-        .status,
+      (
+        await makeAuditExport(harness({ exported: { ok: false, error: "conflict" } }).deps)({
+          reason: REASON,
+        })
+      ).status,
     ).toBe(503);
   });
 
   it("every refusal has no body text and the same no-store headers", async () => {
-    const out = await makeAuditExport(harness({ limiter: async () => false }).deps)({});
+    const out = await makeAuditExport(harness({ limiter: async () => false }).deps)({
+      reason: REASON,
+    });
     expect(out).toMatchObject({
       status: 429,
       headers: { "Cache-Control": expect.stringContaining("no-store") },
