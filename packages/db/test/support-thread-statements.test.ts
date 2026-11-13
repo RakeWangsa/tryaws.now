@@ -121,6 +121,26 @@ describe("messageBody: the text of a message as it is stored", () => {
       expect(messageBody(bad), JSON.stringify(bad)?.slice(0, 12)).toBeNull();
     }
   });
+
+  // Review round 1: the notifier refuses these in a support_reply (f.multiline), so they are refused
+  // before anything is written; a line break is the only control character kept.
+  it("refuses a tab, another control character, a zero-width and a bidirectional-override character", () => {
+    for (const bad of [
+      "a\tb",
+      "a\u0000b",
+      "a\rb",
+      "a\u007fb",
+      "a\u0085b",
+      "a\u200bb",
+      "a\u202eb",
+      "a\u2066b",
+      "a\ufeffb",
+    ]) {
+      expect(messageBody(bad), JSON.stringify(bad)).toBeNull();
+    }
+    expect(messageBody("line one\nline two")).toBe("line one\nline two");
+    expect(messageBody("আপনার উত্তর")).toBe("আপনার উত্তর");
+  });
 });
 
 describe("customerRepos.support.addMessage", () => {
@@ -182,6 +202,8 @@ describe("customerRepos.support.addMessage", () => {
       input({ body: "\r\n" }),
       input({ body: "x".repeat(5001) }),
       input({ body: 5 }),
+      input({ body: "Any\tnews?" }),
+      input({ body: "Any news\u202e?" }),
       input({ idempotencyKey: "" }),
       input({ idempotencyKey: "has space" }),
       input({ idempotencyKey: "k".repeat(129) }),

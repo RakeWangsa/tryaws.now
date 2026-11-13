@@ -1,4 +1,4 @@
-import { supportReplyPayload } from "@tc/db";
+import { messageBody, supportReplyPayload } from "@tc/db";
 import { describe, expect, it } from "vitest";
 import { NotifyError } from "../queue/types";
 import { BN, EN, SHARED } from "../templates/messages";
@@ -128,5 +128,44 @@ describe("support_reply data and words", () => {
     for (const catalog of [BN, EN]) {
       expect(strings(catalog)).not.toMatch(/@|\+?880|\bphone\b|MeghVPS|TryAWS/i);
     }
+  });
+});
+
+// Review round 1: the repositories refuse a message the notifier would refuse, so a stored reply can always
+// be sent. The two checks agree on every character of the list and on ordinary text.
+describe("the text the repositories store is the text the template takes", () => {
+  const samples = [
+    "Plain reply.",
+    "Line one\r\nline two",
+    "  padded  ",
+    "আপনার উত্তর",
+    "a\tb",
+    "a\u0000b",
+    "a\rb",
+    "a\u007fb",
+    "a\u0085b",
+    "a\u200bb",
+    "a\u200fb",
+    "a\u202ab",
+    "a\u202eb",
+    "a\u2066b",
+    "a\u2069b",
+    "a\ufeffb",
+    "x".repeat(5000),
+    "x".repeat(5001),
+    "",
+  ];
+  it.each(samples)("messageBody and the body field agree on %j", (text) => {
+    const stored = messageBody(text);
+    let parsed: string | null;
+    try {
+      parsed = parseTemplateData(
+        "support_reply",
+        supportReplyPayload(IDS.request, text, "customer"),
+      ).body as string;
+    } catch {
+      parsed = null;
+    }
+    expect(stored).toBe(parsed);
   });
 });

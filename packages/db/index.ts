@@ -49,7 +49,7 @@ export type {
   SupportRepo,
 } from "./repositories/customer/support";
 // WPU-Z5: the thread of a support request, shared by the customer and the admin side.
-export { SUPPORT_THREAD_LIMIT } from "./repositories/support-thread";
+export { SUPPORT_THREAD_LIMIT, messageBody } from "./repositories/support-thread";
 export type { SupportAuthorType, SupportStatus } from "./repositories/support-thread";
 export type { DnsZoneRow, DnsZonesRepo, NewDnsZone } from "./repositories/customer/dns-zones";
 export {

@@ -240,6 +240,9 @@ describe("supportAdminRepo.reply", () => {
       reply({ body: "\r\n" }),
       reply({ body: "a".repeat(5001) }),
       reply({ body: 5 }),
+      // Review round 1: what the notifier would refuse is refused before any write (R16).
+      reply({ body: "We refunded\tit." }),
+      reply({ body: "We refunded \u202eit." }),
     ]) {
       const r = rig();
       expect(await r.repo.reply(input, "reply")).toEqual(VALIDATION);

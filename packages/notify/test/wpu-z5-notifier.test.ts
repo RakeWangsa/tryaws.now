@@ -2,7 +2,7 @@ import { supportReplyPayload } from "@tc/db";
 import type { LogEvent } from "@tc/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { InMemoryEmailProvider } from "../email/provider";
-import { runNotifier, type NotifierDeps } from "../queue/run";
+import { runNotifier, withSupportAudience, type NotifierDeps } from "../queue/run";
 import { InMemoryNotifierStore } from "../queue/store";
 import { fixedClock } from "./harness";
 import { IDS } from "./samples";
@@ -110,15 +110,74 @@ describe("support_reply through the notifier", () => {
     expect(JSON.stringify(logs)).toContain(rule);
   });
 
-  it("a row written before WPU-Z5 (no audience) is refused, never sent with a guessed text", async () => {
+  // Review round 1: a row queued before WPU-Z5 has no audience; the recipient of the row decides it.
+  it("a row written before WPU-Z5 to a customer (no audience) is sent as a customer notice with the link", async () => {
     store.add(
       {
         customerId: IDS.customer,
         email: null,
         channel: "email",
         template: "support_reply",
-        payload: { requestId: IDS.request, body: "Hello" },
-        dedupeKey: "support-reply:old",
+        payload: { requestId: IDS.request, body: "Hello there" },
+        dedupeKey: "support-reply:old-customer",
+      },
+      clock.now(),
+    );
+    await runNotifier(deps());
+    expect(store.rows()[0]?.status).toBe("sent");
+    expect(email.sent).toHaveLength(1);
+    expect(email.sent[0]?.text).toContain(`${ORIGIN}/en/support/requests/${IDS.request}`);
+    expect(email.sent[0]?.text).not.toContain("Hello there");
+  });
+
+  it("a row written before WPU-Z5 to a visitor (no audience) is sent with the reply text", async () => {
+    store.add(
+      {
+        customerId: null,
+        email: "visitor@example.test",
+        channel: "email",
+        template: "support_reply",
+        payload: { requestId: IDS.request, body: "Hello there" },
+        dedupeKey: "support-reply:old-visitor",
+      },
+      clock.now(),
+    );
+    await runNotifier(deps());
+    expect(store.rows()[0]?.status).toBe("sent");
+    expect(email.sent[0]?.to).toBe("visitor@example.test");
+    expect(email.sent[0]?.text).toContain("Hello there");
+  });
+
+  it("only a missing audience is filled in: a wrong one and other templates are left as they are", () => {
+    const payload = { requestId: IDS.request, body: "x" };
+    expect(withSupportAudience({ template: "support_reply", customerId: null, payload })).toEqual({
+      ...payload,
+      audience: "visitor",
+    });
+    expect(
+      withSupportAudience({ template: "support_reply", customerId: IDS.customer, payload }),
+    ).toEqual({ ...payload, audience: "customer" });
+    const wrong = { ...payload, audience: "admin" };
+    expect(
+      withSupportAudience({ template: "support_reply", customerId: null, payload: wrong }),
+    ).toBe(wrong);
+    expect(withSupportAudience({ template: "kyc_approved", customerId: null, payload })).toBe(
+      payload,
+    );
+    expect(
+      withSupportAudience({ template: "support_reply", customerId: null, payload: null }),
+    ).toBe(null);
+  });
+
+  it("a row with a wrong audience is still refused, never sent with a guessed text", async () => {
+    store.add(
+      {
+        customerId: IDS.customer,
+        email: null,
+        channel: "email",
+        template: "support_reply",
+        payload: { requestId: IDS.request, body: "Hello", audience: "admin" },
+        dedupeKey: "support-reply:wrong",
       },
       clock.now(),
     );
