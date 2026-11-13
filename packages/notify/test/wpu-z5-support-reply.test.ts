@@ -1,5 +1,6 @@
 import { supportReplyPayload } from "@tc/db";
 import { describe, expect, it } from "vitest";
+import { planRows } from "../queue/notify";
 import { NotifyError } from "../queue/types";
 import { BN, EN, SHARED } from "../templates/messages";
 import { parseTemplateData, renderEmail } from "../templates/render";
@@ -48,6 +49,29 @@ describe("support_reply to a customer", () => {
 
   it("the English text says the reply is waiting in the panel", () => {
     expect(mail("customer", "en").text).toMatch(/waiting for you in the panel/);
+  });
+
+  // The notifier refuses a mail whose text looks like a secret (R14). A request id is in the link, and a
+  // random id has all digits in its last group about once in 280: such a request must still be told.
+  it("a request id whose last group is all digits passes the check of the notifier", () => {
+    const requestId = "0193f7c6-4d5e-5394-8f82-123456789012";
+    for (const locale of ["bn", "en"] as const) {
+      const m = renderEmail(
+        "support_reply",
+        parseTemplateData("support_reply", supportReplyPayload(requestId, BODY, "customer")),
+        ctx(locale),
+      );
+      expect(m.text).toContain(`/support/requests/${requestId}`);
+      expect(scanSecrets(`${m.subject}\n${m.text}`)).toBeNull();
+    }
+    expect(() =>
+      planRows({
+        customerId: IDS.customer,
+        template: "support_reply",
+        data: supportReplyPayload(requestId, BODY, "customer"),
+        dedupeKey: "support-reply-1",
+      }),
+    ).not.toThrow();
   });
 });
 

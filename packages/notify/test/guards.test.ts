@@ -32,6 +32,28 @@ it.each([
   expect(scanSecrets(text)).toBeNull();
 });
 
+// WPU-Z5: a UUID is the id of a row, never a secret. Its digits must not read as a document number or a
+// phone number: a request id whose last group is all digits refused every reply notice of the request
+// (about 1 random id in 280), and the same id in a data field refused the notice at queue time.
+it.each([
+  "Open the request: https://tryaws.now/en/support/requests/0193f7c6-4d5e-5394-8f82-123456789012",
+  "0193F7C6-4D5E-5394-8F82-123456789012",
+  "id 0193f7c6-0171-5234-8567-890123456789 here",
+  "০১৯৩f7c6-4d5e-5394-8f82-১২৩৪৫৬৭৮৯০১২",
+])("accepts a UUID whatever its digits: %s", (text) => {
+  expect(scanSecrets(text)).toBeNull();
+});
+
+it.each([
+  ["a phone number next to a UUID", "0193f7c6-4d5e-5394-8f82-89abcdef0123 call 01712345678"],
+  ["a document number next to a UUID", "NID 1234567890123 0193f7c6-4d5e-5394-8f82-89abcdef0123"],
+  ["a digit run glued to a UUID", "0193f7c6-4d5e-5394-8f82-89abcdef0123-123456789012"],
+  ["a UUID-long hex without hyphens", "0193f7c64d5e53948f82123456789012"],
+  ["a token that is a UUID", "token: 0193f7c6-4d5e-5394-8f82-123456789012"],
+])("still refuses %s", (_name, text) => {
+  expect(scanSecrets(text)).not.toBeNull();
+});
+
 it("measures an SMS: GSM-7 ascii is 160 per segment, anything else is UCS-2 at 70", () => {
   expect(smsLength("a".repeat(160))).toEqual({ encoding: "gsm7", chars: 160, segments: 1 });
   expect(smsLength("a".repeat(161))).toEqual({ encoding: "gsm7", chars: 161, segments: 2 });
