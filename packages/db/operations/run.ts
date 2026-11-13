@@ -130,6 +130,8 @@ export interface OperationBrief {
   readonly attempts: number;
   /** WPU-Y2: the last error (a renewal at poll carries its registry check and the time of it there). */
   readonly lastError: string | null;
+  /** WPU-X3 (b): the payload of the target (a renewal's pre-renewal expiry, read by confirm_unrenewed). */
+  readonly payload: unknown;
 }
 
 // The target of a reject_operation. The row stays locked until the transaction ends.
@@ -147,6 +149,7 @@ export async function loadOperationBrief(
       step: operations.step,
       attempts: operations.attempts,
       lastError: operations.lastError,
+      payload: operations.payload,
     })
     .from(operations)
     .where(eq(operations.id, operationId))

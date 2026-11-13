@@ -24,6 +24,18 @@ export type LocalFailure =
   | "renewal_submitted"
   // WPU-Y5 (c): the rejection of a dns_zone create past create_zone is refused: the hosted zone exists (reject.ts).
   | "zone_created"
+  // WPU-X3 (b): the outcomes of confirm_unrenewed that leave the renewal and its money as they are
+  // (confirm-unrenewed.ts): the target is not a renewal stuck at poll, the registry renewed it or may still, the expiry
+  // is not the exact one before, a fact cannot be read, the registry cannot be reached, the target moved during the
+  // check, or the provisioner has no registry check installed.
+  | "renewal_not_confirmable"
+  | "registry_renewed"
+  | "renewal_in_progress"
+  | "expiry_changed"
+  | "renewal_unreadable"
+  | "registry_unreachable"
+  | "target_changed"
+  | "renewal_check_missing"
   | "invalid_step_result"
   | "lease_expired";
 

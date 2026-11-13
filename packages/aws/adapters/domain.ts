@@ -1,6 +1,8 @@
 import {
   DOMAIN_YEARS,
   normalizeDomainName,
+  renewalRecheckVerdict,
+  type RenewalRecheck,
   parseNameServers,
   parseRegistrantContact,
   stepDone,
@@ -478,4 +480,34 @@ export async function resendVerification(
   if (detail.reachability === "done") return "not_needed";
   await port.resendContactReachabilityEmail(name);
   return "sent";
+}
+
+// A domain name as the domain adapter stores it (normalizeDomainName: ASCII, lower case, no trailing dot).
+const STORED_NAME =
+  /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/**
+ * WPU-X3 (b). The fresh registry check of the admin action "registry confirmed not renewed" (operation kind
+ * `confirm_unrenewed`, functions/provisioner/confirm-unrenewed.ts). GetOperationDetail of the saved RenewDomain
+ * operation first, then GetDomainDetail of the name: a renewal that completes between the two calls shows its later
+ * expiry, which is never a refund. The verdict is renewalRecheckVerdict of @tc/core (only FAILED or ERROR with the
+ * pre-renewal expiry unchanged to the millisecond is "unrenewed"). A missing operation id or name asks AWS nothing and
+ * proves nothing (R16). An AWS error is thrown to the caller; it is never a verdict. Reads only: nothing is changed.
+ */
+export async function recheckRenewal(
+  port: DomainsPort,
+  input: { readonly name: unknown; readonly renewOperationId: unknown; readonly payload: unknown },
+): Promise<RenewalRecheck> {
+  const { name, renewOperationId, payload } = input;
+  if (
+    typeof name !== "string" ||
+    !STORED_NAME.test(name) ||
+    typeof renewOperationId !== "string" ||
+    !OPERATION_ID.test(renewOperationId)
+  ) {
+    return { verdict: "kept", reason: "renewal_unreadable" };
+  }
+  const { status } = await port.getOperationDetail(renewOperationId);
+  const detail = await port.getDomainDetail(name);
+  return renewalRecheckVerdict({ status, liveExpiresAt: detail?.expiresAt ?? null, payload });
 }

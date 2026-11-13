@@ -122,6 +122,7 @@ export type { R53Change, R53RecordSet, R53Zone, Route53Port } from "./adapters/r
 export { createRoute53Port, type Route53Like } from "./adapters/route53-client";
 export {
   createDomainAdapter,
+  recheckRenewal,
   renewDomainOnce,
   resendVerification,
   type DomainAdapterConfig,

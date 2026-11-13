@@ -417,6 +417,9 @@ const Y2_FIX = [
   "rejectionAllowed",
 ];
 
+// WPU-X3 (b): the admin action "registry confirmed not renewed" (a fresh registry check, then the refund or a reason).
+const X3 = ["renewalConfirmable", "renewalRecheckVerdict", "sameRenewalTarget"];
+
 // Exported on main (invoices/seller.ts, BIN display) without a pin in this list; pinned here at the merge of WPU-Y2.
 const MAIN_UNPINNED = ["formatBin"];
 
@@ -698,6 +701,7 @@ describe("the public surface of the order flow", () => {
           ...WPU_Y1,
           ...WPU_Y4,
           ...Y2_FIX,
+          ...X3,
           ...MAIN_UNPINNED,
           ...STORAGE_CONTAINER,
           ...KYC,

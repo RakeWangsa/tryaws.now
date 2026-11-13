@@ -300,6 +300,12 @@ const GATE_CASES: Record<string, GateCase> = {
       r.operations.clearPlanChangeMark({ resourceId: ID(), requestId: ID(), at: AT }, "r"),
     deny: "finance",
   },
+  // WPU-X3 (b): a refund decision on a domain renewal: finance and superadmin, not ops.
+  "operations.stuckRenewals": { call: (r) => r.operations.stuckRenewals(), deny: "ops" },
+  "operations.confirmUnrenewed": {
+    call: (r) => r.operations.confirmUnrenewed({ operationId: ID(), requestId: ID(), at: AT }, "r"),
+    deny: "ops",
+  },
   "operations.approve": {
     call: (r) => r.operations.approve({ operationId: ID(), at: AT }, "r"),
     deny: "finance",

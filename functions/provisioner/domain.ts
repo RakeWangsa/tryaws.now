@@ -1,6 +1,7 @@
 import {
   AwsError,
   createDomainAdapter,
+  recheckRenewal,
   type DomainsPort,
   type ProductAdapter,
   type Route53Port,
@@ -14,7 +15,7 @@ import {
   withTx,
   type Tx,
 } from "@tc/db";
-import type { OperationHooks } from "./types";
+import type { OperationHooks, RenewalRecheckFn } from "./types";
 
 // WP7-T4: the production dependencies of the domain adapter. WPU-B2 added the Route 53 Domains client
 // (`createRoute53DomainsPort` of @tc/aws), but its credentials (STS AssumeRole into tc-dns, role
@@ -48,6 +49,15 @@ export function domainAdapter(ports: DomainPorts = UNCONFIGURED): ProductAdapter
     zoneHeldByOther: (hostedZoneId, resourceId) =>
       withTx((tx) => hostedZoneHeldByOther(tx, hostedZoneId, resourceId)),
   }) as ProductAdapter<unknown>;
+}
+
+/**
+ * WPU-X3 (b): the fresh registry check of the admin's "registry confirmed not renewed", on the same ports as the domain
+ * adapter. Until the ports are wired (JOURNEY "Needs decision") every call throws the fixed local error, and the
+ * confirm operation records `registry_unreachable`: never a refund (R16).
+ */
+export function domainRenewalRecheck(ports: DomainPorts = UNCONFIGURED): RenewalRecheckFn {
+  return (input) => recheckRenewal(ports.domains(), input);
 }
 
 /**

@@ -18,7 +18,7 @@ import { cdnAdapter } from "./cdn";
 import { containerServiceAdapter } from "./container";
 import { databaseAdapter } from "./database";
 import { dnsZoneAdapter, dnsZoneHooks, dnsZonePortsFromEnv } from "./dns-zone";
-import { domainAdapter, domainHooks } from "./domain";
+import { domainAdapter, domainHooks, domainRenewalRecheck } from "./domain";
 import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
@@ -170,6 +170,8 @@ function buildDeps(): StepDeps {
       domainHooks(),
       renewalHooks({ log, notice: noticeWriter }),
     ),
+    // WPU-X3 (b): the registry check of confirm_unrenewed (fails closed until the domain ports are wired).
+    renewalRecheck: domainRenewalRecheck(),
     access,
     env: config.env,
     log,

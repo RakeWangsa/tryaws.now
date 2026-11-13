@@ -51,6 +51,7 @@ it("exports exactly the public API and no credentials function", () => {
     "parseDiskConfig",
     "parsePortRules",
     "parseProbeSources",
+    "recheckRenewal",
     "renewDomainOnce",
     "resendVerification",
     "toAwsError",
