@@ -215,6 +215,8 @@ const KYC = [
   "KYC_UPLOAD_TTL_SECONDS",
   "canSubmitKyc",
   "documentTypesFor",
+  // WPU-Y3: the owner check of a KYC key (kyc-check and the web port).
+  "kycKeyOwnedBy",
   "kycObjectKey",
   "nextKycStatus",
   "normalizeDocumentNumber",
