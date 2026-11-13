@@ -45,7 +45,8 @@ import {
 //
 // * A charge that the wallet could not pay was recorded by the normal passes (runMetering,
 //   runStaticIpMetering) as `resources.config.unpaidSince`, the instant of the first failure, and, for a
-//   static IP, the first and last failed hour (`unpaidIpFrom`, `unpaidIpTo`).
+//   static IP, the first and last failed hour (`unpaidIpFrom`, `unpaidIpTo`); for snapshot storage, the oldest
+//   failed day (`unpaidDayFrom`, WPU-Y9), so a day held back during a catch-up is not lost after three days.
 // * This job looks at every resource with that mark once a Dhaka day (the scheduler calls it in the first
 //   minutes of 07:00, `unpaidDue`), and (1) tries every period back to the first failure again, oldest
 //   first, under the SAME ledger key as the normal pass (`meter:<resource>:<metric>:<period>`), so a period
@@ -228,6 +229,8 @@ export interface UnpaidReport {
 
 type Counts = { -readonly [K in keyof UnpaidReport]: UnpaidReport[K] };
 
+const DAY_NAME = /^\d{4}-\d{2}-\d{2}$/;
+
 const exactDate = (value: unknown): Date | null => {
   if (typeof value !== "string") return null;
   const at = new Date(value);
@@ -309,7 +312,14 @@ async function retryCharges(
   // 1. snapshot storage: every day from the day the first failed attempt could have looked at (the
   // catch-up of the normal pass) to the last day that ended.
   const unit = await ops.snapshotUnit(tx, clock, row.market);
-  const from = dhakaDay(new Date(since.getTime() - CATCH_UP_DAYS * DAY_MS));
+  // WPU-Y9: the oldest failed snapshot day kept in the mark (a day held back during a catch-up can be older
+  // than the catch-up before the first failure). An unreadable day refuses the retry (R16).
+  const normal = dhakaDay(new Date(since.getTime() - CATCH_UP_DAYS * DAY_MS));
+  const markedDay = config.unpaidDayFrom;
+  if (markedDay !== undefined && (typeof markedDay !== "string" || !DAY_NAME.test(markedDay))) {
+    return "blocked";
+  }
+  const from = typeof markedDay === "string" && markedDay < normal ? markedDay : normal;
   const to = lastEndedDay(now);
   const days = from <= to ? await ops.usage(tx, resourceId, SNAPSHOT_METRIC, from, to) : [];
   if (unit === null || unit.totalMinor <= 0n) {

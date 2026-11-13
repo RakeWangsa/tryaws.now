@@ -118,6 +118,25 @@ describe("the marks and the range read of WPU-Y3b", () => {
     expect(left).toEqual([]);
   });
 
+  // WPU-Y9 finding 4 (NOT RUN here, no database).
+  it("keeps the oldest failed snapshot day and clears it with the episode", async () => {
+    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const { resourceId } = await placeOne(kit, buyer);
+    const repo = (tx: Parameters<typeof meteringRepo>[0]) => meteringRepo(tx);
+    await worker((tx) => repo(tx).markUnpaid(resourceId, T0, undefined, "2026-11-10"));
+    await worker((tx) => repo(tx).markUnpaid(resourceId, T0, undefined, "2026-11-08"));
+    await worker((tx) => repo(tx).markUnpaid(resourceId, T0, undefined, "2026-11-09"));
+    const rows = await q("select config from resources where id = $1", [resourceId]);
+    const config = rows[0]!.config as Record<string, string>;
+    expect(config.unpaidSince).toBe(T0.toISOString());
+    expect(config.unpaidDayFrom).toBe("2026-11-08");
+    await worker((tx) => repo(tx).clearUnpaid(resourceId));
+    const after = await q("select config from resources where id = $1", [resourceId]);
+    expect(Object.keys(after[0]!.config as object).filter((k) => k.startsWith("unpaid"))).toEqual(
+      [],
+    );
+  });
+
   it("reads the charged keys of a range in one statement", async () => {
     const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
     const { resourceId } = await placeOne(kit, buyer);

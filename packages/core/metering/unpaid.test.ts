@@ -150,6 +150,7 @@ function build(init: Partial<World> = {}) {
         "unpaidRetainedFrom",
         "unpaidIpFrom",
         "unpaidIpTo",
+        "unpaidDayFrom",
       ])
         delete w.config[k];
     },
@@ -285,6 +286,51 @@ describe("retry of every unpaid day (no window)", () => {
       "snapshot_gb",
       "static_ip_hour",
     ]);
+  });
+
+  // WPU-Y9 finding 4: a held day that failed for a low balance during a catch-up is older than since - 2 days.
+  it("retries from the oldest unpaid day kept in the mark, older than the catch-up before the first failure", async () => {
+    const t = build({
+      config: { unpaidSince: since(1 * DAY), unpaidDayFrom: "2026-11-12" },
+      usage: days("2026-11-12", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.charged).toBe(8);
+    expect([...t.posted.keys()].sort()[0]).toBe(`meter:${RES}:snapshot_gb:2026-11-12`);
+    expect(t.w.config.unpaidDayFrom).toBeUndefined(); // the episode ended: the mark goes with it
+  });
+
+  it("without the day in the mark the retry starts two days before the first failure (as before)", async () => {
+    const t = build({
+      config: { unpaidSince: since(1 * DAY) },
+      usage: days("2026-11-12", "2026-11-19"),
+      balance: 100_000n,
+    });
+    await t.run();
+    expect([...t.posted.keys()].sort()[0]).toBe(`meter:${RES}:snapshot_gb:2026-11-17`);
+  });
+
+  it("refuses to retry when the day in the mark cannot be read (R16)", async () => {
+    const t = build({
+      config: { unpaidSince: since(1 * DAY), unpaidDayFrom: "yesterday" },
+      usage: days("2026-11-12", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.blocked).toBe(1);
+    expect(t.posted.size).toBe(0);
+  });
+
+  it("keeps the per run cap with a long mark: the rest is charged the next run", async () => {
+    const t = build({
+      config: { unpaidSince: since(1 * DAY), unpaidDayFrom: "2026-01-01" },
+      usage: days("2026-01-01", "2026-11-19"),
+      balance: 10_000_000n,
+    });
+    const first = await t.run();
+    expect(first.charged).toBe(UNPAID_PERIOD_CAP);
+    expect(first.capped).toBe(1);
   });
 
   it("charges the oldest first and stops at the first day the wallet cannot pay", async () => {

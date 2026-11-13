@@ -45,6 +45,7 @@ function world(init: {
   const posted = new Map<string, PostTransactionInput>();
   const notices = new Map<string, NewLifecycleNotification>();
   const state = { priceCalls: 0, postCalls: 0 };
+  const marks: { id: string; hour: string | undefined }[] = [];
   const ops: StaticIpOps = {
     list: async (_tx, afterId, limit) =>
       (init.rows ?? [])
@@ -75,6 +76,9 @@ function world(init: {
       posted.set(input.idempotencyKey, input);
       return { ok: true, value: { transactionId: input.idempotencyKey } };
     },
+    markUnpaid: async (_tx, id, _at, hour) => {
+      marks.push({ id, hour });
+    },
     notify: async (_tx, n) => {
       if (notices.has(n.dedupeKey)) return false;
       notices.set(n.dedupeKey, n);
@@ -89,7 +93,7 @@ function world(init: {
       log: (e) => logs.push(e as never),
       ops,
     });
-  return { run, posted, notices, state, logs, ops };
+  return { run, posted, notices, state, logs, ops, marks };
 }
 
 const row = (n: number, detachedAt: Date | null = D0, customer = 1): DetachedIpRow => ({
@@ -283,6 +287,24 @@ describe("charging an unattached static IP", () => {
     const w = world({ rows: [row(1)], price: { ok: false, error: "not_found", fields: {} } });
     expect(await w.run(at("12:00"))).toMatchObject({ charged: 0, priceMissing: true, failed: 0 });
     expect(w.posted.size).toBe(0);
+  });
+
+  // WPU-Y9 finding 5: the hours refused while no price is in force go into the mark, so they are retried
+  // by the unpaid job whatever the attach state is by then.
+  it("no price in force: the first and last refused hour are recorded in the mark", async () => {
+    const w = world({ rows: [row(1)], price: { ok: false, error: "not_found", fields: {} } });
+    await w.run(at("12:00"));
+    expect(w.marks).toEqual([
+      { id: RES(1), hour: "2026-11-12T17" },
+      { id: RES(1), hour: "2026-11-12T18" },
+    ]);
+    expect(w.posted.size).toBe(0);
+  });
+
+  it("a priced run records nothing in the mark", async () => {
+    const w = world({ rows: [row(1)] });
+    await w.run(at("12:00"));
+    expect(w.marks).toEqual([]);
   });
 
   it("a price that rounds to zero paisa charges nothing", async () => {

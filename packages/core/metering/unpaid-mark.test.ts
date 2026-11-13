@@ -10,7 +10,10 @@ const CUST = "0190b000-0000-7000-8000-000000000001";
 const NOW = new Date("2026-11-11T08:00:00Z");
 const UNIT: MeteredUnitPrice = { totalMinor: 1000n, baseMinor: 1000n, steps: [] };
 
-function ops(balance: bigint, marks: { id: string; at: Date }[]): MeteringOps {
+function ops(
+  balance: bigint,
+  marks: { id: string; at: Date; day?: string | undefined }[],
+): MeteringOps {
   return {
     configPrice: async () => withInputs(UNIT),
     repo: () => ({
@@ -37,15 +40,15 @@ function ops(balance: bigint, marks: { id: string; at: Date }[]): MeteringOps {
         ? { ok: false, error: "insufficient_balance" }
         : { ok: true, value: { transactionId: "t" } };
     },
-    markUnpaid: async (_tx, id, at) => {
-      marks.push({ id, at });
+    markUnpaid: async (_tx, id, at, _hour, day) => {
+      marks.push({ id, at, day });
     },
   };
 }
 
 describe("runMetering records the first failure", () => {
   it("marks the resource when the wallet is short", async () => {
-    const marks: { id: string; at: Date }[] = [];
+    const marks: { id: string; at: Date; day?: string | undefined }[] = [];
     const report = await runMetering({
       runTx: (fn) => fn({} as Tx),
       clock: { now: () => NOW },
@@ -53,11 +56,12 @@ describe("runMetering records the first failure", () => {
       ops: ops(0n, marks),
     });
     expect(report.unpaid).toBe(1);
-    expect(marks).toEqual([{ id: RES, at: NOW }]);
+    // WPU-Y9 finding 4: the failed day goes into the mark too (usage of 2026-11-10, the day that ended)
+    expect(marks).toEqual([{ id: RES, at: NOW, day: "2026-11-10" }]);
   });
 
   it("does not mark a resource whose charge was paid", async () => {
-    const marks: { id: string; at: Date }[] = [];
+    const marks: { id: string; at: Date; day?: string | undefined }[] = [];
     const report = await runMetering({
       runTx: (fn) => fn({} as Tx),
       clock: { now: () => NOW },

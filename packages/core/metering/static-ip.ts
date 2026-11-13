@@ -180,7 +180,17 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
           continue;
         }
         const quoted = await priceOf(row.market);
-        if (quoted === null) continue;
+        if (quoted === null) {
+          // WPU-Y9: the hours that cannot be priced now are kept in the mark (first and last), so the daily
+          // unpaid job charges them once a price exists, even when the IP is attached or released by then.
+          const first = hours[0]!;
+          const last = hours[hours.length - 1]!;
+          await deps.runTx(async (tx) => {
+            await ops.markUnpaid?.(tx, row.resourceId, now, first);
+            if (last !== first) await ops.markUnpaid?.(tx, row.resourceId, now, last);
+          });
+          continue;
+        }
         const price = quoted.perHourMinor;
         const breakdown = quoted.breakdown;
         if (price === 0n) {
