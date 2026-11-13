@@ -5,7 +5,7 @@ import { useTempDatabase } from "@tc/db/testing";
 import { beforeAll, expect, it } from "vitest";
 import { PREVIEW_SAMPLES, type PricingStep } from "../pricing/index";
 import { previewChange, quoteInForce, savePricingRule, setFxRate } from "./index";
-import { adminActor, asOwner, asRole, clockAt } from "../test/rates-support";
+import { adminActor, asOwner, asRole, clockAt, settleFxEntries } from "../test/rates-support";
 
 const t = useTempDatabase();
 const T0 = new Date("2026-11-11T06:00:00.000Z");
@@ -18,8 +18,10 @@ const markup: PricingStep[] = LAUNCH_PRICING_STEPS.map((s) => ({
 }));
 
 let actor: AdminActor;
+let second: AdminActor;
 beforeAll(async () => {
   actor = await adminActor(t, "finance");
+  second = await adminActor(t, "superadmin");
   await asOwner(t, (tx) => seedLaunchData(tx, { environment: "staging", at: T0 }));
 });
 
@@ -36,7 +38,12 @@ it("the five products that the preview shows before the save are the five that t
   expect(preview.value.rows).toHaveLength(5);
 
   const fx = await asRole(t, "admin_rw", (tx) =>
-    setFxRate(tx, actor, { market: "BD", rate: "130", reason: "weekly rate" }, clock(T1)),
+    setFxRate(
+      tx,
+      actor,
+      { market: "BD", rate: "130", reason: "weekly rate", requestedBy: second.adminId },
+      clock(T1),
+    ),
   );
   const rule = await asRole(t, "admin_rw", (tx) =>
     savePricingRule(
@@ -46,6 +53,8 @@ it("the five products that the preview shows before the save are the five that t
       clock(T1),
     ),
   );
+  // the database stamps the entry time itself; align it with the fake clock of this test
+  await settleFxEntries(t);
   expect(fx.ok && rule.ok).toBe(true);
   const ruleId = rule.ok ? rule.value.ruleId : "";
 

@@ -4,7 +4,7 @@ import { inTransaction, insertRow, newCustomer, useTempDatabase } from "@tc/db/t
 import { beforeAll, expect, it } from "vitest";
 import { parseSnapshot, snapshotToQuote, type PricingStep } from "../pricing/index";
 import { quoteInForce, savePricingRule, setFxRate } from "./index";
-import { adminActor, asOwner, asRole, clockAt } from "../test/rates-support";
+import { adminActor, asOwner, asRole, clockAt, settleFxEntries } from "../test/rates-support";
 
 const t = useTempDatabase();
 const T0 = new Date("2026-11-11T06:00:00.000Z");
@@ -12,9 +12,11 @@ const T1 = new Date("2026-11-12T06:00:00.000Z");
 const clock = (d: Date) => clockAt(d.toISOString());
 
 let actor: AdminActor;
+let second: AdminActor;
 let orderId: string;
 beforeAll(async () => {
   actor = await adminActor(t, "finance");
+  second = await adminActor(t, "superadmin");
   await asOwner(t, (tx) => seedLaunchData(tx, { environment: "staging", at: T0 }));
 });
 
@@ -101,7 +103,12 @@ it("a new rate and a new rule are saved, new quotes use them, and the stored ord
   }));
 
   const fx = await asRole(t, "admin_rw", (tx) =>
-    setFxRate(tx, actor, { market: "BD", rate: "130", reason: "weekly rate" }, clock(T1)),
+    setFxRate(
+      tx,
+      actor,
+      { market: "BD", rate: "130", reason: "weekly rate", requestedBy: second.adminId },
+      clock(T1),
+    ),
   );
   const rule = await asRole(t, "admin_rw", (tx) =>
     savePricingRule(
@@ -111,6 +118,8 @@ it("a new rate and a new rule are saved, new quotes use them, and the stored ord
       clock(T1),
     ),
   );
+  // the database stamps the entry time itself; align it with the fake clock of this test
+  await settleFxEntries(t);
   expect(fx.ok && rule.ok).toBe(true);
 
   // the positive control: a quote made after the change uses the new rate and the new rule

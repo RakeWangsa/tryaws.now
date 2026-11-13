@@ -96,7 +96,7 @@ const noticeOf = async (ltx: string) =>
   )[0];
 
 beforeAll(async () => {
-  kit = await makeKit(t);
+  kit = await makeKit(t, { keepFxFresh: true });
   await setSeller(SELLER);
   kit.clock.set(START);
 });

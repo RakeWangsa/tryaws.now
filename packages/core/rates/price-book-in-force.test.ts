@@ -33,6 +33,13 @@ const price = (family: string, clock: string, over: Record<string, unknown> = {}
 
 beforeAll(async () => {
   await asOwner(t, (tx) => seedLaunchData(tx, { environment: "staging", at: new Date(T0) }));
+  // WPU-Y9: a rate older than 7 days (from its entry) prices nothing. The test prices up to the 20th, so the same
+  // launch rate is entered again on the 19th, as an admin does every week.
+  await t.pool.query(
+    `insert into fx_rates (id, market, rate, effective_from, created_at)
+     select gen_random_uuid(), 'BD', rate, '2026-11-19T00:00:00Z', '2026-11-19T00:00:00Z'
+     from fx_rates where market = 'BD' order by effective_from desc limit 1`,
+  );
   await store(
     "linux_instance",
     book([

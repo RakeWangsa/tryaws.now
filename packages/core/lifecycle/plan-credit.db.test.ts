@@ -101,7 +101,12 @@ const unbalanced = async () =>
   );
 
 beforeAll(async () => {
-  kit = await makeKit(t, { balanceMinor: 50_000_000n, vcpuLimit: 4000, ipLimit: 4000 });
+  kit = await makeKit(t, {
+    balanceMinor: 50_000_000n,
+    vcpuLimit: 4000,
+    ipLimit: 4000,
+    keepFxFresh: true,
+  });
   // High enough that the tests of WPU-M3 post at once; the four-eyes tests set their own.
   await setLimit(1_000_000_000_000n);
 });

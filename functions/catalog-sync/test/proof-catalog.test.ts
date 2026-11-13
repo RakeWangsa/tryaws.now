@@ -68,6 +68,14 @@ const asOwner = <T>(fn: (tx: Tx) => Promise<T>): Promise<T> => runTransaction(t.
 beforeAll(async () => {
   attachErrorListeners(t.pool);
   await asOwner((tx) => seedLaunchData(tx, { environment: "staging", at: SEEDED_AT }));
+  // WPU-Y9: a rate older than 7 days (from its entry) prices nothing, and this proof prices years after the seed.
+  // The same launch rate is entered again the day before each instant at which the proof reads prices.
+  await t.pool.query(
+    `insert into fx_rates (id, market, rate, effective_from, created_at)
+     select gen_random_uuid(), 'BD', r.rate, d::timestamptz, d::timestamptz
+     from (select rate from fx_rates where market = 'BD' order by effective_from desc limit 1) r,
+          unnest(array['2028-05-31T00:00:00Z']) d`,
+  );
   await insertRow(t.pool, "pool_accounts", {
     aws_account_id: POOL_ACCOUNT_ID,
     name: "tc-pool-dev",
@@ -336,8 +344,8 @@ describe("catalog-sync proof (fake AWS, real database)", () => {
     await insertRow(t.pool, "fx_rates", {
       market: "BD",
       rate: "130",
-      effective_from: "2029-01-01T00:00:00Z",
-      created_at: "2029-01-01T00:00:00Z",
+      effective_from: "2030-05-31T00:00:00Z",
+      created_at: "2030-05-31T00:00:00Z",
     });
     const reRead = (await priceActiveRows({ now: () => new Date("2030-06-01T00:00:00Z") }))[0]!;
     expect(reRead.priceBdt.totalMinor > after.priceBdt.totalMinor).toBe(true);

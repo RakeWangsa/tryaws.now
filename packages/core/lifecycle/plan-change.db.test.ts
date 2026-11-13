@@ -110,7 +110,12 @@ const rowOf = (f: Fresh, family: string, config: Record<string, unknown>, state 
   }) as never;
 
 beforeAll(async () => {
-  kit = await makeKit(t, { balanceMinor: 50_000_000n, vcpuLimit: 4000, ipLimit: 4000 });
+  kit = await makeKit(t, {
+    balanceMinor: 50_000_000n,
+    vcpuLimit: 4000,
+    ipLimit: 4000,
+    keepFxFresh: true,
+  });
 });
 
 describe("readPlanChange", () => {

@@ -38,7 +38,13 @@ it("the first rate starts now and is audited with actor, reason, IP, target and 
     ok: true,
     value: {
       replayed: false,
-      fx: { id: expect.any(String), market: "BD", rate: "127", effectiveFrom: T0 },
+      fx: {
+        id: expect.any(String),
+        market: "BD",
+        rate: "127",
+        effectiveFrom: T0,
+        createdAt: expect.any(Date),
+      },
     },
   });
   expect(await audits()).toMatchObject([

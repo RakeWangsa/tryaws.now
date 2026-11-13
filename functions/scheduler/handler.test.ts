@@ -91,6 +91,8 @@ it("a failing job does not stop the others; the run then rejects (R16)", async (
     "lifecycle_run",
     "metering_run",
     "static_ip_metering_run",
+    // WPU-Y3b: the unpaid job runs in the first minutes of 07:00 in Dhaka, which is this test's clock
+    "unpaid_run",
     "invoice_backlog_run",
     "polling_run",
     "rate_limits_purged",

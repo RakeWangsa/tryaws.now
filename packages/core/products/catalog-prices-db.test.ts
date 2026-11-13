@@ -60,11 +60,15 @@ it("reads the clock once for the whole call", async () => {
   expect(reads).toBe(1);
 });
 
-it("a market with no rate in force answers not_found and prices nothing", async () => {
+it("a market with no rate in force prices nothing and says the prices are being updated (WPU-Y1)", async () => {
   const r = await asRole(t, "web_rw", (tx) =>
     priceCatalog(tx, [row()], { market: "KE" }, clockAt(T0)),
   );
-  expect(r).toMatchObject({ ok: false, error: "not_found" });
+  expect(r).toMatchObject({
+    ok: false,
+    error: "upstream_unavailable",
+    fields: { fxRate: "missing" },
+  });
 });
 
 it("leaves inactive rows out by default", async () => {

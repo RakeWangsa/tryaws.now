@@ -112,7 +112,12 @@ const unbalanced = async () =>
   );
 
 beforeAll(async () => {
-  kit = await makeKit(t, { balanceMinor: 50_000_000n, vcpuLimit: 4000, ipLimit: 4000 });
+  kit = await makeKit(t, {
+    balanceMinor: 50_000_000n,
+    vcpuLimit: 4000,
+    ipLimit: 4000,
+    keepFxFresh: true,
+  });
 });
 
 describe("creditWalletForFailedChange: four eyes and the closed operation (WPU-M4)", () => {

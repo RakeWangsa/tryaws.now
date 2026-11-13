@@ -43,6 +43,13 @@ export interface KitOptions {
   readonly flag?: "on" | "off" | "missing";
   readonly awsPriceUsd?: string;
   readonly productActive?: boolean;
+  /**
+   * WPU-Y9. A rate older than 7 days (counted from its entry) prices nothing. A test that moves the clock weeks
+   * ahead sets this: the kit enters the BD rate again on every day of the next 120 days (each entered at its own
+   * start), so the rate in force is always a day old at most. Do not use it with `changeFxRate`: the daily rows would
+   * replace the changed rate an hour later. Tests that prove the stale-rate refusal leave it off.
+   */
+  readonly keepFxFresh?: boolean;
 }
 
 export interface Buyer {
@@ -110,6 +117,16 @@ export async function makeKit(t: TempDatabaseHandle, options: KitOptions = {}): 
     await ensureSystemAccounts(tx);
     await seedLaunchData(tx, { environment: "staging", at: START });
   });
+  if (options.keepFxFresh === true) {
+    await t.pool.query(
+      `insert into fx_rates (id, market, rate, effective_from, created_at)
+       select gen_random_uuid(), 'BD', r.rate, d, d
+       from (select rate from fx_rates where market = 'BD' order by effective_from desc limit 1) r,
+            generate_series($1::timestamptz + interval '1 hour', $1::timestamptz + interval '120 days', interval '1 day') d
+       on conflict (market, effective_from) do nothing`,
+      [START.toISOString()],
+    );
+  }
 
   const setFlag = async (state: "on" | "off" | "missing"): Promise<void> => {
     if (state === "missing") {

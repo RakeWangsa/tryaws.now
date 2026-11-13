@@ -61,7 +61,7 @@ const owed = async (customerId: string) =>
   );
 
 beforeAll(async () => {
-  kit = await makeKit(t);
+  kit = await makeKit(t, { keepFxFresh: true });
 });
 
 describe("the invoice of a purchase", () => {

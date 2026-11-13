@@ -62,7 +62,7 @@ const reverse = (transactionId: string) =>
   asWorker((tx) => reverseTransaction(tx, { transactionId, actor: { type: "system" } }));
 
 beforeAll(async () => {
-  kit = await makeKit(t);
+  kit = await makeKit(t, { keepFxFresh: true });
   await setSeller(SELLER);
   kit.clock.set(START);
 });
