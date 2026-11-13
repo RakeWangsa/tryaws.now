@@ -13,9 +13,9 @@ import type { SmsFailureDetail } from "./provider";
 // docs/runbooks/sms-gateway.md, docs/analysis/gennet-isms-api-2026-11-13.md): a JSON object with
 // `status` ("SUCCESS" or "FAILED"), a numeric `status_code`, `error_message` and `smsinfo`, an array
 // whose items carry `sms_status` (SUCCESS, INVALID, DUPLICATE, BLOCKED), `status_message`, `csms_id` and
-// `reference_id`, and echo the number and the text. A second shape (the fixtures of a Gennet SDK) has
-// `status_meaning` and `description` instead of `error_message`. Gennet answers a failure with HTTP 200
-// and status FAILED, so the HTTP status alone never refuses.
+// `reference_id`, and echo the number and the text. A second shape (the test fixtures of a third-party
+// Gennet SDK) has `status_meaning` and `description` instead of `error_message`. A failure may come with HTTP 200 and
+// status FAILED (that SDK says Gennet answers so; VERIFY), so the HTTP status alone never refuses.
 //   - accepted: HTTP 2xx, status SUCCESS and, when smsinfo is there, its first item SUCCESS.
 //   - refused, reason `invalid_number`: status_code 4025 or 4028, or an smsinfo item INVALID or BLOCKED,
 //     in an answer of HTTP 2xx, 400, 413 or 422. The number or the text is wrong and retrying cannot
@@ -92,7 +92,7 @@ const REASON_WORDS: ReadonlyArray<readonly [SmsFailureDetail, RegExp]> = [
   ["rate_limited", /too many|rate[\s_-]?limit|\btps\b|throttl/i],
   ["ip_not_whitelisted", /white[\s_-]?list|black[\s_-]?list/i],
   ["sender", /\bsid\b|sender|stakeholder|\bmask/i],
-  ["token", /token|api[\s_-]?key|unauthori[sz]|authenticat/i],
+  ["token", /token|api[\s_-]?key|authori[sz]|authenticat/i],
 ];
 
 // The messages of both answer shapes, at the top level and in the smsinfo item.

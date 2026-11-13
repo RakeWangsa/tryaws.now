@@ -394,6 +394,7 @@ describe("GennetSmsTransport: the answer is read by its status code (WPU-Z17)", 
   it.each([
     ["Unauthorized", "token"],
     ["Authentication failed", "token"],
+    ["Authorization failed", "token"],
     ["Invalid API token", "token"],
     ["Invalid api_token", "token"],
     ["SID Not Permitted", "sender"],
