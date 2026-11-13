@@ -52,14 +52,14 @@ const plan = (kit: Kit, power: number | null) =>
 describe("createOrderDraft: the plan must reach the minimum power of the image", () => {
   it("refuses a 512 MB plan for an app whose blueprint says minPower 1000, and writes nothing", async () => {
     const kit = await makeKit(t);
-    await image("wordpress", { kind: "app", minPower: 1000 });
+    await image("wordpress_ls_1_0", { kind: "app", minPower: 1000 });
     const small = await plan(kit, 500);
     const before = await snapshotRows(t);
     expect(
       await createDraft(
         kit.deps,
         kit.session,
-        kit.input({ blueprintId: "wordpress", productId: small }),
+        kit.input({ blueprintId: "wordpress_ls_1_0", productId: small }),
       ),
     ).toEqual(TOO_SMALL);
     expect(await snapshotRows(t)).toEqual(before);
@@ -67,7 +67,7 @@ describe("createOrderDraft: the plan must reach the minimum power of the image",
 
   it("accepts a plan at the minimum and one above it", async () => {
     const kit = await makeKit(t);
-    await image("wordpress", { kind: "app", minPower: 1000 });
+    await image("wordpress_ls_1_0", { kind: "app", minPower: 1000 });
     for (const power of [1000, 2000]) {
       const ok = await plan(kit, power);
       expect(
@@ -75,7 +75,7 @@ describe("createOrderDraft: the plan must reach the minimum power of the image",
           await createDraft(
             kit.deps,
             kit.session,
-            kit.input({ blueprintId: "wordpress", productId: ok }),
+            kit.input({ blueprintId: "wordpress_ls_1_0", productId: ok }),
           )
         ).ok,
       ).toBe(true);
@@ -99,14 +99,14 @@ describe("createOrderDraft: the plan must reach the minimum power of the image",
 
   it("an app with no known minimum falls back to the 1 GB class; an OS image with none runs anywhere", async () => {
     const kit = await makeKit(t);
-    await image("nodejs", { kind: "app" });
+    await image("node_ls_1_0", { kind: "app" });
     await image("debian_12", { kind: "os" });
     const small = await plan(kit, 298);
     expect(
       await createDraft(
         kit.deps,
         kit.session,
-        kit.input({ blueprintId: "nodejs", productId: small }),
+        kit.input({ blueprintId: "node_ls_1_0", productId: small }),
       ),
     ).toEqual(TOO_SMALL);
     expect(
@@ -122,23 +122,27 @@ describe("createOrderDraft: the plan must reach the minimum power of the image",
 
   it("a plan whose power is unknown is refused for an image with a minimum (R16)", async () => {
     const kit = await makeKit(t);
-    await image("wordpress", { kind: "app", minPower: 500 });
+    await image("wordpress_ls_1_0", { kind: "app", minPower: 500 });
     const unknown = await plan(kit, null);
     expect(
       await createDraft(
         kit.deps,
         kit.session,
-        kit.input({ blueprintId: "wordpress", productId: unknown }),
+        kit.input({ blueprintId: "wordpress_ls_1_0", productId: unknown }),
       ),
     ).toEqual(TOO_SMALL);
   });
 
   it("the admin override replaces what AWS reported, in both directions", async () => {
     const kit = await makeKit(t);
-    await image("wordpress", { kind: "app", minPower: 1000 });
+    await image("wordpress_ls_1_0", { kind: "app", minPower: 1000 });
     const small = await plan(kit, 500);
     const ask = () =>
-      createDraft(kit.deps, kit.session, kit.input({ blueprintId: "wordpress", productId: small }));
+      createDraft(
+        kit.deps,
+        kit.session,
+        kit.input({ blueprintId: "wordpress_ls_1_0", productId: small }),
+      );
     expect(await ask()).toEqual(TOO_SMALL);
     await setSwitches({ v: 1, on: [], off: [], minPower: { wordpress: 500 } });
     expect((await ask()).ok).toBe(true);
@@ -150,9 +154,9 @@ describe("createOrderDraft: the plan must reach the minimum power of the image",
 describe("runPurchase: the minimum is checked again, before any write", () => {
   it("an override raised between the draft and the purchase refuses the purchase and changes nothing", async () => {
     const kit = await makeKit(t);
-    await image("wordpress", { kind: "app", minPower: 500 });
+    await image("wordpress_ls_1_0", { kind: "app", minPower: 500 });
     const small = await plan(kit, 500);
-    const { token } = await kit.draft({ blueprintId: "wordpress", productId: small });
+    const { token } = await kit.draft({ blueprintId: "wordpress_ls_1_0", productId: small });
     await setSwitches({ v: 1, on: [], off: [], minPower: { wordpress: 2000 } });
     const verdict = verifyDraft(kit.secrets, token, kit.clock.now());
     if (!verdict.ok) throw new Error("the token does not verify");
