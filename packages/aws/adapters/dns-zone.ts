@@ -14,6 +14,7 @@ import {
 import { AwsError } from "../errors";
 import type { R53Change, R53RecordSet, Route53Port } from "./route53-port";
 import type { LiveState, OpCtx, ProductAdapter } from "./types";
+import { splitChangeBatches } from "./route53-limits";
 
 // WP7-T3: Amazon Route 53 zones and records of the customers. Everything runs in the tc-dns account
 // (hosted zones via STS, TcDnsProvisioner / TcDnsReader; VERIFY the role names against the real
@@ -314,7 +315,10 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
               (s) => !isApexReadOnly(ctx.config.zoneName, { fqdn: plain(s.name), type: s.type }),
             )
             .map((set) => ({ action: "DELETE" as const, set }));
-          if (doomed.length > 0) await port.changeRecordSets(id, doomed);
+          // WPU-Z19: a full zone holds more than one request may (100 sets of 20 values is 2,000 elements): the
+          // DELETEs go in batches under the limits. A retry lists the sets again, so what a batch already deleted
+          // is not sent twice (R7).
+          for (const batch of splitChangeBatches(doomed)) await port.changeRecordSets(id, batch);
           await port.deleteHostedZone(id);
         } catch (error) {
           if (!isNotFound(error)) throw error; // a step that deletes treats "not found" as done

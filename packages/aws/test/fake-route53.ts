@@ -1,4 +1,5 @@
 import { AwsError } from "../errors";
+import { withinBatchLimits } from "../adapters/route53-limits";
 import type { R53Change, R53RecordSet, R53Zone, Route53Port } from "../adapters/route53-port";
 
 const key = (s: { name: string; type: string }): string => `${s.name.toLowerCase()}|${s.type}`;
@@ -60,6 +61,10 @@ export function createFakeRoute53() {
     },
     async changeRecordSets(id, changes: readonly R53Change[]) {
       calls.push({ op: "changeRecordSets", detail: changes });
+      // The limits of the real client (WPU-Z19): a batch over them is refused, never applied in part.
+      if (!withinBatchLimits(changes)) {
+        throw new AwsError({ code: "validation", retryable: false });
+      }
       const z = find(id);
       const draft = new Map(z.sets);
       for (const c of changes) {

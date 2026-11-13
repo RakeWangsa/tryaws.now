@@ -12,6 +12,7 @@ import {
 import { validateZoneName } from "@tc/core";
 import { AwsError, toAwsError } from "../errors";
 import type { R53Change, R53RecordSet, R53Zone, Route53Port } from "./route53-port";
+import { withinBatchLimits } from "./route53-limits";
 
 // WPU-D4: the real Route 53 client behind Route53Port (the tc-dns account; the role is assumed by
 // access.route53, R3). Rules:
@@ -23,10 +24,11 @@ import type { R53Change, R53RecordSet, R53Zone, Route53Port } from "./route53-po
 //   shared table does not know are decided here (NoSuchHostedZone, HostedZoneAlreadyExists, ...).
 // - A record set that cannot be copied exactly (alias, routing policy) fails the read (R16): a later
 //   DELETE needs the exact copy.
-// VERIFY against the Route 53 API reference: CreateHostedZone answers HostedZoneAlreadyExists for a used
-// CallerReference; ListHostedZonesByName returns Config.Comment; ChangeResourceRecordSets allows 1000
-// record elements and 32000 characters of values per batch, ListResourceRecordSets pages by
-// NextRecordName/NextRecordType.
+// WPU-Z19, checked against the Route 53 API reference and quotas page on 2026-11-14: CreateHostedZone answers
+// HostedZoneAlreadyExists (HTTP 409) for a used CallerReference; ListHostedZonesByName returns Config.Comment;
+// ListResourceRecordSets pages by NextRecordName, NextRecordType and NextRecordIdentifier. One
+// ChangeResourceRecordSets request holds at most 1,000 ResourceRecord elements and 32,000 characters of Value, and
+// an UPSERT counts both twice (route53-limits.ts); the platform also caps a batch at 500 changes.
 
 /** The one method of the SDK client that this file uses (the tests pass a fake). */
 export interface Route53Like {
@@ -39,8 +41,6 @@ const GENERATED_COMMENT = /^tc-dnszone-[0-9a-f]{16}$/;
 const RECORD_TYPE = /^[A-Z]{1,10}$/;
 // Names as Route 53 spells them: letters, digits, hyphen, underscore, dot, and \ooo escapes ("*" is \052).
 const RECORD_NAME = /^[A-Za-z0-9_.\\*-]{1,255}$/;
-const MAX_BATCH_CHANGES = 500; // a CREATE or DELETE counts one element, an UPSERT two: 1000 in all
-const MAX_BATCH_VALUE_CHARS = 32_000;
 const MAX_PAGES = 100;
 const MAX_ZONE_PAGES = 20;
 
@@ -318,7 +318,6 @@ export function createRoute53Port(client: Route53Like | Route53Client): Route53P
       const id = checkedId(hostedZoneId, "ChangeResourceRecordSets");
       if (!Array.isArray(changes)) throw validation("ChangeResourceRecordSets");
       if (changes.length === 0) return;
-      let chars = 0;
       const batch: NonNullable<ChangeResourceRecordSetsCommandInput["ChangeBatch"]>["Changes"] = [];
       for (const change of changes as readonly R53Change[]) {
         const { action, set } = change;
@@ -336,7 +335,6 @@ export function createRoute53Port(client: Route53Like | Route53Client): Route53P
         ) {
           throw validation("ChangeResourceRecordSets");
         }
-        for (const v of set.values) chars += v.length;
         batch.push({
           Action: action,
           ResourceRecordSet: {
@@ -347,7 +345,8 @@ export function createRoute53Port(client: Route53Like | Route53Client): Route53P
           },
         });
       }
-      if (changes.length > MAX_BATCH_CHANGES || chars > MAX_BATCH_VALUE_CHARS) {
+      // The elements and characters of every change, an UPSERT twice; over the limits is refused before the call.
+      if (!withinBatchLimits(changes as readonly R53Change[])) {
         throw validation("ChangeResourceRecordSets");
       }
       await send(

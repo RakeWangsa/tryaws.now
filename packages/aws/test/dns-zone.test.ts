@@ -172,6 +172,38 @@ describe("the zone adapter", () => {
     expect((await adapter.aws.destroy(ctx)).kind).toBe("done");
   });
 
+  it("WPU-Z19: destroy of a full zone (100 sets of 20 values) splits the DELETEs into batches under the limits", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    await adapter.aws.create(ctxFor({ zoneName: "example.com" }));
+    for (let i = 0; i < 100; i += 1) {
+      fake.seed("Z000001", {
+        name: `h${i}.example.com.`,
+        type: "A",
+        ttl: 300,
+        values: Array.from({ length: 20 }, (_, j) => `203.0.113.${j + 1}`),
+      });
+    }
+    const ctx = ctxFor(
+      { zoneName: "example.com" },
+      { resourceConfig: { hostedZoneId: "Z000001" } },
+    );
+    expect((await adapter.aws.destroy(ctx)).kind).toBe("done");
+    expect(fake.zones.size).toBe(0);
+    const batches = fake.calls
+      .filter((c) => c.op === "changeRecordSets")
+      .map((c) => c.detail as { action: string; set: { values: string[] } }[]);
+    expect(batches.length).toBeGreaterThan(1);
+    for (const batch of batches) {
+      expect(batch.every((c) => c.action === "DELETE")).toBe(true);
+      expect(batch.reduce((n, c) => n + c.set.values.length, 0)).toBeLessThanOrEqual(1000);
+      expect(batch.reduce((n, c) => n + c.set.values.join("").length, 0)).toBeLessThanOrEqual(
+        32_000,
+      );
+    }
+    expect(batches.flat()).toHaveLength(100);
+  });
+
   it("destroy without a hosted zone id is done (nothing was made)", async () => {
     const adapter = createDnsZoneAdapter({ route53: () => createFakeRoute53().port });
     expect((await adapter.aws.destroy(ctxFor({ zoneName: "example.com" }))).kind).toBe("done");

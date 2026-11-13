@@ -7,13 +7,15 @@
 //
 // Rules for an implementation (VERIFY each against the current Route 53 documentation):
 // - `createHostedZone` is idempotent on `callerReference`: the same reference answers the zone that the
-//   first call made, with `created: false`. (VERIFY: CreateHostedZone with a used CallerReference fails
-//   with HostedZoneAlreadyExists / ConflictingDomainExists; the client then finds the zone itself.)
+//   first call made, with `created: false`. CreateHostedZone with a used CallerReference fails with
+//   HostedZoneAlreadyExists (HTTP 409) only, and the client then finds the zone itself. ConflictingDomainExists
+//   is something else (a delegation set or VPC conflict) and stays a "conflict" (WPU-Z19, API reference).
 // - `listRecordSets` follows the pagination (ListResourceRecordSets, 300 per page) and returns every set.
 //   Names come back with a trailing dot, and "*" as "\052" (VERIFY).
-// - `changeRecordSets` is ONE ChangeResourceRecordSets batch: all changes or none (VERIFY: 1000 record
-//   elements per batch, 32000 characters of values). CREATE of an existing set and DELETE of a missing
-//   one fail the whole batch.
+// - `changeRecordSets` is ONE ChangeResourceRecordSets batch: all changes or none. At most 1,000 ResourceRecord
+//   elements and 32,000 characters of Value, an UPSERT counted twice (route53-limits.ts, the quotas page); a
+//   caller with more independent changes splits them (splitChangeBatches). CREATE of an existing set and DELETE
+//   of a missing one fail the whole batch.
 // - `deleteHostedZone` fails while the zone holds sets other than the apex NS and SOA.
 // - A missing zone is an AwsError with code "not_found"; a refused change is code "conflict".
 

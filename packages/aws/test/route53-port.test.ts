@@ -340,6 +340,48 @@ describe("changeRecordSets", () => {
     expect(calls).toHaveLength(0);
   });
 
+  // WPU-Z19: the DNS quotas page (DNSLimitations.html): "A request cannot contain more than 1,000 ResourceRecord
+  // elements ... When the value of the Action element is UPSERT, each ResourceRecord element is counted twice", and
+  // at most 32,000 characters of Value, where an UPSERT's characters also count twice.
+  it("counts ResourceRecord elements and value characters, an UPSERT twice", async () => {
+    const { port, calls } = fake({
+      ChangeResourceRecordSets: () => ({ ChangeInfo: { Id: "/change/C1", Status: "PENDING" } }),
+    });
+    const values = (n: number) => Array.from({ length: n }, (_, i) => `203.0.113.${i % 250}`);
+    const multi = (action: "CREATE" | "UPSERT" | "DELETE", n: number) => ({
+      action,
+      set: { ...set, values: values(n) },
+    });
+    // 501 values: 501 elements as a CREATE or DELETE, 1002 as an UPSERT.
+    await port.changeRecordSets("Z0TESTZONE1", [multi("CREATE", 501)]);
+    await port.changeRecordSets("Z0TESTZONE1", [multi("DELETE", 501)]);
+    await expect(
+      port.changeRecordSets("Z0TESTZONE1", [multi("UPSERT", 501)]),
+    ).rejects.toMatchObject({ code: "validation" });
+    await port.changeRecordSets("Z0TESTZONE1", [multi("UPSERT", 500)]);
+    // Two DELETEs of 20 values per set: 25 sets is 500 elements; 51 sets of 20 is 1020, over the limit.
+    const sets = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        action: "DELETE" as const,
+        set: { ...set, name: `h${i}.shop.example.`, values: values(20) },
+      }));
+    await port.changeRecordSets("Z0TESTZONE1", sets(50));
+    await expect(port.changeRecordSets("Z0TESTZONE1", sets(51))).rejects.toMatchObject({
+      code: "validation",
+    });
+    // 16,001 characters: allowed once, refused as an UPSERT (32,002).
+    const text = (action: "CREATE" | "UPSERT") => ({
+      action,
+      set: { ...set, type: "TXT", values: [`"${"x".repeat(15_999)}"`] },
+    });
+    await port.changeRecordSets("Z0TESTZONE1", [text("CREATE")]);
+    await expect(port.changeRecordSets("Z0TESTZONE1", [text("UPSERT")])).rejects.toMatchObject({
+      code: "validation",
+    });
+    // Sent: CREATE 501, DELETE 501, UPSERT 500, 50 DELETE sets, the TXT CREATE; every refusal sent nothing.
+    expect(calls).toHaveLength(5);
+  });
+
   it("maps a refused batch to conflict and a missing zone to not_found", async () => {
     for (const [name, code] of [
       ["InvalidChangeBatch", "conflict"],
