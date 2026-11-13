@@ -557,6 +557,10 @@ describe("docs/runbooks/go-live.md", () => {
       at = next;
     }
     expect(page).toContain("list-open-id-connect-providers");
+    // WPU-Z18 review M2: an already set FirstAdminSub is replaced by hand, never with --force
+    expect(page).toContain(
+      "If the script reports `skipped FirstAdminSub (already set; --force replaces it)`, never re-run it with `--force` (it rotates every random key and the database passwords); set the one name by hand with `npx sst secret set FirstAdminSub --stage production` (value on standard input, as the Rollback section describes) and redeploy.",
+    );
     // WPU-Z11 fix round 2: the one-account residuals are named, the asset bucket and headers policy included
     expect(page).toContain("the shared SST asset bucket `sst-asset-*`");
     expect(page).toContain("`tc-<stage>-security-headers`");

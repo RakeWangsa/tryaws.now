@@ -80,6 +80,13 @@ describe("the secret FirstAdminSub", () => {
     expect(code("functions/migrator/config.ts")).toContain(
       "firstAdminSub: secretValue(links(FIRST_ADMIN_SUB_SECRET)),",
     );
+    // review M1: the migrator pins READ COMMITTED, and the bootstrap refuses any other level
+    expect(code("functions/migrator/index.ts")).toMatch(
+      /db\.transaction\(\(tx\) => bootstrapFirstSuperadmin\(tx, sub\), \{\s*isolationLevel: "read committed",\s*\}\)/,
+    );
+    expect(code("packages/db/repositories/system/first-admin.ts")).toContain(
+      "sql`select current_setting('transaction_isolation') as level`",
+    );
     const run = code("functions/migrator/run.ts");
     expect(run).toContain("const plan = firstAdminDecision(config.firstAdminSub);");
     expect(run).toContain("subPrefix: subPrefix(plan.sub)");
@@ -101,6 +108,7 @@ describe("the secret FirstAdminSub", () => {
       "functions/migrator/run.ts",
       "packages/db/index.ts",
       "packages/db/repositories/system/first-admin.ts",
+      "packages/db/test/first-admin-sub.test.ts",
       "packages/db/test/first-admin.test.ts",
     ]);
   });

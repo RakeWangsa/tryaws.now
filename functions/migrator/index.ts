@@ -45,12 +45,15 @@ export const handler = async (event?: unknown): Promise<MigratorReport> => {
       }
     },
     bootstrapFirstAdmin: async (url, sub) => {
-      // WPU-Z18: as the master user, which owns admin_users and audit_log. One transaction (READ
-      // COMMITTED, the default): the advisory lock, the count and the insert commit or roll back together.
+      // WPU-Z18: as the master user, which owns admin_users and audit_log. One transaction, pinned to
+      // READ COMMITTED (bootstrapFirstSuperadmin refuses any other level): the advisory lock, the count
+      // and the insert commit or roll back together.
       const { db, pool } = createDatabase(url, { max: 1 });
       pool.on("error", () => {});
       try {
-        return await db.transaction((tx) => bootstrapFirstSuperadmin(tx, sub));
+        return await db.transaction((tx) => bootstrapFirstSuperadmin(tx, sub), {
+          isolationLevel: "read committed",
+        });
       } finally {
         await pool.end();
       }

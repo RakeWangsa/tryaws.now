@@ -2,6 +2,7 @@ import { beforeEach, expect, it } from "vitest";
 import {
   bootstrapFirstSuperadmin,
   FIRST_ADMIN_ACTION,
+  FIRST_ADMIN_ISOLATION_ERROR,
   FIRST_ADMIN_REASON,
 } from "../repositories/system/first-admin";
 import { useTempDatabase } from "./temp-db";
@@ -13,7 +14,8 @@ const t = useTempDatabase();
 const SUB = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 const OTHER = "11111111-2222-4333-8444-555555555555";
 
-const bootstrap = (sub: string) => t.db.transaction((tx) => bootstrapFirstSuperadmin(tx, sub));
+const bootstrap = (sub: string) =>
+  t.db.transaction((tx) => bootstrapFirstSuperadmin(tx, sub), { isolationLevel: "read committed" });
 const admins = async () =>
   (await t.pool.query("select id, cognito_sub, role, status from admin_users order by id")).rows;
 const bootstrapAudit = async () =>
@@ -78,5 +80,14 @@ it("two concurrent runs on an empty table insert exactly one row", async () => {
 
 it("refuses a sub that is not a canonical UUID before any statement (R16)", async () => {
   await expect(bootstrap("sub-123")).rejects.toThrow("first admin: the sub is not valid");
+  expect(await admins()).toEqual([]);
+});
+
+it("refuses a REPEATABLE READ or SERIALIZABLE transaction and writes nothing (review M1)", async () => {
+  for (const isolationLevel of ["repeatable read", "serializable"] as const) {
+    await expect(
+      t.db.transaction((tx) => bootstrapFirstSuperadmin(tx, SUB), { isolationLevel }),
+    ).rejects.toThrow(FIRST_ADMIN_ISOLATION_ERROR);
+  }
   expect(await admins()).toEqual([]);
 });

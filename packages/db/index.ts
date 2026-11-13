@@ -109,6 +109,7 @@ export {
   firstAdminDecision,
   subPrefix,
   FIRST_ADMIN_ACTION,
+  FIRST_ADMIN_ISOLATION_ERROR,
   FIRST_ADMIN_NOT_CONFIGURED,
   FIRST_ADMIN_REASON,
 } from "./repositories/system/first-admin";

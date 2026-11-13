@@ -13,6 +13,7 @@ import { insertAudit } from "../audit-log";
 export const FIRST_ADMIN_NOT_CONFIGURED = "not-configured";
 export const FIRST_ADMIN_ACTION = "admin_user.bootstrap";
 export const FIRST_ADMIN_REASON = "first superadmin bootstrap";
+export const FIRST_ADMIN_ISOLATION_ERROR = "first admin: the transaction is not read committed";
 
 // The canonical 8-4-4-4-12 form of a Cognito `sub`; nothing around it (no braces, prefix or spaces).
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,6 +60,14 @@ export type FirstAdminOutcome =
 export async function bootstrapFirstSuperadmin(tx: Tx, sub: string): Promise<FirstAdminOutcome> {
   const cognitoSub = canonicalCognitoSub(sub);
   if (cognitoSub === undefined) throw new TypeError("first admin: the sub is not valid");
+  // The guarantee of one first admin rests on the lock plus the existence check, not on a unique key:
+  // the check must see a row that a concurrent run committed while this one waited for the lock, which
+  // only READ COMMITTED does (a REPEATABLE READ snapshot is taken before the lock is granted). Refuse
+  // any other level before the lock (R16).
+  const { rows: level } = await tx.execute<{ level: string }>(
+    sql`select current_setting('transaction_isolation') as level`,
+  );
+  if (level[0]?.level !== "read committed") throw new Error(FIRST_ADMIN_ISOLATION_ERROR);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('admin_users:changes', 0))`);
   const { rows } = await tx.execute<{ present: boolean }>(
     sql`select exists (select 1 from admin_users) as present`,
