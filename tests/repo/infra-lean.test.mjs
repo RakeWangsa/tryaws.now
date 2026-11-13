@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  LEAN_BUDGET_USD,
-  LEAN_BUDGET_THRESHOLDS_USD,
+  NAT_INSTANCE,
   STAGE_SIZES,
+  budgetOf,
   logRetentionOf,
   parseStageSize,
   sizing,
@@ -90,8 +90,9 @@ describe("WPU-B8: the sizing table", () => {
     }
   });
 
-  it("network: one NAT instance in lean, managed gateways in full", () => {
-    expect(sizing("lean", "staging").network.nat).toBe("ec2");
+  it("network: one NAT instance in lean (WPU-Z10: built by network.ts), managed gateways in full", () => {
+    expect(sizing("lean", "staging").network.nat).toBe("single-instance");
+    expect(sizing("lean", "production").network.nat).toBe("single-instance");
     expect(sizing("full", "staging").network.nat).toBe("managed");
     expect(sizing("full", "production").network.nat).toBe("managed");
   });
@@ -114,9 +115,9 @@ describe("WPU-B8: the sizing table", () => {
     expect(logRetentionOf("full")).toBe("2 weeks");
   });
 
-  it("budget: 50 USD, notifications at 40 and 50 USD absolute", () => {
-    expect(LEAN_BUDGET_USD).toBe(50);
-    expect([...LEAN_BUDGET_THRESHOLDS_USD]).toEqual([40, 50]);
+  it("budget (WPU-Z10): staging 50 USD at 25, 40 and 50; production 100 USD at 50, 80 and 100", () => {
+    expect(budgetOf("staging")).toEqual({ limitUsd: 50, thresholdsUsd: [25, 40, 50] });
+    expect(budgetOf("production")).toEqual({ limitUsd: 100, thresholdsUsd: [50, 80, 100] });
   });
 
   it("is frozen (a stack cannot change the table)", () => {
@@ -228,10 +229,16 @@ describe("WPU-B8: the stacks read config.size", () => {
 describe("WPU-B8: the new files hold no account id and no secret", () => {
   const files = ["infra/lib/lean.ts", "infra/stacks/budget.ts"];
 
-  it("has no 12-digit account id", () => {
+  // WPU-Z10: the one 12-digit number allowed is the public AWS account that publishes the fck-nat
+  // images (the AMI owner filter of SST 4.17.2 vpc.ts), in NAT_INSTANCE of lean.ts and nowhere else.
+  it("has no 12-digit account id (the fck-nat image publisher of NAT_INSTANCE aside)", () => {
     for (const file of files) {
-      expect(raw(file), file).not.toMatch(/(?<![0-9])[0-9]{12}(?![0-9])/);
+      const text = raw(file);
+      expect(text.replaceAll(`amiOwner: "${NAT_INSTANCE.amiOwner}"`, ""), file).not.toMatch(
+        /(?<![0-9])[0-9]{12}(?![0-9])/,
+      );
     }
+    expect(raw("infra/lib/lean.ts").split(NAT_INSTANCE.amiOwner)).toHaveLength(2);
   });
 
   it("has no secret-looking text", () => {

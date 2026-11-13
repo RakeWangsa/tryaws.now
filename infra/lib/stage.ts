@@ -118,14 +118,23 @@ export interface StageConfig {
   readonly dnsAccountId: string;
   // sts:ExternalId of the tc-dns roles: a plain value, not a secret (6.3)
   readonly dnsExternalId: string;
-  // C.5: the public /32 addresses of the NAT gateways (TC_PROBE_SOURCES) that the bootstrap beacon port
-  // of a new Linux server is opened to during create, and the network of the Lightsail VPC of the pool
-  // account (TC_VPC_CIDR) that its firewall allows. Required on staging and production; a personal stage
-  // may leave both out and then every Linux create stops before the static IP (R16).
+  // C.5: the public /32 addresses of the stage's NAT (TC_PROBE_SOURCES) that the bootstrap beacon port
+  // of a new Linux server is opened to during create: the two NAT gateways of a full stage, the ONE NAT
+  // instance of a lean stage (WPU-Z10), and the network of the Lightsail VPC of the pool account
+  // (TC_VPC_CIDR) that its firewall allows. Required on staging and production; a personal stage may
+  // leave both out and then every Linux create stops before the static IP (R16).
   readonly probeSources: readonly string[];
   readonly vpcCidr: string | null;
   // WPU-B8: "lean" (one account, about 50 USD a month) or "full" (default). Read from TC_STAGE_SIZE.
   readonly size: StageSize;
+  // WPU-Z10: the Cognito user pools that a removal of staging kept (removalRules) and that this deploy
+  // adopts again (Pulumi `import`, infra/stacks/auth.ts). Null: the deploy creates the pool. Staging only.
+  readonly userPoolIds: UserPoolIds;
+}
+
+export interface UserPoolIds {
+  readonly customers: string | null;
+  readonly admins: string | null;
 }
 
 // ---- TC_PROBE_SOURCES and TC_VPC_CIDR -----------------------------------------------------------------
@@ -174,7 +183,7 @@ export function parseProbeSourcesConfig(raw: string): readonly string[] {
     }
     if (cidr.prefix < MIN_PROBE_PREFIX) {
       throw new InfraConfigError(
-        `TC_PROBE_SOURCES entry ${part} is wider than /${MIN_PROBE_PREFIX} (use the /32 of each NAT gateway)`,
+        `TC_PROBE_SOURCES entry ${part} is wider than /${MIN_PROBE_PREFIX} (use the /32 of each NAT address)`,
       );
     }
     if (!isPublicAddress(cidr.octets)) {
@@ -217,6 +226,38 @@ function host(env: Env, name: string): string {
   const raw = need(env, name);
   if (!HOST.test(raw)) throw new InfraConfigError(`${name} is not a host name`);
   return raw;
+}
+
+// ---- Cognito user pools that staging keeps between test sessions (WPU-Z10) ------------------------------
+// A removal of staging keeps both pools (removalRules: retainUserPools), so the admin users and their TOTP
+// survive. The next deploy would create two new, empty pools unless it is told the ids of the kept ones:
+// a person records them once (stack outputs customerPoolId and adminPoolId) as these variables, and every
+// later deploy adopts the pools (docs/runbooks/staging-on-demand.md). Only staging keeps and adopts pools:
+// a value on another stage is refused (R16), so production can never adopt a pool by mistake.
+export const USER_POOL_ID_VARIABLES = {
+  customers: "TC_COGNITO_CUSTOMER_POOL_ID",
+  admins: "TC_COGNITO_ADMIN_POOL_ID",
+} as const;
+
+// A user pool id is <Region>_<letters and digits> (Cognito API UserPoolId); the pools live in REGION.
+const USER_POOL_ID = new RegExp(`^${REGION}_[0-9A-Za-z]{1,40}$`);
+
+function readUserPoolIds(kind: StageKind, env: Env): UserPoolIds {
+  const read = (name: string): string | null => {
+    const value = optional(env, name);
+    if (value === undefined) return null;
+    if (kind !== "staging") {
+      throw new InfraConfigError(`${name} is for the staging stage only (it adopts a kept pool)`);
+    }
+    if (!USER_POOL_ID.test(value)) {
+      throw new InfraConfigError(`${name} is not a Cognito user pool id of ${REGION}`);
+    }
+    return value;
+  };
+  return {
+    customers: read(USER_POOL_ID_VARIABLES.customers),
+    admins: read(USER_POOL_ID_VARIABLES.admins),
+  };
 }
 
 // Reads the stage configuration from the environment of the deploy. The names are listed in
@@ -274,12 +315,75 @@ export function readStageConfig(stage: string, env: Env): StageConfig {
     probeSources: probeRaw === undefined ? [] : parseProbeSourcesConfig(probeRaw),
     vpcCidr: vpcRaw === undefined ? null : parseVpcCidrConfig(vpcRaw),
     size: parseStageSize(env[STAGE_SIZE_VARIABLE]),
+    userPoolIds: readUserPoolIds(kind, env),
   };
 }
 
-// Removal and protection of stateful resources (SST app() fields).
+// ---- Removal (SST app() `removal`, and what the stacks keep or delete) --------------------------------
+// WPU-Z10 (owner decision 2026-11-13, JOURNEY.md): staging runs only during test sessions and ends with
+// `sst remove --stage staging`, which must delete everything that costs money; its test data is wiped.
+// So staging is "remove" like a personal stage. SST "retain" would keep the RDS instance, its subnet and
+// parameter groups, the VPC with its subnets and the S3 buckets (.sst/platform/src/auto/run.ts,
+// addTransformationToRetainResourcesOnDelete), which is what production needs and staging must not do.
+// Production keeps "retain", and `protect` (infra/app.ts) refuses `sst remove` on it altogether.
 export function removalPolicy(stage: string): "retain" | "remove" {
-  return stageKind(stage) === "personal" ? "remove" : "retain";
+  return stageKind(stage) === "production" ? "retain" : "remove";
+}
+
+export interface RemovalRules {
+  // RDS deletion protection, and a final snapshot when the instance is deleted (3.3, R13).
+  readonly databaseDeletionProtection: boolean;
+  readonly databaseFinalSnapshot: boolean;
+  // S3 forceDestroy: a removal empties the bucket (every object version) and deletes it.
+  readonly bucketForceDestroy: boolean;
+  // The two Cognito user pools survive a removal (Pulumi retainOnDelete) and are adopted again by the next
+  // deploy (UserPoolIds above): free to keep, and their admin users and TOTP are painful to recreate.
+  readonly retainUserPools: boolean;
+}
+
+// - production: exactly as before WPU-Z10 (protection, final snapshot, pools as SST builds them); its
+//   buckets are never emptied by a delete (SST's Bucket defaults to forceDestroy true, bucket.ts).
+// - staging: nothing that costs money survives a removal: no deletion protection, no final snapshot (the
+//   test data is wiped by decision), buckets emptied; the user pools (and the SST secrets, which `sst
+//   remove` leaves alone unless the app sets state.purge) are kept.
+// - personal: unchanged (protection and final snapshot on, SST's own forceDestroy, pools not kept).
+const REMOVAL_RULES: Readonly<Record<StageKind, RemovalRules>> = {
+  production: Object.freeze({
+    databaseDeletionProtection: true,
+    databaseFinalSnapshot: true,
+    bucketForceDestroy: false,
+    retainUserPools: false,
+  }),
+  staging: Object.freeze({
+    databaseDeletionProtection: false,
+    databaseFinalSnapshot: false,
+    bucketForceDestroy: true,
+    retainUserPools: true,
+  }),
+  personal: Object.freeze({
+    databaseDeletionProtection: true,
+    databaseFinalSnapshot: true,
+    bucketForceDestroy: true,
+    retainUserPools: false,
+  }),
+};
+
+export function removalRules(kind: StageKind): RemovalRules {
+  return REMOVAL_RULES[kind];
+}
+
+// ---- The tags SST puts on every resource (WPU-Z10, budget filter) ---------------------------------------
+// The SST 4.17.2 CLI configures the AWS provider with defaultTags {"sst:app": <app>, "sst:stage": <stage>}
+// (.sst/platform/src/components/aws/helpers/provider.ts shows the config; the CLI binary sets it), and
+// SST's own providers for other Regions copy that config (useProvider). A provider built by hand does not:
+// infra/stacks/waf.ts passes these tags to its us-east-1 provider. The lean budget (infra/stacks/budget.ts)
+// counts only the costs that carry BOTH tags, once a person has activated them as cost allocation tags in
+// the payer account (docs/runbooks/staging-on-demand.md).
+export function sstTags(
+  app: string,
+  stage: string,
+): Readonly<Record<"sst:app" | "sst:stage", string>> {
+  return Object.freeze({ "sst:app": app, "sst:stage": stage });
 }
 
 const POOL_ONLY = ["TcProvisioner", "TcReader", "TcAccessDetails"] as const;

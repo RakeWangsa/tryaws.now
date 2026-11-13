@@ -61,9 +61,14 @@ describe("tooling", () => {
     expect(existsSync(resolve(root, "infra/org"))).toBe(true);
   });
 
+  // WPU-Z10: the one public 12-digit number allowed is the AWS account that publishes the fck-nat images
+  // (NAT_INSTANCE.amiOwner of infra/lib/lean.ts, the AMI owner filter of SST 4.17.2 vpc.ts), there only.
   it("writes no account id, ARN of an account, key or secret value in infra/", () => {
+    const FCK_NAT_PUBLISHER = `amiOwner: "568608671756"`;
     for (const file of ours) {
-      const text = readFileSync(resolve(root, file), "utf8");
+      const raw = readFileSync(resolve(root, file), "utf8");
+      const allowed = file === join("infra", "lib", "lean.ts") ? FCK_NAT_PUBLISHER : null;
+      const text = allowed === null ? raw : raw.replace(allowed, "");
       expect(text, file).not.toMatch(/\b\d{12}\b/);
       expect(text, file).not.toMatch(/arn:aws:[a-z0-9-]*:[a-z0-9-]*:\d{12}/);
       expect(text, file).not.toMatch(/AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}/);
