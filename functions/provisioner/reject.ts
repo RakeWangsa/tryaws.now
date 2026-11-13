@@ -1,4 +1,4 @@
-import { decideRefusal, transitionOperation, type LocalFailure } from "@tc/core";
+import { decideRefusal, refundedOnFailure, transitionOperation, type LocalFailure } from "@tc/core";
 import { loadOperationBrief } from "@tc/db";
 import type { RunView, Tx } from "@tc/db";
 import type { RunOutcome, StepDeps } from "./types";
@@ -15,8 +15,8 @@ function targetOf(payload: unknown): string | null {
 }
 
 // The rejection of a stuck operation (an engine kind, no adapter): the target goes needs_attention
-// to failed (W11), a create runs the same failed hook as the automatic path, and the reject
-// operation succeeds. All of it is one transaction under the fence of the lease of the reject
+// to failed (W11), a create or a domain renewal (WPU-Z13: the kinds whose failure moves money back,
+// refundedOnFailure) runs the same failed hook as the automatic path, and the reject operation succeeds. All of it is one transaction under the fence of the lease of the reject
 // operation; a throwing hook rolls everything back and the sweeper recovers the run like an expired
 // lease. Inside the transaction the fenced update of the reject operation comes first (the order is
 // not visible outside), so a stale run writes nothing for the target.
@@ -59,8 +59,8 @@ export async function runReject(
     }
     // An admin who retried the target, or an earlier run, left nothing to reject: a no-op.
     const rejectable = target.state === "needs_attention";
-    const isCreate = target.kind === "create";
-    if (rejectable && isCreate && deps.hooks?.failed === undefined) {
+    const refunded = refundedOnFailure(target.kind);
+    if (rejectable && refunded && deps.hooks?.failed === undefined) {
       return refuse(tx, "failed_hook_missing");
     }
 
@@ -81,12 +81,12 @@ export async function runReject(
     });
     // loadOperationBrief locked the row, so a move that changed nothing is a bug: fail closed (R16).
     if (!moved.applied) throw new Error("reject: the target did not move");
-    if (isCreate) {
+    if (refunded) {
       await deps.hooks?.failed?.(tx, {
         operationId: target.id,
         resourceId: target.resourceId,
         customerId: resource.customerId,
-        kind: "create",
+        kind: target.kind,
         code: "rejected",
       });
     }

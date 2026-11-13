@@ -228,7 +228,7 @@ async function plan(
       now: deps.clock.now(),
       facts: factsOf(error),
     });
-    // R16: a create reaches failed only when the hook that reverses the money is installed.
+    // R16: a create or a domain renewal reaches failed only when the hook that reverses the money is installed.
     if (decision.to === "failed" && deps.hooks?.failed === undefined) {
       return refusal("failed_hook_missing", decision.attempts);
     }

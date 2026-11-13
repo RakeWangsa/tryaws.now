@@ -23,6 +23,7 @@ import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
 import { orderHooks } from "./order-hooks";
+import { renewalHooks } from "./renewal-hooks";
 import { windowsInstanceAdapter } from "./windows";
 import { runStep } from "./step";
 import type { RunOutcome, StepDeps } from "./types";
@@ -147,13 +148,15 @@ function buildDeps(): StepDeps {
       databaseAdapter(),
       loadBalancerAdapter(),
     ]),
-    // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds.
+    // WP5-T4: the guard of R13 and the success hooks of the lifecycle kinds. WPU-Z13: a failed domain renewal gives
+    // its charge back (renewalHooks).
     destructiveGuard,
     hooks: composeHooks(
       orderHooks({ clock, log }),
       lifecycleHooks({ clock, log }),
       dnsZoneHooks(),
       domainHooks(),
+      renewalHooks({ log }),
     ),
     access,
     env: config.env,

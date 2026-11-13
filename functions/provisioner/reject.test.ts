@@ -109,6 +109,47 @@ describe("reject_operation, run by the provisioner as worker_rw", () => {
     expect(events).toEqual([]);
   });
 
+  it("WPU-Z13: a rejected domain renewal reaches failed and calls the failed hook (its charge goes back); without the hook it is not rejected", async () => {
+    const events: unknown[] = [];
+    const { deps } = setup({
+      hooks: {
+        failed: async (_tx, e) => {
+          events.push(e);
+        },
+      },
+    });
+    const target = await create({
+      kind: "renew_domain",
+      state: "needs_attention",
+      attempts: 5,
+      payload: { currentExpiryYear: 2027, years: 1 },
+    });
+    const m = await reject(target.id);
+    expect(await runStep(deps, m)).toMatchObject({ to: "succeeded" });
+    expect(await operationRow(t.pool, target.id)).toMatchObject({
+      state: "failed",
+      last_error: "rejected",
+    });
+    expect(events).toEqual([
+      {
+        operationId: target.id,
+        resourceId: target.resourceId,
+        customerId: world.customerId,
+        kind: "renew_domain",
+        code: "rejected",
+      },
+    ]);
+
+    const bare = setup();
+    const stuck = await create({ kind: "renew_domain", state: "needs_attention", attempts: 5 });
+    const n = await reject(stuck.id);
+    expect(await runStep(bare.deps, n)).toMatchObject({ to: "needs_attention" });
+    expect(await operationRow(t.pool, n.operationId)).toMatchObject({
+      last_error: "failed_hook_missing",
+    });
+    expect(await operationRow(t.pool, stuck.id)).toMatchObject({ state: "needs_attention" });
+  });
+
   it("if an admin retried the target before the engine ran, the older queued target does not hold the rejection back: it does nothing and the reject operation succeeds", async () => {
     const { deps } = setup({
       hooks: {
