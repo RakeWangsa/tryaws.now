@@ -53,11 +53,8 @@ function rig(role: AdminRole = "support", over: Partial<World> = {}) {
       if (text.startsWith("select customer_id, email, status from support_requests")) {
         return { rows: world.request === undefined ? [] : [world.request] };
       }
-      if (text.startsWith("select status, handled_by from support_requests")) {
-        return {
-          rows:
-            world.request === undefined ? [] : [{ status: world.request.status, handled_by: null }],
-        };
+      if (text.startsWith("select status from support_requests")) {
+        return { rows: world.request === undefined ? [] : [{ status: world.request.status }] };
       }
       if (text.startsWith("select request_id, author_type, body from support_messages")) {
         return { rows: world.existing === undefined ? [] : [world.existing] };
@@ -73,7 +70,7 @@ const kindOf = (s: Sent): string =>
   s.sql.startsWith("select role, status from admin_users")
     ? "admin"
     : s.sql.startsWith("select customer_id, email, status from support_requests") ||
-        s.sql.startsWith("select status, handled_by from support_requests")
+        s.sql.startsWith("select status from support_requests")
       ? "lock"
       : s.sql.startsWith("select request_id, author_type, body from support_messages")
         ? "existing"
@@ -296,9 +293,10 @@ describe("supportAdminRepo.close and reopen", () => {
       value: { requestId: REQUEST, status: "open" },
     });
     expect(r.sent.map(kindOf)).toEqual(["admin", "lock", "update", "audit"]);
-    expect(r.sent[1]?.sql).toBe(
-      "select status, handled_by from support_requests where id = $1 for update",
-    );
+    expect(r.sent[1]).toEqual({
+      sql: "select status from support_requests where id = $1 for update",
+      params: [REQUEST],
+    });
     expect(r.sent[2]).toEqual({
       sql: "update support_requests set status = 'open' where id = $1",
       params: [REQUEST],

@@ -196,8 +196,8 @@ export function supportAdminRepo(scope: AdminScope): SupportAdminRepo {
   // The state of a request under a row lock until the transaction ends: a reply, a close and a reopen
   // of the same request run one after the other. Throws a refusal when the request does not exist.
   const lockState = async (requestId: string): Promise<{ status: string }> => {
-    const { rows } = await scope.tx.execute<{ status: string; handled_by: string | null }>(
-      sql`select status, handled_by from support_requests where id = ${requestId} for update`,
+    const { rows } = await scope.tx.execute<{ status: string }>(
+      sql`select status from support_requests where id = ${requestId} for update`,
     );
     const current = rows[0];
     if (current === undefined) throw new Refusal("not_found");
