@@ -2,7 +2,13 @@ import type { Clock, Locale, Logger } from "@tc/core";
 import type { EmailProvider } from "../email/provider";
 import type { SmsProvider } from "../sms/provider";
 import { scanSecrets } from "../text/guards";
-import { isTemplateId, parseTemplateData, renderEmail, renderSms } from "../templates/render";
+import {
+  isTemplateId,
+  linkOf,
+  parseTemplateData,
+  renderEmail,
+  renderSms,
+} from "../templates/render";
 import {
   MAX_ATTEMPTS,
   SMS_DAILY_CAP_DEFAULT,
@@ -137,7 +143,12 @@ export async function runNotifier(deps: NotifierDeps): Promise<NotifierReport> {
           continue;
         }
         const rendered = renderEmail(row.template, data, ctx);
-        const rule = scanSecrets(`${rendered.subject}\n${rendered.text}`);
+        // R14 checks what the mail says. The link of the button is built by the template from the panel
+        // origin and checked fields (panelUrl): it carries no text of anyone, and an id in it is no
+        // secret, though its digits can read as a document number (WPU-Z5: a request id whose last group
+        // is all digits, about 1 random id in 280). It is set aside; everything else is checked as before.
+        const said = rendered.text.replaceAll(linkOf(row.template, data, ctx), "");
+        const rule = scanSecrets(`${rendered.subject}\n${said}`);
         if (rule !== null) {
           await refuse(row, rule);
           continue;

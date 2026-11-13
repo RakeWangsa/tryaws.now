@@ -98,6 +98,17 @@ export function renderEmail(
   return { subject, html, text: plain };
 }
 
+// The link of the button: the panel origin of the configuration and the path the template builds from
+// checked fields (panelUrl refuses anything else). The notifier sets it aside before the secret check
+// (queue/run.ts): it carries no text of anyone.
+export function linkOf(
+  id: TemplateId,
+  data: Readonly<Record<string, Parsed>>,
+  ctx: RenderContext,
+): string {
+  return build(id, data, ctx).href;
+}
+
 // Null when the template has no SMS for this data (for example a reminder at 7 days).
 export function renderSms(
   id: TemplateId,

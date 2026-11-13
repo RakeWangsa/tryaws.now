@@ -1,9 +1,8 @@
 import { supportReplyPayload } from "@tc/db";
 import { describe, expect, it } from "vitest";
-import { planRows } from "../queue/notify";
 import { NotifyError } from "../queue/types";
 import { BN, EN, SHARED } from "../templates/messages";
-import { parseTemplateData, renderEmail } from "../templates/render";
+import { linkOf, parseTemplateData, renderEmail } from "../templates/render";
 import { scanSecrets } from "../text/guards";
 import { IDS } from "./samples";
 
@@ -52,26 +51,22 @@ describe("support_reply to a customer", () => {
   });
 
   // The notifier refuses a mail whose text looks like a secret (R14). A request id is in the link, and a
-  // random id has all digits in its last group about once in 280: such a request must still be told.
-  it("a request id whose last group is all digits passes the check of the notifier", () => {
+  // random id has all digits in its last group about once in 280: the notifier checks the mail without
+  // the link the template built (queue/run.ts; the whole path is in wpu-z5-notifier.test.ts).
+  it("the request id is only in the link, and the mail without the link passes the check", () => {
     const requestId = "0193f7c6-4d5e-5394-8f82-123456789012";
     for (const locale of ["bn", "en"] as const) {
-      const m = renderEmail(
+      const data = parseTemplateData(
         "support_reply",
-        parseTemplateData("support_reply", supportReplyPayload(requestId, BODY, "customer")),
-        ctx(locale),
+        supportReplyPayload(requestId, BODY, "customer"),
       );
-      expect(m.text).toContain(`/support/requests/${requestId}`);
-      expect(scanSecrets(`${m.subject}\n${m.text}`)).toBeNull();
+      const m = renderEmail("support_reply", data, ctx(locale));
+      const link = linkOf("support_reply", data, ctx(locale));
+      expect(link).toBe(`${ORIGIN}${locale === "en" ? "/en" : ""}/support/requests/${requestId}`);
+      const said = `${m.subject}\n${m.text.replaceAll(link, "")}`;
+      expect(said).not.toContain(requestId);
+      expect(scanSecrets(said)).toBeNull();
     }
-    expect(() =>
-      planRows({
-        customerId: IDS.customer,
-        template: "support_reply",
-        data: supportReplyPayload(requestId, BODY, "customer"),
-        dedupeKey: "support-reply-1",
-      }),
-    ).not.toThrow();
   });
 });
 

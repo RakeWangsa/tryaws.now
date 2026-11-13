@@ -36,17 +36,8 @@ const RULES: ReadonlyArray<readonly [string, RegExp]> = [
   ["email_address", /[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/],
 ];
 
-// A whole UUID (8-4-4-4-12 hex digits, no hex digit next to it) is the id of a row, never a secret. It is
-// set aside before the rules run, so that its digits cannot read as a document number or a phone number
-// (WPU-Z5: a request id in the link of a reply notice whose last group was all digits, about 1 random id
-// in 280, refused every notice of that request; an id in a data field was refused at queue time). Only
-// the id itself is set aside: a digit run or a phone number next to it is still found, and the neutral
-// word keeps "token: <id>" a secret.
-const WHOLE_UUID =
-  /(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f])/gi;
-
 export function scanSecrets(text: string): string | null {
-  const t = latin(text).replace(WHOLE_UUID, " id ");
+  const t = latin(text);
   for (const [name, re] of RULES) if (re.test(t)) return name;
   return null;
 }
