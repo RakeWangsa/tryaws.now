@@ -19,6 +19,7 @@ import { runFinalSnapshot, runPurgeSnapshots, type BackupDeps } from "./backup";
 import {
   checkWaitBudget,
   destroyWait,
+  detachWait,
   fail,
   hasTag,
   ignoreNotFound,
@@ -288,13 +289,15 @@ export function createDiskAdapter(deps: BackupDeps): ProductAdapter<DiskConfig> 
             await requireStoppedInstance(ctx, disk.attachedTo);
           }
           await lightsailOf(ctx).send(new DetachDiskCommand({ diskName: diskName(ctx) }));
-        } else if (withServer !== undefined) {
-          // WPU-Y4: bounded from this destroy's own first wait, not from createdAt (the approval queue).
-          return destroyWait(ctx, "wait_detached");
-        } else {
-          checkWaitBudget(ctx);
+          // WPU-Y4 fix round 1: the detach wait is bounded from here (the step's start, after the approval).
+          return withServer !== undefined
+            ? stepWait("wait_detached", pollAt(ctx))
+            : detachWait(ctx, "wait_detached");
         }
-        return stepWait("wait_detached", pollAt(ctx));
+        // WPU-Y4: bounded from this destroy's own first wait, not from createdAt (the approval queue).
+        return withServer !== undefined
+          ? destroyWait(ctx, "wait_detached")
+          : detachWait(ctx, "wait_detached");
       }
       return stepNext("delete_disk");
     }

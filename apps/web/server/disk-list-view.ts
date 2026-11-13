@@ -7,8 +7,10 @@ import { resourceFacts } from "./extras-actions.ts";
 // WPU-Y4: /servers/disks, every block storage disk of the customer in one list (any state, any Region, attached or
 // not), so a detached disk is never out of reach. Read through the repositories of the session's customer only
 // (R8): a disk's `attachedInstanceId` is shown as a server only when that server is one of the customer's own rows.
-// The page is behind the flag of the server family (the disk actions are its actions, R12); the auto-renew switch
-// follows the disk flag (an "off only" switch while it is off). Nothing here returns an AWS account id, an ARN or a
+// Fix round 1: every disk owner sees the list whatever the server flag, so a disk is never out of reach. Each action
+// keeps its own flag (R12): detach, destroy and attach are actions of the server family (their cores refuse with the
+// server flag off) and are offered only while it is on; the auto-renew switch follows the disk flag, and its OFF
+// switch always works (an "off only" switch while the flag is off, WPU-Z14). Nothing here returns an AWS account id, an ARN or a
 // generated AWS name, and the names the customer typed are only text (R11, U6). The actions check everything again.
 
 const SERVER_FAMILY = "linux_instance";
@@ -34,8 +36,7 @@ export interface DiskListItem {
   attachTargets: { id: string; name: string }[];
 }
 
-export type DiskListScreen =
-  { state: "flag_off" } | { state: "ready"; disks: DiskListItem[]; requestId: string };
+export type DiskListScreen = { state: "ready"; disks: DiskListItem[]; requestId: string };
 
 const nameOf = (row: ResourceSummary): string => {
   const c = row.config;
@@ -51,7 +52,10 @@ export function diskListOf(input: {
   rows: readonly ResourceSummary[];
   subscriptions: readonly SubscriptionRow[];
   diskFlagOn: boolean;
+  /** The server family's flag: detach, destroy and attach are its actions (R12). */
+  serverActionsOn: boolean;
 }): DiskListItem[] {
+  const on = input.serverActionsOn;
   const servers = new Map(
     input.rows.filter((r) => r.family === SERVER_FAMILY).map((r) => [r.id, r] as const),
   );
@@ -78,10 +82,10 @@ export function diskListOf(input: {
       attachedTo,
       subscriptionStatus: subscription?.status ?? null,
       autoRenew: autoRenewViewOf(DISK_FAMILY, row, subscription, input.diskFlagOn),
-      canDetach: row.state === "active" && attachedTo !== null && attachedTo.stopped,
-      canDestroy: free && LIVE.includes(row.state) && paidUp && facts.name !== "",
+      canDetach: on && row.state === "active" && attachedTo !== null && attachedTo.stopped,
+      canDestroy: on && free && LIVE.includes(row.state) && paidUp && facts.name !== "",
       attachTargets:
-        free && row.state === "active" && paidUp
+        on && free && row.state === "active" && paidUp
           ? liveServers
               .filter((s) => s.region === row.region)
               .map((s) => ({ id: s.id, name: nameOf(s) }))
@@ -104,15 +108,17 @@ export async function loadDiskList(
     const repos = customerRepos(tx, session.customerId);
     const profile = await repos.profile.get();
     if (profile === null) throw new Error("disk list: no customer row");
-    // R12, R16: a flag that is off or cannot be read shows the flag-off state.
-    if ((await readFeatureFlag(tx, SERVER_FAMILY, profile.market)) !== true) {
-      return { state: "flag_off" };
-    }
+    // R12, R16: a flag that is off or cannot be read offers none of its actions; the list itself is always shown.
+    const serverActionsOn = (await readFeatureFlag(tx, SERVER_FAMILY, profile.market)) === true;
     const diskFlagOn = (await readFeatureFlag(tx, DISK_FAMILY, profile.market)) === true;
     const [rows, subscriptions] = await Promise.all([
       repos.resources.list(),
       repos.subscriptions.list(),
     ]);
-    return { state: "ready", disks: diskListOf({ rows, subscriptions, diskFlagOn }), requestId };
+    return {
+      state: "ready",
+      disks: diskListOf({ rows, subscriptions, diskFlagOn, serverActionsOn }),
+      requestId,
+    };
   });
 }

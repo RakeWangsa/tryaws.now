@@ -73,16 +73,6 @@ const ready = (locale: Locale, list = disks) =>
   );
 
 describe("DiskListContent", () => {
-  it("flag off: the flag-off state, no list and no form (R12)", () => {
-    const html = render(
-      <DiskListContent locale="en" screen={{ state: "flag_off" }} actions={actions} />,
-      "en",
-    );
-    expect(html).toContain("Cloud servers are coming soon");
-    expect(html).not.toContain("<form");
-    expect(html).not.toContain("<table");
-  });
-
   it("empty: says so, in bn and en", () => {
     expect(ready("en", [])).toContain("You have no disk");
     expect(ready("bn", [])).toContain("আপনার কোনো ডিস্ক নেই");

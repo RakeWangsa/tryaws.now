@@ -32,8 +32,8 @@ const actions = {
 
 /**
  * /servers/disks (WPU-Y4): every block storage disk of the customer, any state, any Region, attached or not, with
- * the auto-renew switch and the disk actions, so a detached disk is never out of reach. Behind the flag of the
- * server family (R12).
+ * the auto-renew switch and the disk actions, so a detached disk is never out of reach. Shown to every customer
+ * whatever the server flag; each action follows its own flag (R12).
  */
 export default async function DiskListPage({ params }: Props) {
   const { locale } = await params;

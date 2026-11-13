@@ -10,7 +10,7 @@ import { ServersSubnav } from "../ServersSubnav.tsx";
 import { DestroyButton, PostButton, type ExtrasAction } from "../[id]/ExtrasForms.tsx";
 
 // The content of /servers/disks (WPU-Y4): every disk of the customer, so a disk that no server holds is never out of
-// reach. Synchronous, so it renders in a test without a request. The states: flag off (R12), empty and ready; loading
+// reach. Synchronous, so it renders in a test without a request. The states: empty and ready, whatever the server flag (each action keeps its own flag, R12); loading
 // and error are the loading.tsx and error.tsx of the route (U11). The actions are the existing disk actions of the
 // Storage tab (detach, destroy, the auto-renew switch); attaching is done on the server's own Storage tab. Nothing
 // here shows an account id, an ARN, a generated AWS name or an AWS error text (U6, R11).
@@ -33,9 +33,6 @@ export function DiskListContent({
   const t = useTranslations("DiskList");
   const te = useTranslations("Extras");
   const regionLabel = useRegionLabel();
-  if (screen.state === "flag_off") {
-    return <EmptyState title={t("flagOff.title")} description={t("flagOff.body")} />;
-  }
   const subnav = <ServersSubnav locale={locale} current="disks" />;
   if (screen.disks.length === 0) {
     return (

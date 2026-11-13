@@ -45,6 +45,8 @@ async function disk(
   const id = await newResource(t.pool, customerId, {
     family: "disk",
     state,
+    // resources_deleted_check: a destroyed row has deleted_at, any other row has none.
+    ...(state === "destroyed" ? { deleted_at: "2026-01-20T00:00:00Z" } : {}),
     config: JSON.stringify({
       region: "ap-southeast-1",
       sizeGb: 32,

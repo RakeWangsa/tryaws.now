@@ -29,8 +29,9 @@ async function serverPastGrace(): Promise<{ customerId: string; serverId: string
   await q("update operations set state = 'succeeded' where resource_id = $1", [resourceId]);
   // In grace since long ago, auto-renew off: the next pass retains it.
   await q(
-    "update subscriptions set status = 'grace', auto_renew = false, period_end = $2 where resource_id = $1",
-    [resourceId, new Date(START.getTime() - 30 * DAY)],
+    // subscriptions_period_check: the period end stays after its start.
+    "update subscriptions set status = 'grace', auto_renew = false, period_start = $2, period_end = $3 where resource_id = $1",
+    [resourceId, new Date(START.getTime() - 60 * DAY), new Date(START.getTime() - 30 * DAY)],
   );
   return { customerId: buyer.customerId, serverId: resourceId };
 }

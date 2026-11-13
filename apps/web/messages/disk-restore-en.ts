@@ -46,10 +46,6 @@ export const diskRestoreEn: Same<typeof diskRestoreBn> = {
     heading: "My disks",
     intro:
       "All your Amazon Lightsail block storage disks, in every location, attached to a server or not. A disk that is not attached is still billed until it is destroyed. When a server is destroyed, the disks attached to it are destroyed too.",
-    flagOff: {
-      title: "Cloud servers are coming soon",
-      body: "This service is not open in your market yet. You will be able to use it here once it opens.",
-    },
     empty: {
       title: "You have no disk",
       body: "Add a new disk from the Storage tab of a server.",

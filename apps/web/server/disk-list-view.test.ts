@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 // WPU-Y4: /servers/disks lists every disk of the customer (any state, any Region, attached or not). Cross-tenant
 // proof (R8): the loader opens the repositories of the session's customer only, and a disk's attachedInstanceId is
-// shown as a server only when that server is one of the customer's own rows. Flag off: nothing is listed (R12).
+// shown as a server only when that server is one of the customer's own rows. Fix round 1: every disk owner sees the
+// list whatever the server flag; the actions follow their own flags (R12).
 
 const A = "0190aaaa-0000-7000-8000-0000000000c1";
 const B = "0190aaaa-0000-7000-8000-0000000000c2";
@@ -139,10 +140,31 @@ describe("loadDiskList", () => {
     expect(b).toEqual({ state: "ready", disks: [], requestId: "r" });
   });
 
-  it("the server flag off shows the flag-off state and lists nothing (R12)", async () => {
+  it("fix round 1: the server flag off still lists every disk; detach, destroy and attach are not offered (R12)", async () => {
     seed();
     state.flags = { linux_instance: false, disk: true };
-    expect(await loadDiskList({ customerId: A } as never, "r")).toEqual({ state: "flag_off" });
+    const out = await loadDiskList({ customerId: A } as never, "r");
+    if (out.state !== "ready") throw new Error("ready expected");
+    expect(out.disks.map((d) => d.id).sort()).toEqual([ATTACHED, FAR, FREE, GONE, ODD].sort());
+    for (const d of out.disks) {
+      expect(d.canDetach).toBe(false);
+      expect(d.canDestroy).toBe(false);
+      expect(d.attachTargets).toEqual([]);
+    }
+    // The auto-renew switch keeps working (its own flag, the disk flag).
+    expect(out.disks.find((d) => d.id === ATTACHED)?.autoRenew).toMatchObject({ autoRenew: true });
+  });
+
+  it("fix round 1: both flags off, the OFF switch of an auto-renewing disk still works (WPU-Z14)", async () => {
+    seed();
+    state.flags = { linux_instance: false, disk: false };
+    const out = await loadDiskList({ customerId: A } as never, "r");
+    if (out.state !== "ready") throw new Error("ready expected");
+    expect(out.disks.find((d) => d.id === ATTACHED)?.autoRenew).toEqual({
+      resourceId: ATTACHED,
+      autoRenew: true,
+      canTurnOn: false,
+    });
   });
 
   it("the disk flag off keeps the list; the switch is off-only (none once off)", async () => {
@@ -172,6 +194,7 @@ describe("diskListOf", () => {
       rows,
       subscriptions: [sub(ATTACHED), sub(FREE, { status: "retained" }), sub(FAR)],
       diskFlagOn: true,
+      serverActionsOn: true,
     });
     const byId = new Map(out.map((d) => [d.id, d]));
     expect(byId.get(ATTACHED)).toMatchObject({ canDetach: false, attachedTo: { stopped: false } });

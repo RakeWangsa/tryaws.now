@@ -13,7 +13,7 @@ Support for the customer contact; operations (`ops` role) for the operation on `
 
 ## What the platform does
 
-The disk adapter (`packages/aws/adapters/disk.ts`) never stops a server. Detach and destroy of an attached disk read the live state of the server the disk is attached to and go on only when it is `stopped`; any other state, a server that is not found or an answer without a state is a refusal (`conflict`), so the operation stops in `needs_attention` and nothing is deleted (R16). A disk that is not attached is deleted at once by its destroy (`delete_disk`, after its final snapshot where the lifecycle asks for one).
+The disk adapter (`packages/aws/adapters/disk.ts`) never stops a server. Detach and destroy of an attached disk read the live state of the server the disk is attached to and go on only when it is `stopped`; any other state, a server that is not found or an answer without a state is a refusal (`conflict`), so the operation stops in `needs_attention` and nothing is deleted (R16). A disk that is not attached is deleted at once by its destroy (`delete_disk`, after its final snapshot where the lifecycle asks for one). After a DetachDisk, the destroy waits at most 20 minutes for the detach, counted from when the destroy step started (after the approval), never from when the operation was queued (WPU-Y4 fix round 1).
 
 ## The order (customer and support)
 
@@ -47,15 +47,15 @@ Owner decision 2026-11-14: "if server destroyed then the disk also needs to be d
 What the platform does:
 
 1. When a server's subscription becomes `retained` (the end of its grace, the unpaid rule, or the customer's own destroy), every disk attached to it (`resources.config.attachedInstanceId`) is retained in the same transaction: its subscription ends with the server's, so it is never renewed or charged again, and its `final_snapshot` and `destroy` are queued with the payload `withServer` = the server's id. Before 2026-12-01 both destroys wait in `needs_approval` (R13).
-2. The server's `destroy` (step `release_disks`) sees a block storage disk still attached: it stops the server (the stop is part of the approved destroy) and waits, at most 6 hours from its own first wait, until the disks are detached. It never sends DeleteInstance while a disk is attached.
-3. The disk's `destroy` (step `wait_server`) waits, at most 6 hours, until the server is stopped, then detaches the disk and deletes it. It never stops a server itself.
+2. The server's `destroy` (step `release_disks`) sees a block storage disk still attached: it stops the server (the stop is part of the approved destroy) and waits, at most 24 hours from its own first wait, until the disks are detached. It never sends DeleteInstance while a disk is attached.
+3. The disk's `destroy` (step `wait_server`) waits, at most 24 hours from its own first wait, until the server is stopped, then detaches the disk and deletes it. It never stops a server itself.
 4. Then the server's destroy deletes the instance and releases its static IP.
 
 Operations:
 
-1. Approve the server's `final_snapshot` and `destroy` and every attached disk's `final_snapshot` and `destroy` together (`/operations`, same customer, the disk rows name `withServer`). Approving only the server leaves its destroy waiting for the disks; it ends `needs_attention` with `conflict` after 6 hours and nothing is deleted.
+1. Approve the server's `final_snapshot` and `destroy` and every attached disk's `final_snapshot` and `destroy` together (`/operations`, same customer, the disk rows name `withServer`). Approving only the server leaves its destroy waiting for the disks; it ends `needs_attention` with `conflict` after 24 hours and nothing is deleted.
 2. A server destroy in `needs_attention` with `conflict` at step `release_disks`: check the disk destroys of the same server. Approve them (or `retryOperation` a disk destroy that is in `needs_attention`), and once each disk shows `destroyed`, `retryOperation` the server's destroy with a reason.
-3. A disk destroy in `needs_attention` with `conflict` at step `wait_server`: the server did not stop within 6 hours. Check the server's destroy (approved? running?). When the server is stopped, `retryOperation` the disk's destroy.
+3. A disk destroy in `needs_attention` with `conflict` at step `wait_server`: the server did not stop within 24 hours. Check the server's destroy (approved? running?). When the server is stopped, `retryOperation` the disk's destroy.
 4. A disk the customer wants to keep: it must be detached before the server's subscription is retained (Storage tab or `/servers/disks`). Once retained, it is destroyed with the server; its final backup can make a new disk (`/servers/disk-restore`).
 
 ## Rollback

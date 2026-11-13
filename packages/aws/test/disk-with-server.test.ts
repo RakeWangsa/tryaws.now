@@ -104,7 +104,57 @@ function setup(diskConfig: Record<string, unknown> = {}) {
   return { aws, adapter, ctx, calls, store };
 }
 
+// WPU-Y4 fix round 1: a disk destroyed on its own (no withServer) bounds its wait for the detach from when the
+// destroy step started (after the approval), not from when the operation was queued.
+describe("standalone disk destroy: the detach wait runs from the step's start", () => {
+  const plain = { subscriptionId: SUB_ID };
+
+  it("queued three days ago, detached now: the wait marks its own start instead of failing", async () => {
+    const { aws, adapter, ctx } = setup({ attachedInstanceId: null });
+    aws.on("lightsail", "GetDisk", attached());
+    aws.on("lightsail", "GetInstance", serverIn("stopped"));
+    aws.on("lightsail", "DetachDisk", lightsailOk({ operations: [] }));
+    expect(await adapter.aws.destroy(ctx(null, plain))).toMatchObject({
+      kind: "wait",
+      step: "wait_detached",
+      patch: {
+        configMerge: { destroyWait: { operationId: OP_ID, since: new Date(NOW).toISOString() } },
+      },
+    });
+  });
+
+  it("still detaching 10 minutes after the start: waits; 21 minutes after: upstream_unavailable", async () => {
+    const recent = new Date(NOW - 10 * 60_000).toISOString();
+    const a = setup({ destroyWait: { operationId: OP_ID, since: recent } });
+    a.aws.on("lightsail", "GetDisk", attached());
+    expect(await a.adapter.aws.destroy(a.ctx("wait_detached", plain))).toMatchObject({
+      kind: "wait",
+      step: "wait_detached",
+    });
+    const old = new Date(NOW - 21 * 60_000).toISOString();
+    const b = setup({ destroyWait: { operationId: OP_ID, since: old } });
+    b.aws.on("lightsail", "GetDisk", attached());
+    await expect(b.adapter.aws.destroy(b.ctx("wait_detached", plain))).rejects.toMatchObject({
+      code: "upstream_unavailable",
+    });
+  });
+
+  it("detached: goes on to delete whatever the mark says", async () => {
+    const old = new Date(NOW - 99 * 60_000).toISOString();
+    const { aws, adapter, ctx } = setup({ destroyWait: { operationId: OP_ID, since: old } });
+    aws.on("lightsail", "GetDisk", detached());
+    expect(await adapter.aws.destroy(ctx("wait_detached", plain))).toMatchObject({
+      kind: "next",
+      step: "delete_disk",
+    });
+  });
+});
+
 describe("disk destroy with its server (WPU-Y4)", () => {
+  it("the partner wait is 24 hours (fix round 1: an admin approval can take a day)", () => {
+    expect(DESTROY_WAIT_MS).toBe(24 * 60 * 60 * 1000);
+  });
+
   it("waits for the server's destroy to stop the server: no DetachDisk, a wait mark is written", async () => {
     const { aws, adapter, ctx, calls } = setup();
     aws.on("lightsail", "GetDisk", attached());
