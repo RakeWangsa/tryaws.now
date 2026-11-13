@@ -18,22 +18,29 @@ export interface FxRateUnavailable {
 }
 
 /**
- * The refusal for the rate that would price something at `now`, or null when it is fresh. Pure. `effectiveFrom` of
- * the row in force is the moment the rate began to apply: the rate cannot be older than the person who set it
- * wanted it to be, and a scheduled start is at most 90 days ahead (resolveStart).
+ * The refusal for the rate that would price something at `now`, or null when it is fresh. Pure.
+ * WPU-Y9 (R16): the age is the time since the rate was ENTERED (`createdAt`, the approval), not since the start it
+ * names. A rate typed once and scheduled ahead therefore cannot price for longer than the maximum age counted from
+ * its entry. A rate whose start is still ahead of `now` (beyond the clock tolerance) is not in force: refused. A
+ * missing or unreadable `createdAt` refuses.
  */
 export function fxFreshnessRefusal(
-  fx: { effectiveFrom: Date } | null,
+  fx: { effectiveFrom: Date; createdAt: Date } | null,
   now: Date,
   maxAgeDays?: number,
 ): FxRateUnavailable | null {
   if (fx === null) return refusal("missing");
-  const fresh =
+  // The start is checked with the same rule as before: a start from the future beyond the tolerance is not fresh.
+  const started = rateIsFresh(fx.effectiveFrom, now, FUTURE_CHECK_DAYS);
+  const entered =
     maxAgeDays === undefined
-      ? rateIsFresh(fx.effectiveFrom, now)
-      : rateIsFresh(fx.effectiveFrom, now, maxAgeDays);
-  return fresh ? null : refusal("stale");
+      ? rateIsFresh(fx.createdAt, now)
+      : rateIsFresh(fx.createdAt, now, maxAgeDays);
+  return started && entered ? null : refusal("stale");
 }
+
+// Only used to ask "has the start been reached": a start older than this is not a freshness problem of the start.
+const FUTURE_CHECK_DAYS = 36_500;
 
 function refusal(why: "missing" | "stale"): FxRateUnavailable {
   return {

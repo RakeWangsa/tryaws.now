@@ -1,5 +1,5 @@
 import { adminRepos, readAdminApprover, type AdminActor, type FxRateRow, type Tx } from "@tc/db";
-import { isFxRateText } from "../pricing/index";
+import { FX_RATE_MAX_AGE_DAYS, isFxRateText } from "../pricing/index";
 import type { Clock, Result } from "../types";
 import { isMarketText, isUuidText, marketProblem, reasonProblem, resolveStart } from "./common";
 
@@ -7,7 +7,7 @@ export interface SetFxRateInput {
   market: string;
   /** Plain decimal text, at most 6 digits before and 6 after the point. */
   rate: string;
-  /** Defaults to the instant of the call. Never in the past, at most 90 days ahead. */
+  /** Defaults to the instant of the call. Never in the past, at most 7 days ahead (WPU-Y9). */
   effectiveFrom?: Date;
   reason: string;
   /** The second admin of a change of more than 5 percent (named by the caller, see open point 5). */
@@ -47,7 +47,8 @@ export async function setFxRate(
   const why = reasonProblem(reason);
   if (why !== null) fields.reason = why;
   if (requestedBy !== undefined && !isUuidText(requestedBy)) fields.requestedBy = "invalid";
-  const start = resolveStart(effectiveFrom, at);
+  // WPU-Y9: a rate starts at most FX_RATE_MAX_AGE_DAYS after it is entered, so it is never entered long before use.
+  const start = resolveStart(effectiveFrom, at, FX_RATE_MAX_AGE_DAYS);
   if (!start.ok) fields.effectiveFrom = start.problem;
   if (!start.ok || Object.keys(fields).length > 0) {
     return { ok: false, error: "validation", fields };
@@ -79,11 +80,11 @@ export async function setFxRate(
     reason,
   );
   if (written.ok) {
-    const { id, market: code, rate: saved, effectiveFrom: from } = written.value;
+    const { id, market: code, rate: saved, effectiveFrom: from, createdAt } = written.value;
     return {
       ok: true,
       value: {
-        fx: { id, market: code, rate: saved, effectiveFrom: from },
+        fx: { id, market: code, rate: saved, effectiveFrom: from, createdAt },
         replayed: written.replayed,
       },
     };

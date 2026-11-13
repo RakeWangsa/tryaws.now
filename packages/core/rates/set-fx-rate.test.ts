@@ -145,10 +145,10 @@ it("the same start again with the same rate is a replay; with another rate it is
   expect(await count()).toBe(n);
 });
 
-it(`a start up to ${MAX_SCHEDULE_DAYS} days ahead is accepted; one millisecond further, or in the past, is refused`, async () => {
+it("a rate starts at most 7 days ahead (WPU-Y9); one millisecond further, or in the past, is refused", async () => {
   const now = day(6);
-  const limit = new Date(now.getTime() + MAX_SCHEDULE_DAYS * 86_400_000);
-  expect(MAX_SCHEDULE_DAYS).toBe(90);
+  const limit = new Date(now.getTime() + 7 * 86_400_000);
+  expect(MAX_SCHEDULE_DAYS).toBe(90); // the limit of the other changes (rules, books) is unchanged
   expect(await set({ rate: "151", effectiveFrom: limit }, now)).toMatchObject({ ok: true });
   expect(await set({ rate: "152", effectiveFrom: new Date(limit.getTime() + 1) }, now)).toEqual({
     ok: false,

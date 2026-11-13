@@ -19,19 +19,20 @@ const isInstant = (v: unknown): v is Date => v instanceof Date && !Number.isNaN(
 
 /**
  * Milliseconds from the moment the earlier rate went stale until `now`, while `now` is within three days of the refreshed
- * rate taking effect; otherwise 0. `previousEffectiveFrom` is the start of the rate before the one in force,
+ * rate taking effect; otherwise 0. `previousEnteredAt` is the moment the rate before the one in force was ENTERED
+ * (WPU-Y9: the age of a rate counts from its entry, see fx-gate.ts),
  * `currentEffectiveFrom` the start of the one in force.
  */
 export function staleWindowMs(
-  previousEffectiveFrom: Date | null,
+  previousEnteredAt: Date | null,
   currentEffectiveFrom: Date,
   now: Date,
 ): number {
-  if (previousEffectiveFrom === null) return 0;
-  if (!isInstant(previousEffectiveFrom) || !isInstant(currentEffectiveFrom) || !isInstant(now)) {
+  if (previousEnteredAt === null) return 0;
+  if (!isInstant(previousEnteredAt) || !isInstant(currentEffectiveFrom) || !isInstant(now)) {
     return 0;
   }
-  const staleFrom = previousEffectiveFrom.getTime() + FX_RATE_MAX_AGE_DAYS * DAY_MS;
+  const staleFrom = previousEnteredAt.getTime() + FX_RATE_MAX_AGE_DAYS * DAY_MS;
   if (currentEffectiveFrom.getTime() <= staleFrom) return 0;
   const sinceRefresh = now.getTime() - currentEffectiveFrom.getTime();
   if (sinceRefresh < 0 || sinceRefresh > MAX_CATCH_UP_AFTER_REFRESH_MS) return 0;

@@ -42,14 +42,18 @@ export async function marketProblem(
 export type Start =
   { ok: true; value: Date } | { ok: false; problem: "invalid" | "in_the_past" | "too_far_ahead" };
 
-/** The start of a change: `given`, or `at` when not given. Never before `at`; at most 90 days after. */
-export function resolveStart(given: Date | undefined, at: Date): Start {
+/** The start of a change: `given`, or `at` when not given. Never before `at`; at most `maxDays` (default 90) after. */
+export function resolveStart(
+  given: Date | undefined,
+  at: Date,
+  maxDays: number = MAX_SCHEDULE_DAYS,
+): Start {
   const value = given ?? at;
   if (!(value instanceof Date) || Number.isNaN(value.getTime()))
     return { ok: false, problem: "invalid" };
   if (Number.isNaN(at.getTime())) return { ok: false, problem: "invalid" };
   if (value.getTime() < at.getTime()) return { ok: false, problem: "in_the_past" };
-  if (value.getTime() - at.getTime() > MAX_SCHEDULE_DAYS * DAY_MS) {
+  if (value.getTime() - at.getTime() > maxDays * DAY_MS) {
     return { ok: false, problem: "too_far_ahead" };
   }
   return { ok: true, value };

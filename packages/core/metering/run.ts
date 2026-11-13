@@ -106,11 +106,11 @@ export const defaultMeteringOps: MeteringOps = {
   },
   staleWindowMs: async (tx, clock, market) => {
     const now = clock.now();
-    const rows = await readFxRates(tx, market, 3);
-    const inForce = rows.find((r) => r.effectiveFrom.getTime() <= now.getTime());
+    // WPU-Y9: only the rates that have started (a future row cannot push the one in force out of the list).
+    const rows = await readFxRates(tx, market, 2, now);
+    const [inForce, before] = rows;
     if (inForce === undefined) return 0;
-    const before = rows.find((r) => r.effectiveFrom.getTime() < inForce.effectiveFrom.getTime());
-    return staleWindowMs(before?.effectiveFrom ?? null, inForce.effectiveFrom, now);
+    return staleWindowMs(before?.createdAt ?? null, inForce.effectiveFrom, now);
   },
   repo: (tx) => {
     const m = meteringRepo(tx);

@@ -100,6 +100,7 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
               market: fxRates.market,
               rate: sql<string>`trim_scale(${fxRates.rate})::text`,
               effectiveFrom: fxRates.effectiveFrom,
+              createdAt: fxRates.createdAt,
               same: sql<boolean>`(${fxRates.rate} = ${rate}::numeric)`,
             };
             const [atStart] = await tx
@@ -119,6 +120,7 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
               market: r.market,
               rate: r.rate,
               effectiveFrom: r.effectiveFrom,
+              createdAt: r.createdAt,
             });
             if (atStart) {
               if (!atStart.same) throw new Conflict();
@@ -141,9 +143,11 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
               sql`insert into fx_rates (id, market, rate, effective_from, set_by)
                   values (${uuidv7()}, ${market}, ${rate}::numeric, ${effectiveFrom}, ${actor.adminId})
                   on conflict (market, effective_from) do nothing
-                  returning id, trim_scale(rate)::text as rate`,
+                  returning id, trim_scale(rate)::text as rate, created_at`,
             );
-            const inserted = result.rows[0] as unknown as { id: string; rate: string } | undefined;
+            const inserted = result.rows[0] as unknown as
+              | { id: string; rate: string; created_at: Date }
+              | undefined;
             // Cannot happen while the lock is held (every other saver of the market waits or has
             // finished); a guard only (open point 20).
             if (!inserted) {
@@ -154,6 +158,7 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
               market,
               rate: inserted.rate,
               effectiveFrom,
+              createdAt: new Date(inserted.created_at),
               laterChangePending: null,
             };
             return {
