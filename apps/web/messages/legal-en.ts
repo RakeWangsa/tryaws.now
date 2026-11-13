@@ -54,6 +54,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         p2: "At the end of a period, if auto-renew is on and your wallet holds enough, we renew the resource for another 30 days and issue an invoice. A renewal is charged at the price and the exchange rate of the renewal day.",
         p3: "We remind you by email 7, 3 and 1 day before a period ends, with the renewal amount at the rate of that day and your wallet balance, and by SMS 1 day before.",
         p4: "If auto-renew is off, renew the resource in the panel before the period ends.",
+        p5: "A domain is renewed 30 days before its expiry date, not on the expiry date. We charge your wallet the renewal price of the domain’s TLD in taka at the rate of that day, and ask the registry to renew the domain. If your wallet does not hold enough, we try again until the renewal succeeds or the domain expires.",
       },
       notRenewed: {
         title: "9. When a period is not renewed",
@@ -200,6 +201,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         title: "4. Cancelled charges and partial refunds",
         p1: "When we cancel a purchase or a renewal, we cancel all of it: the whole amount goes back to your wallet and you get a credit note in taka for its invoice.",
         p2: "A refund of part of a charge is only made by hand, after two members of our staff have approved it, and the reason is recorded.",
+        p3: "If the registry refuses or fails to renew a domain, we put the amount of that renewal back into your wallet and you get a credit note in taka. The domain is then not renewed; renew it again from its page in the panel before it expires.",
       },
       payout: {
         title: "5. Paying out wallet money",

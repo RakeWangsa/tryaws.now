@@ -11,11 +11,11 @@ const BENGALI_DIGITS = "০১২৩৪৫৬৭৮৯";
 const bengali = (n: string): string => n.replace(/\d/g, (d) => BENGALI_DIGITS[Number(d)] as string);
 
 describe("LEGAL_VERSIONS", () => {
-  it("records the approved version 1 of 14 November 2026 for each of the three documents", () => {
+  it("records version 2 of 14 November 2026 for each of the three documents", () => {
     expect(LEGAL_VERSIONS).toEqual({
-      terms: "2026-11-14-1",
-      acceptable_use: "2026-11-14-1",
-      privacy: "2026-11-14-1",
+      terms: "2026-11-14-2",
+      acceptable_use: "2026-11-14-2",
+      privacy: "2026-11-14-2",
     });
     for (const version of Object.values(LEGAL_VERSIONS)) expect(version).not.toMatch(/draft/i);
   });
