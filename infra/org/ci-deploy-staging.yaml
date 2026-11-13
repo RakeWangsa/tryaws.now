@@ -1,18 +1,20 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  TiCON Cloud CI role TcCiDeployStaging (R3, B.1 of docs/analysis/pending-audit.md) and the permissions
-  boundary TcCiRoleBoundary that every role it creates must carry. Assumed by the job `deploy` of
-  .github/workflows/deploy-staging.yml through GitHub OIDC, in the STAGING account only. The trust is the
-  three conditions that workflow documents: aud, sub = the GitHub environment `staging`, and
-  job_workflow_ref = that workflow on the protected branch. A pull request, a fork or any other workflow
-  cannot assume it. Deploy with the DevOps admin role after ci-oidc-provider.yaml. The organisation and
-  repository names are parameters; no account id or name is written here.
-  PRIVILEGE ESCALATION GUARD: the role can create, change and pass only roles named tc-* (the function
-  and platform roles of infra/lib/stage.ts roleName) and ticon-cloud-* (the roles SST names itself), and
-  only when the role carries the boundary below; it can attach only the listed AWS managed policies; it
-  can pass a role only to the listed services; it can never remove or replace the boundary, change the
-  boundary policy, touch the CI roles, mint users or keys, or change CloudTrail, GuardDuty or the
-  organization. A compromised deploy job therefore cannot make itself or any role an administrator.
+  TiCON Cloud CI role TcCiDeployStaging and its permissions boundary TcCiRoleBoundary. Assumed through GitHub OIDC by the staging deploy job only (aud, sub = environment staging, job_workflow_ref on the protected branch). Full notes are in the comments at the top of this file.
+# Description (moved from the Description field: CloudFormation allows at most 1024 characters):
+# TiCON Cloud CI role TcCiDeployStaging (R3, B.1 of docs/analysis/pending-audit.md) and the permissions
+# boundary TcCiRoleBoundary that every role it creates must carry. Assumed by the job `deploy` of
+# .github/workflows/deploy-staging.yml through GitHub OIDC, in the STAGING account only. The trust is the
+# three conditions that workflow documents: aud, sub = the GitHub environment `staging`, and
+# job_workflow_ref = that workflow on the protected branch. A pull request, a fork or any other workflow
+# cannot assume it. Deploy with the DevOps admin role after ci-oidc-provider.yaml. The organisation and
+# repository names are parameters; no account id or name is written here.
+# PRIVILEGE ESCALATION GUARD: the role can create, change and pass only roles named tc-* (the function
+# and platform roles of infra/lib/stage.ts roleName) and ticon-cloud-* (the roles SST names itself), and
+# only when the role carries the boundary below; it can attach only the listed AWS managed policies; it
+# can pass a role only to the listed services; it can never remove or replace the boundary, change the
+# boundary policy, touch the CI roles, mint users or keys, or change CloudTrail, GuardDuty or the
+# organization. A compromised deploy job therefore cannot make itself or any role an administrator.
 # VERIFY: IAM evaluates the GitHub claim `job_workflow_ref` as the condition key
 # token.actions.githubusercontent.com:job_workflow_ref (current IAM documentation, "Configure a role for
 # GitHub OIDC identity provider"). Its value has NO "repo:" prefix: <org>/<repo>/.github/workflows/<file>@<ref>.

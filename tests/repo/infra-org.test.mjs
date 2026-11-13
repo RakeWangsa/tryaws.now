@@ -1013,3 +1013,15 @@ describe("security review rules (WP0-T5 review)", () => {
     expect(text).toContain("packages/aws/adapters/cdn.ts");
   });
 });
+
+// Found by the owner's first `aws cloudformation validate-template` (2026-11-13): AWS rejects a
+// template whose Description is longer than 1024 characters (ci-deploy-staging and ci-deploy-production
+// had 1270 and 1342). Long notes belong in comments. Every .yaml file in this folder is checked.
+describe("CloudFormation limits that the owner's first validation found", () => {
+  const yamlFiles = files.filter((n) => n.endsWith(".yaml"));
+  it.each(yamlFiles)("%s: the Description has at most 1024 bytes", (name) => {
+    const doc = load(name);
+    expect(typeof doc.Description, `${name} Description`).toBe("string");
+    expect(Buffer.byteLength(doc.Description, "utf8")).toBeLessThanOrEqual(1024);
+  });
+});
