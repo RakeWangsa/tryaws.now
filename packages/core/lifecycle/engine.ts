@@ -23,7 +23,7 @@ import { resumeAfterRenewalAllowed, retentionKeyNeedsSalt } from "./resume-rule"
 import { SNAPSHOT_FAMILIES } from "./guard";
 import { planApplyWait, queuePlanApply } from "./plan-change";
 import { renewalQuote, renewSubscription } from "./renew";
-import { isFxRateUnavailable } from "../rates/fx-gate";
+import { holdReasonOf, nextHoldMarker, staleHoldMarkers, type HoldReason } from "./hold-rule";
 
 const HOUR_MS = 3_600_000;
 export const LIFECYCLE_LIMIT = 500;
@@ -139,6 +139,9 @@ async function ensureSuspended(work: Work): Promise<void> {
 // retained or destroyed because of it, and the renewal is tried again on every sweep (the period start stays the
 // OLD period end, so no day is lost and the ledger key stops a second charge, R7). The marker lets a subscription
 // whose grace ran out during the hold try to renew once before it is retained.
+// WPU-Z1 (R16). The same hold, under the same key, for every other failure to price or post the renewal that is
+// not the customer's wallet (a stored price that cannot be read, no pricing rule in force, a ledger refusal). The
+// marker says why: `{ since, reason: "fx_rate" | "price_unavailable", error? }` (hold-rule.ts).
 export const FX_HOLD_KEY = "fxRateHold";
 
 const isHeld = (row: LifecycleRow): boolean => {
@@ -146,17 +149,25 @@ const isHeld = (row: LifecycleRow): boolean => {
   return v !== undefined && v !== null;
 };
 
-async function holdForRate(work: Work, deps: LifecycleDeps, where: string): Promise<void> {
+async function holdRenewal(
+  work: Work,
+  deps: LifecycleDeps,
+  where: string,
+  why: HoldReason,
+): Promise<void> {
   const { row } = work;
-  if (!isHeld(row)) {
-    await patchResource(work.tx, row.resourceId, {
-      configMerge: { [FX_HOLD_KEY]: { since: work.now.toISOString() } },
-    });
+  // Written once: a repeat writes nothing, another reason updates the reason only (`since` never moves).
+  const marker = nextHoldMarker(row.resource.config[FX_HOLD_KEY], why, work.now);
+  if (marker !== null) {
+    await patchResource(work.tx, row.resourceId, { configMerge: { [FX_HOLD_KEY]: marker } });
   }
-  // Ids and fixed words only (R14).
+  // Ids and fixed words only (R14): the error is a code of ErrorCode, never a message. The line with
+  // reason price_unavailable alarms (infra/stacks/alarms.ts): a person has to repair the price.
   deps.log({
     event: "lifecycle_renewal_held",
-    reason: "fx_rate_unavailable",
+    ...(why.reason === "fx_rate"
+      ? { reason: "fx_rate_unavailable" }
+      : { reason: "price_unavailable", error: why.error }),
     where,
     subscriptionId: row.id,
     resourceId: row.resourceId,
@@ -181,6 +192,25 @@ const graceFromOf = (row: LifecycleRow): Date | null => {
   const at = new Date(v);
   return Number.isNaN(at.getTime()) || at.toISOString() !== v ? null : at;
 };
+
+// WPU-Z1. renewNow (the customer pays by hand) runs as web_rw, which cannot write resources.config, so the hold
+// marker and the graceFrom of the period it paid stay behind. Once the subscription is active again with its period
+// end ahead they are stale (hold-rule.ts) and are cleared here, before the decision: left alone, a stale hold marker
+// would move the start of a later period's grace from that period end to a sweep (WPU-Y9). In no other state is a
+// marker cleared here.
+async function clearStaleMarkers(tx: Tx, row: LifecycleRow, now: Date): Promise<LifecycleRow> {
+  const config = row.resource.config;
+  const view = {
+    status: row.status,
+    periodEnd: row.periodEnd,
+    hold: config[FX_HOLD_KEY],
+    graceFrom: config[GRACE_FROM_KEY],
+  };
+  if (!staleHoldMarkers(view, now)) return row;
+  const cleared = { [FX_HOLD_KEY]: null, [GRACE_FROM_KEY]: null };
+  await patchResource(tx, row.resourceId, { configMerge: cleared });
+  return { ...row, resource: { ...row.resource, config: { ...config, ...cleared } } };
+}
 
 async function afterRenewal(
   work: Work,
@@ -318,8 +348,10 @@ async function process(
   config: LifecycleConfig,
   deps: LifecycleDeps,
 ): Promise<StepResult> {
-  const row = await lifecycleRepo(tx).lock(id);
-  if (row === null) return { step: "none", messages: [] };
+  const locked = await lifecycleRepo(tx).lock(id);
+  if (locked === null) return { step: "none", messages: [] };
+  // WPU-Z1: markers that a renewal by hand left behind go first, so nothing below reads them.
+  const row = await clearStaleMarkers(tx, locked, now);
   const work = new Work(tx, row, now, config);
   const clock: Clock = { now: () => now };
 
@@ -388,19 +420,24 @@ async function process(
         }
         // WPU-Y1: our rate is the problem, not the customer's wallet. No grace, no suspension: the renewal
         // stays pending and the next sweep prices it again (R16 refuses the price, R7 stops a double charge).
-        if (isFxRateUnavailable(renewed)) {
-          await holdForRate(work, deps, "period_end");
+        // WPU-Z1: the same for every other failure that is not the wallet (insufficient_balance).
+        const why = holdReasonOf(renewed);
+        if (why !== null) {
+          await holdRenewal(work, deps, "period_end", why);
+          break;
+        }
+      } else {
+        // WPU-Y10. A subscription WITHOUT auto-renew has no renewal to try, but the customer's way to pay by hand
+        // needs a price too (renewNow refuses without one). While it cannot be priced (WPU-Z1: for any reason, our
+        // rate or not) the period end is held like a renewal: no grace, no suspension, so the platform's gap never
+        // costs the customer days.
+        const why = holdReasonOf(await renewalQuote(tx, row, clock));
+        if (why !== null) {
+          await holdRenewal(work, deps, "period_end", why);
           break;
         }
       }
-      // WPU-Y10. A subscription WITHOUT auto-renew has no renewal to try, but the customer's way to pay by hand
-      // needs a price too (renewNow refuses with prices_updating). While our rate is missing or stale the period
-      // end is held like a renewal: no grace, no suspension, so the platform's gap never costs the customer days.
-      if (!action.tryRenew && isFxRateUnavailable(await renewalQuote(tx, row, clock))) {
-        await holdForRate(work, deps, "period_end");
-        break;
-      }
-      // WPU-Y9: a renewal that was held for the rate and now fails for the wallet starts its grace now.
+      // WPU-Y9: a renewal that was held and now fails for the wallet starts its grace now.
       const fromHold = isHeld(row);
       if (fromHold) await releaseHold(work);
       await enterGrace(work, deps, fromHold ? work.now : undefined);
@@ -412,12 +449,16 @@ async function process(
       if (renewed.ok) {
         await afterRenewal(work, renewed.value, true);
         step = "renewed";
-      } else if (isFxRateUnavailable(renewed)) {
-        await holdForRate(work, deps, "retry_renew");
-      } else {
-        if (isHeld(row)) await releaseHold(work); // WPU-Y9: the grace starts at the release
-        await ensureSuspended(work);
+        break;
       }
+      // WPU-Y1, WPU-Z1: held when the wallet is not the reason.
+      const why = holdReasonOf(renewed);
+      if (why !== null) {
+        await holdRenewal(work, deps, "retry_renew", why);
+        break;
+      }
+      if (isHeld(row)) await releaseHold(work); // WPU-Y9: the grace starts at the release
+      await ensureSuspended(work);
       break;
     }
     case "retain": {
@@ -425,9 +466,12 @@ async function process(
       // One whose grace ran out during such a hold gets one renewal before it is retained.
       // WPU-Y10. Without auto-renew nothing is ever charged here. While the rate cannot be priced the retention
       // waits too; once the rate is back the grace runs from that moment (graceFrom), exactly as for a held renewal.
+      // WPU-Z1. "Cannot be priced" is any failure that is not the wallet: our rate, a stored price that cannot be
+      // read, no pricing rule in force, a ledger refusal.
       if (!row.autoRenew) {
-        if (isFxRateUnavailable(await renewalQuote(tx, row, clock))) {
-          await holdForRate(work, deps, "retain");
+        const why = holdReasonOf(await renewalQuote(tx, row, clock));
+        if (why !== null) {
+          await holdRenewal(work, deps, "retain", why);
           break;
         }
         if (isHeld(row)) {
@@ -444,8 +488,9 @@ async function process(
             step = "renewed";
             break;
           }
-          if (isFxRateUnavailable(renewed)) {
-            await holdForRate(work, deps, "retain");
+          const why = holdReasonOf(renewed);
+          if (why !== null) {
+            await holdRenewal(work, deps, "retain", why);
             break;
           }
           // WPU-Y9: the grace ran out during the hold and the wallet is short now. The customer gets the grace
@@ -453,9 +498,12 @@ async function process(
           await releaseHold(work);
           await ensureSuspended(work);
           break;
-        } else if (isFxRateUnavailable(await renewalQuote(tx, row, clock))) {
-          await holdForRate(work, deps, "retain");
-          break;
+        } else {
+          const why = holdReasonOf(await renewalQuote(tx, row, clock));
+          if (why !== null) {
+            await holdRenewal(work, deps, "retain", why);
+            break;
+          }
         }
       }
       await retain(work);

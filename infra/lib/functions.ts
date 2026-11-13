@@ -299,6 +299,10 @@ export const ALERT_LOG_EVENTS = {
   // packages/core/rates/fx-watch.ts (log by the scheduler): WPU-Y1, the hand-set USD to BDT rate is older than
   // 6 days or missing; written once a day. After 7 days purchases are refused (R16).
   fxRateStaleWarning: "fx_rate_stale_warning",
+  // packages/core/lifecycle/engine.ts (log by the scheduler, on every sweep while it lasts): a renewal is held,
+  // nothing is charged, graced or retained. WPU-Z1: the alert matches only the lines with the reason of
+  // ALERT_LOG_REASONS (the rate has its own alert above).
+  lifecycleRenewalHeld: "lifecycle_renewal_held",
   // functions/reconciler/reconcile.ts (the hourly run): a run that found orphans or missing resources,
   // could not read something, found stale operations, or could not write usage.
   reconcileFindings: "reconcile_findings",
@@ -307,6 +311,13 @@ export const ALERT_LOG_EVENTS = {
   reconcileUsageFailed: "reconcile_usage_failed",
   // The healthy line of a run: its silence is an alarm too.
   reconcileOk: "reconcile_ok",
+} as const;
+// WPU-Z1: the value of the field `reason` that an alert matches next to its event, written by the same code (the
+// repo test checks it there too).
+export const ALERT_LOG_REASONS = {
+  // packages/core/lifecycle/engine.ts: the renewal could not be priced or posted for another reason than the
+  // rate or the wallet (a stored price that cannot be read, no pricing rule in force, a ledger refusal).
+  renewalPriceUnavailable: "price_unavailable",
 } as const;
 export const ALERT_METRIC_NAMESPACE = "TiconCloud/Alerts";
 // The reconciler runs every hour and logs reconcile_ok or reconcile_incomplete every time it finishes.

@@ -13,7 +13,7 @@ import { createMemoryQueue } from "../operations/queue";
 import type { ChargeSnapshot } from "../pricing/charge-snapshot";
 import type { MeteredUnitPrice } from "../pricing/metering";
 import type { StaticIpPrice } from "../products/static-ip-price";
-import type { Result } from "../types";
+import type { ErrorCode, Result } from "../types";
 import { UNPAID_PERIOD_CAP, runUnpaid, unpaidRunKey, type UnpaidOps } from "./index";
 import { ipWithInputs, withInputs } from "../test/metered-inputs";
 
@@ -58,6 +58,8 @@ interface World {
   seed: Seed[];
   /** WPU-Y3c. Operations whose cancel loses the race (they started in the meantime). */
   cancelLoses: string[];
+  /** WPU-Z1. The ledger refuses every new posting with this code (another reason than the wallet). */
+  postError?: ErrorCode;
 }
 
 interface Seed {
@@ -209,6 +211,7 @@ function build(init: Partial<World> = {}) {
     },
     post: async (_tx, input): Promise<Result<{ transactionId: string }>> => {
       if (posted.has(input.idempotencyKey)) return { ok: true, value: { transactionId: "x" } };
+      if (w.postError !== undefined) return { ok: false, error: w.postError };
       const wallet = input.postings.find((p) => p.account.type === "customer_wallet")!;
       if (w.balance < wallet.amountMinor) {
         return { ok: false, error: "insufficient_balance", data: { shortfallMinor: 1n } };
@@ -898,6 +901,60 @@ describe("held static IP hours without the unpaid clock", () => {
     expect(report.stillUnpaid).toBe(1);
     expect(t.ops.size).toBe(0); // not suspended: the clock is at day 0
     expect([...t.notices.values()].map((n) => n.template)).toEqual(["unpaid_warning"]);
+  });
+});
+
+// WPU-Z1 (requirement 5). Only a charge that the wallet cannot pay (insufficient_balance) starts the unpaid clock or
+// moves a customer toward suspension or deletion. A charge that cannot be priced (no price in force, the rate or not),
+// or that the ledger refuses for another reason, decides nothing at any stage of the clock: no clock, no suspension,
+// no retention, no message. The job already refuses such a run ("blocked"); this pins it.
+describe("a charge that cannot be priced or posted for another reason than the wallet (WPU-Z1)", () => {
+  const heldHours = () => ({
+    staticIpAttached: true,
+    unpaidIpFrom: "2026-11-20T01",
+    unpaidIpTo: "2026-11-20T03",
+  });
+  const cases: [string, Partial<World>][] = [
+    [
+      "held hours without a clock, the ledger refuses the posting (conflict)",
+      { config: heldHours(), ipPrice: IP, postError: "conflict", balance: 1_000_000n },
+    ],
+    [
+      "clock at day 3 (the suspension stage), the ledger refuses the posting (internal)",
+      {
+        config: { unpaidSince: since(3 * DAY) },
+        usage: days("2026-11-15", "2026-11-19"),
+        postError: "internal",
+        balance: 1_000_000n,
+      },
+    ],
+    [
+      "clock at day 8 (the deletion stage), the static IP hours have no price in force",
+      { config: { unpaidSince: since(8 * DAY), ...heldHours() }, ipPrice: null, balance: 0n },
+    ],
+    [
+      "clock at day 8 (the deletion stage), snapshot storage has no price",
+      {
+        config: { unpaidSince: since(8 * DAY) },
+        usage: days("2026-11-10", "2026-11-19"),
+        unit: null,
+        balance: 0n,
+      },
+    ],
+  ];
+
+  it.each(cases)("%s: no clock, no suspension, no retention, no message", async (_name, init) => {
+    const t = build(init);
+    const clockBefore = t.w.config.unpaidSince;
+    const report = await t.run();
+    expect(report.blocked).toBe(1);
+    expect(report).toMatchObject({ suspended: 0, retained: 0, noticed: 0, paid: 0 });
+    expect(t.calls.clockStarts).toEqual([]);
+    expect(t.w.config.unpaidSince).toBe(clockBefore);
+    expect(t.calls.flags).toEqual([]);
+    expect(t.calls.retain).toBe(0);
+    expect(t.calls.setStatus).toEqual([]);
+    expect(t.ops.size + t.notices.size + t.posted.size).toBe(0);
   });
 });
 

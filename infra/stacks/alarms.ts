@@ -8,6 +8,7 @@
 import { DEAD_LETTER_ALARM, SCHEDULER_ALARM } from "../../packages/core/operations/queue-config";
 import {
   ALERT_LOG_EVENTS,
+  ALERT_LOG_REASONS,
   ALERT_METRIC_NAMESPACE,
   LEDGER_LOG_MESSAGES,
   LEDGER_METRIC_NAMESPACE,
@@ -216,6 +217,29 @@ export function alarms(
     "The USD to BDT rate is older than 6 days or missing: set a new rate in the admin portal (purchases stop after 7 days)",
   );
 
+  // WPU-Z1: a renewal held because it could not be priced or posted for another reason than the rate or the wallet
+  // (a stored price that cannot be read, no pricing rule in force, a ledger refusal). Nothing is charged, graced or
+  // retained while it lasts, so a person has to repair it: one line in 5 minutes alarms. The event AND the reason are
+  // matched, so the lines of a rate hold (reason fx_rate_unavailable) stay with FxRateStaleAlarm.
+  // Checked 2026-11-13 against the CloudWatch Logs page "Filter pattern syntax": a JSON pattern joins conditions with
+  // `&&` without parentheses (order () > && > ||). The VERIFY of the log group above applies here too.
+  new aws.cloudwatch.LogMetricFilter("RenewalPriceHoldFilter", {
+    name: resourceName(stage, "renewalpriceholdfilter"),
+    logGroupName: $interpolate`/aws/lambda/${schedulerFunction?.name}`,
+    pattern: `{ $.event = "${ALERT_LOG_EVENTS.lifecycleRenewalHeld}" && $.reason = "${ALERT_LOG_REASONS.renewalPriceUnavailable}" }`,
+    metricTransformation: {
+      name: "RenewalPriceHold",
+      namespace: ALERT_METRIC_NAMESPACE,
+      value: "1",
+      defaultValue: "0",
+    },
+  });
+  const renewalPriceHoldAlarm = alertAlarm(
+    "RenewalPriceHoldAlarm",
+    "RenewalPriceHold",
+    "A renewal is held because it cannot be priced (not the rate, not the wallet): see lifecycle_renewal_held with reason price_unavailable and repair the price",
+  );
+
   // Item 36: reconciliation.
   const reconcilerFunction = workers.crons["reconciler"]?.nodes.function;
   alertFilter(
@@ -303,6 +327,7 @@ export function alarms(
     capacityReleaseAlarm,
     creditNoteStuckAlarm,
     fxRateStaleAlarm,
+    renewalPriceHoldAlarm,
     reconcileBadAlarm,
     reconcileSilentAlarm,
     functionErrorAlarms,

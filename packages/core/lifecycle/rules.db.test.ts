@@ -210,7 +210,9 @@ describe("two runs at once", () => {
 });
 
 describe("a subscription that cannot be priced (R16)", () => {
-  it("is not charged: its snapshot is unreadable, so it goes to grace and the others go on", async () => {
+  // WPU-Z1: the platform's failure is not the customer's. Before, an unreadable snapshot went to grace (and so to
+  // suspension and retention); now the renewal is held like a stale rate: no grace, no suspension, tried again.
+  it("is not charged: its snapshot is unreadable, so it is held (no grace, no suspension) and the others go on", async () => {
     const bad = await fresh(10_000_000n, true);
     const good = await fresh(10_000_000n, true);
     await q("update subscriptions set price_snapshot = '{\"v\": 2}'::jsonb where id = $1", [
@@ -221,7 +223,17 @@ describe("a subscription that cannot be priced (R16)", () => {
     expect(report.renewed).toBeGreaterThanOrEqual(1);
     expect(await renewals(bad.subscriptionId)).toBe(0);
     expect(await renewals(good.subscriptionId)).toBe(1);
-    expect((await subRow(bad.subscriptionId)).status).toBe("grace");
+    expect((await subRow(bad.subscriptionId)).status).toBe("active");
+    expect(
+      await q("select kind from operations where resource_id = $1 and kind = 'suspend'", [
+        bad.resourceId,
+      ]),
+    ).toEqual([]);
+    expect(
+      (
+        await q("select config->'fxRateHold' as h from resources where id = $1", [bad.resourceId])
+      )[0]!.h,
+    ).toMatchObject({ reason: "price_unavailable", error: "internal" });
     expect(await kit.balance(bad.customerId)).toBe(10_000_000n);
     expect(DAY).toBeGreaterThan(0);
   });
