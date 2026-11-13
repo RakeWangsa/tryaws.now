@@ -43,9 +43,14 @@ const stepsOf = (job) => job.steps ?? [];
 const runText = (step) => (typeof step.run === "string" ? step.run : "");
 
 describe("every file under .github", () => {
-  it("has the three deploy files and the CI file", () => {
+  it("has the two deploy files, the CI file and the OmniRank audit (WPU-Z16)", () => {
     const names = workflowFiles.map((f) => f.split("/").pop()).sort();
-    expect(names).toEqual(["ci.yml", "deploy-production.yml", "deploy-staging.yml"]);
+    expect(names).toEqual([
+      "ci.yml",
+      "deploy-production.yml",
+      "deploy-staging.yml",
+      "omnirank.yml",
+    ]);
   });
   it("holds no static AWS key and no AWS secret reference (R3)", () => {
     for (const file of githubFiles) {

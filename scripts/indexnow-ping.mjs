@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global URL, fetch, console */
 // WPU-Z16: tell IndexNow (Bing, and through it Copilot and ChatGPT search) that the public pages of the
 // site changed. Run after each production deploy (the job `indexnow` of .github/workflows/omnirank.yml)
 // or by hand:

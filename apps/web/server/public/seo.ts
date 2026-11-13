@@ -191,7 +191,11 @@ export function webPageLd(input: {
 export function siteLd(
   input: Parameters<typeof webPageLd>[0] & { organization: OrganizationFacts },
 ): Ld[] {
-  return [organizationLd(input.origin, input.organization), websiteLd(input.origin), webPageLd(input)];
+  return [
+    organizationLd(input.origin, input.organization),
+    websiteLd(input.origin),
+    webPageLd(input),
+  ];
 }
 
 export function breadcrumbLd(

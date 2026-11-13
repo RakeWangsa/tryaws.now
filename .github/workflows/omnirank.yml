@@ -1,0 +1,118 @@
+name: omnirank
+
+# WPU-Z16. The SEO, AEO and GEO audit of the public site with OmniRank (https://github.com/bemoshiur/OmniRank,
+# MIT), pinned to tag v0.4.0 by its commit, and the IndexNow ping after a production deploy.
+#
+#   audit     manual dispatch against staging (https://staging.tryaws.now) or production
+#             (https://tryaws.now), and on its own after every successful production deploy. It installs
+#             OmniRank in a virtual environment, runs `omnirank audit` with omnirank.config.json (site.url
+#             replaced by the chosen site) and fails on the gates of `audit.failOn`. The scores and every
+#             finding go to the job summary.
+#   indexnow  after every successful production deploy, or by hand with `indexnow: true` on production:
+#             scripts/indexnow-ping.mjs sends the URLs of the live sitemap.xml to IndexNow. The key is the
+#             public file apps/web/public/<key>.txt (public by design).
+#
+# No AWS role, no secret, no write permission: the jobs read the public site only. Inputs reach the shell
+# through env:, never as an expression inside a script. Runbook: docs/runbooks/ai-visibility.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Site to audit"
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+      indexnow:
+        description: "Also ping IndexNow (production only)"
+        type: boolean
+        default: false
+  workflow_run:
+    workflows:
+      - deploy-production
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: omnirank-${{ github.event.inputs.target || 'production' }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Tag v0.4.0 of bemoshiur/OmniRank (a tag can move; the commit cannot).
+  OMNIRANK_COMMIT: dabe4bedd6e2623aa0160cb584bf5880aaec14bc
+
+jobs:
+  audit:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Choose the site
+        env:
+          TARGET: ${{ github.event.inputs.target || 'production' }}
+        run: |
+          case "$TARGET" in
+            staging) echo "SITE_URL=https://staging.tryaws.now" >> "$GITHUB_ENV" ;;
+            production) echo "SITE_URL=https://tryaws.now" >> "$GITHUB_ENV" ;;
+            *) echo "unknown target" >&2; exit 1 ;;
+          esac
+
+      - name: Install OmniRank v0.4.0 in a virtual environment
+        run: |
+          python3 --version
+          python3 -m venv "$RUNNER_TEMP/omnirank"
+          "$RUNNER_TEMP/omnirank/bin/pip" install --disable-pip-version-check --no-input \
+            "omnirank @ git+https://github.com/bemoshiur/OmniRank.git@${OMNIRANK_COMMIT}#subdirectory=scripts/py"
+
+      - name: Audit
+        run: |
+          jq --arg url "$SITE_URL" '.site.url = $url' omnirank.config.json > "$RUNNER_TEMP/omnirank.config.json"
+          "$RUNNER_TEMP/omnirank/bin/omnirank" audit --config "$RUNNER_TEMP/omnirank.config.json" \
+            --out "$RUNNER_TEMP/omnirank-report.json"
+
+      - name: Report in the job summary
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/omnirank-report.json"
+          if [ ! -f "$report" ]; then echo "No report was written." >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          {
+            echo "## OmniRank v0.4.0: $SITE_URL"
+            echo
+            echo '```json'
+            jq '.score' "$report"
+            echo '```'
+            echo
+            echo "| severity | id | url | observed |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '.findings[] | "| \(.severity) | \(.id) | \(.url) | \(.observed | tostring | gsub("\\|"; "/")) |"' "$report"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  indexnow:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'production' &&
+      github.event.inputs.indexnow == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Ping IndexNow with the URLs of the live sitemap
+        run: node scripts/indexnow-ping.mjs --origin https://tryaws.now
