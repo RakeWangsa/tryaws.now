@@ -25,7 +25,7 @@ describe("public site messages (WPP-T1 to WPP-T4)", () => {
     expect(Object.keys(items).length).toBeGreaterThanOrEqual(10);
     expect(publicEn.Public.help.items.realAws.a).toMatch(/^Yes, 100%/);
     expect(publicEn.Public.help.items.noAccount.a).toMatch(/^No\./);
-    expect(publicEn.Public.help.items.billing.a).toMatch(/^MeghVPS/);
+    expect(publicEn.Public.help.items.billing.a).toMatch(/^TryAWS\.now/);
     expect(publicEn.Public.help.items.dataLocation.a).toMatch(/AWS Singapore/);
   });
 
@@ -50,15 +50,15 @@ describe("support through support requests, no phone and no e-mail (WPU-Z7)", ()
     }
   });
 
-  it("the FAQ says who bills and supports: MeghVPS, through support requests in the panel, no phone", () => {
+  it("the FAQ says who bills and supports: TryAWS.now, through support requests in the panel, no phone", () => {
     const { billing, support } = publicEn.Public.help.items;
-    expect(billing.a).toMatch(/^MeghVPS\./);
+    expect(billing.a).toMatch(/^TryAWS\.now\./);
     expect(billing.a).toContain("support requests in the panel");
     expect(billing.a).toContain("no support phone");
     expect(support.a).toContain("support request");
     expect(support.a).toContain("no support phone line or support email address");
     const bn = publicBn.Public.help.items;
-    expect(bn.billing.a).toMatch(/^MeghVPS।/);
+    expect(bn.billing.a).toMatch(/^TryAWS\.now।/);
     expect(bn.billing.a).toContain("সাপোর্ট অনুরোধ");
     expect(bn.billing.a).toContain("ফোন লাইন নেই");
     expect(bn.support.a).toContain("সাপোর্ট অনুরোধ");

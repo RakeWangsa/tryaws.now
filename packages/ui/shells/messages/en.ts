@@ -6,9 +6,9 @@ type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 export const en: Same<typeof bn> = {
   Shell: {
     skip: "Skip to main content",
-    brand: "MeghVPS",
-    logoAlt: "MeghVPS",
-    homeLabel: "MeghVPS home",
+    brand: "TryAWS.now",
+    logoAlt: "TryAWS.now",
+    homeLabel: "TryAWS.now home",
     menu: "Menu",
     close: "Close",
     public: {
@@ -30,7 +30,7 @@ export const en: Same<typeof bn> = {
       payments: "Payments",
       help: "Help centre",
       contact: "Support request",
-      terms: "Terms of use",
+      terms: "Terms of service",
       privacy: "Privacy policy",
       companyName: "TiCON System Limited",
       address: "Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230",
@@ -93,7 +93,7 @@ export const en: Same<typeof bn> = {
   },
   Aws: {
     short: "100% AWS infrastructure. Built on Amazon Lightsail.",
-    long: "Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai). MeghVPS sells, bills and supports the service. You manage everything from this panel and do not need an AWS account.",
+    long: "Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai). TryAWS.now sells, bills and supports the service. You manage everything from this panel and do not need an AWS account.",
     trademark:
       "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.",
   },

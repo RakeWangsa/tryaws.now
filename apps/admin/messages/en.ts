@@ -5,7 +5,7 @@ type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 export const en: Same<typeof bn> = {
   Admin: {
     meta: {
-      title: "MeghVPS Admin",
+      title: "TryAWS.now Admin",
     },
     home: {
       title: "The admin panel is being built",

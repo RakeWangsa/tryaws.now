@@ -26,9 +26,14 @@ export function flatLeaves(tree: Messages): Map<string, string> {
 }
 
 const BENGALI = /[ঀ-৿]/;
+// WPU-Z8, owner decision 2026-11-13: the brand is "TryAWS.now", a deliberate deviation from 16.13 ("no AWS
+// mark inside a product name, a company name or a domain name"; the trademark risk is recorded in
+// JOURNEY.md). The exception is this exact token, standing alone: "TryAWS", "TryAWS.com", "tryAWS.now",
+// "TryAWS.nowhere" or "MyTryAWS.now" are not the brand, and the rule "aws-in-name" below still catches them.
+const BRAND_TOKEN = /(?<![A-Za-z0-9][.-]?)TryAWS\.now(?![.-]?[A-Za-z0-9])/g;
 // Brand and product marks that stay in Latin script inside Bengali text (16.13).
 const TOKENS =
-  /MeghVPS|TiCON|Amazon Lightsail|Amazon Route 53|Amazon Web Services|Amazon\.com, Inc\.|AWS|KYC|EPS|SSH|TOTP|DNS|CDN|HTTPS?|IPv[46]|IP|SMS|OTP|PDF|CSV|API|URL|TLS|SSL|MX|TXT|CNAME|NS|SOA|CAA|SRV|ICMP|TCP|UDP|BDT|GB|MB|TB|vCPU|RAM|SSD|bKash|Nagad|Rocket|Windows|Linux|Ubuntu|Debian|MySQL|PostgreSQL|WordPress|Docker|Node\.js|Cognito|Singapore|Mumbai|Virginia|ap-[a-z]+-\d|us-east-1/g;
+  /TryAWS\.now|TiCON|Amazon Lightsail|Amazon Route 53|Amazon Web Services|Amazon\.com, Inc\.|AWS|KYC|EPS|SSH|TOTP|DNS|CDN|HTTPS?|IPv[46]|IP|SMS|OTP|PDF|CSV|API|URL|TLS|SSL|MX|TXT|CNAME|NS|SOA|CAA|SRV|ICMP|TCP|UDP|BDT|GB|MB|TB|vCPU|RAM|SSD|bKash|Nagad|Rocket|Windows|Linux|Ubuntu|Debian|MySQL|PostgreSQL|WordPress|Docker|Node\.js|Cognito|Singapore|Mumbai|Virginia|ap-[a-z]+-\d|us-east-1/g;
 
 /** True when the text holds no word that a translator would change. */
 export function isLanguageNeutral(text: string): boolean {
@@ -57,7 +62,8 @@ const allowed = (list: readonly WordingAllow[], key: string): boolean =>
 const AWS_ERROR =
   /\b(AccessDenied(?:Exception)?|InvalidParameter\w*|ThrottlingException|ResourceNotFound\w*|ServiceException|InvalidInput\w*|OperationFailure\w*|UnauthenticatedException|NotFoundException|InternalFailure|RequestLimitExceeded|ValidationException)\b/;
 
-const FORBIDDEN: readonly { rule: string; test: RegExp }[] = [
+// `except` is removed from the text before `test` runs.
+const FORBIDDEN: readonly { rule: string; test: RegExp; except?: RegExp }[] = [
   { rule: "arn", test: /arn:aws[\w-]*:/i },
   { rule: "account-id", test: /(?<![\d.])\d{12}(?![\d])/ },
   { rule: "aws-error-code", test: AWS_ERROR },
@@ -65,6 +71,14 @@ const FORBIDDEN: readonly { rule: string; test: RegExp }[] = [
   { rule: "aws-lightsail", test: /\bAWS[\s-]*Lightsail/i },
   { rule: "bare-lightsail", test: /(?<!Amazon )Lightsail/ },
   { rule: "joined-mark", test: /\b(?:AWS|Amazon)(?:Lightsail|Route53)\b|Amazon-Lightsail/i },
+  // 16.13 "Exact marks" and "Own brand first": AWS is never joined or hyphenated with another word, so it
+  // is never part of a name ("MyAWS", "AWS-Hosting", "TryAWS.com"). A Bengali case ending ("AWS-এর") is
+  // not a word, and the brand token is the one exception (BRAND_TOKEN).
+  {
+    rule: "aws-in-name",
+    test: /[A-Za-z0-9][.-]?AWS|AWS[.-]?[A-Za-z0-9]/,
+    except: BRAND_TOKEN,
+  },
   { rule: "route53", test: /(?<!Amazon )Route\s?53|Route53/ },
   { rule: "powered-by-aws", test: /powered\s+by\s+(?:AWS|Amazon)/i },
   {
@@ -73,8 +87,9 @@ const FORBIDDEN: readonly { rule: string; test: RegExp }[] = [
   },
   { rule: "aws-endorses", test: /(?:official|authorized|authorised)\s+(?:AWS|Amazon)\b/i },
   {
+    // the brand (or the company) followed by an AWS mark, as if AWS were part of the product's name
     rule: "ticon-aws-product",
-    test: /(?:MeghVPS|TiCON)\s+(?:AWS|Lightsail)|(?:MeghVPS|TiCON)'s\s+AWS/i,
+    test: /(?:TryAWS\.now|TiCON)\s+(?:AWS|Lightsail)|(?:TryAWS\.now|TiCON)'s\s+AWS/i,
   },
   {
     rule: "aws-sku-name",
@@ -143,9 +158,10 @@ export function checkWording(bn: Messages, en: Messages, opts: CheckOptions = {}
       [bnText, "bn"],
       [enText, "en"],
     ] as const) {
-      for (const { rule, test } of FORBIDDEN) {
+      for (const { rule, test, except } of FORBIDDEN) {
         if (rule === "todo" && isLegal) continue;
-        if (test.test(text)) found.push({ key, rule: `${rule}(${locale})`, text });
+        const subject = except === undefined ? text : text.replace(except, " ");
+        if (test.test(subject)) found.push({ key, rule: `${rule}(${locale})`, text });
       }
     }
   }

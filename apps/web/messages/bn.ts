@@ -3,13 +3,13 @@
 export const bn = {
   Web: {
     meta: {
-      title: "MeghVPS",
+      title: "TryAWS.now",
       description:
         "বাংলাদেশের জন্য প্রিপেইড ক্লাউড প্যানেল। ১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
     },
-    announcement: "MeghVPS শীঘ্রই আসছে।",
+    announcement: "TryAWS.now শীঘ্রই আসছে।",
     home: {
-      title: "MeghVPS শীঘ্রই আসছে",
+      title: "TryAWS.now শীঘ্রই আসছে",
     },
   },
 };
