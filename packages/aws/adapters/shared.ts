@@ -1,5 +1,5 @@
 import type { LightsailClient } from "@aws-sdk/client-lightsail";
-import { resourceTags, type TcEnv } from "@tc/core";
+import { resourceTags, stepWait, type StepResult, type TcEnv } from "@tc/core";
 import { AwsError } from "../errors";
 import type { OpCtx } from "./types";
 
@@ -52,6 +52,41 @@ export function checkWaitBudget(ctx: OpCtx<unknown>): void {
   if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
     throw fail("upstream_unavailable");
   }
+}
+
+/**
+ * WPU-Y4. How long a destroy waits for another operation of the same flow (a server's destroy for its disks to be
+ * detached, a disk's destroy for its server to be stopped). The bound runs from the destroy's OWN first wait, never
+ * from `createdAt`: a destroy waits in the approval queue for days before it runs (R13), and MAX_WAIT_MS from its
+ * creation would end it at once. The first wait writes `destroyWait = { operationId, since }` into resources.config;
+ * a mark of another operation is not this one's.
+ */
+export const DESTROY_WAIT_MS = 6 * 60 * 60 * 1000;
+export const DESTROY_POLL_SECONDS = 60;
+
+export function destroyWait(ctx: OpCtx<unknown>, step: string): StepResult {
+  const now = ctx.clock.now();
+  const until = new Date(now.getTime() + DESTROY_POLL_SECONDS * 1000);
+  const config = ctx.resource.config;
+  const mark =
+    typeof config === "object" && config !== null
+      ? (config as Record<string, unknown>)["destroyWait"]
+      : undefined;
+  const own =
+    typeof mark === "object" &&
+    mark !== null &&
+    (mark as Record<string, unknown>)["operationId"] === ctx.operation.id;
+  if (!own) {
+    return stepWait(step, until, {
+      configMerge: { destroyWait: { operationId: ctx.operation.id, since: now.toISOString() } },
+    });
+  }
+  const since = (mark as Record<string, unknown>)["since"];
+  const sinceMs = typeof since === "string" ? Date.parse(since) : Number.NaN;
+  // A mark that cannot be read, or a wait past its bound, is a refusal (R16): the operation goes to
+  // needs_attention and nothing is detached or deleted.
+  if (Number.isNaN(sinceMs) || now.getTime() - sinceMs > DESTROY_WAIT_MS) throw fail("conflict");
+  return stepWait(step, until);
 }
 
 export function pollAt(ctx: OpCtx<unknown>): Date {
