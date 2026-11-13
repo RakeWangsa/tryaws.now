@@ -48,6 +48,7 @@ export type {
   NewSupportRequest,
   SupportRepo,
 } from "./repositories/customer/support";
+export { SUPPORT_MESSAGE_KEY } from "./repositories/customer/support";
 // WPU-Z5: the thread of a support request, shared by the customer and the admin side.
 export { SUPPORT_THREAD_LIMIT, messageBody } from "./repositories/support-thread";
 export type { SupportAuthorType, SupportStatus } from "./repositories/support-thread";

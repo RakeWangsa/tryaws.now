@@ -93,8 +93,9 @@ const LIST_COLUMNS = {
   lastActivityAt: supportRequests.lastActivityAt,
 };
 
-// The key of a message (R7): the characters a form token or a UUID uses, as for operations.
-const KEY_PATTERN = /^[A-Za-z0-9:_.-]{1,128}$/;
+// The key of a message (R7): the characters a form token or a UUID uses, as for operations. Exported so
+// that the panel checks the key of its reply form with this one rule (WPU-Z6).
+export const SUPPORT_MESSAGE_KEY = /^[A-Za-z0-9:_.-]{1,128}$/;
 
 // The id of a request: a UUID v5 of the idempotency key inside the namespace of the customer (a
 // customer id is a UUID). The same customer and key give the same id on every call, so the primary
@@ -117,7 +118,12 @@ type ThreadRequestRow = {
   created_at: Date | string;
   last_activity_at: Date | string;
 };
-type ThreadMessageRow = { id: string; author_type: string; body: string; created_at: Date | string };
+type ThreadMessageRow = {
+  id: string;
+  author_type: string;
+  body: string;
+  created_at: Date | string;
+};
 
 // A raw tx.execute answers timestamptz as text (no type parser for it on main); the thread hands out Date
 // objects like list() does, so the page can format the times in the customer's locale (WPU-Z6).
@@ -239,7 +245,7 @@ export function supportRepo(scope: TenantScope): SupportRepo {
       if (
         body === null ||
         typeof idempotencyKey !== "string" ||
-        !KEY_PATTERN.test(idempotencyKey)
+        !SUPPORT_MESSAGE_KEY.test(idempotencyKey)
       ) {
         return refused("validation");
       }

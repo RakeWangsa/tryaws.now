@@ -3,7 +3,12 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { v5 as uuidv5 } from "uuid";
 import { describe, expect, it } from "vitest";
 import type { Tx } from "../client";
-import { supportMessageId, supportRepo } from "../repositories/customer/support";
+import {
+  SUPPORT_MESSAGE_KEY,
+  supportMessageId,
+  supportRepo,
+} from "../repositories/customer/support";
+import * as db from "../index";
 import { SUPPORT_THREAD_LIMIT, messageBody } from "../repositories/support-thread";
 
 // WPU-Z5: the thread methods of customerRepos(tx, id).support, without a database. A fake transaction
@@ -220,6 +225,17 @@ describe("customerRepos.support.addMessage", () => {
       const r = rig();
       expect(await r.repo.addMessage(request)).toEqual(VALIDATION);
       expect(r.sent).toEqual([]);
+    }
+  });
+
+  // WPU-Z6: the panel checks the key of its reply form with the repository's own rule (one source).
+  it("exports its key rule: a UUID passes, a blank, spaced or too long key does not", async () => {
+    expect(db.SUPPORT_MESSAGE_KEY).toBe(SUPPORT_MESSAGE_KEY);
+    expect(SUPPORT_MESSAGE_KEY.test(KEY)).toBe(true);
+    for (const k of ["", "has space", "k".repeat(129), "a/b"]) {
+      expect(SUPPORT_MESSAGE_KEY.test(k)).toBe(false);
+      const r = rig();
+      expect(await r.repo.addMessage(input({ idempotencyKey: k }))).toEqual(VALIDATION);
     }
   });
 
