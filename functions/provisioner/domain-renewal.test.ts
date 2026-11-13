@@ -23,8 +23,10 @@ import { operationRow, seedOperation } from "./test/seed";
 // WPU-Z13: a renew_domain through the real provisioner path. A registry that refuses moves it to failed and the
 // renewal charge of its period goes back in the same transaction (one reversal, the subscription ended at the
 // period that was paid); an error that passes waits and moves no money; a reversal that cannot be made rolls the
-// move to failed back; an admin's rejection after the retries gives the money back too. The domain adapter is a
-// fake here (its RenewDomain call is proved in packages/aws/test/domain-actions.test.ts).
+// move to failed back; an admin's rejection after the retries gives the money back too while the registry does
+// not hold the renewal. Once it does (step poll, review round 1) only the registry's own refusal gives it back: a
+// poll that gives up stops in needs_attention and a rejection is refused. The domain adapter is a fake here (its
+// RenewDomain call and its errors are proved in packages/aws/test/domain-actions.test.ts).
 const { t, world, setup, message } = useHarness();
 const PRICE = 150_000n;
 const DAY = 24 * 3_600_000;
@@ -250,7 +252,92 @@ describe("a registry renewal that the registry refuses", () => {
   });
 });
 
-describe("a registry renewal that ran out of retries", () => {
+// WPU-Z13 review round 1: once RenewDomain was accepted (step poll) the registry holds the renewal. TiCON pays for
+// it and it may still complete, so only the registry's own refusal gives the charge back.
+describe("a registry renewal that the registry holds (step poll)", () => {
+  const held = async (at: Date) => {
+    const d = await renewedDomain(at);
+    await t.pool.query("update operations set step = 'poll' where id = $1", [d.operationId]);
+    return d;
+  };
+  const throwing = (error: AwsError) =>
+    domainRegistry(async () => {
+      throw error;
+    });
+
+  it("still in progress after three days (the poll gives up): needs_attention, no money moves", async () => {
+    const d = await held(new Date("2026-11-15T09:00:00.000Z"));
+    const start = await balance();
+    const { deps } = setup({
+      adapters: throwing(new AwsError({ code: "upstream_unavailable", retryable: false })),
+      hooks: hooks(),
+    });
+    expect(await runStep(deps, message(d.operationId, d.resourceId))).toEqual({
+      outcome: "advanced",
+      to: "needs_attention",
+      sent: false,
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "needs_attention",
+      step: "poll",
+      last_error: "upstream_unavailable",
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(0);
+    expect(await balance()).toBe(start);
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
+  });
+
+  it("the registry answers failed: failed, and the charge goes back once", async () => {
+    const at = new Date("2026-11-16T09:00:00.000Z");
+    const d = await held(at);
+    const start = await balance();
+    const { deps } = setup({
+      adapters: throwing(new AwsError({ code: "conflict", retryable: false })),
+      hooks: hooks(),
+    });
+    expect(await runStep(deps, message(d.operationId, d.resourceId))).toMatchObject({
+      to: "failed",
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "failed",
+      last_error: "conflict",
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(1);
+    expect(await balance()).toBe(start + PRICE);
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("ended");
+  });
+
+  it("an admin's rejection is refused (renewal_submitted): the renewal stays for a retry, no money moves", async () => {
+    const d = await held(new Date("2026-11-17T09:00:00.000Z"));
+    await t.pool.query(
+      "update operations set state = 'needs_attention', attempts = 5, last_error = 'rate_limited:ThrottlingException' where id = $1",
+      [d.operationId],
+    );
+    const start = await balance();
+    const out = await runTransaction(
+      t.db,
+      (tx) => rejectOperation(tx, { operationId: d.operationId, at: NOW }),
+      { role: "admin_rw" },
+    );
+    if (!out.ok || !out.message) throw new Error("reject did not queue an operation");
+    const { deps } = setup({ adapters: refusing(), hooks: hooks() });
+
+    expect(await runStep(deps, out.message)).toMatchObject({ to: "needs_attention" });
+    expect(await operationRow(t.pool, out.message.operationId)).toMatchObject({
+      state: "needs_attention",
+      last_error: "renewal_submitted",
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "needs_attention",
+      step: "poll",
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(0);
+    expect(await balance()).toBe(start);
+    expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
+  });
+});
+
+describe("a registry renewal that ran out of retries before RenewDomain was accepted (no step)", () => {
   it("is rejected by an admin: failed, and the charge goes back once", async () => {
     const at = new Date("2026-11-14T09:00:00.000Z");
     const d = await renewedDomain(at);

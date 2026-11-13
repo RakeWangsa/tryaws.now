@@ -245,6 +245,9 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
   async function renewAction(ctx: Ctx): Promise<StepResult> {
     const port = deps.domains();
     const { name } = ctx.config;
+    // WPU-Z13: from `poll` on the registry holds the renewal (registryHoldsRenewal of @tc/core). The failure
+    // policy gives the charge back only for `conflict` without an AWS error name, the registry's failed answer
+    // here; a give-up or any other error stops in needs_attention (pinned in test/domain-actions.test.ts).
     if (ctx.operation.step === "poll") {
       const operationId = savedId(ctx.resource.config, "renewOperationId");
       if (operationId === null) throw fail("internal");

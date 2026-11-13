@@ -109,7 +109,51 @@ describe("reject_operation, run by the provisioner as worker_rw", () => {
     expect(events).toEqual([]);
   });
 
-  it("WPU-Z13: a rejected domain renewal reaches failed and calls the failed hook (its charge goes back); without the hook it is not rejected", async () => {
+  it("WPU-Z13: a domain renewal the registry holds (step poll) is not rejected: the reject operation needs attention with renewal_submitted, the target stays and no hook runs", async () => {
+    const events: unknown[] = [];
+    const attention: unknown[] = [];
+    const { deps } = setup({
+      hooks: {
+        failed: async (_tx, e) => {
+          events.push(e);
+        },
+        needsAttention: async (_tx, e) => {
+          attention.push(e);
+        },
+      },
+    });
+    const target = await create({
+      kind: "renew_domain",
+      state: "needs_attention",
+      step: "poll",
+      attempts: 5,
+      last_error: "rate_limited:ThrottlingException",
+      payload: { currentExpiryYear: 2027, years: 1 },
+    });
+    const m = await reject(target.id);
+    expect(await runStep(deps, m)).toMatchObject({ outcome: "advanced", to: "needs_attention" });
+    expect(await operationRow(t.pool, m.operationId)).toMatchObject({
+      state: "needs_attention",
+      last_error: "renewal_submitted",
+    });
+    expect(await operationRow(t.pool, target.id)).toMatchObject({
+      state: "needs_attention",
+      step: "poll",
+      attempts: 5,
+      last_error: "rate_limited:ThrottlingException",
+    });
+    expect(events).toEqual([]);
+    expect(attention).toEqual([
+      {
+        operationId: m.operationId,
+        resourceId: target.resourceId,
+        kind: "reject_operation",
+        code: "renewal_submitted",
+      },
+    ]);
+  });
+
+  it("WPU-Z13: a rejected domain renewal that the registry does not hold yet (no step) reaches failed and calls the failed hook (its charge goes back); without the hook it is not rejected", async () => {
     const events: unknown[] = [];
     const { deps } = setup({
       hooks: {

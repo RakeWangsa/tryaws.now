@@ -1,4 +1,10 @@
-import { decideRefusal, refundedOnFailure, transitionOperation, type LocalFailure } from "@tc/core";
+import {
+  decideRefusal,
+  refundedOnFailure,
+  registryHoldsRenewal,
+  transitionOperation,
+  type LocalFailure,
+} from "@tc/core";
 import { loadOperationBrief } from "@tc/db";
 import type { RunView, Tx } from "@tc/db";
 import type { RunOutcome, StepDeps } from "./types";
@@ -21,6 +27,12 @@ function targetOf(payload: unknown): string | null {
 // operation; a throwing hook rolls everything back and the sweeper recovers the run like an expired
 // lease. Inside the transaction the fenced update of the reject operation comes first (the order is
 // not visible outside), so a stale run writes nothing for the target.
+// WPU-Z13 (review round 1): a domain renewal the registry holds (RenewDomain accepted, step poll) is
+// not rejected. TiCON pays the registry for that renewal and it may still complete, so a refund
+// waits for the registry's own answer: a retry polls it (successful: done; failed: the refund of the
+// registry's refusal). The reject operation needs attention with `renewal_submitted`; the target and
+// the money stay as they are. Whether a person may refund it without that answer is the owner's
+// decision (JOURNEY, Needs decision).
 export async function runReject(
   deps: StepDeps,
   view: RunView,
@@ -60,6 +72,9 @@ export async function runReject(
     }
     // An admin who retried the target, or an earlier run, left nothing to reject: a no-op.
     const rejectable = target.state === "needs_attention";
+    if (rejectable && registryHoldsRenewal(target.kind, target.step)) {
+      return refuse(tx, "renewal_submitted");
+    }
     const refunded = refundedOnFailure(target.kind);
     if (rejectable && refunded && deps.hooks?.failed === undefined) {
       return refuse(tx, "failed_hook_missing");

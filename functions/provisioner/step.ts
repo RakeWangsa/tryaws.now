@@ -224,6 +224,8 @@ async function plan(
   } catch (error) {
     const decision = decideFailure({
       kind: operation.kind as HookEvent["kind"],
+      // WPU-Z13: a domain renewal the registry holds (step poll) is refunded only on the registry's own refusal.
+      step: operation.step,
       attempts: operation.attempts,
       now: deps.clock.now(),
       facts: factsOf(error),

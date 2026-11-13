@@ -1,5 +1,7 @@
+import { decideFailure, registryHoldsRenewal, type FailureFacts } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { createDomainAdapter, type DomainAdapterConfig } from "../adapters/domain";
+import { AwsError } from "../errors";
 import type { OpCtx } from "../adapters/types";
 import { createFakeDomains } from "./fake-domains";
 import { createFakeRoute53 } from "./fake-route53";
@@ -260,6 +262,47 @@ describe("renew_domain", () => {
     });
     await fake.finish(opId, "failed");
     await expect(poll()).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  // WPU-Z13 review round 1: the contract between this adapter and the failure policy of @tc/core. After RenewDomain
+  // the registry holds the renewal (TiCON pays for it, it may still complete): a poll that gives up or cannot poll
+  // moves no money (needs_attention), and only the registry's own FAILED answer fails the operation, refunded.
+  it("from the step after RenewDomain only the registry's failed answer is a refusal that gives the charge back", async () => {
+    const { adapter, fake } = await registered();
+    const payload = { currentExpiryYear: 2031 };
+    const started = await run(adapter, "renew_domain", payload);
+    const step = started.kind === "wait" ? started.step : null;
+    expect(registryHoldsRenewal("renew_domain", step)).toBe(true);
+    const opId = configOf(started)["renewOperationId"] as string;
+    const decide = async (attempt: Promise<unknown>) => {
+      const error: unknown = await attempt.then(
+        () => null,
+        (e: unknown) => e,
+      );
+      if (!(error instanceof AwsError)) throw new Error("expected an AwsError");
+      // The facts that functions/provisioner/step.ts builds from an AwsError.
+      const facts: FailureFacts = {
+        code: error.code,
+        retryable: error.retryable,
+        poolFull: error.poolFull,
+        awsErrorName: error.awsErrorName,
+      };
+      return decideFailure({ kind: "renew_domain", step, attempts: 0, now: NOW, facts }).to;
+    };
+    const poll = (more: Extra = {}) =>
+      run(adapter, "renew_domain", payload, {
+        step,
+        resourceConfig: { renewOperationId: opId },
+        ...more,
+      });
+    // Still in progress three days after the operation was created: the registry may still renew the name.
+    expect(await decide(poll({ now: new Date("2030-01-10T00:00:00.000Z") }))).toBe(
+      "needs_attention",
+    );
+    // A poll without the registry's operation id.
+    expect(await decide(run(adapter, "renew_domain", payload, { step }))).toBe("needs_attention");
+    await fake.finish(opId, "failed");
+    expect(await decide(poll())).toBe("failed");
   });
 });
 

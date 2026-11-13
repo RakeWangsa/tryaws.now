@@ -22,6 +22,8 @@ import type { Logger } from "../operations/types";
 // move: one reversing ledger transaction (R5), the credit-note notice where the charge had an invoice, and the
 // subscription back at the period that was paid, ended. Ended, because the ledger key of the renewal stays taken:
 // a renewal of the same period again would be a replay of the reversed charge, a period for nothing.
+// Once RenewDomain was accepted the registry holds the renewal (operations/policy.ts registryHoldsRenewal): only
+// the registry's own refusal ends it failed; a poll that gives up and an admin's rejection move no money.
 
 const DOMAIN_FAMILY = "domain";
 const DAY_MS = 24 * 60 * 60 * 1000;
