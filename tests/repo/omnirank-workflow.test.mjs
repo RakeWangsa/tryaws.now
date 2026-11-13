@@ -36,6 +36,59 @@ describe("omnirank.yml", () => {
     expect(all).not.toContain("--fail-on");
   });
 
+  it("installs every Python dependency from a hashed lock and OmniRank without resolving any (R17)", () => {
+    const install = steps("audit").find((s) => /Install OmniRank/.test(s.name ?? "")).run;
+    expect(install).toMatch(
+      /pip" install --no-input --require-hashes --no-deps \\\s*-r \.github\/omnirank\/requirements\.txt/,
+    );
+    expect(install).toMatch(
+      /pip" install --no-input --no-deps --no-build-isolation \\\s*"omnirank @ git\+/,
+    );
+    // Every pip install of the job is one of these two: nothing resolved from an open range.
+    const installs = install.match(/pip" install[^\n]*/g);
+    expect(installs).toHaveLength(2);
+    for (const line of installs) expect(line).toContain("--no-deps");
+    expect(install).toContain("sys.version_info[:2] == (3, 12)");
+    expect(workflow.env.PIP_NO_CACHE_DIR).toBe("1");
+    expect(text).not.toMatch(/uses:\s*actions\/cache|^\s*cache:/m);
+  });
+
+  it("the lock pins every package by version and by hash, setuptools included", () => {
+    const path = join(root, ".github/omnirank/requirements.txt");
+    const lock = readFileSync(path, "utf8");
+    const entries = lock
+      .split(/\n(?=[a-z0-9])/i)
+      .filter((block) => /^[a-z0-9][a-z0-9._-]*==/i.test(block));
+    expect(entries.length).toBeGreaterThanOrEqual(10);
+    for (const entry of entries)
+      expect(entry, entry.split("\n")[0]).toMatch(/--hash=sha256:[0-9a-f]{64}/);
+    const names = entries.map((e) => e.split("==")[0].toLowerCase());
+    for (const name of ["httpx", "beautifulsoup4", "lxml", "jsonschema", "setuptools"]) {
+      expect(names, name).toContain(name);
+    }
+  });
+
+  it("drops only the indexing gates on staging, which is noindex by design", () => {
+    expect(JSON.parse(workflow.env.STAGING_SKIPPED_GATES)).toEqual([
+      "ai-allowlist",
+      "noindex-in-sitemap",
+      "robots-sitemap",
+      "canonical-target",
+      "hreflang-noindex",
+    ]);
+    const audit = steps("audit").find((s) => s.name === "Audit").run;
+    expect(audit).toContain(
+      'if [ "$TARGET" = "staging" ]; then skip="$STAGING_SKIPPED_GATES"; else skip=\'[]\'; fi',
+    );
+    expect(audit).toContain(".audit.failOn -= $skip");
+  });
+
+  it("escapes newlines and pipes of the audited site's text in the summary table", () => {
+    const report = steps("audit").find((s) => /summary/.test(s.name ?? "")).run;
+    expect(report).toContain('gsub("[\\r\\n]"; " ")');
+    expect(report).toContain('gsub("\\\\|"; "\\\\|")');
+  });
+
   it("holds no secret, no AWS role and no expression inside a script", () => {
     expect(text).not.toMatch(/secrets\./);
     expect(text).not.toMatch(/configure-aws-credentials|id-token/);

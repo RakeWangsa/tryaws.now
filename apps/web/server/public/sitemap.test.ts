@@ -55,7 +55,7 @@ describe("sitemap.xml", () => {
 
 describe("robots.txt", () => {
   it("allows the site, names the sitemap and keeps crawlers out of the panel and the sign-in pages, in both locales", () => {
-    const file = robotsFile(ORIGIN);
+    const file = robotsFile(ORIGIN, true);
     const all = file.rules[0]!;
     expect(all.userAgent).toBe("*");
     expect(file.sitemap).toBe(`${ORIGIN}/sitemap.xml`);
@@ -119,7 +119,7 @@ describe("robots.txt for answer engines (WPU-Z16)", () => {
     "Applebot-Extended",
   ];
 
-  const text = resolveRobots(robotsFile(ORIGIN));
+  const text = resolveRobots(robotsFile(ORIGIN, true));
   /** Groups of the file: consecutive User-Agent lines, then their rules. */
   const groups = (() => {
     const out: { agents: string[]; allow: string[]; disallow: string[] }[] = [];
@@ -189,5 +189,17 @@ describe("robots.txt for answer engines (WPU-Z16)", () => {
 
   it("names the sitemap of the origin", () => {
     expect(text).toContain(`Sitemap: ${ORIGIN}/sitemap.xml`);
+  });
+});
+
+describe("robots.txt on a stage that is not production (WPU-Z16)", () => {
+  it("keeps every agent out of the whole site and names no sitemap", () => {
+    const file = robotsFile(ORIGIN, false);
+    expect(file.sitemap).toBeUndefined();
+    expect(file.rules).toEqual([{ userAgent: "*", allow: [], disallow: ["/"] }]);
+    const text = resolveRobots(file);
+    expect(text).toBe("User-Agent: *\nDisallow: /\n\n");
+    expect(text).not.toContain("Sitemap");
+    expect(text).not.toContain("Allow:");
   });
 });

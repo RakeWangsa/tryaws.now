@@ -110,7 +110,7 @@ Q: Are prices in taka?
 A: Prices are shown in US dollars. Your wallet, top-ups and invoices are in Bangladeshi taka (BDT); the taka amount of an order is worked out at checkout with the exchange rate of the day.
 
 Q: Do I get a VAT invoice?
-A: Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Prices include VAT of 5%. A VAT-registered business can have its BIN printed on the invoice.
+A: Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.
 
 Q: Can I get a refund?
 A: If a resource cannot be created after you paid, the full amount goes back to your wallet automatically. When we cancel a purchase or a renewal, the whole amount goes back to your wallet and you get a credit note in taka. For anything else, open a billing support request; the refund policy has the details.
@@ -226,7 +226,7 @@ Q: মূল্য কি টাকায়?
 A: মূল্য মার্কিন ডলারে দেখানো হয়। ওয়ালেট, টপ আপ ও ইনভয়েস বাংলাদেশি টাকায় (BDT); অর্ডারের টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয়।
 
 Q: আমি কি VAT সহ কর চালানপত্র পাব?
-A: হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। মূল্যে ৫% VAT অন্তর্ভুক্ত। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।
+A: হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।
 
 Q: টাকা ফেরত পাওয়া যায় কি?
 A: পেমেন্টের পর কোনো resource তৈরি না হলে পুরো টাকা নিজে থেকেই ওয়ালেটে ফেরত যায়। আমরা কোনো কেনা বা নবায়ন বাতিল করলে পুরো টাকা ওয়ালেটে ফেরত যায় এবং আপনি টাকায় ক্রেডিট নোট পান। অন্য কিছুর জন্য বিল বিষয়ে সাপোর্ট অনুরোধ খুলুন; বিস্তারিত ফেরতের নীতিতে আছে।

@@ -64,9 +64,22 @@ export function isPublicPath(pathname: string): boolean {
 
 export const NOINDEX = "noindex, nofollow";
 
-/** The `X-Robots-Tag` value for a path: null for a public page, `noindex, nofollow` for the rest. */
-export function robotsTagFor(pathname: string): string | null {
-  return isPublicPath(pathname) ? null : NOINDEX;
+/**
+ * WPU-Z16 (owner ruling 2026-11-14): only the production site may be indexed. Every other stage
+ * (staging, local, test, or a TC_STAGE that is missing or unknown: fail closed, R16) is kept out of
+ * every index: robots.txt disallows everything and every page carries `noindex, nofollow`. The stage
+ * is TC_STAGE, the variable the web app already reads (server/config.ts, set by infra/stacks/web.ts).
+ */
+export function indexableStage(env: Readonly<Record<string, string | undefined>>): boolean {
+  return env["TC_STAGE"] === "production";
+}
+
+/**
+ * The `X-Robots-Tag` value for a path: null for a public page of an indexable stage, `noindex,
+ * nofollow` for the rest and for every path of a stage that is not production.
+ */
+export function robotsTagFor(pathname: string, indexable: boolean): string | null {
+  return indexable && isPublicPath(pathname) ? null : NOINDEX;
 }
 
 /** The prefixes that robots.txt asks crawlers to stay out of (a hint; the header is the rule). */

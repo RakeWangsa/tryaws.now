@@ -254,7 +254,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         vatInvoice: {
           q: "Do I get a VAT invoice?",
-          a: "Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Prices include VAT of 5%. A VAT-registered business can have its BIN printed on the invoice.",
+          a: "Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.",
         },
         refunds: {
           q: "Can I get a refund?",

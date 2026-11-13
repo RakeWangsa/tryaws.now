@@ -109,7 +109,7 @@
       },
       {
         "q": "আমি কি VAT সহ কর চালানপত্র পাব?",
-        "a": "হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। মূল্যে ৫% VAT অন্তর্ভুক্ত। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।"
+        "a": "হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।"
       },
       {
         "q": "টাকা ফেরত পাওয়া যায় কি?",
@@ -167,7 +167,7 @@
       },
       {
         "q": "Do I get a VAT invoice?",
-        "a": "Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Prices include VAT of 5%. A VAT-registered business can have its BIN printed on the invoice."
+        "a": "Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice."
       },
       {
         "q": "Can I get a refund?",

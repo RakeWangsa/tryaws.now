@@ -85,7 +85,12 @@ export function disallowedPaths(): string[] {
   return DISALLOWED_PREFIXES.flatMap((prefix) => [prefix, `/en${prefix}`]);
 }
 
-export function robotsFile(origin: string | null): RobotsFile {
+/**
+ * robots.txt. `indexable` is false on every stage but production (indexableStage): then every agent is
+ * kept out of the whole site and no sitemap is named (WPU-Z16).
+ */
+export function robotsFile(origin: string | null, indexable: boolean): RobotsFile {
+  if (!indexable) return { rules: [{ userAgent: "*", allow: [], disallow: ["/"] }] };
   const disallow = disallowedPaths();
   return {
     rules: [

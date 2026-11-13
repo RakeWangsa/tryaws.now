@@ -9,7 +9,14 @@ import {
   serializeJsonLd,
   wholeTakaUp,
 } from "./seo.ts";
-import { FAMILY_PAGES, NOINDEX, PUBLIC_PATHS, isPublicPath, robotsTagFor } from "./indexing.ts";
+import {
+  FAMILY_PAGES,
+  NOINDEX,
+  PUBLIC_PATHS,
+  indexableStage,
+  isPublicPath,
+  robotsTagFor,
+} from "./indexing.ts";
 
 const ORIGIN = "https://cloud.example.test";
 
@@ -106,7 +113,7 @@ describe("indexing", () => {
     for (const path of PUBLIC_PATHS) {
       expect(isPublicPath(path), path).toBe(true);
       expect(isPublicPath(path === "/" ? "/en" : `/en${path}`), path).toBe(true);
-      expect(robotsTagFor(path)).toBeNull();
+      expect(robotsTagFor(path, true)).toBeNull();
     }
     for (const page of FAMILY_PAGES) expect(isPublicPath(`/products/${page.slug}`)).toBe(true);
   });
@@ -127,7 +134,20 @@ describe("indexing", () => {
       "/legal/unknown",
       "/something-else",
     ]) {
-      expect(robotsTagFor(path), path).toBe(NOINDEX);
+      expect(robotsTagFor(path, true), path).toBe(NOINDEX);
+    }
+  });
+
+  it("only production is an indexable stage; staging, local, test and a missing stage are not (WPU-Z16)", () => {
+    expect(indexableStage({ TC_STAGE: "production" })).toBe(true);
+    for (const stage of ["staging", "local", "test", "", "Production", undefined]) {
+      expect(indexableStage({ TC_STAGE: stage }), String(stage)).toBe(false);
+    }
+  });
+
+  it("puts noindex on every path, public pages included, of a stage that is not production", () => {
+    for (const path of [...PUBLIC_PATHS, "/en", "/en/pricing", "/dashboard"]) {
+      expect(robotsTagFor(path, false), path).toBe(NOINDEX);
     }
   });
 });

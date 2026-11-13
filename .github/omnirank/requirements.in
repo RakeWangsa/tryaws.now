@@ -1,0 +1,12 @@
+# WPU-Z16: the runtime dependencies of OmniRank v0.4.0 (scripts/py/pyproject.toml at commit
+# dabe4bedd6e2623aa0160cb584bf5880aaec14bc) and its build backend. The hashed lock requirements.txt is
+# generated from this file with Python 3.12 (the python3 of ubuntu-24.04, the runner of omnirank.yml):
+#
+#   python3.12 -m venv /tmp/piptools && /tmp/piptools/bin/pip install pip-tools
+#   /tmp/piptools/bin/pip-compile --generate-hashes --allow-unsafe \
+#     --output-file .github/omnirank/requirements.txt .github/omnirank/requirements.in
+httpx>=0.27
+beautifulsoup4>=4.12
+lxml>=5.2
+jsonschema>=4.22
+setuptools>=68

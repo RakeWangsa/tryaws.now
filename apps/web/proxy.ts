@@ -7,7 +7,7 @@ import { gatewayFormOrigins } from "@tc/eps/redirect";
 import { CSP_REPORT_ONLY_HEADER, CSP_REPORT_PATH, buildCsp, createNonce } from "@tc/ui/runtime";
 import { routing } from "./i18n/routing.ts";
 import { proxyAuthRuntime } from "./server/proxy-auth.ts";
-import { robotsTagFor } from "./server/public/indexing.ts";
+import { indexableStage, robotsTagFor } from "./server/public/indexing.ts";
 
 const handleI18n = createMiddleware(routing);
 
@@ -60,7 +60,8 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   // Only the public pages may be indexed (16.8): the panel, the sign-in pages, the dev pages and
   // every path that is not a public page carry `noindex, nofollow` (server/public/indexing.ts).
-  const robots = robotsTagFor(request.nextUrl.pathname);
+  // WPU-Z16: on every stage but production, every path carries it.
+  const robots = robotsTagFor(request.nextUrl.pathname, indexableStage(process.env));
   if (robots !== null) response.headers.set("X-Robots-Tag", robots);
   return response;
 }
