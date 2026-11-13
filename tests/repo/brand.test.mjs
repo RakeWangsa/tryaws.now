@@ -6,7 +6,9 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-const OLD = /TiCON\s+Cloud|টিকন\s+ক্লাউড|MeghVPS|মেঘ\s*ভিপিএস/i;
+const OLD = /TiCON\s+Cloud|টিকন\s+ক্লাউড/i;
+// WPU-Z8: the brand of WPU-B1, replaced by TryAWS.now.
+const FORMER = /MeghVPS|মেঘ\s*ভিপিএস/i;
 
 const walk = (dir, out = []) => {
   for (const name of readdirSync(dir)) {
@@ -36,10 +38,17 @@ const customerFacing = () => {
   return files.filter((f) => /\.(ts|tsx|svg|json)$/.test(f) && !/\.test\./.test(f));
 };
 
-it("no customer-facing message, template, logo or invoice text says an old brand name", () => {
+it("no customer-facing message, template, logo or invoice text says TiCON Cloud", () => {
   const files = customerFacing();
   expect(files.length).toBeGreaterThan(20);
   const hits = files.filter((f) => OLD.test(readFileSync(f, "utf8")));
+  expect(hits).toEqual([]);
+});
+
+it("no customer-facing message, template, logo or invoice text says MeghVPS (WPU-Z8)", () => {
+  const files = customerFacing();
+  expect(files.length).toBeGreaterThan(20);
+  const hits = files.filter((f) => FORMER.test(readFileSync(f, "utf8")));
   expect(hits).toEqual([]);
 });
 
