@@ -1,10 +1,11 @@
 import { AwsError } from "@tc/aws";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { claim, transition, brief } = vi.hoisted(() => ({
+const { claim, transition, brief, payloadOf } = vi.hoisted(() => ({
   claim: vi.fn(),
   transition: vi.fn(),
   brief: vi.fn(),
+  payloadOf: vi.fn(),
 }));
 vi.mock("./claim", () => ({ claimStep: (...args: unknown[]) => claim(...args) }));
 vi.mock("@tc/core", async (importOriginal) => ({
@@ -14,6 +15,7 @@ vi.mock("@tc/core", async (importOriginal) => ({
 vi.mock("@tc/db", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tc/db")>()),
   loadOperationBrief: (...args: unknown[]) => brief(...args),
+  loadOperationPayload: (...args: unknown[]) => payloadOf(...args),
 }));
 
 import { createManualClock, createMemoryQueue, type LogEvent, type RenewalRecheck } from "@tc/core";
@@ -76,7 +78,6 @@ const target = (over: Record<string, unknown> = {}) => ({
   step: "poll",
   attempts: 2,
   lastError: "upstream_unavailable",
-  payload: PAYLOAD,
   ...over,
 });
 
@@ -120,6 +121,8 @@ beforeEach(() => {
   claim.mockReset();
   transition.mockReset();
   brief.mockReset();
+  payloadOf.mockReset();
+  payloadOf.mockResolvedValue({ payload: PAYLOAD });
   transition.mockResolvedValue({ applied: true, enqueueSeq: 1 });
 });
 
@@ -132,7 +135,9 @@ describe("runConfirmUnrenewed", () => {
       to: "succeeded",
       sent: false,
     });
-    // The check reads the name and the saved RenewDomain operation id of the resource, and the target's payload.
+    // The check reads the name and the saved RenewDomain operation id of the resource, and the target's payload
+    // (read apart from the brief, for this resource only).
+    expect(payloadOf).toHaveBeenCalledWith(TX, TARGET, RESOURCE);
     expect(checks).toHaveBeenCalledWith({
       name: "example.com",
       renewOperationId: "op-renew-1",
@@ -296,6 +301,18 @@ describe("runConfirmUnrenewed", () => {
       expect(transition).toHaveBeenCalledWith(TX, "worker", keptWith(code));
       expect(s.failed).not.toHaveBeenCalled();
     }
+  });
+
+  it("a payload that cannot be read for this resource is owner_mismatch, nothing asked", async () => {
+    const { deps, checks, failed } = setup();
+    brief.mockResolvedValue(target());
+    payloadOf.mockResolvedValue(null);
+    expect(await runConfirmUnrenewed(deps, view(), LEASE)).toMatchObject({
+      to: "needs_attention",
+    });
+    expect(transition).toHaveBeenCalledWith(TX, "worker", keptWith("owner_mismatch"));
+    expect(checks).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
   });
 
   it("a stale lease writes nothing more: the target is never moved", async () => {

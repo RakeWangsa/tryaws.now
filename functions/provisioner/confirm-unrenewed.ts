@@ -7,7 +7,7 @@ import {
   type LocalFailure,
   type RenewalRecheck,
 } from "@tc/core";
-import { loadOperationBrief } from "@tc/db";
+import { loadOperationBrief, loadOperationPayload } from "@tc/db";
 import type { OperationBrief, RunView, Tx } from "@tc/db";
 import type { RunOutcome, StepDeps } from "./types";
 
@@ -74,7 +74,7 @@ export async function runConfirmUnrenewed(
 
   // Phase 1.
   const first = await deps.runTx(
-    async (tx): Promise<{ target: OperationBrief } | { recorded: Recorded }> => {
+    async (tx): Promise<{ target: OperationBrief; payload: unknown } | { recorded: Recorded }> => {
       const targetId = targetOf(operation.payload);
       if (targetId === null) return { recorded: await refuse(tx, "invalid_step_result") };
       const target = await loadOperationBrief(tx, targetId);
@@ -91,7 +91,10 @@ export async function runConfirmUnrenewed(
       if (deps.renewalRecheck === undefined) {
         return { recorded: await refuse(tx, "renewal_check_missing") };
       }
-      return { target };
+      // The brief carries no payload (reject and others read it); the renewal's payload is read here only.
+      const read = await loadOperationPayload(tx, target.id, operation.resourceId);
+      if (read === null) return { recorded: await refuse(tx, "owner_mismatch") };
+      return { target, payload: read.payload };
     },
   );
 
@@ -108,7 +111,7 @@ export async function runConfirmUnrenewed(
         (await deps.renewalRecheck?.({
           name: config["name"],
           renewOperationId: config["renewOperationId"],
-          payload: before.payload,
+          payload: first.payload,
         })) ?? null;
     } catch {
       // R14: nothing of the error is kept.

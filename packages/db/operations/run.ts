@@ -130,8 +130,6 @@ export interface OperationBrief {
   readonly attempts: number;
   /** WPU-Y2: the last error (a renewal at poll carries its registry check and the time of it there). */
   readonly lastError: string | null;
-  /** WPU-X3 (b): the payload of the target (a renewal's pre-renewal expiry, read by confirm_unrenewed). */
-  readonly payload: unknown;
 }
 
 // The target of a reject_operation. The row stays locked until the transaction ends.
@@ -149,7 +147,6 @@ export async function loadOperationBrief(
       step: operations.step,
       attempts: operations.attempts,
       lastError: operations.lastError,
-      payload: operations.payload,
     })
     .from(operations)
     .where(eq(operations.id, operationId))
@@ -157,6 +154,26 @@ export async function loadOperationBrief(
     .for("update");
   const row = rows[0];
   return row === undefined ? null : { ...row, state: row.state as OperationState };
+}
+
+/**
+ * WPU-X3 (b): the payload of one operation of one resource (a renewal's pre-renewal expiry), for the provisioner's
+ * confirm_unrenewed only (worker_rw). Kept apart from the brief, which reject and others read. null for an unknown id,
+ * a non-UUID or an operation of another resource (R8).
+ */
+export async function loadOperationPayload(
+  tx: Tx,
+  operationId: string,
+  resourceId: string,
+): Promise<{ readonly payload: unknown } | null> {
+  if (!isUuid(operationId) || !isUuid(resourceId)) return null;
+  const rows = await tx
+    .select({ payload: operations.payload })
+    .from(operations)
+    .where(and(eq(operations.id, operationId), eq(operations.resourceId, resourceId)))
+    .limit(1);
+  const row = rows[0];
+  return row === undefined ? null : { payload: row.payload };
 }
 
 // R8: the owner is part of the same statement. Another customer's resource, a missing one and an id
