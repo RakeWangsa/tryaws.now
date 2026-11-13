@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import type { FamilyPage } from "../../../../../server/public/indexing.ts";
 import { breadcrumbLd } from "../../../../../server/public/seo.ts";
 import { JsonLds } from "../../_components/JsonLd.tsx";
+import { useSiteLd } from "../../_components/site-ld.ts";
 import type { Tr } from "../../_components/offers.tsx";
 import { NotifyForm } from "./NotifyForm.tsx";
 
@@ -30,11 +31,18 @@ export function FamilyContent({
   const t = useTranslations("Public") as unknown as Tr;
   const tAws = useTranslations("Aws");
   const name = t(`family.${page.nameKey}`);
+  const site = useSiteLd(locale);
   const crumbs = (
     <JsonLds
       origin={origin}
       nonce={nonce}
       build={(o) => [
+        ...site(o, {
+          path: `/products/${page.slug}`,
+          name: open ? name : t("soon.title", { name }),
+          description: t("meta.soon.description"),
+          answer: false,
+        }),
         breadcrumbLd(o, locale, [
           { name: t("crumb.home"), path: "/" },
           { name, path: `/products/${page.slug}` },

@@ -33,6 +33,7 @@ Commands cited in these pages: `pnpm verify --task <id>`, `pnpm db:up`, `pnpm db
 | [incident.md](incident.md)                                                       | incident                                                |
 | [support-requests.md](support-requests.md)                                       | support inbox                                           |
 | [restore-drill.md](restore-drill.md)                                             | database restore (written in WP9-T3)                    |
+| [ai-visibility.md](ai-visibility.md)                                             | OmniRank audit, GEO files, IndexNow, off-site steps     |
 
 ## Walked through once
 
@@ -63,3 +64,4 @@ Filled in by the owner when a person has read the page against the admin app and
 | [incident.md](incident.md)                                                       |                                |
 | [support-requests.md](support-requests.md)                                       |                                |
 | [restore-drill.md](restore-drill.md)                                             |                                |
+| [ai-visibility.md](ai-visibility.md)                                             |                                |

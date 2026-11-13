@@ -44,12 +44,14 @@ const runText = (step) => (typeof step.run === "string" ? step.run : "");
 
 describe("every file under .github", () => {
   // WPU-Z10: remove-staging.yml ends a staging test session (tests/repo/remove-staging.test.mjs).
-  it("has the deploy files, the staging removal and the CI file", () => {
+  // WPU-Z16: omnirank.yml audits the public site (tests/repo/omnirank-workflow.test.mjs).
+  it("has the deploy files, the staging removal, the CI file and the OmniRank audit", () => {
     const names = workflowFiles.map((f) => f.split("/").pop()).sort();
     expect(names).toEqual([
       "ci.yml",
       "deploy-production.yml",
       "deploy-staging.yml",
+      "omnirank.yml",
       "remove-staging.yml",
     ]);
   });

@@ -1,13 +1,18 @@
-import { Accordion, Button } from "@tc/ui";
+import { Button } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { breadcrumbLd, faqLd } from "../../../../server/public/seo.ts";
+import { AnswerBlock } from "../_components/AnswerBlock.tsx";
+import { FaqList } from "../_components/FaqList.tsx";
 import { JsonLds } from "../_components/JsonLd.tsx";
+import { useSiteLd } from "../_components/site-ld.ts";
 import type { Tr } from "../_components/offers.tsx";
 
-// `/help` (faq.html): the questions in an Accordion. The four required answers of 16.8 come first:
-// is this real AWS, an AWS account or console, who bills and supports, where the data is.
+// `/help` (faq.html): the answer block (WPU-Z16), then the questions as a description list with
+// every answer in the HTML. The four required answers of 16.8 come first: is this real AWS, an AWS
+// account or console, who bills and supports, where the data is. WPU-Z16 adds the questions people
+// ask AI assistants about the offer: the VAT invoice and refunds.
 
 export const FAQ_KEYS = [
   "realAws",
@@ -22,6 +27,8 @@ export const FAQ_KEYS = [
   "port25",
   "support",
   "bdt",
+  "vatInvoice",
+  "refunds",
 ] as const;
 
 export function HelpContent({
@@ -35,9 +42,9 @@ export function HelpContent({
 }) {
   const t = useTranslations("Public") as unknown as Tr;
   const tAws = useTranslations("Aws");
+  const site = useSiteLd(locale);
   const items = FAQ_KEYS.map((key) => ({
-    id: key,
-    title: t(`help.items.${key}.q`),
+    question: t(`help.items.${key}.q`),
     answer: t(`help.items.${key}.a`),
   }));
   return (
@@ -46,11 +53,17 @@ export function HelpContent({
         origin={origin}
         nonce={nonce}
         build={(o) => [
+          ...site(o, {
+            path: "/help",
+            name: t("meta.help.title"),
+            description: t("meta.help.description"),
+            answer: true,
+          }),
           breadcrumbLd(o, locale, [
             { name: t("crumb.home"), path: "/" },
             { name: t("help.heading"), path: "/help" },
           ]),
-          faqLd(items.map((item) => ({ question: item.title, answer: item.answer }))),
+          faqLd(items),
         ]}
       />
       <div className="top-header">
@@ -59,6 +72,7 @@ export function HelpContent({
             <div className="col-lg-12">
               <div className="wrapper">
                 <h1 className="heading mb-0">{t("help.heading")}</h1>
+                <AnswerBlock text={t("help.answer")} />
                 <p className="seccolor">{t("help.lead")}</p>
                 <p className="seccolor">{tAws("long")}</p>
               </div>
@@ -69,15 +83,7 @@ export function HelpContent({
       <section id="gotop" className="blog motpath pb-80 bg-colorstyle">
         <div className="container">
           <h2 className="section-heading mergecolor mt-80">{t("help.listTitle")}</h2>
-          <Accordion
-            headingLevel={3}
-            defaultOpenId="realAws"
-            items={items.map((item) => ({
-              id: item.id,
-              title: item.title,
-              content: <p className="seccolor">{item.answer}</p>,
-            }))}
-          />
+          <FaqList items={items} />
           <h2 className="h4 mergecolor mt-5">{t("help.stillTitle")}</h2>
           <p className="seccolor">{t("help.stillText")}</p>
           <Button variant="primary" href={localePath(locale, "/support")}>

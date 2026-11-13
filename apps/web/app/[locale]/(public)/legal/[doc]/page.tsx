@@ -21,7 +21,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     locale,
     path: `/legal/${doc}`,
     title: t(`legal.docs.${doc}.title`),
-    description: t("meta.legal.description"),
+    // WPU-Z16: one description per document (no two pages share one).
+    description: t("meta.legal.descriptionOf", { title: t(`legal.docs.${doc}.title`) }),
   });
 }
 

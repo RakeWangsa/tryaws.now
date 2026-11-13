@@ -1,0 +1,243 @@
+# TryAWS.now: full text
+
+> TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in US dollars and include VAT and fees; you pay in taka from a wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.
+
+Canonical site: https://tryaws.now
+Last updated: 2026-11-14
+
+## English
+
+### TryAWS.now: Cloud Server, built on Amazon Lightsail
+
+URL: https://tryaws.now/en
+
+Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in US dollars, wallet in taka, top up with EPS.
+
+TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in US dollars and include VAT and fees; you pay in taka from a wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.
+
+### Pricing: Cloud Server, built on Amazon Lightsail
+
+URL: https://tryaws.now/en/pricing
+
+Cloud Server plans with prices in US dollars for 30 days. Prices include VAT and fees. Built on Amazon Lightsail.
+
+Every Cloud Server price on TryAWS.now is in US dollars for 30 days and already includes VAT and fees. At checkout you see the exchange rate of the day and the exact amount in taka before you confirm, and exactly that amount is taken from your wallet, which you top up with EPS.
+
+### Cloud Server, built on Amazon Lightsail
+
+URL: https://tryaws.now/en/products/cloud-servers
+
+Cloud servers that run in the AWS Region Singapore or Mumbai. Plans, specifications and prices in US dollars. Built on Amazon Lightsail.
+
+A Cloud Server on TryAWS.now is an Amazon Lightsail instance that runs in the AWS Region Singapore or Mumbai. You pick a plan and a location, see the price in US dollars for 30 days with VAT and fees included, pay in taka from your wallet, and manage the server from the TryAWS.now panel.
+
+### Help and frequently asked questions
+
+URL: https://tryaws.now/en/help
+
+Answers about TryAWS.now and Amazon Lightsail: AWS, billing, support and where your data is.
+
+TryAWS.now sells Cloud Servers, built on Amazon Lightsail, in the AWS Region Singapore or Mumbai. You top up a wallet in taka with EPS and buy from it; prices are in US dollars, include VAT and fees, and are converted to taka at checkout. You complete an identity check once, and you get support through support requests.
+
+### Support and contact
+
+URL: https://tryaws.now/en/support
+
+How to get support from TryAWS.now: support requests in the panel, or the form on the support page without an account.
+
+TryAWS.now gives support through support requests only, and our support team answers every request in writing. With an account, open a request in the panel and follow the answers there. Without an account, use the form on the support page and we answer by email. There is no support phone line and no support email address.
+
+### Terms of service
+
+URL: https://tryaws.now/en/legal/terms
+
+Terms of service of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+
+### Privacy policy
+
+URL: https://tryaws.now/en/legal/privacy
+
+Privacy policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+
+### Acceptable use policy
+
+URL: https://tryaws.now/en/legal/acceptable-use
+
+Acceptable use policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+
+### Refund policy
+
+URL: https://tryaws.now/en/legal/refund
+
+Refund policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+
+### Frequently asked questions
+
+Q: Is this real AWS?
+A: Yes, 100%. Every server, database, disk and bucket you buy here is an Amazon Lightsail resource that runs in the AWS Region you choose.
+
+Q: Do I get an AWS account or the AWS console?
+A: No. You run everything from the TryAWS.now panel. You do not need a separate AWS account or the AWS console.
+
+Q: Who bills me and who supports me?
+A: TryAWS.now. We sell and bill the service, and we support you through support requests in the panel. There is no support phone line.
+
+Q: Where is my data?
+A: Servers, databases, disks and buckets are in the AWS Region you choose. CDN copies are at AWS edge locations worldwide. DNS is a global service. Your account and identity documents are kept in AWS Singapore.
+
+Q: How do I pay?
+A: Top up your wallet with EPS first, then buy servers from the wallet. The wallet and all payments are in taka; the taka amount of an order is shown at checkout.
+
+Q: What does the price include?
+A: A displayed price is in US dollars, for 30 days, and includes VAT and fees. At checkout you see the exchange rate of the day and the amount in taka before you confirm, and you are charged exactly that amount.
+
+Q: Which locations are there?
+A: Two AWS Regions at the start: Singapore and Mumbai. The data transfer of a plan can differ by location, so the price list shows the value for each location.
+
+Q: Do I need an identity check before I buy a server?
+A: Yes. You complete an identity check once before you buy a server. Our staff review it and tell you the result.
+
+Q: When do databases, storage and other products come?
+A: Products open step by step. If one is not open yet, leave your email on its page and we will tell you when it opens.
+
+Q: Is outbound port 25 open for sending email?
+A: No. Outbound port 25 is closed. To send email, use the API of an email service or another port.
+
+Q: Where do I get help?
+A: Open a support request in the panel and read our answers there. Without an account, use the form on the support page and we answer by email. There is no support phone line or support email address.
+
+Q: Are prices in taka?
+A: Prices are shown in US dollars. Your wallet, top-ups and invoices are in Bangladeshi taka (BDT); the taka amount of an order is worked out at checkout with the exchange rate of the day.
+
+Q: Do I get a VAT invoice?
+A: Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.
+
+Q: Can I get a refund?
+A: If a resource cannot be created after you paid, the full amount goes back to your wallet automatically. When we cancel a purchase or a renewal, the whole amount goes back to your wallet and you get a credit note in taka. For anything else, open a billing support request; the refund policy has the details.
+
+Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai). TryAWS.now sells, bills and supports the service. You manage everything from this panel and do not need an AWS account.
+
+Prices are in US dollars (USD), for 30 days, and include VAT and fees. The amount in taka is worked out at checkout with the exchange rate of the day, and you see it before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail.
+
+Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.
+
+## বাংলা
+
+### TryAWS.now: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি
+
+URL: https://tryaws.now/
+
+বাংলাদেশের জন্য প্রিপেইড ক্লাউড প্যানেল। ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি। মূল্য মার্কিন ডলারে, ওয়ালেট টাকায়, EPS দিয়ে টপ আপ।
+
+TryAWS.now বাংলাদেশের মানুষ ও প্রতিষ্ঠানের জন্য একটি প্রিপেইড ক্লাউড প্যানেল। এখানে Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার কেনা যায়, যা Singapore বা Mumbai AWS Region থেকে চলে। মূল্য মার্কিন ডলারে দেখানো হয় এবং তাতে VAT ও ফি অন্তর্ভুক্ত; পরিশোধ হয় টাকায়, ওয়ালেট থেকে, যা EPS দিয়ে টপ আপ করা যায়। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।
+
+### মূল্য তালিকা: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি
+
+URL: https://tryaws.now/pricing
+
+ক্লাউড সার্ভারের সব প্ল্যানের মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য। মূল্যে VAT ও ফি অন্তর্ভুক্ত। Amazon Lightsail দিয়ে তৈরি।
+
+TryAWS.now-এর প্রতিটি ক্লাউড সার্ভারের মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য, এবং তাতে VAT ও ফি অন্তর্ভুক্ত। চেকআউটে নিশ্চিত করার আগেই সেদিনের বিনিময় হার ও টাকায় ঠিক কত লাগবে তা দেখতে পাবেন, আর ঠিক সেই পরিমাণই আপনার ওয়ালেট থেকে কাটা হয়, যা EPS দিয়ে টপ আপ করা যায়।
+
+### ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি
+
+URL: https://tryaws.now/products/cloud-servers
+
+Singapore বা Mumbai AWS Region-এ চলা ক্লাউড সার্ভার। প্ল্যান, স্পেসিফিকেশন ও মূল্য মার্কিন ডলারে। Amazon Lightsail দিয়ে তৈরি।
+
+TryAWS.now-এর একটি ক্লাউড সার্ভার হলো একটি Amazon Lightsail instance, যা Singapore বা Mumbai AWS Region-এ চলে। আপনি প্ল্যান ও লোকেশন বেছে নেন, ৩০ দিনের মূল্য মার্কিন ডলারে VAT ও ফি সহ দেখেন, ওয়ালেট থেকে টাকায় পরিশোধ করেন, আর TryAWS.now প্যানেল থেকে সার্ভার চালান।
+
+### সাহায্য ও সাধারণ প্রশ্ন
+
+URL: https://tryaws.now/help
+
+TryAWS.now ও Amazon Lightsail নিয়ে সাধারণ প্রশ্নের উত্তর: AWS, বিল, সাপোর্ট, ডেটা কোথায় থাকে।
+
+TryAWS.now Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার বিক্রি করে, যা Singapore বা Mumbai AWS Region-এ চলে। EPS দিয়ে টাকায় ওয়ালেট টপ আপ করে সেখান থেকে কেনা যায়; মূল্য মার্কিন ডলারে, VAT ও ফি সহ, আর চেকআউটে টাকায় হিসাব হয়। একবার পরিচয় যাচাই করতে হয়, আর সাপোর্ট পাওয়া যায় সাপোর্ট অনুরোধের মাধ্যমে।
+
+### সাপোর্ট ও যোগাযোগ
+
+URL: https://tryaws.now/support
+
+TryAWS.now-এর সাপোর্ট পাওয়ার উপায়: প্যানেলে সাপোর্ট অনুরোধ, আর অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম।
+
+TryAWS.now সাপোর্ট দেয় শুধু সাপোর্ট অনুরোধের মাধ্যমে, এবং প্রতিটি অনুরোধের লিখিত উত্তর দেয় আমাদের সাপোর্ট দল। অ্যাকাউন্ট থাকলে প্যানেলে অনুরোধ খুলুন এবং সেখানেই উত্তর দেখুন। অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম ব্যবহার করুন, আমরা ইমেইলে উত্তর দেব। সাপোর্টের কোনো ফোন লাইন বা ইমেইল ঠিকানা নেই।
+
+### সেবার শর্তাবলি
+
+URL: https://tryaws.now/legal/terms
+
+সেবার শর্তাবলি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+
+### গোপনীয়তা নীতি
+
+URL: https://tryaws.now/legal/privacy
+
+গোপনীয়তা নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+
+### গ্রহণযোগ্য ব্যবহারের নীতি
+
+URL: https://tryaws.now/legal/acceptable-use
+
+গ্রহণযোগ্য ব্যবহারের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+
+### টাকা ফেরতের নীতি
+
+URL: https://tryaws.now/legal/refund
+
+টাকা ফেরতের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+
+### সাধারণ প্রশ্ন
+
+Q: এটি কি সত্যিই AWS?
+A: হ্যাঁ, ১০০%। এখানে কেনা প্রতিটি সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট একটি Amazon Lightsail resource, যা আপনার বেছে নেওয়া AWS Region-এ চলে।
+
+Q: আমি কি AWS account বা AWS console পাব?
+A: না। আপনি TryAWS.now প্যানেল থেকেই সবকিছু চালান। আলাদা AWS account বা AWS console লাগে না।
+
+Q: বিল ও সাপোর্ট কে দেয়?
+A: TryAWS.now। আমরা বিক্রি করি ও বিল করি, আর প্যানেলের সাপোর্ট অনুরোধের মাধ্যমে সাপোর্ট দিই। সাপোর্টের কোনো ফোন লাইন নেই।
+
+Q: আমার ডেটা কোথায় থাকে?
+A: সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট আপনার বেছে নেওয়া AWS Region-এ থাকে। CDN-এর কপি বিশ্বজুড়ে AWS-এর edge লোকেশনে থাকে। DNS বৈশ্বিক সেবা। আপনার অ্যাকাউন্ট ও পরিচয়পত্রের নথি AWS Singapore-এ রাখা হয়।
+
+Q: কীভাবে টাকা দেব?
+A: প্রথমে EPS দিয়ে ওয়ালেটে টপ আপ করুন। তারপর ওয়ালেট থেকে সার্ভার কিনুন। ওয়ালেট ও সব পেমেন্ট টাকায়; অর্ডারের টাকার পরিমাণ চেকআউটে দেখানো হয়।
+
+Q: মূল্যে কী কী অন্তর্ভুক্ত?
+A: প্রদর্শিত মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য এবং তাতে VAT ও ফি অন্তর্ভুক্ত। চেকআউটে সেদিনের বিনিময় হার ও টাকার পরিমাণ নিশ্চিত করার আগেই দেখানো হয়, এবং ঠিক সেই পরিমাণই কাটা হয়।
+
+Q: কোন কোন লোকেশন আছে?
+A: শুরুতে দুটি AWS Region: Singapore ও Mumbai। প্ল্যানের ডেটা ট্রান্সফার লোকেশন অনুযায়ী আলাদা হতে পারে, তাই মূল্য তালিকায় প্রতিটি লোকেশনের মান আলাদা দেখানো হয়।
+
+Q: সার্ভার কেনার আগে পরিচয় যাচাই লাগে?
+A: হ্যাঁ। সার্ভার কেনার আগে একবার পরিচয় যাচাই সম্পন্ন করতে হয়। কর্মী যাচাই করে ফল জানান।
+
+Q: ডেটাবেস, স্টোরেজ ও অন্য পণ্য কবে?
+A: পণ্যগুলো ধাপে ধাপে খোলা হচ্ছে। যেটি এখনো খোলেনি, তার পাতায় আপনার ইমেইল দিলে খোলা হলে জানানো হবে।
+
+Q: ইমেইল পাঠানোর জন্য পোর্ট ২৫ খোলা থাকে?
+A: না। বাইরে যাওয়া পোর্ট ২৫ বন্ধ থাকে। ইমেইল পাঠাতে একটি ইমেইল সেবার API বা অন্য পোর্ট ব্যবহার করুন।
+
+Q: সাহায্য কোথায় পাব?
+A: প্যানেলে সাপোর্ট অনুরোধ খুলুন এবং সেখানেই আমাদের উত্তর দেখুন। অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম ব্যবহার করুন, আমরা ইমেইলে উত্তর দেব। সাপোর্টের কোনো ফোন লাইন বা ইমেইল ঠিকানা নেই।
+
+Q: মূল্য কি টাকায়?
+A: মূল্য মার্কিন ডলারে দেখানো হয়। ওয়ালেট, টপ আপ ও ইনভয়েস বাংলাদেশি টাকায় (BDT); অর্ডারের টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয়।
+
+Q: আমি কি VAT সহ কর চালানপত্র পাব?
+A: হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।
+
+Q: টাকা ফেরত পাওয়া যায় কি?
+A: পেমেন্টের পর কোনো resource তৈরি না হলে পুরো টাকা নিজে থেকেই ওয়ালেটে ফেরত যায়। আমরা কোনো কেনা বা নবায়ন বাতিল করলে পুরো টাকা ওয়ালেটে ফেরত যায় এবং আপনি টাকায় ক্রেডিট নোট পান। অন্য কিছুর জন্য বিল বিষয়ে সাপোর্ট অনুরোধ খুলুন; বিস্তারিত ফেরতের নীতিতে আছে।
+
+এখানে কেনা প্রতিটি সার্ভার, ডেটাবেস ও স্টোরেজ একটি Amazon Lightsail resource, যা Singapore বা Mumbai AWS Region থেকে চলে। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়। সবকিছু এই প্যানেল থেকেই চালানো যায়, আলাদা AWS account লাগে না।
+
+মূল্য মার্কিন ডলারে (USD), ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত। টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয় এবং নিশ্চিত করার আগেই দেখানো হয়। ১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।
+
+Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.
+
+## How to cite us
+
+Content is licensed CC-BY-4.0. When quoting, attribute to TryAWS.now (TiCON System Limited) and link the source URL.
+When quoting a page, prefer that page's AnswerBlock — it is written to be lifted verbatim.

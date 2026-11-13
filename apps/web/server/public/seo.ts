@@ -8,6 +8,24 @@ import type { Locale } from "@tc/ui/runtime";
 
 export const SITE_NAME = "TryAWS.now";
 
+/**
+ * WPU-Z16: the date the public texts were last changed (ISO date, Asia/Dhaka). Shown at the foot of
+ * every public page, written as `dateModified` of each WebPage and into facts.json. A text change of
+ * the public pages moves it; geo-files.test.ts then asks for the GEO files to be written again.
+ */
+export const CONTENT_UPDATED = "2026-11-14";
+
+/** WPU-Z16: the picture of a shared link: the wordmark on the theme's dark ground, 1200 x 630. */
+export const OG_IMAGE = Object.freeze({ path: "/brand/og.png", width: 1200, height: 630 });
+
+/**
+ * WPU-Z16: the CSS selector of the answer block (AEO): the hero subtitle of the mockup
+ * (`.top-header .wrapper .subheading`), which holds the 40 to 60 word plain answer of a page.
+ * omnirank.config.json names the same selector (geo.answerBlockSelector), and the speakable part
+ * of the WebPage JSON-LD points at it.
+ */
+export const ANSWER_SELECTOR = ".subheading";
+
 export interface PageMeta {
   /** A plain origin without a final slash (WebConfig.appOrigin); null when the site has none configured. */
   origin: string | null;
@@ -52,7 +70,17 @@ export function pageMetadata(meta: PageMeta): Metadata {
       url: url(meta.locale),
       locale: meta.locale === "bn" ? "bn_BD" : "en_US",
       alternateLocale: meta.locale === "bn" ? ["en_US"] : ["bn_BD"],
+      // The picture shows the wordmark only, so its text is the brand in both languages.
+      images: [
+        {
+          url: origin + OG_IMAGE.path,
+          width: OG_IMAGE.width,
+          height: OG_IMAGE.height,
+          alt: SITE_NAME,
+        },
+      ],
     },
+    twitter: { card: "summary_large_image", title: meta.title, description: meta.description },
     icons: { icon: "/brand/symbol.svg" },
   };
 }
@@ -87,14 +115,87 @@ export function wholeTakaUp(minor: bigint): string {
 
 type Ld = Record<string, unknown>;
 
-export function organizationLd(origin: string): Ld {
+/** The stable `@id` of the organisation: every other block refers to it by this id (WPU-Z16). */
+export const organizationId = (origin: string): string => `${origin}/#organization`;
+export const websiteId = (origin: string): string => `${origin}/#website`;
+
+export interface OrganizationFacts {
+  /** The entity statement (`Public.entity.statement`) in the page's language. */
+  description: string;
+  /** The legal entity of the footer (`Shell.footer.companyName`). */
+  legalName: string;
+}
+
+/**
+ * The organisation behind the brand, with a stable `@id`. No `sameAs`: it lists only profiles that
+ * exist, and none does yet (runbook "AI visibility" names the owner's steps).
+ */
+export function organizationLd(origin: string, facts: OrganizationFacts): Ld {
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": organizationId(origin),
     name: SITE_NAME,
+    legalName: facts.legalName,
     url: origin + "/",
     logo: origin + "/brand/symbol.svg",
+    description: facts.description,
+    areaServed: { "@type": "Country", name: "Bangladesh" },
   };
+}
+
+/** The site itself, in both languages, published by the organisation. */
+export function websiteLd(origin: string): Ld {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": websiteId(origin),
+    url: origin + "/",
+    name: SITE_NAME,
+    inLanguage: ["bn", "en"],
+    publisher: { "@id": organizationId(origin) },
+  };
+}
+
+/**
+ * One public page: its URL, name and language, the date its text last changed, and, on a page with
+ * an answer block, the speakable part that points at it.
+ */
+export function webPageLd(input: {
+  origin: string;
+  locale: Locale;
+  path: string;
+  name: string;
+  description: string;
+  answer: boolean;
+}): Ld {
+  const url = input.origin + localePath(input.locale, input.path);
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": `${url}#webpage`,
+    url,
+    name: input.name,
+    description: input.description,
+    inLanguage: input.locale,
+    isPartOf: { "@id": websiteId(input.origin) },
+    about: { "@id": organizationId(input.origin) },
+    dateModified: CONTENT_UPDATED,
+    ...(input.answer
+      ? { speakable: { "@type": "SpeakableSpecification", cssSelector: [ANSWER_SELECTOR] } }
+      : {}),
+  };
+}
+
+/** Organization, WebSite and WebPage: the three blocks every public page carries. */
+export function siteLd(
+  input: Parameters<typeof webPageLd>[0] & { organization: OrganizationFacts },
+): Ld[] {
+  return [
+    organizationLd(input.origin, input.organization),
+    websiteLd(input.origin),
+    webPageLd(input),
+  ];
 }
 
 export function breadcrumbLd(

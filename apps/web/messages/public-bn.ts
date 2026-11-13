@@ -7,6 +7,15 @@ import { legalDocsBn } from "./legal-bn.ts";
 export const publicBn = {
   Public: {
     crumb: { home: "হোম" },
+    // WPU-Z16 (AEO and GEO): one statement of what TryAWS.now is, for whom, where and how it is billed.
+    // The home page shows it as its answer block (40 to 60 words), and the same text is the
+    // description of the Organization JSON-LD, of llms.txt and of facts.json.
+    entity: {
+      statement:
+        "TryAWS.now বাংলাদেশের মানুষ ও প্রতিষ্ঠানের জন্য একটি প্রিপেইড ক্লাউড প্যানেল। এখানে Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার কেনা যায়, যা Singapore বা Mumbai AWS Region থেকে চলে। মূল্য মার্কিন ডলারে দেখানো হয় এবং তাতে VAT ও ফি অন্তর্ভুক্ত; পরিশোধ হয় টাকায়, ওয়ালেট থেকে, যা EPS দিয়ে টপ আপ করা যায়। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।",
+    },
+    // WPU-Z16: the dated line at the foot of every public page (the same date is in facts.json).
+    updated: { label: "সর্বশেষ হালনাগাদ: <time>{date}</time>" },
     meta: {
       home: {
         title: "TryAWS.now: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
@@ -36,6 +45,9 @@ export const publicBn = {
       legal: {
         title: "আইনি নথি",
         description: "TryAWS.now-এর শর্তাবলি, গোপনীয়তা, গ্রহণযোগ্য ব্যবহার ও ফেরতের নীতি।",
+        // WPU-Z16: one description per document, so no two legal pages share one (OmniRank).
+        descriptionOf:
+          "{title}: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।",
       },
       soon: {
         description: "এই পণ্য এখনো খোলা হয়নি। খোলা হলে ইমেইলে জানাতে আপনার ঠিকানা দিন।",
@@ -80,8 +92,6 @@ export const publicBn = {
     },
     home: {
       heroTitle: "ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
-      heroLead:
-        "বাংলাদেশের জন্য প্রিপেইড ক্লাউড প্যানেল। মূল্য মার্কিন ডলারে, ওয়ালেট টাকায়, EPS দিয়ে ওয়ালেটে টপ আপ। সবকিছু এক প্যানেল থেকে চালান।",
       plansTitle: "জনপ্রিয় ক্লাউড সার্ভার প্ল্যান",
       plansLead:
         "বর্তমানে খোলা সবচেয়ে কম মূল্যের প্ল্যান। সব মূল্য সরাসরি মূল্য তালিকা থেকে নেওয়া।",
@@ -117,6 +127,8 @@ export const publicBn = {
     pricing: {
       heading: "মূল্য তালিকা",
       lead: "ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি। প্রতিটি মূল্য ৩০ দিনের জন্য, মার্কিন ডলারে।",
+      answer:
+        "TryAWS.now-এর প্রতিটি ক্লাউড সার্ভারের মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য, এবং তাতে VAT ও ফি অন্তর্ভুক্ত। চেকআউটে নিশ্চিত করার আগেই সেদিনের বিনিময় হার ও টাকায় ঠিক কত লাগবে তা দেখতে পাবেন, আর ঠিক সেই পরিমাণই আপনার ওয়ালেট থেকে কাটা হয়, যা EPS দিয়ে টপ আপ করা যায়।",
       tabsLabel: "পণ্যের ধরন",
       tabCloudServers: "ক্লাউড সার্ভার",
       tableTitle: "প্ল্যানের তুলনা",
@@ -133,6 +145,8 @@ export const publicBn = {
     cloudServers: {
       heading: "ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
       lead: "প্রতিটি ক্লাউড সার্ভার একটি Amazon Lightsail instance, যা Singapore বা Mumbai AWS Region-এ চলে।",
+      answer:
+        "TryAWS.now-এর একটি ক্লাউড সার্ভার হলো একটি Amazon Lightsail instance, যা Singapore বা Mumbai AWS Region-এ চলে। আপনি প্ল্যান ও লোকেশন বেছে নেন, ৩০ দিনের মূল্য মার্কিন ডলারে VAT ও ফি সহ দেখেন, ওয়ালেট থেকে টাকায় পরিশোধ করেন, আর TryAWS.now প্যানেল থেকে সার্ভার চালান।",
       plansTitle: "প্ল্যান",
       featuresTitle: "যা পাবেন",
       features: {
@@ -185,6 +199,8 @@ export const publicBn = {
     help: {
       heading: "সাধারণ প্রশ্ন",
       lead: "TryAWS.now ও Amazon Lightsail নিয়ে সবচেয়ে বেশি জিজ্ঞাসিত প্রশ্ন।",
+      answer:
+        "TryAWS.now Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার বিক্রি করে, যা Singapore বা Mumbai AWS Region-এ চলে। EPS দিয়ে টাকায় ওয়ালেট টপ আপ করে সেখান থেকে কেনা যায়; মূল্য মার্কিন ডলারে, VAT ও ফি সহ, আর চেকআউটে টাকায় হিসাব হয়। একবার পরিচয় যাচাই করতে হয়, আর সাপোর্ট পাওয়া যায় সাপোর্ট অনুরোধের মাধ্যমে।",
       listTitle: "প্রশ্নোত্তর",
       stillTitle: "উত্তর পাননি?",
       stillText: "সাপোর্ট পাতায় আমাদের জানান।",
@@ -237,11 +253,21 @@ export const publicBn = {
           q: "মূল্য কি টাকায়?",
           a: "মূল্য মার্কিন ডলারে দেখানো হয়। ওয়ালেট, টপ আপ ও ইনভয়েস বাংলাদেশি টাকায় (BDT); অর্ডারের টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয়।",
         },
+        // WPU-Z16: what people ask AI assistants about this offer; facts of the terms and refund drafts.
+        vatInvoice: {
+          q: "আমি কি VAT সহ কর চালানপত্র পাব?",
+          a: "হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।",
+        },
+        refunds: {
+          q: "টাকা ফেরত পাওয়া যায় কি?",
+          a: "পেমেন্টের পর কোনো resource তৈরি না হলে পুরো টাকা নিজে থেকেই ওয়ালেটে ফেরত যায়। আমরা কোনো কেনা বা নবায়ন বাতিল করলে পুরো টাকা ওয়ালেটে ফেরত যায় এবং আপনি টাকায় ক্রেডিট নোট পান। অন্য কিছুর জন্য বিল বিষয়ে সাপোর্ট অনুরোধ খুলুন; বিস্তারিত ফেরতের নীতিতে আছে।",
+        },
       },
     },
     support: {
       heading: "সাপোর্ট ও যোগাযোগ",
-      lead: "TryAWS.now সাপোর্ট দেয় সাপোর্ট অনুরোধের মাধ্যমে, এবং প্রতিটি অনুরোধের লিখিত উত্তর দেয় আমাদের সাপোর্ট দল। সাপোর্টের কোনো ফোন লাইন বা ইমেইল ঠিকানা নেই।",
+      // WPU-Z16: also the answer block of the page (40 to 60 words).
+      lead: "TryAWS.now সাপোর্ট দেয় শুধু সাপোর্ট অনুরোধের মাধ্যমে, এবং প্রতিটি অনুরোধের লিখিত উত্তর দেয় আমাদের সাপোর্ট দল। অ্যাকাউন্ট থাকলে প্যানেলে অনুরোধ খুলুন এবং সেখানেই উত্তর দেখুন। অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম ব্যবহার করুন, আমরা ইমেইলে উত্তর দেব। সাপোর্টের কোনো ফোন লাইন বা ইমেইল ঠিকানা নেই।",
       customerTitle: "আপনার অ্যাকাউন্ট থাকলে",
       customerText:
         "প্যানেলে সাপোর্ট অনুরোধ খুলুন এবং সেখানেই সেটি অনুসরণ করুন: আমাদের উত্তর পড়ুন এবং একই জায়গায় জবাব দিন। সাইন ইন করা না থাকলে আগে সাইন ইন করতে হবে।",

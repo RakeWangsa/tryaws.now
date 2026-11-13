@@ -5,6 +5,7 @@ import { LEGAL_DOCS } from "../../../../server/public/indexing.ts";
 import type { LegalDoc } from "../../../../server/public/indexing.ts";
 import { breadcrumbLd } from "../../../../server/public/seo.ts";
 import { JsonLds } from "../_components/JsonLd.tsx";
+import { useSiteLd } from "../_components/site-ld.ts";
 import type { Tr } from "../_components/offers.tsx";
 
 // `/legal/[doc]` (legal.html): the sidebar of documents and the document. The texts are DRAFTS (WPU-Z7,
@@ -93,12 +94,19 @@ export function LegalContent({
     brand: tShell("brand"),
   };
   const title = t(`legal.docs.${doc}.title`);
+  const site = useSiteLd(locale);
   return (
     <>
       <JsonLds
         origin={origin}
         nonce={nonce}
         build={(o) => [
+          ...site(o, {
+            path: `/legal/${doc}`,
+            name: title,
+            description: t("meta.legal.descriptionOf", { title }),
+            answer: false,
+          }),
           breadcrumbLd(o, locale, [
             { name: t("crumb.home"), path: "/" },
             { name: t("legal.heading"), path: "/legal/terms" },
