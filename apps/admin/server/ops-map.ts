@@ -35,6 +35,16 @@ export const ERROR_CODES = [
   "failed_hook_missing",
   "renewal_submitted",
   "zone_created",
+  // WPU-X3 (b): a renewal refunded on a confirmed "not renewed", and the reasons a check keeps a renewal.
+  "renewal_unrenewed_confirmed",
+  "renewal_not_confirmable",
+  "registry_renewed",
+  "renewal_in_progress",
+  "expiry_changed",
+  "renewal_unreadable",
+  "registry_unreachable",
+  "target_changed",
+  "renewal_check_missing",
   "invalid_step_result",
   "lease_expired",
 ] as const;

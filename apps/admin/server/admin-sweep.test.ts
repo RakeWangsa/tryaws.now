@@ -166,6 +166,7 @@ describe("flows: authorize with roles is the first step, before the limiter, the
       "server/price-book-flow.ts",
       "server/pricing-flow.ts",
       "server/reconciliation-flow.ts",
+      "server/renewal-flow.ts",
       "server/support-flow.ts",
       "server/tier-limits-flow.ts",
       "server/unpaid-rule-flow.ts",
@@ -255,6 +256,31 @@ describe("flows: authorize with roles is the first step, before the limiter, the
     expect([...code.matchAll(/await deps\.authorize\(OPS_ROLES\)/g)].length).toBe(1);
     expect([...code.matchAll(/authorize\(/g)].length).toBe(1);
     expect(code).not.toMatch(/customerId|customerRepos|\bsession\b|request\.(actor|adminId|role)/);
+  });
+
+  // WPU-X3 (b). "Registry confirmed not renewed": one write, finance and superadmin (a refund decision). It writes an
+  // operation row for one renewal of any customer by its id (an admin sees every tenant); the request carries no actor,
+  // role or customer, and the flow calls no AWS (R1).
+  it("the renewal flow authorizes in its one write, with the finance roles, takes no actor and calls no AWS", () => {
+    const code = read(join(ROOT, "server/renewal-flow.ts")).replace(/\/\/.*$/gm, "");
+    expect([...code.matchAll(/await deps\.authorize\(RENEWAL_CONFIRM_ROLES\)/g)].length).toBe(1);
+    expect([...code.matchAll(/authorize\(/g)].length).toBe(1);
+    expect(code).toMatch(
+      /RENEWAL_CONFIRM_ROLES: readonly AdminRole\[\] = \["finance", "superadmin"\]/,
+    );
+    expect(code).not.toMatch(
+      /customerId|customerRepos|\bsession\b|request\.(actor|adminId|role)|@tc\/aws/,
+    );
+  });
+
+  it("the confirm action is a Server Action of ops-actions.ts that uses the flow with the session check and carries no actor", () => {
+    const source = read(join(ROOT, "server/ops-actions.ts"));
+    const head = source.indexOf("export async function confirmUnrenewedAction(");
+    expect(head).toBeGreaterThanOrEqual(0);
+    const body = source.slice(head, source.indexOf("\n}\n", head) + 3);
+    expect(body).toContain("ensureAdminAuth()");
+    expect(body).toContain("makeConfirmUnrenewedAction(opsFlowDeps())");
+    expect(body).not.toMatch(/adminId|role|approver|actor/i);
   });
 
   // WPU-Z4. The switch of the unpaid-usage job: one write, market configuration only (a settings row), so

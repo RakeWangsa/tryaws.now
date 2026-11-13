@@ -73,6 +73,7 @@ export const opsEn: Same<typeof opsBn> = {
       set_name_servers: "Change domain name servers",
       reject_operation: "Reject a stuck operation",
       cleanup_failed_create: "Remove leftovers of a failed create",
+      confirm_unrenewed: "Confirm a domain renewal did not happen",
       other: "Other kind",
     },
     errors: {
@@ -108,6 +109,23 @@ export const opsEn: Same<typeof opsBn> = {
         "The renewal may already be at the registry, so a rejection cannot refund it yet. Retry it: if the registry answers that the renewal failed, it is refunded; if it answers ERROR and the expiry is unchanged, you can reject it within the hour of that check. A renewal still in progress cannot be refunded",
       zone_created:
         "The hosted zone already exists, so a rejection cannot refund it; retry the create, or destroy the zone first",
+      renewal_unrenewed_confirmed:
+        "The registry confirmed the renewal did not happen; the renewal charge went back to the wallet",
+      renewal_not_confirmable:
+        "Only a domain renewal that needs attention at the registry check step can be confirmed as not renewed",
+      registry_renewed:
+        "The registry renewed the domain: nothing is refunded. Retry the renewal so it finishes",
+      renewal_in_progress:
+        "The registry is still working on the renewal: nothing is refunded. Check again later",
+      expiry_changed:
+        "The expiry date at the registry is not the one before the renewal: nothing is refunded. Look at the domain before you act",
+      renewal_unreadable:
+        "The renewal or the registry answer could not be read: nothing is refunded",
+      registry_unreachable:
+        "The registry could not be asked now: nothing is refunded. Try again later",
+      target_changed:
+        "The renewal changed during the check (a retry or another run): nothing is refunded. Reload and check again",
+      renewal_check_missing: "The registry check is not set up: nothing is refunded",
       invalid_step_result: "A step answered with an invalid result",
       lease_expired: "The time for the operation ran out",
       other: "Another error. Details are in the log",

@@ -139,6 +139,8 @@ export const OPS_KINDS = ["approveOperation", "rejectOperation", "retryOperation
 export const opsAction = z.object({ kind: z.enum(OPS_KINDS), id: uuid, reason });
 
 export const planMarkAction = z.object({ resourceId: uuid, requestId: uuid, reason });
+// WPU-X3 (b): "registry confirmed not renewed" of a stuck domain renewal: the renewal, the id of the form, the reason.
+export const confirmUnrenewedAction = z.object({ id: uuid, requestId: uuid, reason });
 
 // ---- one reasoned action on one row (reconciliation, abuse case ids, support) ----
 export const reasonedId = z.object({ id: uuid, reason });

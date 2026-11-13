@@ -3832,6 +3832,24 @@ TASKS["WPU-Y4"] = [
   repo,
 ];
 
+// WPU-X3: (a) the app password file of an image on the Connect tab, one list of Bitnami stacks; (b) the admin action
+// "registry confirmed not renewed" (confirm_unrenewed: core rule, aws recheck, db repo, provisioner runner, admin
+// flow and page). core, db and the provisioner include PostgreSQL tests.
+TASKS["WPU-X3"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  web,
+  admin,
+  repo,
+];
+
 // WPU-Y1: app images move to the Lightsail-packaged blueprints (core tables and defaults; no DB change).
 TASKS["WPU-Y1"] = [specSync, baselineSync, lint, typecheck, format, core, repo];
 
