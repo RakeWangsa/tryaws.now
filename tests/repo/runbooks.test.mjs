@@ -87,3 +87,35 @@ describe("runbook commands and rules", () => {
     }
   });
 });
+
+// Final review (Z19 runbook): the disk stop procedure. The order is unmount, stop the server, then detach or
+// destroy; the adapter refuses while the server is not stopped, and the admin path never stops a server.
+describe("disk-detach-and-destroy.md", () => {
+  const page = read("disk-detach-and-destroy.md");
+  const adapter = readFileSync(join(root, "packages", "aws", "adapters", "disk.ts"), "utf8");
+
+  it("names the order unmount, stop, detach, and the admin path of a refused end-of-subscription destroy", () => {
+    const order = ["sudo umount", "/etc/fstab", "Stop the server", "Detach the disk"];
+    let at = -1;
+    for (const step of order) {
+      const next = page.indexOf(step, at + 1);
+      expect(next, step).toBeGreaterThan(at);
+      at = next;
+    }
+    expect(page).toContain("## End-of-subscription destroy refused because the server runs");
+    expect(page).toContain("`retryOperation`");
+    expect(page).toContain("Never stop a customer's server");
+    expect(page).toContain("Needs decision");
+    expect(read("lifecycle-approval.md")).toContain(
+      "[disk-detach-and-destroy.md](disk-detach-and-destroy.md)",
+    );
+  });
+
+  it("matches the adapter: a detach or destroy of an attached disk needs a stopped server", () => {
+    expect(adapter).toContain(
+      'if (got?.instance?.state?.name !== "stopped") throw fail("conflict");',
+    );
+    expect(adapter).toContain("await requireStoppedInstance(ctx, disk.attachedTo);");
+    expect(adapter).not.toMatch(/StopInstanceCommand/);
+  });
+});
