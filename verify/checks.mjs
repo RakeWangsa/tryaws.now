@@ -3676,6 +3676,106 @@ TASKS["WPU-Z9"] = [
 // scheduler include PostgreSQL tests).
 TASKS["WPU-Z12"] = [specSync, baselineSync, lint, typecheck, format, core, db, scheduler, repo];
 
+// WPU-Z5: support requests become tickets with a thread (data, notification, admin); db includes PostgreSQL.
+TASKS["WPU-Z5"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  crossTenant,
+  notifyAll,
+  admin,
+  web,
+  adminCaseRepos,
+  adminCaseApp,
+  repo,
+];
+
+// WPU-Z10: staging on demand (one NAT instance, one week of logs, a stage that removes cleanly).
+TASKS["WPU-Z10"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  infraLib,
+  infraTest(
+    "sst-types",
+    "WPU-Z9: infra/stacks type-check against the SST 4.17.2 platform (skips without .sst/platform)",
+    "sst-types",
+  ),
+  infraTest("infra-rules", "infra/stacks: static rules of the SST declarations", "infra-rules"),
+  repo,
+];
+
+// WPU-Z11: go-live in one account (CI OIDC roles with boundaries and cross-stage denies, workflows, owner
+// scripts, runbook); the templates and scripts are proven by the repo tests.
+TASKS["WPU-Z11"] = [specSync, baselineSync, lint, typecheck, format, web, repo];
+
+// WPU-Z13: a domain renewal renews the name at the registry, or the money goes back.
+TASKS["WPU-Z13"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  provisioner,
+  aws,
+  admin,
+  repo,
+];
+
+// WPU-Z14: an auto-renew switch on the page of every family; auto-renew on at purchase for nine families
+// (disks stay off); turning it off works with the family flag off.
+TASKS["WPU-Z14"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  crossTenant,
+  web,
+  repo,
+];
+
+// WPU-Z15: go-live blockers in the apps: SST links read at run time through one adapter, admin sign-in.
+TASKS["WPU-Z15"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  db,
+  web,
+  admin,
+  auth,
+  adminNoMfa,
+  glueTest(
+    "database-url",
+    "packages/db: the database password through the SST SDK at run time (R2, R3, R16)",
+    "@tc/db",
+    "test/database-url",
+  ),
+  glueTest(
+    "links",
+    "packages/db: the one reader of linked SST values (R3, R14, R16)",
+    "@tc/db",
+    "test/links",
+  ),
+  repo,
+];
+
+// WPU-Z16: OmniRank audit in CI and AI-answer visibility of the public site; staging is never indexed.
+TASKS["WPU-Z16"] = [specSync, baselineSync, lint, typecheck, format, web, repo];
+
+// WPU-Z17: Gennet answers are read by their status code.
+TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".
