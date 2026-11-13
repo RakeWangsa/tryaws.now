@@ -34,7 +34,7 @@ interface Text {
 export const COGNITO_TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<Locale, Text>>>> = {
   verify_code: {
     bn: {
-      subject: "MeghVPS: আপনার ইমেইল যাচাইয়ের কোড",
+      subject: "TryAWS.now: আপনার ইমেইল যাচাইয়ের কোড",
       headline: "ইমেইল যাচাই করুন",
       body: [
         "আপনার ইমেইল যাচাই করতে নিচের কোডটি প্যানেলে লিখুন।",
@@ -43,7 +43,7 @@ export const COGNITO_TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<
       ],
     },
     en: {
-      subject: "MeghVPS: your email verification code",
+      subject: "TryAWS.now: your email verification code",
       headline: "Verify your email",
       body: [
         "Enter this code in the panel to verify your email.",
@@ -54,7 +54,7 @@ export const COGNITO_TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<
   },
   reset_code: {
     bn: {
-      subject: "MeghVPS: পাসওয়ার্ড রিসেটের কোড",
+      subject: "TryAWS.now: পাসওয়ার্ড রিসেটের কোড",
       headline: "পাসওয়ার্ড রিসেট",
       body: [
         "পাসওয়ার্ড রিসেট করতে নিচের কোডটি প্যানেলে লিখুন।",
@@ -63,7 +63,7 @@ export const COGNITO_TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<
       ],
     },
     en: {
-      subject: "MeghVPS: your password reset code",
+      subject: "TryAWS.now: your password reset code",
       headline: "Reset your password",
       body: [
         "Enter this code in the panel to reset your password.",
@@ -74,7 +74,7 @@ export const COGNITO_TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<
   },
   admin_temp_password: {
     bn: {
-      subject: "MeghVPS অ্যাডমিন: আপনার সাময়িক পাসওয়ার্ড",
+      subject: "TryAWS.now অ্যাডমিন: আপনার সাময়িক পাসওয়ার্ড",
       headline: "অ্যাডমিন অ্যাকাউন্ট তৈরি হয়েছে",
       body: [
         "আপনার অ্যাডমিন অ্যাকাউন্ট তৈরি হয়েছে।",
@@ -84,7 +84,7 @@ export const COGNITO_TEXTS: Readonly<Record<CognitoMessageKind, Readonly<Record<
       ],
     },
     en: {
-      subject: "MeghVPS admin: your temporary password",
+      subject: "TryAWS.now admin: your temporary password",
       headline: "Your admin account is ready",
       body: [
         "Your admin account has been created.",

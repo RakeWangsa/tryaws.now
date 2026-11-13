@@ -85,8 +85,13 @@ export function LegalContent({
   const t = useTranslations("Public") as unknown as Tr;
   const tAws = useTranslations("Aws");
   const tShell = useTranslations("Shell");
-  // The provider's name and address are those of the footer (Section 1): one source for both.
-  const provider = { company: tShell("footer.companyName"), address: tShell("footer.address") };
+  // The provider's name and address are those of the footer (Section 1), and the brand is the shell's
+  // (WPU-Z8): one source for each.
+  const provider = {
+    company: tShell("footer.companyName"),
+    address: tShell("footer.address"),
+    brand: tShell("brand"),
+  };
   const title = t(`legal.docs.${doc}.title`);
   return (
     <>

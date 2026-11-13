@@ -15,7 +15,7 @@ describe("SesEmailProvider", () => {
   const make = (send: SesTransport["send"], timeoutMs?: number) =>
     new SesEmailProvider({
       transport: { send },
-      from: "MeghVPS <no-reply@ticoncloud.test>",
+      from: "TryAWS.now <no-reply@ticoncloud.test>",
       timeoutMs,
     });
 
@@ -24,7 +24,7 @@ describe("SesEmailProvider", () => {
     const r = await make(send).send(MSG);
     expect(r).toEqual({ ok: true, messageId: "ses-1" });
     expect(send).toHaveBeenCalledWith({
-      from: "MeghVPS <no-reply@ticoncloud.test>",
+      from: "TryAWS.now <no-reply@ticoncloud.test>",
       to: MSG.to,
       subject: MSG.subject,
       html: MSG.html,

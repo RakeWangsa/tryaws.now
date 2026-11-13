@@ -4,7 +4,7 @@ Rules: R4 (money is bigint paisa; decimal math only in `packages/core/pricing`; 
 
 ## Trigger
 
-The USD to BDT rate that MeghVPS charges must change (the market moved, or the owner decides on a new rate). Prices of existing subscriptions are not changed by a new rate; renewals use "today's rate" (Section 11).
+The USD to BDT rate that TryAWS.now charges must change (the market moved, or the owner decides on a new rate). Prices of existing subscriptions are not changed by a new rate; renewals use "today's rate" (Section 11).
 
 ## Who
 

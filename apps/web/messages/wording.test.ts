@@ -57,6 +57,7 @@ describe("wording check (WP9-T5)", () => {
         empty: "",
         ph: "Hi {name}",
         todo: "TODO",
+        joined: "MyAWS",
       },
     };
     const good = { A: { ...bad.A, ph: "Hi {user}" } };
@@ -67,6 +68,7 @@ describe("wording check (WP9-T5)", () => {
       "aws-error-code",
       "internal-name",
       "aws-lightsail",
+      "aws-in-name",
       "same-in-both",
       "empty-bn",
       "placeholder-mismatch",
@@ -77,8 +79,77 @@ describe("wording check (WP9-T5)", () => {
     }
     const missing = checkWording({ A: { b: "ঢাকা" } }, { A: { b: "Dhaka", extra: "x" } });
     expect(missing.map((f) => f.rule)).toContain("missing-in-bn");
-    expect(isLanguageNeutral("MeghVPS 24 {n} GB")).toBe(true);
+    expect(isLanguageNeutral("TryAWS.now 24 {n} GB")).toBe(true);
     expect(isLanguageNeutral("Save")).toBe(false);
     expect(placeholdersOf("{count, plural, one {# x} other {{n} y}}")).toEqual(["count", "n"]);
+  });
+
+  // WPU-Z8, owner decision 2026-11-13: the brand is "TryAWS.now". That is a deliberate deviation from 16.13
+  // ("no AWS mark inside a product name, a company name or a domain name"; the trademark risk is recorded in
+  // JOURNEY.md). The exception is narrow: the exact token only. AWS joined to any other word still fails,
+  // and every other rule about AWS still applies next to the brand.
+  describe("the brand token TryAWS.now (WPU-Z8)", () => {
+    const rulesOf = (bn: string, en: string): string[] =>
+      checkWording({ A: { k: bn } }, { A: { k: en } }).map((f) => f.rule);
+
+    it("accepts the exact token as the brand, alone, in a sentence and in Bengali text", () => {
+      expect(isLanguageNeutral("TryAWS.now")).toBe(true);
+      for (const [bn, en] of [
+        ["TryAWS.now", "TryAWS.now"],
+        ["TryAWS.now অ্যাডমিন", "TryAWS.now Admin"],
+        [
+          "বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।",
+          "TryAWS.now sells, bills and supports the service.",
+        ],
+        ["TryAWS.now-এর নিয়ম", "The rules of TryAWS.now."],
+        [
+          "এই শর্তাবলিতে “TryAWS.now” বলতে কোম্পানিকে বোঝায়।",
+          "In these terms, “TryAWS.now” means the company.",
+        ],
+        ["TryAWS.now: আপনার পাসওয়ার্ড বদলানো হয়েছে।", "TryAWS.now: your password was changed."],
+      ] as const) {
+        expect(rulesOf(bn, en), en).toEqual([]);
+      }
+    });
+
+    it("rejects every other name with AWS inside it, the near misses of the brand included", () => {
+      for (const name of [
+        "TryAWS",
+        "TryAWS.com",
+        "tryAWS.now",
+        "TRYAWS.NOW",
+        "TryAWS.nowhere",
+        "TryAWS.now.com",
+        "MyTryAWS.now",
+        "AWS.now",
+        "MyAWS",
+        "AWSome",
+        "AWS-Hosting",
+        "Cloud-AWS",
+      ]) {
+        const found = rulesOf(`${name} প্যানেল`, `${name} panel`);
+        expect(found, name).toContain("aws-in-name(bn)");
+        expect(found, name).toContain("aws-in-name(en)");
+      }
+      // A Bengali case ending after the mark is grammar, not a joined word ("AWS-এর" = "of AWS").
+      expect(rulesOf("AWS-এর নিয়ম", "The rules of AWS.")).toEqual([]);
+      // Only the exact token is language-neutral: a near miss reads as words a translator would change.
+      expect(isLanguageNeutral("TryAWS")).toBe(false);
+      expect(isLanguageNeutral("tryaws.now")).toBe(false);
+    });
+
+    it("keeps every other AWS rule next to the brand", () => {
+      const found = (text: string): string[] => rulesOf(text, text);
+      expect(found("TryAWS.now AWS Lightsail")).toEqual(
+        expect.arrayContaining(["aws-lightsail(en)", "ticon-aws-product(en)"]),
+      );
+      expect(found("TryAWS.now Lightsail")).toEqual(
+        expect.arrayContaining(["bare-lightsail(en)", "ticon-aws-product(en)"]),
+      );
+      expect(found("TryAWS.now's AWS servers")).toContain("ticon-aws-product(en)");
+      expect(found("TryAWS.now, powered by AWS")).toContain("powered-by-aws(en)");
+      expect(found("TryAWS.now, an official AWS partner")).toContain("aws-endorses(en)");
+      expect(found("TryAWS.now AWS Cloud Server")).toContain("aws-sku-name(en)");
+    });
   });
 });

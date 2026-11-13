@@ -9,7 +9,7 @@ export const publicEn: Same<typeof publicBn> = {
     crumb: { home: "Home" },
     meta: {
       home: {
-        title: "MeghVPS: Cloud Server, built on Amazon Lightsail",
+        title: "TryAWS.now: Cloud Server, built on Amazon Lightsail",
         description:
           "Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in US dollars, wallet in taka, top up with EPS.",
       },
@@ -26,16 +26,16 @@ export const publicEn: Same<typeof publicBn> = {
       help: {
         title: "Help and frequently asked questions",
         description:
-          "Answers about MeghVPS and Amazon Lightsail: AWS, billing, support and where your data is.",
+          "Answers about TryAWS.now and Amazon Lightsail: AWS, billing, support and where your data is.",
       },
       support: {
         title: "Support and contact",
         description:
-          "How to get support from MeghVPS: support requests in the panel, or the form on the support page without an account.",
+          "How to get support from TryAWS.now: support requests in the panel, or the form on the support page without an account.",
       },
       legal: {
         title: "Legal documents",
-        description: "MeghVPS terms, privacy, acceptable use and refund policy.",
+        description: "TryAWS.now terms, privacy, acceptable use and refund policy.",
       },
       soon: {
         description:
@@ -86,7 +86,7 @@ export const publicEn: Same<typeof publicBn> = {
       plansTitle: "Popular Cloud Server plans",
       plansLead:
         "The lowest priced open plans right now. Every price comes straight from the price list.",
-      whyTitle: "Why MeghVPS",
+      whyTitle: "Why TryAWS.now",
       why: {
         aws: {
           title: "100% AWS infrastructure",
@@ -98,11 +98,11 @@ export const publicEn: Same<typeof publicBn> = {
         },
         panel: {
           title: "One panel, no separate AWS account",
-          text: "Create, start, stop and back up servers from the MeghVPS panel. You do not need the AWS console.",
+          text: "Create, start, stop and back up servers from the TryAWS.now panel. You do not need the AWS console.",
         },
         support: {
-          title: "MeghVPS bills and supports you",
-          text: "MeghVPS sells, bills and supports the service. Open a support request when you need help.",
+          title: "TryAWS.now bills and supports you",
+          text: "TryAWS.now sells, bills and supports the service. Open a support request when you need help.",
         },
       },
       locationsTitle: "Two locations",
@@ -188,7 +188,7 @@ export const publicEn: Same<typeof publicBn> = {
     },
     help: {
       heading: "Frequently asked questions",
-      lead: "The questions we hear most about MeghVPS and Amazon Lightsail.",
+      lead: "The questions we hear most about TryAWS.now and Amazon Lightsail.",
       listTitle: "Questions and answers",
       stillTitle: "Did not find an answer?",
       stillText: "Tell us on the support page.",
@@ -199,11 +199,11 @@ export const publicEn: Same<typeof publicBn> = {
         },
         noAccount: {
           q: "Do I get an AWS account or the AWS console?",
-          a: "No. You run everything from the MeghVPS panel. You do not need a separate AWS account or the AWS console.",
+          a: "No. You run everything from the TryAWS.now panel. You do not need a separate AWS account or the AWS console.",
         },
         billing: {
           q: "Who bills me and who supports me?",
-          a: "MeghVPS. We sell and bill the service, and we support you through support requests in the panel. There is no support phone line.",
+          a: "TryAWS.now. We sell and bill the service, and we support you through support requests in the panel. There is no support phone line.",
         },
         dataLocation: {
           q: "Where is my data?",
@@ -245,7 +245,7 @@ export const publicEn: Same<typeof publicBn> = {
     },
     support: {
       heading: "Support and contact",
-      lead: "MeghVPS gives support through support requests, and our support team answers every request in writing. There is no support phone line and no support email address.",
+      lead: "TryAWS.now gives support through support requests, and our support team answers every request in writing. There is no support phone line and no support email address.",
       customerTitle: "If you have an account",
       customerText:
         "Open a support request in the panel and follow it there: read our answers and reply in the same place. If you are not signed in, you sign in first.",

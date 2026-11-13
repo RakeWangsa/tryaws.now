@@ -74,7 +74,7 @@ export const walletEn: Same<typeof walletBn> = {
         badge: "online payment",
         title: "How the payment works",
         p1: "You are taken to the secure EPS page to pay.",
-        p2: "Card and mobile-wallet details never reach MeghVPS.",
+        p2: "Card and mobile-wallet details never reach TryAWS.now.",
         p3: "Your balance grows only after EPS confirms the payment.",
       },
       open: { title: "Payments waiting", view: "View" },

@@ -42,7 +42,7 @@ export interface SesTransport {
 
 export interface SesEmailOptions {
   readonly transport: SesTransport;
-  // "MeghVPS <no-reply@...>": the verified identity of the SES account.
+  // "TryAWS.now <no-reply@...>": the verified identity of the SES account.
   readonly from: string;
   readonly timeoutMs?: number | undefined;
 }
