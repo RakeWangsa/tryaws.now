@@ -39,7 +39,8 @@ describe("priceSnapshot on a posting", () => {
 
   it("is required on a sale and optional on every other kind (WPU-Y9, R16)", () => {
     for (const sale of [purchase(), renewal(), metered()]) {
-      const { priceSnapshot: _dropped, ...bare } = sale;
+      const bare: Partial<typeof sale> = { ...sale };
+      delete bare.priceSnapshot;
       expect(checkPosting(bare)).toMatchObject({
         ok: false,
         error: "validation",

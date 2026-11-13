@@ -163,14 +163,35 @@ async function holdForRate(work: Work, deps: LifecycleDeps, where: string): Prom
   });
 }
 
+// WPU-Y9. The hold ends and the renewal then fails for the customer's own reason (the wallet is short): the grace
+// starts HERE, not at the old period end. Otherwise a hold of two days or more would use the whole grace up and
+// the next sweep would retain the subscription at once, for days the customer never could have paid. The marker
+// is cleared and `graceFrom` says when the grace began; decideSubscription runs the grace from it.
+export const GRACE_FROM_KEY = "graceFrom";
+
+async function releaseHold(work: Work): Promise<void> {
+  await patchResource(work.tx, work.row.resourceId, {
+    configMerge: { [FX_HOLD_KEY]: null, [GRACE_FROM_KEY]: work.now.toISOString() },
+  });
+}
+
+const graceFromOf = (row: LifecycleRow): Date | null => {
+  const v = row.resource.config[GRACE_FROM_KEY];
+  if (typeof v !== "string") return null;
+  const at = new Date(v);
+  return Number.isNaN(at.getTime()) || at.toISOString() !== v ? null : at;
+};
+
 async function afterRenewal(
   work: Work,
   renewed: { periodStart: Date; totalMinor: bigint; periodEnd: Date },
   fromGrace: boolean,
 ): Promise<void> {
   const { row } = work;
-  if (isHeld(row)) {
-    await patchResource(work.tx, row.resourceId, { configMerge: { [FX_HOLD_KEY]: null } });
+  if (isHeld(row) || graceFromOf(row) !== null) {
+    await patchResource(work.tx, row.resourceId, {
+      configMerge: { [FX_HOLD_KEY]: null, [GRACE_FROM_KEY]: null },
+    });
   }
   // 11: an admin's suspension is never lifted by a renewal; only an admin action lifts it. WPU-Y3b: nor
   // is a suspension that holds an unpaid usage charge: the unpaid job resumes after that is paid.
@@ -185,11 +206,13 @@ async function afterRenewal(
   });
 }
 
-async function enterGrace(work: Work, deps: LifecycleDeps): Promise<void> {
+async function enterGrace(work: Work, deps: LifecycleDeps, graceStart?: Date): Promise<void> {
   const { row, config } = work;
   await lifecycleRepo(work.tx).setStatus(row.id, "grace");
   await ensureSuspended(work);
-  const graceUntil = new Date(row.periodEnd.getTime() + config.graceHours * HOUR_MS);
+  const graceUntil = new Date(
+    (graceStart ?? row.periodEnd).getTime() + config.graceHours * HOUR_MS,
+  );
   await work.notify(
     "lifecycle_grace_started",
     row.periodEnd.toISOString(),
@@ -307,6 +330,7 @@ async function process(
       autoRenew: row.autoRenew,
       resourceState: row.resource.state,
       destroyedAt: row.resource.deletedAt,
+      graceFrom: graceFromOf(row),
     },
     now,
     config,
@@ -369,7 +393,10 @@ async function process(
           break;
         }
       }
-      await enterGrace(work, deps);
+      // WPU-Y9: a renewal that was held for the rate and now fails for the wallet starts its grace now.
+      const fromHold = isHeld(row);
+      if (fromHold) await releaseHold(work);
+      await enterGrace(work, deps, fromHold ? work.now : undefined);
       step = "graced";
       break;
     }
@@ -381,6 +408,7 @@ async function process(
       } else if (isFxRateUnavailable(renewed)) {
         await holdForRate(work, deps, "retry_renew");
       } else {
+        if (isHeld(row)) await releaseHold(work); // WPU-Y9: the grace starts at the release
         await ensureSuspended(work);
       }
       break;
@@ -400,6 +428,11 @@ async function process(
             await holdForRate(work, deps, "retain");
             break;
           }
+          // WPU-Y9: the grace ran out during the hold and the wallet is short now. The customer gets the grace
+          // from this release; nothing is retained in this sweep.
+          await releaseHold(work);
+          await ensureSuspended(work);
+          break;
         } else if (isFxRateUnavailable(await renewalQuote(tx, row, clock))) {
           await holdForRate(work, deps, "retain");
           break;

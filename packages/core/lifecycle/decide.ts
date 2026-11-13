@@ -13,6 +13,12 @@ export interface DecisionView {
   readonly resourceState: string;
   // resources.deleted_at: the instant the destroy happened; the retention runs from it.
   readonly destroyedAt: Date | null;
+  /**
+   * WPU-Y9. When the grace started after a rate hold was released (the renewal could not be priced, so the days
+   * of the hold are not the customer's). The grace runs from the later of this and the period end. Absent: from
+   * the period end.
+   */
+  readonly graceFrom?: Date | null;
 }
 
 export type LifecycleAction =
@@ -56,7 +62,10 @@ export function decideSubscription(
     }
 
     case "grace": {
-      if (nowMs >= endMs + config.graceHours * HOUR_MS) return { type: "retain" };
+      const fromMs = view.graceFrom?.getTime();
+      const graceStart =
+        fromMs !== undefined && !Number.isNaN(fromMs) && fromMs > endMs ? fromMs : endMs;
+      if (nowMs >= graceStart + config.graceHours * HOUR_MS) return { type: "retain" };
       return view.autoRenew ? { type: "retry_renew" } : NONE;
     }
 

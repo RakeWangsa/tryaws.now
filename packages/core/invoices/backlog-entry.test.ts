@@ -3,7 +3,7 @@ import type { UnrecordedCharge } from "@tc/db";
 import { buildChargeSnapshot, chargeToPriceSnapshot } from "../pricing/charge-snapshot";
 import { quoteWithBook } from "../pricing/book";
 import type { PricingRule } from "../pricing/types";
-import { backlogEntryOf } from "./backlog";
+import { backlogEntryOf } from "./backlog-entry";
 import { invoiceLinesOf } from "./charge";
 
 // WPU-Y9 finding 6: the reconciliation rebuilds the lines from the snapshot saved with the charge.
