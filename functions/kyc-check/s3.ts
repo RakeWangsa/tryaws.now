@@ -3,9 +3,9 @@ import type { HeadResult } from "./handler";
 
 // WPU-Y3. The one S3 call of kyc-check: HeadObject of one key in the kyc bucket. It returns the size and
 // the content type and never a byte of the object. The role of the function has s3:GetObject on kyc/*
-// (the permission HeadObject needs) and s3:ListBucket on the bucket for the prefix kyc/ (so a missing key
-// answers 404, not 403); it has no grant on the bucket's key, so a GetObject of the content is refused
-// (infra/stacks/workers.ts). No ServerSideEncryption header is sent: S3 refuses it on a HEAD.
+// (the permission HeadObject needs) and s3:ListBucket on the bucket (so a missing key answers 404, not
+// 403); it has no grant on the bucket's key, and the bucket policy admits only objects encrypted with that
+// key, so a GetObject of the content is refused (infra/stacks/workers.ts, storage.ts). No ServerSideEncryption header is sent: S3 refuses it on a HEAD.
 
 export interface S3CommandSender {
   send(command: unknown): Promise<unknown>;

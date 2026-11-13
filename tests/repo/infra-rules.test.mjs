@@ -535,7 +535,9 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(storage).toMatch(/effect: "deny"/);
     expect(storage).toContain('actions: ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"]');
     expect(storage).toContain('roleName(stage, "web")');
-    expect(storage).toContain('privateBucket("Kyc", kycKey, forceEmptyBuckets, [denyWebRead])');
+    expect(storage).toMatch(
+      /privateBucket\("Kyc", kycKey, forceEmptyBuckets, \[ ?denyWebRead, \.\.\.kycEncryptionOnly\]\)/,
+    );
     const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
     // the web role writes kyc objects (presigned POST) and nothing else on that bucket or key
     expect(customer).toContain(
@@ -666,9 +668,9 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(branch).toContain(
       'actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/kyc/*`]',
     );
-    expect(branch).toContain(
-      'actions: ["s3:ListBucket"], resources: [storage.kyc.arn], conditions: [{ test: "StringLike", variable: "s3:prefix", values: ["kyc/*"] }]',
-    );
+    // round 1: no s3:prefix condition (it could turn a missing key into 403)
+    expect(branch).toContain('actions: ["s3:ListBucket"], resources: [storage.kyc.arn] }');
+    expect(branch).not.toContain("s3:prefix");
     expect(branch).not.toMatch(/kms:|sts:|s3:(Put|Delete|\*)|"\*"|storage\.(invoices|exports)/);
     // nothing else in workers.ts grants anything on the kyc key or a write on the kyc bucket
     expect(workers).not.toContain("storage.kycKey");
@@ -687,7 +689,41 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(admin).not.toContain("kyc-check");
     expect(admin).not.toContain("kycCheckAliases");
     expect(storage).toContain('actions: ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"]');
-    expect(storage).toContain('privateBucket("Kyc", kycKey, forceEmptyBuckets, [denyWebRead])');
+    expect(storage).toMatch(
+      /privateBucket\("Kyc", kycKey, forceEmptyBuckets, \[ ?denyWebRead, \.\.\.kycEncryptionOnly\]\)/,
+    );
+  });
+
+  // WPU-Y3 (security review round 1): kyc-check's "no content" rests on every kyc object being SSE-KMS with
+  // the kyc key, so the bucket policy enforces it, one Deny statement per condition (conditions of one
+  // statement are ANDed), and a header-less upload (the presigned POST) is not denied by any of them.
+  it("admits only uploads encrypted with the kyc key: three separate Deny statements on PutObject (WPU-Y3)", () => {
+    const block = between(storage, "const kycEncryptionOnly = [", "const { forceEmptyBuckets }");
+    const statements = block.split('effect: "deny" as const').slice(1);
+    expect(statements).toHaveLength(3);
+    for (const st of statements) {
+      expect(st).toContain('principals: "*" as const');
+      expect(st).toContain('actions: ["s3:PutObject"]');
+      expect(st).toContain('paths: ["*"]');
+      expect([...st.matchAll(/test: "/g)]).toHaveLength(1);
+    }
+    expect(statements[0]).toContain(
+      'test: "StringNotEqualsIfExists", variable: "s3:x-amz-server-side-encryption", values: ["aws:kms"]',
+    );
+    expect(statements[1]).toContain(
+      'test: "StringNotEqualsIfExists", variable: "s3:x-amz-server-side-encryption-aws-kms-key-id", values: [kycKey.arn]',
+    );
+    expect(statements[2]).toContain(
+      'test: "Null", variable: "s3:x-amz-server-side-encryption-customer-algorithm", values: ["false"]',
+    );
+    // IfExists on the two header keys: an upload without encryption headers gets the bucket default
+    expect(block).not.toMatch(
+      /test: "(StringNotEquals|StringEquals)", variable: "s3:x-amz-server-side-encryption/,
+    );
+    // only the kyc bucket gets them; the bucket default stays the kyc key
+    expect(storage.match(/kycEncryptionOnly/g)).toHaveLength(2);
+    expect(storage).toContain('privateBucket("Kyc", kycKey,');
+    expect(storage).toContain("kmsMasterKeyId: key.arn");
   });
 
   it("names the web role identically where it is created and where kyc denies it", () => {
@@ -723,8 +759,14 @@ describe("no unused bucket variables on the Next.js apps", () => {
       ["grep", "-l", "-E", "KYC_BUCKET|EXPORTS_BUCKET", "--", "apps", "packages", "functions"],
       { cwd: resolve(import.meta.dirname, "../.."), encoding: "utf8" },
     );
-    // git grep: exit 1 and no output when nothing matches
-    expect(r.status, r.stderr).toBe(1);
-    expect(r.stdout).toBe("");
+    // WPU-Y3: the one reader is the kyc-check function (its own variable, set by workers.ts only, never on
+    // an app); no app and no package reads either name.
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout.trim().split("\n").sort()).toEqual([
+      "functions/kyc-check/boundaries.test.ts",
+      "functions/kyc-check/config.ts",
+      "functions/kyc-check/s3.test.ts",
+    ]);
+    expect(r.stdout).not.toMatch(/EXPORTS_BUCKET/);
   });
 });

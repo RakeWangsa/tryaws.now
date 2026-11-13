@@ -1,8 +1,12 @@
 // WP0-T4: buckets kyc, invoices, exports (3.3). All private, Block Public Access on, SSE-KMS.
 // The kyc bucket denies GetObject for the web role: the proof that WP2-T4 depends on ("read only by
-// admin"). WPU-Y3: the web tier learns whether an upload arrived from the kyc-check function, whose own
-// role may HEAD kyc/* (workers.ts) and has no grant on the kyc key; the deny below stays as it is. The deny is written twice, on purpose: in the bucket policy and by giving the web role no
+// admin"). The deny is written twice, on purpose: in the bucket policy and by giving the web role no
 // kms:Decrypt on the kyc key.
+//
+// WPU-Y3: the web tier learns whether an upload arrived from the kyc-check function, whose own role may
+// HEAD kyc/* (workers.ts) and has no grant on the kyc key; the web deny stays as it is. That role cannot
+// read content only because every kyc object is SSE-KMS with the kyc key, so the bucket policy enforces
+// it (kycEncryptionOnly below).
 //
 // WPU-Z10: a removal of staging empties and deletes the three buckets (forceDestroy set here; staging test
 // data is wiped by decision). Production and personal stages get the bucket arguments exactly as before
@@ -102,8 +106,62 @@ export function storage(config: StageConfig) {
     conditions: [{ test: "ArnEquals", variable: "aws:PrincipalArn", values: [webRoleArn] }],
   };
 
+  // WPU-Y3 (security review round 1): every object of the kyc bucket is SSE-KMS with the kyc key, so that
+  // a role with s3:GetObject and no grant on that key (kyc-check) can never read content. Three separate
+  // Deny statements, so each condition denies on its own (conditions of one statement are ANDed):
+  // (a) an encryption header other than aws:kms (AES256, aws:kms:dsse);
+  // (b) a KMS key other than the kyc key. S3 compares the key it would really use: a bare aws:kms header
+  //     names the AWS managed key aws/s3, which is not the kyc key, and is denied (S3 user guide, SSE-KMS,
+  //     "Requiring server-side encryption");
+  // (c) any SSE-C upload (the customer-algorithm header present).
+  // A request without encryption headers (the presigned POST of the web tier) passes all three: the
+  // bucket default (BucketServerSideEncryptionConfiguration, the kyc key) applies to it.
+  // VERIFY (staging): a PutObject with AES256 is denied; with aws:kms and no key id is denied; the
+  // header-less presigned POST of /kyc succeeds and the object reports the kyc key.
+  const kycEncryptionOnly = [
+    {
+      effect: "deny" as const,
+      principals: "*" as const,
+      actions: ["s3:PutObject"],
+      paths: ["*"],
+      conditions: [
+        {
+          test: "StringNotEqualsIfExists",
+          variable: "s3:x-amz-server-side-encryption",
+          values: ["aws:kms"],
+        },
+      ],
+    },
+    {
+      effect: "deny" as const,
+      principals: "*" as const,
+      actions: ["s3:PutObject"],
+      paths: ["*"],
+      conditions: [
+        {
+          test: "StringNotEqualsIfExists",
+          variable: "s3:x-amz-server-side-encryption-aws-kms-key-id",
+          values: [kycKey.arn],
+        },
+      ],
+    },
+    {
+      effect: "deny" as const,
+      principals: "*" as const,
+      actions: ["s3:PutObject"],
+      paths: ["*"],
+      conditions: [
+        {
+          test: "Null",
+          variable: "s3:x-amz-server-side-encryption-customer-algorithm",
+          values: ["false"],
+        },
+      ],
+    },
+  ];
+
   const { forceEmptyBuckets } = removalRules(config.kind);
-  const kyc = privateBucket("Kyc", kycKey, forceEmptyBuckets, [denyWebRead]);
+  const kyc = privateBucket("Kyc", kycKey, forceEmptyBuckets, [denyWebRead, ...kycEncryptionOnly]);
   const invoices = privateBucket("Invoices", filesKey, forceEmptyBuckets);
   const exportFiles = privateBucket("Exports", filesKey, forceEmptyBuckets);
 

@@ -56,18 +56,17 @@ function permissionsOf(spec: FunctionSpec, inputs: WorkerInputs) {
   if (spec.dir === "kyc-check") {
     // WPU-Y3. HeadObject has no IAM action of its own: "To use HEAD, you must have the s3:GetObject
     // permission" (S3 API reference, HeadObject). So s3:GetObject on kyc/* and on nothing else, and NO
-    // kms:Decrypt on the kyc key: every kyc object is SSE-KMS with that key (storage.ts), so a GetObject of
-    // the content by this role is refused, and only the metadata of a HEAD comes back. s3:ListBucket only
-    // for the prefix kyc/, so that a missing key answers 404 and not 403 (same page).
-    // VERIFY (staging): a HEAD of a missing key under this condition answers 404; a HEAD of an upload
+    // kms:Decrypt on the kyc key. The kyc bucket policy denies every upload that is not SSE-KMS with the
+    // kyc key (storage.ts, kycEncryptionOnly), so a GetObject of the content by this role is refused and
+    // only the metadata of a HEAD comes back. s3:ListBucket on the bucket, without a prefix condition
+    // (every object lives under kyc/, and the implicit ListBucket check that S3 makes for a HEAD has no
+    // documented s3:prefix, so a condition could turn a missing key into 403), so that a missing key
+    // answers 404 and not 403 (same page).
+    // VERIFY (staging): a HEAD of a missing key answers 404 ("upload missing"); a HEAD of an upload
     // answers without kms:Decrypt; a GetObject by this role is denied.
     permissions.push(
       { actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/kyc/*`] },
-      {
-        actions: ["s3:ListBucket"],
-        resources: [storage.kyc.arn],
-        conditions: [{ test: "StringLike", variable: "s3:prefix", values: ["kyc/*"] }],
-      },
+      { actions: ["s3:ListBucket"], resources: [storage.kyc.arn] },
     );
   }
   if (spec.dir === "invoice-renderer") {
