@@ -337,6 +337,7 @@ describe("catalog-sync proof (fake AWS, real database)", () => {
       market: "BD",
       rate: "130",
       effective_from: "2029-01-01T00:00:00Z",
+      created_at: "2029-01-01T00:00:00Z",
     });
     const reRead = (await priceActiveRows({ now: () => new Date("2030-06-01T00:00:00Z") }))[0]!;
     expect(reRead.priceBdt.totalMinor > after.priceBdt.totalMinor).toBe(true);

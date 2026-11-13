@@ -166,6 +166,7 @@ const GATE_CASES: Record<string, GateCase> = {
     deny: null,
   },
   "fxChanges.read": { call: (r) => r.fxChanges.read("BD"), deny: null, raw: true },
+  "fxRates.meta": { call: (r) => r.fxRates.meta("BD", AT), deny: null, raw: true },
   "fxChanges.request": {
     call: (r) =>
       r.fxChanges.request(

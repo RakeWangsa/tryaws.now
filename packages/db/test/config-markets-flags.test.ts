@@ -6,7 +6,12 @@ import {
   readFeatureFlag,
   readFeatureFlags,
 } from "../repositories/config/feature-flags";
-import { readMarket, readMarketBasics, readMarkets } from "../repositories/config/markets";
+import {
+  readMarket,
+  readMarketBasics,
+  readMarketCodes,
+  readMarkets,
+} from "../repositories/config/markets";
 import { runTransaction, type DatabaseRole } from "../tx";
 import { ensureMarket } from "./fixtures";
 import { insertRow } from "./sql";
@@ -110,4 +115,12 @@ it("worker_rw and report_ro have no grant on feature_flags: the read fails with 
     name: "DbError",
     code: "42501",
   });
+});
+
+// The exchange-rate watch (WPU-Y1) runs as worker_rw, which may read only code, currency, locales and numerals of
+// markets (0006). readMarkets selects the whole row and is refused for it; readMarketCodes must work.
+it("worker_rw can list the market codes, and readMarkets (the whole row) is refused for it", async () => {
+  await ensureMarket(t.pool, "BD");
+  expect(await as("worker_rw", (tx) => readMarketCodes(tx))).toContain("BD");
+  await expect(as("worker_rw", (tx) => readMarkets(tx))).rejects.toThrow();
 });

@@ -237,14 +237,16 @@ export async function makeKit(t: TempDatabaseHandle, options: KitOptions = {}): 
         market: "BD",
         rate,
         effective_from: effective.toISOString(),
+        // WPU-Y9: the age of a rate counts from its entry; the kit enters it at the instant it starts.
+        created_at: effective.toISOString(),
       });
       clock.set(new Date(effective.getTime() + 1000));
     },
     async refreshFx() {
       const now = clock.now();
       await t.pool.query(
-        `insert into fx_rates (id, market, rate, effective_from)
-         select gen_random_uuid(), market, rate, $1 from fx_rates
+        `insert into fx_rates (id, market, rate, effective_from, created_at)
+         select gen_random_uuid(), market, rate, $1, $1 from fx_rates
          where market = 'BD' and effective_from <= $1 order by effective_from desc limit 1
          on conflict (market, effective_from) do nothing`,
         [now.toISOString()],

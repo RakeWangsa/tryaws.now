@@ -24,6 +24,7 @@ beforeAll(async () => {
     market: "BD",
     rate: "127",
     effective_from: "2026-11-01T00:00:00Z",
+    created_at: "2026-11-01T00:00:00Z",
   });
 });
 const save = (input: Partial<SavePricingRuleInput>, now: Date = T0) =>

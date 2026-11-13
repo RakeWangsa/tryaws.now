@@ -158,9 +158,18 @@ it("a purchase, a renewal and a metered charge need a price snapshot", async () 
       { constraint: "ledger_transactions_sale_snapshot_check" },
     );
   }
-  await t.pool.query(
-    "insert into ledger_transactions (id, kind, reference_type, reference_id, idempotency_key, actor_type, price_snapshot) values (gen_random_uuid(), 'purchase', 'x', gen_random_uuid(), 'sale-ok', 'system', '{}'::jsonb)",
-  );
+  // With a snapshot the check passes. The row has no lines, so the deferred balance rule would refuse it at
+  // commit: the insert runs in a transaction that is rolled back, which still proves the CHECK accepted it.
+  const client = await t.pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(
+      "insert into ledger_transactions (id, kind, reference_type, reference_id, idempotency_key, actor_type, price_snapshot) values (gen_random_uuid(), 'purchase', 'x', gen_random_uuid(), 'sale-ok', 'system', '{}'::jsonb)",
+    );
+  } finally {
+    await client.query("rollback");
+    client.release();
+  }
 });
 
 const payment = (customer_id: string, over: Record<string, unknown> = {}) => ({

@@ -336,6 +336,7 @@ export { lockFxRateWrites, lockPricingRuleWrites } from "./repositories/config/l
 export { isFlagKeyText, isMarketCode } from "./repositories/config/args";
 export {
   readMarket,
+  readMarketCodes,
   readMarkets,
   readMarketBasics,
   type Market,

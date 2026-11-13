@@ -55,6 +55,8 @@ describe("a ledger transaction", () => {
       expect(found).toEqual({
         ...row,
         id,
+        // WPU-Y2: the column exists for sale kinds only; a top-up carries none
+        priceSnapshot: null,
         entries: [
           {
             id: expect.any(String),

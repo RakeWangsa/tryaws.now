@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { inputs, transactionIdOf, useLedgerDatabase, type Wallet } from "../test/ledger-fixtures";
+import { snapshotOfAmount } from "../test/ledger-requests";
 import { walletBalance, walletEntriesSum } from "./balance";
 import { LedgerError } from "./errors";
 import { postTransaction, writePosting } from "./post";
@@ -77,6 +78,8 @@ describe("the same key", () => {
       "another amount",
       (i: PostTransactionInput) => ({
         ...i,
+        // WPU-Y2: a sale carries a snapshot whose total is the wallet debit, so the other amount carries its own
+        priceSnapshot: snapshotOfAmount("purchase", 99n),
         postings: i.postings.map((p) => ({ ...p, amountMinor: 99n })),
       }),
     ],
@@ -280,6 +283,7 @@ describe("one ledger transaction for one reference (M1)", () => {
     const renew = (at: string): PostTransactionInput => ({
       ...inputs.spend(w.customerId, 100n),
       kind: "renewal",
+      priceSnapshot: snapshotOfAmount("renewal", 100n),
       reference: { type: "subscription", id: sub },
       idempotencyKey: `renew:${sub}:${at}`,
     });

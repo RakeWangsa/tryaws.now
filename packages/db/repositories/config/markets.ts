@@ -42,6 +42,17 @@ export async function readMarket(tx: Tx, code: string): Promise<Market | null> {
   return (rows[0] as Market | undefined) ?? null;
 }
 
+/**
+ * The codes of the markets, in order. The one column every role may read: worker_rw may read only code, currency,
+ * locales and numerals of markets (0006), so a job that only needs to know WHICH markets exist (the exchange-rate watch,
+ * WPU-Y1) must not call readMarkets, which selects the whole row and is refused for that role.
+ */
+export async function readMarketCodes(tx: Tx): Promise<string[]> {
+  return (await tx.select({ code: markets.code }).from(markets).orderBy(asc(markets.code))).map(
+    (r) => r.code,
+  );
+}
+
 export async function readMarkets(tx: Tx): Promise<Market[]> {
   return (await tx.select(whole).from(markets).orderBy(asc(markets.code))) as Market[];
 }

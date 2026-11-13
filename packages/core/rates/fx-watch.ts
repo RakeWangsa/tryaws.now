@@ -1,4 +1,4 @@
-import { readFxRateInForce, readMarkets, type Tx } from "@tc/db";
+import { readFxRateInForce, readMarketCodes, type Tx } from "@tc/db";
 import {
   FX_RATE_ALERT_AGE_DAYS,
   FX_RATE_MAX_AGE_DAYS,
@@ -37,7 +37,8 @@ export interface FxWatchOps {
 }
 
 export const defaultFxWatchOps: FxWatchOps = {
-  markets: async (tx) => (await readMarkets(tx)).map((m) => m.code),
+  // worker_rw may read the market codes only (0006): not the whole row.
+  markets: (tx) => readMarketCodes(tx),
   inForce: (tx, market, at) => readFxRateInForce(tx, market, at),
 };
 

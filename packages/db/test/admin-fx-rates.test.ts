@@ -38,7 +38,14 @@ it("the first rate is a new row with its start, its author and one audit row wit
   expect(set).toEqual({
     ok: true,
     replayed: false,
-    value: { id: UUID7, market: "BD", rate: "127", effectiveFrom: T0, laterChangePending: null },
+    value: {
+      id: UUID7,
+      market: "BD",
+      rate: "127",
+      effectiveFrom: T0,
+      laterChangePending: null,
+      createdAt: expect.any(Date),
+    },
   });
   expect((await t.pool.query("select rate::text as rate, set_by from fx_rates")).rows[0]).toEqual({
     rate: "127.000000",

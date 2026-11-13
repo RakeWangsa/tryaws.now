@@ -97,8 +97,8 @@ describe("what the check finds", () => {
       const txId = crypto.randomUUID();
       // one query string with no parameters: both statements run in one implicit transaction
       await K.pool.query(
-        `insert into ledger_transactions (id, kind, reference_type, reference_id, idempotency_key, actor_type)
-           values ('${txId}', 'purchase', 'order', gen_random_uuid(), 'neg:${txId}', 'system');
+        `insert into ledger_transactions (id, kind, reference_type, reference_id, idempotency_key, actor_type, price_snapshot)
+           values ('${txId}', 'purchase', 'order', gen_random_uuid(), 'neg:${txId}', 'system', '{}'::jsonb);
          insert into ledger_entries (id, transaction_id, account_id, direction, amount_minor) values
            (gen_random_uuid(), '${txId}', '${w.accountId}', 'debit', 50),
            (gen_random_uuid(), '${txId}', '${revenue}', 'credit', 50)`,

@@ -493,6 +493,7 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "payments.discrepancies",
   "payments.search",
   "fxChanges.read",
+  "fxRates.meta",
   "priceBook.read",
   "configPrices.read",
   "tierLimits.read",

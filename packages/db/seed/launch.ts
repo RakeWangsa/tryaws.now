@@ -144,7 +144,9 @@ export async function seedLaunchData(
       .where(eq(fxRates.market, code))
       .limit(1);
     if (rates.length === 0) {
-      await tx.insert(fxRates).values({ market: code, rate: LAUNCH_FX_RATE, effectiveFrom: at });
+      await tx
+        .insert(fxRates)
+        .values({ market: code, rate: LAUNCH_FX_RATE, effectiveFrom: at, createdAt: at });
       result.fxRate = true;
     }
   }

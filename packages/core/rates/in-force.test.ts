@@ -38,12 +38,14 @@ beforeAll(async () => {
     market: "BD",
     rate: "127",
     effective_from: "2026-11-15T00:00:00Z",
+    created_at: "2026-11-15T00:00:00Z",
   });
   // a new rate from 20 November
   await insertRow(t.pool, "fx_rates", {
     market: "BD",
     rate: "130",
     effective_from: "2026-11-20T00:00:00Z",
+    created_at: "2026-11-20T00:00:00Z",
   });
   await ensureMarket(t.pool, "KE");
 });
@@ -145,6 +147,7 @@ it("with a rate but no rule, and with a stored rule that fails the engine, nothi
     market: "KE",
     rate: "1.25",
     effective_from: "2026-11-10T00:00:00Z",
+    created_at: "2026-11-10T00:00:00Z",
   });
   const ke = () =>
     asRole(t, "web_rw", (tx) =>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { quote } from "../pricing/quote";
 import { accountFor } from "../pricing/validate";
 import { inputs, transactionIdOf, useLedgerDatabase, type Wallet } from "../test/ledger-fixtures";
+import { snapshotOfAmount } from "../test/ledger-requests";
 import { walletBalance, walletEntriesSum } from "./balance";
 import { checkLedger } from "./check";
 import { postTransaction } from "./post";
@@ -57,6 +58,8 @@ function purchaseOf(customerId: string, awsPriceUsd: string, rule = RULE): PostT
   ];
   return {
     ...inputs.spend(customerId, 1n),
+    // WPU-Y2: the snapshot of the sale; its total is the wallet debit of the quote
+    priceSnapshot: snapshotOfAmount("purchase", q.totalMinor),
     postings: [
       {
         account: { type: "customer_wallet", customerId },

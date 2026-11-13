@@ -269,7 +269,7 @@ it("searching and reading write no audit row, and an export writes exactly its o
   expect(out.ok).toBe(true);
   expect(await count()).toBe(before + 1);
   const rows = await t.pool.query(
-    "select actor_type, actor_id, action, target_type, target_id, host(ip) as ip, metadata from audit_log where action = 'audit.export'",
+    "select actor_type, actor_id, action, target_type, target_id, host(ip) as ip, metadata from audit_log where action = 'audit.export' and metadata->>'reason' = 'year-end review'",
   );
   expect(rows.rows).toHaveLength(1);
   const [row] = rows.rows;
