@@ -200,9 +200,22 @@ it("a destroy held back behind a running final snapshot does not hold the paybac
     [serverId],
   );
   const snap = String(ops.find((o) => o.kind === "final_snapshot")!.id);
-  const destroy = String(ops.find((o) => o.kind === "destroy")!.id);
-  // The final snapshot runs (its row exists); the destroy, flagged no more (after the R13 date), was held back by
-  // the claim's block rule.
+  const flagged = String(ops.find((o) => o.kind === "destroy")!.id);
+  // The destroy of the retention was made before the R13 date (flagged). The trigger of R13 forbids changing
+  // needs_approval on a row, so the flagged one is cancelled before it ran (failed, no attempt: viewDestroys skips
+  // it) and the destroy of this case is inserted as it would be after the R13 date: not flagged, held back by the
+  // claim's block rule behind the running final snapshot (waiting, no step, no attempt).
+  await q("update operations set state = 'failed' where id = $1", [flagged]);
+  const destroy = String(
+    (
+      await q(
+        `insert into operations (id, resource_id, kind, state, idempotency_key, payload, needs_approval, attempts)
+         values (gen_random_uuid(), $1, 'destroy', 'waiting', $2, '{}'::jsonb, false, 0) returning id`,
+        [serverId, `test:x1:blocked-destroy:${serverId}`],
+      )
+    )[0]!.id,
+  );
+  // The final snapshot runs (its row exists).
   const { id: backupId } = await worker((tx) =>
     ensureFinalBackup(tx, {
       customerId: buyer.customerId,
@@ -211,10 +224,6 @@ it("a destroy held back behind a running final snapshot does not hold the paybac
     }),
   );
   await q("update operations set state = 'running', attempts = 1 where id = $1", [snap]);
-  await q(
-    "update operations set needs_approval = false, approved_by = null, state = 'waiting', step = null, attempts = 0 where id = $1",
-    [destroy],
-  );
 
   await q("update wallets set balance_minor = 20000000 where customer_id = $1", [buyer.customerId]);
   const report = await unpaid(new Date(day7.getTime() + 3_600_000));
