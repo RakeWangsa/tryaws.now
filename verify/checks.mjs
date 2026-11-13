@@ -3629,6 +3629,53 @@ TASKS["WPU-Z3"] = [
 // WPU-Z7: the public support page without phone or e-mail, the FAQ, the legal drafts, the on-call proof text.
 TASKS["WPU-Z7"] = [...wppBase, wppPages, wppAnchors, wppMessages, web, repo];
 
+// WPU-Z4: the admin screen that switches the unpaid-usage job on and off (db includes PostgreSQL tests).
+TASKS["WPU-Z4"] = [specSync, baselineSync, lint, typecheck, format, db, admin, repo];
+
+// WPU-Z8: the brand is TryAWS.now everywhere (web, admin, ui, e-mails, SMS, invoices, Cognito messages), and the
+// legal text items of the WPU-Z7 review. brandNotify and brandWeb include PostgreSQL tests.
+TASKS["WPU-Z8"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  brandCore,
+  brandNotify,
+  brandWeb,
+  brandAdmin,
+  ui,
+  invoiceRenderer,
+  notifierFn,
+  glueTest(
+    "cognito-messages",
+    "functions/cognito-messages: bn/en verification, reset and admin messages, locale, escaping",
+    "@tc/fn-cognito-messages",
+  ),
+  repo,
+];
+
+// WPU-Z9: the SST stack files type-check against the SST 4.17.2 platform types (the sst-types check skips with
+// its reason where `sst install` has not run), and the static rules of the declarations.
+TASKS["WPU-Z9"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  infraTest(
+    "sst-types",
+    "WPU-Z9: infra/stacks type-check against the SST 4.17.2 platform (skips without .sst/platform)",
+    "sst-types",
+  ),
+  infraTest("infra-rules", "infra/stacks: static rules of the SST declarations", "infra-rules"),
+  repo,
+];
+
+// WPU-Z12: the lifecycle scheduler walks every candidate with a keyset cursor and a pass budget (core, db and
+// scheduler include PostgreSQL tests).
+TASKS["WPU-Z12"] = [specSync, baselineSync, lint, typecheck, format, core, db, scheduler, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

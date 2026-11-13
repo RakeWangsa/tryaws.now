@@ -217,13 +217,17 @@ it("task WP4-T1 is proven by lint, types, format, the aws and core tests and the
     "WPU-X6",
     "WPU-Z0",
     "WPU-Z1",
+    "WPU-Z12",
     "WPU-Z2",
     "WPU-Z3",
+    "WPU-Z4",
     "WPU-Z7",
+    "WPU-Z8",
+    "WPU-Z9",
   ]);
 });
 
-it("tasks WPU-Z0 to WPU-Z3 and WPU-Z7 (owner decisions round 3) name their proofs", () => {
+it("the WPU-Z tasks of the owner decisions round 3 name their proofs", () => {
   const ids = (task) => TASKS[task].map((c) => c.id);
   expect(ids("WPU-Z0")).toEqual([
     "spec-sync",
@@ -240,6 +244,18 @@ it("tasks WPU-Z0 to WPU-Z3 and WPU-Z7 (owner decisions round 3) name their proof
   expect(ids("WPU-Z3")).toEqual(
     expect.arrayContaining(["notify", "notifier-fn", "web", "infra-lib", "repo"]),
   );
+  expect(ids("WPU-Z4")).toEqual(expect.arrayContaining(["db", "admin", "repo"]));
+  expect(ids("WPU-Z8")).toEqual(
+    expect.arrayContaining([
+      "web-brand",
+      "admin-brand",
+      "notify-brand",
+      "cognito-messages",
+      "repo",
+    ]),
+  );
+  expect(ids("WPU-Z9")).toEqual(expect.arrayContaining(["sst-types", "infra-rules", "repo"]));
+  expect(ids("WPU-Z12")).toEqual(expect.arrayContaining(["core", "db", "scheduler", "repo"]));
   expect(ids("WPU-Z7")).toEqual(
     expect.arrayContaining(["wpp-pages", "wpp-mockup-anchors", "wpp-messages", "web", "repo"]),
   );
