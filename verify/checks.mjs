@@ -3951,6 +3951,21 @@ TASKS["WPU-Y2"] = [
   repo,
 ];
 
+// WPU-X1 (owner round 5, required before the disk flag): a started final snapshot finishes as an ordinary,
+// deletable backup after a revival; only an unstarted one is ended. core and db include PostgreSQL tests.
+TASKS["WPU-X1"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  repo,
+];
+
 // WPU-X2 (owner round 5): the domain renewal rules (30 days before expiry, the refund when the registry
 // refuses) in the terms and the refund policy, en and bn, with LEGAL_VERSIONS moved to version 2. The text
 // waits for the owner's approval before merge.
