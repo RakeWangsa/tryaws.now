@@ -118,6 +118,10 @@ export function auth(config: StageConfig) {
         args.accessTokenValidity = 1;
         args.idTokenValidity = 1;
         args.tokenValidityUnits = { refreshToken: "hours", accessToken: "hours", idToken: "hours" };
+        // WPU-Z15: exactly the flow of the admin sign-in (USER_PASSWORD_AUTH, then the
+        // SOFTWARE_TOKEN_MFA challenge, packages/auth/admin-signin.ts), and refresh. Without a list
+        // Cognito allows only refresh, SRP and custom auth, and the sign-in is refused.
+        args.explicitAuthFlows = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"];
         args.preventUserExistenceErrors = "ENABLED";
       },
     },

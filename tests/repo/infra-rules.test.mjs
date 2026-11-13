@@ -415,6 +415,21 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     expect(auth).toContain('refreshToken: "hours"');
   });
 
+  // WPU-Z15 (B6): without an explicit list Cognito gives an app client ALLOW_REFRESH_TOKEN_AUTH,
+  // ALLOW_USER_SRP_AUTH and ALLOW_CUSTOM_AUTH (CreateUserPoolClient, ExplicitAuthFlows), so the
+  // USER_PASSWORD_AUTH call of the admin sign-in would be refused and no admin could sign in.
+  it("lets the admin app client use exactly the flow of the admin sign-in, and refresh", () => {
+    const client = between(auth, "const adminClient", "return {");
+    const list = /args\.explicitAuthFlows = \[([^\]]*)\]/.exec(client);
+    expect(list, "explicitAuthFlows of adminClient").not.toBeNull();
+    const allowed = [...(list?.[1] ?? "").matchAll(/"([A-Z_]+)"/g)].map((m) => m[1]);
+    const signIn = source("packages/auth/admin-signin.ts");
+    const used = [...signIn.matchAll(/AuthFlow: "([A-Z_]+)"/g)].map((m) => `ALLOW_${m[1]}`);
+    expect(used).toEqual(["ALLOW_USER_PASSWORD_AUTH"]);
+    expect(allowed).toEqual([...used, "ALLOW_REFRESH_TOKEN_AUTH"]);
+    expect(client).toContain("args.generateSecret = false");
+  });
+
   it("lets customers sign up, with optional TOTP and a 12 character password", () => {
     expect(customers).toContain('mfa: "optional"');
     expect(customers).toContain("allowAdminCreateUserOnly: false");
