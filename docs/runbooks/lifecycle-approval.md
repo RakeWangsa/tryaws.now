@@ -23,6 +23,7 @@ Operations (`ops` role). The approver reads the evidence below; the audit row st
 1. `approveOperation` with a reason, or `rejectOperation` to give the customer more time (the subscription state is then handled by the lifecycle job on its next run).
 2. Watch the operation go `running` then `succeeded`; the state becomes `retained` and the customer is notified.
    A disk whose destroy stops in `needs_attention` with `conflict` is still attached to a running server: follow [disk-detach-and-destroy.md](disk-detach-and-destroy.md).
+   A server with attached disks (WPU-Y4): its disks' `final_snapshot` and `destroy` are queued with it (payload `withServer`); approve them together with the server's, see [disk-detach-and-destroy.md](disk-detach-and-destroy.md).
 3. 14 days later the job purges snapshots and the state becomes `ended`; this also needs the matching approval while the rule lasts.
 
 ## Unpaid usage, day 7 (WPU-Y3, WPU-Y10)

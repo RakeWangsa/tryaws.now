@@ -3815,6 +3815,23 @@ TASKS["WPU-Z19"] = [
   repo,
 ];
 
+// WPU-Y4: a destroyed server takes its attached disks with it (lifecycle, customer destroy, adapters, the disk list
+// page); core, db and the cross-tenant suite include PostgreSQL.
+TASKS["WPU-Y4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  crossTenant,
+  aws,
+  provisioner,
+  web,
+  repo,
+];
+
 // WPU-Z17: Gennet answers are read by their status code.
 TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];
 
