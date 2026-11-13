@@ -573,7 +573,8 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     // WPU-Z9: the three function names of the web tier come from workers.invoked, fail closed (R16)
     expect(web).toContain("const fn = workers.invoked[dir];");
     expect(web).toContain("if (fn === undefined) throw new Error(`no function for ${dir}`);");
-    expect(web.match(/_FUNCTION_NAME: functionOf\("[a-z-]+"\)\.name/g)).toHaveLength(3);
+    // WPU-Y3: the fourth is kyc-check
+    expect(web.match(/_FUNCTION_NAME: functionOf\("[a-z-]+"\)\.name/g)).toHaveLength(4);
     expect(admin).toContain("storage.filesKey.arn");
     // the customer path invokes the renderer and gets the PDF in its answer (WPU-N1); WPU-B7 (L2): it holds
     // no read of the invoices bucket, only of exports
@@ -651,6 +652,42 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
       'copyFiles: [{ from: "functions/invoice-renderer/fonts", to: "fonts" }]',
     );
     expect(workers).toContain('architecture: "x86_64"');
+  });
+
+  // WPU-Y3: the web tier learns whether a KYC upload arrived from kyc-check; the web role keeps its Deny
+  // and gains no read of the kyc bucket. kyc-check may HEAD kyc/* (s3:GetObject is what HEAD needs), list
+  // only the prefix kyc/, and has no grant on the kyc key, so the content of an object stays unreadable.
+  it("lets kyc-check HEAD kyc/* only, with no key grant, and the web role invoke its web alias only (WPU-Y3)", () => {
+    const branch = between(workers, 'if (spec.dir === "kyc-check") { permissions.push(', "} if (");
+    expect([...branch.matchAll(/actions: \[([^\]]*)\]/g)].map((m) => m[1])).toEqual([
+      '"s3:GetObject"',
+      '"s3:ListBucket"',
+    ]);
+    expect(branch).toContain(
+      'actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/kyc/*`]',
+    );
+    expect(branch).toContain(
+      'actions: ["s3:ListBucket"], resources: [storage.kyc.arn], conditions: [{ test: "StringLike", variable: "s3:prefix", values: ["kyc/*"] }]',
+    );
+    expect(branch).not.toMatch(/kms:|sts:|s3:(Put|Delete|\*)|"\*"|storage\.(invoices|exports)/);
+    // nothing else in workers.ts grants anything on the kyc key or a write on the kyc bucket
+    expect(workers).not.toContain("storage.kycKey");
+    expect(workers.match(/storage\.kyc\.arn/g)).toHaveLength(2);
+    expect(workers).toContain('spec.dir === "kyc-check") { env.KYC_BUCKET = storage.kyc.name');
+    // one "web" alias, published, and returned for web.ts
+    expect(workers).toContain('new aws.lambda.Alias("KycCheckAliasWeb", { name: "web"');
+    expect(workers).toContain("kycCheckAliases");
+    // the web role: invoke on that alias, the function name, and still no read of kyc (the Deny stays)
+    const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
+    expect(customer).toContain("workers.kycCheckAliases.web.arn");
+    expect(customer).toContain('KYC_CHECK_FUNCTION_NAME: functionOf("kyc-check").name');
+    expect(customer).not.toMatch(/invoked\["kyc-check"\][^;]*\.arn/);
+    expect(web.match(/kycCheckAliases/g)).toHaveLength(1);
+    const admin = between(web, 'new sst.aws.Nextjs("Admin"');
+    expect(admin).not.toContain("kyc-check");
+    expect(admin).not.toContain("kycCheckAliases");
+    expect(storage).toContain('actions: ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"]');
+    expect(storage).toContain('privateBucket("Kyc", kycKey, forceEmptyBuckets, [denyWebRead])');
   });
 
   it("names the web role identically where it is created and where kyc denies it", () => {

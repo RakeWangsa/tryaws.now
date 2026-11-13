@@ -517,8 +517,9 @@ describe("requirement 11: the VERIFY fixes in the stacks", () => {
 
   it("workers.ts publishes a version of access-details for its alias", () => {
     const workers = code("infra/stacks/workers.ts");
-    expect(workers).toContain(
-      'const PUBLISHED_VERSIONS: readonly string[] = ["reader", "access-details", "invoice-renderer"]',
+    // WPU-Y3: and kyc-check, for its "web" alias.
+    expect(workers).toMatch(
+      /const PUBLISHED_VERSIONS: readonly string\[\] = \[ "reader", "access-details", "invoice-renderer", "kyc-check",? \]/,
     );
     expect(workers).not.toContain("an alias cannot point to $LATEST");
   });

@@ -53,6 +53,23 @@ function permissionsOf(spec: FunctionSpec, inputs: WorkerInputs) {
   if (spec.dir === "notifier") {
     permissions.push({ actions: ["ses:SendEmail"], resources: [config.sesIdentityArn] });
   }
+  if (spec.dir === "kyc-check") {
+    // WPU-Y3. HeadObject has no IAM action of its own: "To use HEAD, you must have the s3:GetObject
+    // permission" (S3 API reference, HeadObject). So s3:GetObject on kyc/* and on nothing else, and NO
+    // kms:Decrypt on the kyc key: every kyc object is SSE-KMS with that key (storage.ts), so a GetObject of
+    // the content by this role is refused, and only the metadata of a HEAD comes back. s3:ListBucket only
+    // for the prefix kyc/, so that a missing key answers 404 and not 403 (same page).
+    // VERIFY (staging): a HEAD of a missing key under this condition answers 404; a HEAD of an upload
+    // answers without kms:Decrypt; a GetObject by this role is denied.
+    permissions.push(
+      { actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/kyc/*`] },
+      {
+        actions: ["s3:ListBucket"],
+        resources: [storage.kyc.arn],
+        conditions: [{ test: "StringLike", variable: "s3:prefix", values: ["kyc/*"] }],
+      },
+    );
+  }
   if (spec.dir === "invoice-renderer") {
     permissions.push(
       { actions: ["s3:PutObject"], resources: [$interpolate`${storage.invoices.arn}/*`] },
@@ -91,6 +108,10 @@ function environmentOf(
   if (spec.dir === "invoice-renderer") {
     // The one bucket the renderer writes to (PutObject on invoices/* only, permissionsOf).
     env.INVOICES_BUCKET = storage.invoices.name;
+  }
+  if (spec.dir === "kyc-check") {
+    // WPU-Y3: the one bucket kyc-check asks (functions/kyc-check/config.ts reads KYC_BUCKET).
+    env.KYC_BUCKET = storage.kyc.name;
   }
   if (spec.dir === "provisioner") {
     // C.5: required stack configuration on staging and production (infra/lib/stage.ts).
@@ -167,7 +188,12 @@ function rendererArgs(spec: FunctionSpec): Partial<sst.aws.FunctionArgs> {
 }
 
 // The functions whose aliases (below) point at a published, numbered version.
-const PUBLISHED_VERSIONS: readonly string[] = ["reader", "access-details", "invoice-renderer"];
+const PUBLISHED_VERSIONS: readonly string[] = [
+  "reader",
+  "access-details",
+  "invoice-renderer",
+  "kyc-check",
+];
 
 // Typed as sst.aws.Function takes it; without that, `timeout` and `memory` widen to string.
 export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs): sst.aws.FunctionArgs {
@@ -191,8 +217,9 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs): sst.aws.
     permissions: permissionsOf(spec, inputs),
     environment: environmentOf(spec, inputs),
     transform: {
-      // The three functions with aliases publish versions (reader WPU-S6, invoice renderer WPU-B7 L3,
-      // access-details WPU-N2): publishing pins each alias to an immutable numbered version per deploy.
+      // The four functions with aliases publish versions (reader WPU-S6, invoice renderer WPU-B7 L3,
+      // access-details WPU-N2, kyc-check WPU-Y3): publishing pins each alias to an immutable numbered
+      // version per deploy.
       // WPU-Z10, VERIFY review 2026-11-13 (docs/analysis/verify-review-2026-11-13.md, B1
       // infra/stacks/workers.ts:230 and :250, lines 156 to 177): an alias CAN point to $LATEST (only a
       // weighted alias cannot), and access-details did not publish, so its alias pointed at $LATEST.
@@ -247,7 +274,7 @@ export function workers(inputs: WorkerInputs) {
   // VERIFY result (verify review 2026-11-13, B1 workers.ts:230): `transform.function` reaches the
   // aws.lambda.Function of sst.aws.Function, publish makes a numbered version, and
   // `nodes.function.version` is that version; each alias is pinned to it (PUBLISHED_VERSIONS).
-  // `as`: FUNCTIONS holds an invoke row for reader, access-details and invoice-renderer
+  // `as`: FUNCTIONS holds an invoke row for reader, access-details, invoice-renderer and kyc-check
   // (infra/lib/functions.ts); without one, the property reads below stop the deploy.
   const reader = invoked["reader"] as sst.aws.Function;
   // `as`: Object.fromEntries forgets the two keys of the tuple it is built from.
@@ -283,6 +310,18 @@ export function workers(inputs: WorkerInputs) {
     functionName: renderer.name,
     functionVersion: renderer.nodes.function.version,
   });
+
+  // WPU-Y3: kyc-check has one alias, "web", like access-details. The handler refuses every other qualifier
+  // (functions/kyc-check/handler.ts) and web.ts grants the web role lambda:InvokeFunction on this alias
+  // ARN only.
+  const kycCheck = invoked["kyc-check"] as sst.aws.Function;
+  const kycCheckAliases = {
+    web: new aws.lambda.Alias("KycCheckAliasWeb", {
+      name: "web",
+      functionName: kycCheck.name,
+      functionVersion: kycCheck.nodes.function.version,
+    }),
+  };
 
   // Scheduled: EventBridge Scheduler (sst.aws.CronV2), retry policy 0 (the functions are idempotent
   // and the next run repeats the work). VERIFY: CronV2 args `schedule`, `function`, `retries`.
@@ -327,6 +366,7 @@ export function workers(inputs: WorkerInputs) {
     provisioner,
     migrator,
     migration,
+    kycCheckAliases,
   };
 }
 

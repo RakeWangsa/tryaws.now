@@ -1,6 +1,7 @@
 // WP0-T4: buckets kyc, invoices, exports (3.3). All private, Block Public Access on, SSE-KMS.
 // The kyc bucket denies GetObject for the web role: the proof that WP2-T4 depends on ("read only by
-// admin"). The deny is written twice, on purpose: in the bucket policy and by giving the web role no
+// admin"). WPU-Y3: the web tier learns whether an upload arrived from the kyc-check function, whose own
+// role may HEAD kyc/* (workers.ts) and has no grant on the kyc key; the deny below stays as it is. The deny is written twice, on purpose: in the bucket policy and by giving the web role no
 // kms:Decrypt on the kyc key.
 //
 // WPU-Z10: a removal of staging empties and deletes the three buckets (forceDestroy set here; staging test
