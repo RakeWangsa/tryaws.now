@@ -345,9 +345,61 @@ export type MetricRangeKey = "1h" | "1d" | "1w";
 export const METRIC_RANGE_KEYS: readonly MetricRangeKey[] = ["1h", "1d", "1w"];
 
 export interface MetricSeriesView {
-  metric: "cpu" | "networkIn" | "networkOut" | "statusCheckFailed";
+  metric:
+    | "cpu"
+    | "networkIn"
+    | "networkOut"
+    | "statusCheckFailed"
+    | "connections"
+    | "freeStorage"
+    | "diskQueue";
   unit: "percent" | "bytes" | "count";
   points: { at: string; value: number }[];
+}
+
+/** WPU-Y8. A database series states what one point means (average, maximum or minimum of a period). */
+export interface DatabaseSeriesView extends MetricSeriesView {
+  statistic: "average" | "maximum" | "minimum";
+  periodSeconds: number;
+}
+
+export type TargetHealthWord =
+  "healthy" | "unhealthy" | "initial" | "unused" | "draining" | "unavailable";
+export const TARGET_HEALTH_WORDS: readonly TargetHealthWord[] = [
+  "healthy",
+  "unhealthy",
+  "initial",
+  "unused",
+  "draining",
+  "unavailable",
+];
+export const TARGET_REASON_WORDS = [
+  "registering",
+  "initial_checks",
+  "response_code_mismatch",
+  "timeout",
+  "failed_checks",
+  "internal_error",
+  "not_registered",
+  "not_in_use",
+  "ip_unusable",
+  "stopped",
+  "deregistering",
+  "unknown",
+] as const;
+export type TargetReasonWord = (typeof TARGET_REASON_WORDS)[number];
+
+/** WPU-Y8. The answer of the reader's `targetHealth`, by platform id only. */
+export interface TargetHealthReportView {
+  live: boolean;
+  checkedAt: string;
+  targets: {
+    targetResourceId: string;
+    health: TargetHealthWord;
+    reason: TargetReasonWord | null;
+  }[];
+  counts: Record<TargetHealthWord, number>;
+  unresolved: number;
 }
 
 /**
@@ -361,6 +413,17 @@ export interface ReaderPort {
     caller: { customerId: string },
     range: MetricRangeKey,
   ): Promise<{ ok: true; series: readonly MetricSeriesView[] } | { ok: false; error: string }>;
+  /** WPU-Y8. Health of the servers behind a load balancer (display only). */
+  targetHealth(
+    resourceId: string,
+    caller: { customerId: string },
+  ): Promise<{ ok: true; report: TargetHealthReportView } | { ok: false; error: string }>;
+  /** WPU-Y8. The four series of a managed database. */
+  databaseMetrics(
+    resourceId: string,
+    caller: { customerId: string },
+    range: MetricRangeKey,
+  ): Promise<{ ok: true; series: readonly DatabaseSeriesView[] } | { ok: false; error: string }>;
 }
 
 export type MetricsScreen =
@@ -377,7 +440,7 @@ export async function loadMetrics(
   session: CustomerSession,
   id: string,
   range: MetricRangeKey,
-  reader: ReaderPort | null,
+  reader: Pick<ReaderPort, "metrics"> | null,
 ): Promise<MetricsScreen> {
   if (reader === null) return { state: "unavailable" };
   const owned = await withTx(async (tx) => {

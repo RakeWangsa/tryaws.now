@@ -3,7 +3,7 @@
 // Lightsail is a fake source that holds a different series for each instance and records every call.
 import { createManualClock, type LogEvent } from "@tc/core";
 import type { LiveReadSource } from "@tc/aws";
-import { loadReadTarget } from "@tc/db";
+import { loadReadTarget, loadRecordedTargets } from "@tc/db";
 import {
   insertRow,
   newAdmin,
@@ -27,6 +27,12 @@ const world = {} as {
   resB: string;
   admin: string;
   ghost: string;
+  srvA: string;
+  srvB: string;
+  lbA: string;
+  lbB: string;
+  dbA: string;
+  dbB: string;
 };
 
 beforeAll(async () => {
@@ -44,6 +50,20 @@ beforeAll(async () => {
   // Both customers live in the same pool account and Region, as in production.
   world.resA = await newResource(t.pool, world.a, placed);
   world.resB = await newResource(t.pool, world.b, placed);
+  world.srvA = world.resA;
+  world.srvB = world.resB;
+  world.lbA = await newResource(t.pool, world.a, {
+    ...placed,
+    family: "load_balancer",
+    config: JSON.stringify({ targetIds: [world.resA, world.resB] }),
+  });
+  world.lbB = await newResource(t.pool, world.b, {
+    ...placed,
+    family: "load_balancer",
+    config: JSON.stringify({ targetIds: [world.resB] }),
+  });
+  world.dbA = await newResource(t.pool, world.a, { ...placed, family: "database" });
+  world.dbB = await newResource(t.pool, world.b, { ...placed, family: "database" });
   world.admin = await newAdmin(t.pool, "support");
   world.ghost = "00000000-0000-4000-8000-000000000000";
 });
@@ -71,10 +91,27 @@ function build() {
       seen.push(`transfer:${target.instanceName}`);
       return { bytes: 1, days: 30 };
     },
+    loadBalancerTargetHealth: async (target, known) => {
+      seen.push(`health:${target.loadBalancerName}`);
+      return {
+        targets: [...known.values()].map((id) => ({
+          targetResourceId: id,
+          health: "healthy" as const,
+          reason: null,
+        })),
+        unresolved: 0,
+      };
+    },
+    databaseMetrics: async (target) => {
+      seen.push(`dbmetrics:${target.databaseName}`);
+      return [];
+    },
   };
   const reader = createReader({
     loadTarget: (caller, id) =>
       runTransaction(t.db, (tx) => loadReadTarget(tx, caller, id), { role: "worker_rw" }),
+    loadRecordedTargets: (target) =>
+      runTransaction(t.db, (tx) => loadRecordedTargets(tx, target), { role: "worker_rw" }),
     source,
     clock: createManualClock(NOW),
     log: (e) => logged.push(e),
@@ -153,5 +190,46 @@ describe("WP5-T3: customer A cannot read customer B's metrics", () => {
     for (const secret of [world.a, world.b, world.resA, world.resB, "210987654321", "arn:"]) {
       expect(text).not.toContain(secret);
     }
+  });
+});
+
+describe("WPU-Y8: customer A cannot read customer B's target health or database metrics", () => {
+  it("B's load balancer and database give A the answer for a missing id; AWS is not asked", async () => {
+    const { reader, invoke, seen } = build();
+    const A = { customerId: world.a };
+    expect(await reader.targetHealth(world.lbB, A)).toEqual(
+      await reader.targetHealth(world.ghost, A),
+    );
+    expect(await reader.targetHealth(world.lbB, A)).toEqual({ ok: false, error: "not_found" });
+    for (const range of ["1h", "1d", "1w"] as const) {
+      expect(await reader.databaseMetrics(world.dbB, A, range)).toEqual(
+        await reader.databaseMetrics(world.ghost, A, range),
+      );
+    }
+    expect(
+      await invoke({ action: "targetHealth", resourceId: world.lbB, caller: A }, "web"),
+    ).toEqual({ ok: false, error: "not_found" });
+    expect(
+      await invoke(
+        { action: "databaseMetrics", resourceId: world.dbB, caller: A, range: "1h" },
+        "web",
+      ),
+    ).toEqual({ ok: false, error: "not_found" });
+    expect(seen).toEqual([]);
+  });
+
+  it("A's load balancer lists only A's own recorded servers, never B's", async () => {
+    const { reader, seen } = build();
+    const got = await reader.targetHealth(world.lbA, { customerId: world.a });
+    expect(got.ok && got.value.targets.map((x) => x.targetResourceId)).toEqual([world.resA]);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("the owner reads its own and an active admin reads any", async () => {
+    const { reader } = build();
+    expect((await reader.databaseMetrics(world.dbA, { customerId: world.a }, "1h")).ok).toBe(true);
+    expect(await reader.targetHealth(world.lbB, { adminId: world.admin })).toMatchObject({
+      ok: true,
+    });
   });
 });

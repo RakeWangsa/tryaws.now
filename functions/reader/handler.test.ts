@@ -5,11 +5,17 @@ import {
   ADMIN,
   CUSTOMER_A,
   CUSTOMER_B,
+  DB_A,
+  DB_B,
   EXTERNAL_ID,
   GHOST,
+  LB_A,
+  LB_B,
   POOL_ACCOUNT,
   RESOURCE_A,
   RESOURCE_B,
+  SERVER_1,
+  SERVER_2,
   fakeSource,
   setup,
   target,
@@ -223,5 +229,147 @@ describe("rate limit and audit", () => {
       { event: "reader_read", action: "describe", callerKind: "customer", outcome: "not_found" },
     ]);
     expect(JSON.stringify(logged)).not.toContain(CUSTOMER_A);
+  });
+});
+
+describe("targetHealth (WPU-Y8)", () => {
+  it("gives the owner the health of the recorded servers, by platform id, with counts", async () => {
+    const { reader, calls, logged } = setup();
+    const got = await reader.targetHealth(LB_A, A);
+    expect(got).toEqual({
+      ok: true,
+      value: {
+        resourceId: LB_A,
+        live: true,
+        checkedAt: "2026-11-11T10:00:00.000Z",
+        targets: [
+          { targetResourceId: SERVER_1, health: "healthy", reason: null },
+          { targetResourceId: SERVER_2, health: "healthy", reason: null },
+        ],
+        counts: { healthy: 2, unhealthy: 0, initial: 0, unused: 0, draining: 0, unavailable: 0 },
+        unresolved: 1,
+      },
+    });
+    expect(calls.map((c) => c.op)).toEqual(["health"]);
+    expect((calls[0]!.target as unknown as { loadBalancerName: string }).loadBalancerName).toBe(
+      awsResourceName("lb", LB_A),
+    );
+    expect(logged).toEqual([
+      { event: "reader_read", action: "target_health", callerKind: "customer", outcome: "ok" },
+    ]);
+    expect(JSON.stringify([got, logged])).not.toMatch(/tc-(lb|instance)-|arn:|210987654321/);
+  });
+
+  it("passes only the recorded servers' names to the source", async () => {
+    let known: ReadonlyMap<string, string> | undefined;
+    const { source } = fakeSource({
+      loadBalancerTargetHealth: async (_t, k) => {
+        known = k;
+        return { targets: [], unresolved: 0 };
+      },
+    });
+    const { reader } = setup({ source });
+    await reader.targetHealth(LB_A, A);
+    expect([...known!.entries()].sort()).toEqual(
+      [
+        [awsResourceName("instance", SERVER_1), SERVER_1],
+        [awsResourceName("instance", SERVER_2), SERVER_2],
+      ].sort(),
+    );
+  });
+
+  it("answers another customer as a missing id and a resource of another family as validation", async () => {
+    const { reader, calls } = setup();
+    expect(await reader.targetHealth(LB_B, A)).toEqual(await reader.targetHealth(GHOST, A));
+    expect(await reader.targetHealth(LB_B, A)).toEqual({ ok: false, error: "not_found" });
+    expect(await reader.targetHealth(DB_A, A)).toEqual({ ok: false, error: "validation" });
+    expect(await reader.targetHealth(RESOURCE_A, A)).toEqual({ ok: false, error: "validation" });
+    expect(calls).toEqual([]);
+  });
+
+  it("does not ask AWS for a load balancer that is not live", async () => {
+    const { reader, calls } = setup(
+      {},
+      { [LB_A]: { owner: CUSTOMER_A, target: target(LB_A, "creating", "load_balancer") } },
+    );
+    const got = await reader.targetHealth(LB_A, A);
+    expect(got.ok && got.value.live).toBe(false);
+    expect(got.ok && got.value.targets).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it("fails closed: unreadable record, too many targets, AWS errors", async () => {
+    const a = setup({ loadRecordedTargets: async () => null });
+    expect(await a.reader.targetHealth(LB_A, A)).toEqual({ ok: false, error: "internal" });
+    const many = fakeSource({
+      loadBalancerTargetHealth: async () => ({
+        targets: Array.from({ length: 21 }, (_, i) => ({
+          targetResourceId: String(i),
+          health: "healthy" as const,
+          reason: null,
+        })),
+        unresolved: 0,
+      }),
+    });
+    const b = setup({ source: many.source });
+    expect(await b.reader.targetHealth(LB_A, A)).toEqual({ ok: false, error: "internal" });
+    const err = fakeSource({
+      loadBalancerTargetHealth: async () => {
+        throw new AwsError({ code: "forbidden", retryable: false });
+      },
+    });
+    const c = setup({ source: err.source });
+    expect(await c.reader.targetHealth(LB_A, A)).toEqual({
+      ok: false,
+      error: "upstream_unavailable",
+    });
+  });
+
+  it("has no caller: unauthenticated; rate limited per caller", async () => {
+    const { reader } = setup({ rateLimit: { max: 1, windowMs: 60_000 } });
+    expect(await reader.targetHealth(LB_A, {} as never)).toEqual({
+      ok: false,
+      error: "unauthenticated",
+    });
+    expect((await reader.targetHealth(LB_A, A)).ok).toBe(true);
+    expect(await reader.targetHealth(LB_A, A)).toEqual({ ok: false, error: "rate_limited" });
+  });
+});
+
+describe("databaseMetrics (WPU-Y8)", () => {
+  it("gives the owner the series for a range with the generated database name", async () => {
+    const { reader, calls, logged } = setup();
+    const got = await reader.databaseMetrics(DB_A, A, "1h");
+    expect(got.ok && got.value.series[0]!.statistic).toBe("average");
+    expect(got.ok && got.value.range).toBe("1h");
+    expect((calls[0]!.target as unknown as { databaseName: string }).databaseName).toBe(
+      awsResourceName("database", DB_A),
+    );
+    expect(logged[0]).toMatchObject({ action: "database_metrics", outcome: "ok" });
+    expect(JSON.stringify([got, logged])).not.toMatch(/tc-database-|arn:|210987654321/);
+  });
+
+  it("validates range and family, hides foreign resources", async () => {
+    const { reader, calls } = setup();
+    expect(await reader.databaseMetrics(DB_A, A, "2y" as never)).toEqual({
+      ok: false,
+      error: "validation",
+    });
+    expect(await reader.databaseMetrics(LB_A, A, "1h")).toEqual({ ok: false, error: "validation" });
+    expect(await reader.databaseMetrics(DB_B, A, "1h")).toEqual(
+      await reader.databaseMetrics(GHOST, A, "1h"),
+    );
+    expect(await reader.databaseMetrics(DB_B, A, "1h")).toEqual({ ok: false, error: "not_found" });
+    expect(calls).toEqual([]);
+  });
+
+  it("maps an AWS failure to a platform code and returns no partial series", async () => {
+    const err = fakeSource({
+      databaseMetrics: async () => {
+        throw new AwsError({ code: "not_found", retryable: false });
+      },
+    });
+    const { reader } = setup({ source: err.source });
+    expect(await reader.databaseMetrics(DB_A, A, "1d")).toEqual({ ok: false, error: "not_found" });
   });
 });

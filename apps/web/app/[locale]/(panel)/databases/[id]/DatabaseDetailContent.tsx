@@ -49,6 +49,7 @@ export function DatabaseDetailContent({
   initialSecret = null,
   extra = null,
   parametersTab = null,
+  metricsTab = null,
   snapshots,
 }: {
   locale: Locale;
@@ -64,6 +65,8 @@ export function DatabaseDetailContent({
   extra?: ReactNode;
   /** WPU-G11: the Parameters tab, built by the page; without it (the static mockup states) there is no such tab. */
   parametersTab?: ReactNode;
+  /** WPU-Y8: the Metrics tab, built by the page from the reader; without it the tab says it is not available. */
+  metricsTab?: ReactNode;
   /**
    * WPU-G9. The actions of the Backups tab; without them (the static mockup states) the tab shows the
    * read-only table.
@@ -235,7 +238,7 @@ export function DatabaseDetailContent({
       </>
     );
 
-  const metrics = (
+  const metrics = metricsTab ?? (
     <EmptyState
       title={t("detail.metrics.unavailable.title")}
       description={t("detail.metrics.unavailable.body")}

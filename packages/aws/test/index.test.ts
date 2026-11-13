@@ -14,6 +14,7 @@ it("exports exactly the public API and no credentials function", () => {
     "LIGHTSAIL_REGIONS",
     "MASTER_DATABASE_NAME",
     "MASTER_USERNAME",
+    "MAX_LB_TARGETS",
     "METRIC_RANGES",
     "QUEUE_URL_PATTERN",
     "ROUTE53_REGION",

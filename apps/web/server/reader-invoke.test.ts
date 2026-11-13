@@ -174,3 +174,120 @@ describe("readerPortFromEnv", () => {
     expect(READER_FUNCTION_PATTERN.test("../x")).toBe(false);
   });
 });
+
+describe("WPU-Y8: targetHealth and databaseMetrics of the port", () => {
+  const S1 = "0190aaaa-0000-7000-8000-0000000000b1";
+  const health = {
+    ok: true,
+    value: {
+      resourceId: ID,
+      live: true,
+      checkedAt: "2026-11-13T10:00:00.000Z",
+      targets: [{ targetResourceId: S1, health: "unhealthy", reason: "timeout" }],
+      counts: { healthy: 0, unhealthy: 1, initial: 0, unused: 0, draining: 0, unavailable: 0 },
+      unresolved: 0,
+    },
+  };
+  const dbGood = {
+    ok: true,
+    value: {
+      resourceId: ID,
+      range: "1d",
+      series: [
+        {
+          metric: "freeStorage",
+          unit: "bytes",
+          statistic: "minimum",
+          periodSeconds: 900,
+          points: [{ at: "2026-11-13T10:00:00.000Z", value: 1000 }],
+        },
+      ],
+    },
+  };
+
+  it("sends the action, the resource and the session's customer only", async () => {
+    const invoker = answering(health);
+    const out = await readerPortFromInvoker(invoker).targetHealth(ID, { customerId: CUSTOMER });
+    expect(out).toMatchObject({
+      ok: true,
+      report: { live: true, targets: [{ reason: "timeout" }] },
+    });
+    const sent = JSON.parse((invoker.invoke as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
+    expect(sent).toEqual({
+      action: "targetHealth",
+      resourceId: ID,
+      caller: { customerId: CUSTOMER },
+    });
+    const db = answering(dbGood);
+    const m = await readerPortFromInvoker(db).databaseMetrics(ID, { customerId: CUSTOMER }, "1d");
+    expect(m).toMatchObject({
+      ok: true,
+      series: [{ metric: "freeStorage", statistic: "minimum" }],
+    });
+    expect(JSON.parse((db.invoke as ReturnType<typeof vi.fn>).mock.calls[0]![0])).toEqual({
+      action: "databaseMetrics",
+      resourceId: ID,
+      caller: { customerId: CUSTOMER },
+      range: "1d",
+    });
+  });
+
+  it("refuses a malformed answer, an unknown word, a function error and a bad id (R16)", async () => {
+    const bad = {
+      ...health,
+      value: { ...health.value, targets: [{ ...health.value.targets[0], health: "fine" }] },
+    };
+    expect(
+      await readerPortFromInvoker(answering(bad)).targetHealth(ID, { customerId: CUSTOMER }),
+    ).toEqual({ ok: false, error: "unavailable" });
+    const tooMany = {
+      ...health,
+      value: {
+        ...health.value,
+        targets: Array.from({ length: 21 }, () => health.value.targets[0]),
+      },
+    };
+    expect(
+      (await readerPortFromInvoker(answering(tooMany)).targetHealth(ID, { customerId: CUSTOMER }))
+        .ok,
+    ).toBe(false);
+    expect(
+      await readerPortFromInvoker(answering(health, true)).targetHealth(ID, {
+        customerId: CUSTOMER,
+      }),
+    ).toEqual({ ok: false, error: "unavailable" });
+    expect(
+      await readerPortFromInvoker(answering(dbGood)).databaseMetrics(
+        "x",
+        { customerId: CUSTOMER },
+        "1h",
+      ),
+    ).toEqual({ ok: false, error: "validation" });
+    const wrongMetric = {
+      ok: true,
+      value: { series: [{ ...dbGood.value.series[0], metric: "networkIn" }] },
+    };
+    expect(
+      (
+        await readerPortFromInvoker(answering(wrongMetric)).databaseMetrics(
+          ID,
+          { customerId: CUSTOMER },
+          "1h",
+        )
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("passes only a known reader code through and never other text", async () => {
+    expect(
+      await readerPortFromInvoker(answering({ ok: false, error: "not_found" })).targetHealth(ID, {
+        customerId: CUSTOMER,
+      }),
+    ).toEqual({ ok: false, error: "not_found" });
+    expect(
+      await readerPortFromInvoker(
+        answering({ ok: false, error: "arn:aws:iam::123456789012:role/x" }),
+      ).databaseMetrics(ID, { customerId: CUSTOMER }, "1h"),
+    ).toEqual({ ok: false, error: "unavailable" });
+  });
+});

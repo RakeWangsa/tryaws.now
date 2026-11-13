@@ -1,6 +1,6 @@
 import { createAwsAccess, createLightsailReadSource } from "@tc/aws";
 import type { Clock, Logger } from "@tc/core";
-import { loadReadTarget, type ReadCaller, type Tx } from "@tc/db";
+import { loadReadTarget, loadRecordedTargets, type ReadCaller, type Tx } from "@tc/db";
 import type { ReaderConfig } from "./config";
 import { createReader, type Reader } from "./handler";
 import { createInvoke } from "./invoke";
@@ -22,6 +22,7 @@ export function buildReaderDeps(env: ReaderEnv): {
   const reader = createReader({
     loadTarget: (caller: ReadCaller, resourceId: string) =>
       env.runTx((tx) => loadReadTarget(tx, caller, resourceId)),
+    loadRecordedTargets: (target) => env.runTx((tx) => loadRecordedTargets(tx, target)),
     source: createLightsailReadSource(access, env.clock),
     clock: env.clock,
     log: env.log,

@@ -26,7 +26,7 @@ import type { DraftActionResult, OrderActionDeps } from "./order-actions.ts";
 // check it later, but a refusal on the spot is what the customer sees.
 //
 // The HTTPS certificate, the health check path and the redirect are in console-actions.ts (WPU-G7).
-// Not built: the per-target health read (needs the reader; WPU-G24).
+// The per-target health is a read of the reader (WPU-Y8, server/reader-reads-view.ts), not an action.
 
 export const LOAD_BALANCER_SPEC: FamilySpec = {
   family: "load_balancer",

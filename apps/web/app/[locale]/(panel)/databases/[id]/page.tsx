@@ -5,6 +5,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
 import { loadDatabaseDetail } from "../../../../../server/databases-view.ts";
+import { rangeOf } from "../../../../../server/extras-view.ts";
+import { getReaderPort } from "../../../../../server/reader-port.ts";
+import { loadDatabaseMetrics } from "../../../../../server/reader-reads-view.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { PanelFrame, numeralsFor } from "../../PanelFrame.tsx";
 import {
@@ -25,6 +28,7 @@ import {
 import { DatabaseOptionsForm } from "../../_console/ConsoleForms.tsx";
 import { DatabaseParameters } from "../../_console/DatabaseParameters.tsx";
 import { DatabaseDetailContent } from "./DatabaseDetailContent.tsx";
+import { DatabaseMetricsTab } from "./DatabaseMetricsTab.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +56,16 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
   const panel = await startPanelPage(path);
   const database = await loadDatabaseDetail(panel.session, id);
   const tab = one(query["tab"]);
+  // WPU-Y8: read once on page load (the tabs are all rendered; no timer, no polling).
+  const metricsScreen =
+    database !== null
+      ? await loadDatabaseMetrics(
+          panel.session,
+          database.id,
+          rangeOf(one(query["range"])),
+          await getReaderPort(),
+        )
+      : ({ state: "empty", range: rangeOf(one(query["range"])) } as const);
   return (
     <PanelFrame locale={locale} path={path} currentId="databases" panel={panel}>
       <DatabaseDetailContent
@@ -84,6 +98,18 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
                       publiclyAccessible: false,
                     }
                   }
+                />
+              ),
+            }
+          : {})}
+        {...(database !== null
+          ? {
+              metricsTab: (
+                <DatabaseMetricsTab
+                  databaseId={database.id}
+                  screen={metricsScreen}
+                  locale={locale}
+                  numerals={numeralsFor(locale, panel)}
                 />
               ),
             }

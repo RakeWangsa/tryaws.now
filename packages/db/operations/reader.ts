@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Tx } from "../client";
 import { isUuid } from "../repositories/scope";
 import { adminUsers } from "../schema/admins";
@@ -60,4 +60,37 @@ export async function loadReadTarget(
   const account = pool[0];
   if (account === undefined) return null;
   return { resource, account, region: resource.region };
+}
+
+// WPU-Y8. The platform ids recorded as targets of a load balancer (`config.targetIds`), kept only when
+// they are still servers of the same customer (R8): the statement carries the owner and the family. The
+// reader maps the AWS names of the health read back to ids against this list only. null when the record
+// is malformed (R16); an empty list when none is recorded.
+const MAX_RECORDED_TARGETS = 20;
+
+export async function loadRecordedTargets(
+  tx: Tx,
+  target: ReadTarget,
+): Promise<readonly string[] | null> {
+  const config = target.resource.config as { targetIds?: unknown } | null;
+  const raw = config !== null && typeof config === "object" ? config.targetIds : undefined;
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_RECORDED_TARGETS) return null;
+  const ids: string[] = [];
+  for (const id of raw) {
+    if (typeof id !== "string" || !isUuid(id)) return null;
+    if (!ids.includes(id)) ids.push(id);
+  }
+  if (ids.length === 0) return [];
+  const rows = await tx
+    .select({ id: resources.id })
+    .from(resources)
+    .where(
+      and(
+        inArray(resources.id, ids),
+        eq(resources.customerId, target.resource.customerId),
+        eq(resources.family, "linux_instance"),
+      ),
+    );
+  return rows.map((r) => r.id).sort();
 }
