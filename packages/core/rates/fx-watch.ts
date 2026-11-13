@@ -33,7 +33,7 @@ export function fxAlertWindowOpen(now: Date): boolean {
 
 export interface FxWatchOps {
   markets(tx: Tx): Promise<string[]>;
-  inForce(tx: Tx, market: string, at: Date): Promise<{ effectiveFrom: Date } | null>;
+  inForce(tx: Tx, market: string, at: Date): Promise<{ createdAt: Date } | null>;
 }
 
 export const defaultFxWatchOps: FxWatchOps = {
@@ -61,18 +61,18 @@ export async function runFxRateWatch(deps: FxWatchDeps): Promise<FxWatchReport> 
   const states: Record<string, FxRateState> = {};
   let alerted = 0;
   const found = await deps.runTx(async (tx) => {
-    const out: { market: string; effectiveFrom: Date | null }[] = [];
+    const out: { market: string; enteredAt: Date | null }[] = [];
     for (const market of await ops.markets(tx)) {
       const rate = await ops.inForce(tx, market, now);
-      out.push({ market, effectiveFrom: rate === null ? null : rate.effectiveFrom });
+      out.push({ market, enteredAt: rate === null ? null : rate.createdAt });
     }
     return out;
   });
-  for (const { market, effectiveFrom } of found) {
-    const state = fxRateState(effectiveFrom, now);
+  for (const { market, enteredAt } of found) {
+    const state = fxRateState(enteredAt, now);
     states[market] = state;
-    if (!fxRateAlertDue(effectiveFrom, now) || !fxAlertWindowOpen(now)) continue;
-    const seconds = fxRateAgeSeconds(effectiveFrom, now);
+    if (!fxRateAlertDue(enteredAt, now) || !fxAlertWindowOpen(now)) continue;
+    const seconds = fxRateAgeSeconds(enteredAt, now);
     try {
       deps.log({
         event: FX_ALERT_EVENT,

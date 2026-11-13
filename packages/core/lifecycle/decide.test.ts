@@ -140,3 +140,31 @@ describe("decideSubscription: guards", () => {
     ]);
   });
 });
+
+// WPU-Y9 finding 8: a grace that starts when a rate hold is released (graceFrom) runs from there, so the
+// days of the hold do not use it up and nobody is retained the moment the hold ends.
+describe("decideSubscription: grace from the release of a rate hold", () => {
+  const released = new Date(END.getTime() + 10 * DAY); // a hold of ten days, released here
+  const grace = (over: Partial<DecisionView> = {}) =>
+    view({ status: "grace", autoRenew: true, graceFrom: released, ...over });
+  it("without graceFrom the grace runs from the period end, as before", () => {
+    expect(
+      decideSubscription(view({ status: "grace", autoRenew: true }), at(10 * DAY), cfg),
+    ).toEqual({ type: "retain" });
+  });
+  it("with graceFrom it keeps retrying until graceHours after the release", () => {
+    expect(decideSubscription(grace(), released, cfg)).toEqual({ type: "retry_renew" });
+    expect(decideSubscription(grace(), new Date(released.getTime() + 48 * HOUR - 1), cfg)).toEqual({
+      type: "retry_renew",
+    });
+    expect(decideSubscription(grace(), new Date(released.getTime() + 48 * HOUR), cfg)).toEqual({
+      type: "retain",
+    });
+  });
+  it("a graceFrom before the period end, or one that cannot be read, changes nothing", () => {
+    const early = grace({ graceFrom: new Date(END.getTime() - DAY) });
+    expect(decideSubscription(early, at(48 * HOUR), cfg)).toEqual({ type: "retain" });
+    const bad = grace({ graceFrom: new Date("nope") });
+    expect(decideSubscription(bad, at(48 * HOUR), cfg)).toEqual({ type: "retain" });
+  });
+});

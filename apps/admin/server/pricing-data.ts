@@ -114,7 +114,7 @@ export async function loadPricing(
         adminRepos(tx, admin).fxChanges.read(market),
         adminRepos(tx, admin).fxRates.meta(market, now),
       ]);
-      const anchor = fxInForce === null ? null : fxInForce.effectiveFrom;
+      const anchor = fxInForce === null ? null : fxInForce.createdAt; // WPU-Y9: the age counts from the entry
       let draft: Draft = { ...asked, market };
       let preview: PreviewState = { kind: "none" };
       if (submitted) {

@@ -393,7 +393,7 @@
       "table": [],
       "insertColumns": null,
       "updateColumns": null,
-      "selectColumns": ["id", "market", "rate", "effective_from"]
+      "selectColumns": ["id", "market", "rate", "effective_from", "created_at"]
     },
     "admin_rw": {
       "table": ["SELECT"],
@@ -405,7 +405,7 @@
       "table": [],
       "insertColumns": null,
       "updateColumns": null,
-      "selectColumns": ["id", "market", "rate", "effective_from"]
+      "selectColumns": ["id", "market", "rate", "effective_from", "created_at"]
     },
     "report_ro": {
       "table": [],

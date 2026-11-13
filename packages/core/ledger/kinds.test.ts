@@ -283,6 +283,7 @@ describe("who may post what (R6, R8): forbidden, not validation", () => {
       idempotencyKey: `reversal:${REF}`,
     });
     delete base.memo;
+    delete base.priceSnapshot; // a reversal is no sale
     const allow = { allowReversal: true };
     expect(checkPosting(base, allow).ok).toBe(true);
     expect(checkPosting({ ...base, idempotencyKey: `order-reversal:${OTHER}` }, allow).ok).toBe(
@@ -335,6 +336,42 @@ describe("reversePostings and samePosting", () => {
       { accountId: "a2", direction: "credit" as const, amountMinor: 5n },
     ],
   };
+  // WPU-Y9 finding 7: the same key with another price snapshot is another request, not a replay.
+  it("samePosting compares the snapshot of a sale (key order does not matter) and not of other kinds", () => {
+    const sale = { ...stored, kind: "metered_charge", referenceType: "resource" };
+    const snap = {
+      schemaVersion: 1,
+      kind: "metered",
+      totalMinor: "5",
+      fx: { id: "a", rate: "127" },
+    };
+    const reordered = {
+      fx: { rate: "127", id: "a" },
+      totalMinor: "5",
+      kind: "metered",
+      schemaVersion: 1,
+    };
+    expect(
+      samePosting({ ...sale, priceSnapshot: snap }, { ...sale, priceSnapshot: reordered }),
+    ).toBe(true);
+    expect(
+      samePosting(
+        { ...sale, priceSnapshot: snap },
+        { ...sale, priceSnapshot: { ...snap, fx: { id: "b", rate: "130" } } },
+      ),
+    ).toBe(false);
+    expect(samePosting({ ...sale, priceSnapshot: snap }, { ...sale, priceSnapshot: null })).toBe(
+      false,
+    );
+    // a row from before the snapshot existed (null) is still a replay of the same key
+    expect(samePosting({ ...sale, priceSnapshot: null }, { ...sale, priceSnapshot: snap })).toBe(
+      true,
+    );
+    // a kind that is no sale never compares it
+    expect(
+      samePosting({ ...stored, priceSnapshot: snap }, { ...stored, priceSnapshot: null }),
+    ).toBe(true);
+  });
   it("samePosting ignores the order of the lines and nothing else", () => {
     expect(samePosting(stored, { ...stored, lines: [...stored.lines].reverse() })).toBe(true);
     expect(samePosting(stored, { ...stored, kind: "refund" })).toBe(false);

@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { AwsError } from "@tc/aws";
-import { createManualClock, ensureSystemAccounts, openWallet, postTransaction } from "@tc/core";
+import {
+  buildChargeSnapshot,
+  createManualClock,
+  ensureSystemAccounts,
+  openWallet,
+  postTransaction,
+  quote,
+} from "@tc/core";
 import { rejectOperation, runTransaction } from "@tc/db/testing";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAdapterRegistry } from "./adapters";
@@ -83,6 +90,23 @@ async function seedPaid(resourceId: string): Promise<string> {
         reference: { type: "order", id: orderId },
         idempotencyKey: `order:${randomUUID().replaceAll("-", "")}`,
         actor: { type: "customer", id: world.customerId },
+        priceSnapshot: buildChargeSnapshot(
+          "purchase",
+          {
+            pricedAt: NOW,
+            awsPriceUsd: "5",
+            quantity: "1",
+            fx: { id: "fx-1", rate: "127", effectiveFrom: NOW },
+            rule: { id: "rule-id-1", version: "rule-1" },
+            book: null,
+            quote: quote({
+              awsPriceUsd: "5",
+              fxRate: "127",
+              rule: { version: "rule-1", steps: [] },
+            }),
+          },
+          { charge: { baseMinor: PRICE, steps: [], totalMinor: PRICE } },
+        ),
         postings: [
           {
             account: { type: "customer_wallet", customerId: world.customerId },

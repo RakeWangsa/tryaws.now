@@ -4,7 +4,7 @@
 import type { Tx } from "@tc/db";
 import { runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, describe, expect, it } from "vitest";
-import { makeKit, placeOne, START, type Kit } from "../test/orders-kit";
+import { PLAN_TOTAL, makeKit, placeOne, START, type Kit } from "../test/orders-kit";
 import { runLifecycle } from "./engine";
 
 const t = useTempDatabase();
@@ -22,9 +22,9 @@ interface Fresh {
   end: Date;
 }
 
-async function fresh(): Promise<Fresh> {
+async function fresh(balanceMinor = 50_000_000n): Promise<Fresh> {
   kit.clock.set(START);
-  const buyer = await kit.newBuyer({ balanceMinor: 50_000_000n });
+  const buyer = await kit.newBuyer({ balanceMinor });
   const { resourceId } = await placeOne(kit, buyer);
   const s = (
     await q("select id, period_end from subscriptions where resource_id = $1", [resourceId])
@@ -106,5 +106,25 @@ describe("a renewal that cannot be priced because the rate is stale", () => {
     await sweep();
     expect(await status(f.subscriptionId)).toBe("active");
     expect(await renewals(f.subscriptionId)).toBe(1);
+  });
+
+  // WPU-Y9 finding 8 (NOT RUN here, no database): the grace starts when the hold is released.
+  it("a wallet that is short when the hold ends gets the whole grace from that moment, not from the old period end", async () => {
+    const f = await fresh(PLAN_TOTAL); // exactly the price of the plan: the wallet is empty for the renewal
+    kit.clock.set(new Date(f.end.getTime() + 10 * DAY)); // held for ten days
+    await sweep();
+    expect(await status(f.subscriptionId)).toBe("active");
+    await kit.refreshFx();
+    await sweep(); // the hold is released, the renewal fails for the wallet: grace starts now
+    expect(await status(f.subscriptionId)).toBe("grace");
+    await sweep(); // not retained at once
+    expect(await status(f.subscriptionId)).toBe("grace");
+    const graceFrom = (
+      await q("select config->>'graceFrom' as g from resources where id = $1", [f.resourceId])
+    )[0]!.g;
+    expect(graceFrom).toBe(kit.clock.now().toISOString());
+    kit.clock.set(new Date(kit.clock.now().getTime() + 49 * 3_600_000));
+    await sweep();
+    expect(await status(f.subscriptionId)).toBe("retained");
   });
 });

@@ -434,6 +434,14 @@ function check(
   // WPU-Y2: the price inputs of a sale. Checked here, so a charge cannot be saved with a snapshot that
   // is damaged, of another kind, or whose total is not the amount taken from the wallet (R16).
   let priceSnapshot: ChargeSnapshot | null = null;
+  // WPU-Y9 (R16): a sale without its price inputs is refused; the database CHECK says the same.
+  if (
+    kind !== null &&
+    SNAPSHOT_KIND[kind] !== undefined &&
+    (input.priceSnapshot === undefined || input.priceSnapshot === null)
+  ) {
+    flag("priceSnapshot", "A sale needs its price snapshot.");
+  }
   if (input.priceSnapshot !== undefined && input.priceSnapshot !== null) {
     try {
       priceSnapshot = parseChargeSnapshot(input.priceSnapshot);
@@ -551,7 +559,25 @@ export function reversePostings(lines: readonly NormalizedLine[]): Posting[] {
   });
 }
 
+const SALE_KINDS: ReadonlySet<string> = new Set(["purchase", "renewal", "metered_charge"]);
+
+// JSON with the keys of every object sorted, so the jsonb of the database (which reorders keys) and the
+// object of the request compare equal when they hold the same values.
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(record[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
 export interface StoredPosting {
+  /** WPU-Y9: the price snapshot of a sale; compared by samePosting for the sale kinds only. */
+  readonly priceSnapshot?: unknown;
   readonly kind: string;
   readonly referenceType: string;
   readonly referenceId: string;
@@ -567,6 +593,14 @@ export interface StoredPosting {
  * and the same lines as a multiset of (account, side, amount). The actor and the memo are not compared.
  */
 export function samePosting(stored: StoredPosting, wanted: StoredPosting): boolean {
+  if (
+    SALE_KINDS.has(wanted.kind) &&
+    stored.priceSnapshot !== undefined &&
+    stored.priceSnapshot !== null &&
+    canonicalJson(stored.priceSnapshot) !== canonicalJson(wanted.priceSnapshot ?? null)
+  ) {
+    return false;
+  }
   if (
     stored.kind !== wanted.kind ||
     stored.referenceType !== wanted.referenceType ||

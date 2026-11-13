@@ -46,12 +46,12 @@ describe("meteredSnapshot", () => {
     expect(priceSnapshot?.fx.id).toBe("fx-1");
   });
 
-  it("saves nothing for a unit without inputs (no recalculation is invented)", () => {
+  it("throws for a unit without inputs: no charge without a snapshot (R16)", () => {
     const bare: MeteredUnitPrice = {
       totalMinor: unit.totalMinor,
       baseMinor: unit.baseMinor,
       steps: unit.steps,
     };
-    expect(meteredSnapshot(bare, "snapshot_gb", "10", 5n)).toEqual({});
+    expect(() => meteredSnapshot(bare, "snapshot_gb", "10", 5n)).toThrow(RangeError);
   });
 });

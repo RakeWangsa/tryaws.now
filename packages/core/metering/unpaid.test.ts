@@ -10,10 +10,12 @@ import type { Notice } from "../lifecycle/notice";
 import { R13_APPROVAL_UNTIL } from "../lifecycle/unpaid";
 import type { PostTransactionInput } from "../ledger/types";
 import { createMemoryQueue } from "../operations/queue";
+import type { ChargeSnapshot } from "../pricing/charge-snapshot";
 import type { MeteredUnitPrice } from "../pricing/metering";
 import type { StaticIpPrice } from "../products/static-ip-price";
 import type { Result } from "../types";
 import { UNPAID_PERIOD_CAP, runUnpaid, unpaidRunKey, type UnpaidOps } from "./index";
+import { ipWithInputs, withInputs } from "../test/metered-inputs";
 
 // WPU-Y3. The unpaid-usage rule with a fake world (no database): retry every unpaid day without a
 // window, suspend at 1 day, retain at 7 days, R13 on both sides of the date, a payment restores, and a
@@ -114,6 +116,7 @@ function build(init: Partial<World> = {}) {
     episode: undefined as number | undefined,
     balanceReads: 0,
     superseded: 0,
+    clockStarts: [] as string[],
   };
   const fake: UnpaidOps = {
     enabled: async () => w.enabled,
@@ -121,14 +124,15 @@ function build(init: Partial<World> = {}) {
     list: async (_tx, after) => {
       calls.list += 1;
       const hasMark =
-        typeof w.config.unpaidSince === "string" &&
+        (typeof w.config.unpaidSince === "string" || typeof w.config.unpaidIpFrom === "string") &&
         ["active", "stopped", "suspended"].includes(w.state);
       if (!hasMark || after !== null) return [];
       const row: UnpaidResourceRow = {
         resourceId: RES,
         customerId: CUST,
         subscriptionId: SUB,
-        unpaidSince: new Date(w.config.unpaidSince as string),
+        unpaidSince:
+          typeof w.config.unpaidSince === "string" ? new Date(w.config.unpaidSince) : null,
       };
       return [row];
     },
@@ -153,9 +157,11 @@ function build(init: Partial<World> = {}) {
       }) satisfies LifecycleRow,
     usage: async (_tx, _r, _m, from, to) =>
       w.usage.filter((u) => u.period >= from && u.period <= to),
-    snapshotUnit: async () => w.unit,
+    snapshotUnit: async () => (w.unit === null ? null : withInputs(w.unit)),
     staticIpPrice: async () =>
-      w.ipPrice === null ? { ok: false, error: "not_found" } : { ok: true, value: w.ipPrice },
+      w.ipPrice === null
+        ? { ok: false, error: "not_found" }
+        : { ok: true, value: ipWithInputs(w.ipPrice) },
     chargedPeriods: async (_tx, resourceId, metric, from, to) => {
       calls.chargedQueries += 1;
       const prefix = `meter:${resourceId}:${metric}:`;
@@ -219,8 +225,13 @@ function build(init: Partial<World> = {}) {
         "unpaidRetainedFrom",
         "unpaidIpFrom",
         "unpaidIpTo",
+        "unpaidDayFrom",
       ])
         delete w.config[k];
+    },
+    startClock: async (_tx, _r, at) => {
+      calls.clockStarts.push(at.toISOString());
+      if (w.config.unpaidSince === undefined) w.config.unpaidSince = at.toISOString();
     },
     setFlag: async (_tx, _r, key, value) => {
       calls.flags.push(`${key}=${value}`);
@@ -337,6 +348,85 @@ describe("retry of every unpaid day (no window)", () => {
     expect(report.paid).toBe(1);
     expect(t.w.config.unpaidSince).toBeUndefined();
     expect(t.w.balance).toBe(100_000n - 7000n);
+  });
+
+  // WPU-Y9 finding 1: a retried charge carries the price inputs, so the ledger CHECK and R16 are met.
+  it("saves a price snapshot with every retried snapshot-storage and static IP charge", async () => {
+    const t = build({
+      config: {
+        unpaidSince: since(5 * HOUR),
+        staticIpAttached: true,
+        unpaidIpFrom: "2026-11-20T09",
+        unpaidIpTo: "2026-11-20T09",
+      },
+      usage: days("2026-11-19", "2026-11-19"),
+      ipPrice: IP,
+      balance: 100_000n,
+    });
+    await t.run();
+    const posts = [...t.posted.values()].map((p) => ({
+      ...p,
+      snapshot: p.priceSnapshot as ChargeSnapshot | undefined,
+    }));
+    expect(posts.length).toBe(2);
+    for (const p of posts) {
+      expect(p.snapshot?.kind).toBe("metered");
+      expect(p.snapshot?.totalMinor).toBe(
+        p.postings
+          .filter((x) => x.account.type === "customer_wallet")
+          .reduce((a, x) => a + x.amountMinor, 0n)
+          .toString(),
+      );
+    }
+    expect(posts.map((p) => p.snapshot?.meter?.metric).sort()).toEqual([
+      "snapshot_gb",
+      "static_ip_hour",
+    ]);
+  });
+
+  // WPU-Y9 finding 4: a held day that failed for a low balance during a catch-up is older than since - 2 days.
+  it("retries from the oldest unpaid day kept in the mark, older than the catch-up before the first failure", async () => {
+    const t = build({
+      config: { unpaidSince: since(1 * DAY), unpaidDayFrom: "2026-11-12" },
+      usage: days("2026-11-12", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.charged).toBe(8);
+    expect([...t.posted.keys()].sort()[0]).toBe(`meter:${RES}:snapshot_gb:2026-11-12`);
+    expect(t.w.config.unpaidDayFrom).toBeUndefined(); // the episode ended: the mark goes with it
+  });
+
+  it("without the day in the mark the retry starts two days before the first failure (as before)", async () => {
+    const t = build({
+      config: { unpaidSince: since(1 * DAY) },
+      usage: days("2026-11-12", "2026-11-19"),
+      balance: 100_000n,
+    });
+    await t.run();
+    expect([...t.posted.keys()].sort()[0]).toBe(`meter:${RES}:snapshot_gb:2026-11-17`);
+  });
+
+  it("refuses to retry when the day in the mark cannot be read (R16)", async () => {
+    const t = build({
+      config: { unpaidSince: since(1 * DAY), unpaidDayFrom: "yesterday" },
+      usage: days("2026-11-12", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.blocked).toBe(1);
+    expect(t.posted.size).toBe(0);
+  });
+
+  it("keeps the per run cap with a long mark: the rest is charged the next run", async () => {
+    const t = build({
+      config: { unpaidSince: since(1 * DAY), unpaidDayFrom: "2026-01-01" },
+      usage: days("2026-01-01", "2026-11-19"),
+      balance: 10_000_000n,
+    });
+    const first = await t.run();
+    expect(first.charged).toBe(UNPAID_PERIOD_CAP);
+    expect(first.capped).toBe(1);
   });
 
   it("charges the oldest first and stops at the first day the wallet cannot pay", async () => {
@@ -769,6 +859,48 @@ describe("the suspend key changes after a resume (finding 2)", () => {
 });
 
 // Finding 3 (MEDIUM).
+// WPU-Y9: hours held because of a stale rate carry no clock. Nobody is suspended or told because of the
+// platform's rate; the clock starts at the first charge that fails for insufficient_balance.
+describe("held static IP hours without the unpaid clock", () => {
+  const H = (h: string): string => `meter:${RES}:static_ip_hour:${h}`;
+  const heldConfig = () => ({
+    staticIpAttached: true,
+    unpaidIpFrom: "2026-11-20T01",
+    unpaidIpTo: "2026-11-20T11",
+  });
+  it("rate refreshed and the wallet sufficient: hours charged, no suspension, no email, marks gone", async () => {
+    const t = build({ ipPrice: IP, config: heldConfig(), usage: [], balance: 1_000_000n });
+    const report = await t.run();
+    expect(report.paid).toBe(1);
+    expect(report.charged).toBe(11);
+    expect(t.posted.has(H("2026-11-20T01"))).toBe(true);
+    expect(t.ops.size).toBe(0);
+    expect(t.notices.size).toBe(0);
+    expect(t.calls.clockStarts).toEqual([]);
+    expect(t.w.config.unpaidSince).toBeUndefined();
+    expect(t.w.config.unpaidIpFrom).toBeUndefined();
+  });
+
+  it("rate still missing: blocked, no clock, no message", async () => {
+    const t = build({ ipPrice: null, config: heldConfig(), usage: [], balance: 1_000_000n });
+    const report = await t.run();
+    expect(report.blocked).toBe(1);
+    expect(t.calls.clockStarts).toEqual([]);
+    expect(t.w.config.unpaidSince).toBeUndefined();
+    expect(t.ops.size + t.notices.size + t.posted.size).toBe(0);
+  });
+
+  it("rate refreshed and the wallet short: the clock starts at the first insufficient_balance, day 0 is a warning only", async () => {
+    const t = build({ ipPrice: IP, config: heldConfig(), usage: [], balance: 100n });
+    const report = await t.run();
+    expect(t.calls.clockStarts).toEqual([NOW.toISOString()]);
+    expect(t.w.config.unpaidSince).toBe(NOW.toISOString());
+    expect(report.stillUnpaid).toBe(1);
+    expect(t.ops.size).toBe(0); // not suspended: the clock is at day 0
+    expect([...t.notices.values()].map((n) => n.template)).toEqual(["unpaid_warning"]);
+  });
+});
+
 describe("the unpaid static IP hours stay in the mark (finding 3)", () => {
   const H = (h: string): string => `meter:${RES}:static_ip_hour:${h}`;
   const ipConfig = () => ({

@@ -7,6 +7,7 @@ import { postTransaction } from "../ledger/post";
 import { inputs } from "../test/ledger-fixtures";
 import { makeKit, placeOne, PLAN_TOTAL, START, type Kit } from "../test/orders-kit";
 import { runLifecycle } from "./engine";
+import { snapshotOfAmount } from "../test/ledger-requests";
 
 const t = useTempDatabase();
 const DAY = 24 * 3_600_000;
@@ -61,6 +62,7 @@ async function setWallet(customerId: string, target: bigint): Promise<void> {
         reference: { type: "order", id: crypto.randomUUID() },
         idempotencyKey: `order:${crypto.randomUUID().replaceAll("-", "")}`,
         actor: { type: "system" },
+        priceSnapshot: snapshotOfAmount("purchase", current - target),
         postings: [
           {
             account: { type: "customer_wallet", customerId },

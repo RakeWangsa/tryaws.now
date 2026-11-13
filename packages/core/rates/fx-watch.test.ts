@@ -21,7 +21,7 @@ function world(rateAge: number | null, markets = ["BD"]) {
   const ops: FxWatchOps = {
     markets: async () => markets,
     inForce: async (_tx, _market, at) =>
-      rateAge === null ? null : { effectiveFrom: new Date(at.getTime() - rateAge) },
+      rateAge === null ? null : { createdAt: new Date(at.getTime() - rateAge) },
   };
   const deps = (now: Date) => ({
     runTx: async <T>(fn: (tx: never) => Promise<T>) => fn(undefined as never),

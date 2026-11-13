@@ -8,6 +8,11 @@ export interface FxRateRow {
   market: string;
   rate: string;
   effectiveFrom: Date;
+  /**
+   * WPU-Y9. When the rate was entered (approved). The freshness of a rate is measured from here, never from
+   * `effectiveFrom`, which can be up to 7 days after the entry.
+   */
+  createdAt: Date;
 }
 
 // Only the columns that the three roles may read; who set a row is in the audit log. The canonical
@@ -17,6 +22,7 @@ const columns = {
   market: fxRates.market,
   rate: sql<string>`trim_scale(${fxRates.rate})::text`,
   effectiveFrom: fxRates.effectiveFrom,
+  createdAt: fxRates.createdAt,
 };
 
 export async function readFxRateInForce(
@@ -35,13 +41,27 @@ export async function readFxRateInForce(
   return rows[0] ?? null;
 }
 
-export async function readFxRates(tx: Tx, market: string, limit?: number): Promise<FxRateRow[]> {
+/**
+ * The rates of a market, newest start first. With `at`, only the rates that have started by then (WPU-Y9: the rate
+ * in force and the one before it, never a rate scheduled for later).
+ */
+export async function readFxRates(
+  tx: Tx,
+  market: string,
+  limit?: number,
+  at?: Date,
+): Promise<FxRateRow[]> {
   const n = historyLimit(limit);
   if (!isMarketCode(market)) return [];
+  if (at !== undefined) requireInstant(at, "readFxRates: at");
   return tx
     .select(columns)
     .from(fxRates)
-    .where(eq(fxRates.market, market))
+    .where(
+      at === undefined
+        ? eq(fxRates.market, market)
+        : and(eq(fxRates.market, market), lte(fxRates.effectiveFrom, at)),
+    )
     .orderBy(desc(fxRates.effectiveFrom), desc(fxRates.id))
     .limit(n);
 }

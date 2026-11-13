@@ -5,11 +5,11 @@ import {
   type UnrecordedCharge,
 } from "@tc/db";
 import type { Logger, RunTx } from "../operations/types";
-import { parseSnapshot } from "../pricing/snapshot";
 import type { Clock } from "../types";
 import { fiscalYearOf } from "./base";
+import { backlogEntryOf } from "./backlog-entry";
 import { issueCreditNotes } from "./credit-note";
-import { invoiceIdFor, invoiceLinesOf, noteIdFor, queueIdFor, readBuyerSnapshot } from "./charge";
+import { invoiceIdFor, noteIdFor, queueIdFor, readBuyerSnapshot } from "./charge";
 
 // WPU-I2: the invoices that were owed when the seller details were missing (charge.ts queued them).
 // Each run issues the oldest first, one transaction for each invoice, so the numbers follow the order of
@@ -255,15 +255,15 @@ async function recordOne(
   try {
     return await deps.runTx(async (tx) => {
       const invoices = customerRepos(tx, charge.customerId).invoices;
-      if (charge.kind === "order" && charge.orderId !== null) {
+      const entry = backlogEntryOf(charge);
+      if (entry !== null) {
         try {
-          const lines = invoiceLinesOf(parseSnapshot(charge.priceSnapshot));
           const queued = await invoices.queueBacklog({
             id: queueIdFor(charge.ledgerTransactionId),
-            kind: "order",
-            orderId: charge.orderId,
+            kind: entry.kind,
+            ...(entry.orderId === null ? {} : { orderId: entry.orderId }),
             ledgerTransactionId: charge.ledgerTransactionId,
-            lines,
+            lines: entry.lines,
             totalMinor: charge.totalMinor,
           });
           if (queued.ok) {
@@ -275,7 +275,7 @@ async function recordOne(
             return "queued" as const;
           }
         } catch {
-          // the lines cannot be rebuilt: fall through to the notice
+          // fall through to the notice
         }
       }
       const written = await invoices.noteUnrecorded({

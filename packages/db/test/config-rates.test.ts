@@ -60,6 +60,7 @@ it("a rate row has the market, the canonical text, the start as a Date and a UUI
     market: "BD",
     rate: "127",
     effectiveFrom: new Date("2026-11-01T00:00:00.000Z"),
+    createdAt: expect.any(Date),
   });
 });
 
@@ -98,6 +99,17 @@ it("an instant that is not a valid date is a programming error, not 'nothing in 
   await expect(
     as("web_rw", (tx) => readPricingRuleInForce(tx, "BD", null, new Date("nope"))),
   ).rejects.toThrow(new TypeError("readPricingRuleInForce: at: not a valid date"));
+});
+
+// WPU-Y9 finding 3: with `at`, a row scheduled for later never takes a place among the newest two.
+it("readFxRates with an instant lists only the rates that have started, newest first", async () => {
+  const at = new Date("2026-11-20T00:00:00Z"); // the third rate (2026-12-01) is still ahead
+  const rows = await as("worker_rw", (tx) => readFxRates(tx, "BD", 2, at));
+  expect(rows.map((r) => r.rate)).toEqual(["130.5", "127"]);
+  expect(rows.every((r) => r.createdAt instanceof Date)).toBe(true);
+  expect(
+    await as("worker_rw", (tx) => readFxRates(tx, "BD", 2, new Date("2026-10-01T00:00:00Z"))),
+  ).toEqual([]);
 });
 
 it("the history is newest first, limited, and shows scheduled rows too", async () => {

@@ -1,4 +1,5 @@
 import { beforeAll } from "vitest";
+import { saleSnapshot, snapshotOfAmount } from "./ledger-requests";
 import type { Database, Tx } from "@tc/db";
 import {
   attachErrorListeners,
@@ -82,6 +83,7 @@ export const inputs = {
       reference: { type: "order", id: crypto.randomUUID() },
       idempotencyKey: key,
       actor: { type: "customer", id: customerId },
+      priceSnapshot: saleSnapshot("purchase"),
       postings: [
         {
           account: { type: "customer_wallet", customerId },
@@ -102,6 +104,7 @@ export const inputs = {
       reference: { type: "order", id: crypto.randomUUID() },
       idempotencyKey: key,
       actor: { type: "customer", id: customerId },
+      priceSnapshot: snapshotOfAmount("purchase", amountMinor),
       postings: [
         { account: { type: "customer_wallet", customerId }, direction: "debit", amountMinor },
         { account: { type: "revenue_aws_base" }, direction: "credit", amountMinor },

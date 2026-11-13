@@ -99,6 +99,12 @@ export interface StaticIpOps {
    * without it needs nothing.
    */
   markUnpaid?(tx: Tx, resourceId: string, at: Date, ipHour?: string): Promise<void>;
+  /**
+   * WPU-Y9. Keeps an hour that could not be PRICED (no rate in force, a stale rate) in the mark, WITHOUT the
+   * unpaid clock: a stale rate is the platform's, so it never moves a customer toward suspension or deletion.
+   * The clock (`unpaidSince`) starts only when a charge fails for `insufficient_balance`.
+   */
+  markHeld?(tx: Tx, resourceId: string, ipHour: string): Promise<void>;
   /** WPU-Y3b. As MeteringOps.unpaidJobEnabled: true stops the old unpaid notice (the unpaid job writes the mail). */
   unpaidJobEnabled?(tx: Tx): Promise<boolean>;
 }
@@ -111,6 +117,7 @@ export const defaultStaticIpOps: StaticIpOps = {
   post: postTransaction,
   notify: (tx, notice) => lifecycleRepo(tx).insertNotification(notice),
   markUnpaid: (tx, resourceId, at, ipHour) => meteringRepo(tx).markUnpaid(resourceId, at, ipHour),
+  markHeld: (tx, resourceId, ipHour) => meteringRepo(tx).markHeld(resourceId, ipHour),
   unpaidJobEnabled: defaultMeteringOps.unpaidJobEnabled!,
 };
 
@@ -180,7 +187,17 @@ export async function runStaticIpMetering(deps: StaticIpMeteringDeps): Promise<S
           continue;
         }
         const quoted = await priceOf(row.market);
-        if (quoted === null) continue;
+        if (quoted === null) {
+          // WPU-Y9: the hours that cannot be priced now are kept in the mark (first and last), so the daily
+          // unpaid job charges them once a price exists, even when the IP is attached or released by then.
+          const first = hours[0]!;
+          const last = hours[hours.length - 1]!;
+          await deps.runTx(async (tx) => {
+            await ops.markHeld?.(tx, row.resourceId, first);
+            if (last !== first) await ops.markHeld?.(tx, row.resourceId, last);
+          });
+          continue;
+        }
         const price = quoted.perHourMinor;
         const breakdown = quoted.breakdown;
         if (price === 0n) {

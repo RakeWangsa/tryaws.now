@@ -35,7 +35,7 @@ import { snapshotPrice } from "../products/snapshot-price";
 import { staticIpHourPrice, type StaticIpPrice } from "../products/static-ip-price";
 import type { Clock, Result } from "../types";
 import { viewDestroys, viewSuspends } from "./unpaid-undo";
-import { CATCH_UP_DAYS, SNAPSHOT_METRIC, dhakaDay } from "./run";
+import { CATCH_UP_DAYS, SNAPSHOT_METRIC, dhakaDay, meteredSnapshot } from "./run";
 import {
   STATIC_IP_CATCH_UP_HOURS,
   STATIC_IP_METRIC,
@@ -47,7 +47,8 @@ import {
 //
 // * A charge that the wallet could not pay was recorded by the normal passes (runMetering,
 //   runStaticIpMetering) as `resources.config.unpaidSince`, the instant of the first failure, and, for a
-//   static IP, the first and last failed hour (`unpaidIpFrom`, `unpaidIpTo`).
+//   static IP, the first and last failed hour (`unpaidIpFrom`, `unpaidIpTo`); for snapshot storage, the oldest
+//   failed day (`unpaidDayFrom`, WPU-Y9), so a day held back during a catch-up is not lost after three days.
 // * This job looks at every resource with that mark once a Dhaka day (the scheduler calls it in the first
 //   minutes of 07:00, `unpaidDue`), and (1) tries every period back to the first failure again, oldest
 //   first, under the SAME ledger key as the normal pass (`meter:<resource>:<metric>:<period>`), so a period
@@ -134,6 +135,11 @@ export interface UnpaidOps {
   balance(tx: Tx, customerId: string): Promise<bigint>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
   clear(tx: Tx, resourceId: string): Promise<void>;
+  /**
+   * WPU-Y9. Starts the unpaid clock (`unpaidSince`) of a resource that had only held hours, at the first
+   * charge that failed for `insufficient_balance`. Optional: absent means a world without it.
+   */
+  startClock?(tx: Tx, resourceId: string, at: Date): Promise<void>;
   setFlag(
     tx: Tx,
     resourceId: string,
@@ -181,6 +187,7 @@ export const defaultUnpaidOps: UnpaidOps = {
   balance: (tx, customerId) => walletBalance(tx, customerId),
   post: postTransaction,
   clear: (tx, resourceId) => meteringRepo(tx).clearUnpaid(resourceId),
+  startClock: (tx, resourceId, at) => meteringRepo(tx).markUnpaid(resourceId, at),
   setFlag: (tx, resourceId, key, value) => meteringRepo(tx).setUnpaidFlag(resourceId, key, value),
   enqueue: async (tx, input, now) => {
     const inserted = await insertOperation(
@@ -242,6 +249,8 @@ export interface UnpaidReport {
 }
 
 type Counts = { -readonly [K in keyof UnpaidReport]: UnpaidReport[K] };
+
+const DAY_NAME = /^\d{4}-\d{2}-\d{2}$/;
 
 const exactDate = (value: unknown): Date | null => {
   if (typeof value !== "string") return null;
@@ -324,7 +333,14 @@ async function retryCharges(
   // 1. snapshot storage: every day from the day the first failed attempt could have looked at (the
   // catch-up of the normal pass) to the last day that ended.
   const unit = await ops.snapshotUnit(tx, clock, row.market);
-  const from = dhakaDay(new Date(since.getTime() - CATCH_UP_DAYS * DAY_MS));
+  // WPU-Y9: the oldest failed snapshot day kept in the mark (a day held back during a catch-up can be older
+  // than the catch-up before the first failure). An unreadable day refuses the retry (R16).
+  const normal = dhakaDay(new Date(since.getTime() - CATCH_UP_DAYS * DAY_MS));
+  const markedDay = config.unpaidDayFrom;
+  if (markedDay !== undefined && (typeof markedDay !== "string" || !DAY_NAME.test(markedDay))) {
+    return "blocked";
+  }
+  const from = typeof markedDay === "string" && markedDay < normal ? markedDay : normal;
   const to = lastEndedDay(now);
   const days = from <= to ? await ops.usage(tx, resourceId, SNAPSHOT_METRIC, from, to) : [];
   if (unit === null || unit.totalMinor <= 0n) {
@@ -348,6 +364,7 @@ async function retryCharges(
         reference: { type: "resource", id: resourceId },
         idempotencyKey: ledgerKey.metered(resourceId, SNAPSHOT_METRIC, period),
         actor: { type: "system" },
+        ...meteredSnapshot(unit, SNAPSHOT_METRIC, quantity.get(period)!, amountMinor),
         postings: salePostings(customerId, {
           totalMinor: amountMinor,
           ...splitMeteredChargeMinor(amountMinor, unit),
@@ -401,6 +418,7 @@ async function retryCharges(
             idempotencyKey: ledgerKey.metered(resourceId, STATIC_IP_METRIC, hour),
             actor: { type: "system" },
             memo: STATIC_IP_MEMO,
+            ...meteredSnapshot(quoted.value.breakdown, STATIC_IP_METRIC, "1", price),
             postings: salePostings(customerId, {
               totalMinor: price,
               ...splitMeteredChargeMinor(price, quoted.value.breakdown),
@@ -488,12 +506,19 @@ async function processOne(
   const row = await ops.lock(tx, listed.subscriptionId);
   if (row === null || row.resourceId !== listed.resourceId) return blocked();
   if (!(LIVE_STATES as readonly string[]).includes(row.resource.state)) return { messages };
-  const since = exactDate(row.resource.config.unpaidSince);
-  if (since === null) return blocked();
+  const markedSince = exactDate(row.resource.config.unpaidSince);
+  // WPU-Y9: held hours without the clock (a stale rate kept them). They are retried like unpaid periods,
+  // but nobody is near suspension or deletion until a charge fails for insufficient_balance.
+  const held =
+    markedSince === null &&
+    row.resource.config.unpaidSince === undefined &&
+    row.resource.config.unpaidIpFrom !== undefined;
+  if (markedSince === null && !held) return blocked();
+  const since = markedSince ?? now;
 
   const clock: Clock = { now: () => now };
   const config = row.resource.config;
-  const sinceMs = since.getTime();
+  const sinceMs = since.getTime(); // for a held resource this is now: day 0, the clock starts below
 
   // After the retention nothing is retried while the wallet is empty (a payment is what ends the wait).
   let retried: Retried;
@@ -504,6 +529,15 @@ async function processOne(
     retried = await retryCharges(tx, ops, row, since, now, clock, count);
   }
   if (retried === "blocked") return blocked();
+  if (held && retried !== "paid") {
+    // Nothing failed for a short wallet yet, only the cap of this run: the rest is next run, no clock.
+    if (retried === "capped") {
+      count.capped += 1;
+      return { messages };
+    }
+    // The first insufficient_balance result: the clock starts now (day 0, a warning only).
+    await ops.startClock?.(tx, row.resourceId, now);
+  }
 
   if (retried === "paid") {
     // Everything is paid: the episode ends. Only what this job did is undone (an admin's suspension

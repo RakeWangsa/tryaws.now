@@ -146,6 +146,23 @@ it("a system actor has no id, a person actor has one", async () => {
   );
 });
 
+// WPU-Y9 (migration 0026): a sale row needs its price snapshot; any other kind does not.
+it("a purchase, a renewal and a metered charge need a price snapshot", async () => {
+  for (const kind of ["purchase", "renewal", "metered_charge"]) {
+    await expectSqlError(
+      t.pool.query(
+        "insert into ledger_transactions (id, kind, reference_type, reference_id, idempotency_key, actor_type) values (gen_random_uuid(), $1, 'x', gen_random_uuid(), $2, 'system')",
+        [kind, `sale-${kind}`],
+      ),
+      "23514",
+      { constraint: "ledger_transactions_sale_snapshot_check" },
+    );
+  }
+  await t.pool.query(
+    "insert into ledger_transactions (id, kind, reference_type, reference_id, idempotency_key, actor_type, price_snapshot) values (gen_random_uuid(), 'purchase', 'x', gen_random_uuid(), 'sale-ok', 'system', '{}'::jsonb)",
+  );
+});
+
 const payment = (customer_id: string, over: Record<string, unknown> = {}) => ({
   customer_id,
   gateway: "eps",

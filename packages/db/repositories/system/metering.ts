@@ -76,6 +76,7 @@ export type UnpaidFlagKey = "unpaidSuspended" | "unpaidRetained" | "unpaidRetain
 
 // A Dhaka hour bucket as the static IP charge keys it: YYYY-MM-DDTHH.
 const IP_HOUR = /^\d{4}-\d{2}-\d{2}T\d{2}$/;
+const SNAPSHOT_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 const METRIC = /^[a-z][a-z0-9_]{0,39}$/;
 const PERIOD = /^\d{4}-\d{2}(-\d{2}(T\d{2})?)?$/;
@@ -197,9 +198,30 @@ export function meteringRepo(tx: Tx) {
     // WPU-Y3. The first failed charge of a resource: written once and never moved (the clock of the
     // 1 day and the 7 days starts here). A later failure of the same episode changes nothing. `||` on
     // jsonb replaces one top-level key and keeps the others, so it cannot undo a concurrent patch.
-    async markUnpaid(resourceId: string, at: Date, ipHour?: string): Promise<void> {
+    async markUnpaid(
+      resourceId: string,
+      at: Date,
+      ipHour?: string,
+      snapshotDay?: string,
+    ): Promise<void> {
       if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
       if (Number.isNaN(at.getTime())) throw new TypeError("metering: the instant is not a date");
+      // WPU-Y9. A failed snapshot-storage day: the mark keeps the oldest such day, so the retry starts there
+      // whatever the catch-up of the failing run was.
+      if (snapshotDay !== undefined) {
+        if (!SNAPSHOT_DAY.test(snapshotDay))
+          throw new TypeError("metering: the day has the wrong form");
+        await tx.execute(sql`
+          update resources
+          set config = config
+            || case when (config ->> 'unpaidSince') is null
+                 then jsonb_build_object('unpaidSince', ${at.toISOString()}::text)
+                 else '{}'::jsonb end
+            || jsonb_build_object(
+                 'unpaidDayFrom', least(coalesce(config ->> 'unpaidDayFrom', ${snapshotDay}::text), ${snapshotDay}::text))
+          where id = ${resourceId}`);
+        return;
+      }
       if (ipHour === undefined) {
         await tx.execute(sql`
           update resources
@@ -222,13 +244,27 @@ export function meteringRepo(tx: Tx) {
         where id = ${resourceId}`);
     },
 
+    // WPU-Y9. An hour that was held because no price could be quoted: the range of the mark only. It never
+    // writes `unpaidSince` (the clock of the 1 day and the 7 days): a stale rate is not the customer's debt.
+    async markHeld(resourceId: string, ipHour: string): Promise<void> {
+      if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
+      if (!IP_HOUR.test(ipHour)) throw new TypeError("metering: the hour has the wrong form");
+      await tx.execute(sql`
+        update resources
+        set config = config
+          || jsonb_build_object(
+               'unpaidIpFrom', least(coalesce(config ->> 'unpaidIpFrom', ${ipHour}::text), ${ipHour}::text),
+               'unpaidIpTo', greatest(coalesce(config ->> 'unpaidIpTo', ${ipHour}::text), ${ipHour}::text))
+        where id = ${resourceId}`);
+    },
+
     // WPU-Y3. Everything is paid: the episode ends and its marks go (`-` removes a top-level key).
     async clearUnpaid(resourceId: string): Promise<void> {
       if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
       await tx.execute(sql`
         update resources
         set config = config - 'unpaidSince' - 'unpaidSuspended' - 'unpaidRetained'
-          - 'unpaidRetainedFrom' - 'unpaidIpFrom' - 'unpaidIpTo'
+          - 'unpaidRetainedFrom' - 'unpaidIpFrom' - 'unpaidIpTo' - 'unpaidDayFrom'
         where id = ${resourceId}`);
     },
 
@@ -358,7 +394,8 @@ export function meteringRepo(tx: Tx) {
           (select s.id from subscriptions s where s.resource_id = r.id
             order by s.period_end desc limit 1) as subscription_id
         from resources r
-        where (r.config ->> 'unpaidSince') is not null
+        where ((r.config ->> 'unpaidSince') is not null
+               or (r.config ->> 'unpaidIpFrom') is not null) -- WPU-Y9: held hours, no clock yet
           and r.state in ('active', 'stopped', 'suspended')
           and (${afterId}::uuid is null or r.id > ${afterId}::uuid)
         order by r.id limit ${limit}`);

@@ -75,6 +75,7 @@ async function seedFailedApply(): Promise<string> {
       reference_id: sub,
       idempotency_key: `renew:${sub}:${end.toISOString()}`,
       actor_type: "system",
+      price_snapshot: "{}", // WPU-Y9: a sale row must carry one
     });
     await insertRow(c, "ledger_entries", {
       transaction_id: txId,

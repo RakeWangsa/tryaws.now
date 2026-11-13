@@ -164,6 +164,7 @@ describe("what is refused as validation, with the path of the problem and no val
       reference: { type: "ledger_transaction", id: REF },
       idempotencyKey: `reversal:${REF}`, // the key family of the kind (Task 3)
       actor: { type: "system" },
+      priceSnapshot: null, // a reversal is no sale
     });
     expect(checkPosting(input, { allowReversal: true }).ok).toBe(true);
     expect(checkPosting(input).ok).toBe(false);

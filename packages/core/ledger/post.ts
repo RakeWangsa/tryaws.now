@@ -81,6 +81,7 @@ export async function writePosting(
     kind: p.kind,
     referenceType: p.referenceType,
     referenceId: p.referenceId,
+    priceSnapshot: p.priceSnapshot,
     lines,
   };
   const answerFor = (stored: StoredLedgerTransaction): Posted =>
@@ -89,6 +90,7 @@ export async function writePosting(
         kind: stored.kind,
         referenceType: stored.referenceType,
         referenceId: stored.referenceId,
+        priceSnapshot: stored.priceSnapshot,
         lines: stored.entries.map((e) => ({
           accountId: e.accountId,
           direction: e.direction,

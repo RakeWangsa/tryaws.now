@@ -91,7 +91,14 @@ export interface MeteringOps {
    * recorded), so the daily unpaid job retries every period back to it, with no window. Optional so a
    * test world without it needs nothing.
    */
-  markUnpaid?(tx: Tx, resourceId: string, at: Date, ipHour?: string): Promise<void>;
+  markUnpaid?(
+    tx: Tx,
+    resourceId: string,
+    at: Date,
+    ipHour?: string,
+    /** WPU-Y9. The Dhaka day of a failed snapshot charge; the mark keeps the oldest, the retry starts there. */
+    snapshotDay?: string,
+  ): Promise<void>;
   /**
    * WPU-Y3b. True when the unpaid job (`lifecycle_unpaid_enabled`) is on. It is then the single source of
    * unpaid emails, and the old `lifecycle_metered_unpaid` notice is not written. Optional: absent means off.
@@ -106,11 +113,11 @@ export const defaultMeteringOps: MeteringOps = {
   },
   staleWindowMs: async (tx, clock, market) => {
     const now = clock.now();
-    const rows = await readFxRates(tx, market, 3);
-    const inForce = rows.find((r) => r.effectiveFrom.getTime() <= now.getTime());
+    // WPU-Y9: only the rates that have started (a future row cannot push the one in force out of the list).
+    const rows = await readFxRates(tx, market, 2, now);
+    const [inForce, before] = rows;
     if (inForce === undefined) return 0;
-    const before = rows.find((r) => r.effectiveFrom.getTime() < inForce.effectiveFrom.getTime());
-    return staleWindowMs(before?.effectiveFrom ?? null, inForce.effectiveFrom, now);
+    return staleWindowMs(before?.createdAt ?? null, inForce.effectiveFrom, now);
   },
   repo: (tx) => {
     const m = meteringRepo(tx);
@@ -124,7 +131,8 @@ export const defaultMeteringOps: MeteringOps = {
   },
   hasCharge: async (tx, key) => (await findLedgerTransactionByKey(tx, key)) !== null,
   post: postTransaction,
-  markUnpaid: (tx, resourceId, at, ipHour) => meteringRepo(tx).markUnpaid(resourceId, at, ipHour),
+  markUnpaid: (tx, resourceId, at, ipHour, snapshotDay) =>
+    meteringRepo(tx).markUnpaid(resourceId, at, ipHour, snapshotDay),
   unpaidJobEnabled: async (tx) =>
     (await lifecycleRepo(tx).readSettings(["lifecycle_unpaid_enabled"])).get(
       "lifecycle_unpaid_enabled",
@@ -165,15 +173,19 @@ function readPrice(value: unknown): bigint | null {
 
 /**
  * WPU-Y2: the price inputs of one metered charge: the unit price's inputs, the usage, and the split of THIS
- * charge. Empty when the unit carries no inputs (a test world), which saves no snapshot.
+ * charge. Throws when the unit carries no inputs (R16).
  */
 export function meteredSnapshot(
   unit: MeteredUnitPrice,
   metric: string,
   usage: string,
   chargeMinor: bigint,
-): { priceSnapshot?: ChargeSnapshot } {
-  if (unit.charge === undefined) return {};
+): { priceSnapshot: ChargeSnapshot } {
+  // WPU-Y9: fail closed (R16). A sale without its price inputs cannot be rebuilt later, so a unit that
+  // carries none is an error, never a charge without a snapshot.
+  if (unit.charge === undefined) {
+    throw new RangeError("metering: the unit price carries no charge inputs (no price snapshot)");
+  }
   const split = splitMeteredChargeMinor(chargeMinor, unit);
   return {
     priceSnapshot: buildChargeSnapshot("metered", unit.charge, {
@@ -270,7 +282,7 @@ export async function runMetering(deps: MeteringDeps): Promise<MeteringReport> {
               // The same grace flow as a renewal (section 11) is a decision for the lifecycle owner (JOURNEY);
               // here the customer gets one notice per resource and day and the next run tries again.
               // WPU-Y3: the first failure is recorded; the unpaid job then retries every day since.
-              await ops.markUnpaid?.(tx, row.resourceId, now);
+              await ops.markUnpaid?.(tx, row.resourceId, now, undefined, day);
               // WPU-Y3b: with the unpaid job on, its daily message is the only unpaid email.
               if (!((await ops.unpaidJobEnabled?.(tx)) ?? false)) {
                 await ops.repo(tx).insertNotification({

@@ -11,6 +11,7 @@ import {
   runMetering,
   type MeteringOps,
 } from "./index";
+import { withInputs } from "../test/metered-inputs";
 
 const RES = (n: number): string => `0190a000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 const CUST = (n: number): string => `0190b000-0000-7000-8000-${String(n).padStart(12, "0")}`;
@@ -78,8 +79,11 @@ function world(init: {
           configPrice: async (_tx, clock, market) => {
             state.priced.push(market);
             state.instants.push(clock.now().getTime());
-            if (init.configByMarket !== undefined) return init.configByMarket[market] ?? null;
-            return init.config ?? null;
+            const found =
+              init.configByMarket !== undefined
+                ? (init.configByMarket[market] ?? null)
+                : (init.config ?? null);
+            return found === null ? null : withInputs(found);
           },
         }),
     repo: () => ({
