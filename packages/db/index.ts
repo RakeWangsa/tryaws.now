@@ -473,8 +473,10 @@ export {
   RETAINED_WITH_SERVER_KEY,
   attachedServerStatus,
   clearRetainedWithServer,
+  endDiskRetentionOps,
   lifecycleOperationKey,
   listDisksRetainedWithServer,
+  lockDiskRetentionOps,
   recordDiskHeld,
   retainAttachedDisks,
   serverStatusForDisk,
@@ -482,6 +484,7 @@ export {
 export type {
   AttachedDiskOperation,
   DiskRetainedWithServer,
+  DiskRetentionOp,
   RetainedFrom,
 } from "./repositories/system/attached-disks";
 export { pollingRepo } from "./repositories/system/polling";

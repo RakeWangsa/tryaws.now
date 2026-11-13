@@ -288,3 +288,61 @@ export async function recordDiskHeld(
   await tx.execute(sql`insert into discrepancies (id, kind, details)
     values (${uuidv7()}, 'missing', ${details}::jsonb)`);
 }
+
+export interface DiskRetentionOp {
+  readonly id: string;
+  readonly kind: "destroy" | "final_snapshot";
+  readonly state: string;
+  readonly step: string | null;
+}
+
+/**
+ * WPU-Y4 fix round 5 (worker_rw). The destroy and final_snapshot rows of one disk, locked FOR UPDATE: the
+ * provisioner's claim locks the operation row too (loadRunView), so a release and a claim of the DeleteDisk step
+ * never interleave; what is read here is what the release decides on.
+ */
+export async function lockDiskRetentionOps(tx: Tx, diskId: string): Promise<DiskRetentionOp[]> {
+  if (!isUuid(diskId)) throw new TypeError("attached disks: disk id is not a UUID");
+  const { rows } = await tx.execute<{
+    id: string;
+    kind: string;
+    state: string;
+    step: string | null;
+  }>(
+    sql`select id, kind, state, step from operations
+      where resource_id = ${diskId} and kind in ('destroy', 'final_snapshot')
+      order by created_at, id
+      for update`,
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    kind: r.kind as DiskRetentionOp["kind"],
+    state: r.state,
+    step: r.step ?? null,
+  }));
+}
+
+/**
+ * WPU-Y4 fix round 5 (worker_rw). The system end of the given operations of a disk whose server was revived: each
+ * that is not running and has not ended becomes `failed` (approved or not; `failed` is allowed by every check of the
+ * operations table), so a later retention of the disk gets fresh rows (insertFreshOperation). Returns the count.
+ */
+export async function endDiskRetentionOps(
+  tx: Tx,
+  input: { readonly diskId: string; readonly operationIds: readonly string[] },
+): Promise<number> {
+  if (!isUuid(input.diskId)) throw new TypeError("attached disks: disk id is not a UUID");
+  const ids = input.operationIds.filter((id) => isUuid(id));
+  if (ids.length === 0) return 0;
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    update operations set state = 'failed', last_error = 'cancelled: the server was revived'
+    where resource_id = ${input.diskId}
+      and id in (${sql.join(
+        ids.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})
+      and kind in ('destroy', 'final_snapshot')
+      and state not in ('running', 'succeeded', 'failed')
+    returning id`);
+  return rows.length;
+}

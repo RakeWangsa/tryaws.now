@@ -1,7 +1,9 @@
 import {
   clearRetainedWithServer,
+  endDiskRetentionOps,
   lifecycleRepo,
   listDisksRetainedWithServer,
+  lockDiskRetentionOps,
   meteringRepo,
   recordDiskHeld,
   type Tx,
@@ -27,10 +29,9 @@ export interface ReleasedDisks {
 const DELETE_STEP = "delete_disk";
 
 /**
- * Fix round 4: a disk is given back unless DeleteDisk may already have been sent (a destroy at the delete step, or
- * one that succeeded). A destroy that was approved or started but has not reached that step does not hold the disk:
- * the guard checks again at every claim and refuses it while the server is not retained (R13, R16). Such a destroy
- * is left as it is (only an unstarted, unapproved one can be cancelled here) and ends refused.
+ * Fix round 4: a disk is given back unless DeleteDisk may already have been sent (a destroy at the delete step,
+ * running, or one that succeeded). Fix round 5: every other destroy and final snapshot of the disk is ended
+ * (`failed`) in the same transaction, approved or not, under the lock of its row.
  */
 export async function releaseServerDisks(
   tx: Tx,
@@ -48,9 +49,12 @@ export async function releaseServerDisks(
       await clear();
       continue;
     }
-    const destroys = await metering.operationsOf(disk.diskId, ["destroy"]);
-    const mayHaveDeleted = destroys.some(
-      (op) => op.state === "succeeded" || op.step === DELETE_STEP,
+    // Fix round 5: the rows are locked against the provisioner's claim (M1) and decided on as locked.
+    const ops = await lockDiskRetentionOps(tx, disk.diskId);
+    const mayHaveDeleted = ops.some(
+      (op) =>
+        op.kind === "destroy" &&
+        (op.state === "succeeded" || op.state === "running" || op.step === DELETE_STEP),
     );
     if (mayHaveDeleted) {
       held += 1;
@@ -64,15 +68,15 @@ export async function releaseServerDisks(
       });
       continue;
     }
-    // What has not started is cancelled; anything else is refused by the guard when it is claimed.
-    for (const op of [
-      ...destroys,
-      ...(await metering.operationsOf(disk.diskId, ["final_snapshot"])),
-    ]) {
-      if ((op.state === "queued" || op.state === "needs_approval") && !op.approved) {
-        await metering.cancelUnstarted(op.id);
-      }
-    }
+    // Fix round 5 (N1): every destroy and final snapshot of the disk that is not running and has not ended is
+    // ended (queued, waiting, needs_approval, needs_attention, approved or not), so none stays alive under the
+    // period's key and a later retention of the disk gets fresh rows (insertFreshOperation).
+    await endDiskRetentionOps(tx, {
+      diskId: disk.diskId,
+      operationIds: ops
+        .filter((op) => !["running", "succeeded", "failed"].includes(op.state))
+        .map((op) => op.id),
+    });
     await metering.supersedeFinalBackups(disk.diskId);
     await lifecycleRepo(tx).setStatus(disk.subscriptionId, disk.from);
     await clear();

@@ -2,12 +2,13 @@
 // disks with it. Their subscriptions are retained in the same transaction (never renewed or charged again) and
 // their final snapshot and destroy are queued under the engine's own keys, so every later pass replays them (R7).
 import type { Tx } from "@tc/db";
-import { lifecycleOperationKey } from "@tc/db";
+import { lifecycleOperationKey, lifecycleRepo, loadRunView } from "@tc/db";
 import { newAdmin, runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, expect, it } from "vitest";
 import { makeKit, placeOne, START, type Kit } from "../test/orders-kit";
 import type { QueueMessage } from "../operations/queue";
-import { runLifecycle, SERVER_HOLD_KEY } from "./engine";
+import { retainSubscription, runLifecycle, SERVER_HOLD_KEY } from "./engine";
+import { destructiveGuard } from "./guard";
 import { completeRestore } from "./restore";
 
 const t = useTempDatabase();
@@ -263,12 +264,58 @@ it("a disk whose destroy waits for the server (approved, started) is still given
   await worker((tx) => completeRestore(tx, { subscriptionId: serverSub, clock: kit.clock }));
   expect(await statusOf(d.id)).toBe("active");
   expect(await markOf(d.id)).toBeNull();
-  // The started destroy is left to the guard, which refuses it while the server is not retained.
-  const destroy = await q(
-    "select state from operations where resource_id = $1 and kind = 'destroy'",
+  // Fix round 5 (N1): the approved, waiting destroy is ended (failed), so it can never stay alive under the
+  // period's key; nothing of the disk's retention is left alive.
+  const left = await q(
+    "select kind, state from operations where resource_id = $1 and kind in ('destroy', 'final_snapshot') order by created_at, id",
     [d.id],
   );
-  expect(destroy[0]!.state).toBe("waiting");
+  expect(left.map((o) => o.state)).toEqual(left.map(() => "failed"));
+  expect(left.some((o) => o.kind === "destroy")).toBe(true);
+
+  // Then the disk's own retention in the same period (its grace runs out): a live destroy under a fresh key, and
+  // the guard lets it pass once its final snapshot exists.
+  const locked = await worker((tx) => lifecycleRepo(tx).lock(d.subscriptionId));
+  await worker((tx) => retainSubscription(tx, locked!, kit.clock.now()));
+  expect(await statusOf(d.id)).toBe("retained");
+  const live = await q(
+    "select id, idempotency_key, payload from operations where resource_id = $1 and kind = 'destroy' and state not in ('failed', 'succeeded')",
+    [d.id],
+  );
+  expect(live).toHaveLength(1);
+  expect(String(live[0]!.idempotency_key)).toContain(":after:");
+  expect(live[0]!.payload).toEqual({ subscriptionId: d.subscriptionId });
+  await q(
+    `insert into resources (id, customer_id, family, state, parent_resource_id, config)
+     values (gen_random_uuid(), $1, 'backup', 'active', $2, '{"final": true}'::jsonb)`,
+    [s.customerId, d.id],
+  );
+  const allowed = await worker(async (tx) => {
+    const view = await loadRunView(tx, String(live[0]!.id));
+    return view === null ? false : destructiveGuard(tx, view);
+  });
+  expect(allowed).toBe(true);
+});
+
+// Fix round 5 (M1): a destroy that is running (claimed by the provisioner) at any step holds the disk.
+it("a disk whose destroy is running (claimed) stays retained, with an attention item", async () => {
+  const s = await serverPastGrace();
+  const d = await disk(s.customerId, s.serverId);
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  await q(
+    "update operations set state = 'running', step = 'wait_server', attempts = 1, approved_by = case when needs_approval then $2::uuid end where resource_id = $1 and kind = 'destroy'",
+    [d.id, await newAdmin(t.pool, "ops")],
+  );
+  const serverSub = String(
+    (await q("select id from subscriptions where resource_id = $1", [s.serverId]))[0]!.id,
+  );
+  await worker((tx) => completeRestore(tx, { subscriptionId: serverSub, clock: kit.clock }));
+  expect(await statusOf(d.id)).toBe("retained");
+  const items = await q("select details from discrepancies where details ->> 'resourceId' = $1", [
+    d.id,
+  ]);
+  expect(items).toHaveLength(1);
 });
 
 it("a disk whose destroy reached the DeleteDisk step stays retained, with an attention item", async () => {
