@@ -50,6 +50,8 @@ async function post(
       actor_type: "system",
       memo: "staff note that the customer must never see",
       created_at: createdAt,
+      // WPU-Y9: a sale row must carry a price snapshot
+      ...(["purchase", "renewal", "metered_charge"].includes(kind) ? { price_snapshot: "{}" } : {}),
     });
     await insertRow(c, "ledger_entries", {
       id: entryId,

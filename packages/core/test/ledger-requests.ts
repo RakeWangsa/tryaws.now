@@ -1,4 +1,7 @@
 import type { checkPosting } from "../ledger/rules";
+import { buildChargeSnapshot, type ChargeKind } from "../pricing/charge-snapshot";
+import { quote } from "../pricing/quote";
+import type { PricingRule } from "../pricing/types";
 import type { Posting, PostTransactionInput } from "../ledger/types";
 
 // Requests in the shapes of spec 9.1 with fixed ids, for the tests that need no database.
@@ -7,6 +10,35 @@ export const B = "01a1c982-80e4-717b-b74d-a57864819067"; // another customer, or
 export const REF = "01a1c982-80f0-7000-8000-00000000abcd"; // a payment, an order, a request row
 export const wallet = (customerId = A) => ({ type: "customer_wallet" as const, customerId });
 
+// WPU-Y9: a sale is refused without its price snapshot, so the sale builders carry one: the quote of section 8.
+const label = { bn: "ক", en: "a" };
+const FIXTURE_RULE: PricingRule = {
+  version: "rule-1",
+  steps: [
+    { code: "korea_vat", rate: "0.10", base: "aws", label },
+    { code: "bd_vat", rate: "0.05", base: "aws", label },
+    { code: "processing_fee", rate: "0.02", base: "aws", label },
+    { code: "markup", rate: "0", base: "aws", label },
+  ],
+};
+/** The snapshot of the 74295 paisa sale of section 8, of the given kind. */
+const saleInputs = () => ({
+  pricedAt: new Date("2026-11-11T08:00:00.000Z"),
+  awsPriceUsd: "5",
+  quantity: "1",
+  fx: { id: "fx-1", rate: "127", effectiveFrom: new Date("2026-11-10T00:00:00.000Z") },
+  rule: { id: "rule-id-1", version: "rule-1" },
+  book: null,
+  quote: quote({ awsPriceUsd: "5", fxRate: "127", rule: FIXTURE_RULE }),
+});
+/** A sale snapshot whose total is `amountMinor` (one line, no steps), for fixtures that post any amount. */
+export const snapshotOfAmount = (kind: ChargeKind, amountMinor: bigint) =>
+  buildChargeSnapshot(kind, saleInputs(), {
+    charge: { baseMinor: amountMinor, steps: [], totalMinor: amountMinor },
+  });
+export const saleSnapshot = (kind: ChargeKind = "purchase") =>
+  buildChargeSnapshot(kind, saleInputs());
+
 // Section 8: 5 USD at FX 127 is 63500 + 6350 + 3175 + 1270 = 74295 paisa; the markup of 0 posts no line.
 export const purchase = (over: Partial<PostTransactionInput> = {}): PostTransactionInput => ({
   kind: "purchase",
@@ -14,6 +46,7 @@ export const purchase = (over: Partial<PostTransactionInput> = {}): PostTransact
   idempotencyKey: "order:" + "a".repeat(32),
   actor: { type: "customer", id: A },
   memo: "Cloud Server, 30 days",
+  priceSnapshot: saleSnapshot("purchase"),
   postings: [
     { account: wallet(), direction: "debit", amountMinor: 74295n },
     { account: { type: "revenue_aws_base" }, direction: "credit", amountMinor: 63500n },
@@ -66,6 +99,7 @@ export const renewal = (over: Partial<PostTransactionInput> = {}): PostTransacti
   kind: "renewal",
   reference: { type: "subscription", id: REF },
   idempotencyKey: `renew:${REF}:2026-12-01T00:00:00.000Z`,
+  priceSnapshot: saleSnapshot("renewal"),
   ...over,
 });
 export const metered = (over: Partial<PostTransactionInput> = {}): PostTransactionInput => ({
@@ -75,11 +109,28 @@ export const metered = (over: Partial<PostTransactionInput> = {}): PostTransacti
   idempotencyKey: `meter:${REF}:snapshot_gb:2026-11-11`,
   actor: { type: "system" },
   memo: "snapshot_gb, 2026-11-11",
+  priceSnapshot: saleSnapshot("metered"),
   ...over,
 });
 /** The purchase with a markup of 100 paisa: the wallet pays 74395 and `markup_income` gets a fifth credit line. */
 export const withMarkup = (input: PostTransactionInput = purchase()): PostTransactionInput => ({
   ...input,
+  priceSnapshot: buildChargeSnapshot(
+    input.kind === "renewal" ? "renewal" : "purchase",
+    saleInputs(),
+    {
+      charge: {
+        baseMinor: 63500n,
+        steps: [
+          { code: "korea_vat", amountMinor: 6350n },
+          { code: "bd_vat", amountMinor: 3175n },
+          { code: "processing_fee", amountMinor: 1270n },
+          { code: "markup", amountMinor: 100n },
+        ],
+        totalMinor: 74395n,
+      },
+    },
+  ),
   postings: [
     ...input.postings.map((p, i) => (i === 0 ? { ...p, amountMinor: p.amountMinor + 100n } : p)),
     { account: { type: "markup_income" }, direction: "credit", amountMinor: 100n },

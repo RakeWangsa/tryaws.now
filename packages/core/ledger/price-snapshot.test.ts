@@ -37,8 +37,17 @@ describe("priceSnapshot on a posting", () => {
     expect(checkPosting({ ...metered(), priceSnapshot: snapshot("metered") }).ok).toBe(true);
   });
 
-  it("is optional: a posting without one carries null", () => {
-    const checked = checkPosting(purchase());
+  it("is required on a sale and optional on every other kind (WPU-Y9, R16)", () => {
+    for (const sale of [purchase(), renewal(), metered()]) {
+      const { priceSnapshot: _dropped, ...bare } = sale;
+      expect(checkPosting(bare)).toMatchObject({
+        ok: false,
+        error: "validation",
+        fields: { priceSnapshot: expect.any(String) },
+      });
+      expect(checkPosting({ ...bare, priceSnapshot: null }).ok).toBe(false);
+    }
+    const checked = checkPosting(topup());
     expect(checked.ok && checked.value.priceSnapshot).toBeNull();
   });
 

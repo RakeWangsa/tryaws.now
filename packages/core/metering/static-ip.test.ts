@@ -12,6 +12,7 @@ import {
   staticIpChargeableHours,
   type StaticIpOps,
 } from "./index";
+import { ipWithInputs } from "../test/metered-inputs";
 
 // WPU-M1. An unattached static IP is charged as Amazon Lightsail does: free while attached, and USD
 // 0.005 an hour once it has been unattached for MORE than one hour. The charge is the existing
@@ -52,12 +53,11 @@ function world(init: {
         .slice(0, limit),
     price: async () => {
       state.priceCalls += 1;
-      return (
-        init.price ?? {
-          ok: true,
-          value: { unit: "hour", perHourMinor: PRICE, breakdown: BREAKDOWN },
-        }
-      );
+      const found = init.price ?? {
+        ok: true as const,
+        value: { unit: "hour" as const, perHourMinor: PRICE, breakdown: BREAKDOWN },
+      };
+      return found.ok ? { ok: true as const, value: ipWithInputs(found.value) } : found;
     },
     hasCharge: async (_tx, key) => posted.has(key),
     post: async (_tx, input): Promise<Result<{ transactionId: string }>> => {

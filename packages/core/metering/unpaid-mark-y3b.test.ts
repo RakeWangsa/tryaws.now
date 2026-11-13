@@ -2,6 +2,7 @@ import type { DetachedIpRow, Tx } from "@tc/db";
 import { describe, expect, it } from "vitest";
 import type { MeteredUnitPrice } from "../pricing/metering";
 import { runMetering, runStaticIpMetering, type MeteringOps, type StaticIpOps } from "./index";
+import { withInputs } from "../test/metered-inputs";
 
 // WPU-Y3b findings 3 and 8. The normal passes record the failed static IP hours in the mark, and they
 // stop writing the old `lifecycle_metered_unpaid` notice once the unpaid job (the single source of
@@ -28,7 +29,7 @@ function ipWorld(enabled: boolean | undefined) {
       value: {
         unit: "hour",
         perHourMinor: 77n,
-        breakdown: { totalMinor: 77n, baseMinor: 77n, steps: [] },
+        breakdown: withInputs({ totalMinor: 77n, baseMinor: 77n, steps: [] }),
       },
     }),
     hasCharge: async () => false,
@@ -90,7 +91,7 @@ describe("a single source of unpaid emails (finding 8)", () => {
   });
 
   const meterOps = (enabled: boolean, notices: string[]): MeteringOps => ({
-    configPrice: async () => UNIT,
+    configPrice: async () => withInputs(UNIT),
     unpaidJobEnabled: async () => enabled,
     repo: () => ({
       readSettings: async () => new Map(),

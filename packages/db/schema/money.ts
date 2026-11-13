@@ -105,6 +105,11 @@ export const ledgerTransactions = pgTable(
       "ledger_transactions_price_snapshot_check",
       sql`${t.priceSnapshot} IS NULL OR (jsonb_typeof(${t.priceSnapshot}) = 'object' AND ${t.kind} IN ('purchase', 'renewal', 'metered_charge'))`,
     ),
+    // WPU-Y9 (migration 0026, added NOT VALID: old rows stay legal, every new row is checked).
+    check(
+      "ledger_transactions_sale_snapshot_check",
+      sql`${t.kind} NOT IN ('purchase', 'renewal', 'metered_charge') OR ${t.priceSnapshot} IS NOT NULL`,
+    ),
     check(
       "ledger_transactions_actor_check",
       sql`(${t.actorType} = 'system') = (${t.actorId} IS NULL)`,

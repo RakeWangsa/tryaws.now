@@ -4,10 +4,12 @@ import type { Notice } from "../lifecycle/notice";
 import { R13_APPROVAL_UNTIL } from "../lifecycle/unpaid";
 import type { PostTransactionInput } from "../ledger/types";
 import { createMemoryQueue } from "../operations/queue";
+import type { ChargeSnapshot } from "../pricing/charge-snapshot";
 import type { MeteredUnitPrice } from "../pricing/metering";
 import type { StaticIpPrice } from "../products/static-ip-price";
 import type { Result } from "../types";
 import { UNPAID_PERIOD_CAP, runUnpaid, unpaidRunKey, type UnpaidOps } from "./index";
+import { ipWithInputs, withInputs } from "../test/metered-inputs";
 
 // WPU-Y3. The unpaid-usage rule with a fake world (no database): retry every unpaid day without a
 // window, suspend at 1 day, retain at 7 days, R13 on both sides of the date, a payment restores, and a
@@ -110,9 +112,11 @@ function build(init: Partial<World> = {}) {
       }) satisfies LifecycleRow,
     usage: async (_tx, _r, _m, from, to) =>
       w.usage.filter((u) => u.period >= from && u.period <= to),
-    snapshotUnit: async () => w.unit,
+    snapshotUnit: async () => (w.unit === null ? null : withInputs(w.unit)),
     staticIpPrice: async () =>
-      w.ipPrice === null ? { ok: false, error: "not_found" } : { ok: true, value: w.ipPrice },
+      w.ipPrice === null
+        ? { ok: false, error: "not_found" }
+        : { ok: true, value: ipWithInputs(w.ipPrice) },
     chargedPeriods: async (_tx, resourceId, metric, from, to) => {
       calls.chargedQueries += 1;
       const prefix = `meter:${resourceId}:${metric}:`;
@@ -247,6 +251,40 @@ describe("retry of every unpaid day (no window)", () => {
     expect(report.paid).toBe(1);
     expect(t.w.config.unpaidSince).toBeUndefined();
     expect(t.w.balance).toBe(100_000n - 7000n);
+  });
+
+  // WPU-Y9 finding 1: a retried charge carries the price inputs, so the ledger CHECK and R16 are met.
+  it("saves a price snapshot with every retried snapshot-storage and static IP charge", async () => {
+    const t = build({
+      config: {
+        unpaidSince: since(5 * HOUR),
+        staticIpAttached: true,
+        unpaidIpFrom: "2026-11-20T09",
+        unpaidIpTo: "2026-11-20T09",
+      },
+      usage: days("2026-11-19", "2026-11-19"),
+      ipPrice: IP,
+      balance: 100_000n,
+    });
+    await t.run();
+    const posts = [...t.posted.values()].map((p) => ({
+      ...p,
+      snapshot: p.priceSnapshot as ChargeSnapshot | undefined,
+    }));
+    expect(posts.length).toBe(2);
+    for (const p of posts) {
+      expect(p.snapshot?.kind).toBe("metered");
+      expect(p.snapshot?.totalMinor).toBe(
+        p.postings
+          .filter((x) => x.account.type === "customer_wallet")
+          .reduce((a, x) => a + x.amountMinor, 0n)
+          .toString(),
+      );
+    }
+    expect(posts.map((p) => p.snapshot?.meter?.metric).sort()).toEqual([
+      "snapshot_gb",
+      "static_ip_hour",
+    ]);
   });
 
   it("charges the oldest first and stops at the first day the wallet cannot pay", async () => {

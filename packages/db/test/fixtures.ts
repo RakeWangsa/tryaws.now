@@ -209,6 +209,7 @@ export async function newRenewalCharge(
       reference_id: subscription,
       idempotency_key: "renew:" + uniqueSuffix(),
       actor_type: "system",
+      price_snapshot: "{}", // WPU-Y9: a sale row must carry one (the legacy empty object)
     });
     await insertRow(c, "ledger_entries", {
       transaction_id: id,

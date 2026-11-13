@@ -2,6 +2,7 @@ import type { Tx } from "@tc/db";
 import { describe, expect, it } from "vitest";
 import type { MeteredUnitPrice } from "../pricing/metering";
 import { runMetering, type MeteringOps } from "./index";
+import { withInputs } from "../test/metered-inputs";
 
 // WPU-Y3. The normal pass records the first failed charge (markUnpaid) so the unpaid job can retry from it.
 const RES = "0190a000-0000-7000-8000-000000000001";
@@ -11,7 +12,7 @@ const UNIT: MeteredUnitPrice = { totalMinor: 1000n, baseMinor: 1000n, steps: [] 
 
 function ops(balance: bigint, marks: { id: string; at: Date }[]): MeteringOps {
   return {
-    configPrice: async () => UNIT,
+    configPrice: async () => withInputs(UNIT),
     repo: () => ({
       readSettings: async () => new Map(),
       listUsage: async (metric, period, after) =>

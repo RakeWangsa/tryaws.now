@@ -169,6 +169,13 @@
       "when": 1794521195847,
       "tag": "0025_charge_price_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794524795847,
+      "tag": "0026_sale_snapshot_required",
+      "breakpoints": true
     }
   ]
 }

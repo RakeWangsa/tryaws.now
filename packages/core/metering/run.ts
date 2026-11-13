@@ -165,15 +165,19 @@ function readPrice(value: unknown): bigint | null {
 
 /**
  * WPU-Y2: the price inputs of one metered charge: the unit price's inputs, the usage, and the split of THIS
- * charge. Empty when the unit carries no inputs (a test world), which saves no snapshot.
+ * charge. Throws when the unit carries no inputs (R16).
  */
 export function meteredSnapshot(
   unit: MeteredUnitPrice,
   metric: string,
   usage: string,
   chargeMinor: bigint,
-): { priceSnapshot?: ChargeSnapshot } {
-  if (unit.charge === undefined) return {};
+): { priceSnapshot: ChargeSnapshot } {
+  // WPU-Y9: fail closed (R16). A sale without its price inputs cannot be rebuilt later, so a unit that
+  // carries none is an error, never a charge without a snapshot.
+  if (unit.charge === undefined) {
+    throw new RangeError("metering: the unit price carries no charge inputs (no price snapshot)");
+  }
   const split = splitMeteredChargeMinor(chargeMinor, unit);
   return {
     priceSnapshot: buildChargeSnapshot("metered", unit.charge, {

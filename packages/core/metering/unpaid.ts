@@ -33,7 +33,7 @@ import {
 import { snapshotPrice } from "../products/snapshot-price";
 import { staticIpHourPrice, type StaticIpPrice } from "../products/static-ip-price";
 import type { Clock, Result } from "../types";
-import { CATCH_UP_DAYS, SNAPSHOT_METRIC, dhakaDay } from "./run";
+import { CATCH_UP_DAYS, SNAPSHOT_METRIC, dhakaDay, meteredSnapshot } from "./run";
 import {
   STATIC_IP_CATCH_UP_HOURS,
   STATIC_IP_METRIC,
@@ -333,6 +333,7 @@ async function retryCharges(
         reference: { type: "resource", id: resourceId },
         idempotencyKey: ledgerKey.metered(resourceId, SNAPSHOT_METRIC, period),
         actor: { type: "system" },
+        ...meteredSnapshot(unit, SNAPSHOT_METRIC, quantity.get(period)!, amountMinor),
         postings: salePostings(customerId, {
           totalMinor: amountMinor,
           ...splitMeteredChargeMinor(amountMinor, unit),
@@ -386,6 +387,7 @@ async function retryCharges(
             idempotencyKey: ledgerKey.metered(resourceId, STATIC_IP_METRIC, hour),
             actor: { type: "system" },
             memo: STATIC_IP_MEMO,
+            ...meteredSnapshot(quoted.value.breakdown, STATIC_IP_METRIC, "1", price),
             postings: salePostings(customerId, {
               totalMinor: price,
               ...splitMeteredChargeMinor(price, quoted.value.breakdown),
