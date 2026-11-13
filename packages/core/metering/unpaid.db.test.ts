@@ -128,3 +128,39 @@ describe("the marks and the range read of WPU-Y3b", () => {
     expect(keys).toEqual([]);
   });
 });
+
+// WPU-Y3c. The system-level cancel and the operation read (written without a database in this session;
+// NOT RUN here, run with pnpm db:up).
+describe("the system cancel of an operation that has not started (WPU-Y3c)", () => {
+  it("fails a queued or unapproved operation once, leaves a started or approved one alone", async () => {
+    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const { resourceId } = await placeOne(kit, buyer);
+    const add = async (key: string, state: string, attempts = 0): Promise<string> => {
+      const rows = await q(
+        `insert into operations (id, resource_id, kind, state, idempotency_key, attempts)
+         values (gen_random_uuid(), $1, 'suspend', $2, $3, $4) returning id`,
+        [resourceId, state, key, attempts],
+      );
+      return rows[0]!.id as string;
+    };
+    const queued = await add("test:y3c:queued", "queued");
+    const running = await add("test:y3c:running", "running", 1);
+    const tried = await add("test:y3c:tried", "queued", 2);
+    const cancel = (id: string) => worker((tx) => meteringRepo(tx).cancelUnstarted(id));
+    expect(await cancel(queued)).toBe(true);
+    expect(await cancel(queued)).toBe(false); // a second call changes nothing (R7)
+    expect(await cancel(running)).toBe(false);
+    expect(await cancel(tried)).toBe(false);
+    const state = await q("select id, state, last_error from operations where id = $1", [queued]);
+    expect(state[0]!.state).toBe("failed");
+    // the unique key stays: the same request cannot queue the work again
+    await expect(add("test:y3c:queued", "queued")).rejects.toThrow();
+    const listed = await worker((tx) => meteringRepo(tx).operationsOf(resourceId, ["suspend"]));
+    expect(listed.map((o) => o.key).sort()).toEqual([
+      "test:y3c:queued",
+      "test:y3c:running",
+      "test:y3c:tried",
+    ]);
+    expect(listed.find((o) => o.key === "test:y3c:tried")!.attempts).toBe(2);
+  });
+});

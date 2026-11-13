@@ -5,6 +5,7 @@ import {
   readApprovalUntil,
   type LifecycleRow,
   type OperationKind,
+  type ResourceOpRow,
   type SubscriptionStatus,
   type Tx,
   type UnpaidFlagKey,
@@ -33,6 +34,7 @@ import {
 import { snapshotPrice } from "../products/snapshot-price";
 import { staticIpHourPrice, type StaticIpPrice } from "../products/static-ip-price";
 import type { Clock, Result } from "../types";
+import { viewDestroys, viewSuspends } from "./unpaid-undo";
 import { CATCH_UP_DAYS, SNAPSHOT_METRIC, dhakaDay } from "./run";
 import {
   STATIC_IP_CATCH_UP_HOURS,
@@ -147,6 +149,13 @@ export interface UnpaidOps {
   retain(tx: Tx, row: LifecycleRow, now: Date, episode?: number): Promise<QueueMessage[]>;
   /** Final snapshots of the resource stop being final (a restore ends the retention); returns their ids. */
   supersedeFinal(tx: Tx, resourceId: string): Promise<string[]>;
+  /** WPU-Y3c. The operations of the resource of these kinds, oldest first. */
+  resourceOps(tx: Tx, resourceId: string, kinds: readonly string[]): Promise<ResourceOpRow[]>;
+  /**
+   * WPU-Y3c. The system-level cancel: a queued (or unapproved, waiting) operation that has not started
+   * becomes `failed`. False when it was already claimed, approved or over.
+   */
+  cancel(tx: Tx, operationId: string): Promise<boolean>;
 }
 
 export const defaultUnpaidOps: UnpaidOps = {
@@ -189,6 +198,8 @@ export const defaultUnpaidOps: UnpaidOps = {
   setStatus: (tx, subscriptionId, status) => lifecycleRepo(tx).setStatus(subscriptionId, status),
   retain: retainSubscription,
   supersedeFinal: (tx, resourceId) => meteringRepo(tx).supersedeFinalBackups(resourceId),
+  resourceOps: (tx, resourceId, kinds) => meteringRepo(tx).operationsOf(resourceId, kinds),
+  cancel: (tx, operationId) => meteringRepo(tx).cancelUnstarted(operationId),
 };
 
 export interface UnpaidDeps {
@@ -219,8 +230,12 @@ export interface UnpaidReport {
   readonly capped: number;
   /** Resources after the retention with an empty wallet: no retry was made. */
   readonly skipped: number;
-  /** Final snapshots whose removal was queued after a restore. */
-  readonly snapshotsQueued: number;
+  /** WPU-Y3c. Suspends of the job itself that had not started and were cancelled by a payment. */
+  readonly suspendsCancelled: number;
+  /** WPU-Y3c. Final snapshots that stopped being final after a payment (the customer may delete them). */
+  readonly finalReleased: number;
+  /** WPU-Y3c. Resources whose final snapshot stays final because a destroy ran, is approved or is unclear. */
+  readonly finalHeld: number;
   /** No price, no subscription, an unreadable mark or a family without a message word. */
   readonly blocked: number;
   readonly failed: number;
@@ -409,6 +424,38 @@ interface StepOutcome {
   readonly messages: QueueMessage[];
 }
 
+/**
+ * WPU-Y3c (R13). After a payment that came after the retention: the final snapshot stops being final
+ * only when the retention destroy is confirmed not to have run. Every destroy operation of the resource
+ * (plain key and episode-salted key alike) is read; one that is running, done, stuck, approved or failed
+ * after it ran stops everything, and so does a resource that is not live. A destroy that has not started
+ * (queued, or waiting for an approval nobody gave) is cancelled first, and every cancel must succeed.
+ * Nothing is deleted here: the former final snapshot becomes an ordinary backup that the customer (or an
+ * admin, with approval until the R13 date) deletes; no `delete_backup` is queued by this job.
+ */
+async function releaseFinalSnapshots(
+  tx: Tx,
+  ops: UnpaidOps,
+  deps: UnpaidDeps,
+  row: LifecycleRow,
+  count: Counts,
+): Promise<void> {
+  const held = (reason: string): void => {
+    count.finalHeld += 1;
+    deps.log({ event: "unpaid", action: "final_held", reason, resourceId: row.resourceId });
+  };
+  const live =
+    (LIVE_STATES as readonly string[]).includes(row.resource.state) &&
+    row.resource.deletedAt === null;
+  if (!live) return held("not_live");
+  const view = viewDestroys(await ops.resourceOps(tx, row.resourceId, ["destroy"]));
+  if (!view.safe) return held("destroy_started_or_approved");
+  for (const op of view.toCancel) {
+    if (!(await ops.cancel(tx, op.id))) return held("destroy_not_cancelled");
+  }
+  count.finalReleased += (await ops.supersedeFinal(tx, row.resourceId)).length;
+}
+
 async function processOne(
   tx: Tx,
   ops: UnpaidOps,
@@ -453,49 +500,48 @@ async function processOne(
       // destroy that is still waiting (R13) and the renewal flow goes on where it was. Unreadable: grace.
       status = config.unpaidRetainedFrom === "active" ? "active" : "grace";
       await ops.setStatus(tx, row.id, status);
-      // The final snapshot is no longer final; its removal is queued (R13: approval until the end date).
-      for (const backupId of await ops.supersedeFinal(tx, row.resourceId)) {
-        const removal = await ops.enqueue(
+      await releaseFinalSnapshots(tx, ops, deps, row, count);
+    }
+    // WPU-Y3c. A suspend of the job that has not started is CANCELLED, not answered with a blind resume
+    // (the review found that a resume could lift an admin's suspension queued in the meantime). A resume
+    // is queued only when the job's own suspend has started or ran, or the resource is suspended; it
+    // needs an active subscription with a period end in the future (finding 1) and no other suspend of
+    // the resource that is open, or done and not resumed (admin abuse, lifecycle, unknown: R16). It
+    // runs after the suspend (the provisioner takes the operations of a resource in the order they
+    // were created).
+    const state = row.resource.state;
+    const subscriptionOk = status === "active" && row.periodEnd.getTime() > now.getTime();
+    if (config.unpaidSuspended === true || state === "suspended") {
+      const view = viewSuspends(
+        await ops.resourceOps(tx, row.resourceId, ["suspend", "resume"]),
+        row.resourceId,
+      );
+      let ownLeft = view.ownInFlightOrDone;
+      for (const op of view.cancellable) {
+        if (await ops.cancel(tx, op.id)) count.suspendsCancelled += 1;
+        else ownLeft = true; // it started in the meantime: the resume has to follow it
+      }
+      if (
+        config.adminSuspended !== true &&
+        subscriptionOk &&
+        !view.foreignHolds &&
+        (state === "suspended" || ownLeft)
+      ) {
+        const resume = await ops.enqueue(
           tx,
           {
-            resourceId: backupId,
-            kind: "delete_backup",
-            key: `unpaid:final-delete:${backupId}`,
-            payload: {},
+            resourceId: row.resourceId,
+            kind: "resume",
+            key: `unpaid:resume:${row.resourceId}:${sinceMs}`,
+            payload: { subscriptionId: row.id },
           },
           now,
         );
-        if (removal.created && removal.state === "queued") {
-          messages.push(firstMessage(removal.operationId, backupId));
+        if (resume.created && resume.state === "queued") {
+          messages.push(firstMessage(resume.operationId, row.resourceId));
         }
-        count.snapshotsQueued += 1;
+        count.resumed += 1;
       }
-    }
-    // Resume only a subscription that is active and not past its period end (finding 1); a suspension
-    // that holds a renewal stays for the renewal flow. A suspend of this job that has not run yet is
-    // undone anyway: the resume runs after it (finding 4).
-    const state = row.resource.state;
-    const subscriptionOk = status === "active" && row.periodEnd.getTime() > now.getTime();
-    const undoPendingSuspend =
-      config.unpaidSuspended === true && (state === "active" || state === "stopped");
-    if (
-      config.adminSuspended !== true &&
-      ((state === "suspended" && subscriptionOk) || undoPendingSuspend)
-    ) {
-      const resume = await ops.enqueue(
-        tx,
-        {
-          resourceId: row.resourceId,
-          kind: "resume",
-          key: `unpaid:resume:${row.resourceId}:${sinceMs}`,
-          payload: { subscriptionId: row.id },
-        },
-        now,
-      );
-      if (resume.created && resume.state === "queued") {
-        messages.push(firstMessage(resume.operationId, row.resourceId));
-      }
-      count.resumed += 1;
     }
     await ops.clear(tx, row.resourceId);
     count.paid += 1;
@@ -598,7 +644,9 @@ export async function runUnpaid(deps: UnpaidDeps): Promise<UnpaidReport> {
     stillUnpaid: 0,
     capped: 0,
     skipped: 0,
-    snapshotsQueued: 0,
+    suspendsCancelled: 0,
+    finalReleased: 0,
+    finalHeld: 0,
     blocked: 0,
     failed: 0,
   };
