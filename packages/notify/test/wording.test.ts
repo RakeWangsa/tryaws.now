@@ -44,10 +44,12 @@ describe("notify wording (WP9-T5)", () => {
     expect(SHARED.en.awsShort).toBe("100% AWS infrastructure. Built on Amazon Lightsail.");
   });
 
-  it("OTP SMS text: the gateway's English format for every locale (WPU-Z3), with the brand, no link, no AWS name", () => {
+  it("OTP SMS text: the gateway's English format for every locale (WPU-Z3), with the brand TryAWS.now, no link, no other AWS name", () => {
     const text = otpSmsText("123456");
-    expect(text.startsWith("MeghVPS ")).toBe(true);
-    expect(text).not.toMatch(/https?:|AWS|Lightsail/);
+    expect(text.startsWith("TryAWS.now ")).toBe(true);
+    expect(text).not.toMatch(/https?:|www\./i);
+    // 16.13: the owner's exception (2026-11-13) covers the exact token TryAWS.now and nothing else
+    expect(text.replace("TryAWS.now", "")).not.toMatch(/AWS|Amazon|Lightsail/i);
     expect(text).not.toMatch(/[ঀ-৿]/);
   });
 });
