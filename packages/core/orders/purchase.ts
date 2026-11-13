@@ -38,20 +38,34 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 type Repos = ReturnType<typeof customerRepos>;
 
 /**
- * WPU-Z2. The families whose purchase opens the subscription with auto-renew ON (owner decision of
- * 2026-11-13: the next period is paid from the wallet when this one ends, until the customer turns it
- * off). A family is listed only when both hold:
+ * WPU-Z2, widened by WPU-Z14. The families whose purchase opens the subscription with auto-renew ON (owner
+ * decision of 2026-11-13: the next period is paid from the wallet when this one ends, until the customer
+ * turns it off). A family is listed only when both hold:
  * - the customer can turn auto-renew off in the panel: the Billing tab of a Linux server
- *   (`setAutoRenewCore` of apps/web, which accepts no other family). Without a switch the wallet would be
- *   charged every period with no way to stop it but deleting the resource.
- * - the renewal gives the next period of the service. A domain is NOT listed: spec 17 open item 79 keeps a
- *   domain from renewing by itself until the domain renewal rule is decided (WPU-Z14). Since WPU-Z13 a
- *   domain's renewal charge queues the renewal at the registry (`renew_domain`; RegisterDomain still sends
- *   AutoRenew=false) and is given back when the registry refuses it.
- * Every other family is bought with auto-renew off, as before WPU-Z2, until it has both. The order review
- * shows its auto-renew line exactly for these families (apps/web ReviewContent).
+ *   (`setAutoRenewCore`), the domain page (`setDomainAutoRenewCore`) and, since WPU-Z14, the detail page of
+ *   every other family with a subscription (`setResourceAutoRenewCore` of apps/web/server/
+ *   auto-renew-actions.ts). Without a switch the
+ *   wallet would be charged every period with no way to stop it but deleting the resource.
+ * - the renewal gives the next period of the service. Since WPU-Z13 a domain's renewal charge queues the
+ *   renewal at the registry (`renew_domain`; RegisterDomain still sends AutoRenew=false) and is given back
+ *   when the registry refuses it.
+ * A static IP and a backup are parts of a server with no subscription or switch of their own: off. A disk
+ * is off too (WPU-Z14 review ruling): its only switch is a row of the Storage tab of a live Linux server of
+ * its Region, and a disk can lose that place (its server destroyed, no live server in the Region), so it
+ * could be charged every period with no switch to stop it. The order review shows its auto-renew line
+ * exactly for these families (apps/web ReviewContent).
  */
-const AUTO_RENEW_AT_PURCHASE: ReadonlySet<string> = new Set(["linux_instance"]);
+const AUTO_RENEW_AT_PURCHASE: ReadonlySet<string> = new Set([
+  "linux_instance",
+  "windows_instance",
+  "database",
+  "bucket",
+  "load_balancer",
+  "container_service",
+  "cdn",
+  "dns_zone",
+  "domain",
+]);
 
 /** WPU-Z2: whether a purchase of this family turns auto-renew on. Pure; an unknown family is off (R16). */
 export function autoRenewAtPurchase(family: string): boolean {

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Button, Card, CopyField, DataTable, EmptyState, StateBadge } from "@tc/ui";
 import type { BadgeState } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
@@ -69,6 +70,7 @@ export function ZoneContent({
   saveAction,
   deleteAction,
   destroyAction,
+  renewal = null,
 }: {
   locale: Locale;
   screen: ZoneScreen | null;
@@ -77,6 +79,8 @@ export function ZoneContent({
   saveAction: DnsAction;
   deleteAction: DnsAction;
   destroyAction: FamilyAction;
+  /** WPU-Z14: the auto-renew switch, built by the page; shown above the delete panel. */
+  renewal?: ReactNode;
 }) {
   const t = useTranslations("Dns");
   const listHref = localePath(locale, "/dns");
@@ -95,16 +99,20 @@ export function ZoneContent({
     );
   }
   if (screen.state === "flag_off") {
+    // WPU-Z14: an "off only" auto-renew switch while renewals still charge (built by the page).
     return (
-      <EmptyState
-        title={t("flagOff.title")}
-        description={t("flagOff.body")}
-        action={
-          <Button variant="primary" href={listHref}>
-            {t("detail.back")}
-          </Button>
-        }
-      />
+      <>
+        <EmptyState
+          title={t("flagOff.title")}
+          description={t("flagOff.body")}
+          action={
+            <Button variant="primary" href={listHref}>
+              {t("detail.back")}
+            </Button>
+          }
+        />
+        {renewal}
+      </>
     );
   }
 
@@ -234,6 +242,7 @@ export function ZoneContent({
           )}
         </>
       )}
+      {renewal}
       <Card as="section" title={t("detail.destroy.title")} className="mt-4">
         <DestroyPanel
           ns="Dns"

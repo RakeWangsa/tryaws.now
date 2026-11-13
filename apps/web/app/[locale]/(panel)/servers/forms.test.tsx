@@ -41,9 +41,9 @@ const readyReview = review({ balanceMinor: 150000n }) as Extract<
 // A dollar sign followed by a digit, Latin or Bengali: how formatUsd prints a USD amount ("$5.75", "$৫.৭৫").
 const USD_AMOUNT = /\$\s*[\d০-৯]/;
 const AUTO_RENEW_EN =
-  "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the Billing tab.";
+  "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the page of this service in the panel.";
 const AUTO_RENEW_BN =
-  "স্বয়ংক্রিয় নবায়ন চালু আছে: এই মেয়াদ শেষ হলে পরবর্তী মেয়াদ আপনার ওয়ালেট থেকে পরিশোধ হবে। বিলিং ট্যাবে যেকোনো সময় এটি বন্ধ করতে পারবেন।";
+  "স্বয়ংক্রিয় নবায়ন চালু আছে: এই মেয়াদ শেষ হলে পরবর্তী মেয়াদ আপনার ওয়ালেট থেকে পরিশোধ হবে। প্যানেলে এই সেবার পাতায় যেকোনো সময় এটি বন্ধ করতে পারবেন।";
 // The review of a server: a purchase of a Linux server turns auto-renew on (WPU-Z2), so the line is shown.
 const place = (locale: Locale, over = readyReview, autoRenew = true) =>
   intl(

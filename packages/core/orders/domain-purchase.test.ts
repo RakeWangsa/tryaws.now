@@ -85,9 +85,9 @@ describe("a domain order", () => {
       )
     ).rows[0] as { term_days: number; auto_renew: boolean };
     expect(sub.term_days).toBe(365);
-    // WPU-Z2: a domain is bought with auto-renew OFF: the domain renewal rule (spec 17, open item 79) is not
-    // decided, so it must not be charged by itself (WPU-Z13 made a charge renew the name at the registry).
-    expect(sub.auto_renew).toBe(false);
+    // WPU-Z14: a domain is bought with auto-renew ON (owner decision of 2026-11-13): since WPU-Z13 a renewal
+    // charge renews the name at the registry, and the domain page has the switch that turns it off.
+    expect(sub.auto_renew).toBe(true);
 
     const op = (
       await t.pool.query("select kind, state from operations where resource_id = $1", [

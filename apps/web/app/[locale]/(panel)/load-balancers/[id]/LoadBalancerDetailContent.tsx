@@ -33,6 +33,7 @@ export function LoadBalancerDetailContent({
   defaultTab,
   extra = null,
   targetHealth,
+  renewal = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -47,22 +48,29 @@ export function LoadBalancerDetailContent({
   extra?: ReactNode;
   /** WPU-Y8. The health read; without it (the static mockup states) the tab says it is not available. */
   targetHealth?: TargetHealthScreen;
+  /** WPU-Z14: the auto-renew switch, built by the page; shown at the end of the Overview tab. */
+  renewal?: ReactNode;
 }) {
   const t = useTranslations("LoadBalancers");
   const regionLabel = useRegionLabel();
   const listHref = localePath(locale, "/load-balancers");
 
   if (balancer === null) {
+    // WPU-Z14: with the flag of the family off the page has no detail, but an "off only" auto-renew switch
+    // (built by the page while auto-renew is still on) lets the customer stop the renewals.
     return (
-      <EmptyState
-        title={t("detail.notFound.title")}
-        description={t("detail.notFound.body")}
-        action={
-          <Button variant="primary" href={listHref}>
-            {t("detail.back")}
-          </Button>
-        }
-      />
+      <>
+        <EmptyState
+          title={t("detail.notFound.title")}
+          description={t("detail.notFound.body")}
+          action={
+            <Button variant="primary" href={listHref}>
+              {t("detail.back")}
+            </Button>
+          }
+        />
+        {renewal}
+      </>
     );
   }
 
@@ -194,7 +202,19 @@ export function LoadBalancerDetailContent({
         <Tabs
           label={t("detail.tabsLabel")}
           tabs={[
-            { id: "overview", title: t("detail.tab.overview"), content: overview },
+            {
+              id: "overview",
+              title: t("detail.tab.overview"),
+              content:
+                renewal === null ? (
+                  overview
+                ) : (
+                  <>
+                    {overview}
+                    {renewal}
+                  </>
+                ),
+            },
             { id: "targets", title: t("detail.tab.targets"), content: targets },
             { id: "health", title: t("detail.tab.health"), content: health },
             { id: "destroy", title: t("detail.tab.destroy"), content: destroy },

@@ -19,6 +19,8 @@ import {
 import type { CatalogProduct, InvoiceRow, NotificationRow, SubscriptionRow } from "@tc/db";
 import { TEMPLATE_IDS, parseTemplateData, renderInApp } from "@tc/notify";
 import type { RenderContext, TemplateId } from "@tc/notify";
+import { autoRenewViewOf } from "./auto-renew-view.ts";
+import type { AutoRenewView } from "./auto-renew-view.ts";
 import { resourceFacts } from "./extras-actions.ts";
 import { renewalWaitOf } from "./renewal-wait.ts";
 import type { RenewalWait } from "./renewal-wait.ts";
@@ -114,6 +116,8 @@ export interface DiskItem {
   state: string;
   attachedToThis: boolean;
   attachedElsewhere: boolean;
+  /** WPU-Z14: the auto-renew switch of the disk's own subscription; null = no switch (flag off, none). */
+  autoRenew: AutoRenewView | null;
 }
 export interface InvoiceItem {
   id: string;
@@ -245,13 +249,16 @@ export async function loadServerExtras(
     const server = await repos.resources.get(id);
     if (server === null || server.family !== FAMILY) return { state: "ready", extras: null };
 
-    const [children, disks, subscription, invoices, requests] = await Promise.all([
+    const [children, disks, subscription, invoices, requests, subscriptions] = await Promise.all([
       repos.resources.listChildren(id, "backup"),
       repos.resources.list(),
       repos.subscriptions.get(id),
       repos.invoices.list({ limit: 5 }),
       repos.operations.listForResource(id),
+      repos.subscriptions.list(),
     ]);
+    const diskFlagOn = (await readFeatureFlag(tx, "disk", profile.market)) === true;
+    const subscriptionOf = new Map(subscriptions.map((s) => [s.resourceId, s] as const));
     const backups = children.map((b): BackupItem => {
       const f = resourceFacts(b);
       return {
@@ -275,13 +282,15 @@ export async function loadServerExtras(
           state: r.state,
           attachedToThis: f.attachedTo === id,
           attachedElsewhere: f.attachedTo !== null && f.attachedTo !== id,
+          // R12: with the disk flag off the switch is "off only" (none once it is off).
+          autoRenew: autoRenewViewOf("disk", r, subscriptionOf.get(r.id) ?? null, diskFlagOn),
         };
       });
     const live = LIVE.includes(server.state);
     const diskOffer = diskOfferFor({
       rows: await listCatalogProducts(tx, "disk"),
       region: server.region,
-      flagOn: (await readFeatureFlag(tx, "disk", profile.market)) === true,
+      flagOn: diskFlagOn,
       live: server.state === "active" || server.state === "stopped",
     });
     const restorePlans = live ? await restorePlansFor(tx, profile.market, server, now) : [];

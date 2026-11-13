@@ -184,7 +184,8 @@ class Refusal extends Error {
 /**
  * The renewal toggle of 16.10. It switches `auto_renew` of the subscription of the customer's own
  * domain; the lifecycle engine charges and extends at the period end (11), so the switch is the whole
- * action. The open item on the renewal rule keeps the default off (spec 12, 17).
+ * action. Since WPU-Z14 a domain is bought with auto-renew on (owner decision of 2026-11-13; a renewal
+ * renews the name at the registry since WPU-Z13); this switch turns it off.
  */
 export async function setDomainAutoRenewCore(
   deps: DomainActionDeps,

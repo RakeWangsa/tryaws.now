@@ -51,6 +51,7 @@ export function DatabaseDetailContent({
   parametersTab = null,
   metricsTab = null,
   snapshots,
+  renewal = null,
 }: {
   locale: Locale;
   numerals: Numerals;
@@ -80,6 +81,8 @@ export function DatabaseDetailContent({
   };
   /** Tests only: the Connect tab as it is after the button. */
   initialSecret?: { username: string; password: string } | null;
+  /** WPU-Z14: the auto-renew switch, built by the page; shown at the end of the Overview tab. */
+  renewal?: ReactNode;
 }) {
   const t = useTranslations("Databases");
   const tc = useTranslations("DbConnect");
@@ -88,16 +91,21 @@ export function DatabaseDetailContent({
   const listHref = localePath(locale, "/databases");
 
   if (database === null) {
+    // WPU-Z14: with the flag of the family off the page has no detail, but an "off only" auto-renew switch
+    // (built by the page while auto-renew is still on) lets the customer stop the renewals.
     return (
-      <EmptyState
-        title={t("detail.notFound.title")}
-        description={t("detail.notFound.body")}
-        action={
-          <Button variant="primary" href={listHref}>
-            {t("detail.back")}
-          </Button>
-        }
-      />
+      <>
+        <EmptyState
+          title={t("detail.notFound.title")}
+          description={t("detail.notFound.body")}
+          action={
+            <Button variant="primary" href={listHref}>
+              {t("detail.back")}
+            </Button>
+          }
+        />
+        {renewal}
+      </>
     );
   }
 
@@ -299,7 +307,19 @@ export function DatabaseDetailContent({
         <Tabs
           label={t("detail.tabsLabel")}
           tabs={[
-            { id: "overview", title: t("detail.tab.overview"), content: overview },
+            {
+              id: "overview",
+              title: t("detail.tab.overview"),
+              content:
+                renewal === null ? (
+                  overview
+                ) : (
+                  <>
+                    {overview}
+                    {renewal}
+                  </>
+                ),
+            },
             { id: "access", title: t("detail.tab.access"), content: access },
             { id: "backups", title: t("detail.tab.backups"), content: backups },
             { id: "metrics", title: t("detail.tab.metrics"), content: metrics },

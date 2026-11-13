@@ -177,9 +177,9 @@ export function PlaceForm({
             </div>
           ) : null}
 
-          {/* WPU-Z2: the customer reads it before confirming, only for a family that a purchase opens with
-              auto-renew on (a Linux server): the line points to the Billing tab switch, which no other
-              family has. */}
+          {/* WPU-Z2, WPU-Z14: the customer reads it before confirming, only for a family that a purchase
+              opens with auto-renew on: the line points to the switch on the page of the service, which
+              every such family has. */}
           {autoRenew ? <p className="seccolor">{t("autoRenew")}</p> : null}
           <p className="seccolor">{t("renewal")}</p>
 

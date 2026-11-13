@@ -43,6 +43,8 @@ const { loadCdnDetail } = await import("./cdn-view.ts");
 const { loadBucketDetail } = await import("./bucket-view.ts");
 const { loadContainerDetail } = await import("./container-view.ts");
 const { loadPayment } = await import("./topup-view.ts");
+const { loadAutoRenew } = await import("./auto-renew-view.ts");
+const { SWITCH_FAMILIES } = await import("./auto-renew-actions.ts");
 
 const MINE = "22222222-2222-4222-8222-222222222222";
 const THEIRS = "0190aaaa-0000-7000-8000-0000000000a1"; // an id of another customer's row
@@ -73,6 +75,12 @@ const CASES: Array<[string, () => Promise<unknown>, unknown]> = [
   ["storage/[id]  loadBucketDetail", () => loadBucketDetail(session, THEIRS), null],
   ["containers/[id]  loadContainerDetail", () => loadContainerDetail(session, THEIRS), null],
   ["wallet/topup/[paymentId]  loadPayment", () => loadPayment(session, THEIRS), null],
+  // WPU-Z14: the auto-renew switch of every family's detail page (and of each disk of the Storage tab).
+  ...SWITCH_FAMILIES.map((family): [string, () => Promise<unknown>, unknown] => [
+    `${family}  loadAutoRenew`,
+    () => loadAutoRenew(session, family, THEIRS),
+    null,
+  ]),
 ];
 
 describe("the loaders of the pages with an id answer another customer's id like a missing row", () => {

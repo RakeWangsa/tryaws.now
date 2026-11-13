@@ -12,6 +12,7 @@ import type {
   ServerExtras,
 } from "../../../../../server/extras-view.ts";
 import { METRIC_RANGE_KEYS } from "../../../../../server/extras-view.ts";
+import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
 import { MetricChart } from "./MetricsCharts.tsx";
 import {
   ActionNotice,
@@ -42,6 +43,8 @@ export interface ExtrasActions {
   detachDisk: ExtrasAction;
   destroyDisk: ExtrasAction;
   setAutoRenew: ExtrasAction;
+  /** WPU-Z14: the auto-renew switch of one disk (its own subscription). */
+  setDiskAutoRenew: ExtrasAction;
   renewNow: ExtrasAction;
   restoreToNewServer: ExtrasAction;
   destroyServer: ExtrasAction;
@@ -197,6 +200,14 @@ function StorageTab({
   const te = useTranslations("Extras");
   const size = (disk: DiskItem): ReactNode =>
     disk.sizeGb === null ? te("none") : `${disk.sizeGb} GB`;
+  const ta = useTranslations("AutoRenew");
+  // WPU-Z14: each disk has a subscription of its own, so its own switch (no switch: a dash).
+  const renewCell = (disk: DiskItem): ReactNode =>
+    disk.autoRenew === null ? (
+      te("none")
+    ) : (
+      <AutoRenewSwitch action={actions.setDiskAutoRenew} view={disk.autoRenew} compact />
+    );
   return (
     <>
       <p className="seccolor">{t("intro")}</p>
@@ -211,6 +222,7 @@ function StorageTab({
             { key: "name", header: t("name"), cell: (row) => row.name || te("none") },
             { key: "size", header: t("size"), cell: size },
             { key: "state", header: t("state"), cell: () => t("attachedHere") },
+            { key: "autoRenew", header: ta("column"), cell: renewCell },
             {
               key: "actions",
               header: "",
@@ -237,6 +249,7 @@ function StorageTab({
             columns={[
               { key: "name", header: t("name"), cell: (row) => row.name || te("none") },
               { key: "size", header: t("size"), cell: size },
+              { key: "autoRenew", header: ta("column"), cell: renewCell },
               {
                 key: "actions",
                 header: "",

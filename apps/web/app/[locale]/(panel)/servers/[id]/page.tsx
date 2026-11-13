@@ -7,6 +7,12 @@ import { routing } from "../../../../../i18n/routing.ts";
 import { loadMetrics, loadServerExtras, rangeOf } from "../../../../../server/extras-view.ts";
 import { loadResourceHistory } from "../../../../../server/resource-history.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
+import { loadAutoRenew } from "../../../../../server/auto-renew-view.ts";
+import { AutoRenewSwitch } from "../../_family/AutoRenewSwitch.tsx";
+import {
+  setDiskAutoRenewAction,
+  setWindowsAutoRenewAction,
+} from "../../_family/auto-renew-actions.ts";
 import { getReaderPort } from "../../../../../server/reader-port.ts";
 import { loadServerManage } from "../../../../../server/server-manage-view.ts";
 import { loadServerDetail } from "../../../../../server/servers-view.ts";
@@ -60,6 +66,8 @@ const actions = {
   detachDisk: detachDiskAction,
   destroyDisk: destroyDiskAction,
   setAutoRenew: setAutoRenewAction,
+  // WPU-Z14: the auto-renew switch of each disk on the Storage tab.
+  setDiskAutoRenew: setDiskAutoRenewAction,
   renewNow: renewNowAction,
   restoreToNewServer: restoreToNewServerAction,
   destroyServer: destroyServerAction,
@@ -109,6 +117,14 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
   const managed = server === null ? null : await loadServerManage(panel.session, id, newUuidV7());
   const manage = managed === null ? null : { data: managed, actions: manageActions };
   const history = server === null ? null : await loadResourceHistory(panel.session, id);
+  // WPU-Z14: a Windows server has no Billing tab; its auto-renew switch is on the Overview tab. A Linux
+  // server keeps the switch of its Billing tab.
+  // With the Windows flag off the detail is null; loadAutoRenew then gives the "off only" switch of the
+  // customer's own Windows server (null for any other row).
+  const renew =
+    server === null || server.family === "windows_instance"
+      ? await loadAutoRenew(panel.session, "windows_instance", id)
+      : null;
   const tab = one(query["tab"]);
   return (
     <PanelFrame locale={locale} path={path} currentId="cloudServers" panel={panel}>
@@ -121,6 +137,9 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
         history={history}
         {...(tab !== undefined ? { defaultTab: tab } : {})}
         windowsAction={revealWindowsPasswordAction}
+        {...(renew !== null
+          ? { renewal: <AutoRenewSwitch action={setWindowsAutoRenewAction} view={renew} /> }
+          : {})}
       />
     </PanelFrame>
   );
