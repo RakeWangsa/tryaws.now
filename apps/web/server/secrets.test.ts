@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resourceSecrets } from "./secrets.ts";
+import { NOT_CONFIGURED, resourceSecrets } from "./secrets.ts";
 
 describe("resourceSecrets", () => {
   it("reads the value of an SST linked secret", () => {
@@ -42,6 +42,23 @@ describe("resourceSecrets", () => {
     expect(source("EpsHashKey")).toBeUndefined();
     env["SST_RESOURCE_EpsHashKey"] = '{"value":"late"}';
     expect(source("EpsHashKey")).toBe("late");
+  });
+
+  // WPU-Z11: scripts/golive/stage-secrets.sh stores this literal for an EPS value that the owner does
+  // not have yet (SST needs a value for every declared secret). It is the same as no value.
+  it("reads the placeholder not-configured as no value, whatever the name (WPU-Z11)", () => {
+    const placeholder = '{"type":"sst.sst.Secret","value":"not-configured"}';
+    const source = resourceSecrets({
+      SST_RESOURCE_EpsMerchantId: placeholder,
+      SST_RESOURCE_EpsPassword: placeholder,
+      SST_RESOURCE_SmsApiKey: placeholder,
+      SST_RESOURCE_EpsHashKey: '{"value":"not-configured-is-only-a-prefix-here"}',
+    });
+    expect(NOT_CONFIGURED).toBe("not-configured");
+    expect(source("EpsMerchantId")).toBeUndefined();
+    expect(source("EpsPassword")).toBeUndefined();
+    expect(source("SmsApiKey")).toBeUndefined();
+    expect(source("EpsHashKey")).toBe("not-configured-is-only-a-prefix-here");
   });
 
   it("holds no secret in a property of the source", () => {

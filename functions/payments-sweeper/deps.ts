@@ -11,8 +11,8 @@ import {
 } from "@tc/eps";
 import { createLogAlert } from "./alert";
 import type { SweeperConfig } from "./config";
-import { createSweeperHandler } from "./handler";
-import type { SecretSource } from "./secrets";
+import { createSkippedHandler, createSweeperHandler, type SweeperReport } from "./handler";
+import { epsConfigured, type SecretSource } from "./secrets";
 
 export interface SweeperEnv {
   readonly config: SweeperConfig;
@@ -78,4 +78,15 @@ export function buildSweeperDeps(env: SweeperEnv): {
     limit: config.limit,
   });
   return { eps, epsDeps, handler };
+}
+
+/**
+ * The handler of the job (index.ts). WPU-Z11: while an EPS secret holds the placeholder (EPS not
+ * configured), no gateway is built and the job asks EPS nothing; otherwise it is the sweeper above.
+ */
+export function buildSweeper(env: SweeperEnv): (event?: unknown) => Promise<SweeperReport> {
+  if (!epsConfigured(env.secrets)) {
+    return createSkippedHandler({ log: env.log, limit: env.config.limit });
+  }
+  return buildSweeperDeps(env).handler;
 }

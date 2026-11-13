@@ -20,6 +20,13 @@ export type SecretName =
 
 export type SecretSource = (name: SecretName) => string | undefined;
 
+// WPU-Z11: the value a person stores for a secret that is deliberately not configured yet. SST needs a
+// value for every declared secret before a deploy, so scripts/golive/stage-secrets.sh stores this
+// literal for each EPS value the owner leaves empty (the EPS production keys come later). It reads as no
+// value: the caller fails closed exactly as for a missing secret, so with an EPS value on the placeholder
+// there is no EPS, every top-up says "not open" and nothing is sent to EPS (R6, R16).
+export const NOT_CONFIGURED = "not-configured";
+
 export function resourceSecrets(env: Readonly<Record<string, string | undefined>>): SecretSource {
   return (name) => {
     const raw = env[`SST_RESOURCE_${name}`];
@@ -28,7 +35,9 @@ export function resourceSecrets(env: Readonly<Record<string, string | undefined>
       const parsed: unknown = JSON.parse(raw);
       if (typeof parsed !== "object" || parsed === null) return undefined;
       const value = (parsed as { value?: unknown }).value;
-      return typeof value === "string" && value.length > 0 ? value : undefined;
+      return typeof value === "string" && value.length > 0 && value !== NOT_CONFIGURED
+        ? value
+        : undefined;
     } catch {
       return undefined;
     }
