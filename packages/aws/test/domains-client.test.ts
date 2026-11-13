@@ -203,6 +203,49 @@ describe("renewDomain", () => {
       CurrentExpiryYear: 2031,
     });
   });
+
+  // WPU-Z13: a renewal that ends failed gives the customer's money back, so only a real refusal may be final. Too
+  // many operations running in the account passes (Route 53 Domains API reference, RenewDomain errors): retried.
+  it("a limit of running operations is retried; a refusal of the registry is final", async () => {
+    const renew = (name: string) =>
+      createRoute53DomainsPort(
+        sender({
+          RenewDomainCommand: () => {
+            throw awsFailure(name);
+          },
+        }).fake,
+      ).renewDomain({ name: "shop.com", years: 1, currentExpiryYear: 2031 });
+    await expect(renew("OperationLimitExceeded")).rejects.toMatchObject({
+      code: "conflict",
+      retryable: true,
+      awsErrorName: "OperationLimitExceeded",
+    });
+    await expect(renew("TLDRulesViolation")).rejects.toMatchObject({
+      code: "conflict",
+      retryable: false,
+    });
+    await expect(renew("UnsupportedTLD")).rejects.toMatchObject({
+      code: "validation",
+      retryable: false,
+    });
+    await expect(renew("InvalidInput")).rejects.toMatchObject({
+      code: "not_found",
+      retryable: false,
+    });
+    await expect(renew("DuplicateRequest")).rejects.toMatchObject({
+      code: "conflict",
+      retryable: true,
+    });
+    // RegisterDomain keeps its mapping (a create that cannot start is refunded as before).
+    const register = createRoute53DomainsPort(
+      sender({
+        RegisterDomainCommand: () => {
+          throw awsFailure("OperationLimitExceeded");
+        },
+      }).fake,
+    ).registerDomain({ name: "shop.com", years: 1, contact: CONTACT });
+    await expect(register).rejects.toMatchObject({ code: "conflict", retryable: false });
+  });
 });
 
 describe("getDomainDetail", () => {

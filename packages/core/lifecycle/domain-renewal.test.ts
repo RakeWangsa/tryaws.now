@@ -1,0 +1,231 @@
+import { APPROVAL_UNTIL, operationInsertValues } from "@tc/db";
+import { describe, expect, it } from "vitest";
+import {
+  DomainRenewalError,
+  decideDomainRenewalReversal,
+  domainRenewalKey,
+  domainRenewalOperation,
+  readDomainRenewalPayload,
+  type ReversalFacts,
+} from "./domain-renewal";
+
+// WPU-Z13: the pure rules of the registry renewal that a domain's renewal charge pays for (the hook of the
+// lifecycle) and of the reversal when the registry refuses it. The database paths are proved in
+// domain-renewal.db.test.ts and in the provisioner.
+
+const SUB = "0190a000-0000-7000-8000-000000000001";
+const RES = "0190a000-0000-7000-8000-000000000002";
+const CUS = "0190a000-0000-7000-8000-000000000003";
+const CHARGE = "0190a000-0000-7000-8000-000000000004";
+const DAY = 24 * 3_600_000;
+const START = new Date("2027-11-11T06:00:00.000Z");
+
+const row = (family: string, config: Record<string, unknown>) => ({
+  id: SUB,
+  resourceId: RES,
+  resource: { family, state: "active", config, deletedAt: null },
+});
+const domain = (config: Record<string, unknown> = { expiresAt: "2027-11-12T08:00:00.000Z" }) =>
+  row("domain", config);
+
+describe("the key of a registry renewal", () => {
+  it("is the lifecycle's key form: one per subscription and period start (R7)", () => {
+    expect(domainRenewalKey(SUB, START)).toBe(
+      `lifecycle:renew-domain:${SUB}:2027-11-11T06:00:00.000Z`,
+    );
+    // Another period is another key; the same period is the same key, whoever charged it.
+    expect(domainRenewalKey(SUB, new Date(START.getTime() + 365 * DAY))).not.toBe(
+      domainRenewalKey(SUB, START),
+    );
+    expect(domainRenewalKey(SUB, new Date(START.getTime()))).toBe(domainRenewalKey(SUB, START));
+  });
+});
+
+describe("the operation a domain's renewal charge queues", () => {
+  it("renews one year at the registry with the expiry year the row holds", () => {
+    expect(domainRenewalOperation(domain(), START)).toEqual({
+      resourceId: RES,
+      kind: "renew_domain",
+      payload: {
+        subscriptionId: SUB,
+        periodStart: "2027-11-11T06:00:00.000Z",
+        currentExpiryYear: 2027,
+        years: 1,
+      },
+      idempotencyKey: domainRenewalKey(SUB, START),
+    });
+  });
+
+  it("takes the UTC year of the stored expiry, the year Route 53 compares (not the Dhaka date)", () => {
+    // 23:30 UTC on 31 December is already 1 January in Dhaka.
+    const late = domainRenewalOperation(domain({ expiresAt: "2027-12-31T23:30:00.000Z" }), START);
+    expect((late?.payload as { currentExpiryYear: number }).currentExpiryYear).toBe(2027);
+  });
+
+  it("is nothing for every other family: their renewal has no registry", () => {
+    for (const family of ["linux_instance", "windows_instance", "dns_zone", "bucket", "cdn"]) {
+      expect(domainRenewalOperation(row(family, {}), START), family).toBeNull();
+    }
+  });
+
+  it("refuses a domain whose registry expiry is not known: the charge must not stand (R16)", () => {
+    for (const expiresAt of [
+      undefined,
+      null,
+      "",
+      "2027-11-12",
+      "2027-11-12T08:00:00Z",
+      "not a date",
+      2027,
+      { year: 2027 },
+    ]) {
+      const config = expiresAt === undefined ? {} : { expiresAt };
+      expect(() => domainRenewalOperation(domain(config), START), String(expiresAt)).toThrow(
+        DomainRenewalError,
+      );
+    }
+  });
+
+  it("is a plain, non-destructive operation: queued at once, no admin approval before 2026-12-01 (R13)", () => {
+    const input = domainRenewalOperation(domain(), START);
+    if (input === null) throw new Error("expected an operation");
+    const values = operationInsertValues(
+      input,
+      new Date("2026-11-20T00:00:00.000Z"),
+      new Date(APPROVAL_UNTIL),
+    );
+    expect(values).toMatchObject({
+      kind: "renew_domain",
+      state: "queued",
+      needsApproval: false,
+      idempotencyKey: domainRenewalKey(SUB, START),
+    });
+    expect(JSON.parse(values.payloadJson)).toEqual(input.payload);
+  });
+});
+
+describe("the payload a failed renewal is read back from", () => {
+  it("gives the subscription and the period of the charge", () => {
+    const input = domainRenewalOperation(domain(), START);
+    expect(readDomainRenewalPayload(input?.payload)).toEqual({
+      subscriptionId: SUB,
+      periodStart: START,
+    });
+  });
+
+  it("is null for anything this module did not write", () => {
+    for (const payload of [
+      null,
+      undefined,
+      "x",
+      [],
+      {},
+      { subscriptionId: SUB },
+      { periodStart: START.toISOString() },
+      { subscriptionId: "not-a-uuid", periodStart: START.toISOString() },
+      { subscriptionId: SUB, periodStart: "2027-11-11" },
+      { subscriptionId: SUB, periodStart: "2027-11-11T06:00:00Z" },
+      { subscriptionId: SUB, periodStart: START },
+    ]) {
+      expect(readDomainRenewalPayload(payload), JSON.stringify(payload)).toBeNull();
+    }
+  });
+});
+
+describe("the reversal decision", () => {
+  const renewedEnd = new Date(START.getTime() + 365 * DAY);
+  const facts = (over: Partial<ReversalFacts> = {}): ReversalFacts => ({
+    resourceId: RES,
+    customerId: CUS,
+    payload: { subscriptionId: SUB, periodStart: START },
+    subscription: {
+      id: SUB,
+      resourceId: RES,
+      customerId: CUS,
+      status: "active",
+      periodStart: START,
+      periodEnd: renewedEnd,
+      termDays: 365,
+    },
+    charge: { id: CHARGE, kind: "renewal", referenceId: SUB },
+    ...over,
+  });
+
+  it("reverses the charge of the period and moves the subscription back to the period that was paid", () => {
+    expect(decideDomainRenewalReversal(facts())).toEqual({
+      action: "reverse",
+      chargeId: CHARGE,
+      rollBack: { periodStart: new Date(START.getTime() - 365 * DAY), periodEnd: START },
+    });
+  });
+
+  it("a repeat after the move back reverses again (a replay of the keyed reversal) and moves nothing", () => {
+    const back = {
+      ...facts().subscription!,
+      status: "ended" as const,
+      periodStart: new Date(START.getTime() - 365 * DAY),
+      periodEnd: START,
+    };
+    expect(decideDomainRenewalReversal(facts({ subscription: back }))).toEqual({
+      action: "reverse",
+      chargeId: CHARGE,
+      rollBack: null,
+    });
+  });
+
+  it("refuses a payload it cannot read", () => {
+    expect(decideDomainRenewalReversal(facts({ payload: null }))).toEqual({
+      action: "refuse",
+      reason: "payload",
+    });
+  });
+
+  it("refuses a subscription that is missing, of another resource or of another customer (R8, R16)", () => {
+    const sub = facts().subscription!;
+    for (const subscription of [
+      null,
+      { ...sub, id: CHARGE },
+      { ...sub, resourceId: CHARGE },
+      { ...sub, customerId: CHARGE },
+      { ...sub, termDays: 0 },
+      { ...sub, termDays: 1.5 },
+    ]) {
+      expect(decideDomainRenewalReversal(facts({ subscription }))).toEqual({
+        action: "refuse",
+        reason: "subscription",
+      });
+    }
+  });
+
+  it("refuses when the charge of the period is missing or is not this subscription's renewal", () => {
+    for (const charge of [
+      null,
+      { id: CHARGE, kind: "purchase", referenceId: SUB },
+      { id: CHARGE, kind: "renewal", referenceId: RES },
+    ]) {
+      expect(decideDomainRenewalReversal(facts({ charge }))).toEqual({
+        action: "refuse",
+        reason: "charge",
+      });
+    }
+  });
+
+  it("refuses when the subscription is in another period: a person decides (R16)", () => {
+    const sub = facts().subscription!;
+    for (const subscription of [
+      // A later period was charged since.
+      { ...sub, periodStart: renewedEnd, periodEnd: new Date(renewedEnd.getTime() + 365 * DAY) },
+      // Back at the paid period but not ended: not the state this module leaves.
+      {
+        ...sub,
+        periodStart: new Date(START.getTime() - 365 * DAY),
+        periodEnd: START,
+      },
+    ]) {
+      expect(decideDomainRenewalReversal(facts({ subscription }))).toEqual({
+        action: "refuse",
+        reason: "period",
+      });
+    }
+  });
+});

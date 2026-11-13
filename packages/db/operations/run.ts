@@ -124,6 +124,8 @@ export interface OperationBrief {
   readonly resourceId: string;
   readonly kind: string;
   readonly state: OperationState;
+  // WPU-Z13: a domain renewal at step `poll` is held by the registry; its rejection is refused (reject.ts).
+  readonly step: string | null;
 }
 
 // The target of a reject_operation. The row stays locked until the transaction ends.
@@ -138,6 +140,7 @@ export async function loadOperationBrief(
       resourceId: operations.resourceId,
       kind: operations.kind,
       state: operations.state,
+      step: operations.step,
     })
     .from(operations)
     .where(eq(operations.id, operationId))

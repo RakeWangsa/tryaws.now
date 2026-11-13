@@ -20,6 +20,8 @@ export type LocalFailure =
   | "resource_state"
   | "admin_suspended"
   | "failed_hook_missing"
+  // WPU-Z13: the rejection of a domain renewal the registry holds is refused (reject.ts); it is not refunded.
+  | "renewal_submitted"
   | "invalid_step_result"
   | "lease_expired";
 

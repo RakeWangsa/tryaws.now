@@ -44,10 +44,10 @@ type Repos = ReturnType<typeof customerRepos>;
  * - the customer can turn auto-renew off in the panel: the Billing tab of a Linux server
  *   (`setAutoRenewCore` of apps/web, which accepts no other family). Without a switch the wallet would be
  *   charged every period with no way to stop it but deleting the resource.
- * - the renewal gives the next period of the service. A domain is NOT listed: the lifecycle renewal charges
- *   the wallet, but nothing renews the name at the registry (no `renew_domain` is enqueued, and
- *   RegisterDomain is sent with AutoRenew=false), and spec 17 open item 79 keeps a domain from renewing by
- *   itself until the domain renewal rule is decided.
+ * - the renewal gives the next period of the service. A domain is NOT listed: spec 17 open item 79 keeps a
+ *   domain from renewing by itself until the domain renewal rule is decided (WPU-Z14). Since WPU-Z13 a
+ *   domain's renewal charge queues the renewal at the registry (`renew_domain`; RegisterDomain still sends
+ *   AutoRenew=false) and is given back when the registry refuses it.
  * Every other family is bought with auto-renew off, as before WPU-Z2, until it has both. The order review
  * shows its auto-renew line exactly for these families (apps/web ReviewContent).
  */
