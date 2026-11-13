@@ -1,7 +1,7 @@
 // WPU-B1, WPU-Z8: the product brand is TryAWS.now (owner decision 2026-11-13), after MeghVPS (WPU-B1) and
-// TiCON Cloud before it. No old brand name may return to any text a customer reads. The legal entity
-// (TICON SYSTEM LIMITED / TiCON System Limited) and technical names (tc- prefixes, ticon-cloud SST app,
-// TiCON-Pools-Dev, ticon-log-protection, @tc/*) stay and are not scanned for.
+// TiCON Cloud before it. No old brand name may return to any text a customer reads. WPU-Y6: the company is
+// TryAWS.now too (below). Technical names (tc- prefixes, TiCON-Pools-Dev, ticon-log-protection, @tc/*)
+// stay and are not scanned for.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -80,11 +80,52 @@ it("writes the brand exactly TryAWS.now in every customer-facing file", () => {
   expect(wrong).toEqual([]);
 });
 
-it("the legal entity stays TiCON System Limited where a legal name is printed", () => {
+// WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now on every page, in every e-mail, invoice, GEO file
+// and JSON-LD: never "TiCON System Limited" / "TiCON System Ltd". A deliberate deviation from 16.14 of the
+// spec, which names the old legal entity. The BIN and the trade licence are written exactly as given.
+const OLD_COMPANY = /TiCON\s+System\s+(Limited|Ltd)|TICON\s+SYSTEM\s+(LIMITED|LTD)|টিকন\s+সিস্টেম/i;
+
+const crawlerVisible = () => {
+  const files = [...customerFacing()];
+  for (const dir of ["apps/web/app", "apps/admin/app", "packages/ui/shells", "functions"]) {
+    if (existsSync(dir)) {
+      files.push(...walk(dir).filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f)));
+    }
+  }
+  for (const name of readdirSync("apps/web/public")) {
+    const p = join("apps/web/public", name);
+    if (statSync(p).isFile()) files.push(p);
+  }
+  files.push("omnirank.config.json", "packages/core/invoices/seller.ts");
+  return files;
+};
+
+it("no page, message, template, invoice, GEO file or JSON-LD names the old company (WPU-Y6)", () => {
+  const files = crawlerVisible();
+  expect(files).toContain("apps/web/public/llms.txt");
+  expect(files).toContain("apps/web/public/facts.json");
+  const hits = files.filter((f) => OLD_COMPANY.test(readFileSync(f, "utf8")));
+  expect(hits).toEqual([]);
+});
+
+it("the company is TryAWS.now with its BIN and trade licence where the legal entity is printed (WPU-Y6)", () => {
   for (const file of [
     "packages/ui/shells/messages/en.ts",
+    "packages/ui/shells/messages/bn.ts",
     "packages/notify/templates/messages.ts",
+    "apps/web/public/llms.txt",
+    "apps/web/public/llms-full.txt",
+    "apps/web/public/facts.json",
   ]) {
-    expect(readFileSync(file, "utf8"), file).toContain("TiCON System Limited");
+    const text = readFileSync(file, "utf8");
+    expect(text, file).toContain("008073062-0507");
+    expect(text, file).toContain("TRAD/DNCC/098737/2020");
   }
+  for (const file of ["packages/ui/shells/messages/en.ts", "packages/ui/shells/messages/bn.ts"]) {
+    const text = readFileSync(file, "utf8");
+    expect(text, file).toContain('companyName: "TryAWS.now"');
+    expect(text, file).toContain('bin: "BIN: 008073062-0507"');
+    expect(text, file).toContain('tradeLicense: "Trade License: TRAD/DNCC/098737/2020"');
+  }
+  expect(readFileSync("apps/web/public/facts.json", "utf8")).toContain('"legalName": "TryAWS.now"');
 });

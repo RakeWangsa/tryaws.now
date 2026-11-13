@@ -85,8 +85,8 @@ describe("wording check (WP9-T5)", () => {
   });
 
   // WPU-Z8, owner decision 2026-11-13: the brand is "TryAWS.now". That is a deliberate deviation from 16.13
-  // ("no AWS mark inside a product name, a company name or a domain name"; the trademark risk is recorded in
-  // JOURNEY.md). The exception is narrow: the exact token only. AWS joined to any other word still fails,
+  // ("no AWS mark inside a product name, a company name or a domain name"). The trademark question is closed
+  // by the owner (WPU-Y6, 2026-11-14: "TryAWS.now is a different name"). The exception is narrow: the exact token only. AWS joined to any other word still fails,
   // and every other rule about AWS still applies next to the brand.
   describe("the brand token TryAWS.now (WPU-Z8)", () => {
     const rulesOf = (bn: string, en: string): string[] =>

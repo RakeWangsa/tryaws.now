@@ -119,9 +119,16 @@ describe("shellMessages", () => {
     expect(leaf(bn, "Shell.nav.dashboard")).not.toBe(leaf(en, "Shell.nav.dashboard"));
   });
 
-  it("keeps the footer address and company name unchanged in both locales", () => {
-    expect(leaf(bn, "Shell.footer.address")).toBe(leaf(en, "Shell.footer.address"));
-    expect(leaf(bn, "Shell.footer.companyName")).toBe("TiCON System Limited");
+  // WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now, never the old legal name, with the BIN and
+  // the trade licence written exactly as the owner gave them. A deliberate deviation from 16.14 of the spec.
+  it("names the company TryAWS.now with its BIN and trade licence, the same in both locales", () => {
+    for (const key of ["address", "companyName", "bin", "tradeLicense"]) {
+      expect(leaf(bn, `Shell.footer.${key}`)).toBe(leaf(en, `Shell.footer.${key}`));
+    }
+    expect(leaf(en, "Shell.footer.companyName")).toBe("TryAWS.now");
+    expect(leaf(en, "Shell.footer.bin")).toBe("BIN: 008073062-0507");
+    expect(leaf(en, "Shell.footer.tradeLicense")).toBe("Trade License: TRAD/DNCC/098737/2020");
+    for (const tree of [bn, en]) expect(JSON.stringify(tree)).not.toMatch(/TiCON System/i);
   });
 
   // WPU-Z8: the brand is TryAWS.now (owner decision 2026-11-13), in Latin letters in both locales.

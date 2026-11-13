@@ -119,10 +119,24 @@ type Ld = Record<string, unknown>;
 export const organizationId = (origin: string): string => `${origin}/#organization`;
 export const websiteId = (origin: string): string => `${origin}/#website`;
 
+/**
+ * WPU-Y6 (owner, 2026-11-14): the two identifiers of the company TryAWS.now, exactly as the owner gave
+ * them. The footer prints them with their labels (`Shell.footer.bin`, `Shell.footer.tradeLicense`); a
+ * test keeps the two in step.
+ */
+export const COMPANY_BIN = "008073062-0507";
+export const COMPANY_TRADE_LICENSE = "TRAD/DNCC/098737/2020";
+
+/** The identifiers of the company as schema.org PropertyValue items (Organization `identifier`). */
+export const companyIdentifiers = (): Ld[] => [
+  { "@type": "PropertyValue", propertyID: "BIN", value: COMPANY_BIN },
+  { "@type": "PropertyValue", propertyID: "Trade License", value: COMPANY_TRADE_LICENSE },
+];
+
 export interface OrganizationFacts {
   /** The entity statement (`Public.entity.statement`) in the page's language. */
   description: string;
-  /** The legal entity of the footer (`Shell.footer.companyName`). */
+  /** The company of the footer (`Shell.footer.companyName`): TryAWS.now (WPU-Y6). */
   legalName: string;
 }
 
@@ -140,6 +154,7 @@ export function organizationLd(origin: string, facts: OrganizationFacts): Ld {
     url: origin + "/",
     logo: origin + "/brand/symbol.svg",
     description: facts.description,
+    identifier: companyIdentifiers(),
     areaServed: { "@type": "Country", name: "Bangladesh" },
   };
 }

@@ -31,8 +31,10 @@ export interface SharedText {
 // 16.13 "used unchanged": the trademark line is English in both locales.
 const TRADEMARK =
   "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates.";
+// WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now, with its BIN and trade licence written exactly
+// as the owner gave them (the same as the footer of the site, Shell.footer).
 const ADDRESS =
-  "TiCON System Limited, Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230";
+  "TryAWS.now, Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230. BIN: 008073062-0507. Trade License: TRAD/DNCC/098737/2020";
 
 export const SHARED: Readonly<Record<"bn" | "en", SharedText>> = {
   bn: {

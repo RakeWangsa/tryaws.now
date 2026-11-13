@@ -168,6 +168,16 @@ describe.each(LOCALES)("PublicShell (%s)", (locale) => {
     expect(brand).toBeLessThan(body.indexOf(aws["short"] as string));
   });
 
+  // WPU-Y6: the footer legal line is the company TryAWS.now with its BIN and trade licence.
+  it("prints the company TryAWS.now, its BIN and its trade licence in the footer", () => {
+    const { container } = shell(locale);
+    const bottom = container.querySelector("footer .footer-bottom")?.textContent ?? "";
+    expect(bottom).toContain("TryAWS.now");
+    expect(bottom).toContain("BIN: 008073062-0507");
+    expect(bottom).toContain("Trade License: TRAD/DNCC/098737/2020");
+    expect(bottom).not.toMatch(/TiCON System/i);
+  });
+
   it("renders the mobile bar and the language switch", () => {
     const { container } = shell(locale);
     const mobile = container.querySelector("div.menu-wrap.mobile");

@@ -5,7 +5,7 @@
 > TryAWS.now বাংলাদেশের মানুষ ও প্রতিষ্ঠানের জন্য একটি প্রিপেইড ক্লাউড প্যানেল। এখানে Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার কেনা যায়, যা Singapore বা Mumbai AWS Region থেকে চলে। মূল্য মার্কিন ডলারে দেখানো হয় এবং তাতে VAT ও ফি অন্তর্ভুক্ত; পরিশোধ হয় টাকায়, ওয়ালেট থেকে, যা EPS দিয়ে টপ আপ করা যায়। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।
 
 Canonical site: https://tryaws.now
-Published by TiCON System Limited
+Published by TryAWS.now
 Last updated: 2026-11-14
 
 ## Key facts
@@ -14,7 +14,8 @@ Last updated: 2026-11-14
 - Locations: Singapore (ap-southeast-1), Mumbai (ap-south-1)
 - Prices: Prices are in US dollars (USD), for 30 days, and include VAT and fees. The amount in taka is worked out at checkout with the exchange rate of the day, and you see it before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail.
 - Support: TryAWS.now gives support through support requests only, and our support team answers every request in writing. With an account, open a request in the panel and follow the answers there. Without an account, use the form on the support page and we answer by email. There is no support phone line and no support email address.
-- Company: TiCON System Limited, Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230
+- Company: TryAWS.now, Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230
+- Identifiers: BIN: 008073062-0507, Trade License: TRAD/DNCC/098737/2020
 - Machine-readable facts: https://tryaws.now/facts.json
 - Full text: https://tryaws.now/llms-full.txt
 
@@ -25,10 +26,10 @@ Last updated: 2026-11-14
 - [Cloud Server, built on Amazon Lightsail](https://tryaws.now/en/products/cloud-servers): Cloud servers that run in the AWS Region Singapore or Mumbai. Plans, specifications and prices in US dollars. Built on Amazon Lightsail.
 - [Help and frequently asked questions](https://tryaws.now/en/help): Answers about TryAWS.now and Amazon Lightsail: AWS, billing, support and where your data is.
 - [Support and contact](https://tryaws.now/en/support): How to get support from TryAWS.now: support requests in the panel, or the form on the support page without an account.
-- [Terms of service](https://tryaws.now/en/legal/terms): Terms of service of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
-- [Privacy policy](https://tryaws.now/en/legal/privacy): Privacy policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
-- [Acceptable use policy](https://tryaws.now/en/legal/acceptable-use): Acceptable use policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
-- [Refund policy](https://tryaws.now/en/legal/refund): Refund policy of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.
+- [Terms of service](https://tryaws.now/en/legal/terms): Terms of service of TryAWS.now, the prepaid cloud panel for Bangladesh.
+- [Privacy policy](https://tryaws.now/en/legal/privacy): Privacy policy of TryAWS.now, the prepaid cloud panel for Bangladesh.
+- [Acceptable use policy](https://tryaws.now/en/legal/acceptable-use): Acceptable use policy of TryAWS.now, the prepaid cloud panel for Bangladesh.
+- [Refund policy](https://tryaws.now/en/legal/refund): Refund policy of TryAWS.now, the prepaid cloud panel for Bangladesh.
 
 ## পাতা, বাংলা (9)
 
@@ -37,12 +38,12 @@ Last updated: 2026-11-14
 - [ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি](https://tryaws.now/products/cloud-servers): Singapore বা Mumbai AWS Region-এ চলা ক্লাউড সার্ভার। প্ল্যান, স্পেসিফিকেশন ও মূল্য মার্কিন ডলারে। Amazon Lightsail দিয়ে তৈরি।
 - [সাহায্য ও সাধারণ প্রশ্ন](https://tryaws.now/help): TryAWS.now ও Amazon Lightsail নিয়ে সাধারণ প্রশ্নের উত্তর: AWS, বিল, সাপোর্ট, ডেটা কোথায় থাকে।
 - [সাপোর্ট ও যোগাযোগ](https://tryaws.now/support): TryAWS.now-এর সাপোর্ট পাওয়ার উপায়: প্যানেলে সাপোর্ট অনুরোধ, আর অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম।
-- [সেবার শর্তাবলি](https://tryaws.now/legal/terms): সেবার শর্তাবলি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
-- [গোপনীয়তা নীতি](https://tryaws.now/legal/privacy): গোপনীয়তা নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
-- [গ্রহণযোগ্য ব্যবহারের নীতি](https://tryaws.now/legal/acceptable-use): গ্রহণযোগ্য ব্যবহারের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
-- [টাকা ফেরতের নীতি](https://tryaws.now/legal/refund): টাকা ফেরতের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।
+- [সেবার শর্তাবলি](https://tryaws.now/legal/terms): সেবার শর্তাবলি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।
+- [গোপনীয়তা নীতি](https://tryaws.now/legal/privacy): গোপনীয়তা নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।
+- [গ্রহণযোগ্য ব্যবহারের নীতি](https://tryaws.now/legal/acceptable-use): গ্রহণযোগ্য ব্যবহারের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।
+- [টাকা ফেরতের নীতি](https://tryaws.now/legal/refund): টাকা ফেরতের নীতি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।
 
 ## How to cite us
 
-Content is licensed CC-BY-4.0. When quoting, attribute to TryAWS.now (TiCON System Limited) and link the source URL.
+Content is licensed CC-BY-4.0. When quoting, attribute to TryAWS.now and link the source URL.
 When quoting a page, prefer that page's AnswerBlock — it is written to be lifted verbatim.

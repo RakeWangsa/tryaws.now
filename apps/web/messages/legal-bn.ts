@@ -1,18 +1,19 @@
-// `Public.legal.docs`: the DRAFTS of the four legal documents (WPU-Z7), in place of the one-line
+// `Public.legal.docs`: the four legal documents (WPU-Z7), in place of the one-line
 // placeholders. Bengali is written first (rule U5); `legal-en.ts` is typed from this tree. Every fact
 // comes from the specification (sections 1, 2, 8, 9, 11 and 16) or the owner decisions in JOURNEY.md;
 // where a fact is missing, the text says so in a note "[সিদ্ধান্ত বাকি: …]" instead of inventing it.
-// The owner approves these exact texts (manual proof wp9-t5-legal-final); a native speaker reviews the
+// The owner approved these texts on 2026-11-14 (WPU-Y6: no draft notice); a native speaker reviews the
 // Bengali. Each section has a numbered `title` and the paragraphs p1, p2, ... (LegalContent.tsx).
-// `{company}` and `{address}` are filled from the footer messages of the shell (Section 1), and `{brand}`
-// from the shell's brand (WPU-Z8: TryAWS.now), so that no draft writes a name of its own.
+// `{company}`, `{address}`, `{bin}` and `{tradeLicense}` are filled from the footer messages of the shell
+// (Section 1; WPU-Y6: the company is TryAWS.now), and `{brand}` from the shell's brand (WPU-Z8:
+// TryAWS.now), so that no text writes a name of its own.
 export const legalDocsBn = {
   terms: {
     title: "সেবার শর্তাবলি",
     sections: {
       provider: {
         title: "১. সেবা কে দেয়",
-        p1: "{brand} হলো {company}-এর একটি ব্র্যান্ড, ঠিকানা: {address}। এই শর্তাবলিতে “{brand}”, “আমরা” ও “আমাদের” বলতে {company}-কে বোঝায়।",
+        p1: "সেবাটি দেয় {company}, ঠিকানা: {address}; {bin}; {tradeLicense}। এই শর্তাবলিতে “আমরা” ও “আমাদের” বলতে {company}-কে বোঝায়।",
         p2: "এই শর্তাবলি আপনার {brand} অ্যাকাউন্ট এবং আপনার কেনা প্রতিটি রিসোর্সের ক্ষেত্রে প্রযোজ্য। অ্যাকাউন্ট খোলার সময় আপনি গ্রহণযোগ্য ব্যবহারের নীতি ও গোপনীয়তা নীতির সঙ্গে এই শর্তাবলিও মেনে নেন, এবং আপনি কোন সংস্করণ মেনে নিয়েছেন তা আমরা সংরক্ষণ করি।",
       },
       service: {
@@ -151,7 +152,7 @@ export const legalDocsBn = {
     sections: {
       controller: {
         title: "১. তথ্যের দায়িত্ব কার",
-        p1: "{brand} যে ব্যক্তিগত তথ্য ব্যবহার করে, তার দায়িত্ব {company}-এর, ঠিকানা: {address}।",
+        p1: "আমরা যে ব্যক্তিগত তথ্য ব্যবহার করি, তার দায়িত্ব {company}-এর, ঠিকানা: {address} ({bin}; {tradeLicense})।",
       },
       collect: {
         title: "২. আমরা যে তথ্য নিই",

@@ -80,8 +80,8 @@ describe("support through support requests, no phone and no e-mail (WPU-Z7)", ()
 
 // WPU-Z7: the legal pages are full drafts in place of the one-line placeholders. Every section is
 // numbered from 1, has a title and the paragraphs p1, p2, ...; a missing fact is a bracketed note in
-// one form; nothing of the old placeholders is left. The owner approves the exact texts (manual proof
-// wp9-t5-legal-final); until then the page shows the draft notice.
+// one form; nothing of the old placeholders is left. WPU-Y6: the owner approved the texts on 2026-11-14;
+// the page shows no draft notice.
 type LegalSection = Record<string, string>;
 type LegalDocTree = { title: string; sections: Record<string, LegalSection> };
 const legalDocs = (tree: typeof publicBn | typeof publicEn): Record<string, LegalDocTree> =>
@@ -177,11 +177,18 @@ describe("legal drafts (WPU-Z7)", () => {
     }
   });
 
-  it("shows the notice 'Draft — awaiting final approval' until the owner approves the texts", () => {
-    expect(publicEn.Public.legal.draftTitle).toBe("Draft — awaiting final approval");
-    expect(publicBn.Public.legal.draftTitle).toBe("খসড়া — চূড়ান্ত অনুমোদনের অপেক্ষায়");
-    expect(publicEn.Public.legal.version).toMatch(/draft/i);
-    expect(publicBn.Public.legal.version).toContain("খসড়া");
+  // WPU-Y6 (owner, 2026-11-14): the legal texts are APPROVED. No draft notice, no "draft" in the
+  // version line or the page descriptions. A deliberate deviation from the draft notice of the spec.
+  it("has no draft notice: the texts are approved by the owner", () => {
+    for (const [locale, tree] of LOCALES) {
+      const legal = tree.Public.legal as Record<string, unknown>;
+      expect(legal["draftTitle"], locale).toBeUndefined();
+      expect(legal["draftText"], locale).toBeUndefined();
+      expect(tree.Public.legal.version, locale).not.toMatch(/draft|খসড়া/i);
+      expect(tree.Public.meta.legal.descriptionOf, locale).not.toMatch(/draft|খসড়া|অনুমোদন/i);
+    }
+    expect(publicEn.Public.legal.version).toBe("Version 1, 14 November 2026");
+    expect(publicBn.Public.legal.version).toBe("সংস্করণ ১, ১৪ নভেম্বর ২০২৬");
   });
 
   it("says where the data is kept in the words of the FAQ (16.8), and names the abuse category of the form", () => {

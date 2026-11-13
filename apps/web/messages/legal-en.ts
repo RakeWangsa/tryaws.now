@@ -2,15 +2,15 @@ import type { legalDocsBn } from "./legal-bn.ts";
 
 type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 
-// `Public.legal.docs` in English: the DRAFTS of WPU-Z7 (see legal-bn.ts). A missing fact is a note
-// "[To be decided: …]"; the owner approves these exact texts (manual proof wp9-t5-legal-final).
+// `Public.legal.docs` in English: the texts of WPU-Z7 (see legal-bn.ts), approved by the owner on
+// 2026-11-14 (WPU-Y6). A fact still open is a note "[To be decided: …]".
 export const legalDocsEn: Same<typeof legalDocsBn> = {
   terms: {
     title: "Terms of service",
     sections: {
       provider: {
         title: "1. Who provides the service",
-        p1: "{brand} is a brand of {company}, {address}. In these terms, “{brand}”, “we” and “us” mean {company}.",
+        p1: "The service is provided by {company}, {address}; {bin}; {tradeLicense}. In these terms, “we” and “us” mean {company}.",
         p2: "These terms apply to your {brand} account and to every resource you buy. You accept them, together with the acceptable use policy and the privacy policy, when you open your account, and we record the version you accepted.",
       },
       service: {
@@ -149,7 +149,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
     sections: {
       controller: {
         title: "1. Who is responsible",
-        p1: "{company}, {address}, is responsible for the personal data that {brand} processes.",
+        p1: "{company}, {address} ({bin}; {tradeLicense}), is responsible for the personal data that we process.",
       },
       collect: {
         title: "2. What we collect",

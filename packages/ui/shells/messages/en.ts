@@ -32,7 +32,11 @@ export const en: Same<typeof bn> = {
       contact: "Support request",
       terms: "Terms of service",
       privacy: "Privacy policy",
-      companyName: "TiCON System Limited",
+      // WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now everywhere a customer or crawler reads it,
+      // with its two identifiers written exactly as the owner gave them, in both locales.
+      companyName: "TryAWS.now",
+      bin: "BIN: 008073062-0507",
+      tradeLicense: "Trade License: TRAD/DNCC/098737/2020",
       address: "Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230",
     },
     auth: {

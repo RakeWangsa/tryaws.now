@@ -8,11 +8,10 @@ import { JsonLds } from "../_components/JsonLd.tsx";
 import { useSiteLd } from "../_components/site-ld.ts";
 import type { Tr } from "../_components/offers.tsx";
 
-// `/legal/[doc]` (legal.html): the sidebar of documents and the document. The texts are DRAFTS (WPU-Z7,
-// messages/legal-bn.ts and legal-en.ts) written only from the specification and the owner decisions:
-// numbered sections in plain language, and a bracketed "to be decided" note where a fact is missing.
-// The page shows the notice "Draft — awaiting final approval" until the owner approves these exact
-// texts (manual proof wp9-t5-legal-final); the legal adviser's wording may replace them (16.8).
+// `/legal/[doc]` (legal.html): the sidebar of documents and the document. The texts (WPU-Z7,
+// messages/legal-bn.ts and legal-en.ts) are written from the specification and the owner decisions:
+// numbered sections in plain language, and a bracketed "to be decided" note where a fact is open.
+// WPU-Y6: the owner approved the texts on 2026-11-14; the page shows no draft notice.
 
 /**
  * The sections of each document, in order. Each has a numbered `title` and the paragraphs p1, p2, ...
@@ -86,11 +85,13 @@ export function LegalContent({
   const t = useTranslations("Public") as unknown as Tr;
   const tAws = useTranslations("Aws");
   const tShell = useTranslations("Shell");
-  // The provider's name and address are those of the footer (Section 1), and the brand is the shell's
-  // (WPU-Z8): one source for each.
+  // The provider's name, address, BIN and trade licence are those of the footer (Section 1, WPU-Y6), and
+  // the brand is the shell's (WPU-Z8): one source for each.
   const provider = {
     company: tShell("footer.companyName"),
     address: tShell("footer.address"),
+    bin: tShell("footer.bin"),
+    tradeLicense: tShell("footer.tradeLicense"),
     brand: tShell("brand"),
   };
   const title = t(`legal.docs.${doc}.title`);
@@ -153,9 +154,6 @@ export function LegalContent({
               <div id="sidebar_content" className="wrap-blog">
                 <div className="row">
                   <div className="col-md-12 col-lg-12 knowledge">
-                    <div className="alert alert-warning mt-5" role="note">
-                      <strong>{t("legal.draftTitle")}</strong> {t("legal.draftText")}
-                    </div>
                     <div className="wrapper mt-5 bg-seccolorstyle noshadow">
                       <h2 className="h5 mergecolor">
                         <b>{title}</b>{" "}

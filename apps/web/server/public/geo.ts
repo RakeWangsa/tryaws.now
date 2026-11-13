@@ -4,7 +4,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { publicBn } from "../../messages/public-bn.ts";
 import { publicEn } from "../../messages/public-en.ts";
 import { LEGAL_DOCS } from "./indexing.ts";
-import { CONTENT_UPDATED, SITE_NAME } from "./seo.ts";
+import { COMPANY_BIN, COMPANY_TRADE_LICENSE, CONTENT_UPDATED, SITE_NAME } from "./seo.ts";
 
 // WPU-Z16 (GEO): llms.txt, llms-full.txt and facts.json, the machine-readable ground truth that
 // answer engines can cite, in the format of OmniRank v0.4.0 (docs/geo-artifacts-guide.md). Every
@@ -35,7 +35,7 @@ const PUBLIC: Readonly<Record<Locale, PublicTree>> = {
   en: publicEn.Public as unknown as PublicTree,
 };
 type ShellTree = {
-  Shell: { footer: { companyName: string; address: string } };
+  Shell: { footer: { companyName: string; address: string; bin: string; tradeLicense: string } };
   Aws: { short: string; long: string; trademark: string };
 };
 const SHELL = shellMessages as unknown as Readonly<Record<Locale, ShellTree>>;
@@ -90,9 +90,14 @@ export function geoPages(locale: Locale): GeoPage[] {
 
 const urlOf = (locale: Locale, path: string): string => GEO_SITE_URL + localePath(locale, path);
 
-/** The legal entity (footer) is the publisher; the attribution names the brand with it. */
+/**
+ * The company of the footer is the publisher. WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now, so
+ * the attribution is the brand alone, and the BIN and the trade licence follow the company.
+ */
 const company = (): string => SHELL.en.Shell.footer.companyName;
-export const geoAttribution = (): string => `${SITE_NAME} (${company()})`;
+export const geoAttribution = (): string => company();
+const companyIds = (): string =>
+  `${SHELL.en.Shell.footer.bin}, ${SHELL.en.Shell.footer.tradeLicense}`;
 
 /** The two AWS Regions, with the names of the messages and their codes (16.13 format). */
 function regions(locale: Locale): { code: string; name: string }[] {
@@ -139,6 +144,7 @@ export function llmsTxt(): string {
     `- Prices: ${en.common.priceNote}`,
     `- Support: ${en.support.lead}`,
     `- Company: ${company()}, ${SHELL.en.Shell.footer.address}`,
+    `- Identifiers: ${companyIds()}`,
     `- Machine-readable facts: ${GEO_SITE_URL}/facts.json`,
     `- Full text: ${GEO_SITE_URL}/llms-full.txt`,
     "",
@@ -181,6 +187,8 @@ export function llmsFullTxt(): string {
     `> ${PUBLIC.en.entity.statement}`,
     "",
     `Canonical site: ${GEO_SITE_URL}`,
+    `Published by ${company()}, ${SHELL.en.Shell.footer.address}`,
+    `Identifiers: ${companyIds()}`,
     `Last updated: ${CONTENT_UPDATED}`,
     "",
     "## English",
@@ -207,6 +215,7 @@ export function factsJson(): string {
     license: GEO_LICENSE,
     attribution: geoAttribution(),
     legalName: company(),
+    identifiers: { bin: COMPANY_BIN, tradeLicense: COMPANY_TRADE_LICENSE },
     dateModified: CONTENT_UPDATED,
     locales: [
       { code: "bn-BD", path: "/", default: true },

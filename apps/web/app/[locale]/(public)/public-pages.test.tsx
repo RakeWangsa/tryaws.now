@@ -308,7 +308,9 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
     for (const locale of LOCALES) {
       const page = all["support.data"]!(locale);
       const main = mainOf(page);
-      const text = main.replace(/<[^>]*>/g, " ");
+      // WPU-Y6: the JSON-LD carries the company BIN (13 digits), which is not a phone number; the
+      // check reads the text a visitor sees, without the script blocks.
+      const text = main.replace(/<script[\s\S]*?<\/script>/g, " ").replace(/<[^>]*>/g, " ");
       const t = (locale === "bn" ? publicBn : publicEn).Public.support;
       expect(main).not.toMatch(/href="(tel|mailto):/);
       expect(text, "an e-mail address").not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
@@ -333,15 +335,15 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
     }
   });
 
-  it("every legal document is a draft awaiting approval: the notice, the version, every section in order", () => {
+  it("every legal document is approved: no draft notice, the version, every section in order", () => {
     for (const doc of LEGAL) {
       for (const locale of LOCALES) {
         const page = all[`legal.${doc}`]!(locale);
         const main = mainOf(page);
         const where = `${doc} ${locale}`;
         const t = (locale === "bn" ? publicBn : publicEn).Public.legal;
-        expect(main, where).toContain(escape(t.draftTitle));
-        expect(main, where).toContain(escape(t.draftText));
+        // WPU-Y6 (owner, 2026-11-14): the texts are approved; no draft notice is shown.
+        expect(main, where).not.toMatch(/draft|খসড়া|alert-warning/i);
         expect(main, where).toContain(escape(t.version));
         expect(main, where).not.toMatch(/\[legal text[^\]]*pending\]|\[আইনি লেখা[^\]]*বাকি\]/i);
         // Every title and paragraph of the messages is on the page, in their order, with the
@@ -352,6 +354,8 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
           text
             .replace(/\{company\}/g, leaf(locale, "Shell.footer.companyName"))
             .replace(/\{address\}/g, leaf(locale, "Shell.footer.address"))
+            .replace(/\{bin\}/g, leaf(locale, "Shell.footer.bin"))
+            .replace(/\{tradeLicense\}/g, leaf(locale, "Shell.footer.tradeLicense"))
             .replace(/\{brand\}/g, leaf(locale, "Shell.brand"));
         let from = 0;
         for (const [key, section] of Object.entries(tree.sections)) {
@@ -361,7 +365,13 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
             from = at + 1;
           }
         }
-        expect(main, where).not.toMatch(/\{(?:company|address|brand)\}/);
+        expect(main, where).not.toMatch(/\{(?:company|address|bin|tradeLicense|brand)\}/);
+        expect(main, where).not.toMatch(/TiCON System/i);
+        if (doc === "terms" || doc === "privacy") {
+          // WPU-Y6: the provider is TryAWS.now with its BIN and trade licence, exactly as given.
+          expect(main, where).toContain("BIN: 008073062-0507");
+          expect(main, where).toContain("Trade License: TRAD/DNCC/098737/2020");
+        }
         expect(main, `${where}: the brand`).toContain(leaf(locale, "Shell.brand"));
         // One heading per section, under the h2 of the document.
         expect(count(main, /<h3[\s>]/g), where).toBe(Object.keys(tree.sections).length);

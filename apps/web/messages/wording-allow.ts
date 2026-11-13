@@ -14,7 +14,15 @@ export const SAME_IN_BOTH: readonly WordingAllow[] = [
   { key: "kit.locale.*", reason: "each language is written in its own script in both locales" },
   { key: "Settings.profile.details.localeBn", reason: "language name in its own script" },
   { key: "Settings.profile.details.localeEn", reason: "language name in its own script" },
-  { key: "Shell.footer.companyName", reason: "legal name of the company, a brand" },
+  { key: "Shell.footer.companyName", reason: "the company name, the brand TryAWS.now (WPU-Y6)" },
+  {
+    key: "Shell.footer.bin",
+    reason: "WPU-Y6: the BIN of the company, written exactly as the owner gave it",
+  },
+  {
+    key: "Shell.footer.tradeLicense",
+    reason: "WPU-Y6: the trade licence number, written exactly as the owner gave it",
+  },
   { key: "Shell.footer.address", reason: "postal address of the company (16.14), in Latin" },
   { key: "Shell.admin.ops", reason: "role abbreviation shown as in the operator tools" },
   { key: "Aws.trademark", reason: "16.13: the trademark line is the same English line" },
