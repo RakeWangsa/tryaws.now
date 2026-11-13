@@ -21,7 +21,8 @@ import type { OperationHooks } from "./types";
 // TcDnsProvisioner) and the KMS unseal are NOT wired here yet (JOURNEY "Needs decision"): until they are,
 // every port refuses with a fixed local error, a create fails closed and its order is reversed, and a renewal
 // (`renew_domain`, WPU-Z13) fails closed and its charge is reversed (renewal-hooks.ts). The domain flag is off in
-// production (R12), so no order reaches this. The two database reads are real: they decide who holds a name and a zone.
+// production (R12), so no order reaches this. The two database reads are real: they decide who holds a name and a
+// zone.
 export interface DomainPorts {
   readonly domains: () => DomainsPort;
   readonly route53: () => Route53Port;

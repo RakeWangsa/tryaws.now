@@ -16,7 +16,8 @@ function targetOf(payload: unknown): string | null {
 
 // The rejection of a stuck operation (an engine kind, no adapter): the target goes needs_attention
 // to failed (W11), a create or a domain renewal (WPU-Z13: the kinds whose failure moves money back,
-// refundedOnFailure) runs the same failed hook as the automatic path, and the reject operation succeeds. All of it is one transaction under the fence of the lease of the reject
+// refundedOnFailure) runs the same failed hook as the automatic path, and the reject operation
+// succeeds. All of it is one transaction under the fence of the lease of the reject
 // operation; a throwing hook rolls everything back and the sweeper recovers the run like an expired
 // lease. Inside the transaction the fenced update of the reject operation comes first (the order is
 // not visible outside), so a stale run writes nothing for the target.
