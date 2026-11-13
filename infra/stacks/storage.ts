@@ -15,8 +15,8 @@ const BLOCK_ALL = {
 
 function privateBucket(
   name: string,
-  key: { arn: unknown; id: unknown },
-  extraPolicy: unknown[] = [],
+  key: aws.kms.Key,
+  extraPolicy: sst.aws.BucketArgs["policy"] = [],
 ) {
   const bucket = new sst.aws.Bucket(name, {
     // access is not set: the default grants no public access. versioning keeps overwritten KYC files.
@@ -26,7 +26,8 @@ function privateBucket(
     transform: {
       // VERIFY: transform.publicAccessBlock is listed in the docs; the docs do not say whether the
       // component creates one by default, so it is set here explicitly.
-      publicAccessBlock: (args: Record<string, unknown>) => {
+      // Transform<s3.BucketPublicAccessBlockArgs>, as SST passes it (components/aws/bucket.ts).
+      publicAccessBlock: (args: aws.s3.BucketPublicAccessBlockArgs) => {
         Object.assign(args, BLOCK_ALL);
       },
     },
@@ -77,9 +78,10 @@ export function storage(config: StageConfig) {
   // actions, conditions, effect, paths, principals); the aws:PrincipalArn condition below is what
   // keeps this a Deny for the web role only.
   const webRoleArn = `arn:aws:iam::${account}:role/${roleName(stage, "web")}`;
+  // `as const`: the Bucket policy takes the literals "deny" and "*" (components/aws/bucket.ts).
   const denyWebRead = {
-    effect: "deny",
-    principals: "*",
+    effect: "deny" as const,
+    principals: "*" as const,
     actions: ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"],
     paths: ["*"],
     conditions: [{ test: "ArnEquals", variable: "aws:PrincipalArn", values: [webRoleArn] }],

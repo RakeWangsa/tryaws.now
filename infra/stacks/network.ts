@@ -1,10 +1,12 @@
 // WP0-T2: VPC with two AZs and managed NAT (3.3), the security groups of the data path, and the two
 // isolated subnets of invoice-renderer.
 //
-// NOT TYPE-CHECKED: SST is not installed in this repository yet (JOURNEY.md, first manual step), so
-// `sst`, `aws` and `$output` are undeclared globals here. ESLint parses the file, Prettier formats it,
-// and tests/repo/infra-rules.test.mjs reads the text. Every detail the SST and Pulumi documents did
-// not confirm is marked `VERIFY:` and listed in JOURNEY.md.
+// NOT TYPE-CHECKED unless `.sst/platform/config.d.ts` exists: `sst`, `aws`, `$util` and `$output`
+// are globals that `sst install` declares there (git-ignored, absent in CI). Where it exists,
+// tests/repo/sst-types.test.mjs runs `tsc -p infra/tsconfig.stacks.json` against the SST 4.17.2
+// and Pulumi AWS 7.20.0 types (WPU-Z9). ESLint parses the file, Prettier formats it, and
+// tests/repo/infra-rules.test.mjs reads the text. Every detail the SST and Pulumi documents did not
+// confirm is marked `VERIFY:` and listed in JOURNEY.md.
 import { AZ_COUNT, VPC_CIDR, isolatedSubnets } from "../lib/network";
 import { sizing } from "../lib/lean";
 import { REGION, resourceName, type StageConfig } from "../lib/stage";
@@ -21,7 +23,8 @@ export function network(config: StageConfig) {
     az: AZ_COUNT,
     nat: sizing(config.size, config.kind).network.nat,
     transform: {
-      vpc: (args: { cidrBlock?: string }) => {
+      // Transform<ec2.VpcArgs>, as SST passes it (.sst/platform/src/components/aws/vpc.ts).
+      vpc: (args: aws.ec2.VpcArgs) => {
         // VERIFY: transform.vpc is listed in the docs; that aws.ec2.Vpc cidrBlock set here is honoured
         // by the component's subnet layout (it may compute subnets from its own default 10.0.0.0/16).
         args.cidrBlock = VPC_CIDR[config.kind];

@@ -38,7 +38,7 @@ export interface WorkerInputs {
 
 function permissionsOf(spec: FunctionSpec, inputs: WorkerInputs) {
   const { config, queues, storage } = inputs;
-  const permissions: { actions: string[]; resources: unknown[] }[] = [];
+  const permissions: sst.aws.FunctionPermissionArgs[] = [];
   const roles = [...new Set(spec.poolRoles)];
   if (roles.length > 0) {
     permissions.push({
@@ -61,9 +61,13 @@ function permissionsOf(spec: FunctionSpec, inputs: WorkerInputs) {
   return permissions;
 }
 
-function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string, unknown> {
+// Lambda environment values are strings (FunctionArgs.environment, components/aws/function.ts).
+function environmentOf(
+  spec: FunctionSpec,
+  inputs: WorkerInputs,
+): Record<string, $util.Input<string>> {
   const { config, db, queues, storage } = inputs;
-  const env: Record<string, unknown> = {
+  const env: Record<string, $util.Input<string>> = {
     TC_STAGE: config.tcStage,
     TC_ENV: config.tcStage,
   };
@@ -73,7 +77,8 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
     // the linked secret that DB_PASSWORD_SECRET names (SST_RESOURCE_<name>). The migrator reads the
     // master user from the linked Postgres resource and ignores DB_USER and DB_PASSWORD_SECRET.
     env.DB_HOST = db.connection.host;
-    env.DB_PORT = db.connection.port;
+    // WPU-Z9: the port is a number output; an environment value is a string (environmentOf).
+    env.DB_PORT = $interpolate`${db.connection.port}`;
     env.DB_NAME = db.connection.name;
     env.DB_USER = spec.dbRole;
     env.DB_PASSWORD_SECRET = DB_PASSWORD_SECRET[spec.dbRole];
@@ -109,7 +114,8 @@ function environmentOf(spec: FunctionSpec, inputs: WorkerInputs): Record<string,
     env.PUBLIC_BASE_URL = `https://${config.webDomain}`;
   }
   if (spec.dir === "catalog-sync") {
-    env.CATALOG_POOL_ACCOUNT_ID = config.poolAccountIds[0];
+    // `!`: readStageConfig refuses an empty TC_POOL_ACCOUNT_IDS (infra/lib/stage.ts).
+    env.CATALOG_POOL_ACCOUNT_ID = config.poolAccountIds[0]!;
     env.CATALOG_REGIONS = "ap-southeast-1";
     env.CATALOG_DNS_ACCOUNT_ID = config.dnsAccountId;
     env.CATALOG_DNS_EXTERNAL_ID = config.dnsExternalId;
@@ -148,7 +154,7 @@ function vpcOf(spec: FunctionSpec, net: Network) {
 // browser unpacks itself to /tmp, so the function gets 2 GB of /tmp.
 // VERIFY (staging): nodejs.install installs the two packages with the versions of
 // functions/invoice-renderer/package.json; copyFiles puts the folder at /var/task/fonts.
-function rendererArgs(spec: FunctionSpec) {
+function rendererArgs(spec: FunctionSpec): Partial<sst.aws.FunctionArgs> {
   if (spec.dir !== "invoice-renderer") return {};
   return {
     architecture: "x86_64",
@@ -158,7 +164,8 @@ function rendererArgs(spec: FunctionSpec) {
   };
 }
 
-export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
+// Typed as sst.aws.Function takes it; without that, `timeout` and `memory` widen to string.
+export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs): sst.aws.FunctionArgs {
   return {
     ...rendererArgs(spec),
     handler: `functions/${spec.dir}/index.${spec.handlerExport}`,
@@ -180,14 +187,15 @@ export function functionArgs(spec: FunctionSpec, inputs: WorkerInputs) {
     transform: {
       // Only the reader and the invoice renderer publish versions: their aliases need a numbered
       // version (WPU-S6, WPU-B7 L3).
+      // Transform<lambda.FunctionArgs> and Transform<iam.RoleArgs>, as SST passes them.
       ...(spec.dir === "reader" || spec.dir === "invoice-renderer"
         ? {
-            function: (args: { publish?: boolean }) => {
+            function: (args: aws.lambda.FunctionArgs) => {
               args.publish = true;
             },
           }
         : {}),
-      role: (args: { name?: string }) => {
+      role: (args: aws.iam.RoleArgs) => {
         // VERIFY: the docs do not say that transform.role may set the IAM role name; the Pulumi
         // aws.iam.Role `name` argument is what is set here.
         args.name = roleName(inputs.config.stage, spec.name ?? spec.dir);
@@ -229,48 +237,42 @@ export function workers(inputs: WorkerInputs) {
   // web.ts grants each role lambda:InvokeFunction on its own alias ARN and on no other.
   // VERIFY: `transform.function` reaches the aws.lambda.Function of sst.aws.Function (publish makes a
   // numbered version; an alias cannot point to $LATEST) and `nodes.function.version` is that version.
-  const reader = invoked["reader"] as {
-    nodes: { function: { version: unknown } };
-    name: unknown;
-  };
+  // `as`: FUNCTIONS holds an invoke row for reader, access-details and invoice-renderer
+  // (infra/lib/functions.ts); without one, the property reads below stop the deploy.
+  const reader = invoked["reader"] as sst.aws.Function;
+  // `as`: Object.fromEntries forgets the two keys of the tuple it is built from.
   const readerAliases = Object.fromEntries(
     (["web", "admin"] as const).map((tier) => [
       tier,
       new aws.lambda.Alias(`ReaderAlias${tier === "web" ? "Web" : "Admin"}`, {
         name: tier,
-        functionName: reader.name as string,
-        functionVersion: reader.nodes.function.version as string,
+        functionName: reader.name,
+        functionVersion: reader.nodes.function.version,
       }),
     ]),
-  ) as Record<"web" | "admin", { arn: unknown }>;
+  ) as Record<"web" | "admin", aws.lambda.Alias>;
 
   // WPU-N2: access-details has one alias, "web". The function accepts customerId only on it
   // (functions/access-details/invoke.ts) and web.ts grants the web role lambda:InvokeFunction on
   // this alias ARN and on nothing else, so the unaliased function cannot be invoked by web.
   // VERIFY: same alias mechanics as the reader above.
-  const accessDetails = invoked["access-details"] as {
-    nodes: { function: { version: unknown } };
-    name: unknown;
-  };
+  const accessDetails = invoked["access-details"] as sst.aws.Function;
   const accessAliases = {
     web: new aws.lambda.Alias("AccessAliasWeb", {
       name: "web",
-      functionName: accessDetails.name as string,
-      functionVersion: accessDetails.nodes.function.version as string,
+      functionName: accessDetails.name,
+      functionVersion: accessDetails.nodes.function.version,
     }),
-  } as Record<"web", { arn: unknown }>;
+  };
   // WPU-N1: the invoice renderer has one alias, "web". The customer role may invoke that alias and no
   // other form of the function; the admin role has no grant on the renderer at all (WPU-S8).
   // VERIFY: same as the reader aliases above (the published version, `nodes.function.version`).
-  const renderer = invoked["invoice-renderer"] as {
-    nodes: { function: { version: unknown } };
-    name: unknown;
-  };
+  const renderer = invoked["invoice-renderer"] as sst.aws.Function;
   const rendererAliasWeb = new aws.lambda.Alias("InvoiceRendererAliasWeb", {
     name: "web",
-    functionName: renderer.name as string,
-    functionVersion: renderer.nodes.function.version as string,
-  }) as { arn: unknown };
+    functionName: renderer.name,
+    functionVersion: renderer.nodes.function.version,
+  });
 
   // Scheduled: EventBridge Scheduler (sst.aws.CronV2), retry policy 0 (the functions are idempotent
   // and the next run repeats the work). VERIFY: CronV2 args `schedule`, `function`, `retries`.
@@ -280,7 +282,8 @@ export function workers(inputs: WorkerInputs) {
       return [
         f.dir,
         new sst.aws.CronV2(f.component, {
-          schedule: trigger.schedule,
+          // `as`: lib/functions.ts types it as a string; every row is rate(...) or cron(...).
+          schedule: trigger.schedule as sst.aws.CronV2Args["schedule"],
           function: functionArgs(f, inputs),
           retries: 0,
         }),

@@ -5,7 +5,7 @@
 import { LEAN_BUDGET_THRESHOLDS_USD, LEAN_BUDGET_USD } from "../lib/lean";
 import { resourceName, type StageConfig } from "../lib/stage";
 
-export function budget(config: StageConfig, topic: { arn: unknown }) {
+export function budget(config: StageConfig, topic: aws.sns.Topic) {
   const stage = config.stage;
 
   // AWS Budgets publishes to the topic as the service principal budgets.amazonaws.com, so the topic

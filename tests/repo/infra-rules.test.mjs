@@ -256,11 +256,13 @@ describe("WAF rate rules and Server Actions", () => {
 
 describe("Cognito attribute writes", () => {
   it("requires verification before an e-mail update in both pools", () => {
+    // WPU-Z9: the Pulumi AWS 7.20.0 field is attributesRequireVerificationBeforeUpdates (plural).
     expect([
       ...auth.matchAll(
-        /args\.userAttributeUpdateSettings = \{ attributesRequireVerificationBeforeUpdate: \["email"\] \}/g,
+        /args\.userAttributeUpdateSettings = \{ attributesRequireVerificationBeforeUpdates: \["email"\] ?\}/g,
       ),
     ]).toHaveLength(2);
+    expect(auth).not.toMatch(/attributesRequireVerificationBeforeUpdate:/);
   });
 
   it("gives the clients an explicit writeAttributes allowlist without e-mail or phone", () => {
@@ -518,6 +520,8 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
     // what admin keeps: the exports bucket with its key, and catalog-sync
     expect(admin).toContain("$interpolate`${storage.exports.arn}/*`");
     expect(admin).toContain('...invoke("catalog-sync")');
+    // WPU-Z9: catalog-sync is a CronV2, not in workers.invoked: the lookup reads the crons too
+    expect(web).toContain("workers.invoked[dir] ?? workers.crons[dir]?.nodes.function");
     expect(admin).toContain("storage.filesKey.arn");
     // the customer path invokes the renderer and gets the PDF in its answer (WPU-N1); WPU-B7 (L2): it holds
     // no read of the invoices bucket, only of exports

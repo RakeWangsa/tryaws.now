@@ -9,7 +9,8 @@ export function messaging() {
   const deadLetter = new sst.aws.Queue("ProvisioningDlq", {
     fifo: true,
     transform: {
-      queue: (args: Record<string, unknown>) => {
+      // Transform<sqs.QueueArgs>, as SST passes it (.sst/platform/src/components/aws/queue.ts).
+      queue: (args: aws.sqs.QueueArgs) => {
         args.messageRetentionSeconds = PROVISIONING_QUEUE.deadLetterRetentionSeconds;
         // VERIFY: SSE-SQS (sqsManagedSseEnabled) is on by default for new queues; set explicitly.
         args.sqsManagedSseEnabled = true;
@@ -24,7 +25,7 @@ export function messaging() {
     // VERIFY: dlq.queue takes the ARN of the dead-letter queue and `retry` is the maxReceiveCount.
     dlq: { queue: deadLetter.arn, retry: PROVISIONING_QUEUE.maxReceiveCount },
     transform: {
-      queue: (args: Record<string, unknown>) => {
+      queue: (args: aws.sqs.QueueArgs) => {
         args.messageRetentionSeconds = PROVISIONING_QUEUE.retentionSeconds;
         args.sqsManagedSseEnabled = true;
         // The deduplication id is <operation id>:<enqueue_seq>, set by the sender (3.3), so
