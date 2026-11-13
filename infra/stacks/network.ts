@@ -68,6 +68,8 @@ function singleNatInstance(config: StageConfig, vpc: sst.aws.Vpc) {
     vpcSecurityGroupIds: [securityGroup.id],
     // A NAT forwards traffic that is neither from nor to itself.
     sourceDestCheck: false,
+    // IMDSv2 only (review of WPU-Z10): the instance has no role, but nothing needs IMDSv1.
+    metadataOptions: { httpTokens: "required" },
     // sst:is-nat as SST tags its own NAT instances (vpc.ts), so the runbooks' EC2 filter finds it.
     tags: { Name: resourceName(stage, "nat"), "sst:is-nat": "true" },
   });
@@ -75,10 +77,13 @@ function singleNatInstance(config: StageConfig, vpc: sst.aws.Vpc) {
     domain: "vpc",
     tags: { Name: resourceName(stage, "nat-ip") },
   });
-  new aws.ec2.EipAssociation("NatElasticIpAssociation", {
-    instanceId: instance.id,
-    allocationId: elasticIp.allocationId,
-  });
+  // After the internet gateway is attached (review of WPU-Z10): an EIP association before it fails with
+  // Gateway.NotAttached.
+  new aws.ec2.EipAssociation(
+    "NatElasticIpAssociation",
+    { instanceId: instance.id, allocationId: elasticIp.allocationId },
+    { dependsOn: [vpc.nodes.internetGateway] },
+  );
   return { instance, elasticIp, securityGroup };
 }
 

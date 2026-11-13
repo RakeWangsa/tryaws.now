@@ -12,7 +12,7 @@
 // (function.ts createLogGroup, logging.ts RETENTION: "1 week" is 7 days).
 //
 // Left as they are: `logging: false` (no log group) and `logging.logGroup` (a group made elsewhere: SST
-// refuses retention together with logGroup). No Lambda@Edge function is built (web.ts: regional servers).
+// refuses retention together with logGroup). SST's Lambda@Edge signer (oac-with-edge-signing in web.ts) writes log groups that Lambda itself creates in edge Regions; this transform cannot reach them (docs/runbooks/staging-on-demand.md, 'Left behind').
 // VERIFY (first `sst diff --stage staging`): every /aws/lambda log group of the stage shows
 // retentionInDays 7.
 //
