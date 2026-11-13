@@ -83,8 +83,8 @@ it("list: the newest activity first, and the next page starts after the last row
   for (const minutes of [30, 20, 10]) {
     const id = await seedRequest({ status: "closed" });
     await t.pool.query(
-      `update support_requests set last_activity_at = now() + interval '1 day' - ($2 || ' minutes')::interval where id = $1`,
-      [id, String(minutes)],
+      "update support_requests set last_activity_at = now() + interval '1 day' - $2::int * interval '1 minute' where id = $1",
+      [id, minutes],
     );
     ids.push(id);
   }
