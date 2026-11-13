@@ -373,3 +373,47 @@ describe("TC_PROBE_SOURCES and TC_VPC_CIDR reach every sst job", () => {
     });
   }
 });
+
+// WPU-Z11: infra/lib/lean.ts reads TC_STAGE_SIZE and unset means "full" (the expensive sizing), so every
+// job of every workflow that runs sst passes the variable of its GitHub environment. The check walks all
+// workflow files, so a new workflow with an sst job (remove-staging.yml) is held to the same rule.
+describe("TC_STAGE_SIZE reaches every sst job (WPU-Z11)", () => {
+  const sstJobsOf = (file) =>
+    Object.entries(parse(read(file)).jobs ?? {}).filter(([, job]) =>
+      stepsOf(job).some((s) => /\bsst (diff|deploy|remove|refresh)\b/.test(runText(s))),
+    );
+
+  it("finds the sst jobs of the deploy workflows (plan, deploy, staging deploy)", () => {
+    const found = workflowFiles.flatMap((file) =>
+      sstJobsOf(file).map(([id]) => `${file.split("/").pop()}:${id}`),
+    );
+    expect(found).toEqual(
+      expect.arrayContaining([
+        "deploy-production.yml:plan",
+        "deploy-production.yml:deploy",
+        "deploy-staging.yml:deploy",
+      ]),
+    );
+  });
+
+  it("passes it from vars.TC_STAGE_SIZE at job level in each of them", () => {
+    for (const file of workflowFiles) {
+      for (const [id, job] of sstJobsOf(file)) {
+        expect(job.env?.TC_STAGE_SIZE, `${file} ${id}`).toBe("${{ vars.TC_STAGE_SIZE }}");
+      }
+    }
+  });
+});
+
+// WPU-Z11 (VERIFY of 2026-11-13): this repository was created after 2026-07-15, so GitHub signs the
+// immutable subject form with the owner and repository ids. The comments that tell DevOps what the trust
+// policy checks name that form, and the job_workflow_ref value has no "repo:" prefix.
+describe("the workflows document the OIDC subject that GitHub sends today (WPU-Z11)", () => {
+  for (const [name, { text }] of deployWorkflows) {
+    it(`${name} names repo:<org>@<owner-id>/<repo>@<repo-id>:environment:<name>`, () => {
+      expect(text).toContain("repo:<org>@<owner-id>/<repo>@<repo-id>:environment:");
+      expect(text).not.toMatch(/sub = repo:<org>\/<repo>:/);
+      expect(text).not.toMatch(/job_workflow_ref = repo:/);
+    });
+  }
+});

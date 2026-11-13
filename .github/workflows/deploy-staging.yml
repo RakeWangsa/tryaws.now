@@ -2,11 +2,16 @@ name: deploy-staging
 
 # WP0-T6. Deploys the SST app to the staging stage. Manual only, and only from the protected branch.
 #
-# Approval: the job `deploy` uses the GitHub environment `staging`; DevOps sets required reviewers on it.
+# Approval: the job `deploy` uses the GitHub environment `staging` (required reviewers where the GitHub plan
+# offers them; a private repository on the owner's plan has none, so starting the run is the approval).
 # Credentials: GitHub OIDC (R3). There is no AWS key in GitHub, no `secrets.*` in this file. The role is
-# assumed in the staging account only. Trust policy of that role (DevOps creates it, see JOURNEY.md):
+# TcCiDeployStaging (infra/org/ci-deploy-staging.yaml, deployed by scripts/golive/ci-roles.sh). Its trust:
 #   token.actions.githubusercontent.com:aud = sts.amazonaws.com
-#   token.actions.githubusercontent.com:sub = repo:<org>/<repo>:environment:staging
+#   token.actions.githubusercontent.com:sub = repo:<org>@<owner-id>/<repo>@<repo-id>:environment:staging
+#   token.actions.githubusercontent.com:job_workflow_ref = <org>/<repo>/.github/workflows/deploy-staging.yml@refs/heads/main
+# The sub is GitHub's immutable form with the owner and repository ids: every repository created or renamed
+# after 2026-07-15 gets it (GitHub OIDC reference, VERIFY result of WPU-Z11).
+# TC_STAGE_SIZE (lean or full; unset is full) comes from the environment like the other stage values.
 # Secrets of the app (EPS keys and so on) are set by a person with `sst secret set` and live in AWS.
 
 on:
@@ -89,6 +94,7 @@ jobs:
       TC_SES_FROM_ADDRESS: ${{ vars.TC_SES_FROM_ADDRESS }}
       TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
       TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
+      TC_STAGE_SIZE: ${{ vars.TC_STAGE_SIZE }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
