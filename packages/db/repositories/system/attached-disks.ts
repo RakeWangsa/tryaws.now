@@ -35,13 +35,32 @@ export interface AttachedDiskOperation {
 const ENDS_WITH_SERVER = new Set(["active", "grace", "retained"]);
 
 /**
+ * WPU-Y4 fix round 2. The status a disk subscription had before the cascade retained it with its server: `active`
+ * or `grace` (the cascade retained it, a revival of the server gives it back), or `retained` (it was retained on its
+ * own; a revival of the server does not touch it).
+ */
+export type RetainedFrom = "active" | "grace" | "retained";
+
+/** The mark `resources.config.retainedWithServer` of a disk retained with its server (worker_rw writes it). */
+export const RETAINED_WITH_SERVER_KEY = "retainedWithServer";
+
+const isFrom = (v: unknown): v is RetainedFrom =>
+  v === "active" || v === "grace" || v === "retained";
+
+/**
  * The disks attached to `serverId` that still live, under the lock of their subscriptions, retained with their
  * operations. Returns the operations (created or replayed) so the engine can send the queue messages after commit.
+ * The payload of a new operation names the server (`withServer`) and the disk's status before (`from`).
+ * `markConfig` (worker_rw only: web_rw may not update resources) also writes the mark `retainedWithServer =
+ * { serverId, from }` on the disk, which the disk adapter and the guard read when the payload of a replayed
+ * destroy (one the disk got on its own) has no `withServer`, and which a revival of the server reads to give the
+ * disk its status back (releaseServerDisks of @tc/core).
  */
 export async function retainAttachedDisks(
   tx: Tx,
   input: { readonly customerId: string; readonly serverId: string },
   now: Date,
+  options: { readonly markConfig?: boolean } = {},
 ): Promise<AttachedDiskOperation[]> {
   if (!isUuid(input.customerId)) throw new TypeError("attached disks: customer id is not a UUID");
   if (!isUuid(input.serverId)) throw new TypeError("attached disks: server id is not a UUID");
@@ -50,8 +69,15 @@ export async function retainAttachedDisks(
     subscription_id: string;
     status: string;
     period_end: unknown;
+    mark: unknown;
+    payload_from: unknown;
   }>(sql`
-    select r.id as disk_id, s.id as subscription_id, s.status, s.period_end
+    select r.id as disk_id, s.id as subscription_id, s.status, s.period_end,
+      r.config -> 'retainedWithServer' as mark,
+      (select o.payload ->> 'from' from operations o
+        where o.resource_id = r.id and o.kind = 'destroy'
+          and o.payload ->> 'withServer' = ${input.serverId}
+        order by o.created_at desc, o.id desc limit 1) as payload_from
     from resources r
     join subscriptions s on s.resource_id = r.id
     where r.customer_id = ${input.customerId} and s.customer_id = ${input.customerId}
@@ -65,10 +91,33 @@ export async function retainAttachedDisks(
   const out: AttachedDiskOperation[] = [];
   for (const row of rows) {
     if (!ENDS_WITH_SERVER.has(row.status)) continue;
+    const mark =
+      typeof row.mark === "object" && row.mark !== null
+        ? (row.mark as Record<string, unknown>)
+        : null;
+    const marked = mark !== null && mark["serverId"] === input.serverId && isFrom(mark["from"]);
+    // What the disk was before: its own status now, or (already retained) what this cascade recorded before,
+    // else it was retained on its own.
+    const from: RetainedFrom =
+      row.status === "active" || row.status === "grace"
+        ? row.status
+        : marked
+          ? (mark["from"] as RetainedFrom)
+          : isFrom(row.payload_from)
+            ? row.payload_from
+            : "retained";
     if (row.status !== "retained") {
       await tx.execute(sql`
         update subscriptions set status = 'retained'
         where id = ${row.subscription_id} and customer_id = ${input.customerId}`);
+    }
+    if (options.markConfig === true && !marked) {
+      const value = JSON.stringify({
+        [RETAINED_WITH_SERVER_KEY]: { serverId: input.serverId, from },
+      });
+      await tx.execute(sql`
+        update resources set config = config || ${value}::jsonb
+        where id = ${row.disk_id} and customer_id = ${input.customerId}`);
     }
     const periodEnd =
       row.period_end instanceof Date ? row.period_end : new Date(String(row.period_end));
@@ -78,7 +127,7 @@ export async function retainAttachedDisks(
         {
           resourceId: row.disk_id,
           kind,
-          payload: { subscriptionId: row.subscription_id, withServer: input.serverId },
+          payload: { subscriptionId: row.subscription_id, withServer: input.serverId, from },
           idempotencyKey: lifecycleOperationKey(kind, row.subscription_id, periodEnd),
         },
         now,
@@ -93,4 +142,109 @@ export async function retainAttachedDisks(
     }
   }
   return out;
+}
+
+export interface DiskRetainedWithServer {
+  readonly diskId: string;
+  readonly subscriptionId: string;
+  readonly status: string;
+  /** The status before the cascade; `retained` = retained on its own (or unknown: fail closed, nothing given back). */
+  readonly from: RetainedFrom;
+}
+
+/**
+ * WPU-Y4 fix round 2 (worker_rw). The disks of this customer that the cascade retained with `serverId` (the mark on
+ * the disk, or a destroy whose payload names the server), under the lock of their subscriptions.
+ */
+export async function listDisksRetainedWithServer(
+  tx: Tx,
+  input: { readonly customerId: string; readonly serverId: string },
+): Promise<DiskRetainedWithServer[]> {
+  if (!isUuid(input.customerId)) throw new TypeError("attached disks: customer id is not a UUID");
+  if (!isUuid(input.serverId)) throw new TypeError("attached disks: server id is not a UUID");
+  const { rows } = await tx.execute<{
+    disk_id: string;
+    subscription_id: string;
+    status: string;
+    mark_server: unknown;
+    mark_from: unknown;
+    payload_from: unknown;
+  }>(sql`
+    select r.id as disk_id, s.id as subscription_id, s.status,
+      r.config -> 'retainedWithServer' ->> 'serverId' as mark_server,
+      r.config -> 'retainedWithServer' ->> 'from' as mark_from,
+      (select o.payload ->> 'from' from operations o
+        where o.resource_id = r.id and o.kind = 'destroy'
+          and o.payload ->> 'withServer' = ${input.serverId}
+        order by o.created_at desc, o.id desc limit 1) as payload_from
+    from resources r
+    join subscriptions s on s.resource_id = r.id
+    where r.customer_id = ${input.customerId} and s.customer_id = ${input.customerId}
+      and r.family = 'disk'
+      and r.state not in ('destroyed', 'failed')
+      and r.deleted_at is null
+      and (r.config -> 'retainedWithServer' ->> 'serverId' = ${input.serverId}
+        or exists (select 1 from operations o
+          where o.resource_id = r.id and o.kind = 'destroy'
+            and o.payload ->> 'withServer' = ${input.serverId}))
+    order by r.id
+    for update of s`);
+  return rows.map((row) => ({
+    diskId: row.disk_id,
+    subscriptionId: row.subscription_id,
+    status: row.status,
+    from:
+      row.mark_server === input.serverId && isFrom(row.mark_from)
+        ? row.mark_from
+        : isFrom(row.payload_from)
+          ? row.payload_from
+          : "retained",
+  }));
+}
+
+/** WPU-Y4 fix round 2 (worker_rw). Removes the mark `retainedWithServer` of one disk of this customer. */
+export async function clearRetainedWithServer(
+  tx: Tx,
+  input: { readonly customerId: string; readonly diskId: string },
+): Promise<void> {
+  if (!isUuid(input.customerId)) throw new TypeError("attached disks: customer id is not a UUID");
+  if (!isUuid(input.diskId)) throw new TypeError("attached disks: disk id is not a UUID");
+  await tx.execute(sql`
+    update resources set config = config - 'retainedWithServer'
+    where id = ${input.diskId} and customer_id = ${input.customerId} and family = 'disk'`);
+}
+
+/**
+ * WPU-Y4 fix round 2 (the guard, R13). The subscription status of `serverId` when it is a server of the same
+ * customer as the disk `diskId`; null otherwise (another customer's id, a missing row: the guard refuses).
+ */
+export async function serverStatusForDisk(
+  tx: Tx,
+  input: { readonly diskId: string; readonly serverId: string },
+): Promise<string | null> {
+  if (!isUuid(input.diskId) || !isUuid(input.serverId)) return null;
+  const { rows } = await tx.execute<{ status: string }>(sql`
+    select s.status from resources d
+    join resources srv on srv.customer_id = d.customer_id
+    join subscriptions s on s.resource_id = srv.id and s.customer_id = srv.customer_id
+    where d.id = ${input.diskId} and srv.id = ${input.serverId}
+      and srv.family in ('linux_instance', 'windows_instance')`);
+  return rows[0]?.status ?? null;
+}
+
+/**
+ * WPU-Y4 fix round 2 (point 2). The subscription status of the server a disk is attached to, when that server is
+ * the customer's own; null when the disk is not attached to one of the customer's servers.
+ */
+export async function attachedServerStatus(
+  tx: Tx,
+  input: { readonly customerId: string; readonly serverId: string },
+): Promise<string | null> {
+  if (!isUuid(input.customerId) || !isUuid(input.serverId)) return null;
+  const { rows } = await tx.execute<{ status: string }>(sql`
+    select s.status from resources srv
+    join subscriptions s on s.resource_id = srv.id and s.customer_id = srv.customer_id
+    where srv.id = ${input.serverId} and srv.customer_id = ${input.customerId}
+      and srv.family in ('linux_instance', 'windows_instance')`);
+  return rows[0]?.status ?? null;
 }

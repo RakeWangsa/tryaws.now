@@ -104,6 +104,40 @@ function setup(diskConfig: Record<string, unknown> = {}) {
   return { aws, adapter, ctx, calls, store };
 }
 
+// WPU-Y4 fix round 2 (point 3): a destroy the disk got on its own (no withServer in its payload), replayed by the
+// cascade, follows the disk's mark `retainedWithServer` the lifecycle wrote: it waits for the server's stop instead
+// of going to needs_attention at once.
+describe("a replayed standalone destroy of a disk retained with its server", () => {
+  const plain = { subscriptionId: SUB_ID };
+
+  it("waits for the server named by the mark, then detaches", async () => {
+    const mark = { retainedWithServer: { serverId: SERVER_ID, from: "retained" } };
+    const a = setup(mark);
+    a.aws.on("lightsail", "GetDisk", attached());
+    a.aws.on("lightsail", "GetInstance", serverIn("running"));
+    expect(await a.adapter.aws.destroy(a.ctx(null, plain))).toMatchObject({
+      kind: "wait",
+      step: "wait_server",
+    });
+    const b = setup(mark);
+    b.aws.on("lightsail", "GetDisk", attached());
+    b.aws.on("lightsail", "GetInstance", serverIn("stopped"));
+    b.aws.on("lightsail", "DetachDisk", lightsailOk({ operations: [] }));
+    expect(await b.adapter.aws.destroy(b.ctx("wait_server", plain))).toMatchObject({
+      kind: "wait",
+      step: "wait_detached",
+    });
+  });
+
+  it("a mark whose server is not an id is refused (R16)", async () => {
+    const { aws, adapter, ctx } = setup({ retainedWithServer: { serverId: "x", from: "active" } });
+    aws.on("lightsail", "GetDisk", attached());
+    await expect(adapter.aws.destroy(ctx(null, plain))).rejects.toMatchObject({
+      code: "validation",
+    });
+  });
+});
+
 // WPU-Y4 fix round 1: a disk destroyed on its own (no withServer) bounds its wait for the detach from when the
 // destroy step started (after the approval), not from when the operation was queued.
 describe("standalone disk destroy: the detach wait runs from the step's start", () => {

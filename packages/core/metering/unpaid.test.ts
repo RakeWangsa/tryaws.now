@@ -119,6 +119,7 @@ function build(init: Partial<World> = {}) {
     balanceReads: 0,
     superseded: 0,
     clockStarts: [] as string[],
+    releaseDisks: 0,
   };
   const fake: UnpaidOps = {
     enabled: async () => w.enabled,
@@ -266,6 +267,9 @@ function build(init: Partial<World> = {}) {
     setStatus: async (_tx, _s, status) => {
       calls.setStatus.push(status);
       w.status = status;
+    },
+    releaseDisks: async () => {
+      calls.releaseDisks += 1;
     },
     retain: async (_tx, row, _now, episode) => {
       calls.retain += 1;
@@ -630,6 +634,8 @@ describe("paying restores; deletion never follows a payment", () => {
     await t.run();
     expect(t.calls.setStatus).toEqual(["active"]);
     expect(t.calls.retain).toBe(0);
+    // WPU-Y4 fix round 2: the disks retained with the server are given back in the same transaction.
+    expect(t.calls.releaseDisks).toBe(1);
   });
 
   it("a subscription that was retained for another reason stays retained", async () => {
@@ -642,6 +648,7 @@ describe("paying restores; deletion never follows a payment", () => {
     });
     await t.run();
     expect(t.calls.setStatus).toEqual([]);
+    expect(t.calls.releaseDisks).toBe(0);
   });
 
   it("a destroyed resource is not listed and nothing happens to it", async () => {

@@ -1,3 +1,4 @@
+import { releaseServerDisks } from "../lifecycle/attached-disks";
 import {
   insertOperation,
   lifecycleRepo,
@@ -162,6 +163,11 @@ export interface UnpaidOps {
    * becomes `failed`. False when it was already claimed, approved or over.
    */
   cancel(tx: Tx, operationId: string): Promise<boolean>;
+  /**
+   * WPU-Y4 fix round 2. A server that leaves `retained` gives the disks retained with it their status back
+   * (releaseServerDisks). Optional: absent means a world without it.
+   */
+  releaseDisks?(tx: Tx, row: LifecycleRow): Promise<void>;
 }
 
 export const defaultUnpaidOps: UnpaidOps = {
@@ -207,6 +213,11 @@ export const defaultUnpaidOps: UnpaidOps = {
   supersedeFinal: (tx, resourceId) => meteringRepo(tx).supersedeFinalBackups(resourceId),
   resourceOps: (tx, resourceId, kinds) => meteringRepo(tx).operationsOf(resourceId, kinds),
   cancel: (tx, operationId) => meteringRepo(tx).cancelUnstarted(operationId),
+  releaseDisks: async (tx, row) => {
+    if (row.resource.family !== "linux_instance" && row.resource.family !== "windows_instance")
+      return;
+    await releaseServerDisks(tx, { customerId: row.customerId, serverId: row.resourceId });
+  },
 };
 
 export interface UnpaidDeps {
@@ -549,6 +560,8 @@ async function processOne(
       status = config.unpaidRetainedFrom === "active" ? "active" : "grace";
       await ops.setStatus(tx, row.id, status);
       await releaseFinalSnapshots(tx, ops, deps, row, count, sinceMs);
+      // WPU-Y4 fix round 2: the disks retained with the server are given back in the same transaction.
+      await ops.releaseDisks?.(tx, row);
     }
     // WPU-Y3c. A suspend of the job that has not started is CANCELLED, not answered with a blind resume
     // (the review found that a resume could lift an admin's suspension queued in the meantime). A resume

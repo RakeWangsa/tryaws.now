@@ -1,6 +1,13 @@
 import { expect, it } from "vitest";
 import type { CustomerRepos } from "../repositories/customer/index";
-import { lifecycleOperationKey, retainAttachedDisks } from "../repositories/system/attached-disks";
+import {
+  attachedServerStatus,
+  clearRetainedWithServer,
+  lifecycleOperationKey,
+  listDisksRetainedWithServer,
+  retainAttachedDisks,
+  serverStatusForDisk,
+} from "../repositories/system/attached-disks";
 import { withCustomerRepos } from "../testing/repos";
 import { newCustomer, newResource } from "./fixtures";
 import { insertRow } from "./sql";
@@ -63,6 +70,13 @@ const opsOf = (resourceId: string) =>
       [resourceId],
     )
     .then((r) => r.rows);
+const markOf = (resourceId: string) =>
+  t.pool
+    .query<{ mark: unknown }>(
+      "select config -> 'retainedWithServer' as mark from resources where id = $1",
+      [resourceId],
+    )
+    .then((r) => r.rows[0]?.mark ?? null);
 const statusOf = (resourceId: string) =>
   t.pool
     .query<{ status: string }>("select status from subscriptions where resource_id = $1", [
@@ -90,7 +104,13 @@ it("the customer's destroy of a server retains its attached disks and queues the
     lifecycleOperationKey("final_snapshot", attached.subscriptionId, new Date(PERIOD_END)),
     lifecycleOperationKey("destroy", attached.subscriptionId, new Date(PERIOD_END)),
   ]);
-  expect(ops[1]?.payload).toEqual({ subscriptionId: attached.subscriptionId, withServer: srv });
+  expect(ops[1]?.payload).toEqual({
+    subscriptionId: attached.subscriptionId,
+    withServer: srv,
+    from: "active",
+  });
+  // web_rw writes no mark (it may not update resources); the payload carries the server and the former status.
+  expect(await markOf(attached.id)).toBeNull();
   // A disk that is not attached to the server is not touched.
   expect(await statusOf(free.id)).toBe("active");
   expect(await opsOf(free.id)).toEqual([]);
@@ -173,4 +193,93 @@ it("refuses ids that are not UUIDs before any statement (R16)", async () => {
       retainAttachedDisks(tx, { customerId: "x", serverId: "y" }, new Date()),
     ),
   ).rejects.toThrow(TypeError);
+});
+
+// WPU-Y4 fix round 2: the mark of the worker path, the list a revival reads, and the server status the guard reads.
+it("markConfig writes retainedWithServer = { serverId, from } once; a disk retained on its own is marked from retained", async () => {
+  const a = await newCustomer(t.pool);
+  const srv = await server(a);
+  const graceDisk = await disk(a, srv, "grace");
+  const ownDisk = await disk(a, srv, "retained");
+  await t.db.transaction((tx) =>
+    retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date(), { markConfig: true }),
+  );
+  expect(await markOf(graceDisk.id)).toEqual({ serverId: srv, from: "grace" });
+  expect(await markOf(ownDisk.id)).toEqual({ serverId: srv, from: "retained" });
+  // A replay keeps the first mark (the disk is retained now, its former status is the mark's).
+  await t.db.transaction((tx) =>
+    retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date(), { markConfig: true }),
+  );
+  expect(await markOf(graceDisk.id)).toEqual({ serverId: srv, from: "grace" });
+  const listed = await t.db.transaction((tx) =>
+    listDisksRetainedWithServer(tx, { customerId: a, serverId: srv }),
+  );
+  expect(new Map(listed.map((d) => [d.diskId, d.from]))).toEqual(
+    new Map([
+      [graceDisk.id, "grace"],
+      [ownDisk.id, "retained"],
+    ]),
+  );
+  await t.db.transaction((tx) =>
+    clearRetainedWithServer(tx, { customerId: a, diskId: graceDisk.id }),
+  );
+  expect(await markOf(graceDisk.id)).toBeNull();
+});
+
+it("a web-path cascade (no mark) is still found by the payload, with the former status of the payload", async () => {
+  const a = await newCustomer(t.pool);
+  const srv = await server(a);
+  const attached = await disk(a, srv);
+  await as(a, (r) =>
+    r.subscriptions.requestDestroy({
+      resourceId: srv,
+      idempotencyKey: "w1",
+      withFinalSnapshot: true,
+    }),
+  );
+  const listed = await t.db.transaction((tx) =>
+    listDisksRetainedWithServer(tx, { customerId: a, serverId: srv }),
+  );
+  expect(listed).toEqual([
+    {
+      diskId: attached.id,
+      subscriptionId: attached.subscriptionId,
+      status: "retained",
+      from: "active",
+    },
+  ]);
+  // Then the engine replays the cascade with the mark: the former status comes from the payload, not "retained".
+  await t.db.transaction((tx) =>
+    retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date(), { markConfig: true }),
+  );
+  expect(await markOf(attached.id)).toEqual({ serverId: srv, from: "active" });
+});
+
+it("cross-tenant (R8): the list, the server status for a disk and the attached server status read one customer only", async () => {
+  const a = await newCustomer(t.pool);
+  const b = await newCustomer(t.pool);
+  const srvA = await server(a);
+  const srvB = await server(b);
+  const diskA = await disk(a, srvA);
+  await t.db.transaction((tx) =>
+    retainAttachedDisks(tx, { customerId: a, serverId: srvA }, new Date(), { markConfig: true }),
+  );
+  expect(
+    await t.db.transaction((tx) =>
+      listDisksRetainedWithServer(tx, { customerId: b, serverId: srvA }),
+    ),
+  ).toEqual([]);
+  expect(
+    await t.db.transaction((tx) => serverStatusForDisk(tx, { diskId: diskA.id, serverId: srvA })),
+  ).toBe("active");
+  // B's server is never the server of A's disk: null, so the guard refuses.
+  expect(
+    await t.db.transaction((tx) => serverStatusForDisk(tx, { diskId: diskA.id, serverId: srvB })),
+  ).toBeNull();
+  expect(
+    await t.db.transaction((tx) => attachedServerStatus(tx, { customerId: a, serverId: srvA })),
+  ).toBe("active");
+  expect(
+    await t.db.transaction((tx) => attachedServerStatus(tx, { customerId: b, serverId: srvA })),
+  ).toBeNull();
 });

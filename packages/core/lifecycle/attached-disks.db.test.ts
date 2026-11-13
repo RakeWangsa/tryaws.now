@@ -7,7 +7,8 @@ import { runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, expect, it } from "vitest";
 import { makeKit, placeOne, START, type Kit } from "../test/orders-kit";
 import type { QueueMessage } from "../operations/queue";
-import { runLifecycle } from "./engine";
+import { runLifecycle, SERVER_HOLD_KEY } from "./engine";
+import { completeRestore } from "./restore";
 
 const t = useTempDatabase();
 const DAY = 24 * 3_600_000;
@@ -16,6 +17,27 @@ let kit: Kit;
 const worker = <T>(fn: (tx: Tx) => Promise<T>) => runTransaction(t.db, fn, { role: "worker_rw" });
 const q = async (sql: string, params: unknown[] = []) =>
   (await t.pool.query(sql, params)).rows as Record<string, unknown>[];
+
+const markOf = async (id: string) =>
+  (await q("select config -> 'retainedWithServer' as m from resources where id = $1", [id]))[0]!
+    .m ?? null;
+const configOf = async (id: string) =>
+  (await q("select config from resources where id = $1", [id]))[0]!.config as Record<
+    string,
+    unknown
+  >;
+const statusOf = async (resourceId: string) =>
+  String(
+    (await q("select status from subscriptions where resource_id = $1", [resourceId]))[0]!.status,
+  );
+const ledgerRows = async (subscriptionId: string) =>
+  Number(
+    (
+      await q("select count(*)::int as n from ledger_transactions where reference_id = $1", [
+        subscriptionId,
+      ])
+    )[0]!.n,
+  );
 
 beforeAll(async () => {
   kit = await makeKit(t);
@@ -93,7 +115,10 @@ it("retaining a server retains its attached disks and queues their final snapsho
   expect(ops[1]!.payload).toEqual({
     subscriptionId: attached.subscriptionId,
     withServer: s.serverId,
+    from: "active",
   });
+  // Fix round 2: the worker path marks the disk with the server and its former status.
+  expect(await markOf(attached.id)).toEqual({ serverId: s.serverId, from: "active" });
   // A queued operation of the disk is sent after the commit; one that waits for an admin is not (R13).
   const sentIds = new Set(sent.map((m) => JSON.stringify(m)));
   for (const op of ops) {
@@ -115,4 +140,75 @@ it("retaining a server retains its attached disks and queues their final snapsho
     attached.id,
   ]);
   expect(Number(again[0]!.n)).toBe(2);
+});
+
+// WPU-Y4 fix round 2 (money review 1): a revival of the server gives its disks back.
+it("completeRestore of the server gives the disk its former status, cancels its destroy and clears the mark", async () => {
+  const s = await serverPastGrace();
+  const attached = await disk(s.customerId, s.serverId);
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  expect(await statusOf(attached.id)).toBe("retained");
+  const serverSub = String(
+    (await q("select id from subscriptions where resource_id = $1", [s.serverId]))[0]!.id,
+  );
+  const before = await ledgerRows(attached.subscriptionId);
+  const restored = await worker((tx) =>
+    completeRestore(tx, { subscriptionId: serverSub, clock: kit.clock }),
+  );
+  expect(restored.ok).toBe(true);
+  expect(await statusOf(s.serverId)).toBe("active");
+  expect(await statusOf(attached.id)).toBe("active");
+  expect(await markOf(attached.id)).toBeNull();
+  const ops = await q(
+    "select kind, state, attempts from operations where resource_id = $1 order by created_at, id",
+    [attached.id],
+  );
+  // Neither the destroy nor the final snapshot of the disk can run any more (cancelled before they started).
+  expect(ops.map((o) => [o.kind, o.state])).toEqual([
+    ["final_snapshot", "failed"],
+    ["destroy", "failed"],
+  ]);
+  // No ledger change for the disk (R5).
+  expect(await ledgerRows(attached.subscriptionId)).toBe(before);
+  // A later pass does not retain the disk again: the server is active.
+  kit.clock.set(new Date(kit.clock.now().getTime() + 3_600_000));
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  expect(await statusOf(attached.id)).toBe("active");
+});
+
+// WPU-Y4 fix round 2 (money review 2): no renewal charge of a disk while its server is in grace.
+it("a disk whose server is in grace is not renewed (held with a mark); the mark goes once the server is active", async () => {
+  kit.clock.set(START);
+  const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
+  const { resourceId: serverId } = await placeOne(kit, buyer);
+  await q("update resources set state = 'active' where id = $1", [serverId]);
+  await q("update operations set state = 'succeeded' where resource_id = $1", [serverId]);
+  // In grace for one hour (the grace lasts longer): neither retained nor renewed on this pass.
+  await q(
+    "update subscriptions set status = 'grace', auto_renew = false, period_start = $2, period_end = $3 where resource_id = $1",
+    [serverId, new Date(START.getTime() - 30 * DAY), new Date(START.getTime() - 3_600_000)],
+  );
+  const d = await disk(buyer.customerId, serverId);
+  // The disk's own period ended an hour ago, auto-renew on: without the hold it would be charged now.
+  await q("update subscriptions set period_start = $2, period_end = $3 where id = $1", [
+    d.subscriptionId,
+    new Date(START.getTime() - 30 * DAY),
+    new Date(START.getTime() - 3_600_000),
+  ]);
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  expect(await statusOf(d.id)).toBe("active");
+  expect(await ledgerRows(d.subscriptionId)).toBe(0);
+  expect((await configOf(d.id))[SERVER_HOLD_KEY]).toMatchObject({ serverId });
+
+  // The server is paid up again: the hold mark goes on the next pass.
+  await q("update subscriptions set status = 'active', period_end = $2 where resource_id = $1", [
+    serverId,
+    new Date(START.getTime() + 30 * DAY),
+  ]);
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  expect((await configOf(d.id))[SERVER_HOLD_KEY] ?? null).toBeNull();
 });

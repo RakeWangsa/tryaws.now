@@ -50,6 +50,8 @@ What the platform does:
 2. The server's `destroy` (step `release_disks`) sees a block storage disk still attached: it stops the server (the stop is part of the approved destroy) and waits, at most 24 hours from its own first wait, until the disks are detached. It never sends DeleteInstance while a disk is attached.
 3. The disk's `destroy` (step `wait_server`) waits, at most 24 hours from its own first wait, until the server is stopped, then detaches the disk and deletes it. It never stops a server itself.
 4. Then the server's destroy deletes the instance and releases its static IP.
+5. A server that leaves `retained` (the customer pays the unpaid usage, or a restore) gives its disks back in the same transaction: each disk subscription gets its former status (`active` or `grace`, kept in the disk's mark `retainedWithServer` and in the destroy's payload `from`), its destroy and final snapshot that never started are cancelled, its final backups stop being final, and the mark goes. Nothing is posted to the ledger. A disk whose destroy already ran or was approved stays `retained` and a log line `attached_disks held` is written; the guard refuses that destroy while the server is not `retained`, so it ends in `needs_attention`: write a Needs decision.
+6. While a disk's server is in `grace` or `retained`, the disk is not renewed and not charged (mark `serverHold`); the mark goes when the server is `active` again and the disk's period end is then handled as usual.
 
 Operations:
 

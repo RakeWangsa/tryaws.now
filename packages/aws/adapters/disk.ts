@@ -271,10 +271,27 @@ export function createDiskAdapter(deps: BackupDeps): ProductAdapter<DiskConfig> 
     return state === "stopped";
   }
 
+  /**
+   * WPU-Y4. The server this destroy goes with: the payload's `withServer`, else (fix round 2) the disk's mark
+   * `retainedWithServer.serverId` that the lifecycle wrote when it retained the disk with its server (a destroy the
+   * disk got on its own and the cascade replayed has no `withServer` in its payload). undefined = none.
+   */
+  function withServerOf(ctx: OpCtx<DiskConfig>): unknown {
+    const fromPayload = payloadOf(ctx).withServer;
+    if (fromPayload !== undefined) return fromPayload;
+    const config = ctx.resource.config;
+    const mark =
+      typeof config === "object" && config !== null
+        ? (config as Record<string, unknown>)["retainedWithServer"]
+        : undefined;
+    if (mark === undefined || mark === null) return undefined;
+    return typeof mark === "object" ? (mark as Record<string, unknown>)["serverId"] : mark;
+  }
+
   async function destroy(ctx: OpCtx<DiskConfig>): Promise<StepResult> {
     const step = ctx.operation.step;
     if (step === null || step === "detach" || step === "wait_server" || step === "wait_detached") {
-      const withServer = payloadOf(ctx).withServer;
+      const withServer = withServerOf(ctx);
       if (withServer !== undefined && !isUuid(withServer)) throw fail("validation");
       const disk = await ourDisk(ctx);
       if (disk === null) return stepNext("delete_disk");
