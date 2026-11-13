@@ -202,16 +202,22 @@ describe("the wiring", () => {
     );
   });
 
-  // WPU-Y5 (a): the notifier logs notifier_sms_off at the start of a run without the SMS gateway. The metric
-  // exists on every stage; only production alarms (staging may run without an SMS contract).
-  it("counts notifier_sms_off from the notifier's log and alarms on it in production only", () => {
-    expect(alarms).toMatch(
+  // WPU-Y5 (a), fix round 1: the notifier logs notifier_sms_off at the start of a run without the SMS gateway. The
+  // metric has no stage dimension and staging runs with SMS off by design (one account), so the filter and the alarm
+  // are both created in production only: staging must never feed the production alarm.
+  it("counts notifier_sms_off from the notifier's log and alarms on it, both in production only", () => {
+    expect(alarms).toContain('const notifierFunction = workers.crons["notifier"]?.nodes.function;');
+    const guard = alarms.indexOf('if (stageKind(stage) === "production") {');
+    expect(guard).toBeGreaterThan(-1);
+    const end = alarms.indexOf("}", alarms.indexOf("notifierSmsOffAlarm = alertAlarm(", guard));
+    const block = alarms.slice(guard, end);
+    expect(block).toMatch(
       /alertFilter\( "NotifierSmsOffFilter", notifierFunction, \[ALERT_LOG_EVENTS\.notifierSmsOff\], "NotifierSmsOff", \)/,
     );
-    expect(alarms).toContain('const notifierFunction = workers.crons["notifier"]?.nodes.function;');
-    expect(alarms).toMatch(
-      /stageKind\(stage\) === "production" \? alertAlarm\( "NotifierSmsOffAlarm", "NotifierSmsOff",/,
-    );
+    expect(block).toContain('alertAlarm( "NotifierSmsOffAlarm", "NotifierSmsOff",');
+    // nowhere else: one filter and one alarm, both inside the guard
+    expect(alarms.split('"NotifierSmsOffFilter"')).toHaveLength(2);
+    expect(alarms.split('"NotifierSmsOffAlarm"')).toHaveLength(2);
     expect(alarms).toContain("notifierSmsOffAlarm,");
   });
 

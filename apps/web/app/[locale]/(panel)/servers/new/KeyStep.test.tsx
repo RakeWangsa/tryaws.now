@@ -23,7 +23,12 @@ vi.mock("./ssh-keygen.ts", async (importActual) => ({
 const { KeyStep } = await import("./KeyStep.tsx");
 
 const KEYS = [
-  { id: "0190aaaa-0000-7000-8000-0000000000c1", name: "Laptop", fingerprint: "SHA256:a" },
+  {
+    id: "0190aaaa-0000-7000-8000-0000000000c1",
+    name: "Laptop",
+    fingerprint: "SHA256:a",
+    usable: true,
+  },
 ];
 let ready: boolean[] = [];
 let downloads: { name: string; blob: Blob }[] = [];
@@ -120,6 +125,37 @@ describe("KeyStep", () => {
     expect(q('[name="keyPairId"]')).toBeNull();
     expect(q('textarea[name="newKeyPublic"]')).not.toBeNull();
     expect(ready.at(-1)).toBe(true);
+  });
+
+  // WPU-Y5 (e): a stored Ed25519/ECDSA key cannot start a server (ImportKeyPair takes ssh-rsa only).
+  it("lists a key that cannot start a server as disabled, with the reason, in en and bn", async () => {
+    const old = {
+      id: "0190aaaa-0000-7000-8000-0000000000c9",
+      name: "Old",
+      fingerprint: "SHA256:o",
+      usable: false,
+    };
+    await mount([old, ...KEYS]);
+    const options = [...(host as HTMLElement).querySelectorAll<HTMLOptionElement>("option")];
+    const disabled = options.find((o) => o.value === old.id);
+    expect(disabled?.disabled).toBe(true);
+    expect(disabled?.textContent).toBe(
+      "Old (cannot start a server: not an RSA key of 2048 bits or more)",
+    );
+    expect(options.find((o) => o.value === KEYS[0]?.id)?.disabled).toBe(false);
+    expect(value("keyPairId")).toBe(KEYS[0]?.id);
+    expect(ready.at(-1)).toBe(true);
+    await act(async () => root?.unmount());
+    host?.remove();
+    await mount([old], "bn");
+    // only unusable keys: the wizard starts on a new pair and is not ready
+    expect(q('[name="keyPairId"]')).toBeNull();
+    expect(ready.at(-1)).toBe(false);
+    // choosing the existing key shows the reason, and the step still is not ready
+    await click(radioOf("আমার আগের কী ব্যবহার করব"));
+    expect(html()).toContain("২০৪৮ বিট বা তার বেশি RSA কী নয়");
+    expect(q<HTMLOptionElement>("option")?.disabled).toBe(true);
+    expect(ready.at(-1)).toBe(false);
   });
 
   it("without a key it starts on a new pair and is not ready until the private key was downloaded", async () => {

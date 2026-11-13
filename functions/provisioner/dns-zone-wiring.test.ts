@@ -128,8 +128,18 @@ describe("dns_zone in the provisioner", () => {
         ])
       ).rows[0],
     ).toEqual({ pool_account_id: null, product_id: null });
+    // WPU-Y5 (c): step null only moves to create_zone (no AWS call), then the next message runs CreateHostedZone.
+    expect(await runStep(deps, message(id, zone.resourceId))).toMatchObject({
+      outcome: "advanced",
+      to: "queued",
+    });
+    expect(await operationRow(t.pool, id)).toMatchObject({
+      state: "queued",
+      step: "create_zone",
+      enqueue_seq: 1,
+    });
     // WPU-Z19: CreateHostedZone, then a wait for GetChange INSYNC; the zone is active only after it.
-    const first = await runStep(deps, message(id, zone.resourceId));
+    const first = await runStep(deps, message(id, zone.resourceId, 1));
     expect(first).toMatchObject({ outcome: "advanced", to: "waiting" });
     expect(await operationRow(t.pool, id)).toMatchObject({ state: "waiting", step: "wait_insync" });
     expect(
@@ -137,7 +147,7 @@ describe("dns_zone in the provisioner", () => {
     ).toEqual({ state: "creating" });
     // The sweeper queues a due wait again (the time the adapter named is not waited for here).
     await t.pool.query("update operations set state = 'queued' where id = $1", [id]);
-    const out = await runStep(deps, message(id, zone.resourceId));
+    const out = await runStep(deps, message(id, zone.resourceId, 1));
     expect(out).toMatchObject({ outcome: "advanced", to: "succeeded" });
     expect(await operationRow(t.pool, id)).toMatchObject({ state: "succeeded" });
 
@@ -180,7 +190,9 @@ describe("dns_zone in the provisioner", () => {
       // The reversal of the money is the orderHooks and has its own tests; this one is the row.
       hooks: dnsZoneHooks(),
     });
-    const out = await runStep(deps, message(id, zone.resourceId));
+    // step null moves to create_zone; CreateHostedZone is refused there by its own input check
+    expect(await runStep(deps, message(id, zone.resourceId))).toMatchObject({ to: "queued" });
+    const out = await runStep(deps, message(id, zone.resourceId, 1));
     expect(out).toMatchObject({ outcome: "advanced", to: "failed" });
     expect(
       (await t.pool.query("select status from dns_zones where resource_id = $1", [zone.resourceId]))

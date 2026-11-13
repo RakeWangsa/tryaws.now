@@ -20,7 +20,8 @@ function ctxFor(
     operation: {
       id: extra.opId ?? "0190a000-0000-7000-8000-000000000001",
       kind: "create",
-      step: extra.step ?? null,
+      // WPU-Y5 (c): CreateHostedZone runs at create_zone; step null only moves there.
+      step: "step" in extra ? (extra.step ?? null) : "create_zone",
       attempt: 1,
       createdAt: NOW,
       payload: {},
@@ -256,6 +257,20 @@ describe("the zone adapter", () => {
       kind: "done",
       patch: { state: "active", configMerge: { hostedZoneId: "Z000001" } },
     });
+    expect(fake.calls.filter((c) => c.op === "createHostedZone")).toHaveLength(1);
+  });
+
+  it("WPU-Y5: step null only moves to create_zone, with no AWS call; CreateHostedZone runs at create_zone", async () => {
+    const fake = createFakeRoute53();
+    const adapter = createDnsZoneAdapter({ route53: () => fake.port });
+    expect(await adapter.aws.create(ctxFor({ zoneName: "example.com" }, { step: null }))).toEqual({
+      kind: "next",
+      step: "create_zone",
+    });
+    expect(fake.calls).toEqual([]);
+    expect(
+      await adapter.aws.create(ctxFor({ zoneName: "example.com" }, { step: "create_zone" })),
+    ).toMatchObject({ kind: "wait", step: "wait_insync" });
     expect(fake.calls.filter((c) => c.op === "createHostedZone")).toHaveLength(1);
   });
 

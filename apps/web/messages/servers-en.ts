@@ -115,6 +115,7 @@ export const serversEn: Same<typeof serversBn> = {
       keyName: "Key name",
       keyNameHint: "English letters, digits, spaces, dots, dashes and underscores, up to 60.",
       keyNameTaken: "You already have another key with this name. Use a different name.",
+      keyNotUsable: "{name} (cannot start a server: not an RSA key of 2048 bits or more)",
       keyPublic: "Public key",
       keyPublicHint:
         "One line that starts with ssh-rsa (an RSA key of 2048 bits or more). Never paste a private key here.",

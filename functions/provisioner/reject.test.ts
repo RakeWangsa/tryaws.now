@@ -196,30 +196,73 @@ describe("reject_operation, run by the provisioner as worker_rw", () => {
     ]);
   });
 
-  it("WPU-Y5: a dns_zone create at create_zone (no zone known yet) is rejected with its refund", async () => {
-    const events: unknown[] = [];
-    const { deps } = setup({
-      hooks: {
-        failed: async (_tx, e) => {
-          events.push(e);
-        },
-      },
-    });
+  // WPU-Y5 (c), fix round 1: at create_zone an earlier attempt may have sent CreateHostedZone with its answer lost.
+  const zoneCreate = async (over: Record<string, unknown>) => {
     const resourceId = await seedResource(t.pool, world, { family: "dns_zone" });
     const targetId = await seedOperation(t.pool, resourceId, {
       kind: "create",
       state: "needs_attention",
-      step: "create_zone",
-      attempts: 5,
       payload: { orderId: world.orderId },
+      ...over,
     });
-    const m = await reject(targetId);
-    expect(await runStep(deps, m)).toMatchObject({ outcome: "advanced", to: "succeeded" });
-    expect(await operationRow(t.pool, targetId)).toMatchObject({
-      state: "failed",
-      last_error: "rejected",
-    });
-    expect(events).toHaveLength(1);
+    return { resourceId, targetId };
+  };
+
+  it("WPU-Y5: a dns_zone create at create_zone after an attempt (attempts > 0 or a last error) is not rejected: zone_created", async () => {
+    for (const over of [
+      { step: "create_zone", attempts: 5, last_error: "upstream_unavailable:ServiceException" },
+      { step: "create_zone", attempts: 1 },
+      { step: "create_zone", attempts: 0, last_error: "lease_expired" },
+    ]) {
+      const events: unknown[] = [];
+      const { deps } = setup({
+        hooks: {
+          failed: async (_tx, e) => {
+            events.push(e);
+          },
+        },
+      });
+      const { targetId } = await zoneCreate(over);
+      const m = await reject(targetId);
+      expect(await runStep(deps, m), JSON.stringify(over)).toMatchObject({
+        to: "needs_attention",
+      });
+      expect(await operationRow(t.pool, m.operationId)).toMatchObject({
+        state: "needs_attention",
+        last_error: "zone_created",
+      });
+      expect(await operationRow(t.pool, targetId)).toMatchObject({
+        state: "needs_attention",
+        step: "create_zone",
+      });
+      expect(events).toEqual([]);
+    }
+  });
+
+  it("WPU-Y5: a dns_zone create that cannot have sent CreateHostedZone is rejected with its refund", async () => {
+    for (const over of [
+      { step: null, attempts: 5, last_error: "upstream_unavailable:ServiceException" },
+      { step: "create_zone", attempts: 0 },
+      // the local input check of createHostedZone: the same input at every attempt, so nothing was ever sent
+      { step: "create_zone", attempts: 3, last_error: "validation" },
+    ]) {
+      const events: unknown[] = [];
+      const { deps } = setup({
+        hooks: {
+          failed: async (_tx, e) => {
+            events.push(e);
+          },
+        },
+      });
+      const { targetId } = await zoneCreate(over);
+      const m = await reject(targetId);
+      expect(await runStep(deps, m), JSON.stringify(over)).toMatchObject({ to: "succeeded" });
+      expect(await operationRow(t.pool, targetId)).toMatchObject({
+        state: "failed",
+        last_error: "rejected",
+      });
+      expect(events).toHaveLength(1);
+    }
   });
 
   it("WPU-Z13 review round 2: a domain renewal at step submit (RenewDomain may have been sent, its answer lost) is not rejected either: renewal_submitted, the target stays and no hook runs", async () => {

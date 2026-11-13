@@ -105,8 +105,17 @@ describe("scripts/golive/tag-ruleset.sh", () => {
     const wrong = run({ FAKE_SHAPE: "tag evaluate refs/tags/v* creation,deletion,update" });
     expect(wrong.status).toBe(1);
     expect(wrong.stderr).toContain("does not hold the wanted form");
+    // fix round 1: a read-back that fails after a successful write never says "Nothing changed"
     const unreadable = run({ FAKE_FAIL_READ: "500" });
     expect(unreadable.status).toBe(1);
+    expect(unreadable.stderr).toContain("HTTP 500");
+    expect(unreadable.stderr).toContain("The ruleset WAS written (created 777)");
+    expect(unreadable.stderr).toContain("check tc-release-tags in the GitHub settings");
+    expect(unreadable.stderr).not.toContain("Nothing changed");
+    const updatedUnreadable = run({ FAKE_IDS: "4242", FAKE_FAIL_READ: "403" });
+    expect(updatedUnreadable.status).toBe(1);
+    expect(updatedUnreadable.stderr).toContain("The ruleset WAS written (updated 4242)");
+    expect(updatedUnreadable.stderr).not.toContain("Nothing changed");
     const two = run({ FAKE_IDS: "1 2" });
     expect(two.status).toBe(1);
     expect(two.stderr).toContain("more than one ruleset");

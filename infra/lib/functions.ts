@@ -343,7 +343,7 @@ export const ALERT_LOG_EVENTS = {
   // The healthy line of a run: its silence is an alarm too.
   reconcileOk: "reconcile_ok",
   // functions/notifier/build.ts (the notifier, every minute): WPU-Y5 (a), a run started without the SMS gateway
-  // (an SMS secret on the placeholder). Counted on every stage; production alarms on it.
+  // (an SMS secret on the placeholder). Counted and alarmed in production only (staging runs with SMS off).
   notifierSmsOff: "notifier_sms_off",
 } as const;
 // WPU-Z1: the value of the field `reason` that an alert matches next to its event, written by the same code (the

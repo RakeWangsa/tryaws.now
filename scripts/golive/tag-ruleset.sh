@@ -37,18 +37,26 @@ die() {
   exit "${2:-1}"
 }
 
-# fail_from <answer of a failed gh api call>: a clear message by HTTP status, never the answer itself.
+# fail_from <answer of a failed gh api call> [written]: a clear message by HTTP status, never the answer itself.
+# Before any write it says "Nothing changed."; with `written` (the read-back after a successful POST or PUT) it says
+# that the ruleset was written and must be checked in the GitHub settings.
 fail_from() {
-  local status
+  local status outcome
   status="$(grep -oE 'HTTP [0-9]{3}' <<<"$1" | tail -n 1 | cut -d' ' -f2 || true)"
+  if [[ "${2:-}" == "written" ]]; then
+    outcome="The ruleset WAS written (${ACTION:-written} ${RULESET_ID:-}), but it could not be read back: check ${RULESET_NAME} in the GitHub settings (Rules, Rulesets)."
+  else
+    outcome="Nothing changed."
+  fi
   case "$status" in
     403)
-      die "GitHub answered HTTP 403: rulesets on a private repository need GitHub Pro (or Team). Nothing changed. Buy GitHub Pro, then run this again (docs/runbooks/go-live.md)." 3
+      if [[ "${2:-}" == "written" ]]; then die "GitHub answered HTTP 403 to the read-back. ${outcome}"; fi
+      die "GitHub answered HTTP 403: rulesets on a private repository need GitHub Pro (or Team). ${outcome} Buy GitHub Pro, then run this again (docs/runbooks/go-live.md)." 3
       ;;
-    404) die "GitHub answered HTTP 404: the repository is not visible to the gh login, or the login is not a repository admin. Nothing changed." ;;
-    401) die "GitHub answered HTTP 401: gh is not logged in (run gh auth login yourself). Nothing changed." ;;
-    "") die "gh api failed without an HTTP status (network or gh error). Nothing changed." ;;
-    *) die "GitHub answered HTTP ${status}. Nothing changed." ;;
+    404) die "GitHub answered HTTP 404: the repository is not visible to the gh login, or the login is not a repository admin. ${outcome}" ;;
+    401) die "GitHub answered HTTP 401: gh is not logged in (run gh auth login yourself). ${outcome}" ;;
+    "") die "gh api failed without an HTTP status (network or gh error). ${outcome}" ;;
+    *) die "GitHub answered HTTP ${status}. ${outcome}" ;;
   esac
 }
 
@@ -102,7 +110,7 @@ readonly SHAPE_JQ='[.target, .enforcement, (.conditions.ref_name.include | join(
   ([.rules[].type] | sort | join(",")),
   ([.bypass_actors[] | "\(.actor_type):\(.actor_id):\(.bypass_mode)"] | join(","))] | join(" ")'
 if ! SHAPE="$(gh api -H "$API_VERSION" "${REPO_PATH}/rulesets/${RULESET_ID}" --jq "$SHAPE_JQ" 2>&1)"; then
-  fail_from "$SHAPE"
+  fail_from "$SHAPE" written
 fi
 readonly WANTED="tag active ${TAG_PATTERN} creation,deletion,update RepositoryRole:${ADMIN_ROLE_ID}:always"
 [[ "$SHAPE" == "$WANTED" ]] || die "ruleset ${RULESET_ID} does not hold the wanted form after the ${ACTION%d}; check it in the GitHub settings"

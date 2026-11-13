@@ -152,7 +152,7 @@ describe("loadRunView", () => {
 });
 
 describe("loadOperationBrief and loadOwnedResource", () => {
-  it("the brief has five columns, is null for an unknown id and a non-UUID, and locks the row", async () => {
+  it("the brief has seven columns, is null for an unknown id and a non-UUID, and locks the row", async () => {
     const id = await seed("needs_attention");
     expect(await worker((tx) => loadOperationBrief(tx, id))).toEqual({
       id,
@@ -160,6 +160,8 @@ describe("loadOperationBrief and loadOwnedResource", () => {
       kind: "reboot",
       state: "needs_attention",
       step: null,
+      attempts: 0,
+      lastError: null,
     });
     // WPU-Z13: the step tells the rejection whether the registry holds a domain renewal already.
     const held = await seed("needs_attention", { kind: "renew_domain", step: "poll" });
@@ -169,6 +171,20 @@ describe("loadOperationBrief and loadOwnedResource", () => {
       kind: "renew_domain",
       state: "needs_attention",
       step: "poll",
+      attempts: 0,
+      lastError: null,
+    });
+    // WPU-Y5 (c): attempts and last_error tell whether a dns_zone create at create_zone may have sent the create.
+    const tried = await seed("needs_attention", {
+      kind: "create",
+      step: "create_zone",
+      attempts: 2,
+      last_error: "upstream_unavailable:ServiceException",
+    });
+    expect(await worker((tx) => loadOperationBrief(tx, tried))).toMatchObject({
+      step: "create_zone",
+      attempts: 2,
+      lastError: "upstream_unavailable:ServiceException",
     });
     expect(
       await worker((tx) => loadOperationBrief(tx, "01a1c97d-e814-7352-b32c-d3d3ee408ab8")),

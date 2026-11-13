@@ -4,6 +4,7 @@ import {
   DNS_RECORD_TYPES,
   checkChange,
   stepDone,
+  stepNext,
   stepWait,
   validateRecord,
   validateRecordKey,
@@ -319,7 +320,11 @@ export function createDnsZoneAdapter(deps: DnsZoneDeps): ProductAdapter<DnsZoneC
       // needs_attention, never failed (final review Z19 I-1, attention()).
       async create(ctx: OpCtx<DnsZoneConfig>): Promise<StepResult> {
         const port = deps.route53();
-        if (ctx.operation.step === null || ctx.operation.step === "create_zone") {
+        // WPU-Y5 (c), fix round 1: step null only moves to `create_zone`, with no AWS call, like the renewal's
+        // `submit`. So a create at null has sent nothing, and at `create_zone` attempts and last_error tell whether an
+        // earlier attempt may have sent CreateHostedZone (dnsZoneMayExist of @tc/core, used by reject.ts).
+        if (ctx.operation.step === null) return stepNext("create_zone");
+        if (ctx.operation.step === "create_zone") {
           const { zone, changeId } = await port.createHostedZone({
             name: ctx.config.zoneName,
             callerReference: ctx.operation.id,
