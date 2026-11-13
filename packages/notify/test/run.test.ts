@@ -6,6 +6,7 @@ import { MAX_ATTEMPTS, runNotifier, type NotifierDeps } from "../queue/run";
 import { InMemoryNotifierStore } from "../queue/store";
 import { TEMPLATE_IDS, type TemplateId } from "../queue/types";
 import { InMemorySmsProvider } from "../sms/fake";
+import type { SmsProvider, SmsSendResult } from "../sms/provider";
 import { scanSecrets } from "../text/guards";
 import { fixedClock } from "./harness";
 import { IDS, SAMPLES } from "./samples";
@@ -348,5 +349,90 @@ describe("the reference of an SMS (WPU-Z3)", () => {
     await runNotifier(deps({ sms: recording }));
     expect(references).toEqual([row?.id]);
     expect(store.rows().find((r) => r.channel === "sms")?.status).toBe("sent");
+  });
+});
+
+describe("the reason word of a failed SMS (WPU-Z17)", () => {
+  const smsRow = () => store.rows().find((r) => r.channel === "sms");
+  const answering = (answer: SmsSendResult): SmsProvider => ({
+    send: () => Promise.resolve(answer),
+  });
+  const smsLines = () => logs.filter((line) => line.channel === "sms");
+
+  it("a retried SMS row logs the gateway's reason word", async () => {
+    queue("kyc_approved");
+    await runNotifier(
+      deps({ sms: answering({ ok: false, reason: "unavailable", detail: "ip_not_whitelisted" }) }),
+    );
+    expect(smsRow()).toMatchObject({ status: "pending", attempts: 1 });
+    expect(smsLines()).toEqual([
+      {
+        event: "notifier_retry",
+        row: smsRow()?.id,
+        channel: "sms",
+        template: "kyc_approved",
+        attempts: 1,
+        detail: "ip_not_whitelisted",
+      },
+    ]);
+  });
+
+  it("a refused SMS row is failed at once and logs rejected with invalid_number", async () => {
+    queue("kyc_approved");
+    await runNotifier(
+      deps({ sms: answering({ ok: false, reason: "rejected", detail: "invalid_number" }) }),
+    );
+    expect(smsRow()).toMatchObject({ status: "failed", attempts: 1 });
+    expect(smsLines()).toEqual([
+      {
+        event: "notifier_failed",
+        row: smsRow()?.id,
+        channel: "sms",
+        template: "kyc_approved",
+        reason: "rejected",
+        attempts: 1,
+        detail: "invalid_number",
+      },
+    ]);
+  });
+
+  it("the last attempt of an SMS row logs notifier_failed with the reason word", async () => {
+    queue("kyc_approved");
+    const gateway = answering({ ok: false, reason: "unavailable", detail: "token" });
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      clock.advanceSeconds(3600);
+      await runNotifier(deps({ sms: gateway }));
+    }
+    expect(smsRow()).toMatchObject({ status: "failed", attempts: MAX_ATTEMPTS });
+    expect(smsLines().map((line) => [line.event, line.detail])).toEqual([
+      ...Array.from({ length: MAX_ATTEMPTS - 1 }, () => ["notifier_retry", "token"]),
+      ["notifier_failed", "token"],
+    ]);
+  });
+
+  it("a detail that is not one of the fixed words is never logged (R14)", async () => {
+    queue("kyc_approved");
+    const leaky = {
+      ok: false,
+      reason: "unavailable",
+      detail: `token for ${PHONE}`,
+    } as unknown as SmsSendResult;
+    await runNotifier(deps({ sms: answering(leaky) }));
+    const [line] = smsLines();
+    expect(line).toMatchObject({ event: "notifier_retry", channel: "sms" });
+    expect(line).not.toHaveProperty("detail");
+    expect(JSON.stringify(logs)).not.toContain(PHONE);
+  });
+
+  it("a failure without a word (the e-mail, the in-memory gateway) logs no detail", async () => {
+    queue("kyc_approved");
+    email.failNext("unavailable");
+    sms.failNext("rejected");
+    await runNotifier(deps());
+    const failures = logs.filter(
+      (l) => l.event === "notifier_retry" || l.event === "notifier_failed",
+    );
+    expect(failures.map((l) => l.channel).sort()).toEqual(["email", "sms"]);
+    for (const line of failures) expect(line).not.toHaveProperty("detail");
   });
 });
