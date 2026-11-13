@@ -306,9 +306,9 @@ export const BN: Catalog = {
     body: ["{lead}", "{message}", "{next}"],
     extra: {
       customer_lead:
-        "TryAWS.now সাপোর্ট আপনার সাপোর্ট অনুরোধের উত্তর দিয়েছে। উত্তরটি প্যানেলে আপনার জন্য অপেক্ষা করছে।",
+        "আমাদের সাপোর্ট টিম আপনার সাপোর্ট অনুরোধের উত্তর দিয়েছে। উত্তরটি প্যানেলে আপনার জন্য অপেক্ষা করছে।",
       customer_next: "সাইন ইন করে অনুরোধটি খুলুন এবং উত্তরটি পড়ুন। সেখান থেকেই জবাব দিতে পারবেন।",
-      visitor_lead: "TryAWS.now সাপোর্ট আপনার সাপোর্ট অনুরোধের উত্তর দিয়েছে:",
+      visitor_lead: "আমাদের সাপোর্ট টিম আপনার সাপোর্ট অনুরোধের উত্তর দিয়েছে:",
       visitor_next:
         "এই ইমেইলের জবাব পড়া হয় না। উত্তর দিতে বা আরও কিছু জানাতে সাপোর্ট পেজ থেকে নতুন অনুরোধ পাঠান।",
     },
@@ -573,9 +573,9 @@ export const EN: Catalog = {
     body: ["{lead}", "{message}", "{next}"],
     extra: {
       customer_lead:
-        "TryAWS.now support has answered your support request. The reply is waiting for you in the panel.",
+        "Our support team has answered your support request. The reply is waiting for you in the panel.",
       customer_next: "Sign in and open the request to read the reply. You can answer there too.",
-      visitor_lead: "TryAWS.now support has answered your support request:",
+      visitor_lead: "Our support team has answered your support request:",
       visitor_next:
         "Replies to this email are not read. To answer or to ask more, send a new request from the support page.",
     },

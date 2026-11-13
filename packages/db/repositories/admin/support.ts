@@ -14,6 +14,9 @@ import { audited, isActiveAdmin } from "./audited";
 import { maskEmail } from "./customers";
 import type { AdminRole, AdminScope } from "./index";
 
+// A raw `execute` returns timestamptz as text: the typed rows promise a Date.
+const asDate = (v: Date | string): Date => (v instanceof Date ? v : new Date(v));
+
 // 16.12 /support: the support requests, replyByEmail and closeRequest, and since WPU-Z5 (owner decision
 // 2026-11-13, round 3) the thread of each request and reopenRequest. The roles column of 16.12 says
 // `support`; `superadmin` owns every area (6.2). The role check here is a second layer behind
@@ -159,8 +162,8 @@ type RequestDbRow = {
   status: string;
   related_resource_id: string | null;
   handled_by: string | null;
-  created_at: Date;
-  last_activity_at: Date;
+  created_at: Date | string;
+  last_activity_at: Date | string;
 };
 
 const SELECT_REQUEST = sql`select s.id, s.customer_id, coalesce(s.name, c.name) as name, s.email,
@@ -180,8 +183,8 @@ const toRow = (r: RequestDbRow): SupportRequestRow => {
     status: r.status as SupportStatus,
     relatedResourceId: r.related_resource_id,
     handledBy: r.handled_by,
-    createdAt: r.created_at,
-    lastActivityAt: r.last_activity_at,
+    createdAt: asDate(r.created_at),
+    lastActivityAt: asDate(r.last_activity_at),
   };
 };
 
@@ -300,7 +303,7 @@ export function supportAdminRepo(scope: AdminScope): SupportAdminRepo {
         author_type: string;
         admin_id: string | null;
         body: string;
-        created_at: Date;
+        created_at: Date | string;
       }>(
         sql`select id, author_type, admin_id, body, created_at from support_messages
           where request_id = ${requestId} order by created_at desc, id desc limit ${SUPPORT_THREAD_LIMIT + 1}`,
@@ -311,7 +314,7 @@ export function supportAdminRepo(scope: AdminScope): SupportAdminRepo {
         action: string;
         actor_id: string | null;
         reason: string | null;
-        created_at: Date;
+        created_at: Date | string;
       }>(
         sql`select id, action, actor_id, metadata->>'reason' as reason, created_at from audit_log
           where target_type = 'support_request' and target_id = ${requestId}
@@ -328,7 +331,7 @@ export function supportAdminRepo(scope: AdminScope): SupportAdminRepo {
             authorType: m.author_type as SupportAuthorType,
             adminId: m.admin_id,
             body: m.body,
-            createdAt: m.created_at,
+            createdAt: asDate(m.created_at),
           })),
           hasEarlier: page.hasEarlier,
           audit: trail.rows.map((a) => ({
@@ -336,7 +339,7 @@ export function supportAdminRepo(scope: AdminScope): SupportAdminRepo {
             action: a.action,
             actorId: a.actor_id,
             reason: a.reason,
-            createdAt: a.created_at,
+            createdAt: asDate(a.created_at),
           })),
         },
       };
