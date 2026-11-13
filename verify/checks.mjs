@@ -3818,6 +3818,21 @@ TASKS["WPU-Z19"] = [
 // WPU-Z17: Gennet answers are read by their status code.
 TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];
 
+// WPU-Y2 (owner round 4): a domain renewal at the TLD's renewal price, charged 30 days before the registry
+// expiry, and a refused renewal that never ends the subscription for good; core and db include PostgreSQL.
+TASKS["WPU-Y2"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  repo,
+];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".
