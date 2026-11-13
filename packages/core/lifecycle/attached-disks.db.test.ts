@@ -2,13 +2,19 @@
 // disks with it. Their subscriptions are retained in the same transaction (never renewed or charged again) and
 // their final snapshot and destroy are queued under the engine's own keys, so every later pass replays them (R7).
 import type { Tx } from "@tc/db";
-import { lifecycleOperationKey, lifecycleRepo, loadRunView } from "@tc/db";
+import {
+  ensureFinalBackup,
+  lifecycleOperationKey,
+  lifecycleRepo,
+  loadRunView,
+  markFinalBackup,
+} from "@tc/db";
 import { newAdmin, runTransaction, useTempDatabase } from "@tc/db/testing";
-import { beforeAll, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { makeKit, placeOne, START, type Kit } from "../test/orders-kit";
 import type { QueueMessage } from "../operations/queue";
 import { retainSubscription, runLifecycle, SERVER_HOLD_KEY } from "./engine";
-import { destructiveGuard } from "./guard";
+import { decideDestructive, destructiveGuard } from "./guard";
 import { completeRestore } from "./restore";
 
 const t = useTempDatabase();
@@ -349,4 +355,152 @@ it("a disk whose destroy reached the DeleteDisk step stays retained, with an att
       },
     },
   ]);
+});
+
+// WPU-X1 (the round-5 money review, required before the disk flag): a release never ends a final snapshot of the
+// disk that already started. It finishes, and its backup is an ordinary one: `active` (metered like any snapshot,
+// usage-writer), not final, so the customer may delete it. Only one that never started is ended, and the release
+// logs the ids of what it ended (ids and fixed words only, R14).
+describe("a disk final snapshot at the release of its server (WPU-X1)", () => {
+  const serverSubOf = async (serverId: string) =>
+    String((await q("select id from subscriptions where resource_id = $1", [serverId]))[0]!.id);
+  const opsOf = async (diskId: string) =>
+    (await q(
+      "select id, kind, state from operations where resource_id = $1 and kind in ('final_snapshot', 'destroy') order by created_at, id",
+      [diskId],
+    )) as { id: string; kind: string; state: string }[];
+  const backupOf = async (id: string) =>
+    (await q("select state, aws_name, config from resources where id = $1", [id]))[0] as {
+      state: string;
+      aws_name: string | null;
+      config: Record<string, unknown>;
+    };
+  const deletable = async (backupId: string) => {
+    const facts = await worker((tx) => lifecycleRepo(tx).resourceOfOperation(backupId));
+    return facts !== null && decideDestructive("delete_backup", facts);
+  };
+  const snapshotName = (id: string) => `tc-snapshot-${id.replaceAll("-", "")}`;
+
+  async function retainedDisk() {
+    const s = await serverPastGrace();
+    const d = await disk(s.customerId, s.serverId);
+    await kit.refreshFx();
+    await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+    expect(await statusOf(d.id)).toBe("retained");
+    const ops = await opsOf(d.id);
+    const snap = ops.find((o) => o.kind === "final_snapshot")!.id;
+    const destroy = ops.find((o) => o.kind === "destroy")!.id;
+    return { s, d, snap, destroy };
+  }
+  async function release(serverId: string) {
+    const lines: Record<string, unknown>[] = [];
+    const done = await worker(async (tx) =>
+      completeRestore(tx, {
+        subscriptionId: await serverSubOf(serverId),
+        clock: kit.clock,
+        log: (line) => lines.push(line),
+      }),
+    );
+    expect(done.ok).toBe(true);
+    return lines;
+  }
+
+  it("one waiting at wait_snapshot is left to finish and ends as an active, deletable backup", async () => {
+    const { s, d, snap, destroy } = await retainedDisk();
+    // The adapter's first step: the backup row (creating, final) and CreateDiskSnapshot; then it waits.
+    const { id: backupId } = await worker((tx) =>
+      ensureFinalBackup(tx, {
+        customerId: s.customerId,
+        parentResourceId: d.id,
+        operationId: snap,
+      }),
+    );
+    await q(
+      "update operations set state = 'waiting', step = 'wait_snapshot', attempts = 1 where id = $1",
+      [snap],
+    );
+    const lines = await release(s.serverId);
+    expect(await statusOf(d.id)).toBe("active");
+    expect((await opsOf(d.id)).map((o) => [o.kind, o.state])).toEqual([
+      ["final_snapshot", "waiting"],
+      ["destroy", "failed"],
+    ]);
+    // The release logs the ids of what it ended, and only those.
+    expect(lines.filter((l) => l.action === "ended")).toEqual([
+      {
+        event: "attached_disks",
+        action: "ended",
+        diskId: d.id,
+        serverId: s.serverId,
+        operationId: destroy,
+        kind: "destroy",
+      },
+    ]);
+    // The snapshot is available: the adapter marks the row of the same operation.
+    await worker((tx) =>
+      markFinalBackup(tx, {
+        id: backupId,
+        customerId: s.customerId,
+        operationId: snap,
+        awsName: snapshotName(backupId),
+        sizeGb: 32,
+      }),
+    );
+    const row = await backupOf(backupId);
+    expect(row.state).toBe("active");
+    expect(row.config).toMatchObject({ final: false, finalOperation: snap, sizeGb: 32 });
+    expect(await deletable(backupId)).toBe(true);
+  });
+
+  it("one running at the release, whose row is made after it, ends as an active, deletable backup", async () => {
+    const { s, d, snap, destroy } = await retainedDisk();
+    // Claimed by the provisioner, no backup row yet.
+    await q("update operations set state = 'running', attempts = 1 where id = $1", [snap]);
+    const lines = await release(s.serverId);
+    expect(await statusOf(d.id)).toBe("active");
+    expect((await opsOf(d.id)).map((o) => [o.kind, o.state])).toEqual([
+      ["final_snapshot", "running"],
+      ["destroy", "failed"],
+    ]);
+    expect(lines.filter((l) => l.action === "ended").map((l) => l.operationId)).toEqual([destroy]);
+    // After the release committed, the adapter makes the row and the snapshot completes.
+    const { id: backupId } = await worker((tx) =>
+      ensureFinalBackup(tx, {
+        customerId: s.customerId,
+        parentResourceId: d.id,
+        operationId: snap,
+      }),
+    );
+    expect((await backupOf(backupId)).config).toMatchObject({ final: false });
+    await worker((tx) =>
+      markFinalBackup(tx, {
+        id: backupId,
+        customerId: s.customerId,
+        operationId: snap,
+        awsName: snapshotName(backupId),
+        sizeGb: 32,
+      }),
+    );
+    const row = await backupOf(backupId);
+    expect(row.state).toBe("active");
+    expect(row.config).toMatchObject({ final: false, sizeGb: 32 });
+    expect(await deletable(backupId)).toBe(true);
+  });
+
+  it("one that never started is ended, and its id is logged", async () => {
+    const { s, d, snap, destroy } = await retainedDisk();
+    const lines = await release(s.serverId);
+    expect((await opsOf(d.id)).map((o) => [o.kind, o.state])).toEqual([
+      ["final_snapshot", "failed"],
+      ["destroy", "failed"],
+    ]);
+    const ended = lines.filter((l) => l.action === "ended" && l.diskId === d.id);
+    expect(ended.map((l) => l.operationId).sort()).toEqual([snap, destroy].sort());
+    // Ids and fixed words only (R14).
+    for (const line of ended) {
+      expect(Object.keys(line).sort()).toEqual(
+        ["action", "diskId", "event", "kind", "operationId", "serverId"].sort(),
+      );
+    }
+  });
 });

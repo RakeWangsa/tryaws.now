@@ -67,7 +67,12 @@ function setup() {
     [INSTANCE_ID, instanceRow],
     [BACKUP_ID, backupRow],
   ]);
-  const finals: { id: string; marked: number | null | undefined; ensured: number }[] = [];
+  const finals: {
+    id: string;
+    marked: number | null | undefined;
+    ensured: number;
+    markedFor?: string;
+  }[] = [];
   const deps: BackupDeps = {
     listBackups: async () => [{ id: BACKUP_ID }],
     ensureFinalBackup: async () => {
@@ -77,6 +82,8 @@ function setup() {
     },
     markFinalBackup: async (input) => {
       (finals[0] as { marked: number | null }).marked = input.sizeGb;
+      // WPU-X1: the row is marked for the operation that made it (it may have stopped being final meanwhile).
+      (finals[0] as { markedFor?: string }).markedFor = input.operationId;
     },
   };
   const calls = () => aws.seen.filter((r) => r.service === "lightsail").map((r) => r.action);
@@ -513,6 +520,7 @@ describe("final snapshot and purge (R13)", () => {
     );
     expect(done).toEqual({ kind: "done" });
     expect(finals[0]?.marked).toBe(40);
+    expect(finals[0]?.markedFor).toBe(OP_ID);
   });
 
   it("purge deletes every child backup; not found is done", async () => {

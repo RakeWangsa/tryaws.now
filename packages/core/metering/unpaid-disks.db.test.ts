@@ -99,6 +99,16 @@ it("a payment after the unpaid retention gives the server AND its attached disk 
   expect(await unpaid(new Date(day7.getTime() + 3_600_000))).toMatchObject({ paid: 1 });
   expect(await statusOf(serverId)).toBe("active");
   expect(await statusOf(diskId)).toBe("active");
+  // WPU-X1: the server's own final snapshot never started, so the payback ends it with the retention (no snapshot
+  // nobody asked for); a started one would finish as an ordinary backup.
+  const serverOps = await q(
+    "select kind, state from operations where resource_id = $1 and kind in ('final_snapshot', 'destroy') order by created_at, id",
+    [serverId],
+  );
+  expect(serverOps.map((o) => `${String(o.kind)}:${String(o.state)}`).sort()).toEqual([
+    "destroy:failed",
+    "final_snapshot:failed",
+  ]);
   const after = await q(
     "select kind, state from operations where resource_id = $1 order by created_at, id",
     [diskId],
