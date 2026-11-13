@@ -6,6 +6,7 @@ import {
   decideFailure,
   decideRefusal,
   lastErrorText,
+  refundedOnFailure,
 } from "./policy";
 
 const NOW = new Date("2030-01-01T00:00:00.000Z");
@@ -69,16 +70,51 @@ it("a full pool needs attention at once, even for a create", () => {
   });
 });
 
-it("an error that can never succeed fails a create and only stops every other kind", () => {
+it("an error that can never succeed fails a create and a domain renewal, and only stops every other kind", () => {
   const facts = {
     code: "validation",
     retryable: false,
     poolFull: false,
     awsErrorName: "InvalidInputException",
   } as const;
-  expect(decideFailure({ kind: "create", attempts: 2, now: NOW, facts }).to).toBe("failed");
-  for (const kind of ["reboot", "destroy", "resume", "attach_disk"] as const) {
+  // WPU-Z13: a renewal the registry refuses reaches failed like a create, so its charge goes back (10.1).
+  for (const kind of ["create", "renew_domain"] as const) {
+    expect(decideFailure({ kind, attempts: 2, now: NOW, facts })).toEqual({
+      to: "failed",
+      attempts: 3,
+      lastError: "validation:InvalidInputException",
+    });
+  }
+  for (const kind of [
+    "reboot",
+    "destroy",
+    "resume",
+    "attach_disk",
+    "set_name_servers",
+    "resend_verification",
+    "scale_container",
+  ] as const) {
     expect(decideFailure({ kind, attempts: 2, now: NOW, facts }).to).toBe("needs_attention");
+  }
+});
+
+it("a domain renewal is retried like any kind, and an admin decides after the fifth failure (10.1)", () => {
+  expect(decideFailure({ kind: "renew_domain", attempts: 0, now: NOW, facts: retryable })).toEqual({
+    to: "waiting",
+    attempts: 1,
+    nextRunAt: after(60),
+    lastError: "upstream_unavailable:ServiceException",
+  });
+  expect(decideFailure({ kind: "renew_domain", attempts: 4, now: NOW, facts: retryable }).to).toBe(
+    "needs_attention",
+  );
+});
+
+it("the kinds whose failure gives money back: a create and a domain renewal, nothing else", () => {
+  expect(refundedOnFailure("create")).toBe(true);
+  expect(refundedOnFailure("renew_domain")).toBe(true);
+  for (const kind of ["reboot", "destroy", "cleanup_failed_create", "reject_operation", "x", ""]) {
+    expect(refundedOnFailure(kind), kind).toBe(false);
   }
 });
 
