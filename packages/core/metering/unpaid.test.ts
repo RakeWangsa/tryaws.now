@@ -1324,10 +1324,18 @@ describe("the final snapshot after a payment that came after day 7 (WPU-Y3c, 2)"
     expect(report.finalHeld).toBe(1);
   });
 
-  it.each(["running", "waiting", "succeeded", "needs_attention"])(
-    "a destroy that is %s stops it: the flag stays, nothing is deleted",
-    async (state) => {
-      const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state }] });
+  it.each([
+    ["running", null, 0],
+    ["waiting", "wait_server", 0],
+    ["waiting", null, 1],
+    ["succeeded", null, 0],
+    ["needs_attention", null, 0],
+  ])(
+    "a destroy that is %s (step %s, attempts %d) stops it: the flag stays, nothing is deleted",
+    async (state, step, attempts) => {
+      const t = retainedPaid({
+        seed: [{ key: DESTROY, kind: "destroy", state, step, attempts }],
+      });
       const report = await t.run();
       expect(t.cancelled).toEqual([]);
       expect(t.calls.superseded).toBe(0);
@@ -1336,6 +1344,24 @@ describe("the final snapshot after a payment that came after day 7 (WPU-Y3c, 2)"
       expect(t.keys.some((k) => k.startsWith("unpaid:final-delete:"))).toBe(false);
     },
   );
+
+  it("a destroy held back by the claim's block rule (waiting, no step, never attempted) is cancelled, then the flag is cleared (WPU-X1 fix round 2)", async () => {
+    const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state: "waiting" }] });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([DESTROY]);
+    expect(t.calls.superseded).toBe(1);
+    expect(report.finalReleased).toBe(1);
+    expect(report.finalHeld).toBe(0);
+  });
+
+  it("a blocked waiting destroy that an admin approved still stops it", async () => {
+    const t = retainedPaid({
+      seed: [{ key: DESTROY, kind: "destroy", state: "waiting", approved: true }],
+    });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([]);
+    expect(report.finalHeld).toBe(1);
+  });
 
   it("an approved destroy stops it, even when it is only queued", async () => {
     const t = retainedPaid({

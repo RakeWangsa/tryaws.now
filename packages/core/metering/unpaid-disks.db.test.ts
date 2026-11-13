@@ -3,9 +3,11 @@
 // disk's, the disk's destroy and final snapshot are cancelled before they ran, its mark goes, and the disk's own
 // subscription gets no ledger row (R5). Needs the local PostgreSQL (pnpm db:up).
 import type { Tx } from "@tc/db";
+import { ensureFinalBackup, lifecycleRepo, markFinalBackup } from "@tc/db";
 import { runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, expect, it } from "vitest";
 import { makeKit, placeOne, type Kit } from "../test/orders-kit";
+import { decideDestructive } from "../lifecycle/guard";
 import { runStaticIpMetering, runUnpaid } from "./index";
 
 const t = useTempDatabase();
@@ -160,4 +162,81 @@ it("a payment after the unpaid retention gives the server AND its attached disk 
     [diskId],
   );
   expect(live.map((o) => o.kind)).toEqual(["final_snapshot", "destroy"]);
+});
+
+// WPU-X1 fix round 2: after the R13 date a destroy needs no approval, so the claim can hold it back behind the
+// running final snapshot (the block rule: `waiting`, no step, no attempt). It never started: the payback cancels it
+// and releases the final snapshot, which finishes as an ordinary backup the customer may delete.
+it("a destroy held back behind a running final snapshot does not hold the payback; the backup ends deletable", async () => {
+  const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
+  const { resourceId: serverId } = await placeOne(kit, buyer);
+  await q("update wallets set balance_minor = 0 where customer_id = $1", [buyer.customerId]);
+  await q(
+    `update resources set state = 'active',
+       config = config || jsonb_build_object('staticIpAttached', false, 'detachedAt', $2::text)
+     where id = $1`,
+    [serverId, DETACHED.toISOString()],
+  );
+  await q("update operations set state = 'succeeded' where resource_id = $1", [serverId]);
+  await q(
+    `insert into settings (id, key, market, scope, scope_id, value, created_at)
+     select gen_random_uuid(), 'lifecycle_unpaid_enabled', 'BD', 'market', null, 'true'::jsonb, now()
+     where not exists (select 1 from settings where key = 'lifecycle_unpaid_enabled')`,
+  );
+  const unpaid = async (now: Date) => {
+    kit.clock.set(now);
+    await kit.refreshFx();
+    return runUnpaid({ runTx: worker, clock: kit.clock, log: () => undefined });
+  };
+  kit.clock.set(T0);
+  await kit.refreshFx();
+  await runStaticIpMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
+  await unpaid(T0);
+  const day7 = new Date(T0.getTime() + 7 * DAY + 3_600_000);
+  expect(await unpaid(day7)).toMatchObject({ retained: 1 });
+  expect(await statusOf(serverId)).toBe("retained");
+  const ops = await q(
+    "select id, kind from operations where resource_id = $1 and kind in ('final_snapshot', 'destroy')",
+    [serverId],
+  );
+  const snap = String(ops.find((o) => o.kind === "final_snapshot")!.id);
+  const destroy = String(ops.find((o) => o.kind === "destroy")!.id);
+  // The final snapshot runs (its row exists); the destroy, flagged no more (after the R13 date), was held back by
+  // the claim's block rule.
+  const { id: backupId } = await worker((tx) =>
+    ensureFinalBackup(tx, {
+      customerId: buyer.customerId,
+      parentResourceId: serverId,
+      operationId: snap,
+    }),
+  );
+  await q("update operations set state = 'running', attempts = 1 where id = $1", [snap]);
+  await q(
+    "update operations set needs_approval = false, approved_by = null, state = 'waiting', step = null, attempts = 0 where id = $1",
+    [destroy],
+  );
+
+  await q("update wallets set balance_minor = 20000000 where customer_id = $1", [buyer.customerId]);
+  const report = await unpaid(new Date(day7.getTime() + 3_600_000));
+  expect(report).toMatchObject({ paid: 1, finalHeld: 0 });
+  expect(await statusOf(serverId)).toBe("active");
+  const after = await q("select id, state from operations where id = any($1)", [[snap, destroy]]);
+  const stateOf = new Map(after.map((o) => [String(o.id), String(o.state)]));
+  expect(stateOf.get(destroy)).toBe("failed");
+  expect(stateOf.get(snap)).toBe("running");
+  // The snapshot completes: an active, ordinary backup the customer may delete.
+  await worker((tx) =>
+    markFinalBackup(tx, {
+      id: backupId,
+      customerId: buyer.customerId,
+      operationId: snap,
+      awsName: `tc-snapshot-${backupId.replaceAll("-", "")}`,
+      sizeGb: 40,
+    }),
+  );
+  const row = (await q("select state, config from resources where id = $1", [backupId]))[0]!;
+  expect(row.state).toBe("active");
+  expect(row.config).toMatchObject({ final: false, sizeGb: 40 });
+  const facts = await worker((tx) => lifecycleRepo(tx).resourceOfOperation(backupId));
+  expect(facts !== null && decideDestructive("delete_backup", facts)).toBe(true);
 });
