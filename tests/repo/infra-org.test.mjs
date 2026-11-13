@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1142,7 +1143,7 @@ describe("WPU-Y7: both role templates in one account and in a staging stage", ()
   });
 
   it("the DNS Description fits CloudFormation limits and the parameter names the single-account rule", () => {
-    expect(new TextEncoder().encode(dns.Description).length).toBeLessThanOrEqual(1024);
+    expect(Buffer.byteLength(dns.Description, "utf8")).toBeLessThanOrEqual(1024);
     expect(Object.keys(dns.Parameters).length).toBeLessThanOrEqual(200);
     expect(dns.Parameters.CreateBillingReader.Description).toMatch(/pool-roles/);
     expect(dns.Parameters.CreateBillingReader.Description).toMatch(/false/);
