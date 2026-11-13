@@ -11,6 +11,7 @@ import {
   type StepResult,
 } from "@tc/core";
 import { rejectOperation, runTransaction } from "@tc/db/testing";
+import { notify } from "@tc/notify";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createAdapterRegistry } from "./adapters";
 import { composeHooks } from "./hooks";
@@ -192,7 +193,20 @@ const refusing = () =>
       operation: "RenewDomain",
     });
   });
-const hooks = () => composeHooks(orderHooks({ clock }), renewalHooks({}));
+// WPU-Y2 fix round 1: the refund message goes through @tc/notify, as in index.ts.
+const hooks = () =>
+  composeHooks(
+    orderHooks({ clock }),
+    renewalHooks({
+      notice: (tx, n) =>
+        notify(tx, {
+          customerId: n.customerId,
+          template: n.template,
+          data: n.data,
+          dedupeKey: n.dedupeKey,
+        }),
+    }),
+  );
 
 describe("a registry renewal that the registry refuses", () => {
   it("reaches failed and gives the renewal charge back in the same transaction", async () => {
@@ -289,13 +303,59 @@ describe("a registry renewal that the registry holds (step poll)", () => {
     expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
   });
 
-  // WPU-Y2 (owner rule c): a refusal that reached the registry (a MaxPrice refusal may be one) is for an admin.
-  it("the registry answers failed: needs_attention, no money moves, the subscription stays", async () => {
+  // WPU-Y2 fix round 1: GetOperationDetail FAILED for the saved RenewDomain operation is final "not renewed": failed,
+  // the charge back once, the subscription active at the paid period, the period marked with the refused price, the
+  // customer told. ERROR (registry_unrenewed) stops for an admin, who may then reject it with the refund.
+  it("the registry answers FAILED: failed, the charge back once, active at the paid period, marked, the customer told", async () => {
     const at = new Date("2026-11-16T09:00:00.000Z");
+    const d = await held(at);
+    await t.pool.query(
+      `update operations set payload = payload || '{"maxPriceUsd":"13.0000"}'::jsonb where id = $1`,
+      [d.operationId],
+    );
+    const start = await balance();
+    const { deps } = setup({
+      adapters: throwing(
+        new AwsError({ code: "conflict", retryable: false, reason: "registry_failed" }),
+      ),
+      hooks: hooks(),
+    });
+    expect(await runStep(deps, message(d.operationId, d.resourceId))).toMatchObject({
+      to: "failed",
+    });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({
+      state: "failed",
+      last_error: "conflict:registry_failed",
+    });
+    expect(await reversalsOf(d.chargeId)).toBe(1);
+    expect(await balance()).toBe(start + PRICE);
+    const s = await subscriptionOf(d.subscriptionId);
+    expect(s.status).toBe("active");
+    expect((s.period_end as Date).toISOString()).toBe(at.toISOString());
+    const marker = await one(
+      "select config->'domainRenewalRefused' as m from resources where id = $1",
+      [d.resourceId],
+    );
+    expect(marker.m).toEqual({ periodStart: at.toISOString(), maxPriceUsd: "13.0000" });
+    const told = await t.pool.query(
+      "select template from notifications where customer_id = $1 and template = 'domain_renewal_refunded'",
+      [world.customerId],
+    );
+    expect(told.rows.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("the registry answers ERROR (expiry unchanged): needs_attention, no money moves; a fresh check lets an admin reject it with the refund", async () => {
+    const at = new Date("2026-11-18T09:00:00.000Z");
     const d = await held(at);
     const start = await balance();
     const { deps } = setup({
-      adapters: throwing(new AwsError({ code: "conflict", retryable: false })),
+      adapters: throwing(
+        new AwsError({
+          code: "upstream_unavailable",
+          retryable: false,
+          reason: "registry_unrenewed",
+        }),
+      ),
       hooks: hooks(),
     });
     expect(await runStep(deps, message(d.operationId, d.resourceId))).toMatchObject({
@@ -303,10 +363,25 @@ describe("a registry renewal that the registry holds (step poll)", () => {
     });
     expect(await operationRow(t.pool, d.operationId)).toMatchObject({
       state: "needs_attention",
-      last_error: "conflict",
+      last_error: "upstream_unavailable:registry_unrenewed",
     });
     expect(await reversalsOf(d.chargeId)).toBe(0);
     expect(await balance()).toBe(start);
+    // the admin rejects it within the hour of that check: failed, refunded
+    const out = await runTransaction(
+      t.db,
+      (tx) => rejectOperation(tx, { operationId: d.operationId, at: NOW }),
+      { role: "admin_rw" },
+    );
+    if (!out.ok || !out.message) throw new Error("reject did not queue an operation");
+    const rejecting = setup({
+      adapters: throwing(new AwsError({ code: "internal", retryable: false })),
+      hooks: hooks(),
+    });
+    expect(await runStep(rejecting.deps, out.message)).toMatchObject({ to: "succeeded" });
+    expect(await operationRow(t.pool, d.operationId)).toMatchObject({ state: "failed" });
+    expect(await reversalsOf(d.chargeId)).toBe(1);
+    expect(await balance()).toBe(start + PRICE);
     expect((await subscriptionOf(d.subscriptionId)).status).toBe("active");
   });
 

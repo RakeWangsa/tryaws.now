@@ -16,6 +16,7 @@ import { isUuid } from "../validation/uuid";
 import { reverseTransaction } from "../ledger/reverse";
 import { firstMessage, type QueueMessage } from "../operations/queue";
 import type { Logger } from "../operations/types";
+import type { NoticeWriter } from "./notice";
 import type { Result } from "../types";
 
 // WPU-Z13. A domain's renewal charge (the lifecycle at the period end, or renewNow) pays for a renewal at the
@@ -72,16 +73,33 @@ export const DOMAIN_RENEWAL_REFUSED_KEY = "domainRenewalRefused";
  * Pure. Whether the lifecycle must not charge the renewal starting at `periodStart` by itself: the registry refused
  * the renewal of exactly that period (the marker names it). A marker that cannot be read blocks too (R16); a marker
  * of another period does not (the customer renewed since).
+ * WPU-Y2 fix round 1 (ruling 3): the marker keeps the refused USD price. When the renewal price of today
+ * (`currentUsd`, the TLD's renewal price) is another price, the lifecycle tries once more by itself; a refusal of that
+ * try writes the marker again with its own price, so each price is tried once. Without a readable price, or the same
+ * price, only the customer retries (renewNow).
  */
 export function domainRenewalRefused(
   config: Readonly<Record<string, unknown>>,
   periodStart: Date,
+  currentUsd: string | null = null,
 ): boolean {
   const marker = config[DOMAIN_RENEWAL_REFUSED_KEY];
   if (marker === undefined || marker === null) return false;
   if (typeof marker !== "object" || Array.isArray(marker)) return true;
-  const start = instantOf((marker as Record<string, unknown>)["periodStart"]);
-  return start === null || start.getTime() === periodStart.getTime();
+  const fields = marker as Record<string, unknown>;
+  const start = instantOf(fields["periodStart"]);
+  if (start === null) return true;
+  if (start.getTime() !== periodStart.getTime()) return false;
+  const refused = fields["maxPriceUsd"];
+  if (currentUsd === null || typeof refused !== "string" || !USD_TEXT.test(refused)) return true;
+  if (!USD_TEXT.test(currentUsd)) return true;
+  return sameDecimalText(refused, currentUsd);
+}
+
+/** Pure. Two plain decimal texts name the same amount ("15", "15.0", "15.0000"): no number is made (R4). */
+function sameDecimalText(a: string, b: string): boolean {
+  const norm = (v: string) => (v.includes(".") ? v.replace(/0+$/, "").replace(/\.$/, "") : v);
+  return norm(a) === norm(b);
 }
 
 /**
@@ -164,6 +182,8 @@ function validAttempt(value: unknown): value is number {
 export interface DomainRenewalPayload {
   readonly subscriptionId: string;
   readonly periodStart: Date;
+  /** WPU-Y2 fix round 1: the USD price sent as Consent.MaxPrice; null when the payload holds none readable. */
+  readonly maxPriceUsd?: string | null;
   /** WPU-Y2: the attempt of the charge; 0 when the payload names none (written before WPU-Y2, or the first). */
   readonly attempt: number;
 }
@@ -171,13 +191,18 @@ export interface DomainRenewalPayload {
 /** Pure. The subscription, the period and the attempt of a `renew_domain` payload, or null when not one written here. */
 export function readDomainRenewalPayload(payload: unknown): DomainRenewalPayload | null {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
-  const { subscriptionId, periodStart, attempt } = payload as Record<string, unknown>;
+  const { subscriptionId, periodStart, attempt, maxPriceUsd } = payload as Record<string, unknown>;
   if (!isUuid(subscriptionId)) return null;
   const start = instantOf(periodStart);
   if (start === null) return null;
   // Written only from 1 on: an explicit 0, or anything else, is not this module's (R16).
   if (attempt !== undefined && (!validAttempt(attempt) || attempt === 0)) return null;
-  return { subscriptionId, periodStart: start, attempt: attempt ?? 0 };
+  return {
+    subscriptionId,
+    periodStart: start,
+    attempt: attempt ?? 0,
+    maxPriceUsd: typeof maxPriceUsd === "string" && USD_TEXT.test(maxPriceUsd) ? maxPriceUsd : null,
+  };
 }
 
 export interface ReversalFacts {
@@ -304,6 +329,40 @@ export async function renewWithRegistry<T>(
   }
 }
 
+/**
+ * WPU-Y2 fix round 1 (ruling 4): "We could not renew {domain} at the registry. Your payment has been refunded to your
+ * wallet. You can renew it again from the domain page before {expiry}." Once per failed operation (the dedupe key).
+ * In a savepoint of its own: a message that cannot be written never holds the refund back; it is logged by id.
+ */
+async function refundNotice(
+  tx: Tx,
+  deps: { readonly log?: Logger; readonly notice?: NoticeWriter },
+  event: DomainRenewalFailure,
+  subscription: { readonly id: string } & Partial<Pick<LifecycleRow, "resource">>,
+  paidUntil: Date,
+): Promise<void> {
+  if (deps.notice === undefined) return;
+  const config = subscription.resource?.config ?? {};
+  const name = config["name"];
+  const expiry = instantOf(config["expiresAt"]) ?? paidUntil;
+  try {
+    await tx.transaction(async (sp) => {
+      await deps.notice!(sp, {
+        customerId: event.customerId,
+        template: "domain_renewal_refunded",
+        data: { domain: typeof name === "string" ? name : "", expiresAt: expiry.toISOString() },
+        dedupeKey: `domain-renewal-refunded:${event.operationId}`,
+      });
+    });
+  } catch (error) {
+    deps.log?.({
+      event: "domain_renewal_notice_failed",
+      operationId: event.operationId,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+  }
+}
+
 export interface DomainRenewalFailure {
   readonly operationId: string;
   readonly resourceId: string;
@@ -328,7 +387,7 @@ export interface DomainRenewalReversed {
  */
 export async function reverseFailedDomainRenewal(
   tx: Tx,
-  deps: { readonly log?: Logger },
+  deps: { readonly log?: Logger; readonly notice?: NoticeWriter },
   event: DomainRenewalFailure,
 ): Promise<DomainRenewalReversed> {
   const repo = lifecycleRepo(tx);
@@ -371,9 +430,14 @@ export async function reverseFailedDomainRenewal(
     await repo.setPeriod(subscription.id, { status: "active", ...decision.rollBack });
     await patchResource(tx, event.resourceId, {
       configMerge: {
-        [DOMAIN_RENEWAL_REFUSED_KEY]: { periodStart: payload.periodStart.toISOString() },
+        [DOMAIN_RENEWAL_REFUSED_KEY]: {
+          periodStart: payload.periodStart.toISOString(),
+          // WPU-Y2 fix round 1 (ruling 3): the refused price; another renewal price is tried once by itself.
+          ...(payload.maxPriceUsd ? { maxPriceUsd: payload.maxPriceUsd } : {}),
+        },
       },
     });
+    await refundNotice(tx, deps, event, subscription, decision.rollBack.periodEnd);
   }
   const rolledBack = decision.rollBack !== null;
   // Ids and a fixed word only (R14).

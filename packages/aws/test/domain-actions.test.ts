@@ -292,11 +292,36 @@ describe("renew_domain", () => {
         resourceConfig: { renewOperationId: opId },
         ...more,
       });
+    // WPU-Y2 fix round 1: a give-up reads the live expiry; still the same year: registry_unrenewed.
     await expect(poll({ now: new Date("2030-01-10T00:00:00.000Z") })).rejects.toMatchObject({
       code: "upstream_unavailable",
+      retryable: false,
+      reason: "registry_unrenewed",
     });
     await fake.finish(opId, "failed");
-    await expect(poll()).rejects.toMatchObject({ code: "conflict" });
+    await expect(poll()).rejects.toMatchObject({ code: "conflict", reason: "registry_failed" });
+  });
+
+  it("WPU-Y2 fix round 1: ERROR is not FAILED: a fresh GetDomainDetail decides, renewed is done, unchanged is registry_unrenewed", async () => {
+    const { adapter, fake } = await registered();
+    const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031 };
+    const started = await run(adapter, "renew_domain", payload, { step: "submit" });
+    const opId = configOf(started)["renewOperationId"] as string;
+    const poll = () =>
+      run(adapter, "renew_domain", payload, {
+        step: "poll",
+        resourceConfig: { renewOperationId: opId },
+      });
+    await fake.finish(opId, "error");
+    await expect(poll()).rejects.toMatchObject({
+      code: "upstream_unavailable",
+      retryable: false,
+      reason: "registry_unrenewed",
+    });
+    // the same ERROR while the live expiry moved a year on: the renewal went through
+    await fake.finish(opId, "successful");
+    await fake.finish(opId, "error");
+    expect(configOf(await poll())).toEqual({ expiresAt: "2032-01-01T00:00:00.000Z" });
   });
 
   // WPU-Z13: the contract between this adapter and the failure policy of @tc/core. The error the adapter throws is
@@ -317,14 +342,17 @@ describe("renew_domain", () => {
       poolFull: error.poolFull,
       awsErrorName: error.awsErrorName,
       mayHaveActed: error.mayHaveActed,
+      // as functions/provisioner/step.ts factsOf (WPU-Y2 fix round 1)
+      ...(error.reason === "registry_failed" && { registryVerdict: "failed" as const }),
+      ...(error.reason === "registry_unrenewed" && { registryVerdict: "unrenewed" as const }),
     };
     return decideFailure({ kind: "renew_domain", step, ...previous, now: NOW, facts }).to;
   };
 
   // Review round 1: after RenewDomain was accepted the registry holds the renewal (TiCON pays for it, it may still
-  // complete): a poll that gives up or cannot poll moves no money (needs_attention). WPU-Y2 (owner rule c): the
-  // registry's own FAILED answer (a MaxPrice refusal may be one) reached the registry too: needs_attention, no refund.
-  it("from the step after RenewDomain nothing gives the charge back, not even the registry's failed answer", async () => {
+  // complete): a poll that gives up or cannot poll moves no money (needs_attention). WPU-Y2 fix round 1: the
+  // registry's FAILED answer for the saved operation is final "not renewed" and gives the charge back.
+  it("from the step after RenewDomain only the registry's FAILED answer gives the charge back", async () => {
     const { adapter, fake } = await registered();
     const payload = { maxPriceUsd: PRICE, currentExpiryYear: 2031 };
     const started = await run(adapter, "renew_domain", payload, { step: "submit" });
@@ -346,7 +374,7 @@ describe("renew_domain", () => {
       "needs_attention",
     );
     await fake.finish(opId, "failed");
-    expect(await decide(poll(), step)).toBe("needs_attention");
+    expect(await decide(poll(), step)).toBe("failed");
   });
 
   // Review round 2: RenewDomain is sent only at `submit`, which step null records first. A call that may have

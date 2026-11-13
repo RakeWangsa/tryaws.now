@@ -1,4 +1,4 @@
-import { reverseFailedDomainRenewal, type Logger } from "@tc/core";
+import { reverseFailedDomainRenewal, type Logger, type NoticeWriter } from "@tc/core";
 import type { OperationHooks } from "./types";
 
 // WPU-Z13: the thin adapter between the `failed` hook of the engine and the reversal of a failed domain renewal
@@ -8,7 +8,11 @@ import type { OperationHooks } from "./types";
 // and `poll`) only a failure that proves nothing was sent (at `submit`) gets here (WPU-Y2: not the registry's own
 // refusal at `poll` any more): decideFailure stops any other final error in needs_attention and reject.ts refuses the rejection
 // (review rounds 1 and 2). A throw rolls the move back and the sweeper recovers the run. No AWS call here (R1).
-export function renewalHooks(deps: { readonly log?: Logger }): OperationHooks {
+// WPU-Y2 fix round 1: `notice` writes the customer's "not renewed, refunded" message (a template of @tc/notify).
+export function renewalHooks(deps: {
+  readonly log?: Logger;
+  readonly notice?: NoticeWriter;
+}): OperationHooks {
   return {
     failed: async (tx, event) => {
       if (event.kind !== "renew_domain") return;

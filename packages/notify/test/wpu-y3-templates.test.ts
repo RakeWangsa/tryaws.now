@@ -1,4 +1,4 @@
-import { UNPAID_TEMPLATES } from "@tc/core";
+import { DOMAIN_NOTICE_TEMPLATES, UNPAID_TEMPLATES } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { planRows } from "../queue/notify";
 import { NotifyError, TEMPLATE_IDS } from "../queue/types";
@@ -103,5 +103,33 @@ describe("WPU-Y3 templates", () => {
     expect(() =>
       parseTemplateData("unpaid_warning", { ...SAMPLES.unpaid_warning.data, phone: "01700000000" }),
     ).toThrow(NotifyError);
+  });
+});
+
+// WPU-Y2 fix round 1 (wording ruled 2026-11-14): the refunded domain renewal, and the 30-day renewal in the reminder.
+describe("WPU-Y2 domain renewal texts", () => {
+  it("the refund message core writes is a registered template, with the ruled wording in en and bn", () => {
+    for (const id of DOMAIN_NOTICE_TEMPLATES) expect(TEMPLATE_IDS).toContain(id);
+    const data = parseTemplateData("domain_renewal_refunded", SAMPLES.domain_renewal_refunded.data);
+    const en = renderEmail("domain_renewal_refunded", data, ctx("en"));
+    expect(en.text).toContain(
+      "We could not renew example.com at the registry. Your payment has been refunded to your wallet.",
+    );
+    expect(en.text).toContain("You can renew it again from the domain page before 11 Nov 2026.");
+    // the expiry date in Dhaka (20:00 UTC on the 10th is the 11th)
+    const bn = renderEmail("domain_renewal_refunded", data, ctx("bn"));
+    expect(bn.text).toContain("১১ নভেম্বর ২০২৬");
+    expect(BN.domain_renewal_refunded.subject).toMatch(/[ঀ-৿]/);
+    expect(Object.keys(BN.domain_renewal_refunded).sort()).toEqual(
+      Object.keys(EN.domain_renewal_refunded).sort(),
+    );
+  });
+
+  it("the renewal reminder says a domain is renewed 30 days before its expiry date", () => {
+    const data = parseTemplateData("domain_renewal_reminder", SAMPLES.domain_renewal_reminder.data);
+    expect(renderEmail("domain_renewal_reminder", data, ctx("en")).text).toContain(
+      "renewed 30 days before its expiry date",
+    );
+    expect(renderEmail("domain_renewal_reminder", data, ctx("bn")).text).toContain("৩০ দিন আগে");
   });
 });

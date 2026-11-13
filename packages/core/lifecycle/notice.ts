@@ -13,9 +13,14 @@ export const UNPAID_TEMPLATES = [
 ] as const;
 export type UnpaidTemplateId = (typeof UNPAID_TEMPLATES)[number];
 
+// WPU-Y2 fix round 1: the message of a domain renewal that the registry did not make and that was refunded
+// (wording ruled on 2026-11-14). Written by the failed hook of the provisioner through the same port.
+export const DOMAIN_NOTICE_TEMPLATES = ["domain_renewal_refunded"] as const;
+export type DomainNoticeTemplateId = (typeof DOMAIN_NOTICE_TEMPLATES)[number];
+
 export interface Notice {
   readonly customerId: string;
-  readonly template: UnpaidTemplateId;
+  readonly template: UnpaidTemplateId | DomainNoticeTemplateId;
   readonly data: Record<string, unknown>;
   /** A caller key (letters, digits, `.:_-`); the queue adds the template and the channel. R7. */
   readonly dedupeKey: string;

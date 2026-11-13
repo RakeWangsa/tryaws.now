@@ -295,9 +295,18 @@ export const BN: Catalog = {
     headline: "ডোমেইন রিনিউয়ের অনুস্মারক",
     body: [
       "{domain} এর মেয়াদ {date} তারিখে শেষ হবে ({days} দিন বাকি)।",
+      "অটো-রিনিউ চালু থাকলে মেয়াদ শেষের ৩০ দিন আগে ডোমেইনটি রিনিউ হয় এবং তখনই ওয়ালেট থেকে চার্জ কাটা হয়।",
       "রিনিউ না করলে ডোমেইনটি হারাতে পারেন।",
     ],
-    sms: "TryAWS.now: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। রিনিউ করুন।",
+    sms: "TryAWS.now: {domain} এর মেয়াদ {days} দিন পর ({date}) শেষ। মেয়াদ শেষের ৩০ দিন আগে রিনিউ হয়।",
+  },
+  domain_renewal_refunded: {
+    subject: "ডোমেইন {domain}: রিনিউ হয়নি, টাকা ফেরত",
+    headline: "ডোমেইন রিনিউ হয়নি",
+    body: [
+      "আমরা রেজিস্ট্রিতে {domain} রিনিউ করতে পারিনি। আপনার পেমেন্ট আপনার ওয়ালেটে ফেরত দেওয়া হয়েছে।",
+      "{expiry} এর আগে ডোমেইনের পাতা থেকে আবার রিনিউ করতে পারেন।",
+    ],
   },
   // WPU-Z5: a customer reads the reply in the panel ({message} is empty); a visitor gets the text.
   support_reply: {
@@ -562,9 +571,18 @@ export const EN: Catalog = {
     headline: "Domain renewal reminder",
     body: [
       "{domain} ends on {date} ({days} days left).",
+      "With auto-renew on, a domain is renewed 30 days before its expiry date, and the wallet is charged then.",
       "If you do not renew, you can lose the domain.",
     ],
-    sms: "TryAWS.now: {domain} ends in {days} days ({date}). Renew it.",
+    sms: "TryAWS.now: {domain} ends in {days} days ({date}). Domains renew 30 days before expiry.",
+  },
+  domain_renewal_refunded: {
+    subject: "Domain {domain}: not renewed, payment refunded",
+    headline: "Domain not renewed",
+    body: [
+      "We could not renew {domain} at the registry. Your payment has been refunded to your wallet.",
+      "You can renew it again from the domain page before {expiry}.",
+    ],
   },
   // WPU-Z5: a customer reads the reply in the panel ({message} is empty); a visitor gets the text.
   support_reply: {

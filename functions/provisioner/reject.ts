@@ -2,7 +2,7 @@ import {
   decideRefusal,
   isUuid,
   refundedOnFailure,
-  registryHoldsRenewal,
+  rejectionAllowed,
   transitionOperation,
   type LocalFailure,
 } from "@tc/core";
@@ -33,8 +33,8 @@ function targetOf(payload: unknown): string | null {
 // first: already renewed is done; at `poll` the operation: successful is done, failed is the refund of
 // the registry's refusal). The reject operation needs attention with `renewal_submitted`; the target
 // and the money stay as they are. Only a renewal at step null (reads only, nothing sent) is rejected
-// with its refund. Whether a person may refund a held one without that answer is the owner's decision
-// (JOURNEY, Needs decision).
+// with its refund. WPU-Y2 fix round 1: and a renewal at `poll` whose last run (at most an hour ago) recorded the
+// provisioner's fresh check `registry_unrenewed` (ERROR or a give-up, the expiry unchanged): rejectionAllowed.
 export async function runReject(
   deps: StepDeps,
   view: RunView,
@@ -74,7 +74,8 @@ export async function runReject(
     }
     // An admin who retried the target, or an earlier run, left nothing to reject: a no-op.
     const rejectable = target.state === "needs_attention";
-    if (rejectable && registryHoldsRenewal(target.kind, target.step)) {
+    // WPU-Y2 fix round 1: a renewal at `poll` whose last run recorded a fresh "expiry unchanged" check may be rejected.
+    if (rejectable && !rejectionAllowed(target, deps.clock.now())) {
       return refuse(tx, "renewal_submitted");
     }
     const refunded = refundedOnFailure(target.kind);

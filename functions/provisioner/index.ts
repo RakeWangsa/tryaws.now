@@ -27,6 +27,18 @@ import { renewalHooks } from "./renewal-hooks";
 import { windowsInstanceAdapter } from "./windows";
 import { runStep } from "./step";
 import type { RunOutcome, StepDeps } from "./types";
+import { notify } from "@tc/notify";
+import type { NoticeWriter } from "@tc/core";
+
+// WPU-Y2 fix round 1: the customer's message of a refunded domain renewal is a template of @tc/notify, written in the
+// transaction of the failed hook (core cannot import notify).
+const noticeWriter: NoticeWriter = (tx, n) =>
+  notify(tx, {
+    customerId: n.customerId,
+    template: n.template,
+    data: n.data,
+    dedupeKey: n.dedupeKey,
+  });
 
 // The three fields of the Lambda SQS event that this code reads, so no @types/aws-lambda is needed.
 export interface SqsRecord {
@@ -156,7 +168,7 @@ function buildDeps(): StepDeps {
       lifecycleHooks({ clock, log }),
       dnsZoneHooks(),
       domainHooks(),
-      renewalHooks({ log }),
+      renewalHooks({ log, notice: noticeWriter }),
     ),
     access,
     env: config.env,

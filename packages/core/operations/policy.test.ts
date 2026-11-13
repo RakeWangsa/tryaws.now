@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  REGISTRY_UNRENEWED_ERROR,
   LEASE_SECONDS,
   MAX_ATTEMPTS,
   RETRY_DELAYS_SECONDS,
@@ -149,18 +150,59 @@ describe("a domain renewal the registry holds (step poll)", () => {
     }
   });
 
-  // WPU-Y2 (owner rule c, 2026-11-14): a refusal that reached the registry (a MaxPrice refusal among them) never ends
-  // the renewal failed, which reversed the charge and ended the subscription: it stops for an admin, no money moves.
-  it("the registry's own refusal (GetOperationDetail FAILED) reached the registry: needs attention, no refund", () => {
+  // WPU-Y2 fix round 1: the registry's FAILED answer for the exact saved RenewDomain operation (the adapter's
+  // `registry_failed`) is final "not renewed": failed, with the refund. ERROR and a give-up with the expiry unchanged
+  // (`registry_unrenewed`), and a conflict without that verdict, stop in needs_attention.
+  it("the registry's FAILED answer at step poll (registry_failed) fails it: the charge goes back", () => {
     expect(
       decideFailure({
         kind: "renew_domain",
         step: "poll",
         attempts: 3,
         now: NOW,
-        facts: final("conflict"),
+        facts: { ...final("conflict"), registryVerdict: "failed" },
       }),
-    ).toEqual({ to: "needs_attention", attempts: 4, lastError: "conflict" });
+    ).toEqual({ to: "failed", attempts: 4, lastError: "conflict:registry_failed" });
+  });
+
+  it("ERROR or a give-up with the expiry unchanged (registry_unrenewed), or a bare conflict: needs attention, no refund", () => {
+    expect(
+      decideFailure({
+        kind: "renew_domain",
+        step: "poll",
+        attempts: 0,
+        now: NOW,
+        facts: { ...final("upstream_unavailable"), registryVerdict: "unrenewed" },
+      }),
+    ).toEqual({ to: "needs_attention", attempts: 1, lastError: REGISTRY_UNRENEWED_ERROR });
+    expect(
+      decideFailure({
+        kind: "renew_domain",
+        step: "poll",
+        attempts: 0,
+        now: NOW,
+        facts: final("conflict"),
+      }).to,
+    ).toBe("needs_attention");
+    // the verdict counts only at poll and only with conflict
+    expect(
+      decideFailure({
+        kind: "renew_domain",
+        step: "poll",
+        attempts: 0,
+        now: NOW,
+        facts: { ...final("upstream_unavailable"), registryVerdict: "failed" },
+      }).to,
+    ).toBe("needs_attention");
+    expect(
+      decideFailure({
+        kind: "renew_domain",
+        step: "start",
+        attempts: 0,
+        now: NOW,
+        facts: { ...final("conflict"), registryVerdict: "failed" },
+      }).to,
+    ).toBe("needs_attention");
   });
 
   it("a step that is not known is taken as held (R16): nothing fails it", () => {

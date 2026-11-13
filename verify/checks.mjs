@@ -3830,6 +3830,9 @@ TASKS["WPU-Y2"] = [
   db,
   aws,
   provisioner,
+  notifyAll,
+  web,
+  admin,
   repo,
 ];
 

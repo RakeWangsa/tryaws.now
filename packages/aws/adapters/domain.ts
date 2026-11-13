@@ -184,7 +184,7 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
     if (operationId === null) throw fail("internal");
     const { status } = await deps.domains().getOperationDetail(operationId);
     if (status === "successful") return stepNext("adopt");
-    if (status === "failed") throw fail("conflict");
+    if (status === "failed" || status === "error") throw fail("conflict");
     if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
       throw fail("upstream_unavailable");
     }
@@ -241,7 +241,7 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
       const operationId = savedId(ctx.resource.config, "nameServerOperationId");
       if (operationId === null) throw fail("internal");
       const { status } = await port.getOperationDetail(operationId);
-      if (status === "failed") throw fail("conflict");
+      if (status === "failed" || status === "error") throw fail("conflict");
       if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
       const detail = await port.getDomainDetail(name);
       if (detail === null) throw fail("upstream_unavailable", true);
@@ -320,20 +320,49 @@ export function createDomainAdapter(deps: DomainDeps): ProductAdapter<DomainAdap
         const operationId = savedId(ctx.resource.config, "renewOperationId");
         if (operationId === null) throw fail("internal");
         const { status } = await port.getOperationDetail(operationId);
-        if (status === "failed") throw fail("conflict");
-        if (status === "in_progress") return waitOrGiveUp(ctx, "poll");
-        return renewedExpiry(port, name);
+        // WPU-Y2 fix round 1: FAILED for the exact RenewDomain operation id that was saved is the registry's final
+        // "not renewed": the failure policy refunds it (registry_failed).
+        if (status === "failed") {
+          throw new AwsError({ code: "conflict", retryable: false, reason: "registry_failed" });
+        }
+        if (status === "successful") return renewedExpiry(port, name);
+        if (status === "in_progress" && !gaveUp(ctx))
+          return stepWait("poll", inSeconds(ctx, POLL_SECONDS));
+        // ERROR (not defined by the API reference) or no answer after three days: a fresh GetDomainDetail. A later
+        // expiry year is a renewal that went through; the same year is recorded as `registry_unrenewed`, the one
+        // last_error on which an admin may reject the renewal with its refund (functions/provisioner/reject.ts).
+        return unrenewedOrDone(port, ctx, name);
       }
       default:
         throw fail("internal");
     }
   }
 
+  function gaveUp(ctx: Ctx): boolean {
+    return ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS;
+  }
+
   function waitOrGiveUp(ctx: Ctx, step: string): StepResult {
-    if (ctx.clock.now().getTime() - ctx.operation.createdAt.getTime() > MAX_WAIT_MS) {
-      throw fail("upstream_unavailable");
-    }
+    if (gaveUp(ctx)) throw fail("upstream_unavailable");
     return stepWait(step, inSeconds(ctx, POLL_SECONDS));
+  }
+
+  async function unrenewedOrDone(port: DomainsPort, ctx: Ctx, name: string): Promise<StepResult> {
+    const year = recordOf(ctx.operation.payload)["currentExpiryYear"];
+    if (typeof year !== "number" || !Number.isInteger(year)) throw fail("validation");
+    const detail = await port.getDomainDetail(name);
+    if (detail === null || detail.expiresAt === null) throw fail("upstream_unavailable");
+    const live = detail.expiresAt.getUTCFullYear();
+    if (live > year) {
+      return stepDone({ configMerge: { expiresAt: detail.expiresAt.toISOString() } });
+    }
+    // The same year: not renewed (as of this read). An earlier year is row and registry disagreeing (R16).
+    if (live !== year) throw fail("validation");
+    throw new AwsError({
+      code: "upstream_unavailable",
+      retryable: false,
+      reason: "registry_unrenewed",
+    });
   }
 
   async function renewedExpiry(port: DomainsPort, name: string): Promise<StepResult> {

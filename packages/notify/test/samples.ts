@@ -118,6 +118,10 @@ export const SAMPLES: Record<TemplateId, { data: Record<string, unknown>; channe
     data: { domain: "example.com", days: 7, expiresAt: at },
     channels: ["email", "sms", "in_app"],
   },
+  domain_renewal_refunded: {
+    data: { domain: "example.com", expiresAt: at },
+    channels: ["email", "in_app"],
+  },
   // WPU-D4: a reply of support (email only: a visitor has no bell) and the capacity notice of the waitlist.
   // WPU-Z5: the visitor's mail carries the text (a customer's only links to the request).
   support_reply: {

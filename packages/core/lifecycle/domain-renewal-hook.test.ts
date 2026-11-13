@@ -291,7 +291,9 @@ describe("reverseFailedDomainRenewal: the failed hook of a registry renewal", ()
       periodEnd: P,
     });
     expect(patchResource).toHaveBeenCalledWith(TX, RES, {
-      configMerge: { domainRenewalRefused: { periodStart: P.toISOString() } },
+      configMerge: {
+        domainRenewalRefused: { periodStart: P.toISOString(), maxPriceUsd: "13.0000" },
+      },
     });
     // The lock order of the lifecycle and of renewNow: the subscription row, then the wallet.
     expect(calls).toEqual([
@@ -315,6 +317,56 @@ describe("reverseFailedDomainRenewal: the failed hook of a registry renewal", ()
         rolledBack: true,
       },
     ]);
+  });
+
+  it("WPU-Y2 fix round 1: the customer is told once, in a savepoint; a message that fails never holds the refund back", async () => {
+    const notice = vi.fn(async () => undefined);
+    const sp = { savepoint: true } as unknown as Tx;
+    const tx = {
+      ...TX,
+      transaction: async <T>(fn: (inner: Tx) => Promise<T>) => fn(sp),
+    } as unknown as Tx;
+    lock.mockResolvedValue(
+      row("domain", { name: "shop.com", expiresAt: "2027-11-12T08:00:00.000Z" }),
+    );
+    await reverseFailedDomainRenewal(
+      tx,
+      { log: (e: unknown) => logs.push(e), notice } as never,
+      event,
+    );
+    expect(notice).toHaveBeenCalledWith(sp, {
+      customerId: CUS,
+      template: "domain_renewal_refunded",
+      data: { domain: "shop.com", expiresAt: "2027-11-12T08:00:00.000Z" },
+      dedupeKey: `domain-renewal-refunded:${OP}`,
+    });
+    // a throwing writer is logged by name and the refund stands
+    const throwing = vi.fn(async () => {
+      throw new TypeError("bad");
+    });
+    findReversal.mockResolvedValue(null);
+    logs.length = 0;
+    await expect(
+      reverseFailedDomainRenewal(
+        tx,
+        { log: (e: unknown) => logs.push(e), notice: throwing } as never,
+        event,
+      ),
+    ).resolves.toMatchObject({ rolledBack: true });
+    expect(logs).toContainEqual({
+      event: "domain_renewal_notice_failed",
+      operationId: OP,
+      error: "TypeError",
+    });
+    // a replay sends nothing
+    notice.mockClear();
+    findReversal.mockResolvedValue("r");
+    await reverseFailedDomainRenewal(
+      tx,
+      { log: (e: unknown) => logs.push(e), notice } as never,
+      event,
+    );
+    expect(notice).not.toHaveBeenCalled();
   });
 
   it("WPU-Y2: the failed retry of a period reverses the charge of its own attempt", async () => {

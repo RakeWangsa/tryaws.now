@@ -481,6 +481,48 @@ describe("a registry renewal that failed gives the charge back once", () => {
     expect(credit).toHaveLength(1);
   });
 
+  // WPU-Y2 fix round 1 (ruling 3): the marker keeps the refused USD price; once the TLD's renewal price changes the
+  // lifecycle tries once more by itself, under the next attempt.
+  it("a refused period is tried once more by itself when the renewal price changed, never at the same price", async () => {
+    const d = await boughtDomain();
+    kit.clock.set(d.end);
+    await run();
+    const [op] = await renewOps(d.resourceId);
+    await q("update operations set state = 'failed', last_error = 'conflict' where id = $1", [
+      op!.id,
+    ]);
+    await worker((tx) =>
+      reverseFailedDomainRenewal(
+        tx,
+        {},
+        { operationId: String(op!.id), resourceId: d.resourceId, customerId: d.customerId },
+      ),
+    );
+    const [marker] = await q(
+      "select config->'domainRenewalRefused' as refused from resources where id = $1",
+      [d.resourceId],
+    );
+    expect(marker!.refused).toMatchObject({ periodStart: d.end.toISOString() });
+    // same price: held, nothing charged
+    await run();
+    expect(await renewals(d.subscriptionId)).toHaveLength(1);
+    // another renewal price: one more try by itself, under attempt 1, with that price as MaxPrice
+    await q("update tlds set renewal_price_usd = '16.0000' where id = $1", [d.tldId]);
+    await run();
+    const charges = await q(
+      `select idempotency_key from ledger_transactions where kind = 'renewal' and reference_id = $1
+        order by created_at, id`,
+      [d.subscriptionId],
+    );
+    expect(charges.map((c) => c.idempotency_key)).toEqual([
+      `renew:${d.subscriptionId}:${d.end.toISOString()}`,
+      `renew:${d.subscriptionId}:${d.end.toISOString()}:a1`,
+    ]);
+    const ops = await renewOps(d.resourceId);
+    expect(ops).toHaveLength(2);
+    expect((ops[1]!.payload as { maxPriceUsd?: unknown }).maxPriceUsd).toMatch(/^16(\.0+)?$/);
+  });
+
   it("an operation that is not a renewal of this resource is refused and moves no money", async () => {
     const d = await boughtDomain();
     kit.clock.set(d.end);

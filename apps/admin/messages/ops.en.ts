@@ -105,7 +105,7 @@ export const opsEn: Same<typeof opsBn> = {
       admin_suspended: "An admin suspension is in force; only an admin restore lifts it",
       failed_hook_missing: "No handler for the failure",
       renewal_submitted:
-        "The renewal may already be at the registry, so a rejection cannot refund it; retry it to read the registry's answer",
+        "The renewal may already be at the registry, so a rejection cannot refund it yet. Retry it: if the registry answers that the renewal failed, it is refunded; if the check shows the expiry unchanged, you can reject it within the hour",
       invalid_step_result: "A step answered with an invalid result",
       lease_expired: "The time for the operation ran out",
       other: "Another error. Details are in the log",

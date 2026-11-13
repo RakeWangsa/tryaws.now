@@ -56,6 +56,11 @@ const TABLE: ReadonlyArray<{
   },
   { row: "Domain: renewal reminders", templates: ["domain_renewal_reminder"], sms: "only_when" },
   {
+    row: "WPU-Y2: a domain renewal the registry did not make, refunded",
+    templates: ["domain_renewal_refunded"],
+    sms: "no",
+  },
+  {
     row: "WPU-D4: capacity free for a waitlist entry",
     templates: ["waitlist_capacity_available"],
     sms: "no",

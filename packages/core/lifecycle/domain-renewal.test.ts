@@ -5,6 +5,7 @@ import {
   decideDomainRenewalReversal,
   domainRenewalKey,
   domainRenewalOperation,
+  domainRenewalRefused,
   readDomainRenewalPayload,
   type ReversalFacts,
 } from "./domain-renewal";
@@ -132,6 +133,44 @@ describe("the operation a domain's renewal charge queues", () => {
   });
 });
 
+// WPU-Y2 fix round 1 (ruling 3): the marker of a refused period, with the refused USD price.
+describe("domainRenewalRefused: whether the lifecycle charges a refused period by itself", () => {
+  const config = (marker: unknown) => ({ domainRenewalRefused: marker });
+  const refused = { periodStart: START.toISOString(), maxPriceUsd: "15.0000" };
+  it("no marker, or a marker of another period: not refused", () => {
+    expect(domainRenewalRefused({}, START)).toBe(false);
+    expect(domainRenewalRefused(config(null), START)).toBe(false);
+    expect(
+      domainRenewalRefused(
+        config({ ...refused, periodStart: "2026-11-11T06:00:00.000Z" }),
+        START,
+        "15",
+      ),
+    ).toBe(false);
+  });
+  it("the same period at the same price (any spelling), or no price known today: refused", () => {
+    for (const today of [null, "15", "15.0", "15.0000"]) {
+      expect(domainRenewalRefused(config(refused), START, today), String(today)).toBe(true);
+    }
+  });
+  it("another renewal price today: tried once more by itself", () => {
+    expect(domainRenewalRefused(config(refused), START, "16.5000")).toBe(false);
+    expect(domainRenewalRefused(config(refused), START, "1.5")).toBe(false);
+  });
+  it("a marker without a readable price, or one that cannot be read at all: refused (R16)", () => {
+    for (const marker of [
+      { periodStart: START.toISOString() },
+      { periodStart: START.toISOString(), maxPriceUsd: "1e3" },
+      { periodStart: "x", maxPriceUsd: "15" },
+      "refused",
+      [],
+    ]) {
+      expect(domainRenewalRefused(config(marker), START, "16"), JSON.stringify(marker)).toBe(true);
+    }
+    expect(domainRenewalRefused(config(refused), START, "not a price")).toBe(true);
+  });
+});
+
 describe("the payload a failed renewal is read back from", () => {
   it("gives the subscription and the period of the charge", () => {
     const input = domainRenewalOperation(domain(), START, USD);
@@ -139,6 +178,7 @@ describe("the payload a failed renewal is read back from", () => {
       subscriptionId: SUB,
       periodStart: START,
       attempt: 0,
+      maxPriceUsd: USD,
     });
     // WPU-Y2: the attempt of a retry, so the reversal finds the charge of that attempt
     expect(
@@ -147,6 +187,7 @@ describe("the payload a failed renewal is read back from", () => {
       subscriptionId: SUB,
       periodStart: START,
       attempt: 3,
+      maxPriceUsd: USD,
     });
   });
 

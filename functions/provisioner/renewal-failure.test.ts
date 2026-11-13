@@ -155,15 +155,37 @@ describe("runStep: the failure policy reads the step of the renewal", () => {
     expect(needsAttention).toHaveBeenCalledTimes(1);
   });
 
-  // WPU-Y2 (owner rule c): the registry's own refusal reached the registry (a MaxPrice refusal may be one): an admin
-  // decides, no refund and the subscription is not ended.
-  it("the registry's failed answer at step poll stops in needs_attention: no refund", async () => {
+  // WPU-Y2 fix round 1: the registry's FAILED answer for the saved RenewDomain operation (registry_failed) is final
+  // "not renewed": failed, and the failed hook gives the charge back. ERROR (registry_unrenewed) stops for a person.
+  it("the registry's FAILED answer at step poll fails it, and the failed hook gives the charge back once", async () => {
     const { outcome, failed } = await runWith(
       "poll",
-      new AwsError({ code: "conflict", retryable: false }),
+      new AwsError({ code: "conflict", retryable: false, reason: "registry_failed" }),
     );
-    expect(outcome).toMatchObject({ to: "needs_attention" });
-    expect(failed).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ outcome: "advanced", to: "failed", sent: false });
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(failed).toHaveBeenCalledWith(TX, {
+      operationId: OP,
+      resourceId: RESOURCE,
+      customerId: CUSTOMER,
+      kind: "renew_domain",
+      code: "conflict:registry_failed",
+    });
+  });
+
+  it("ERROR with the expiry unchanged (registry_unrenewed), or a conflict without the verdict: needs_attention, no refund", async () => {
+    for (const error of [
+      new AwsError({
+        code: "upstream_unavailable",
+        retryable: false,
+        reason: "registry_unrenewed",
+      }),
+      new AwsError({ code: "conflict", retryable: false }),
+    ]) {
+      const { outcome, failed } = await runWith("poll", error);
+      expect(outcome).toMatchObject({ to: "needs_attention" });
+      expect(failed).not.toHaveBeenCalled();
+    }
   });
 
   it("a refusal before RenewDomain was accepted (step null) still fails it with its refund", async () => {
@@ -301,6 +323,8 @@ describe("runReject: an admin's rejection of a stuck renewal", () => {
     kind: "renew_domain",
     state: "needs_attention",
     step: null,
+    lastError: null,
+    nextRunAt: LEASE,
     ...over,
   });
 
@@ -387,5 +411,44 @@ describe("runReject: an admin's rejection of a stuck renewal", () => {
     brief.mockResolvedValue(target({ kind: "create", step: "poll" }));
     expect(await runReject(deps, rejectView, LEASE)).toMatchObject({ to: "succeeded" });
     expect(failed).toHaveBeenCalledWith(TX, expect.objectContaining({ kind: "create" }));
+  });
+
+  // WPU-Y2 fix round 1 (ruling 2, safe minimum): the provisioner recorded a fresh "expiry unchanged" check on its last
+  // run (ERROR or a give-up): an admin may reject it with the refund, within an hour of that run.
+  it("a renewal at poll with a fresh registry_unrenewed check is rejected, and its charge goes back", async () => {
+    const { deps, failed } = setup();
+    brief.mockResolvedValue(
+      target({
+        step: "poll",
+        lastError: "upstream_unavailable:registry_unrenewed",
+        nextRunAt: LEASE,
+      }),
+    );
+    expect(await runReject(deps, rejectView, LEASE)).toMatchObject({ to: "succeeded" });
+    expect(failed).toHaveBeenCalledWith(
+      TX,
+      expect.objectContaining({ kind: "renew_domain", code: "rejected" }),
+    );
+  });
+
+  it("a stale check (over an hour), another last error, or the check at submit: renewal_submitted, no refund", async () => {
+    for (const over of [
+      {
+        step: "poll",
+        lastError: "upstream_unavailable:registry_unrenewed",
+        nextRunAt: new Date(NOW.getTime() - 60 * 60_000 - 1),
+      },
+      { step: "poll", lastError: "upstream_unavailable" },
+      { step: "poll", lastError: "conflict" },
+      { step: "submit", lastError: "upstream_unavailable:registry_unrenewed" },
+    ]) {
+      transition.mockClear();
+      const { deps, failed } = setup();
+      brief.mockResolvedValue(target(over));
+      expect(await runReject(deps, rejectView, LEASE), JSON.stringify(over)).toMatchObject({
+        to: "needs_attention",
+      });
+      expect(failed).not.toHaveBeenCalled();
+    }
   });
 });

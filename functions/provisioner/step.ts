@@ -173,6 +173,9 @@ function factsOf(error: unknown): FailureFacts {
       poolFull: error.poolFull,
       awsErrorName: error.awsErrorName,
       mayHaveActed: error.mayHaveActed,
+      // WPU-Y2 fix round 1: the domain adapter's verdict on a renewal at `poll`.
+      ...(error.reason === "registry_failed" && { registryVerdict: "failed" as const }),
+      ...(error.reason === "registry_unrenewed" && { registryVerdict: "unrenewed" as const }),
     };
   }
   return {

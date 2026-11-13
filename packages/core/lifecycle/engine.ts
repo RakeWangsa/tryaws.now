@@ -262,7 +262,13 @@ async function renewCharge(
     row.resource.family === "domain" &&
     domainRenewalRefused(row.resource.config, row.periodEnd)
   ) {
-    return { ok: false, error: "conflict", fields: { domainRenewal: "refused" } };
+    // WPU-Y2 fix round 1 (ruling 3): refused at its stored price; today's renewal price, when it is another, is
+    // tried once by itself (a refusal of that try stores its own price).
+    const quoted = await renewalQuote(work.tx, row, clock);
+    const today = quoted.ok ? quoted.value.awsPriceUsd : null;
+    if (domainRenewalRefused(row.resource.config, row.periodEnd, today)) {
+      return { ok: false, error: "conflict", fields: { domainRenewal: "refused" } };
+    }
   }
   return renewWithRegistry(work.tx, async (sp) => {
     const renewed = await renewSubscription(sp, row, clock, log);

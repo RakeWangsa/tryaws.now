@@ -135,7 +135,7 @@ export const domainsEn: Same<typeof domainsBn> = {
       },
       renewal: {
         title: "Renewal",
-        note: "Renewal is paid in advance. We remind you 60, 30 and 7 days before it expires.",
+        note: "Renewal is paid in advance. A domain is renewed 30 days before its expiry date, and we remind you 7, 3 and 1 days before that renewal.",
         on: "Auto-renew is on",
         off: "Auto-renew is off",
         turnOn: "Turn on",

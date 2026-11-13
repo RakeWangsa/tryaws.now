@@ -13,7 +13,11 @@ export type LocalReason =
   | "usage_response_invalid"
   | "usage_pages_exceeded"
   | "reader_response_invalid"
-  | "not_configured";
+  | "not_configured"
+  // WPU-Y2 fix round 1: the registry's FAILED answer for the exact RenewDomain operation (not renewed, final), and a
+  // renewal whose answer is ERROR or never came while a fresh GetDomainDetail shows the expiry unchanged.
+  | "registry_failed"
+  | "registry_unrenewed";
 
 const LOCAL_REASONS: readonly string[] = [
   "role_not_allowed",
@@ -26,6 +30,8 @@ const LOCAL_REASONS: readonly string[] = [
   "usage_pages_exceeded",
   "reader_response_invalid",
   "not_configured",
+  "registry_failed",
+  "registry_unrenewed",
 ];
 
 const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/;
