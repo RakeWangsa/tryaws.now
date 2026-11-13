@@ -183,6 +183,21 @@ describe("/servers/[id] with the tabs of WP5-T6", () => {
     expect(bn).toContain("নতুন ডিস্ক যোগ করুন");
     expect(bn).not.toContain("শীঘ্রই আসছে");
   });
+  it("WPU-Z19: the mount steps find the NVMe disk with lsblk, check it is empty, and say unmount, stop, detach", async () => {
+    const en = await detailHtml("en");
+    expect(en).toContain("lsblk -o NAME,SIZE,MOUNTPOINT,SERIAL");
+    expect(en).toContain("sudo file -s /dev/nvme1n1");
+    expect(en).toContain("sudo mkfs -t ext4 /dev/nvme1n1");
+    expect(en).toContain("sudo blkid /dev/nvme1n1");
+    expect(en).toContain("defaults,nofail");
+    expect(en).toContain("then stop the server, then detach the disk");
+    // /dev/xvdf stays only the AttachDisk path of the attach form, never a device of the mount steps.
+    expect(en).not.toMatch(/(mkfs|mount|blkid|file -s)[^<]*xvdf/);
+    expect(en).not.toContain("The device name /dev/xvdf is the first extra disk");
+    const bn = await detailHtml("bn");
+    expect(bn).toContain("sudo file -s /dev/nvme1n1");
+    expect(bn).toContain("তারপর সার্ভার বন্ধ করুন");
+  });
   it("switches the add-disk form off when there is no offer (flag off, server not live, no row)", async () => {
     state.screen = { state: "ready", extras: extras({ diskOffer: null }) };
     const en = await detailHtml("en");

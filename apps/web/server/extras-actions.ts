@@ -331,7 +331,11 @@ export async function attachDiskCore(deps: ExtrasDeps, raw: unknown): Promise<Ex
   );
 }
 
-/** 16.10 Storage: `detachDisk`. */
+/**
+ * 16.10 Storage: `detachDisk`. WPU-Z19: Lightsail's DetachDisk "Detaches a stopped block storage disk from a Lightsail
+ * instance" (API reference): the server the disk is attached to must be `stopped` in the customer's own rows, else
+ * the request is refused and nothing is queued. The adapter checks the live instance again before DetachDisk (R16).
+ */
 export async function detachDiskCore(deps: ExtrasDeps, raw: unknown): Promise<ExtrasResult> {
   const input = record(raw);
   const bad: Record<string, string> = {};
@@ -343,7 +347,13 @@ export async function detachDiskCore(deps: ExtrasDeps, raw: unknown): Promise<Ex
     () => (Object.keys(bad).length === 0 ? { ok: true } : { ok: false, fields: bad }),
     async (repos) => {
       const disk = await ownDisk(repos, diskId);
-      if (disk.state !== "active" || resourceFacts(disk).attachedTo === null) {
+      const attachedTo = resourceFacts(disk).attachedTo;
+      if (disk.state !== "active" || attachedTo === null) {
+        throw new Refusal("not_allowed");
+      }
+      // Read through the tenant-scoped repository (R8): a server that is not the customer's is not stopped.
+      const server = await repos.resources.get(attachedTo);
+      if (server === null || server.family !== SERVER_FAMILY || server.state !== "stopped") {
         throw new Refusal("not_allowed");
       }
       await request(repos, {

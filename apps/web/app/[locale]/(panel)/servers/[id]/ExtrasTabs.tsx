@@ -160,12 +160,17 @@ function BackupsTab({
 }
 
 // WPU-G19: the commands that make an attached disk usable. They are shell text, not words, so they
-// are not translated; the steps around them are.
+// are not translated; the steps around them are. WPU-Z19: on Lightsail instances created after 2023-06-29 the extra
+// disk is an NVMe device (nvme1n1 and up, in no fixed order; nvme0n1 is the system disk), not the AttachDisk path
+// /dev/xvdf (Lightsail user guide, "Create and attach Lightsail block storage disks to Linux instances"). The
+// customer finds it with lsblk, checks with `file -s` that it is empty before mkfs, and persists it by UUID.
 const MOUNT_STEPS = [
-  { key: "find", command: "lsblk" },
-  { key: "format", command: "sudo mkfs.ext4 /dev/xvdf" },
-  { key: "mount", command: "sudo mkdir -p /data && sudo mount /dev/xvdf /data" },
-  { key: "persist", command: "sudo blkid /dev/xvdf" },
+  { key: "find", command: "lsblk -o NAME,SIZE,MOUNTPOINT,SERIAL" },
+  { key: "check", command: "sudo file -s /dev/nvme1n1" },
+  { key: "format", command: "sudo mkfs -t ext4 /dev/nvme1n1" },
+  { key: "mount", command: "sudo mkdir -p /data && sudo mount /dev/nvme1n1 /data" },
+  { key: "persist", command: "sudo blkid /dev/nvme1n1" },
+  { key: "fstab", command: "UUID=<uuid>  /data  ext4  defaults,nofail  0  2" },
 ] as const;
 
 function MountHelp() {

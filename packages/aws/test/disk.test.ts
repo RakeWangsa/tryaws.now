@@ -28,6 +28,8 @@ const clock = { now: () => new Date(NOW) };
 const TAG = [{ key: "tc:resource", value: DISK_ID }];
 
 const notFound = () => lightsailError(400, "NotFoundException", "raw aws text 210987654321");
+const instanceIn = (state: string) =>
+  lightsailOk({ instance: { name: INSTANCE, state: { name: state } } });
 
 function view(over: Partial<ResourceView> & { id: string }): ResourceView {
   return {
@@ -297,8 +299,12 @@ describe("disk adapter: attach and detach", () => {
       }),
       lightsailOk({ disk: { name: DISK, state: "available", isAttached: false, tags: TAG } }),
     );
+    aws.on("lightsail", "GetInstance", instanceIn("stopped"));
     aws.on("lightsail", "DetachDisk", lightsailOk({ operations: [] }));
     const r1 = await adapter.aws.action("detach_disk", ctx(null, "detach_disk"));
+    expect(JSON.parse(aws.seen.find((q) => q.action === "GetInstance")!.body)).toEqual({
+      instanceName: INSTANCE,
+    });
     expect(r1).toMatchObject({ kind: "wait", step: "wait_detached" });
     expect(JSON.parse(aws.seen.find((q) => q.action === "DetachDisk")!.body)).toEqual({
       diskName: DISK,
@@ -308,6 +314,50 @@ describe("disk adapter: attach and detach", () => {
       kind: "done",
       patch: { configMerge: { attachedInstanceId: null } },
     });
+  });
+
+  it("DetachDisk needs a stopped instance: running or stopping is a conflict and nothing is detached", async () => {
+    for (const state of ["running", "pending", "stopping", "rebooting"]) {
+      const { aws, adapter, ctx, calls } = setup();
+      aws.on(
+        "lightsail",
+        "GetDisk",
+        lightsailOk({
+          disk: { name: DISK, state: "in-use", isAttached: true, attachedTo: INSTANCE, tags: TAG },
+        }),
+      );
+      aws.on("lightsail", "GetInstance", instanceIn(state));
+      await expect(
+        adapter.aws.action("detach_disk", ctx(null, "detach_disk")),
+      ).rejects.toMatchObject({ code: "conflict" });
+      expect(calls()).toEqual(["GetDisk", "GetInstance"]);
+    }
+  });
+
+  it("fails closed when the instance cannot be read (R16): no DetachDisk", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on(
+      "lightsail",
+      "GetDisk",
+      lightsailOk({
+        disk: { name: DISK, state: "in-use", isAttached: true, attachedTo: INSTANCE, tags: TAG },
+      }),
+    );
+    aws.on("lightsail", "GetInstance", notFound());
+    await expect(adapter.aws.action("detach_disk", ctx(null, "detach_disk"))).rejects.toMatchObject(
+      { code: "conflict" },
+    );
+    aws.on("lightsail", "GetInstance", lightsailError(500, "ServiceException", "raw 210987654321"));
+    const e = await adapter.aws
+      .action("detach_disk", ctx(null, "detach_disk"))
+      .catch((x: unknown) => x);
+    expect(e).toMatchObject({ code: expect.any(String) });
+    expectNoLeak(e);
+    aws.on("lightsail", "GetInstance", lightsailOk({ instance: { name: INSTANCE } }));
+    await expect(adapter.aws.action("detach_disk", ctx(null, "detach_disk"))).rejects.toMatchObject(
+      { code: "conflict" },
+    );
+    expect(calls().filter((n) => n === "DetachDisk")).toEqual([]);
   });
 
   it("a detach of a detached disk is done", async () => {
@@ -364,6 +414,7 @@ describe("disk adapter: final snapshot, destroy, purge", () => {
       }),
       lightsailOk({ disk: { name: DISK, state: "available", isAttached: false, tags: TAG } }),
     );
+    aws.on("lightsail", "GetInstance", instanceIn("stopped"));
     aws.on("lightsail", "DetachDisk", lightsailOk({ operations: [] }));
     const r1 = await adapter.aws.destroy(ctx(null, "destroy"));
     expect(r1).toMatchObject({ kind: "wait", step: "wait_detached" });
@@ -376,6 +427,26 @@ describe("disk adapter: final snapshot, destroy, purge", () => {
       diskName: DISK,
       forceDeleteAddOns: true,
     });
+  });
+
+  it("destroy of a disk attached to a running instance is a conflict: no DetachDisk, no DeleteDisk", async () => {
+    const { aws, adapter, ctx, calls } = setup();
+    aws.on(
+      "lightsail",
+      "GetDisk",
+      lightsailOk({
+        disk: { name: DISK, state: "in-use", isAttached: true, attachedTo: INSTANCE, tags: TAG },
+      }),
+    );
+    aws.on("lightsail", "GetInstance", instanceIn("running"));
+    await expect(adapter.aws.destroy(ctx(null, "destroy"))).rejects.toMatchObject({
+      code: "conflict",
+    });
+    aws.on("lightsail", "GetInstance", notFound());
+    await expect(adapter.aws.destroy(ctx(null, "destroy"))).rejects.toMatchObject({
+      code: "conflict",
+    });
+    expect(calls().filter((n) => n === "DetachDisk" || n === "DeleteDisk")).toEqual([]);
   });
 
   it("destroy of a disk that is gone skips to delete", async () => {
@@ -450,6 +521,7 @@ describe("the whole cycle (WP5-T2 proof)", () => {
     expect(
       await adapter.aws.action("attach_disk", ctx("wait_attached", "attach_disk", payload)),
     ).toMatchObject({ kind: "done" });
+    aws.on("lightsail", "GetInstance", instanceIn("stopped"));
     aws.on("lightsail", "DetachDisk", lightsailOk({ operations: [] }));
     expect(await adapter.aws.action("detach_disk", ctx(null, "detach_disk"))).toMatchObject({
       step: "wait_detached",

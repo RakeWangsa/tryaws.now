@@ -5,6 +5,7 @@ import {
   DeleteDiskCommand,
   DetachDiskCommand,
   GetDiskCommand,
+  GetInstanceCommand,
 } from "@aws-sdk/client-lightsail";
 import {
   awsResourceName,
@@ -212,6 +213,21 @@ export function createDiskAdapter(deps: BackupDeps): ProductAdapter<DiskConfig> 
     return stepWait("wait_attached", pollAt(ctx));
   }
 
+  /**
+   * WPU-Z19. DetachDisk "Detaches a stopped block storage disk from a Lightsail instance. Make sure to unmount any
+   * file systems on the device within your operating system before stopping the instance and detaching the disk."
+   * (API reference, read 2026-11-14). The live instance the disk is attached to must be `stopped`: any other state,
+   * an instance that is not found or an answer without a state is a conflict, and a failed read is thrown as it is.
+   * Either way no DetachDisk is sent (R16).
+   */
+  async function requireStoppedInstance(ctx: OpCtx<DiskConfig>, attachedTo: unknown) {
+    if (typeof attachedTo !== "string" || attachedTo === "") throw fail("conflict");
+    const got = await orNull(() =>
+      lightsailOf(ctx).send(new GetInstanceCommand({ instanceName: attachedTo })),
+    );
+    if (got?.instance?.state?.name !== "stopped") throw fail("conflict");
+  }
+
   async function detach(ctx: OpCtx<DiskConfig>): Promise<StepResult> {
     const done = () => stepDone({ configMerge: { attachedInstanceId: null } });
     if (ctx.operation.step === "wait_detached") {
@@ -224,7 +240,8 @@ export function createDiskAdapter(deps: BackupDeps): ProductAdapter<DiskConfig> 
     const disk = await ourDisk(ctx);
     if (disk === null) throw fail("validation");
     if (disk.isAttached !== true) return done();
-    // VERIFY: the customer unmounts first; a detach under a mounted filesystem can lose data.
+    // The customer unmounts the filesystem and stops the server first (the panel says so); here the stop is checked.
+    await requireStoppedInstance(ctx, disk.attachedTo);
     await lightsailOf(ctx).send(new DetachDiskCommand({ diskName: diskName(ctx) }));
     return stepWait("wait_detached", pollAt(ctx));
   }
@@ -236,6 +253,8 @@ export function createDiskAdapter(deps: BackupDeps): ProductAdapter<DiskConfig> 
       if (disk === null) return stepNext("delete_disk");
       if (disk.isAttached === true) {
         if (step !== "wait_detached") {
+          // The same rule as detach: no stop step here, the destroy refuses until the instance is stopped (R13, R16).
+          await requireStoppedInstance(ctx, disk.attachedTo);
           await lightsailOf(ctx).send(new DetachDiskCommand({ diskName: diskName(ctx) }));
         } else {
           checkWaitBudget(ctx);
