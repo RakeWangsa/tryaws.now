@@ -37,13 +37,14 @@ function deps(found: AdminIdentity | null = { id: ADMIN_ID, role: "ops", status:
   return d;
 }
 
-function port(over: Partial<AdminSignInPort> = {}, amr: unknown = ["pwd", "mfa"]): AdminSignInPort {
+// The access token has the shape Cognito gives it: no `amr` claim (WPU-Z15).
+function port(over: Partial<AdminSignInPort> = {}): AdminSignInPort {
   return {
     start: vi.fn(() => Promise.resolve({ kind: "mfa_challenge", session: "sess-1" } as const)),
     confirm: vi.fn(() =>
       Promise.resolve({
         kind: "signed_in",
-        accessToken: issuer.sign({ sub: "admin-sub-1", amr }),
+        accessToken: issuer.sign({ sub: "admin-sub-1" }),
         expiresInSeconds: 28_800,
       } as const),
     ),
@@ -68,13 +69,6 @@ describe("signInAdmin", () => {
     const p = port({ start: vi.fn(() => Promise.resolve({ kind: "other_challenge" } as const)) });
     expect(await signInAdmin(p, deps(), input())).toEqual({ ok: false, reason: "denied" });
     expect(p.confirm).not.toHaveBeenCalled();
-  });
-
-  it("a token without the mfa method, even after the challenge, is refused", async () => {
-    expect(await signInAdmin(port({}, ["pwd"]), deps(), input())).toEqual({
-      ok: false,
-      reason: "denied",
-    });
   });
 
   it("a wrong password, a wrong code and an unknown user all give the same answer", async () => {
@@ -145,6 +139,99 @@ describe("signInAdmin", () => {
         input(),
       ),
     ).toEqual({ ok: false, reason: "unavailable" });
+  });
+});
+
+// WPU-Z15, ruling of 2026-11-13: the proof of TOTP is the sign-in flow itself. The admin pool requires
+// TOTP, and the session comes only out of the SOFTWARE_TOKEN_MFA challenge answered in the same flow;
+// any other path is refused (R16). These run signInAdmin over the real Cognito port and a fake fetch.
+describe("signInAdmin over the Cognito port: a session only after the answered TOTP challenge", () => {
+  type Answer = { readonly status: number; readonly body: unknown };
+  function cognito(answers: Answer[]) {
+    const calls: { target: string; body: Record<string, unknown> }[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      calls.push({
+        target: headers["X-Amz-Target"] ?? "",
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      const next = answers.shift();
+      if (next === undefined) throw new Error("no answer left");
+      return new Response(JSON.stringify(next.body), { status: next.status });
+    });
+    return {
+      calls,
+      port: cognitoAdminSignInPort(issuer.pool, fetchImpl as unknown as typeof fetch),
+    };
+  }
+  const tokens = (accessToken: string) => ({
+    AuthenticationResult: { AccessToken: accessToken, ExpiresIn: 3600, TokenType: "Bearer" },
+  });
+  const challenge = (name: string) => ({ ChallengeName: name, Session: "cognito-session-1" });
+
+  it("password, SOFTWARE_TOKEN_MFA, the code in the same session: the session comes out", async () => {
+    const accessToken = issuer.sign({ sub: "admin-sub-1" });
+    const { calls, port: p } = cognito([
+      { status: 200, body: challenge("SOFTWARE_TOKEN_MFA") },
+      { status: 200, body: tokens(accessToken) },
+    ]);
+    const out = await signInAdmin(p, deps(), input());
+    expect(out).toEqual({
+      ok: true,
+      adminId: ADMIN_ID,
+      accessToken,
+      expiresAt: new Date(NOW.getTime() + 3_600_000),
+    });
+    expect(calls.map((c) => c.target)).toEqual([
+      "AWSCognitoIdentityProviderService.InitiateAuth",
+      "AWSCognitoIdentityProviderService.RespondToAuthChallenge",
+    ]);
+    expect(calls[1]?.body).toMatchObject({
+      ChallengeName: "SOFTWARE_TOKEN_MFA",
+      Session: "cognito-session-1",
+      ChallengeResponses: { USERNAME: "ops@ticoncloud.example", SOFTWARE_TOKEN_MFA_CODE: "123456" },
+    });
+  });
+
+  it("no challenge: tokens straight from the password are refused, and the code is never sent", async () => {
+    const { calls, port: p } = cognito([
+      { status: 200, body: tokens(issuer.sign({ sub: "admin-sub-1" })) },
+    ]);
+    expect(await signInAdmin(p, deps(), input())).toEqual({ ok: false, reason: "denied" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("another challenge is refused, and the code is never sent", async () => {
+    for (const name of [
+      "MFA_SETUP",
+      "NEW_PASSWORD_REQUIRED",
+      "SMS_MFA",
+      "EMAIL_OTP",
+      "SELECT_MFA_TYPE",
+      "CUSTOM_CHALLENGE",
+    ]) {
+      const { calls, port: p } = cognito([{ status: 200, body: challenge(name) }]);
+      expect(await signInAdmin(p, deps(), input()), name).toEqual({ ok: false, reason: "denied" });
+      expect(calls, name).toHaveLength(1);
+    }
+  });
+
+  it("an answer to the code that is another challenge, with or without tokens, is refused", async () => {
+    const token = issuer.sign({ sub: "admin-sub-1" });
+    for (const second of [
+      challenge("MFA_SETUP"),
+      challenge("SOFTWARE_TOKEN_MFA"),
+      { ...challenge("SOFTWARE_TOKEN_MFA"), ...tokens(token) },
+    ]) {
+      const { port: p } = cognito([
+        { status: 200, body: challenge("SOFTWARE_TOKEN_MFA") },
+        { status: 200, body: second },
+      ]);
+      expect(await signInAdmin(p, deps(), input()), JSON.stringify(second)).toEqual({
+        ok: false,
+        reason: "denied",
+      });
+    }
   });
 });
 

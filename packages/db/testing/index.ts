@@ -16,6 +16,7 @@ export {
   newOrder,
 } from "../test/fixtures";
 export { useBoundTestDatabase } from "./bind";
+export { sealSstLinks, type SealedSstLinks } from "./sst-links";
 export { runTransaction, bindDatabase, attachErrorListeners, type DatabaseRole } from "../tx";
 export { tenantSnapshot } from "./snapshot";
 export { TENANT_TABLES, NON_TENANT_TABLES } from "../tenancy";

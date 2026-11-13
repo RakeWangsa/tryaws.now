@@ -3,13 +3,13 @@ import type { OperationQueue, OrdersDeps } from "@tc/core";
 import type { WebConfig } from "./config.ts";
 import { writeLog } from "./log.ts";
 import { queuePortFromEnv } from "./queue-port.ts";
-import { resourceSecrets } from "./secrets.ts";
+import { linkedSecrets, type SecretSource } from "./secrets.ts";
 
 // The composition of the order functions of F for apps/web. `productionDeps()` of @tc/core stays
 // throwing (R16); this file is the wiring that task WP4-T7 owes (open point 2). Nothing here reads
-// process.env: the environment and the ports are parameters. The fake switch is the configuration's
-// `fakes` flag, which config.ts allows only in the stages local and test (R16), and it is checked
-// against the stage a second time here.
+// process.env: the environment, the secret port (the SST SDK by default, WPU-Z15) and the ports are
+// parameters. The fake switch is the configuration's `fakes` flag, which config.ts allows only in the
+// stages local and test (R16), and it is checked against the stage a second time here.
 
 const MIN_SECRET_BYTES = 32;
 
@@ -41,6 +41,7 @@ export function assembleOrdersDeps(
   config: WebConfig,
   env: Readonly<Record<string, string | undefined>>,
   ports: OrdersPorts,
+  secrets: SecretSource = linkedSecrets(),
 ): OrdersDeps | null {
   const log = (event: { event: string }): void => writeLog({ ...event });
   if (config.fakes) {
@@ -52,7 +53,7 @@ export function assembleOrdersDeps(
       log,
     };
   }
-  const text = resourceSecrets(env)("OrderDraftSecret");
+  const text = secrets("OrderDraftSecret");
   if (text === undefined) return null;
   const bytes = new TextEncoder().encode(text);
   if (bytes.length < MIN_SECRET_BYTES) return null;

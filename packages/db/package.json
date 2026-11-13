@@ -6,6 +6,7 @@
   "exports": {
     ".": "./index.ts",
     "./buyer-rules": "./repositories/customer/buyer-rules.ts",
+    "./links": "./links.ts",
     "./migrate": "./migrate.ts",
     "./testing": "./testing/index.ts"
   },
@@ -17,6 +18,7 @@
   "dependencies": {
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1",
+    "sst": "4.17.2",
     "uuid": "^14.0.3"
   },
   "devDependencies": {

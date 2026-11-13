@@ -2,6 +2,8 @@ import { createMemoryQueue, type OrdersDeps } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { assembleOrdersDeps } from "./orders-deps.ts";
 import type { WebConfig } from "./config.ts";
+import { envLinks } from "@tc/db/links";
+import { linkedSecrets } from "./secrets.ts";
 
 const clock = { now: () => new Date("2026-11-12T00:00:00Z") };
 const run = (async () => {
@@ -20,17 +22,25 @@ const envWith = (value: string | undefined): Record<string, string | undefined> 
   SST_RESOURCE_OrderDraftSecret: value === undefined ? undefined : JSON.stringify({ value }),
 });
 
+// The secret comes from the SST_RESOURCE_<Name> variables of the environment object (envLinks); the
+// run-time path through the SST SDK is secrets-sst.test.ts (WPU-Z15).
+const assemble = (
+  cfg: WebConfig,
+  env: Record<string, string | undefined>,
+  ports: Parameters<typeof assembleOrdersDeps>[2],
+) => assembleOrdersDeps(cfg, env, ports, linkedSecrets(envLinks(env)));
+
 describe("assembleOrdersDeps", () => {
   it("is not configured (null, fail closed) without the draft secret outside fake mode", () => {
-    expect(assembleOrdersDeps(config({}), envWith(undefined), { run, clock })).toBeNull();
+    expect(assemble(config({}), envWith(undefined), { run, clock })).toBeNull();
   });
 
   it("is not configured with a secret under 32 bytes", () => {
-    expect(assembleOrdersDeps(config({}), envWith("short"), { run, clock })).toBeNull();
+    expect(assemble(config({}), envWith("short"), { run, clock })).toBeNull();
   });
 
   it("builds the deps from the linked secret and a queue that refuses to send in a real stage", async () => {
-    const deps = assembleOrdersDeps(config({}), envWith(SECRET), { run, clock });
+    const deps = assemble(config({}), envWith(SECRET), { run, clock });
     expect(deps).not.toBeNull();
     expect(deps?.secrets).toHaveLength(1);
     expect(Buffer.from(deps?.secrets[0] as Uint8Array).toString("utf8")).toBe(SECRET);
@@ -41,7 +51,7 @@ describe("assembleOrdersDeps", () => {
   });
 
   it("keeps the refusing fallback queue when the queue URL is malformed (G2: sweep fallback)", async () => {
-    const deps = assembleOrdersDeps(
+    const deps = assemble(
       config({}),
       { ...envWith(SECRET), PROVISIONING_QUEUE_URL: "https://evil.example.com/x" },
       { run, clock },
@@ -52,7 +62,7 @@ describe("assembleOrdersDeps", () => {
   });
 
   it("uses the SQS port when a FIFO queue URL is configured, without building a client at assembly", () => {
-    const deps = assembleOrdersDeps(
+    const deps = assemble(
       config({}),
       {
         ...envWith(SECRET),
@@ -66,7 +76,7 @@ describe("assembleOrdersDeps", () => {
   });
 
   it("uses a random secret and a memory queue only when the configuration says fakes", async () => {
-    const deps = assembleOrdersDeps(
+    const deps = assemble(
       config({ stage: "local", appOrigin: "http://localhost:3000", fakes: true }),
       envWith(undefined),
       { run, clock },
@@ -84,11 +94,10 @@ describe("assembleOrdersDeps", () => {
   });
 
   it("never takes the fake path in production even if asked", () => {
-    const deps = assembleOrdersDeps(
-      config({ stage: "production", fakes: true }),
-      envWith(undefined),
-      { run, clock },
-    );
+    const deps = assemble(config({ stage: "production", fakes: true }), envWith(undefined), {
+      run,
+      clock,
+    });
     expect(deps).toBeNull();
   });
 });

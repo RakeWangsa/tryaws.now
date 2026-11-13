@@ -51,8 +51,10 @@ function build(found: AdminIdentity | null = admin()) {
   return lookup;
 }
 
-const mfaToken = (claims: Record<string, unknown> = {}) =>
-  issuer.sign({ sub: "admin-sub-1", amr: ["pwd", "mfa"], ...claims });
+// The shape of a Cognito access token of the admin pool: no `amr` claim (WPU-Z15, VERIFY: Cognito adds
+// `amr` only to a sign-in that asks for an authentication level, which the admin sign-in does not).
+const adminToken = (claims: Record<string, unknown> = {}) =>
+  issuer.sign({ sub: "admin-sub-1", ...claims });
 const req = (token: string | null, over: Partial<AdminRequestInfo> = {}): AdminRequestInfo => ({
   cookieHeader: token === null ? null : `${ADMIN_ACCESS_COOKIE}=${token}`,
   viewerAddress: "203.0.113.5:44321",
@@ -61,9 +63,9 @@ const req = (token: string | null, over: Partial<AdminRequestInfo> = {}): AdminR
 });
 
 describe("authenticateAdmin", () => {
-  it("returns the actor for a verified token with MFA, an active admin and an allowed address", async () => {
+  it("returns the actor for a verified token of the admin pool, an active admin and an allowed address", async () => {
     const lookup = build();
-    const out = await authenticateAdmin(deps, req(mfaToken()), ["ops", "superadmin"]);
+    const out = await authenticateAdmin(deps, req(adminToken()), ["ops", "superadmin"]);
     expect(out).toEqual({
       ok: true,
       actor: { adminId: ADMIN_ID, role: "ops", ip: "203.0.113.5", userAgent: "test-agent" },
@@ -71,15 +73,11 @@ describe("authenticateAdmin", () => {
     expect(lookup).toHaveBeenCalledWith("admin-sub-1");
   });
 
-  it("no MFA means no sign-in: a token without the mfa method is refused", async () => {
+  it("reads no amr claim: the proof of TOTP is the sign-in flow, not the token (ruling 2026-11-13)", async () => {
     build();
-    for (const amr of [undefined, [], ["pwd"], "mfa", ["MFA"]]) {
-      const out = await authenticateAdmin(deps, req(issuer.sign({ amr })), ["ops"]);
-      expect(out, JSON.stringify(amr)).toEqual({
-        ok: false,
-        error: "forbidden",
-        reason: "mfa_required",
-      });
+    for (const amr of [undefined, [], ["pwd"], "mfa"]) {
+      const out = await authenticateAdmin(deps, req(adminToken({ amr })), ["ops"]);
+      expect(out, JSON.stringify(amr)).toMatchObject({ ok: true, actor: { adminId: ADMIN_ID } });
     }
   });
 
@@ -87,7 +85,7 @@ describe("authenticateAdmin", () => {
     const lookup = build();
     const verify = vi.spyOn(deps.verifier, "verify");
     for (const viewerAddress of ["198.51.100.1:80", null, "garbage", ""]) {
-      const out = await authenticateAdmin(deps, req(mfaToken(), { viewerAddress }), ["ops"]);
+      const out = await authenticateAdmin(deps, req(adminToken(), { viewerAddress }), ["ops"]);
       expect(out).toEqual({ ok: false, error: "forbidden", reason: "ip_not_allowed" });
     }
     expect(verify).not.toHaveBeenCalled();
@@ -96,7 +94,7 @@ describe("authenticateAdmin", () => {
 
   it("an empty allowlist allows nobody", async () => {
     build();
-    const out = await authenticateAdmin({ ...deps, allowlist: [] }, req(mfaToken()), ["ops"]);
+    const out = await authenticateAdmin({ ...deps, allowlist: [] }, req(adminToken()), ["ops"]);
     expect(out).toMatchObject({ ok: false, reason: "ip_not_allowed" });
   });
 
@@ -104,10 +102,10 @@ describe("authenticateAdmin", () => {
     build();
     const cases: [AdminRequestInfo, AuthReason][] = [
       [req(null), "no_cookie"],
-      [{ ...req(null), cookieHeader: `${ACCESS_COOKIE}=${mfaToken()}` }, "no_cookie"],
+      [{ ...req(null), cookieHeader: `${ACCESS_COOKIE}=${adminToken()}` }, "no_cookie"],
       [req("not.a.token"), "token_invalid"],
-      [req(mfaToken({ exp: nowSec - 10, iat: nowSec - 3600 })), "token_expired"],
-      [req(mfaToken({}) + "x"), "token_invalid"],
+      [req(adminToken({ exp: nowSec - 10, iat: nowSec - 3600 })), "token_expired"],
+      [req(adminToken({}) + "x"), "token_invalid"],
     ];
     for (const [r, reason] of cases) {
       expect(await authenticateAdmin(deps, r, ["ops"]), reason).toEqual({
@@ -121,19 +119,19 @@ describe("authenticateAdmin", () => {
   it("a token of the customer pool is not an admin token", async () => {
     build();
     const other = createTestIssuer(clock, { pool: { userPoolId: "ap-southeast-1_OTHER0001" } });
-    const out = await authenticateAdmin(deps, req(other.sign({ amr: ["mfa"] })), ["ops"]);
+    const out = await authenticateAdmin(deps, req(other.sign({ sub: "admin-sub-1" })), ["ops"]);
     expect(out).toMatchObject({ ok: false, reason: "token_invalid" });
   });
 
   it("an unknown sub is unauthenticated; a disabled admin is forbidden", async () => {
     build(null);
-    expect(await authenticateAdmin(deps, req(mfaToken()), ["ops"])).toEqual({
+    expect(await authenticateAdmin(deps, req(adminToken()), ["ops"])).toEqual({
       ok: false,
       error: "unauthenticated",
       reason: "unknown_subject",
     });
     build(admin({ status: "disabled" }));
-    expect(await authenticateAdmin(deps, req(mfaToken()), ["ops"])).toEqual({
+    expect(await authenticateAdmin(deps, req(adminToken()), ["ops"])).toEqual({
       ok: false,
       error: "forbidden",
       reason: "disabled",
@@ -142,7 +140,7 @@ describe("authenticateAdmin", () => {
 
   it("a status that is not exactly active is refused (R16)", async () => {
     build(admin({ status: "weird" as never }));
-    expect(await authenticateAdmin(deps, req(mfaToken()), ["ops"])).toMatchObject({
+    expect(await authenticateAdmin(deps, req(adminToken()), ["ops"])).toMatchObject({
       ok: false,
       reason: "disabled",
     });
@@ -150,20 +148,22 @@ describe("authenticateAdmin", () => {
 
   it("the role guard: a role outside the list, and an empty list, are forbidden", async () => {
     build(admin({ role: "support" }));
-    expect(await authenticateAdmin(deps, req(mfaToken()), ["ops", "superadmin"])).toEqual({
+    expect(await authenticateAdmin(deps, req(adminToken()), ["ops", "superadmin"])).toEqual({
       ok: false,
       error: "forbidden",
       reason: "role_not_allowed",
     });
-    expect(await authenticateAdmin(deps, req(mfaToken()), [])).toMatchObject({
+    expect(await authenticateAdmin(deps, req(adminToken()), [])).toMatchObject({
       reason: "role_not_allowed",
     });
-    expect(await authenticateAdmin(deps, req(mfaToken()), ["support"])).toMatchObject({ ok: true });
+    expect(await authenticateAdmin(deps, req(adminToken()), ["support"])).toMatchObject({
+      ok: true,
+    });
   });
 
   it("a session older than 8 hours since the sign-in is expired, whatever the token says", async () => {
     build();
-    const old = mfaToken({
+    const old = adminToken({
       auth_time: nowSec - 8 * 3600 - 5,
       iat: nowSec - 60,
       exp: nowSec + 3000,
@@ -178,7 +178,7 @@ describe("authenticateAdmin", () => {
   it("a failing lookup is upstream_unavailable and never a session", async () => {
     build();
     deps = { ...deps, lookup: () => Promise.reject(new Error("db down with secret=hunter2")) };
-    const out = await authenticateAdmin(deps, req(mfaToken()), ["ops"]);
+    const out = await authenticateAdmin(deps, req(adminToken()), ["ops"]);
     expect(out).toEqual({ ok: false, error: "upstream_unavailable", reason: "unavailable" });
     expect(JSON.stringify(out)).not.toContain("hunter2");
   });
@@ -199,7 +199,11 @@ describe("authenticateAdmin", () => {
 
   it("reads only the cookie and the viewer address: a forged actor in the request is ignored", async () => {
     build();
-    const forged = { ...req(mfaToken()), adminId: "evil", role: "superadmin" } as AdminRequestInfo;
+    const forged = {
+      ...req(adminToken()),
+      adminId: "evil",
+      role: "superadmin",
+    } as AdminRequestInfo;
     const out = await authenticateAdmin(deps, forged, ["ops"]);
     expect(out).toMatchObject({ ok: true, actor: { adminId: ADMIN_ID, role: "ops" } });
   });
@@ -220,7 +224,7 @@ describe("requireAdmin", () => {
   }
 
   it("resolves the AdminActor of section F", async () => {
-    configure(mfaToken());
+    configure(adminToken());
     expect(await requireAdmin(["ops"])).toEqual({
       adminId: ADMIN_ID,
       role: "ops",
@@ -230,12 +234,12 @@ describe("requireAdmin", () => {
   });
 
   it("rejects with an AuthError of fixed text for each refusal", async () => {
-    configure(mfaToken({ amr: ["pwd"] }));
-    const err = await requireAdmin(["ops"]).catch((e: unknown) => e);
+    configure(adminToken());
+    const err = await requireAdmin(["superadmin"]).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(AuthError);
     expect(err).toMatchObject({
       code: "forbidden",
-      reason: "mfa_required",
+      reason: "role_not_allowed",
       message: "auth: forbidden",
     });
   });

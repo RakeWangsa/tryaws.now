@@ -1,6 +1,7 @@
 import { inspect } from "node:util";
 import { afterEach, expect, it, vi } from "vitest";
 import { handler, loadSesTransport, loadSmsProvider } from "./index";
+import { envLinks } from "@tc/db/links";
 import { NOTIFIER_CONFIG_ERROR } from "./config";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -12,20 +13,26 @@ const SMS_ENV = {
 };
 
 it("has an SMS provider only when both SMS secrets are readable (WPU-Z3)", () => {
-  expect(loadSmsProvider({})).toBeNull();
-  expect(loadSmsProvider({ SST_RESOURCE_SmsApiKey: SMS_ENV.SST_RESOURCE_SmsApiKey })).toBeNull();
+  expect(loadSmsProvider(envLinks({}))).toBeNull();
   expect(
-    loadSmsProvider({ SST_RESOURCE_SmsSenderId: SMS_ENV.SST_RESOURCE_SmsSenderId }),
+    loadSmsProvider(envLinks({ SST_RESOURCE_SmsApiKey: SMS_ENV.SST_RESOURCE_SmsApiKey })),
   ).toBeNull();
-  expect(loadSmsProvider({ ...SMS_ENV, SST_RESOURCE_SmsApiKey: '{"value":""}' })).toBeNull();
-  expect(loadSmsProvider({ ...SMS_ENV, SST_RESOURCE_SmsSenderId: "{not json" })).toBeNull();
-  const provider = loadSmsProvider(SMS_ENV);
+  expect(
+    loadSmsProvider(envLinks({ SST_RESOURCE_SmsSenderId: SMS_ENV.SST_RESOURCE_SmsSenderId })),
+  ).toBeNull();
+  expect(
+    loadSmsProvider(envLinks({ ...SMS_ENV, SST_RESOURCE_SmsApiKey: '{"value":""}' })),
+  ).toBeNull();
+  expect(
+    loadSmsProvider(envLinks({ ...SMS_ENV, SST_RESOURCE_SmsSenderId: "{not json" })),
+  ).toBeNull();
+  const provider = loadSmsProvider(envLinks(SMS_ENV));
   expect(provider?.constructor.name).toBe("GatewaySmsProvider");
   expect(typeof provider?.send).toBe("function");
 });
 
 it("the SMS provider shows neither the token nor the sender id, in JSON or in inspect", () => {
-  const provider = loadSmsProvider(SMS_ENV);
+  const provider = loadSmsProvider(envLinks(SMS_ENV));
   const shown = [JSON.stringify(provider), inspect(provider, { depth: 10, showHidden: true })].join(
     "\n",
   );

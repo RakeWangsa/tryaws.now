@@ -32,7 +32,7 @@ What the code does with them (fail closed, R16):
 - Both readable and not empty: the web app on stage staging or production builds the gateway, and the phone OTP works; the notifier sends the SMS rows.
 - Either one missing, empty or unreadable: the web app has no OTP service (the phone step of `/verify` shows the "not open" state) and the notifier does not read SMS rows at all, so they stay pending with their attempts intact. Stage local and test never use the real gateway (only `TC_SMS=fake`).
 
-The secrets reach the code as the variables `SST_RESOURCE_SmsApiKey` and `SST_RESOURCE_SmsSenderId` (the convention of `apps/web/server/secrets.ts` and `functions/notifier/secrets.ts`, the same as the database password). VERIFY on the first deploy that SST really sets these variables in the Lambda functions and the Next.js server function; if it does not, SMS stays off (fail closed) and the database password fails the same way.
+The secrets reach the code as SST links, read with the SST SDK (`Resource` of `sst/resource`, WPU-Z15; through the one link reader `packages/db/links.ts` (`@tc/db/links`), used by `apps/web/server/secrets.ts` and `functions/notifier/secrets.ts` and by the database password in `packages/db/env.ts`). SST 4.17.2 gives a deployed Lambda function its links only in an encrypted file (`SST_KEY_FILE`, `SST_KEY`) and the Next.js server through the wrapper that decrypts that file into `globalThis.SST_KEY_FILE_DATA`; only `sst dev` sets the variables `SST_RESOURCE_SmsApiKey` and `SST_RESOURCE_SmsSenderId`. If a secret cannot be read, SMS stays off (fail closed), and an unreadable database password fails the same way. VERIFY on the first staging deploy: a phone OTP reaches a test phone.
 
 ## IP whitelist
 

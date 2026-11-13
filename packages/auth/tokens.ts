@@ -14,9 +14,6 @@ export interface VerifiedToken {
   readonly issuedAt: Date; // iat
   readonly authTime: Date; // auth_time
   readonly expiresAt: Date; // exp
-  // The `amr` claim (authentication methods) as a list of strings; [] when absent. The admin check
-  // reads it for the second factor (6.2).
-  readonly amr?: readonly string[];
 }
 
 export type TokenOutcome =
@@ -93,11 +90,7 @@ export function createAccessTokenVerifier(
         const expiresAt = secondsToDate(payload["exp"]);
         if (typeof sub !== "string" || sub.length === 0 || !issuedAt || !authTime || !expiresAt)
           return INVALID;
-        const rawAmr = payload["amr"];
-        const amr = Array.isArray(rawAmr)
-          ? rawAmr.filter((x): x is string => typeof x === "string")
-          : [];
-        return { ok: true, token: { sub, issuedAt, authTime, expiresAt, amr } };
+        return { ok: true, token: { sub, issuedAt, authTime, expiresAt } };
       } catch (error) {
         return outcomeOfError(error);
       }

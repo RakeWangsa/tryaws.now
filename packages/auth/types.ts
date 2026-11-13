@@ -26,11 +26,10 @@ export type AuthReason =
   | "unavailable"
   | "not_configured"
   | "fresh_sign_in_required"
-  // The admin app (6.2): outside the IP allowlist, a disabled admin, no second factor in the token,
-  // a role the action does not allow.
+  // The admin app (6.2): outside the IP allowlist, a disabled admin, a role the action does not allow.
+  // (The second factor is proven by the sign-in flow, not by the token: admin.ts, WPU-Z15.)
   | "ip_not_allowed"
   | "disabled"
-  | "mfa_required"
   | "role_not_allowed";
 
 export type AuthErrorCode = Extract<

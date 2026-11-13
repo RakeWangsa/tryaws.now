@@ -49,9 +49,17 @@ const FAKE = {
   TC_EPS: "fake",
 };
 
+// The secrets of these tests come from the SST_RESOURCE_<Name> variables of the environment object
+// (envLinks); the run-time path through the SST SDK is secrets-sst.test.ts (WPU-Z15). getRuntime keeps
+// its default, the SDK, with nothing linked.
 async function load() {
   vi.resetModules();
-  return import("./runtime.ts");
+  const runtime = await import("./runtime.ts");
+  const { envLinks } = await import("@tc/db/links");
+  const { linkedSecrets } = await import("./secrets.ts");
+  const assembleRuntime = (env: Record<string, string | undefined>) =>
+    runtime.assembleRuntime(env, linkedSecrets(envLinks(env)));
+  return { ...runtime, assembleRuntime };
 }
 
 beforeEach(() => {
