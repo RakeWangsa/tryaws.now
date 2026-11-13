@@ -3798,6 +3798,23 @@ TASKS["WPU-Z18"] = [
   repo,
 ];
 
+// WPU-Z19: product adapters match current AWS documentation (disks, Route 53 Domains, record batches, TLD
+// allowlist, bundle power, snapshot metering, INSYNC wait); core and db include PostgreSQL.
+TASKS["WPU-Z19"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  aws,
+  provisioner,
+  web,
+  admin,
+  repo,
+];
+
 // WPU-Z17: Gennet answers are read by their status code.
 TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];
 
