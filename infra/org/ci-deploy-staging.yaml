@@ -56,13 +56,15 @@ Description: >-
 # platform/src/components/aws/helpers/provider.ts). The tag-based Deny below relies on it; where a service
 # does not evaluate aws:ResourceTag for an action, the name-based Deny is the remaining guard.
 # KNOWN ONE-ACCOUNT RESIDUALS (WPU-Z11 review, Needs decision): this role is NOT confined to its stage for
-# (1) CloudFront distributions and KeyValueStores: cloudfront:* and the KeyValueStore actions are on "*" and
-# key-value-store/*; distributions and stores have random ids, and whether CloudFront evaluates
+# (1) CloudFront distributions, the response headers policy tc-<stage>-security-headers and KeyValueStores:
+# cloudfront:* and the KeyValueStore actions are on "*" and key-value-store/*; their ARNs carry random ids, and whether CloudFront evaluates
 # aws:ResourceTag/sst:stage for distribution actions is a VERIFY (the tag Deny guards them if it does; a
 # KeyValueStore takes no tags); (2) ACM certificates (random ids; guarded only by the tag Deny, VERIFY that
 # SST tags them and ACM evaluates the tag); (3) SES: ses:* on "*" reaches the identity tryaws.now that both
-# stages share. WAF web ACLs and IP sets are named tc-<stage>-* and denied by name; CloudFront Functions by
-# name (VERIFY the names). Separate accounts remove these residuals.
+# stages share; (4) the shared SST asset bucket sst-asset-*: function code objects have keys without the
+# stage (assets/<name>-code-<hash>.zip), so either deploy role can overwrite the code the other stage
+# deploys. WAF web ACLs and IP sets are named tc-<stage>-* and denied by name; CloudFront Functions by name
+# (VERIFY the names). Separate accounts remove these residuals.
 # VERIFY: the KvKeys provider of SST (CloudFront KeyValueStore of the Next.js sites) needs exactly
 # DescribeKeyValueStore, ListKeys and UpdateKeys; the budget of a lean stage needs the five budgets actions
 # below (tags on create need budgets:TagResource, Service Authorization Reference of AWS Budgets).
@@ -495,7 +497,8 @@ Resources:
               # The SST bootstrap is SHARED by both stages of the account (/sst/bootstrap, the state bucket
               # sst-state-*, the asset bucket sst-asset-*). A deploy role uses them but must not change or
               # remove them; after an SST upgrade one SST command with administrator credentials bootstraps
-              # again (docs/runbooks/go-live.md). Only bucket-level actions are denied; objects stay usable.
+              # again (docs/runbooks/go-live.md). Only bucket-level actions are denied here: object access in the shared
+              # asset bucket is known residual (4) above (function code keys carry no stage).
               - Sid: NeverTheSharedSstBootstrap
                 Effect: Deny
                 Action:
@@ -518,6 +521,23 @@ Resources:
                 Resource:
                   - arn:aws:s3:::sst-state-*
                   - arn:aws:s3:::sst-asset-*
+              # WPU-Z11 fix round 2: the name-based object denies must not be bypassed through an S3 access
+              # point (its ARN names the access point, not the bucket). SST 4.17.2 and infra/stacks create
+              # no S3 access point (only efs.AccessPoint exists in SST, unused here).
+              - Sid: NeverCreateAnS3AccessPoint
+                Effect: Deny
+                Action:
+                  - s3:CreateAccessPoint
+                  - s3:CreateAccessPointForObjectLambda
+                  - s3:CreateMultiRegionAccessPoint
+                Resource: "*"
+              - Sid: NeverUseAnS3AccessPoint
+                Effect: Deny
+                Action: s3:*
+                Resource: "*"
+                Condition:
+                  "Null":
+                    s3:DataAccessPointArn: "false"
               - Sid: OnlyTheDnsRecordsOfTheStage
                 Effect: Deny
                 Action: route53:ChangeResourceRecordSets

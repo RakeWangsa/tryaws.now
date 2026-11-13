@@ -510,6 +510,27 @@ describe("one account: fixed names are unique and each deploy role stays in its 
       for (const a of list(buckets.Action)) expect(a).not.toMatch(/Object/);
       expect(buckets.Resource).toEqual(["arn:aws:s3:::sst-state-*", "arn:aws:s3:::sst-asset-*"]);
     });
+
+    // WPU-Z11 fix round 2: the name-based object denies cannot be bypassed through an S3 access point.
+    it("may neither create nor use an S3 access point", () => {
+      const create = statements.find((s) => s.Sid === "NeverCreateAnS3AccessPoint");
+      expect(create).toMatchObject({ Effect: "Deny", Resource: "*" });
+      expect(list(create.Action).sort()).toEqual([
+        "s3:CreateAccessPoint",
+        "s3:CreateAccessPointForObjectLambda",
+        "s3:CreateMultiRegionAccessPoint",
+      ]);
+      const use = statements.find((s) => s.Sid === "NeverUseAnS3AccessPoint");
+      expect(use).toMatchObject({ Effect: "Deny", Action: "s3:*", Resource: "*" });
+      expect(use.Condition).toEqual({ Null: { "s3:DataAccessPointArn": "false" } });
+    });
+
+    it("names the shared SST asset bucket and the response headers policy as known residuals", () => {
+      const text = readFileSync(join(root, "infra", "org", file), "utf8");
+      expect(text).toContain("(4) the shared SST asset bucket sst-asset-*");
+      expect(text).toContain("tc-<stage>-security-headers");
+      expect(text).not.toContain("objects stay usable");
+    });
   });
 
   // WPU-Z11 (security review): a role CREATED by one stage (it carries that stage's boundary) cannot read

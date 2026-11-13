@@ -478,5 +478,8 @@ describe("docs/runbooks/go-live.md", () => {
       at = next;
     }
     expect(page).toContain("list-open-id-connect-providers");
+    // WPU-Z11 fix round 2: the one-account residuals are named, the asset bucket and headers policy included
+    expect(page).toContain("the shared SST asset bucket `sst-asset-*`");
+    expect(page).toContain("`tc-<stage>-security-headers`");
   });
 });
