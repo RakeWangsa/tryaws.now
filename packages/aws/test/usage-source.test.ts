@@ -72,7 +72,7 @@ it("sums the available snapshots per parent for today (Dhaka) and ignores the re
   aws.on(
     "lightsail",
     "GetDiskSnapshots",
-    lightsailOk({ diskSnapshots: [snap({ fromDiskName: DISK, sizeInGb: 8 })] }),
+    lightsailOk({ diskSnapshots: [snap({ fromDiskName: DISK, sizeInGb: 8, state: "completed" })] }),
     lightsailOk(EMPTY),
   );
   aws.on(
@@ -95,6 +95,32 @@ it("sums the available snapshots per parent for today (Dhaka) and ignores the re
   expect(snaps.map((s) => s.awsName)).toContain(DISK);
   expect(snaps.map((s) => s.awsName)).toContain(DB);
   expect(aws.seen.find((r) => r.service === "sts")!.body).toContain("role%2FTcReader");
+});
+
+// WPU-Z19 (verify review, JOURNEY.md:2022): DiskSnapshot.state is pending, completed, error or unknown; a disk
+// snapshot is never "available". Instance and database snapshots keep "available".
+it("meters a completed disk snapshot; available, pending, error and unknown disk snapshots are not charged", async () => {
+  const { aws, source } = setup();
+  aws.on("lightsail", "GetInstanceSnapshots", lightsailOk(EMPTY));
+  aws.on(
+    "lightsail",
+    "GetDiskSnapshots",
+    lightsailOk({
+      diskSnapshots: [
+        snap({ fromDiskName: DISK, sizeInGb: 8, state: "completed" }),
+        snap({ fromDiskName: DISK, sizeInGb: 16, state: "completed" }),
+        snap({ fromDiskName: DISK, sizeInGb: 100, state: "available" }),
+        snap({ fromDiskName: DISK, sizeInGb: 100, state: "pending" }),
+        snap({ fromDiskName: DISK, sizeInGb: 100, state: "error" }),
+        snap({ fromDiskName: DISK, sizeInGb: 100, state: "unknown" }),
+      ],
+    }),
+  );
+  aws.on("lightsail", "GetRelationalDatabaseSnapshots", lightsailOk(EMPTY));
+  const samples = await source.read(ACCOUNT);
+  expect(samples.find((s) => s.metric === "snapshot_gb" && s.awsName === DISK)?.quantityGb).toBe(
+    "24",
+  );
 });
 
 it("follows pageToken and fails closed when pages never end", async () => {

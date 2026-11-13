@@ -111,10 +111,12 @@ export function createLightsailUsageSource(
     const client = access.lightsail(account, region, "TcReader");
     const token = (t: string | undefined) => (t === undefined ? {} : { pageToken: t });
 
-    // Snapshot GB: the available snapshots of one parent, added up, for today.
+    // Snapshot GB: the finished snapshots of one parent, added up, for today. WPU-Z19: a finished disk snapshot is
+    // "completed" (DiskSnapshot.state: pending, completed, error, unknown); an instance or database snapshot is
+    // "available". Any other state has no size to charge yet.
     const totals = new Map<string, number>();
     const add = (kind: Kind, parent: unknown, size: unknown, state: unknown, op: string) => {
-      if (state !== "available") return; // pending or error: no size to charge yet
+      if (state !== (kind === "disk" ? "completed" : "available")) return;
       const gb = wholeGb(size, op);
       if (typeof parent !== "string" || !NAMES[kind].test(parent)) return; // not ours
       totals.set(parent, (totals.get(parent) ?? 0) + gb);
