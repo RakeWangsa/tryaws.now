@@ -32,7 +32,10 @@ describe("the unpaid static IP charge", () => {
        where id = $1`,
       [resourceId, DETACHED.toISOString()],
     );
+    // The real writer (@tc/notify) keeps one message per dedupeKey (R7); this stand-in does the same, so the
+    // test sees what a customer would receive, and a replay is a no-op only if the job reuses the key.
     const notices: Notice[] = [];
+    const seenKeys = new Set<string>();
     const unpaid = (now: Date) => {
       kit.clock.set(now);
       return runUnpaid({
@@ -40,6 +43,8 @@ describe("the unpaid static IP charge", () => {
         clock: kit.clock,
         log: () => undefined,
         notice: async (_tx, n) => {
+          if (seenKeys.has(n.dedupeKey)) return;
+          seenKeys.add(n.dedupeKey);
           notices.push(n);
         },
       });
@@ -101,7 +106,7 @@ describe("the unpaid static IP charge", () => {
 // WPU-Y3b. The new statements (written without a database in this session; NOT RUN here, run with pnpm db:up).
 describe("the marks and the range read of WPU-Y3b", () => {
   it("keeps the first and last failed static IP hour, and clears them with the episode", async () => {
-    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
     const { resourceId } = await placeOne(kit, buyer);
     const at = (ms: number) => new Date(T0.getTime() + ms);
     await worker((tx) => meteringRepo(tx).markUnpaid(resourceId, T0, "2026-11-11T13"));
@@ -120,7 +125,7 @@ describe("the marks and the range read of WPU-Y3b", () => {
 
   // WPU-Y9 finding 4 (NOT RUN here, no database).
   it("keeps the oldest failed snapshot day and clears it with the episode", async () => {
-    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
     const { resourceId } = await placeOne(kit, buyer);
     const repo = (tx: Parameters<typeof meteringRepo>[0]) => meteringRepo(tx);
     await worker((tx) => repo(tx).markUnpaid(resourceId, T0, undefined, "2026-11-10"));
@@ -139,7 +144,7 @@ describe("the marks and the range read of WPU-Y3b", () => {
 
   // WPU-Y9 (NOT RUN here, no database): held hours carry no unpaid clock but are listed for the daily job.
   it("markHeld keeps the hour range without unpaidSince, and the job lists such a resource", async () => {
-    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
     const { resourceId } = await placeOne(kit, buyer);
     await worker((tx) => meteringRepo(tx).markHeld(resourceId, "2026-11-11T15"));
     await worker((tx) => meteringRepo(tx).markHeld(resourceId, "2026-11-11T13"));
@@ -155,7 +160,7 @@ describe("the marks and the range read of WPU-Y3b", () => {
   });
 
   it("reads the charged keys of a range in one statement", async () => {
-    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
     const { resourceId } = await placeOne(kit, buyer);
     const prefix = `meter:${resourceId}:static_ip_hour:`;
     const keys = await worker((tx) =>
@@ -169,7 +174,7 @@ describe("the marks and the range read of WPU-Y3b", () => {
 // NOT RUN here, run with pnpm db:up).
 describe("the system cancel of an operation that has not started (WPU-Y3c)", () => {
   it("fails a queued or unapproved operation once, leaves a started or approved one alone", async () => {
-    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const buyer = await kit.newBuyer({ balanceMinor: 20_000_000n });
     const { resourceId } = await placeOne(kit, buyer);
     const add = async (key: string, state: string, attempts = 0): Promise<string> => {
       const rows = await q(
