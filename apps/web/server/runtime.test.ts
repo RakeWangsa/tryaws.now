@@ -286,6 +286,26 @@ describe("assembleRuntime: the auth parts", () => {
     }
   });
 
+  // Final review M2: the SMS secrets may stay on the placeholder not-configured (SMS off). Then there is no
+  // OTP service (the screens show "SMS unavailable") and no request ever reaches Gennet.
+  it("either SMS secret on the placeholder not-configured is no OTP service and no call to Gennet", async () => {
+    const { assembleRuntime } = await load();
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    const placeholder = '{"type":"sst.sst.Secret","value":"not-configured"}';
+    for (const stage of ["staging", "production"]) {
+      for (const off of [
+        { SST_RESOURCE_SmsApiKey: placeholder },
+        { SST_RESOURCE_SmsSenderId: placeholder },
+        { SST_RESOURCE_SmsApiKey: placeholder, SST_RESOURCE_SmsSenderId: placeholder },
+      ]) {
+        const env = { ...STAGING, TC_STAGE: stage, ...POOL, ...KEYS, ...SMS, ...off };
+        expect((await assembleRuntime(env)).runtime.otp, stage).toBeNull();
+      }
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("in stage local or test without the fake switch no gateway is built, even with its secrets", async () => {
     const { assembleRuntime } = await load();
     for (const stage of ["local", "test"]) {

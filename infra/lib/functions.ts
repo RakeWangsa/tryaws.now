@@ -83,6 +83,11 @@ export const DB_PASSWORD_SECRET: Readonly<Record<DbRoleName, string>> = {
 // is the placeholder of scripts/golive/stage-secrets.sh and FIRST_ADMIN_NOT_CONFIGURED of @tc/db.
 export const FIRST_ADMIN_SUB_SECRET = "FirstAdminSub";
 export const OPTIONAL_SECRET_PLACEHOLDER = "not-configured";
+// Final review M2: the two secrets of the SMS gateway (Gennet) are optional too. They keep their place in
+// ALL_SECRETS and their links, and are declared with the same placeholder (infra/stacks/secrets.ts), so a
+// stage deploys without an SMS contract; the readers (apps/web/server/secrets.ts, functions/notifier/secrets.ts)
+// treat the placeholder as "SMS off" and never send it to Gennet.
+export const OPTIONAL_SMS_SECRETS: readonly SecretName[] = ["SmsApiKey", "SmsSenderId"];
 
 // 3.3: these four are listed in the proxy credentials; migrator uses the master user to create roles.
 export const PROXY_ROLES: readonly DbRoleName[] = ["web_rw", "admin_rw", "worker_rw", "report_ro"];

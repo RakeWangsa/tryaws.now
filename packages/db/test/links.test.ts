@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Resource } from "sst/resource";
 import { describe, expect, it } from "vitest";
-import { envLinks, secretValue, sstLinks } from "../links";
+import { configuredSecretValue, envLinks, NOT_CONFIGURED, secretValue, sstLinks } from "../links";
 
 // WPU-Z15: @tc/db/links is the one reader of linked SST values of the repository (packages/db/env.ts,
 // apps/web/server/secrets.ts, apps/admin/server/rate-subject.ts, functions/migrator/config.ts and
@@ -87,6 +87,24 @@ describe("secretValue, the value of a linked sst.Secret", () => {
     ];
     for (const shape of shapes) {
       expect(secretValue(shape), String(shape)).toBeUndefined();
+    }
+  });
+});
+
+// Final review M2, M3: the one placeholder of a secret that is deliberately not configured (EPS values left
+// empty, the optional SMS secrets, FirstAdminSub). It reads as no value, exactly, and only as a whole value.
+describe("configuredSecretValue, a secret value that is not the placeholder not-configured", () => {
+  it("the placeholder is the literal not-configured", () => {
+    expect(NOT_CONFIGURED).toBe("not-configured");
+  });
+
+  it("gives the value, and undefined for the placeholder and for every shape secretValue refuses", () => {
+    expect(configuredSecretValue({ value: "fake-value" })).toBe("fake-value");
+    expect(configuredSecretValue({ value: "not-configured-is-only-a-prefix-here" })).toBe(
+      "not-configured-is-only-a-prefix-here",
+    );
+    for (const shape of [{ value: NOT_CONFIGURED }, { value: "" }, undefined, null, {}]) {
+      expect(configuredSecretValue(shape), JSON.stringify(shape)).toBeUndefined();
     }
   });
 });

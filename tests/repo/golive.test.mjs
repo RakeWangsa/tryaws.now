@@ -307,6 +307,43 @@ describe("scripts/golive/stage-secrets.sh", () => {
     expect(r.stdout + r.stderr).not.toMatch(/merchant-test-value|rand-|a-value-that-must-not-show/);
   });
 
+  // Final review M2: the SMS gateway is optional. An empty token or sender id sets nothing (the stack's
+  // placeholder not-configured applies and SMS is off), like FirstAdminSub; a value is set as before.
+  it("an empty SMS token or sender id sets nothing and says SMS stays off", () => {
+    expect(text).toMatch(
+      /read -rs -p "Gennet API token for \$\{STAGE\} \(hidden; empty = SMS off\): " SMS_TOKEN \|\| SMS_TOKEN=""/,
+    );
+    expect(text).toMatch(
+      /read -r -p "SMS sender id \(sid\) for \$\{STAGE\} \(empty = SMS off\): " SMS_SENDER \|\| SMS_SENDER=""/,
+    );
+    const smsSets = (calls) =>
+      calls.split("\n").filter((l) => /secret set Sms(ApiKey|SenderId) /.test(l));
+    // both empty, then five empty EPS answers and an empty FirstAdminSub
+    const both = run(STAGE_SECRETS, ["staging"], { input: "\n\n\n\n\n\n\n\n" });
+    expect(both.status, both.stderr).toBe(0);
+    expect(smsSets(both.calls)).toEqual([]);
+    expect(both.stdout).toContain(
+      "skipped SmsApiKey (empty: SMS stays off, the placeholder not-configured applies)",
+    );
+    expect(both.stdout).toContain(
+      "skipped SmsSenderId (empty: SMS stays off, the placeholder not-configured applies)",
+    );
+    expect(both.calls.split("\n").filter((l) => l.includes("secret set"))).toHaveLength(15);
+    // a token and an empty sender id: the token is set, the sender id is not
+    const one = run(STAGE_SECRETS, ["staging"], { input: "token-test-value\n\n\n\n\n\n\n\n" });
+    expect(one.status, one.stderr).toBe(0);
+    expect(smsSets(one.calls)).toEqual([
+      "npx --no-install sst secret set SmsApiKey --stage staging CI= TC_PRODUCTION_DEPLOY= VALUE=token-test-value",
+    ]);
+    expect(one.stdout + one.stderr).not.toContain("token-test-value");
+    // the end of the input at the SMS prompts is the same as empty answers (the EPS prompts after them
+    // still need an answer each, as before)
+    const eof = run(STAGE_SECRETS, ["staging"], { input: "" });
+    expect(eof.stdout).toContain("skipped SmsApiKey (empty: SMS stays off");
+    expect(eof.stdout).toContain("skipped SmsSenderId (empty: SMS stays off");
+    expect(smsSets(eof.calls)).toEqual([]);
+  });
+
   it("--force sets the names that already have a value", () => {
     const r = run(STAGE_SECRETS, ["staging", "--force"], {
       env: { FAKE_EXISTING: "SmsApiKey SmsSenderId" },

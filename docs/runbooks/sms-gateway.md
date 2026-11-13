@@ -25,12 +25,12 @@ Set both in your own terminal, per stage, from the Gennet portal. The values are
 2. `npx sst secret set SmsSenderId <sender id> --stage staging`
 3. Deploy the stage (ask first; production only through the CI deploy after approval). A new value applies at the next deploy.
 
-`SmsSenderId` is new with WPU-Z3. Every secret of `infra/lib/functions.ts` needs a value on a stage before its next deploy (VERIFY: a `sst.Secret` without a value fails the deploy with its name). A personal stage without real values gets obviously fake ones: every SMS then fails at the gateway (unauthorized), nothing is sent, and SMS rows end failed after their attempts.
+`SmsSenderId` is new with WPU-Z3. Both SMS secrets are optional (final review M2): `infra/stacks/secrets.ts` declares them with the placeholder `not-configured`, so a stage without an SMS contract deploys with SMS off. `scripts/golive/stage-secrets.sh` asks for both and an empty answer sets nothing (the placeholder applies). Every other secret of `infra/lib/functions.ts` needs a value on a stage before its next deploy (VERIFY: a `sst.Secret` without a value fails the deploy with its name).
 
 What the code does with them (fail closed, R16):
 
 - Both readable and not empty: the web app on stage staging or production builds the gateway, and the phone OTP works; the notifier sends the SMS rows.
-- Either one missing, empty or unreadable: the web app has no OTP service (the phone step of `/verify` shows the "not open" state) and the notifier does not read SMS rows at all, so they stay pending with their attempts intact. Stage local and test never use the real gateway (only `TC_SMS=fake`).
+- Either one missing, empty, unreadable or the placeholder `not-configured`: the web app has no OTP service (the phone step of `/verify` shows the "not open" state) and the notifier does not read SMS rows at all, so they stay pending with their attempts intact. Nothing is ever sent to Gennet then, and the placeholder is never used as a token or a sender id. Stage local and test never use the real gateway (only `TC_SMS=fake`).
 
 The secrets reach the code as SST links, read with the SST SDK (`Resource` of `sst/resource`, WPU-Z15; through the one link reader `packages/db/links.ts` (`@tc/db/links`), used by `apps/web/server/secrets.ts` and `functions/notifier/secrets.ts` and by the database password in `packages/db/env.ts`). SST 4.17.2 gives a deployed Lambda function its links only in an encrypted file (`SST_KEY_FILE`, `SST_KEY`) and the Next.js server through the wrapper that decrypts that file into `globalThis.SST_KEY_FILE_DATA`; only `sst dev` sets the variables `SST_RESOURCE_SmsApiKey` and `SST_RESOURCE_SmsSenderId`. If a secret cannot be read, SMS stays off (fail closed), and an unreadable database password fails the same way. VERIFY on the first staging deploy: a phone OTP reaches a test phone.
 

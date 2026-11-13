@@ -44,3 +44,12 @@ it("the SST SDK, with nothing linked, gives undefined and not an error (WPU-Z15)
   expect(linkedSecret(sstLinks, "SmsApiKey")).toBeUndefined();
   expect(linkedSecret(sstLinks, "SmsSenderId")).toBeUndefined();
 });
+
+// Final review M2: SmsApiKey and SmsSenderId may stay on the placeholder not-configured (SMS off). The
+// placeholder is never a value: it would otherwise be sent to Gennet as a token or a sender id.
+it("reads the placeholder not-configured as no value", () => {
+  const placeholder = '{"type":"sst.sst.Secret","value":"not-configured"}';
+  const env = { SST_RESOURCE_SmsApiKey: placeholder, SST_RESOURCE_SmsSenderId: placeholder };
+  expect(linkedSecret(envLinks(env), "SmsApiKey")).toBeUndefined();
+  expect(linkedSecret(envLinks(env), "SmsSenderId")).toBeUndefined();
+});

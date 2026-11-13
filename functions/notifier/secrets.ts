@@ -1,4 +1,4 @@
-import { secretValue, type LinkSource } from "@tc/db/links";
+import { configuredSecretValue, type LinkSource } from "@tc/db/links";
 
 // WPU-Z3: the two secrets of the SMS gateway reach the notifier only through this reader (R3): SmsApiKey
 // (the Gennet api_token) and SmsSenderId (the sid). A secret is read when asked for and is never held in
@@ -12,7 +12,9 @@ import { secretValue, type LinkSource } from "@tc/db/links";
 
 export type NotifierSecretName = "SmsApiKey" | "SmsSenderId";
 
-// The `value` of the linked sst.Secret, when it is a string that is not empty.
+// The `value` of the linked sst.Secret, when it is a string that is not empty and not the placeholder
+// `not-configured` (final review M2): the owner may leave both SMS secrets on it, which is "SMS off", and the
+// placeholder must never reach Gennet as a token or a sender id.
 export function linkedSecret(links: LinkSource, name: NotifierSecretName): string | undefined {
-  return secretValue(links(name));
+  return configuredSecretValue(links(name));
 }
