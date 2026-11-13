@@ -137,6 +137,23 @@ describe("the marks and the range read of WPU-Y3b", () => {
     );
   });
 
+  // WPU-Y9 (NOT RUN here, no database): held hours carry no unpaid clock but are listed for the daily job.
+  it("markHeld keeps the hour range without unpaidSince, and the job lists such a resource", async () => {
+    const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
+    const { resourceId } = await placeOne(kit, buyer);
+    await worker((tx) => meteringRepo(tx).markHeld(resourceId, "2026-11-11T15"));
+    await worker((tx) => meteringRepo(tx).markHeld(resourceId, "2026-11-11T13"));
+    const rows = await q("select config from resources where id = $1", [resourceId]);
+    const config = rows[0]!.config as Record<string, string>;
+    expect(config.unpaidSince).toBeUndefined();
+    expect(config.unpaidIpFrom).toBe("2026-11-11T13");
+    expect(config.unpaidIpTo).toBe("2026-11-11T15");
+    const listed = await worker((tx) => meteringRepo(tx).listUnpaidResources(null, 200));
+    const mine = listed.find((r) => r.resourceId === resourceId);
+    expect(mine).toBeDefined();
+    expect(mine?.unpaidSince).toBeNull();
+  });
+
   it("reads the charged keys of a range in one statement", async () => {
     const buyer = await kit.newBuyer({ balanceMinor: 1_000n });
     const { resourceId } = await placeOne(kit, buyer);

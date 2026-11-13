@@ -60,8 +60,13 @@ export interface UnrecordedCharge {
   readonly orderId: string | null;
   readonly ledgerTransactionId: string;
   readonly totalMinor: bigint;
-  /** The snapshot that priced an order; null for a renewal (it stores none). */
+  /** The snapshot that priced an order (the order row); null for a renewal. */
   readonly priceSnapshot: unknown;
+  /**
+   * WPU-Y9. The price snapshot saved with the charge itself (ledger_transactions.price_snapshot, WPU-Y2): the
+   * source of the invoice lines. Null for a charge from before it existed (legacy).
+   */
+  readonly chargeSnapshot: unknown;
 }
 
 /** WPU-C1: a reversal of a charge with an issued invoice and no credit note yet. */
@@ -262,11 +267,12 @@ export function invoiceBacklogRepo(tx: Tx): InvoiceBacklogRepo {
         customer_id: string;
         total: string;
         snapshot: unknown;
+        charge_snapshot: unknown;
       }>(sql`
         select * from (
           select lt.id::text as ltx, 'order'::text as kind, o.id::text as order_id,
                  o.customer_id::text as customer_id, o.total_minor::text as total,
-                 o.price_snapshot as snapshot, lt.created_at
+                 o.price_snapshot as snapshot, lt.price_snapshot as charge_snapshot, lt.created_at
           from orders o join ledger_transactions lt on lt.id = o.ledger_transaction_id
           where lt.created_at >= now() - make_interval(days => ${windowDays})
             and o.total_minor > 0 and ${recorded}
@@ -276,7 +282,7 @@ export function invoiceBacklogRepo(tx: Tx): InvoiceBacklogRepo {
                     join ledger_accounts a on a.id = e.account_id
                    where e.transaction_id = lt.id and a.type = 'customer_wallet'
                      and e.direction = 'debit'),
-                 null::jsonb, lt.created_at
+                 null::jsonb, lt.price_snapshot, lt.created_at
           from ledger_transactions lt join subscriptions sub on sub.id = lt.reference_id
           where lt.kind = 'renewal' and lt.reference_type = 'subscription'
             and lt.created_at >= now() - make_interval(days => ${windowDays}) and ${recorded}
@@ -290,6 +296,7 @@ export function invoiceBacklogRepo(tx: Tx): InvoiceBacklogRepo {
         ledgerTransactionId: r.ltx,
         totalMinor: BigInt(r.total),
         priceSnapshot: r.snapshot,
+        chargeSnapshot: r.charge_snapshot ?? null,
       }));
     },
 

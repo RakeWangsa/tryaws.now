@@ -133,6 +133,11 @@ export interface UnpaidOps {
   balance(tx: Tx, customerId: string): Promise<bigint>;
   post(tx: Tx, input: PostTransactionInput): Promise<Result<{ transactionId: string }>>;
   clear(tx: Tx, resourceId: string): Promise<void>;
+  /**
+   * WPU-Y9. Starts the unpaid clock (`unpaidSince`) of a resource that had only held hours, at the first
+   * charge that failed for `insufficient_balance`. Optional: absent means a world without it.
+   */
+  startClock?(tx: Tx, resourceId: string, at: Date): Promise<void>;
   setFlag(
     tx: Tx,
     resourceId: string,
@@ -173,6 +178,7 @@ export const defaultUnpaidOps: UnpaidOps = {
   balance: (tx, customerId) => walletBalance(tx, customerId),
   post: postTransaction,
   clear: (tx, resourceId) => meteringRepo(tx).clearUnpaid(resourceId),
+  startClock: (tx, resourceId, at) => meteringRepo(tx).markUnpaid(resourceId, at),
   setFlag: (tx, resourceId, key, value) => meteringRepo(tx).setUnpaidFlag(resourceId, key, value),
   enqueue: async (tx, input, now) => {
     const inserted = await insertOperation(
@@ -439,12 +445,19 @@ async function processOne(
   const row = await ops.lock(tx, listed.subscriptionId);
   if (row === null || row.resourceId !== listed.resourceId) return blocked();
   if (!(LIVE_STATES as readonly string[]).includes(row.resource.state)) return { messages };
-  const since = exactDate(row.resource.config.unpaidSince);
-  if (since === null) return blocked();
+  const markedSince = exactDate(row.resource.config.unpaidSince);
+  // WPU-Y9: held hours without the clock (a stale rate kept them). They are retried like unpaid periods,
+  // but nobody is near suspension or deletion until a charge fails for insufficient_balance.
+  const held =
+    markedSince === null &&
+    row.resource.config.unpaidSince === undefined &&
+    row.resource.config.unpaidIpFrom !== undefined;
+  if (markedSince === null && !held) return blocked();
+  const since = markedSince ?? now;
 
   const clock: Clock = { now: () => now };
   const config = row.resource.config;
-  const sinceMs = since.getTime();
+  const sinceMs = since.getTime(); // for a held resource this is now: day 0, the clock starts below
 
   // After the retention nothing is retried while the wallet is empty (a payment is what ends the wait).
   let retried: Retried;
@@ -455,6 +468,15 @@ async function processOne(
     retried = await retryCharges(tx, ops, row, since, now, clock, count);
   }
   if (retried === "blocked") return blocked();
+  if (held && retried !== "paid") {
+    // Nothing failed for a short wallet yet, only the cap of this run: the rest is next run, no clock.
+    if (retried === "capped") {
+      count.capped += 1;
+      return { messages };
+    }
+    // The first insufficient_balance result: the clock starts now (day 0, a warning only).
+    await ops.startClock?.(tx, row.resourceId, now);
+  }
 
   if (retried === "paid") {
     // Everything is paid: the episode ends. Only what this job did is undone (an admin's suspension

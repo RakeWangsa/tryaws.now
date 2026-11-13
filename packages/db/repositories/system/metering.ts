@@ -218,6 +218,20 @@ export function meteringRepo(tx: Tx) {
         where id = ${resourceId}`);
     },
 
+    // WPU-Y9. An hour that was held because no price could be quoted: the range of the mark only. It never
+    // writes `unpaidSince` (the clock of the 1 day and the 7 days): a stale rate is not the customer's debt.
+    async markHeld(resourceId: string, ipHour: string): Promise<void> {
+      if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
+      if (!IP_HOUR.test(ipHour)) throw new TypeError("metering: the hour has the wrong form");
+      await tx.execute(sql`
+        update resources
+        set config = config
+          || jsonb_build_object(
+               'unpaidIpFrom', least(coalesce(config ->> 'unpaidIpFrom', ${ipHour}::text), ${ipHour}::text),
+               'unpaidIpTo', greatest(coalesce(config ->> 'unpaidIpTo', ${ipHour}::text), ${ipHour}::text))
+        where id = ${resourceId}`);
+    },
+
     // WPU-Y3. Everything is paid: the episode ends and its marks go (`-` removes a top-level key).
     async clearUnpaid(resourceId: string): Promise<void> {
       if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
@@ -302,7 +316,8 @@ export function meteringRepo(tx: Tx) {
           (select s.id from subscriptions s where s.resource_id = r.id
             order by s.period_end desc limit 1) as subscription_id
         from resources r
-        where (r.config ->> 'unpaidSince') is not null
+        where ((r.config ->> 'unpaidSince') is not null
+               or (r.config ->> 'unpaidIpFrom') is not null) -- WPU-Y9: held hours, no clock yet
           and r.state in ('active', 'stopped', 'suspended')
           and (${afterId}::uuid is null or r.id > ${afterId}::uuid)
         order by r.id limit ${limit}`);

@@ -78,6 +78,7 @@ function build(init: Partial<World> = {}) {
     chargedQueries: 0,
     episode: undefined as number | undefined,
     balanceReads: 0,
+    clockStarts: [] as string[],
   };
   const fake: UnpaidOps = {
     enabled: async () => w.enabled,
@@ -85,14 +86,15 @@ function build(init: Partial<World> = {}) {
     list: async (_tx, after) => {
       calls.list += 1;
       const hasMark =
-        typeof w.config.unpaidSince === "string" &&
+        (typeof w.config.unpaidSince === "string" || typeof w.config.unpaidIpFrom === "string") &&
         ["active", "stopped", "suspended"].includes(w.state);
       if (!hasMark || after !== null) return [];
       const row: UnpaidResourceRow = {
         resourceId: RES,
         customerId: CUST,
         subscriptionId: SUB,
-        unpaidSince: new Date(w.config.unpaidSince as string),
+        unpaidSince:
+          typeof w.config.unpaidSince === "string" ? new Date(w.config.unpaidSince) : null,
       };
       return [row];
     },
@@ -153,6 +155,10 @@ function build(init: Partial<World> = {}) {
         "unpaidDayFrom",
       ])
         delete w.config[k];
+    },
+    startClock: async (_tx, _r, at) => {
+      calls.clockStarts.push(at.toISOString());
+      if (w.config.unpaidSince === undefined) w.config.unpaidSince = at.toISOString();
     },
     setFlag: async (_tx, _r, key, value) => {
       calls.flags.push(`${key}=${value}`);
@@ -763,6 +769,48 @@ describe("the suspend key changes after a resume (finding 2)", () => {
 });
 
 // Finding 3 (MEDIUM).
+// WPU-Y9: hours held because of a stale rate carry no clock. Nobody is suspended or told because of the
+// platform's rate; the clock starts at the first charge that fails for insufficient_balance.
+describe("held static IP hours without the unpaid clock", () => {
+  const H = (h: string): string => `meter:${RES}:static_ip_hour:${h}`;
+  const heldConfig = () => ({
+    staticIpAttached: true,
+    unpaidIpFrom: "2026-11-20T01",
+    unpaidIpTo: "2026-11-20T11",
+  });
+  it("rate refreshed and the wallet sufficient: hours charged, no suspension, no email, marks gone", async () => {
+    const t = build({ ipPrice: IP, config: heldConfig(), usage: [], balance: 1_000_000n });
+    const report = await t.run();
+    expect(report.paid).toBe(1);
+    expect(report.charged).toBe(11);
+    expect(t.posted.has(H("2026-11-20T01"))).toBe(true);
+    expect(t.ops.size).toBe(0);
+    expect(t.notices.size).toBe(0);
+    expect(t.calls.clockStarts).toEqual([]);
+    expect(t.w.config.unpaidSince).toBeUndefined();
+    expect(t.w.config.unpaidIpFrom).toBeUndefined();
+  });
+
+  it("rate still missing: blocked, no clock, no message", async () => {
+    const t = build({ ipPrice: null, config: heldConfig(), usage: [], balance: 1_000_000n });
+    const report = await t.run();
+    expect(report.blocked).toBe(1);
+    expect(t.calls.clockStarts).toEqual([]);
+    expect(t.w.config.unpaidSince).toBeUndefined();
+    expect(t.ops.size + t.notices.size + t.posted.size).toBe(0);
+  });
+
+  it("rate refreshed and the wallet short: the clock starts at the first insufficient_balance, day 0 is a warning only", async () => {
+    const t = build({ ipPrice: IP, config: heldConfig(), usage: [], balance: 100n });
+    const report = await t.run();
+    expect(t.calls.clockStarts).toEqual([NOW.toISOString()]);
+    expect(t.w.config.unpaidSince).toBe(NOW.toISOString());
+    expect(report.stillUnpaid).toBe(1);
+    expect(t.ops.size).toBe(0); // not suspended: the clock is at day 0
+    expect([...t.notices.values()].map((n) => n.template)).toEqual(["unpaid_warning"]);
+  });
+});
+
 describe("the unpaid static IP hours stay in the mark (finding 3)", () => {
   const H = (h: string): string => `meter:${RES}:static_ip_hour:${h}`;
   const ipConfig = () => ({

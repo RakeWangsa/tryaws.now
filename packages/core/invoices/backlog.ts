@@ -5,9 +5,11 @@ import {
   type UnrecordedCharge,
 } from "@tc/db";
 import type { Logger, RunTx } from "../operations/types";
+import { readChargeSnapshot } from "../pricing/charge-snapshot";
 import { parseSnapshot } from "../pricing/snapshot";
 import type { Clock } from "../types";
-import { fiscalYearOf } from "./base";
+import { fiscalYearOf, type InvoiceLine } from "./base";
+import { resolveChargeLines } from "./charge-lines";
 import { issueCreditNotes } from "./credit-note";
 import { invoiceIdFor, invoiceLinesOf, noteIdFor, queueIdFor, readBuyerSnapshot } from "./charge";
 
@@ -248,6 +250,39 @@ async function reconcile(
   return { reconciled, noted, creditNotes };
 }
 
+/**
+ * WPU-Y9. What to queue for an unrecorded charge, or null when it can only be noted. The lines come from the
+ * snapshot saved with the charge (resolveChargeLines), never from a rate read now, so a rate change after the
+ * charge cannot change the invoice. A legacy order (no saved snapshot) is built from the snapshot of its order
+ * row, as before; a legacy renewal has nothing to build from and is noted. A damaged snapshot is null (R16).
+ */
+export function backlogEntryOf(charge: UnrecordedCharge): {
+  kind: "order" | "renewal";
+  orderId: string | null;
+  lines: InvoiceLine[];
+} | null {
+  try {
+    const read = readChargeSnapshot(charge.chargeSnapshot);
+    if (read.state === "snapshot") {
+      const lines = resolveChargeLines(charge.chargeSnapshot, []).lines;
+      if (charge.kind === "order") {
+        return charge.orderId === null ? null : { kind: "order", orderId: charge.orderId, lines };
+      }
+      return { kind: "renewal", orderId: null, lines };
+    }
+    if (read.state === "legacy" && charge.kind === "order" && charge.orderId !== null) {
+      return {
+        kind: "order",
+        orderId: charge.orderId,
+        lines: invoiceLinesOf(parseSnapshot(charge.priceSnapshot)),
+      };
+    }
+  } catch {
+    // the lines cannot be rebuilt: the caller writes the notice
+  }
+  return null;
+}
+
 async function recordOne(
   deps: InvoiceBacklogDeps,
   charge: UnrecordedCharge,
@@ -255,15 +290,15 @@ async function recordOne(
   try {
     return await deps.runTx(async (tx) => {
       const invoices = customerRepos(tx, charge.customerId).invoices;
-      if (charge.kind === "order" && charge.orderId !== null) {
+      const entry = backlogEntryOf(charge);
+      if (entry !== null) {
         try {
-          const lines = invoiceLinesOf(parseSnapshot(charge.priceSnapshot));
           const queued = await invoices.queueBacklog({
             id: queueIdFor(charge.ledgerTransactionId),
-            kind: "order",
-            orderId: charge.orderId,
+            kind: entry.kind,
+            ...(entry.orderId === null ? {} : { orderId: entry.orderId }),
             ledgerTransactionId: charge.ledgerTransactionId,
-            lines,
+            lines: entry.lines,
             totalMinor: charge.totalMinor,
           });
           if (queued.ok) {
@@ -275,7 +310,7 @@ async function recordOne(
             return "queued" as const;
           }
         } catch {
-          // the lines cannot be rebuilt: fall through to the notice
+          // fall through to the notice
         }
       }
       const written = await invoices.noteUnrecorded({
