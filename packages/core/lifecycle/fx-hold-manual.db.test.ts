@@ -1,7 +1,8 @@
 // WPU-Y10 (written without a database in the sandbox: it needs PostgreSQL, see JOURNEY). A subscription WITHOUT
 // auto-renew is not charged by the scheduler, but while our USD to BDT rate is stale the customer cannot pay by hand
 // either. So its period end must not start the grace and its grace must not end in retention until a rate is back.
-// This file has its own database: the cases do not share rates with fx-hold.db.test.ts.
+// This file has its own database (not shared with fx-hold.db.test.ts), but its cases share rates, so each case
+// sets the rate it needs itself and does not depend on the order of the cases.
 import type { Tx } from "@tc/db";
 import { runTransaction, useTempDatabase } from "@tc/db/testing";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -72,8 +73,8 @@ describe("a subscription without auto-renew while the rate is stale", () => {
 
   it("is not retained while the rate is stale; the grace then runs from the moment a rate is back, with no charge", async () => {
     const f = await fresh();
-    await kit.refreshFx(); // fresh at the period end, so the grace starts normally
     kit.clock.set(new Date(f.end.getTime() + 60_000));
+    await kit.refreshFx(); // a rate entered at the period end, so the grace starts normally
     await sweep();
     expect(await status(f.subscriptionId)).toBe("grace");
     // 20 days later the rate is stale again and far beyond the grace hours
