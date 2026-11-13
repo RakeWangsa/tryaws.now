@@ -103,7 +103,8 @@ export const pricingEn: Same<typeof pricingBn> = {
       fromLabel: "Starts (Dhaka time)",
       bigChange:
         "Every new rate waits until a different admin approves it. A rate that differs by more than {percent}% from the rate in force also needs the confirm box.",
-      confirmLarge: "I checked this rate: it differs by more than {percent}% from the rate in force",
+      confirmLarge:
+        "I checked this rate: it differs by more than {percent}% from the rate in force",
       setBy: "Set by admin #{who} on",
       age: "Age of the rate: {days} days {hours} hours",
       state: {
@@ -113,8 +114,7 @@ export const pricingEn: Same<typeof pricingBn> = {
         stale: "Too old",
       },
       warn: {
-        missing:
-          "There is no rate. Purchases and renewals are refused until one is approved.",
+        missing: "There is no rate. Purchases and renewals are refused until one is approved.",
         ageing:
           "The rate is older than 6 days. After {max} days purchases are refused, renewals and usage charges wait. Set a new rate.",
         stale:

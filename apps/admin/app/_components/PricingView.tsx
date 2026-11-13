@@ -128,7 +128,9 @@ function FxFreshness({ screen }: { screen: PricingScreen }) {
     <div className="mb-3">
       {screen.fxMeta !== null && screen.fxMeta !== undefined ? (
         <p className="mb-1">
-          {t("setBy", { who: screen.fxMeta.setBy === null ? "-" : screen.fxMeta.setBy.slice(0, 8) })}{" "}
+          {t("setBy", {
+            who: screen.fxMeta.setBy === null ? "-" : screen.fxMeta.setBy.slice(0, 8),
+          })}{" "}
           <DateText value={screen.fxMeta.setAt} variant="datetime" />
         </p>
       ) : null}

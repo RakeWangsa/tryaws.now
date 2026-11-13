@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OPERATIONS_READ_CAP, assertWithinOperationCap } from "./metering.ts";
+import { OPERATIONS_READ_CAP, assertWithinOperationCap } from "./metering";
 
 // Automated security review, 2026-11-13: operationsOf cut the read at 500 oldest rows, so on a busy
 // resource the newest operations could be missing and a guard would decide on stale data (fail open).

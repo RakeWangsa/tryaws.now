@@ -56,7 +56,11 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
     async meta(market, at) {
       if (!(await isActiveAdmin(scope))) throw new DbError("42501");
       if (!isMarketCode(market) || !isInstant(at)) return null;
-      const { rows } = await scope.tx.execute<{ id: string; set_by: string | null; created_at: Date }>(
+      const { rows } = await scope.tx.execute<{
+        id: string;
+        set_by: string | null;
+        created_at: Date;
+      }>(
         sql`select id, set_by, created_at from fx_rates
             where market = ${market} and effective_from <= ${at}
             order by effective_from desc limit 1`,
@@ -146,8 +150,7 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
                   returning id, trim_scale(rate)::text as rate, created_at`,
             );
             const inserted = result.rows[0] as unknown as
-              | { id: string; rate: string; created_at: Date }
-              | undefined;
+              { id: string; rate: string; created_at: Date } | undefined;
             // Cannot happen while the lock is held (every other saver of the market waits or has
             // finished); a guard only (open point 20).
             if (!inserted) {

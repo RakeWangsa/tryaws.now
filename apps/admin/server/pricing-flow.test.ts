@@ -384,15 +384,18 @@ describe("setFx (WPU-Y1: every rate is a pending change that a second admin appr
     ["above the range of the market", "1270"],
     ["with an exponent", "1e2"],
     ["zero", "0"],
-  ])("a rate %s is invalid even with the confirm field, and nothing is written", async (_n, rate) => {
-    const { flow, fxChanges } = setup();
-    expect(await flow.setFx({ ...FX, rate, confirmLarge: true })).toEqual({
-      ok: false,
-      code: "invalid",
-      fields: ["rate"],
-    });
-    expect(fxChanges.request).not.toHaveBeenCalled();
-  });
+  ])(
+    "a rate %s is invalid even with the confirm field, and nothing is written",
+    async (_n, rate) => {
+      const { flow, fxChanges } = setup();
+      expect(await flow.setFx({ ...FX, rate, confirmLarge: true })).toEqual({
+        ok: false,
+        code: "invalid",
+        fields: ["rate"],
+      });
+      expect(fxChanges.request).not.toHaveBeenCalled();
+    },
+  );
 
   it("asking twice for the same change is a replay (R7); a different one while it waits is a conflict", async () => {
     const { flow, fxChanges } = setup();

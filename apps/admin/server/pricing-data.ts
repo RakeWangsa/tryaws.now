@@ -140,12 +140,9 @@ export async function loadPricing(
         }
       } else {
         // The editor opens on the rule in force for the family, or the rule of the market.
-        const found = await pricingInForce(
-          tx,
-          { market, productFamily: draft.family },
-          once,
-          { allowStale: true },
-        );
+        const found = await pricingInForce(tx, { market, productFamily: draft.family }, once, {
+          allowStale: true,
+        });
         if (found.ok) draft = { ...draft, steps: draftOfSteps(found.value.rule.value.steps) };
       }
       return {
