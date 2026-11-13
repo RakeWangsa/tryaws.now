@@ -39,6 +39,7 @@ describe("the log events of the alerts exist in the code that writes them", () =
     reconcileStaleOperations: "functions/reconciler/reconcile.ts",
     reconcileUsageFailed: "functions/reconciler/reconcile.ts",
     reconcileOk: "functions/reconciler/reconcile.ts",
+    notifierSmsOff: "functions/notifier/build.ts",
   };
 
   it("names exactly the events that have a writer in this test", () => {
@@ -199,6 +200,19 @@ describe("the wiring", () => {
     expect(workers).toMatch(
       /return \{ invoked, readerAliases, accessAliases, rendererAliasWeb, crons, provisioner,/,
     );
+  });
+
+  // WPU-Y5 (a): the notifier logs notifier_sms_off at the start of a run without the SMS gateway. The metric
+  // exists on every stage; only production alarms (staging may run without an SMS contract).
+  it("counts notifier_sms_off from the notifier's log and alarms on it in production only", () => {
+    expect(alarms).toMatch(
+      /alertFilter\( "NotifierSmsOffFilter", notifierFunction, \[ALERT_LOG_EVENTS\.notifierSmsOff\], "NotifierSmsOff", \)/,
+    );
+    expect(alarms).toContain('const notifierFunction = workers.crons["notifier"]?.nodes.function;');
+    expect(alarms).toMatch(
+      /stageKind\(stage\) === "production" \? alertAlarm\( "NotifierSmsOffAlarm", "NotifierSmsOff",/,
+    );
+    expect(alarms).toContain("notifierSmsOffAlarm,");
   });
 
   it("infra/app.ts hands the web components to the alarms", () => {

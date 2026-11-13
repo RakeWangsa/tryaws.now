@@ -15,7 +15,7 @@ import {
   LEDGER_SILENCE_HOURS,
   RECONCILE_SILENCE_HOURS,
 } from "../lib/functions";
-import { resourceName, type StageConfig } from "../lib/stage";
+import { resourceName, stageKind, type StageConfig } from "../lib/stage";
 import type { Messaging } from "./messaging";
 import type { Workers } from "./workers";
 
@@ -305,6 +305,25 @@ export function alarms(
     alarmDescription: "The reconciliation finished no run for 3 hours",
   });
 
+  // WPU-Y5 (a): production must not run with SMS off unnoticed. The notifier logs notifier_sms_off at the start
+  // of every run without the SMS gateway; the metric exists on every stage, the alarm only in production (a
+  // staging stage may run without an SMS contract). scripts/post-deploy-check.mjs also fails the deploy.
+  const notifierFunction = workers.crons["notifier"]?.nodes.function;
+  alertFilter(
+    "NotifierSmsOffFilter",
+    notifierFunction,
+    [ALERT_LOG_EVENTS.notifierSmsOff],
+    "NotifierSmsOff",
+  );
+  const notifierSmsOffAlarm =
+    stageKind(stage) === "production"
+      ? alertAlarm(
+          "NotifierSmsOffAlarm",
+          "NotifierSmsOff",
+          "The notifier runs without the SMS gateway (an SMS secret is on the placeholder): set SmsApiKey and SmsSenderId (docs/runbooks/sms-gateway.md)",
+        )
+      : undefined;
+
   // Item 36: 5xx. A Lambda that fails answers the caller with an error: for the two Next.js servers that
   // is a 5xx page, for the workers a failed run (R16 makes every job reject on failure). One alarm for
   // each function, on the AWS/Lambda Errors metric.
@@ -319,7 +338,7 @@ export function alarms(
     ["Reconciler", reconcilerFunction],
     ["LedgerCheck", workers.crons["ledger-check"]?.nodes.function],
     ["PaymentsSweeper", workers.crons["payments-sweeper"]?.nodes.function],
-    ["Notifier", workers.crons["notifier"]?.nodes.function],
+    ["Notifier", notifierFunction],
     ["CatalogSync", workers.crons["catalog-sync"]?.nodes.function],
     ["WebServer", customerServer],
     ["AdminServer", adminServer],
@@ -354,6 +373,7 @@ export function alarms(
     renewalPriceHoldAlarm,
     reconcileBadAlarm,
     reconcileSilentAlarm,
+    notifierSmsOffAlarm,
     functionErrorAlarms,
   };
 }

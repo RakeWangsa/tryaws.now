@@ -224,3 +224,16 @@ it("end to end over the Gennet transport (fake fetch): a failed send is retried 
     expect(logged).not.toContain(value);
   }
 });
+
+// WPU-Y5 (a): production must not run with SMS off unnoticed. A run without the SMS gateway starts with one
+// structured line (the alarm of infra/stacks/alarms.ts counts it); a run with the gateway does not.
+it("logs notifier_sms_off once at the start of a run without the SMS gateway, never with it", async () => {
+  const { transport } = fakeTransport();
+  const off = build(seeded(), transport);
+  await off.handler({});
+  expect(off.logs[0]).toEqual({ event: "notifier_sms_off", channel: "sms", severity: "alert" });
+  expect(off.logs.filter((e) => e.event === "notifier_sms_off")).toHaveLength(1);
+  const on = build(seeded(), fakeTransport().transport, recordingSms().sms);
+  await on.handler({});
+  expect(on.logs.some((e) => e.event === "notifier_sms_off")).toBe(false);
+});

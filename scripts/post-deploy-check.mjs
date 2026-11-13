@@ -12,6 +12,9 @@
 //   featureFlagDefaults  object, flag key -> boolean. R12: every default is false in production.
 //   webRolePolicies      array of IAM policy documents (objects or JSON strings) attached to the web role
 //                        and the admin role. R1: none allows sts:AssumeRole (or sts:*, or *).
+//   smsConfigured        boolean (WPU-Y5 (a)), true when both SMS secrets are set (not the placeholder). Only a
+//                        boolean, never a secret value. Production fails when it is not true: production must
+//                        not run with SMS off unnoticed. Other stages do not need it.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -128,6 +131,12 @@ export function checkOutputs({ stage, outputsText }) {
       ],
     };
   }
+  if (stage === "production" && outputs.smsConfigured === undefined) {
+    return {
+      code: EXIT_BLOCKED,
+      lines: ["BLOCKED: the SST outputs lack smsConfigured; the stacks must output it"],
+    };
+  }
   const problems = [];
   if (outputs.stage !== stage)
     problems.push(`outputs are for stage ${String(outputs.stage)}, not ${stage}`);
@@ -138,12 +147,18 @@ export function checkOutputs({ stage, outputsText }) {
   } else {
     problems.push(...assumeRoleProblems(outputs.webRolePolicies));
   }
+  if (stage === "production" && outputs.smsConfigured !== true) {
+    problems.push(
+      "SMS is not configured in production (smsConfigured is not true): set SmsApiKey and SmsSenderId (docs/runbooks/sms-gateway.md)",
+    );
+  }
   if (problems.length > 0) return { code: EXIT_FAILED, lines: problems.map((p) => `FAILED: ${p}`) };
   return {
     code: EXIT_OK,
     lines: [
       `OK: every feature flag default is off in ${stage}`,
       "OK: no web or admin role policy allows sts:AssumeRole",
+      ...(stage === "production" ? ["OK: SMS is configured in production"] : []),
     ],
   };
 }

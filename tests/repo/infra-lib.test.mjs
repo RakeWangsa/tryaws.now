@@ -310,6 +310,31 @@ describe("stack outputs featureFlagDefaults and webRolePolicies", () => {
   });
 });
 
+// WPU-Y5 (a): the stack output smsConfigured, a boolean computed from the two SMS secrets, never a value.
+describe("stack output smsConfigured", () => {
+  it("is true only when both SMS secrets are set to something other than the placeholder", async () => {
+    const { smsConfigured, OPTIONAL_SECRET_PLACEHOLDER } =
+      await import("../../infra/lib/functions.ts");
+    expect(smsConfigured(["fake-token", "FAKESID"])).toBe(true);
+    expect(smsConfigured([OPTIONAL_SECRET_PLACEHOLDER, "FAKESID"])).toBe(false);
+    expect(smsConfigured(["fake-token", OPTIONAL_SECRET_PLACEHOLDER])).toBe(false);
+    expect(smsConfigured([OPTIONAL_SECRET_PLACEHOLDER, OPTIONAL_SECRET_PLACEHOLDER])).toBe(false);
+    expect(smsConfigured(["", "FAKESID"])).toBe(false);
+    expect(smsConfigured(["  ", "FAKESID"])).toBe(false);
+    expect(smsConfigured([` ${OPTIONAL_SECRET_PLACEHOLDER} `, "FAKESID"])).toBe(false);
+    expect(smsConfigured(["fake-token"])).toBe(false);
+    expect(smsConfigured([])).toBe(false);
+    expect(smsConfigured([undefined, "FAKESID"])).toBe(false);
+  });
+
+  it("is returned by the SST app as an unsecret boolean of the two SMS secrets", () => {
+    const config = readFileSync(resolve(root, "infra/app.ts"), "utf8");
+    expect(config).toMatch(/smsConfigured: \$util\.unsecret\(/);
+    expect(config).toContain("OPTIONAL_SMS_SECRETS.map((name) => secretSet.app[name].value)");
+    expect(config).toContain(".apply((values) => smsConfigured(values))");
+  });
+});
+
 // C.13: the ledger check at 02:00 Asia/Dhaka and its alarms.
 describe("ledger check schedule and alarms", () => {
   it("runs every day at 20:00 UTC, which is 02:00 in Dhaka (UTC+6, no daylight saving)", async () => {

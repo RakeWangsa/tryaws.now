@@ -262,6 +262,7 @@ describe("scripts/post-deploy-check.mjs", () => {
       stage: "production",
       featureFlagDefaults: Object.fromEntries(FEATURE_FLAG_KEYS.map((k) => [k, false])),
       webRolePolicies: [goodPolicy, JSON.stringify(goodPolicy)],
+      smsConfigured: true,
       ...patch,
     });
   const check = (text) => checkOutputs({ stage: "production", outputsText: text });
@@ -292,6 +293,29 @@ describe("scripts/post-deploy-check.mjs", () => {
     expect(check(outputs({ featureFlagDefaults: { a: "false" } })).code).toBe(EXIT_FAILED);
     expect(check(outputs({ featureFlagDefaults: {} })).code).toBe(EXIT_FAILED);
     expect(check(outputs({ featureFlagDefaults: null })).code).toBe(EXIT_FAILED);
+  });
+  // WPU-Y5 (a): production must not run with SMS off unnoticed. The output is a boolean only, never a value.
+  it("fails on production when smsConfigured is false or not a boolean, and is BLOCKED when it is missing", () => {
+    const off = check(outputs({ smsConfigured: false }));
+    expect(off.code).toBe(EXIT_FAILED);
+    expect(off.lines.join()).toContain("SMS is not configured");
+    expect(check(outputs({ smsConfigured: "true" })).code).toBe(EXIT_FAILED);
+    expect(check(outputs({ smsConfigured: null })).code).toBe(EXIT_FAILED);
+    const missing = check(outputs({ smsConfigured: undefined }));
+    expect(missing.code).toBe(EXIT_BLOCKED);
+    expect(missing.lines.join()).toContain("smsConfigured");
+    expect(check(outputs()).lines.join("\n")).toContain("OK: SMS is configured in production");
+  });
+  it("does not ask for SMS on another stage", () => {
+    const text = outputs({ stage: "staging", smsConfigured: undefined });
+    const result = checkOutputs({ stage: "staging", outputsText: text });
+    expect(result.code).toBe(EXIT_OK);
+    expect(
+      checkOutputs({
+        stage: "staging",
+        outputsText: outputs({ stage: "staging", smsConfigured: false }),
+      }).code,
+    ).toBe(EXIT_OK);
   });
   it("fails on a wrong stage", () => {
     expect(check(outputs({ stage: "staging" })).code).toBe(EXIT_FAILED);
