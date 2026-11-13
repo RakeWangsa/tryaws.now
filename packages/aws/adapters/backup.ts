@@ -60,10 +60,15 @@ export interface BackupDeps {
     readonly parentResourceId: string;
     readonly operationId: string;
   }): Promise<{ readonly id: string }>;
-  /** The snapshot is available: the row becomes `active`, gets its AWS name and its size. */
+  /**
+   * The snapshot is available: the row of this final_snapshot operation becomes `active`, gets its AWS
+   * name and its size. WPU-X1: a row that stopped being final meanwhile (its retention ended) is marked
+   * too and stays an ordinary backup.
+   */
   markFinalBackup(input: {
     readonly id: string;
     readonly customerId: string;
+    readonly operationId: string;
     readonly sizeGb: number | null;
   }): Promise<void>;
 }
@@ -222,6 +227,7 @@ export async function runFinalSnapshot(ctx: OpCtx<unknown>, deps: BackupDeps): P
     await deps.markFinalBackup({
       id: backup.id,
       customerId: ctx.resource.customerId,
+      operationId: ctx.operation.id,
       sizeGb: r.sizeGb,
     });
     return stepDone();

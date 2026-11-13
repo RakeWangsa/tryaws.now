@@ -14,9 +14,15 @@ export function backupDeps(): BackupDeps {
   return {
     listBackups: (input) => withTx((tx) => listBackupsOf(tx, input)),
     ensureFinalBackup: (input) => withTx((tx) => ensureFinalBackup(tx, input)),
-    markFinalBackup: ({ id, customerId, sizeGb }) =>
+    markFinalBackup: ({ id, customerId, operationId, sizeGb }) =>
       withTx((tx) =>
-        markFinalBackup(tx, { id, customerId, sizeGb, awsName: awsResourceName("snapshot", id) }),
+        markFinalBackup(tx, {
+          id,
+          customerId,
+          operationId,
+          sizeGb,
+          awsName: awsResourceName("snapshot", id),
+        }),
       ),
   };
 }

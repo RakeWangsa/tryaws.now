@@ -1,6 +1,7 @@
 import {
   attachedServerStatus,
   insertFreshOperation,
+  isReleasedFinalSnapshot,
   insertOperation,
   lifecycleOperationKey,
   lifecycleRepo,
@@ -123,22 +124,23 @@ class Work {
     });
     const key = opKey(kind, this.row, keyAt);
     let inserted = await insertOperation(this.tx, request(key), this.now);
+    // WPU-X1 fix round 1: a final snapshot that a release kept (its backup is an ordinary one now) is as dead for
+    // a new retention as an ended row: the retention needs a final snapshot of its own (R13).
+    const stale = async (row: typeof inserted): Promise<boolean> =>
+      !row.created &&
+      (retentionKeyNeedsSalt(row.state) ||
+        (kind === "final_snapshot" &&
+          (await isReleasedFinalSnapshot(this.tx, this.row.resourceId, row.operationId))));
     // WPU-Y3b. A second unpaid episode in the same period must not get the dead (or finished) row of
     // the first one back: when the stored row is such, the episode takes a key of its own.
     if (
       this.episode !== undefined &&
-      !inserted.created &&
-      retentionKeyNeedsSalt(inserted.state) &&
-      (kind === "destroy" || kind === "final_snapshot")
+      (kind === "destroy" || kind === "final_snapshot") &&
+      (await stale(inserted))
     ) {
       inserted = await insertOperation(this.tx, request(`${key}:u${this.episode}`), this.now);
     }
-    if (
-      fresh &&
-      !inserted.created &&
-      retentionKeyNeedsSalt(inserted.state) &&
-      (kind === "destroy" || kind === "final_snapshot")
-    ) {
+    if (fresh && (kind === "destroy" || kind === "final_snapshot") && (await stale(inserted))) {
       const last = this.episode !== undefined ? `${key}:u${this.episode}` : key;
       inserted = await insertFreshOperation(this.tx, request(last), this.now);
     }

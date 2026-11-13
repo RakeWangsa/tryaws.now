@@ -70,8 +70,9 @@ export type DestroyView =
  * R13. May the final snapshots of a resource be released? Only when every destroy operation of the
  * resource (the plain key and the episode-salted key alike: the kind is what counts) never ran and was
  * not approved. `failed` with no attempt is a destroy that was cancelled or rejected before it ran.
- * A destroy that is queued or waiting for approval (nobody approved) is returned to be cancelled; the
- * caller must see every cancel succeed before it goes on.
+ * A destroy that is queued, waiting for approval (nobody approved) or held back by the claim's block rule
+ * (`waiting`, no step, no attempt) is returned to be cancelled; the caller must see every cancel succeed before
+ * it goes on.
  */
 export function viewDestroys(ops: readonly ResourceOpRow[]): DestroyView {
   const toCancel: ResourceOpRow[] = [];
@@ -86,7 +87,30 @@ export function viewDestroys(ops: readonly ResourceOpRow[]): DestroyView {
       toCancel.push(op);
       continue;
     }
+    // WPU-X1 fix round 2: held back by the claim's block rule (another operation of the resource, such as the
+    // final snapshot, ran first): `waiting` with no step and no attempt. Nothing was sent to AWS; it is cancelled
+    // like a queued one (cancelUnstarted accepts this state).
+    if (op.state === "waiting" && (op.step ?? null) === null && op.attempts === 0) {
+      toCancel.push(op);
+      continue;
+    }
     return { safe: false };
   }
   return { safe: true, toCancel };
+}
+
+/**
+ * WPU-X1. A final snapshot that never started: queued, waiting for an approval nobody gave, or held back by the
+ * claim's block rule (`waiting`), never attempted and at no step. Only such a one is ended when the retention ends; one that started finishes as an ordinary backup.
+ * An unknown step is a start (fail closed: its AWS snapshot may exist).
+ */
+export function finalSnapshotUnstarted(op: ResourceOpRow): boolean {
+  return (
+    op.kind === "final_snapshot" &&
+    // Fix round 1: `waiting` with no step and no attempt is an operation the claim's block rule held back.
+    (op.state === "queued" || op.state === "needs_approval" || op.state === "waiting") &&
+    !op.approved &&
+    op.attempts === 0 &&
+    (op.step === null || op.step === undefined)
+  );
 }

@@ -367,8 +367,9 @@ export function meteringRepo(tx: Tx) {
       }));
     },
 
-    // WPU-Y3c. The system-level cancel: an operation that has not started (queued, or waiting for
-    // approval that nobody gave) becomes `failed` (final) with a fixed note. One conditional UPDATE, so
+    // WPU-Y3c. The system-level cancel: an operation that has not started (queued, waiting for
+    // approval that nobody gave, or (WPU-X1 fix round 1) held back by the claim's block rule: `waiting`
+    // with no step and no attempt) becomes `failed` (final) with a fixed note. One conditional UPDATE, so
     // an operation that the provisioner claimed in the meantime, or that an admin approved, is left
     // alone (returns false) and a second call changes nothing (R7). The unique idempotency key stays, so
     // the same request can never queue the work again. worker_rw may update state and last_error.
@@ -376,7 +377,8 @@ export function meteringRepo(tx: Tx) {
       if (!isUuid(operationId)) throw new TypeError("metering: operationId is not a UUID");
       const { rows } = await tx.execute<{ id: string }>(sql`
         update operations set state = 'failed', last_error = 'cancelled: the unpaid usage was paid'
-        where id = ${operationId} and state in ('queued', 'needs_approval')
+        where id = ${operationId}
+          and (state in ('queued', 'needs_approval') or (state = 'waiting' and step is null))
           and approved_by is null and attempts = 0
         returning id`);
       return rows.length === 1;

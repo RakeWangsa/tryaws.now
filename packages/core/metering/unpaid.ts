@@ -35,7 +35,7 @@ import {
 import { snapshotPrice } from "../products/snapshot-price";
 import { staticIpHourPrice, type StaticIpPrice } from "../products/static-ip-price";
 import type { Clock, Result } from "../types";
-import { viewDestroys, viewSuspends } from "./unpaid-undo";
+import { finalSnapshotUnstarted, viewDestroys, viewSuspends } from "./unpaid-undo";
 import { CATCH_UP_DAYS, SNAPSHOT_METRIC, dhakaDay, meteredSnapshot } from "./run";
 import {
   STATIC_IP_CATCH_UP_HOURS,
@@ -167,7 +167,7 @@ export interface UnpaidOps {
    * WPU-Y4 fix round 2. A server that leaves `retained` gives the disks retained with it their status back
    * (releaseServerDisks). Optional: absent means a world without it.
    */
-  releaseDisks?(tx: Tx, row: LifecycleRow): Promise<void>;
+  releaseDisks?(tx: Tx, row: LifecycleRow, log?: Logger): Promise<void>;
 }
 
 export const defaultUnpaidOps: UnpaidOps = {
@@ -213,10 +213,10 @@ export const defaultUnpaidOps: UnpaidOps = {
   supersedeFinal: (tx, resourceId) => meteringRepo(tx).supersedeFinalBackups(resourceId),
   resourceOps: (tx, resourceId, kinds) => meteringRepo(tx).operationsOf(resourceId, kinds),
   cancel: (tx, operationId) => meteringRepo(tx).cancelUnstarted(operationId),
-  releaseDisks: async (tx, row) => {
+  releaseDisks: async (tx, row, log) => {
     if (row.resource.family !== "linux_instance" && row.resource.family !== "windows_instance")
       return;
-    await releaseServerDisks(tx, { customerId: row.customerId, serverId: row.resourceId });
+    await releaseServerDisks(tx, { customerId: row.customerId, serverId: row.resourceId }, log);
   },
 };
 
@@ -483,12 +483,32 @@ async function releaseFinalSnapshots(
   for (const op of view.toCancel) {
     if (!(await ops.cancel(tx, op.id))) return held("destroy_not_cancelled");
   }
+  // WPU-X1: the retention is over, so its final snapshot that never started is ended (it would make a snapshot
+  // that nobody asked for, billed every day). One that started (or whose cancel loses the race with a claim)
+  // finishes: its backup is an ordinary one (superseded below, or not final from the start when its row comes
+  // after this commit: ensureFinalBackup of @tc/db). Ids and fixed words only in the log (R14).
+  // Fix round 1: a started one that is kept counts for the notice below, even when its backup row comes later.
+  let kept = 0;
+  for (const op of await ops.resourceOps(tx, row.resourceId, ["final_snapshot"])) {
+    if (op.state === "succeeded" || op.state === "failed") continue;
+    if (finalSnapshotUnstarted(op) && (await ops.cancel(tx, op.id))) {
+      deps.log({
+        event: "unpaid",
+        action: "final_snapshot_ended",
+        resourceId: row.resourceId,
+        operationId: op.id,
+      });
+      continue;
+    }
+    kept += 1;
+  }
   const released = (await ops.supersedeFinal(tx, row.resourceId)).length;
   count.finalReleased += released;
   // WPU-Y10: the customer is told once for each resource and episode that the former final snapshot is an
   // ordinary backup now, billed every day until it is deleted. Wording approved by the owner on 2026-11-13 (@tc/notify).
+  // WPU-X1 fix round 1: also when a kept (started) final snapshot will finish as such a backup.
   const product = productOfFamily(row.resource.family);
-  if (released > 0 && deps.notice !== undefined && product !== null) {
+  if ((released > 0 || kept > 0) && deps.notice !== undefined && product !== null) {
     await deps.notice(tx, {
       customerId: row.customerId,
       template: "unpaid_snapshot_released",
@@ -561,7 +581,7 @@ async function processOne(
       await ops.setStatus(tx, row.id, status);
       await releaseFinalSnapshots(tx, ops, deps, row, count, sinceMs);
       // WPU-Y4 fix round 2: the disks retained with the server are given back in the same transaction.
-      await ops.releaseDisks?.(tx, row);
+      await ops.releaseDisks?.(tx, row, deps.log);
     }
     // WPU-Y3c. A suspend of the job that has not started is CANCELLED, not answered with a blind resume
     // (the review found that a resume could lift an admin's suspension queued in the meantime). A resume

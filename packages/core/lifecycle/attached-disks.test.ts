@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachedServerOf, diskRenewalHeld } from "./attached-disks";
+import { attachedServerOf, diskRenewalHeld, finalSnapshotStarted } from "./attached-disks";
 import { decideDestructive, withServerOf, type GuardFacts } from "./guard";
 
 // WPU-Y4 fix round 2: the pure parts. The guard refuses the destroy of a disk retained with its server unless that
@@ -46,5 +46,39 @@ describe("the renewal hold of a disk whose server is in grace or retained", () =
     expect(attachedServerOf({ attachedInstanceId: S })).toBe(S);
     expect(attachedServerOf({ attachedInstanceId: "tc-instance-1" })).toBeNull();
     expect(attachedServerOf({})).toBeNull();
+  });
+});
+
+// WPU-X1: a final snapshot that started is never ended by a release (it would leave an AWS snapshot that is billed
+// and cannot be deleted); it finishes as an ordinary backup. Only one that never started is ended.
+describe("a final snapshot that started", () => {
+  const op = (over: Partial<{ state: string; step: string | null; attempts: number }> = {}) => ({
+    kind: "final_snapshot" as const,
+    state: "queued",
+    step: null,
+    attempts: 0,
+    ...over,
+  });
+  it("is one that runs, has a step or was attempted", () => {
+    expect(finalSnapshotStarted(op({ state: "running", attempts: 1 }))).toBe(true);
+    expect(finalSnapshotStarted(op({ state: "running" }))).toBe(true);
+    expect(finalSnapshotStarted(op({ state: "waiting", step: "wait_snapshot", attempts: 1 }))).toBe(
+      true,
+    );
+    expect(finalSnapshotStarted(op({ state: "queued", attempts: 2 }))).toBe(true);
+    expect(finalSnapshotStarted(op({ state: "needs_attention", step: "wait_snapshot" }))).toBe(
+      true,
+    );
+  });
+  it("is not one that is queued, blocked or waits for an approval and never ran", () => {
+    expect(finalSnapshotStarted(op())).toBe(false);
+    expect(finalSnapshotStarted(op({ state: "needs_approval" }))).toBe(false);
+    expect(finalSnapshotStarted(op({ state: "needs_attention" }))).toBe(false);
+    // Fix round 1: moved to `waiting` by the claim's block rule (another operation of the resource ran first):
+    // no step, no attempt, nothing was sent to AWS.
+    expect(finalSnapshotStarted(op({ state: "waiting" }))).toBe(false);
+  });
+  it("is never a destroy (the destroy has its own rule)", () => {
+    expect(finalSnapshotStarted({ ...op({ state: "running" }), kind: "destroy" })).toBe(false);
   });
 });

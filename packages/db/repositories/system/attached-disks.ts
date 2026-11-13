@@ -294,6 +294,8 @@ export interface DiskRetentionOp {
   readonly kind: "destroy" | "final_snapshot";
   readonly state: string;
   readonly step: string | null;
+  /** WPU-X1: how often the provisioner claimed it (a final snapshot that was attempted has started). */
+  readonly attempts: number;
 }
 
 /**
@@ -308,8 +310,9 @@ export async function lockDiskRetentionOps(tx: Tx, diskId: string): Promise<Disk
     kind: string;
     state: string;
     step: string | null;
+    attempts: number;
   }>(
-    sql`select id, kind, state, step from operations
+    sql`select id, kind, state, step, attempts from operations
       where resource_id = ${diskId} and kind in ('destroy', 'final_snapshot')
       order by created_at, id
       for update`,
@@ -319,21 +322,23 @@ export async function lockDiskRetentionOps(tx: Tx, diskId: string): Promise<Disk
     kind: r.kind as DiskRetentionOp["kind"],
     state: r.state,
     step: r.step ?? null,
+    attempts: Number(r.attempts),
   }));
 }
 
 /**
  * WPU-Y4 fix round 5 (worker_rw). The system end of the given operations of a disk whose server was revived: each
  * that is not running and has not ended becomes `failed` (approved or not; `failed` is allowed by every check of the
- * operations table), so a later retention of the disk gets fresh rows (insertFreshOperation). Returns the count.
+ * operations table), so a later retention of the disk gets fresh rows (insertFreshOperation). WPU-X1: returns the
+ * ids of the rows it ended (the caller logs them).
  */
 export async function endDiskRetentionOps(
   tx: Tx,
   input: { readonly diskId: string; readonly operationIds: readonly string[] },
-): Promise<number> {
+): Promise<string[]> {
   if (!isUuid(input.diskId)) throw new TypeError("attached disks: disk id is not a UUID");
   const ids = input.operationIds.filter((id) => isUuid(id));
-  if (ids.length === 0) return 0;
+  if (ids.length === 0) return [];
   const { rows } = await tx.execute<{ id: string }>(sql`
     update operations set state = 'failed', last_error = 'cancelled: the server was revived'
     where resource_id = ${input.diskId}
@@ -344,5 +349,5 @@ export async function endDiskRetentionOps(
       and kind in ('destroy', 'final_snapshot')
       and state not in ('running', 'succeeded', 'failed')
     returning id`);
-  return rows.length;
+  return rows.map((r) => r.id);
 }

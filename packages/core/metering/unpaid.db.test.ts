@@ -192,17 +192,24 @@ describe("the system cancel of an operation that has not started (WPU-Y3c)", () 
     const queued = await add("test:y3c:queued", "queued");
     const running = await add("test:y3c:running", "running", 1);
     const tried = await add("test:y3c:tried", "queued", 2);
+    // WPU-X1 fix round 1: blocked by the claim (waiting, no step, never attempted) has not started.
+    const blocked = await add("test:x1:blocked", "waiting");
+    const waited = await add("test:x1:waited", "waiting", 1);
     const cancel = (id: string) => worker((tx) => meteringRepo(tx).cancelUnstarted(id));
     expect(await cancel(queued)).toBe(true);
     expect(await cancel(queued)).toBe(false); // a second call changes nothing (R7)
     expect(await cancel(running)).toBe(false);
     expect(await cancel(tried)).toBe(false);
+    expect(await cancel(blocked)).toBe(true);
+    expect(await cancel(waited)).toBe(false);
     const state = await q("select id, state, last_error from operations where id = $1", [queued]);
     expect(state[0]!.state).toBe("failed");
     // the unique key stays: the same request cannot queue the work again
     await expect(add("test:y3c:queued", "queued")).rejects.toThrow();
     const listed = await worker((tx) => meteringRepo(tx).operationsOf(resourceId, ["suspend"]));
     expect(listed.map((o) => o.key).sort()).toEqual([
+      "test:x1:blocked",
+      "test:x1:waited",
       "test:y3c:queued",
       "test:y3c:running",
       "test:y3c:tried",

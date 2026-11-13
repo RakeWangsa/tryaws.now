@@ -69,6 +69,7 @@ interface Seed {
   approved?: boolean;
   attempts?: number;
   at?: number;
+  step?: string | null;
 }
 
 function build(init: Partial<World> = {}) {
@@ -94,7 +95,14 @@ function build(init: Partial<World> = {}) {
   const posted = new Map<string, PostTransactionInput>();
   const ops = new Map<
     string,
-    { kind: string; state: string; approved: boolean; attempts: number; at: number }
+    {
+      kind: string;
+      state: string;
+      approved: boolean;
+      attempts: number;
+      at: number;
+      step?: string | null;
+    }
   >();
   let seq = 0;
   const cancelled: string[] = [];
@@ -105,6 +113,7 @@ function build(init: Partial<World> = {}) {
       approved: o.approved ?? false,
       attempts: o.attempts ?? 0,
       at: o.at ?? 1000 + i,
+      step: o.step ?? null,
     }),
   );
   const notices = new Map<string, Notice>();
@@ -194,13 +203,17 @@ function build(init: Partial<World> = {}) {
           approved: o.approved,
           attempts: o.attempts,
           createdAtMs: o.at,
+          step: o.step ?? null,
         })),
     cancel: async (_tx, id) => {
       const o = ops.get(id);
       if (
         o === undefined ||
         w.cancelLoses.includes(id) ||
-        !["queued", "needs_approval"].includes(o.state) ||
+        !(
+          ["queued", "needs_approval"].includes(o.state) ||
+          (o.state === "waiting" && (o.step ?? null) === null)
+        ) ||
         o.approved ||
         o.attempts > 0
       ) {
@@ -1311,10 +1324,18 @@ describe("the final snapshot after a payment that came after day 7 (WPU-Y3c, 2)"
     expect(report.finalHeld).toBe(1);
   });
 
-  it.each(["running", "waiting", "succeeded", "needs_attention"])(
-    "a destroy that is %s stops it: the flag stays, nothing is deleted",
-    async (state) => {
-      const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state }] });
+  it.each([
+    ["running", null, 0],
+    ["waiting", "wait_server", 0],
+    ["waiting", null, 1],
+    ["succeeded", null, 0],
+    ["needs_attention", null, 0],
+  ])(
+    "a destroy that is %s (step %s, attempts %d) stops it: the flag stays, nothing is deleted",
+    async (state, step, attempts) => {
+      const t = retainedPaid({
+        seed: [{ key: DESTROY, kind: "destroy", state, step, attempts }],
+      });
       const report = await t.run();
       expect(t.cancelled).toEqual([]);
       expect(t.calls.superseded).toBe(0);
@@ -1323,6 +1344,24 @@ describe("the final snapshot after a payment that came after day 7 (WPU-Y3c, 2)"
       expect(t.keys.some((k) => k.startsWith("unpaid:final-delete:"))).toBe(false);
     },
   );
+
+  it("a destroy held back by the claim's block rule (waiting, no step, never attempted) is cancelled, then the flag is cleared (WPU-X1 fix round 2)", async () => {
+    const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state: "waiting" }] });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([DESTROY]);
+    expect(t.calls.superseded).toBe(1);
+    expect(report.finalReleased).toBe(1);
+    expect(report.finalHeld).toBe(0);
+  });
+
+  it("a blocked waiting destroy that an admin approved still stops it", async () => {
+    const t = retainedPaid({
+      seed: [{ key: DESTROY, kind: "destroy", state: "waiting", approved: true }],
+    });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([]);
+    expect(report.finalHeld).toBe(1);
+  });
 
   it("an approved destroy stops it, even when it is only queued", async () => {
     const t = retainedPaid({
@@ -1400,6 +1439,87 @@ describe("the final snapshot after a payment that came after day 7 (WPU-Y3c, 2)"
     await t.run();
     expect(t.calls.superseded).toBe(0);
     expect(t.keys.some((k) => k.startsWith("unpaid:final-delete:"))).toBe(false);
+  });
+});
+
+// WPU-X1: the server's own final snapshot at the payback. One that never started is ended with the retention (it
+// would make a billed snapshot nobody asked for); one that started finishes as an ordinary backup (the db rule of
+// ensureFinalBackup and markFinalBackup); the ids of the ended ones are logged (R14: ids and fixed words only).
+describe("the server's own final snapshot at the payback (WPU-X1)", () => {
+  const SNAP = `lifecycle:final-snapshot:${SUB}:2026-12-20T00:00:00.000Z`;
+
+  it("one that never started is cancelled, and its id is logged", async () => {
+    const t = retainedPaid({ seed: [{ key: SNAP, kind: "final_snapshot", state: "queued" }] });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([SNAP]);
+    expect(report.finalReleased).toBe(1);
+    expect(t.logs).toContainEqual({
+      event: "unpaid",
+      action: "final_snapshot_ended",
+      resourceId: RES,
+      operationId: SNAP,
+    });
+  });
+
+  it.each([
+    ["running", null, 1],
+    ["waiting", "wait_snapshot", 1],
+    ["needs_attention", "wait_snapshot", 1],
+    ["queued", null, 2],
+    ["queued", "wait_snapshot", 0],
+  ])("one that started (%s, step %s, attempts %d) is left to finish", async (state, step, n) => {
+    const t = retainedPaid({
+      seed: [{ key: SNAP, kind: "final_snapshot", state, step, attempts: n }],
+    });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([]);
+    expect(t.ops.get(SNAP)?.state).toBe(state);
+    // The release itself goes on: the finished snapshot is an ordinary backup.
+    expect(t.calls.superseded).toBe(1);
+    expect(report.finalReleased).toBe(1);
+    expect(t.logs.some((l) => (l as { action?: string }).action === "final_snapshot_ended")).toBe(
+      false,
+    );
+  });
+
+  it("one blocked behind another operation (waiting, no step, never attempted) is cancelled (fix round 1)", async () => {
+    const t = retainedPaid({ seed: [{ key: SNAP, kind: "final_snapshot", state: "waiting" }] });
+    await t.run();
+    expect(t.cancelled).toEqual([SNAP]);
+  });
+
+  it("one that started, with no backup row yet to release, still gets the released notice (fix round 1)", async () => {
+    const t = retainedPaid({
+      finalBackups: [],
+      seed: [{ key: SNAP, kind: "final_snapshot", state: "running", attempts: 1 }],
+    });
+    await t.run();
+    expect(
+      [...t.notices.values()].filter((n) => n.template === "unpaid_snapshot_released"),
+    ).toHaveLength(1);
+  });
+
+  it("one whose cancel loses the race (it was claimed) is left to finish", async () => {
+    const t = retainedPaid({
+      seed: [{ key: SNAP, kind: "final_snapshot", state: "queued" }],
+      cancelLoses: [SNAP],
+    });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([]);
+    expect(t.calls.superseded).toBe(1);
+    expect(report.finalReleased).toBe(1);
+  });
+
+  it("is not touched when the release is held (a destroy ran: the snapshot stays final)", async () => {
+    const t = retainedPaid({
+      seed: [
+        { key: SNAP, kind: "final_snapshot", state: "queued" },
+        { key: DESTROY, kind: "destroy", state: "running" },
+      ],
+    });
+    await t.run();
+    expect(t.cancelled).toEqual([]);
+    expect(t.calls.superseded).toBe(0);
   });
 });
 
