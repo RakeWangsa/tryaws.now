@@ -22,6 +22,8 @@ export type LocalFailure =
   | "failed_hook_missing"
   // WPU-Z13: the rejection of a domain renewal the registry holds is refused (reject.ts); it is not refunded.
   | "renewal_submitted"
+  // WPU-Y5 (c): the rejection of a dns_zone create past create_zone is refused: the hosted zone exists (reject.ts).
+  | "zone_created"
   | "invalid_step_result"
   | "lease_expired";
 

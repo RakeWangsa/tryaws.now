@@ -34,6 +34,7 @@ export const ERROR_CODES = [
   "admin_suspended",
   "failed_hook_missing",
   "renewal_submitted",
+  "zone_created",
   "invalid_step_result",
   "lease_expired",
 ] as const;

@@ -406,6 +406,9 @@ const LIFECYCLE = [
 // and a renewal the registry holds already (review round 1), which only the registry's own refusal refunds.
 const Z13 = ["refundedOnFailure", "registryHoldsRenewal", "reverseFailedDomainRenewal"];
 
+// WPU-Y5 (c): the rejection of a dns_zone create whose hosted zone exists is refused.
+const Y5 = ["dnsZoneMayExist"];
+
 // Names of the bucket and container tasks, merged without a pin.
 const STORAGE_CONTAINER = [
   "CONTAINER_POWERS",
@@ -685,6 +688,7 @@ describe("the public surface of the order flow", () => {
 
           ...Y2,
           ...Z13,
+          ...Y5,
           ...SHARED_UUID,
         ]),
       ].sort(),

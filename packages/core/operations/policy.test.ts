@@ -5,6 +5,7 @@ import {
   RETRY_DELAYS_SECONDS,
   decideFailure,
   decideRefusal,
+  dnsZoneMayExist,
   lastErrorText,
   refundedOnFailure,
   registryHoldsRenewal,
@@ -193,6 +194,22 @@ describe("a domain renewal the registry holds (step poll)", () => {
     for (const kind of ["create", "set_name_servers", "resend_verification", "reboot", ""]) {
       expect(registryHoldsRenewal(kind, "poll"), kind).toBe(false);
       expect(registryHoldsRenewal(kind, "submit"), kind).toBe(false);
+    }
+  });
+
+  // WPU-Y5 (c): a dns_zone create past create_zone made the hosted zone (CreateHostedZone answered); a rejection would
+  // refund the order while the zone stays. A step that is not known counts as past (R16).
+  it("a dns_zone create may hold a zone at any step past create_zone, nothing else", () => {
+    for (const step of ["wait_insync", "Wait_insync", "later", ""]) {
+      expect(dnsZoneMayExist("dns_zone", "create", step), step).toBe(true);
+    }
+    expect(dnsZoneMayExist("dns_zone", "create", null)).toBe(false);
+    expect(dnsZoneMayExist("dns_zone", "create", "create_zone")).toBe(false);
+    for (const family of ["linux_instance", "domain", "dns", ""]) {
+      expect(dnsZoneMayExist(family, "create", "wait_insync"), family).toBe(false);
+    }
+    for (const kind of ["change_dns_record", "destroy", "reboot", ""]) {
+      expect(dnsZoneMayExist("dns_zone", kind, "wait_insync"), kind).toBe(false);
     }
   });
 

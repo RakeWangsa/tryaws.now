@@ -63,6 +63,21 @@ export function registryHoldsRenewal(kind: string, step: string | null): boolean
   return kind === "renew_domain" && step !== null;
 }
 
+// WPU-Y5 (c): the step of a dns_zone create that sends CreateHostedZone (packages/aws/adapters/dns-zone.ts). Once
+// it answered, the operation moves to `wait_insync` with the zone id saved: the hosted zone exists (and is billed).
+const DNS_ZONE_CREATE_STEP = "create_zone";
+
+/**
+ * Whether the hosted zone of a `dns_zone` create may exist: any step past `create_zone` (`wait_insync`, or a step
+ * that is not known, R16). An admin's rejection of such a create is refused (reject.ts, `zone_created`): the failed
+ * hook would refund the order while the zone stays. The runbook says retry it, or destroy the zone first.
+ */
+export function dnsZoneMayExist(family: string, kind: string, step: string | null): boolean {
+  return (
+    family === "dns_zone" && kind === "create" && step !== null && step !== DNS_ZONE_CREATE_STEP
+  );
+}
+
 // The registry's own answer that a renewal failed (GetOperationDetail FAILED or ERROR): the domain adapter throws
 // `conflict` with no AWS error name. An AWS error of a read at that step carries its name (domains-client.ts) and
 // says nothing about the renewal itself.
