@@ -87,6 +87,13 @@ const build = (srv = server()) => {
       calls.push("accounts");
       return Promise.resolve({ created: accountsCreated });
     },
+    bootstrapFirstAdmin: (url, sub) => {
+      calls.push(`first-admin ${url === CONFIG.masterUrl ? "master" : "other"} ${sub}`);
+      return Promise.resolve({
+        outcome: "inserted",
+        adminId: "0190f0e0-0000-7000-8000-000000000001",
+      });
+    },
     log: (e) => logs.push(e),
   };
   return { deps, logs, calls, srv };
@@ -101,6 +108,7 @@ it("checks TLS, creates the roles, runs the migrations and returns counts only",
     rolesUnchanged: 0,
     migrationsApplied: 5,
     systemAccountsCreated: 8,
+    firstAdmin: "skipped: no secret",
   });
   expect(calls).toEqual(["connect master", "migrate /var/task/migrations", "accounts"]);
   expect(srv.client.ended).toBe(true);
@@ -258,4 +266,97 @@ it("fails with fixed text when the applied rows cannot be read", async () => {
   await expect(runMigrator(failing, { action: "migrate" })).rejects.toThrow(
     "migrator: could not check the applied migrations",
   );
+});
+
+// WPU-Z18: the first superadmin, from the optional secret FirstAdminSub, after the ledger accounts.
+const SUB = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+const withSub = (firstAdminSub: string | undefined, srv = server()) => {
+  const b = build(srv);
+  return { ...b, deps: { ...b.deps, config: { ...CONFIG, firstAdminSub } } };
+};
+
+it("inserts the first superadmin for a valid sub, lowercase, after the accounts, and logs 8 characters at most", async () => {
+  const { deps, calls, logs } = withSub(SUB.toUpperCase());
+  const out = await runMigrator(deps, { action: "migrate" });
+  expect(out.firstAdmin).toBe("inserted");
+  expect(calls).toEqual([
+    "connect master",
+    "migrate /var/task/migrations",
+    "accounts",
+    `first-admin master ${SUB}`,
+  ]);
+  expect(logs).toContainEqual({
+    event: "migrator_first_admin",
+    decision: "inserted",
+    subPrefix: "0a1b2c3d",
+  });
+  const text = JSON.stringify(logs);
+  expect(text).not.toContain(SUB);
+  expect(text.toLowerCase()).not.toContain(SUB.slice(0, 9));
+  // the new admin id is not logged either
+  expect(text).not.toContain("0190f0e0");
+});
+
+it("does nothing when an admin row exists, and says so", async () => {
+  const { deps, logs } = withSub(SUB);
+  const out = await runMigrator(
+    { ...deps, bootstrapFirstAdmin: () => Promise.resolve({ outcome: "admins_exist" }) },
+    { action: "migrate" },
+  );
+  expect(out.firstAdmin).toBe("skipped: admins exist");
+  expect(logs).toContainEqual({
+    event: "migrator_first_admin",
+    decision: "skipped: admins exist",
+    subPrefix: "0a1b2c3d",
+  });
+  expect(JSON.stringify(logs)).not.toContain(SUB);
+});
+
+it("does not touch admin_users without a secret, with the placeholder, or with a malformed sub", async () => {
+  for (const [raw, decision] of [
+    [undefined, "skipped: no secret"],
+    ["", "skipped: no secret"],
+    ["not-configured", "skipped: no secret"],
+    ["sub-123", "skipped: malformed"],
+    [SUB + " ", "skipped: malformed"],
+    ["{" + SUB + "}", "skipped: malformed"],
+    [SUB.replace(/-/g, ""), "skipped: malformed"],
+  ] as const) {
+    const { deps, calls, logs } = withSub(raw);
+    const out = await runMigrator(deps, { action: "migrate" });
+    expect(out.firstAdmin, String(raw)).toBe(decision);
+    expect(
+      calls.some((c) => c.startsWith("first-admin")),
+      String(raw),
+    ).toBe(false);
+    // a skipped run logs the decision only: no part of the value
+    expect(logs).toContainEqual({ event: "migrator_first_admin", decision });
+    if (raw !== undefined && raw !== "")
+      expect(JSON.stringify(logs)).not.toContain(raw.slice(0, 4));
+  }
+});
+
+it("does not bootstrap when the accounts failed, and fails with fixed text when the bootstrap fails", async () => {
+  const { deps, calls } = withSub(SUB);
+  await expect(
+    runMigrator(
+      { ...deps, ensureSystemAccounts: () => Promise.reject(new Error("x")) },
+      { action: "migrate" },
+    ),
+  ).rejects.toThrow("migrator: could not prepare the ledger accounts");
+  expect(calls.some((c) => c.startsWith("first-admin"))).toBe(false);
+  const failing = withSub(SUB);
+  await expect(
+    runMigrator(
+      {
+        ...failing.deps,
+        bootstrapFirstAdmin: () => Promise.reject(new Error(`duplicate ${SUB} SECRET-1`)),
+      },
+      { action: "migrate" },
+    ),
+  ).rejects.toThrow(/^migrator: could not bootstrap the first admin$/);
+  expect(failing.logs).toContainEqual({ event: "migrator_failed", step: "first_admin" });
+  const text = JSON.stringify(failing.logs);
+  expect(text).not.toContain(SUB);
+  expect(text).not.toContain("SECRET-1");
 });

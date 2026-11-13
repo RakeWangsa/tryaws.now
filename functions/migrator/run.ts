@@ -1,4 +1,10 @@
 import type { Logger } from "@tc/core";
+import {
+  firstAdminDecision,
+  subPrefix,
+  type FirstAdminDecision,
+  type FirstAdminOutcome,
+} from "@tc/db";
 import type { MigratorConfig } from "./config";
 import { ensureRoles, type Queryable } from "./roles";
 
@@ -26,6 +32,11 @@ export interface MigratorDeps {
   readonly fileHashes: (migrationsDir: string) => readonly MigrationFileHash[];
   /** C.10: creates the platform ledger accounts that do not exist yet, as the table owner. Idempotent. */
   readonly ensureSystemAccounts: (url: string) => Promise<{ readonly created: number }>;
+  /**
+   * WPU-Z18: in one transaction as the table owner, inserts one superadmin for `sub` only when
+   * admin_users has no row at all (bootstrapFirstSuperadmin of @tc/db). Idempotent.
+   */
+  readonly bootstrapFirstAdmin: (url: string, sub: string) => Promise<FirstAdminOutcome>;
   readonly log: Logger;
 }
 
@@ -35,6 +46,8 @@ export interface MigratorReport {
   readonly rolesUnchanged: number;
   readonly migrationsApplied: number;
   readonly systemAccountsCreated: number;
+  /** WPU-Z18: what the first-superadmin bootstrap did; never the sub. */
+  readonly firstAdmin: FirstAdminDecision;
 }
 
 const APPLIED_MIGRATIONS =
@@ -81,7 +94,8 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       : undefined;
   if (action !== "migrate") throw new Error("migrator: unknown action");
 
-  let step: "connect" | "tls" | "roles" | "verify" | "migrate" | "accounts" = "connect";
+  let step: "connect" | "tls" | "roles" | "verify" | "migrate" | "accounts" | "first_admin" =
+    "connect";
   let client: MasterConnection | undefined;
   let refused = false;
   let changed = 0;
@@ -116,12 +130,28 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     step = "accounts";
     const accounts = await deps.ensureSystemAccounts(config.masterUrl);
 
+    // WPU-Z18: the first superadmin, when FirstAdminSub holds a canonical UUID and admin_users has no
+    // row at all. An unset, placeholder or malformed value writes nothing. The log holds the decision
+    // and at most the first 8 characters of a valid sub (R14), never the new admin id.
+    step = "first_admin";
+    const plan = firstAdminDecision(config.firstAdminSub);
+    let firstAdmin: FirstAdminDecision;
+    if (plan.kind === "skip") {
+      firstAdmin = plan.decision;
+      log({ event: "migrator_first_admin", decision: firstAdmin });
+    } else {
+      const done = await deps.bootstrapFirstAdmin(config.masterUrl, plan.sub);
+      firstAdmin = done.outcome === "inserted" ? "inserted" : "skipped: admins exist";
+      log({ event: "migrator_first_admin", decision: firstAdmin, subPrefix: subPrefix(plan.sub) });
+    }
+
     const report: MigratorReport = {
       rolesCreated: roles.created,
       rolesEnabled: roles.enabled,
       rolesUnchanged: roles.unchanged,
       migrationsApplied: after - before,
       systemAccountsCreated: accounts.created,
+      firstAdmin,
     };
     log({ event: "migrator_done", ...report });
     return report;
@@ -141,6 +171,7 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     if (step === "roles") throw new Error("migrator: could not prepare the roles");
     if (step === "verify") throw new Error("migrator: could not check the applied migrations");
     if (step === "accounts") throw new Error("migrator: could not prepare the ledger accounts");
+    if (step === "first_admin") throw new Error("migrator: could not bootstrap the first admin");
     throw new Error("migrator: the migrations failed");
   } finally {
     await client?.end().catch(() => undefined);

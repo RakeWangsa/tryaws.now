@@ -103,6 +103,20 @@ export type {
   PendingInvoice,
   PendingInvoices,
 } from "./repositories/system/invoice-backlog";
+export {
+  bootstrapFirstSuperadmin,
+  canonicalCognitoSub,
+  firstAdminDecision,
+  subPrefix,
+  FIRST_ADMIN_ACTION,
+  FIRST_ADMIN_NOT_CONFIGURED,
+  FIRST_ADMIN_REASON,
+} from "./repositories/system/first-admin";
+export type {
+  FirstAdminDecision,
+  FirstAdminOutcome,
+  FirstAdminPlan,
+} from "./repositories/system/first-admin";
 export type {
   StatementLine,
   StatementPage,

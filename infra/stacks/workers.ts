@@ -4,7 +4,8 @@
 //   DNS accounts (infra/lib/functions.ts, POOL_ROLE_FUNCTIONS). The role ARNs are built from the
 //   environment of the deploy (assumableRoleArns); no account id is written in the repository.
 // - Each function links only the secrets it uses, and only the database password of its own role.
-//   Only the migrator links the Postgres component (the master user) and all five role passwords.
+//   Only the migrator links the Postgres component (the master user), all five role passwords and the
+//   optional FirstAdminSub (WPU-Z18).
 // - Role names are fixed (roleName), so the trust policies of the pool accounts can name them with an
 //   aws:PrincipalArn condition (6.3).
 //
@@ -128,8 +129,9 @@ function linksOf(spec: FunctionSpec, inputs: WorkerInputs): unknown[] {
   const links: unknown[] = spec.secrets.map((name) => secrets.app[name]);
   if (spec.dbRole === "worker_rw") links.push(secrets.db.worker_rw);
   if (spec.dbRole === "migrator") {
-    // Alone among the functions: the master user (to create the roles) and the five passwords.
-    links.push(db.postgres, ...DB_ROLES.map((role) => secrets.db[role]));
+    // Alone among the functions: the master user (to create the roles) and the five passwords, and
+    // (WPU-Z18) the optional FirstAdminSub of the first-superadmin bootstrap.
+    links.push(db.postgres, ...DB_ROLES.map((role) => secrets.db[role]), secrets.firstAdminSub);
   }
   return links;
 }

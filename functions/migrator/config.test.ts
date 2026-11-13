@@ -1,7 +1,18 @@
 import { expect, it } from "vitest";
-import { DB_PASSWORD_SECRET as INFRA_NAMES, DB_ROLES } from "../../infra/lib/functions";
+import {
+  DB_PASSWORD_SECRET as INFRA_NAMES,
+  DB_ROLES,
+  FIRST_ADMIN_SUB_SECRET as INFRA_FIRST_ADMIN_SUB,
+  OPTIONAL_SECRET_PLACEHOLDER as INFRA_PLACEHOLDER,
+} from "../../infra/lib/functions";
+import { FIRST_ADMIN_NOT_CONFIGURED } from "@tc/db";
 import { envLinks } from "@tc/db/links";
-import { DB_PASSWORD_SECRETS, MIGRATOR_ERROR, readMigratorConfig } from "./config";
+import {
+  DB_PASSWORD_SECRETS,
+  FIRST_ADMIN_SUB_SECRET,
+  MIGRATOR_ERROR,
+  readMigratorConfig,
+} from "./config";
 
 const MASTER_PASSWORD = "m@ster:pw/#1";
 const env = (over: Record<string, string | undefined> = {}) => {
@@ -93,4 +104,24 @@ it("with its default links, the SST SDK, nothing linked fails with the fixed mes
   expect(() => readMigratorConfig({ MIGRATIONS_DIR: "/var/task/migrations" })).toThrow(
     new RegExp(`^${MIGRATOR_ERROR}$`),
   );
+});
+
+// WPU-Z18: the optional secret FirstAdminSub, linked to the migrator only. Its raw value is handed on;
+// the decision (no secret, malformed, run) is runMigrator's. A missing or empty link is not a failure:
+// the migrations must still run when nobody set it.
+it("names the same FirstAdminSub secret and placeholder as the function table of the infrastructure", () => {
+  expect(FIRST_ADMIN_SUB_SECRET).toBe(INFRA_FIRST_ADMIN_SUB);
+  expect(FIRST_ADMIN_NOT_CONFIGURED).toBe(INFRA_PLACEHOLDER);
+});
+
+it("reads the raw value of FirstAdminSub, and undefined when it is not linked or empty", () => {
+  const sub = "0A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D";
+  const linked = (value: unknown) =>
+    read(env({ SST_RESOURCE_FirstAdminSub: JSON.stringify({ value }) })).firstAdminSub;
+  expect(linked(sub)).toBe(sub);
+  expect(linked("not-configured")).toBe("not-configured");
+  expect(linked("")).toBeUndefined();
+  expect(linked(42)).toBeUndefined();
+  expect(read(env()).firstAdminSub).toBeUndefined();
+  expect(read(env({ SST_RESOURCE_FirstAdminSub: "not json" })).firstAdminSub).toBeUndefined();
 });

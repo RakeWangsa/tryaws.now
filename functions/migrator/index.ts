@@ -6,7 +6,7 @@
 // master user (a proxy lists only the four application roles, infra/lib/functions.ts PROXY_ROLES),
 // that Node trusts the certificate chain of that host for sslmode verify-full, and that MIGRATIONS_DIR
 // (copyFiles of the Migrator function) holds the migrations folder next to the bundle.
-import { createDatabase } from "@tc/db";
+import { bootstrapFirstSuperadmin, createDatabase } from "@tc/db";
 import { ensureSystemAccounts } from "@tc/core";
 import { readMigrationHashes, runMigrations } from "@tc/db/migrate";
 import { readMigratorConfig } from "./config";
@@ -40,6 +40,17 @@ export const handler = async (event?: unknown): Promise<MigratorReport> => {
       try {
         const { created } = await db.transaction((tx) => ensureSystemAccounts(tx));
         return { created: created.length };
+      } finally {
+        await pool.end();
+      }
+    },
+    bootstrapFirstAdmin: async (url, sub) => {
+      // WPU-Z18: as the master user, which owns admin_users and audit_log. One transaction (READ
+      // COMMITTED, the default): the advisory lock, the count and the insert commit or roll back together.
+      const { db, pool } = createDatabase(url, { max: 1 });
+      pool.on("error", () => {});
+      try {
+        return await db.transaction((tx) => bootstrapFirstSuperadmin(tx, sub));
       } finally {
         await pool.end();
       }

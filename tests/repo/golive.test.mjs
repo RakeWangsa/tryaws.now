@@ -13,7 +13,11 @@ import {
   ciRoleBoundaryArn,
   instanceProfileName,
 } from "../../infra/lib/ci-boundary.ts";
-import { ALL_SECRETS, DB_PASSWORD_SECRET } from "../../infra/lib/functions.ts";
+import {
+  ALL_SECRETS,
+  DB_PASSWORD_SECRET,
+  FIRST_ADMIN_SUB_SECRET,
+} from "../../infra/lib/functions.ts";
 
 const root = resolve(import.meta.dirname, "../..");
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -206,17 +210,18 @@ describe("scripts/golive/stage-secrets.sh", () => {
   const constant = (name) =>
     names(text.split("\n").find((l) => l.startsWith(`readonly ${name}=`)) ?? "");
 
-  it("sets exactly the secrets of infra/lib/functions.ts (ALL_SECRETS and DB_PASSWORD_SECRET)", () => {
+  it("sets exactly the secrets of infra/lib/functions.ts (ALL_SECRETS, DB_PASSWORD_SECRET, FirstAdminSub)", () => {
     const covered = [
       ...constant("RANDOM_SECRETS"),
       ...constant("DB_PASSWORD_SECRETS"),
       ...constant("EPS_SECRETS"),
       ...constant("SMS_TOKEN_SECRET"),
       ...constant("SMS_SENDER_SECRET"),
+      ...constant("FIRST_ADMIN_SECRET"),
     ];
     expect(new Set(covered).size).toBe(covered.length);
     expect([...covered].sort()).toEqual(
-      [...ALL_SECRETS, ...Object.values(DB_PASSWORD_SECRET)].sort(),
+      [...ALL_SECRETS, ...Object.values(DB_PASSWORD_SECRET), FIRST_ADMIN_SUB_SECRET].sort(),
     );
     expect(constant("EPS_SECRETS").sort()).toEqual(
       ["EpsHashKey", "EpsMerchantId", "EpsPassword", "EpsStoreId", "EpsUsername"].sort(),
@@ -313,6 +318,80 @@ describe("scripts/golive/stage-secrets.sh", () => {
     );
     expect(r.calls).toContain("VALUE=SENDER");
     expect(r.stdout + r.stderr).not.toContain("token-test-value");
+  });
+
+  // WPU-Z18: the optional Cognito sub of the first superadmin, the last prompt.
+  describe("FirstAdminSub", () => {
+    const SUB = "0A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D";
+    const ALL_SET =
+      "EpsLimitKey OrderDraftSecret AuthLimitKey OtpHashKey AdminIpLimitKey DbPasswordWebRw " +
+      "DbPasswordAdminRw DbPasswordWorkerRw DbPasswordMigrator DbPasswordReportRo SmsApiKey " +
+      "SmsSenderId EpsMerchantId EpsStoreId EpsUsername EpsPassword EpsHashKey";
+    const firstAdminSets = (calls) =>
+      calls.split("\n").filter((l) => l.includes("secret set FirstAdminSub"));
+
+    it("asks visibly, says to leave it empty until the Cognito admin exists, and checks the UUID form", () => {
+      expect(text).toMatch(
+        /read -r -p "Cognito sub of the first superadmin for \$\{STAGE\} \(leave empty until the Cognito admin exists\): " FIRST_ADMIN_SUB \|\| FIRST_ADMIN_SUB=""/,
+      );
+      expect(text).toContain(
+        "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      );
+    });
+
+    it("an empty answer, or the end of the input, sets nothing", () => {
+      for (const input of ["\n", ""]) {
+        const r = run(STAGE_SECRETS, ["staging"], { env: { FAKE_EXISTING: ALL_SET }, input });
+        expect(r.status, r.stderr).toBe(0);
+        expect(firstAdminSets(r.calls)).toEqual([]);
+        expect(r.stdout).toContain(
+          "skipped FirstAdminSub (empty: leave empty until the Cognito admin exists)",
+        );
+      }
+    });
+
+    it("sets a UUID in lowercase on standard input and prints the name only", () => {
+      const r = run(STAGE_SECRETS, ["production"], {
+        env: { FAKE_EXISTING: ALL_SET },
+        input: `${SUB}\n`,
+      });
+      expect(r.status, r.stderr).toBe(0);
+      expect(firstAdminSets(r.calls)).toEqual([
+        `npx --no-install sst secret set FirstAdminSub --stage production CI=true TC_PRODUCTION_DEPLOY=ci-approved VALUE=${SUB.toLowerCase()}`,
+      ]);
+      expect(r.stdout).toContain("set FirstAdminSub");
+      expect((r.stdout + r.stderr).toLowerCase()).not.toContain(SUB.toLowerCase().slice(0, 8));
+    });
+
+    it("refuses a value that is not a UUID, sets nothing for it and does not echo it", () => {
+      for (const bad of [
+        "admin@example.test",
+        `{${SUB}}`,
+        SUB.replace(/-/g, ""),
+        "not-configured",
+      ]) {
+        const r = run(STAGE_SECRETS, ["staging"], {
+          env: { FAKE_EXISTING: ALL_SET },
+          input: `${bad}\n`,
+        });
+        expect(r.status, bad).toBe(1);
+        expect(r.stderr).toContain(
+          "FirstAdminSub is not a Cognito sub (a UUID); nothing set for it",
+        );
+        expect(firstAdminSets(r.calls)).toEqual([]);
+        expect(r.stdout + r.stderr).not.toContain(bad);
+      }
+    });
+
+    it("skips it when it already has a value, unless --force", () => {
+      const r = run(STAGE_SECRETS, ["staging"], {
+        env: { FAKE_EXISTING: `${ALL_SET} FirstAdminSub` },
+        input: `${SUB}\n`,
+      });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("skipped FirstAdminSub (already set; --force replaces it)");
+      expect(firstAdminSets(r.calls)).toEqual([]);
+    });
   });
 
   it("sets the production guard variables only on its sst calls for production", () => {

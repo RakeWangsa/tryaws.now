@@ -77,6 +77,13 @@ export const DB_PASSWORD_SECRET: Readonly<Record<DbRoleName, string>> = {
   migrator: "DbPasswordMigrator",
   report_ro: "DbPasswordReportRo",
 };
+// WPU-Z18: the optional secret with the Cognito `sub` of the first superadmin, linked to the migrator only
+// (infra/stacks/workers.ts linksOf). Unlike every other secret it has a placeholder (infra/stacks/secrets.ts),
+// so a stage deploys before anyone set it; the migrator treats the placeholder as "no secret". The literal
+// is the placeholder of scripts/golive/stage-secrets.sh and FIRST_ADMIN_NOT_CONFIGURED of @tc/db.
+export const FIRST_ADMIN_SUB_SECRET = "FirstAdminSub";
+export const OPTIONAL_SECRET_PLACEHOLDER = "not-configured";
+
 // 3.3: these four are listed in the proxy credentials; migrator uses the master user to create roles.
 export const PROXY_ROLES: readonly DbRoleName[] = ["web_rw", "admin_rw", "worker_rw", "report_ro"];
 
