@@ -108,7 +108,11 @@ export async function sendPhoneOtp(
   const id = challengeIdFor(deps.pepper, session.customerId, input.idempotencyKey);
   const code = generateCode(deps.randomInt);
   const codeHash = hashCode(deps.pepper, id, phone, code);
-  // The gateway's own format, the same for every locale (WPU-Z3).
+  // The gateway's own format, the same for every locale (WPU-Z3). The session's locale is still checked
+  // here, before any row or counter: a session with an unknown locale is a programming error (R16).
+  if (session.locale !== "bn" && session.locale !== "en") {
+    throw new TypeError("otp: unknown locale");
+  }
   const text = otpSmsText(code);
 
   // 4. The one transaction that can refuse.

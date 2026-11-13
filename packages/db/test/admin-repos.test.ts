@@ -460,6 +460,14 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
       testPoster,
     );
   },
+  // WPU-Z4: switching the unpaid-usage job off is allowed for ops (roleOf gives ops); no row exists yet, so
+  // this inserts one and writes one audit row.
+  "settings.setBoolean": (r) =>
+    r.settings.setBoolean(
+      { key: "lifecycle_unpaid_enabled", market: "BD" },
+      false,
+      "switch the unpaid-usage job off",
+    ),
   "payments.resolveDiscrepancy": async (r) =>
     r.payments.resolveDiscrepancy(
       { id: await insertRow(t.pool, "discrepancies", { kind: "payment", details: {} }) },
@@ -502,6 +510,7 @@ const ADMIN_READ_METHODS: readonly string[] = [
   "waitlist.counts",
   "waitlist.list",
   "wallets.detail",
+  "settings.read",
 ];
 
 it("every method of adminRepos is a listed read or a write with an audit case", () => {
