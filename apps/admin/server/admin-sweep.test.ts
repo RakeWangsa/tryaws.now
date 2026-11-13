@@ -168,6 +168,7 @@ describe("flows: authorize with roles is the first step, before the limiter, the
       "server/reconciliation-flow.ts",
       "server/support-flow.ts",
       "server/tier-limits-flow.ts",
+      "server/unpaid-rule-flow.ts",
     ]);
   });
 
@@ -254,6 +255,28 @@ describe("flows: authorize with roles is the first step, before the limiter, the
     expect([...code.matchAll(/await deps\.authorize\(OPS_ROLES\)/g)].length).toBe(1);
     expect([...code.matchAll(/authorize\(/g)].length).toBe(1);
     expect(code).not.toMatch(/customerId|customerRepos|\bsession\b|request\.(actor|adminId|role)/);
+  });
+
+  // WPU-Z4. The switch of the unpaid-usage job: one write, market configuration only (a settings row), so
+  // there is no tenant to cross. It authorizes once, with the roles of the direction asked for.
+  it("the unpaid-rule flow authorizes in its one write, with the roles of the direction, and takes no actor", () => {
+    const code = read(join(ROOT, "server/unpaid-rule-flow.ts")).replace(/\/\/.*$/gm, "");
+    expect([...code.matchAll(/await deps\.authorize\(roles\)/g)].length).toBe(1);
+    expect([...code.matchAll(/authorize\(/g)].length).toBe(1);
+    expect(code).toMatch(
+      /const roles = state === "off" \? UNPAID_RULE_OFF_ROLES : UNPAID_RULE_ON_ROLES;/,
+    );
+    expect(code).not.toMatch(/customerId|customerRepos|\bsession\b|request\.(actor|adminId|role)/);
+  });
+
+  it("the unpaid-rule action is a Server Action of ops-actions.ts that uses the flow with the session check and carries no actor", () => {
+    const source = read(join(ROOT, "server/ops-actions.ts"));
+    const head = source.indexOf("export async function switchUnpaidRuleAction(");
+    expect(head).toBeGreaterThanOrEqual(0);
+    const body = source.slice(head, source.indexOf("\n}\n", head));
+    expect(body).toContain("ensureAdminAuth()");
+    expect(body).toContain("makeUnpaidRuleAction(unpaidRuleFlowDeps())");
+    expect(body).not.toMatch(/adminId|role|approver|actor|\bkey\b/i);
   });
 
   it("the clear action is a Server Action of ops-actions.ts that uses the flow with the session check and carries no actor", () => {

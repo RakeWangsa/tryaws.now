@@ -29,6 +29,8 @@ import { opsBn } from "../messages/ops.ts";
 import { opsEn } from "../messages/ops.en.ts";
 import { casesBn } from "../messages/cases.ts";
 import { casesEn } from "../messages/cases.en.ts";
+import { unpaidRuleBn } from "../messages/unpaidrule.ts";
+import { unpaidRuleEn } from "../messages/unpaidrule.en.ts";
 
 const appOwn: Readonly<Record<Locale, Messages>> = { bn, en };
 const customers: Readonly<Record<Locale, Messages>> = { bn: customersBn, en: customersEn };
@@ -51,6 +53,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     invoiceSellerBn,
     ops.bn,
     planChangeBn,
+    unpaidRuleBn,
     auditBn,
     adminsBn,
     cases.bn,
@@ -69,6 +72,7 @@ export const adminMessages: Readonly<Record<Locale, Messages>> = {
     invoiceSellerEn,
     ops.en,
     planChangeEn,
+    unpaidRuleEn,
     auditEn,
     adminsEn,
     cases.en,

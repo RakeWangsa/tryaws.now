@@ -20,6 +20,7 @@ import {
   reasonedId,
   signInForm,
   takaToMinor,
+  unpaidRuleSwitch,
   uuid,
   wholeNumber,
 } from "./schemas.ts";
@@ -157,6 +158,47 @@ describe("operations, plan mark, reasoned ids", () => {
       reason: "x",
     });
     expect(check(planMarkAction, { resourceId: ID, requestId: "no", reason: "x" })).toBeNull();
+  });
+});
+
+describe("the unpaid-usage rule (WPU-Z4)", () => {
+  const on = { market: "BD", state: "on", confirm: "on", reason: "  pilot customers  " };
+
+  it("turning on needs the ticked confirm box; the reason is trimmed", () => {
+    expect(check(unpaidRuleSwitch, on)).toEqual({
+      market: "BD",
+      enabled: true,
+      reason: "pilot customers",
+    });
+    for (const confirm of [undefined, "", "off", "yes", true, "ON"]) {
+      expect(check(unpaidRuleSwitch, { ...on, confirm }), String(confirm)).toBeNull();
+    }
+  });
+
+  it("turning off needs no confirm box", () => {
+    for (const confirm of [undefined, "", "on"]) {
+      expect(check(unpaidRuleSwitch, { ...on, state: "off", confirm })).toEqual({
+        market: "BD",
+        enabled: false,
+        reason: "pilot customers",
+      });
+    }
+  });
+
+  it("refuses a state that is not on or off, a bad market and a missing or long reason", () => {
+    for (const bad of [
+      { ...on, state: "true" },
+      { ...on, state: "ON" },
+      { ...on, state: undefined },
+      { ...on, market: "bd" },
+      { ...on, market: "BDT" },
+      { ...on, reason: "" },
+      { ...on, reason: "   " },
+      { ...on, reason: "x".repeat(501) },
+      { ...on, reason: undefined },
+    ]) {
+      expect(check(unpaidRuleSwitch, bad), JSON.stringify(bad)).toBeNull();
+    }
   });
 });
 

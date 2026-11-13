@@ -37,3 +37,8 @@ export function lockInvoiceSellerWrites(tx: Tx, market: string): Promise<void> {
 export function lockTierLimitsWrites(tx: Tx, market: string): Promise<void> {
   return lock(tx, "tier_limits", market);
 }
+
+// WPU-Z4: the switches of settingsAdminRepo, one lock per key and market. The key is one of the allow-list.
+export function lockSettingWrites(tx: Tx, key: string, market: string): Promise<void> {
+  return lock(tx, `settings.${key}`, market);
+}

@@ -143,6 +143,21 @@ export const planMarkAction = z.object({ resourceId: uuid, requestId: uuid, reas
 // ---- one reasoned action on one row (reconciliation, abuse case ids, support) ----
 export const reasonedId = z.object({ id: uuid, reason });
 
+// ---- the unpaid-usage rule (/operations/unpaid-rule, WPU-Z4) ----
+export const SWITCH_STATES = ["on", "off"] as const;
+
+// Turning the rule on also needs the ticked confirm box (a ticked checkbox sends "on"); turning it off does
+// not. The answer names the value to store, never the form's words.
+export const unpaidRuleSwitch = z
+  .object({ market, state: z.enum(SWITCH_STATES), confirm: z.unknown().optional(), reason })
+  .transform((value, ctx) => {
+    if (value.state === "on" && value.confirm !== "on") {
+      ctx.addIssue({ code: "custom", message: "confirm" });
+      return z.NEVER;
+    }
+    return { market: value.market, enabled: value.state === "on", reason: value.reason };
+  });
+
 // ---- money (/wallets, /payments) ----
 export const MONEY_DIRECTIONS = ["credit", "debit"] as const;
 export const MONEY_ADJUSTMENT_KINDS = ["goodwill", "deposit", "correction"] as const;

@@ -18,6 +18,7 @@ import { priceBookAdminRepo, type PriceBookAdminRepo } from "./price-book";
 import { pricingRulesAdminRepo, type PricingRulesAdminRepo } from "./pricing-rules";
 import { abuseAdminRepo, type AbuseAdminRepo } from "./abuse";
 import { reconciliationAdminRepo, type ReconciliationAdminRepo } from "./reconciliation";
+import { settingsAdminRepo, type SettingsAdminRepo } from "./settings";
 import { supportAdminRepo, type SupportAdminRepo } from "./support";
 import { waitlistAdminRepo, type WaitlistAdminRepo } from "./waitlist";
 import { walletsAdminRepo, type WalletsAdminRepo } from "./wallets";
@@ -59,6 +60,7 @@ export interface AdminRepos {
   pricingRules: PricingRulesAdminRepo;
   abuse: AbuseAdminRepo;
   reconciliation: ReconciliationAdminRepo;
+  settings: SettingsAdminRepo;
   support: SupportAdminRepo;
   waitlist: WaitlistAdminRepo;
   wallets: WalletsAdminRepo;
@@ -95,6 +97,7 @@ export function adminRepos(tx: Tx, actor: AdminActor): AdminRepos {
     pricingRules: pricingRulesAdminRepo(scope),
     abuse: abuseAdminRepo(scope),
     reconciliation: reconciliationAdminRepo(scope),
+    settings: settingsAdminRepo(scope),
     support: supportAdminRepo(scope),
     waitlist: waitlistAdminRepo(scope),
     wallets: walletsAdminRepo(scope),

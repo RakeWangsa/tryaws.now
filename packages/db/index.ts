@@ -167,6 +167,14 @@ export type {
   ReconciliationOverview,
   ReconciliationRow,
 } from "./repositories/admin/reconciliation";
+export { ADMIN_SETTING_KEYS, settingAuditFilter } from "./repositories/admin/settings";
+export type {
+  AdminSettingKey,
+  BooleanSettingRead,
+  BooleanSettingSaved,
+  BooleanSettingTarget,
+  SettingsAdminRepo,
+} from "./repositories/admin/settings";
 export { SUPPORT_REPLY_TEMPLATE } from "./repositories/admin/support";
 export type {
   CaseStatus,
