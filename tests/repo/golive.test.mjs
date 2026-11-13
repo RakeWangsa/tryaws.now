@@ -565,4 +565,38 @@ describe("docs/runbooks/go-live.md", () => {
     expect(page).toContain("the shared SST asset bucket `sst-asset-*`");
     expect(page).toContain("`tc-<stage>-security-headers`");
   });
+
+  // Final review I1: the production verify job runs gate M5, which holds two manual proofs. The gate stays
+  // as it is; the runbook says how the owner records both, in the staging session and before the tag.
+  it("names both manual proofs of gate M5 in the staging session, before the tag, and the gate keeps them", async () => {
+    const { GATES } = await import("../../verify/checks.mjs");
+    const { MANUAL_PROOFS } = await import("../../verify/manual-proofs.mjs");
+    const ids = ["m5-gate-b-staging-cycles", "m5-reconciler-staging"];
+    const m5 = GATES.M5.map((c) => [c.id, c.command.join(" ")]);
+    for (const id of ids) {
+      expect(MANUAL_PROOFS[id].gate).toBe("M5");
+      expect(m5).toContainEqual([`manual-${id}`, `node scripts/manual-proof.mjs ${id}`]);
+    }
+    const workflow = read(".github/workflows/deploy-production.yml");
+    expect(workflow).toContain("run: pnpm verify --gate M5");
+    const session = page.indexOf("7. **Staging test session.**");
+    const tag = page.indexOf("git tag -a v0.1.0");
+    expect(session).toBeGreaterThan(-1);
+    for (const id of ids) {
+      for (const text of [`\`${id}\``, `node scripts/manual-proof.mjs ${id}`]) {
+        const at = page.indexOf(text, session);
+        expect(at, text).toBeGreaterThan(session);
+        expect(at, text).toBeLessThan(tag);
+      }
+    }
+    for (const key of [
+      "`evidence`",
+      "`recordedBy`",
+      "`recordedAt`",
+      "`verify/manual-proofs.json`",
+    ]) {
+      expect(page).toContain(key);
+    }
+    expect(page.indexOf("pnpm verify --gate M5", session)).toBeLessThan(tag);
+  });
 });
