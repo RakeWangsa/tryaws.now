@@ -94,8 +94,8 @@ describe("createS3Head", () => {
 
 describe("readConfig", () => {
   it("reads the bucket name", () => {
-    expect(readConfig({ KYC_BUCKET: "ticon-cloud-staging-kycbucket-abc123" })).toEqual({
-      bucket: "ticon-cloud-staging-kycbucket-abc123",
+    expect(readConfig({ KYC_BUCKET: "tryaws-now-staging-kycbucket-abc123" })).toEqual({
+      bucket: "tryaws-now-staging-kycbucket-abc123",
     });
   });
 
