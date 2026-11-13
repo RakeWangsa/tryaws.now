@@ -40,7 +40,6 @@ import {
 
 const root = resolve(import.meta.dirname, "../..");
 const KINDS = ["production", "staging", "personal"];
-const STAGE_OF = { production: "production", staging: "staging", personal: "track-b" };
 
 const env = {
   TC_ALARM_EMAILS: "oncall@example.com",
@@ -329,5 +328,256 @@ describe("requirements 5, 9 and 10: the monthly budget of a lean stage", () => {
       "sst:stage": "staging",
     });
     expect(Object.isFrozen(sstTags("ticon-cloud", "production"))).toBe(true);
+  });
+});
+
+// ---- The stack text of every requirement (the stacks use SST globals, so their text is pinned) ----------
+
+const text = (file) => readFileSync(resolve(root, file), "utf8");
+// Without comments and with single spaces, as tests/repo/infra-rules.test.mjs reads the stacks.
+const code = (file) =>
+  text(file)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|\s)\/\/.*$/gm, "$1")
+    .replace(/\s+/g, " ");
+
+describe("requirement 1: network.ts builds one NAT instance with one Elastic IP on a lean stage", () => {
+  const network = code("infra/stacks/network.ts");
+
+  it("asks the Vpc for no NAT in lean and builds exactly one instance, one Elastic IP and one association", () => {
+    expect(network).toContain("nat: sstNatOf(nat)");
+    expect(network.match(/new aws\.ec2\.Instance\(/g)).toHaveLength(1);
+    expect(network.match(/new aws\.ec2\.Eip\(/g)).toHaveLength(1);
+    expect(network.match(/new aws\.ec2\.EipAssociation\(/g)).toHaveLength(1);
+    expect(network).toContain(
+      'const singleNat = nat === "single-instance" ? singleNatInstance(config, vpc) : undefined',
+    );
+  });
+
+  it("uses SST's image choice on a t4g.nano and turns off the source/destination check", () => {
+    expect(network).toContain("owners: [NAT_INSTANCE.amiOwner]");
+    expect(network).toContain("values: [NAT_INSTANCE.amiName]");
+    expect(network).toContain("values: [NAT_INSTANCE.architecture]");
+    expect(network).toContain("mostRecent: true");
+    expect(network).toContain("instanceType: NAT_INSTANCE.type");
+    expect(network).toContain("sourceDestCheck: false");
+  });
+
+  it("routes 0.0.0.0/0 of every private route table (both AZs) to the instance, on lean only", () => {
+    expect(network).toContain(
+      'args.routes = [{ cidrBlock: "0.0.0.0/0", networkInterfaceId: $output(natInterface.promise) }]',
+    );
+    expect(network).toContain(
+      '...(nat === "single-instance" ? { privateRouteTable: routeToSingleNat } : {})',
+    );
+    expect(network).toContain("natInterface.resolve(singleNat.instance.primaryNetworkInterfaceId)");
+    // The isolated subnets of invoice-renderer keep their route table without a default route.
+    expect(network).toContain('new aws.ec2.RouteTable("IsolatedRouteTable", { vpcId: vpc.id })');
+  });
+
+  it("keeps the NAT security group minimal: inbound from the VPC CIDR only, outbound anywhere", () => {
+    const group = network.slice(
+      network.indexOf('"NatSecurityGroup"'),
+      network.indexOf('"NatInstance"'),
+    );
+    expect(group).toContain(
+      'ingress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: [VPC_CIDR[config.kind]] }]',
+    );
+    expect(group).toContain(
+      'egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }]',
+    );
+  });
+
+  it("rebases SST's public and private subnets onto the stage's VPC CIDR (requirement 11)", () => {
+    expect(network).toContain("args.cidrBlock = rebaseSubnetCidr(args.cidrBlock, config.kind)");
+    expect(network).toContain("publicSubnet: rebase");
+    expect(network).toContain("privateSubnet: rebase");
+  });
+
+  it("gives the one NAT address to the stack output natAddress", () => {
+    expect(network).toContain("natAddress: singleNat?.elasticIp.publicIp");
+    expect(code("infra/app.ts")).toContain("natAddress: net.natAddress");
+  });
+});
+
+describe("requirement 2: one week of logs on every staging log group", () => {
+  it("logs.ts sets the retention of every sst.aws.Function on staging only", () => {
+    const logs = code("infra/stacks/logs.ts");
+    expect(logs).toContain("const retention = componentLogRetention(config.kind)");
+    expect(logs).toContain("if (retention === undefined) return");
+    expect(logs).toContain("$transform(sst.aws.Function,");
+    expect(logs).toContain("{ ...(logging ?? {}), retention }");
+  });
+
+  it("app.ts registers it before the first stack", () => {
+    const app = code("infra/app.ts");
+    const at = app.indexOf("logRetention(config);");
+    expect(at).toBeGreaterThan(0);
+    for (const first of ["secrets();", "network(config);", "auth(config);", "workers({", "web({"]) {
+      expect(app.indexOf(first), first).toBeGreaterThan(at);
+    }
+  });
+
+  it("workers.ts sets the workers' retention by stage kind and size", () => {
+    expect(code("infra/stacks/workers.ts")).toContain(
+      "logging: { retention: workerLogRetention(inputs.config.kind, inputs.config.size) }",
+    );
+  });
+});
+
+describe("requirements 3 and 4: what the stacks do with the removal rules", () => {
+  it("app.ts takes the removal policy and protection of production from infra/lib/stage.ts", () => {
+    const app = code("infra/app.ts");
+    expect(app).toContain("removal: removalPolicy(stage)");
+    expect(app).toContain('protect: stageKind(stage) === "production"');
+  });
+
+  it("database.ts: protection, the final snapshot and the backup days come from the rules", () => {
+    const database = code("infra/stacks/database.ts");
+    expect(database).toContain("const rules = removalRules(config.kind)");
+    expect(database).toContain("args.deletionProtection = rules.databaseDeletionProtection");
+    expect(database).toContain("args.skipFinalSnapshot = !rules.databaseFinalSnapshot");
+    expect(database).toContain(
+      'if (rules.databaseFinalSnapshot) { args.finalSnapshotIdentifier = resourceName(stage, "database-final"); }',
+    );
+    expect(database).toContain(
+      "args.backupRetentionPeriod = backupRetentionDays(config.kind, config.size)",
+    );
+  });
+
+  it("storage.ts empties the buckets on staging only and leaves the other stages' buckets as SST builds them", () => {
+    const storage = code("infra/stacks/storage.ts");
+    expect(storage).toContain("const { forceEmptyBuckets } = removalRules(config.kind)");
+    expect(storage).toContain("args.forceDestroy = true;");
+    expect(storage).not.toMatch(/forceDestroy = false/);
+  });
+
+  it("auth.ts keeps and adopts the two user pools on staging, and names the trigger there", () => {
+    const auth = code("infra/stacks/auth.ts");
+    expect(auth).toContain("const { retainUserPools } = removalRules(config.kind)");
+    expect(auth).toContain("if (!retainUserPools) return; opts.retainOnDelete = true;");
+    expect(auth).toContain("if (poolId !== null) opts.import = poolId;");
+    expect(auth).toContain("keepPool(opts, config.userPoolIds.customers)");
+    expect(auth).toContain("keepPool(opts, config.userPoolIds.admins)");
+    expect(auth).toContain(
+      '...(retainUserPools ? { name: resourceName(stage, "cognito-messages") } : {})',
+    );
+    // Requirement 11 (verify review B1 auth.ts:53): the plural Pulumi field, in both pools.
+    expect(
+      auth.match(
+        /args\.userAttributeUpdateSettings = \{ attributesRequireVerificationBeforeUpdates: \["email"\],? \}/g,
+      ),
+    ).toHaveLength(2);
+  });
+});
+
+describe("requirements 5, 9 and 10: budget.ts", () => {
+  const budget = code("infra/stacks/budget.ts");
+
+  it("takes the limit and thresholds of the stage kind and names the removal command", () => {
+    expect(budget).toContain("const plan = budgetOf(config.kind)");
+    expect(budget).toContain("name: budgetName(stage)");
+    expect(budget).toContain("limitAmount: String(plan.limitUsd)");
+    expect(budget).toContain("plan.thresholdsUsd.map(");
+  });
+
+  it("filters on the app AND the stage tag", () => {
+    expect(budget).toContain(
+      "filterExpression: { ands: Object.entries(sstTags($app.name, stage)).map(",
+    );
+    expect(budget).toContain("tags: { key, values: [value] }");
+  });
+
+  it("the us-east-1 provider of the web ACLs carries the same tags", () => {
+    expect(code("infra/stacks/waf.ts")).toContain(
+      "defaultTags: { tags: sstTags($app.name, stage) }",
+    );
+  });
+
+  it("app.ts still builds the budget on every lean stage, production included", () => {
+    expect(code("infra/app.ts")).toContain(
+      'if (config.size === "lean") { budget(config, alarm.topic); }',
+    );
+  });
+});
+
+describe("requirement 11: the VERIFY fixes in the stacks", () => {
+  it("alarms.ts takes every filtered log group from the function, never /aws/lambda/<name>", () => {
+    const alarms = code("infra/stacks/alarms.ts");
+    expect(alarms).not.toContain("/aws/lambda/");
+    expect(alarms).toContain("return f.nodes.logGroup;");
+    expect(alarms.match(/logGroupName: logGroupOf\(/g)).toHaveLength(3);
+  });
+
+  it("database.ts replaces SST's rds.force_ssl instead of appending a second one", () => {
+    const database = code("infra/stacks/database.ts");
+    expect(database).toContain("withForcedTls(existing ?? [])");
+    expect(database).not.toMatch(/\.\.\.\(existing \?\? \[\]\), \{ name: "rds\.force_ssl"/);
+  });
+
+  it("workers.ts publishes a version of access-details for its alias", () => {
+    const workers = code("infra/stacks/workers.ts");
+    expect(workers).toContain(
+      'const PUBLISHED_VERSIONS: readonly string[] = ["reader", "access-details", "invoice-renderer"]',
+    );
+    expect(workers).not.toContain("an alias cannot point to $LATEST");
+  });
+
+  it("each fix cites the line of the verify review", () => {
+    for (const file of [
+      "infra/stacks/alarms.ts",
+      "infra/stacks/network.ts",
+      "infra/stacks/workers.ts",
+      "infra/lib/database.ts",
+      "infra/lib/network.ts",
+    ]) {
+      expect(text(file), file).toContain("verify-review-2026-11-13.md");
+    }
+  });
+});
+
+describe("requirements 4 and 7: the documents", () => {
+  const runbook = text("docs/runbooks/staging-on-demand.md");
+
+  it("the staging database proof states the staging rule and that production keeps its own", async () => {
+    const { MANUAL_PROOFS } = await import("../../verify/manual-proofs.mjs");
+    const proof = MANUAL_PROOFS["wp0-t3-staging-database"].description;
+    expect(proof).toContain("1-day backup retention, no deletion protection and no final snapshot");
+    expect(proof).toContain(
+      "production keeps 14-day (7 lean) retention, deletion protection and its final snapshot",
+    );
+    expect(proof).not.toMatch(
+      /14-day backup retention and deletion protection show on the instance/,
+    );
+  });
+
+  it("the runbook covers start, end, what is wiped and kept, the next-day check, the daily cost and the rule", () => {
+    for (const part of [
+      "## Start a session",
+      "## What to test",
+      "## End the session",
+      "## What is wiped and what persists",
+      "## Next day: check that nothing billable remains",
+      '"deploy-staging"',
+      '"remove-staging"',
+      "`npx sst remove --stage staging`",
+      "Cost Explorer",
+      "2.7 USD a day",
+      "never leave staging up overnight unless a test needs it",
+      "cost allocation tag in the Billing console of the PAYER account",
+      "the filter counts nothing",
+      "Both Cognito user pools",
+      "The SST secrets",
+    ]) {
+      expect(runbook, part).toContain(part);
+    }
+    expect(text("docs/runbooks/README.md")).toContain("(staging-on-demand.md)");
+  });
+
+  it("the lean runbook says what SST really builds and what the stage builds instead", () => {
+    const lean = text("docs/runbooks/single-account-lean.md");
+    expect(lean).toContain("in EACH Availability Zone, so two of each");
+    expect(lean).toContain("builds ONE fck-nat t4g.nano");
+    expect(lean).not.toMatch(/VERIFY after the first deploy that SST makes one NAT instance/);
   });
 });
