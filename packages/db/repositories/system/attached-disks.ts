@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
+import { v7 as uuidv7 } from "uuid";
 import type { Tx } from "../../client";
-import { insertOperation } from "../../operations/insert";
+import { insertFreshOperation, insertOperation } from "../../operations/insert";
 import type { OperationState } from "../../operations/kinds";
 import { isUuid } from "../scope";
 
@@ -71,6 +72,7 @@ export async function retainAttachedDisks(
     options.markConfig === true
       ? sql`(select o.payload ->> 'from' from operations o
           where o.resource_id = r.id and o.kind = 'destroy'
+            and o.state not in ('failed', 'succeeded')
             and o.payload ->> 'withServer' = ${input.serverId}
           order by o.created_at desc, o.id desc limit 1)`
       : sql`null::text`;
@@ -128,8 +130,12 @@ export async function retainAttachedDisks(
     }
     const periodEnd =
       row.period_end instanceof Date ? row.period_end : new Date(String(row.period_end));
+    // Fix round 4: a disk retained NOW (it was active or in grace) gets live operations even when an earlier
+    // retention of the same period ended under the same key (a release): insertFreshOperation moves past an
+    // ended row. A disk already retained replays what exists.
+    const insert = row.status === "retained" ? insertOperation : insertFreshOperation;
     for (const kind of ["final_snapshot", "destroy"] as const) {
-      const inserted = await insertOperation(
+      const inserted = await insert(
         tx,
         {
           resourceId: row.disk_id,
@@ -161,7 +167,9 @@ export interface DiskRetainedWithServer {
 
 /**
  * WPU-Y4 fix round 2 (worker_rw). The disks of this customer that the cascade retained with `serverId` (the mark on
- * the disk, or a destroy whose payload names the server), under the lock of their subscriptions.
+ * the disk, or a destroy whose payload names the server), under the lock of their subscriptions. Fix round 4: only
+ * a destroy that has not ended counts (a failed row of an earlier, released retention is history), and the payload
+ * branch needs the disk to be attached to that server still.
  */
 export async function listDisksRetainedWithServer(
   tx: Tx,
@@ -182,6 +190,7 @@ export async function listDisksRetainedWithServer(
       r.config -> 'retainedWithServer' ->> 'from' as mark_from,
       (select o.payload ->> 'from' from operations o
         where o.resource_id = r.id and o.kind = 'destroy'
+          and o.state not in ('failed', 'succeeded')
           and o.payload ->> 'withServer' = ${input.serverId}
         order by o.created_at desc, o.id desc limit 1) as payload_from
     from resources r
@@ -191,9 +200,11 @@ export async function listDisksRetainedWithServer(
       and r.state not in ('destroyed', 'failed')
       and r.deleted_at is null
       and (r.config -> 'retainedWithServer' ->> 'serverId' = ${input.serverId}
-        or exists (select 1 from operations o
-          where o.resource_id = r.id and o.kind = 'destroy'
-            and o.payload ->> 'withServer' = ${input.serverId}))
+        or (r.config ->> 'attachedInstanceId' = ${input.serverId}
+          and exists (select 1 from operations o
+            where o.resource_id = r.id and o.kind = 'destroy'
+              and o.state not in ('failed', 'succeeded')
+              and o.payload ->> 'withServer' = ${input.serverId})))
     order by r.id
     for update of s`);
   return rows.map((row) => ({
@@ -254,4 +265,26 @@ export async function attachedServerStatus(
     where srv.id = ${input.serverId} and srv.customer_id = ${input.customerId}
       and srv.family in ('linux_instance', 'windows_instance')`);
   return rows[0]?.status ?? null;
+}
+
+/**
+ * WPU-Y4 fix round 4 (worker_rw). An attention item for operations: a disk retained with its server could not be
+ * given back when the server was revived, because its destroy may already have sent DeleteDisk. Ids and fixed words
+ * only (R14). It shows in the discrepancies list of the admin app.
+ */
+export async function recordDiskHeld(
+  tx: Tx,
+  input: { readonly diskId: string; readonly serverId: string },
+): Promise<void> {
+  if (!isUuid(input.diskId) || !isUuid(input.serverId)) {
+    throw new TypeError("attached disks: id is not a UUID");
+  }
+  const details = JSON.stringify({
+    resourceId: input.diskId,
+    serverId: input.serverId,
+    reason: "disk_destroy_may_have_run",
+    source: "attached_disks",
+  });
+  await tx.execute(sql`insert into discrepancies (id, kind, details)
+    values (${uuidv7()}, 'missing', ${details}::jsonb)`);
 }

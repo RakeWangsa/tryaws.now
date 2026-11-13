@@ -5,12 +5,14 @@ import {
   clearRetainedWithServer,
   lifecycleOperationKey,
   listDisksRetainedWithServer,
+  recordDiskHeld,
   retainAttachedDisks,
   serverStatusForDisk,
 } from "../repositories/system/attached-disks";
 import { withCustomerRepos } from "../testing/repos";
 import type { Tx } from "../client";
 import { runTransaction } from "../tx";
+import { insertFreshOperation } from "../operations/insert";
 import { newCustomer, newResource } from "./fixtures";
 import { insertRow } from "./sql";
 import { useTempDatabase } from "./temp-db";
@@ -281,4 +283,106 @@ it("cross-tenant (R8): the list, the server status for a disk and the attached s
   expect(
     await worker((tx) => attachedServerStatus(tx, { customerId: b, serverId: srvA })),
   ).toBeNull();
+});
+
+// WPU-Y4 fix round 4 (A): a key whose stored operation ended is no answer for a retention that starts now.
+it("insertFreshOperation moves past an ended row to <key>:after:<id>, replays a live one, and is a replay itself", async () => {
+  const a = await newCustomer(t.pool);
+  const srv = await server(a);
+  const d = await disk(a, srv);
+  const key = `test:fresh:${d.id}`;
+  const input = { resourceId: d.id, kind: "destroy" as const, payload: {}, idempotencyKey: key };
+  const first = await worker((tx) => insertFreshOperation(tx, input, new Date()));
+  expect(first.created).toBe(true);
+  // A live row is replayed.
+  const live = await worker((tx) => insertFreshOperation(tx, input, new Date()));
+  expect(live).toMatchObject({ created: false, operationId: first.operationId });
+  // Ended: a new row under <key>:after:<id>; a repeat replays it (R7).
+  await t.pool.query("update operations set state = 'failed' where id = $1", [first.operationId]);
+  const second = await worker((tx) => insertFreshOperation(tx, input, new Date()));
+  expect(second.created).toBe(true);
+  const keyOf = async (id: string) =>
+    (
+      await t.pool.query<{ k: string }>(
+        "select idempotency_key as k from operations where id = $1",
+        [id],
+      )
+    ).rows[0]?.k;
+  expect(await keyOf(second.operationId)).toBe(`${key}:after:${first.operationId}`);
+  const again = await worker((tx) => insertFreshOperation(tx, input, new Date()));
+  expect(again).toMatchObject({ created: false, operationId: second.operationId });
+  // Ended again: the chain goes on from the base key.
+  await t.pool.query("update operations set state = 'succeeded' where id = $1", [
+    second.operationId,
+  ]);
+  const third = await worker((tx) => insertFreshOperation(tx, input, new Date()));
+  expect(await keyOf(third.operationId)).toBe(`${key}:after:${second.operationId}`);
+});
+
+it("a disk retained again after its earlier retention was released gets a live destroy (no dead replay)", async () => {
+  const a = await newCustomer(t.pool);
+  const srv = await server(a);
+  const d = await disk(a, srv);
+  await worker((tx) =>
+    retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date(), { markConfig: true }),
+  );
+  // The release: operations cancelled, status back, mark gone.
+  await t.pool.query("update operations set state = 'failed' where resource_id = $1", [d.id]);
+  await t.pool.query("update subscriptions set status = 'active' where resource_id = $1", [d.id]);
+  await worker((tx) => clearRetainedWithServer(tx, { customerId: a, diskId: d.id }));
+  await worker((tx) =>
+    retainAttachedDisks(tx, { customerId: a, serverId: srv }, new Date(), { markConfig: true }),
+  );
+  const live = await t.pool.query(
+    "select kind from operations where resource_id = $1 and state not in ('failed', 'succeeded') order by created_at, id",
+    [d.id],
+  );
+  expect(live.rows.map((r) => r.kind)).toEqual(["final_snapshot", "destroy"]);
+});
+
+// WPU-Y4 fix round 4 (C): only a destroy that has not ended counts, and the payload branch needs the disk attached.
+it("listDisksRetainedWithServer ignores ended destroys and disks no longer attached to the server", async () => {
+  const a = await newCustomer(t.pool);
+  const srv = await server(a);
+  const other = await server(a);
+  // A disk retained on its own (no mark) whose only destroy naming srv is a failed row of an earlier episode.
+  const historic = await disk(a, srv, "retained");
+  await t.pool.query(
+    `insert into operations (id, resource_id, kind, state, idempotency_key, payload)
+     values (gen_random_uuid(), $1, 'destroy', 'failed', $2, $3::jsonb)`,
+    [historic.id, `test:old:${historic.id}`, JSON.stringify({ withServer: srv, from: "active" })],
+  );
+  // A disk moved to another server whose live destroy still names srv.
+  const moved = await disk(a, other, "retained");
+  await t.pool.query(
+    `insert into operations (id, resource_id, kind, state, idempotency_key, payload)
+     values (gen_random_uuid(), $1, 'destroy', 'needs_approval', $2, $3::jsonb)`,
+    [moved.id, `test:moved:${moved.id}`, JSON.stringify({ withServer: srv, from: "active" })],
+  );
+  const listed = await worker((tx) =>
+    listDisksRetainedWithServer(tx, { customerId: a, serverId: srv }),
+  );
+  expect(listed).toEqual([]);
+});
+
+it("recordDiskHeld writes an attention item with ids and fixed words only", async () => {
+  const a = await newCustomer(t.pool);
+  const srv = await server(a);
+  const d = await disk(a, srv);
+  await worker((tx) => recordDiskHeld(tx, { diskId: d.id, serverId: srv }));
+  const rows = await t.pool.query<{ kind: string; details: Record<string, unknown> }>(
+    "select kind, details from discrepancies where details ->> 'resourceId' = $1",
+    [d.id],
+  );
+  expect(rows.rows).toEqual([
+    {
+      kind: "missing",
+      details: {
+        resourceId: d.id,
+        serverId: srv,
+        reason: "disk_destroy_may_have_run",
+        source: "attached_disks",
+      },
+    },
+  ]);
 });

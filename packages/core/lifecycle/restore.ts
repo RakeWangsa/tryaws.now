@@ -27,7 +27,9 @@ export async function completeRestore(
   await repo.setPeriod(row.id, { status: "active", periodStart: now, periodEnd });
   // R13: the final snapshot of this retention must not allow the destroy of the next one.
   await repo.supersedeFinalBackups(row.resourceId);
-  // WPU-Y4 fix round 2: the disks retained with this server get their status back (same transaction).
+  // WPU-Y4 fix round 2: the disks retained with this server get their status back (same transaction). Fix round 4:
+  // this needs worker_rw (releaseServerDisks reads operations.payload and step, which web_rw may not read); a
+  // restore flow of the web tier must hand the subscription to a worker job, never call this as web_rw.
   if (row.resource.family === "linux_instance" || row.resource.family === "windows_instance") {
     await releaseServerDisks(tx, { customerId: row.customerId, serverId: row.resourceId });
   }

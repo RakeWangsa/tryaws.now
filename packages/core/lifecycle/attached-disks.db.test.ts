@@ -212,3 +212,92 @@ it("a disk whose server is in grace is not renewed (held with a mark); the mark 
   await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
   expect((await configOf(d.id))[SERVER_HOLD_KEY] ?? null).toBeNull();
 });
+
+// WPU-Y4 fix round 4 (A): after a release, the next retention in the same disk period queues LIVE operations.
+it("a disk released with from:grace gets a new live destroy when its server is retained again", async () => {
+  const s = await serverPastGrace();
+  const d = await disk(s.customerId, s.serverId);
+  await q("update subscriptions set status = 'grace' where id = $1", [d.subscriptionId]);
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  expect(await statusOf(d.id)).toBe("retained");
+  const serverSub = String(
+    (await q("select id from subscriptions where resource_id = $1", [s.serverId]))[0]!.id,
+  );
+  expect(
+    (await worker((tx) => completeRestore(tx, { subscriptionId: serverSub, clock: kit.clock }))).ok,
+  ).toBe(true);
+  expect(await statusOf(d.id)).toBe("grace");
+  // The server's grace runs out again in the same disk period.
+  await q(
+    "update subscriptions set status = 'grace', auto_renew = false, period_start = $2, period_end = $3 where id = $1",
+    [serverSub, new Date(START.getTime() - 60 * DAY), new Date(START.getTime() - 30 * DAY)],
+  );
+  kit.clock.set(new Date(kit.clock.now().getTime() + 3_600_000));
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  expect(await statusOf(s.serverId)).toBe("retained");
+  expect(await statusOf(d.id)).toBe("retained");
+  const live = await q(
+    "select kind, idempotency_key from operations where resource_id = $1 and state not in ('failed', 'succeeded') order by created_at, id",
+    [d.id],
+  );
+  expect(live.map((o) => o.kind)).toEqual(["final_snapshot", "destroy"]);
+  expect(String(live[1]!.idempotency_key)).toContain(":after:");
+});
+
+// WPU-Y4 fix round 4 (B): release unless DeleteDisk may have been sent.
+it("a disk whose destroy waits for the server (approved, started) is still given back", async () => {
+  const s = await serverPastGrace();
+  const d = await disk(s.customerId, s.serverId);
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  await q(
+    "update operations set state = 'waiting', step = 'wait_server', attempts = 1 where resource_id = $1 and kind = 'destroy'",
+    [d.id],
+  );
+  const serverSub = String(
+    (await q("select id from subscriptions where resource_id = $1", [s.serverId]))[0]!.id,
+  );
+  await worker((tx) => completeRestore(tx, { subscriptionId: serverSub, clock: kit.clock }));
+  expect(await statusOf(d.id)).toBe("active");
+  expect(await markOf(d.id)).toBeNull();
+  // The started destroy is left to the guard, which refuses it while the server is not retained.
+  const destroy = await q(
+    "select state from operations where resource_id = $1 and kind = 'destroy'",
+    [d.id],
+  );
+  expect(destroy[0]!.state).toBe("waiting");
+});
+
+it("a disk whose destroy reached the DeleteDisk step stays retained, with an attention item", async () => {
+  const s = await serverPastGrace();
+  const d = await disk(s.customerId, s.serverId);
+  await kit.refreshFx();
+  await runLifecycle({ runTx: worker, clock: kit.clock, log: () => undefined });
+  await q(
+    "update operations set state = 'running', step = 'delete_disk', attempts = 1 where resource_id = $1 and kind = 'destroy'",
+    [d.id],
+  );
+  const serverSub = String(
+    (await q("select id from subscriptions where resource_id = $1", [s.serverId]))[0]!.id,
+  );
+  await worker((tx) => completeRestore(tx, { subscriptionId: serverSub, clock: kit.clock }));
+  expect(await statusOf(s.serverId)).toBe("active");
+  expect(await statusOf(d.id)).toBe("retained");
+  const items = await q(
+    "select kind, details from discrepancies where details ->> 'resourceId' = $1",
+    [d.id],
+  );
+  expect(items).toEqual([
+    {
+      kind: "missing",
+      details: {
+        resourceId: d.id,
+        serverId: s.serverId,
+        reason: "disk_destroy_may_have_run",
+        source: "attached_disks",
+      },
+    },
+  ]);
+});

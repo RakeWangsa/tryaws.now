@@ -1,5 +1,6 @@
 import {
   attachedServerStatus,
+  insertFreshOperation,
   insertOperation,
   lifecycleOperationKey,
   lifecycleRepo,
@@ -107,7 +108,11 @@ class Work {
   ) {}
 
   // R1: only an operation row. The queue message goes out after the commit.
-  async enqueue(kind: OperationKind, keyAt: Date): Promise<void> {
+  // WPU-Y4 fix round 4: `fresh` (a retention that starts now) moves past an ENDED row under the key (a release of an
+  // earlier retention in the same period, with or without an unpaid episode) to `<key>:after:<id>`; without it the
+  // subscription would stay retained with no live destroy, unbilled for ever. The ensure pass (already retained)
+  // only replays.
+  async enqueue(kind: OperationKind, keyAt: Date, fresh = false): Promise<void> {
     const request = (key: string) => ({
       resourceId: this.row.resourceId,
       kind,
@@ -125,6 +130,15 @@ class Work {
       (kind === "destroy" || kind === "final_snapshot")
     ) {
       inserted = await insertOperation(this.tx, request(`${key}:u${this.episode}`), this.now);
+    }
+    if (
+      fresh &&
+      !inserted.created &&
+      retentionKeyNeedsSalt(inserted.state) &&
+      (kind === "destroy" || kind === "final_snapshot")
+    ) {
+      const last = this.episode !== undefined ? `${key}:u${this.episode}` : key;
+      inserted = await insertFreshOperation(this.tx, request(last), this.now);
     }
     if (inserted.created && inserted.state === "queued") {
       this.messages.push(firstMessage(inserted.operationId, this.row.resourceId));
@@ -319,7 +333,7 @@ async function enterGrace(work: Work, deps: LifecycleDeps, graceStart?: Date): P
 async function retain(work: Work): Promise<void> {
   const { row } = work;
   await lifecycleRepo(work.tx).setStatus(row.id, "retained");
-  await queueRetentionOperations(work);
+  await queueRetentionOperations(work, true);
 }
 
 // WPU-Y3: the unpaid-usage rule retains a subscription at 7 days unpaid. The same steps as the end of
@@ -342,11 +356,11 @@ export async function retainSubscription(
 // WPU-Y4: the families a block storage disk is attached to (config.attachedInstanceId).
 const SERVER_FAMILIES: readonly string[] = ["linux_instance", "windows_instance"];
 
-async function queueRetentionOperations(work: Work): Promise<void> {
+async function queueRetentionOperations(work: Work, fresh = false): Promise<void> {
   if (SNAPSHOT_FAMILIES.includes(work.row.resource.family)) {
-    await work.enqueue("final_snapshot", work.row.periodEnd);
+    await work.enqueue("final_snapshot", work.row.periodEnd, fresh);
   }
-  await work.enqueue("destroy", work.row.periodEnd);
+  await work.enqueue("destroy", work.row.periodEnd, fresh);
   // WPU-Y4 (owner decision 2026-11-14): a server's disks end with it. Their subscriptions become `retained` in this
   // transaction and their final snapshot and destroy are queued under their own lifecycle keys (a replay on every
   // later pass, R7). The disk's destroy waits for the server's destroy to stop the server.

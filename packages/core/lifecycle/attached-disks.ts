@@ -3,25 +3,35 @@ import {
   lifecycleRepo,
   listDisksRetainedWithServer,
   meteringRepo,
+  recordDiskHeld,
   type Tx,
 } from "@tc/db";
-import { viewDestroys } from "../metering/unpaid-undo";
 
 // WPU-Y4 fix round 2. A server that leaves `retained` (the unpaid rule's payback, completeRestore) takes back the
 // disks the cascade retained with it (retainAttachedDisks of @tc/db): in the same transaction each disk subscription
 // gets the status it had before (`active` or `grace`), its destroy and final snapshot that never started are
 // cancelled, its final backups stop being final (the same release as the server's own, R13), and the mark goes.
-// Nothing is posted to the ledger (R5). A disk whose destroy already ran or was approved is held (still retained,
-// logged): the guard refuses that destroy anyway while the server is not retained (R13, R16). A disk the cascade
+// Nothing is posted to the ledger (R5). Fix round 4: a disk is held (still retained, an attention item in
+// `discrepancies`) only when its destroy may already have sent DeleteDisk. Runs as worker_rw (it reads
+// operations). A disk the cascade
 // found retained on its own keeps its own retention; only the mark is removed.
 
 export interface ReleasedDisks {
   /** Disks whose subscription got its former status back. */
   readonly released: number;
-  /** Disks left retained because a destroy of theirs ran or was approved, or a cancel failed. */
+  /** Disks left retained because a destroy of theirs may already have sent DeleteDisk (an attention item each). */
   readonly held: number;
 }
 
+// The disk adapter's destroy sends DeleteDisk in this step (packages/aws/adapters/disk.ts).
+const DELETE_STEP = "delete_disk";
+
+/**
+ * Fix round 4: a disk is given back unless DeleteDisk may already have been sent (a destroy at the delete step, or
+ * one that succeeded). A destroy that was approved or started but has not reached that step does not hold the disk:
+ * the guard checks again at every claim and refuses it while the server is not retained (R13, R16). Such a destroy
+ * is left as it is (only an unstarted, unapproved one can be cancelled here) and ends refused.
+ */
 export async function releaseServerDisks(
   tx: Tx,
   input: { readonly customerId: string; readonly serverId: string },
@@ -38,18 +48,13 @@ export async function releaseServerDisks(
       await clear();
       continue;
     }
-    const view = viewDestroys(await metering.operationsOf(disk.diskId, ["destroy"]));
-    let cancelled = view.safe;
-    if (view.safe) {
-      for (const op of view.toCancel) {
-        if (!(await metering.cancelUnstarted(op.id))) {
-          cancelled = false;
-          break;
-        }
-      }
-    }
-    if (!cancelled) {
+    const destroys = await metering.operationsOf(disk.diskId, ["destroy"]);
+    const mayHaveDeleted = destroys.some(
+      (op) => op.state === "succeeded" || op.step === DELETE_STEP,
+    );
+    if (mayHaveDeleted) {
       held += 1;
+      await recordDiskHeld(tx, { diskId: disk.diskId, serverId: input.serverId });
       // Ids and fixed words only (R14).
       log?.({
         event: "attached_disks",
@@ -59,8 +64,11 @@ export async function releaseServerDisks(
       });
       continue;
     }
-    // A final snapshot that has not started is not needed any more; one that started is released below.
-    for (const op of await metering.operationsOf(disk.diskId, ["final_snapshot"])) {
+    // What has not started is cancelled; anything else is refused by the guard when it is claimed.
+    for (const op of [
+      ...destroys,
+      ...(await metering.operationsOf(disk.diskId, ["final_snapshot"])),
+    ]) {
       if ((op.state === "queued" || op.state === "needs_approval") && !op.approved) {
         await metering.cancelUnstarted(op.id);
       }

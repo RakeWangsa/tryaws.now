@@ -122,4 +122,26 @@ it("a payment after the unpaid retention gives the server AND its attached disk 
       )[0]!.n,
     ),
   ).toBe(ledgerBefore);
+
+  // WPU-Y4 fix round 4 (A): a second unpaid episode in the same disk period. The wallet is empty again; at 7 days
+  // the server is retained again, and the disk gets LIVE operations, not the cancelled rows of the first episode.
+  await q("update wallets set balance_minor = 0 where customer_id = $1", [buyer.customerId]);
+  const t1 = new Date(day7.getTime() + 2 * 3_600_000);
+  kit.clock.set(t1);
+  await kit.refreshFx();
+  await runStaticIpMetering({ runTx: worker, clock: kit.clock, log: () => undefined });
+  await unpaid(t1);
+  const since2 = await q("select config ->> 'unpaidSince' as s from resources where id = $1", [
+    serverId,
+  ]);
+  expect(since2[0]!.s).not.toBeNull();
+  const second = new Date(Date.parse(String(since2[0]!.s)) + 7 * DAY + 3_600_000);
+  expect(await unpaid(second)).toMatchObject({ retained: 1 });
+  expect(await statusOf(serverId)).toBe("retained");
+  expect(await statusOf(diskId)).toBe("retained");
+  const live = await q(
+    "select kind from operations where resource_id = $1 and state not in ('failed', 'succeeded') order by created_at, id",
+    [diskId],
+  );
+  expect(live.map((o) => o.kind)).toEqual(["final_snapshot", "destroy"]);
 });

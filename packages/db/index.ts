@@ -475,6 +475,7 @@ export {
   clearRetainedWithServer,
   lifecycleOperationKey,
   listDisksRetainedWithServer,
+  recordDiskHeld,
   retainAttachedDisks,
   serverStatusForDisk,
 } from "./repositories/system/attached-disks";
