@@ -34,6 +34,15 @@ The owner or DevOps with the deploy rights of the stage. A Claude Code session n
    - Budget: an AWS Budgets monthly cost budget with a limit of 50 USD and two notifications on ACTUAL spend, at 40 USD and at 50 USD, sent to the alarm SNS topic.
 7. After the deploy, confirm every e-mail subscription of the alarm topic, then run the safe checks.
 
+## Role stacks in the one account
+
+Both role templates go into the same account, in this order, with the DevOps admin role (never a StackSet, never a Claude Code session). The account id and ExternalId are typed at deploy time only.
+
+1. `infra/org/pool-roles.yaml`: `ControlPlaneAccountId` (the same account), `ExternalId`, `ControlPlaneStage` (`staging` for a staging control plane, `production` otherwise). It creates `TcProvisioner`, `TcReader`, `TcAccessDetails`, `TcBillingReader` and `TcPoolPermissionsBoundary`.
+2. `infra/org/dns-account.yaml`: the same three parameters, the same `ControlPlaneStage`, and `CreateBillingReader=false`. It creates `TcDnsProvisioner`, `TcDnsReader` and `TcDnsPermissionsBoundary`. With the default `true` the stack fails, because `TcBillingReader` already exists.
+
+`TcBillingReader` of step 1 is the only billing role. Its `ce:GetCostAndUsage` on every resource reads the cost of the whole account, Route 53 included, so the reconciler needs no second role. Both stacks may use one ExternalId or two; the pool and DNS rows of the database must hold the value of their own stack. A test (`tests/repo/infra-org.test.mjs`, WPU-Y7) pins that no role or policy name is in both stacks with `CreateBillingReader=false`. Deleting the pool stack removes `TcBillingReader`; delete the DNS stack first.
+
 ## Cost per line item
 
 Estimate, not measured: check the AWS pricing pages and Cost Explorer after 7 days. No price below is a quote. The 50 USD is the ceiling the alarm watches, not a forecast that the lines add up to it.
@@ -93,3 +102,7 @@ Stage, date, who, the size (`lean` or `full`), the alarm that fired and the Cost
 ## Must not
 
 Put the account id, an ExternalId or any key in the repository, a ticket or a chat; deploy this stage from a Claude Code session or by hand; use the management account; create IAM users or access keys; run a size other than `lean` or `full`; remove RDS Proxy, TLS, KMS, deletion protection or the final snapshot to save money; claim a figure of the cost table as measured before Cost Explorer shows it; skip the confirmation of the alarm e-mail subscriptions.
+
+### Warning: ControlPlaneStage=staging for the DNS roles
+
+`dns-account.yaml` accepts `ControlPlaneStage=staging` only so that the one-account stage can use it. The DNS roles can change and delete every hosted zone of the account (`Resource: "*"`). Never deploy a staging-trusted DNS stack into a separate customer DNS account (`tc-dns` of the three-account design); keep `production` there. In the one account the zones of customers and of the platform share the account anyway, which is the accepted cost of the one-account ruling (JOURNEY.md, 2026-11-13).

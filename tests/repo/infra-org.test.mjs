@@ -1026,3 +1026,138 @@ describe("CloudFormation limits that the owner's first validation found", () => 
     expect(Buffer.byteLength(doc.Description, "utf8")).toBeLessThanOrEqual(1024);
   });
 });
+
+// WPU-Y7: pool-roles.yaml and dns-account.yaml in ONE account (the one-account ruling), in a staging stage.
+describe("WPU-Y7: both role templates in one account and in a staging stage", () => {
+  const pool = tpl["pool-roles.yaml"];
+  const dns = tpl["dns-account.yaml"];
+
+  /** Evaluates a Condition of the model: the templates use Fn::Equals of a Ref and a literal only. */
+  const conditionHolds = (t, name, params) => {
+    const [a, b] = t.Conditions[name]["Fn::Equals"];
+    const v = (x) => (x?.Ref !== undefined ? params[x.Ref] : x);
+    return v(a) === v(b);
+  };
+  /** Names of the roles and managed policies that CloudFormation would create with these parameters. */
+  const created = (t, params) => {
+    const out = { roles: [], policies: [] };
+    for (const r of Object.values(t.Resources)) {
+      if (r.Condition !== undefined && !conditionHolds(t, r.Condition, params)) continue;
+      if (r.Type === "AWS::IAM::Role") out.roles.push(r.Properties.RoleName);
+      if (r.Type === "AWS::IAM::ManagedPolicy") out.policies.push(r.Properties.ManagedPolicyName);
+    }
+    return out;
+  };
+  const poolParams = { ...defaultsOf(pool), ControlPlaneStage: "staging" };
+  const dnsParams = (extra = {}) => ({ ...defaultsOf(dns), ...extra });
+
+  it("CreateBillingReader exists, allows only true and false, and defaults to true", () => {
+    const p = dns.Parameters.CreateBillingReader;
+    expect(p.AllowedValues).toEqual(["true", "false"]);
+    expect(String(p.Default)).toBe("true");
+    expect(pool.Parameters.CreateBillingReader).toBeUndefined();
+  });
+
+  it("default behaviour is unchanged: the DNS stack creates its three roles, including TcBillingReader", () => {
+    expect(created(dns, dnsParams()).roles.sort()).toEqual([
+      "TcBillingReader",
+      "TcDnsProvisioner",
+      "TcDnsReader",
+    ]);
+    expect(dns.Parameters.ControlPlaneStage.Default).toBe("production");
+  });
+
+  it("with CreateBillingReader=false no role or managed policy name appears in both templates", () => {
+    const a = created(pool, poolParams);
+    const b = created(dns, dnsParams({ CreateBillingReader: "false" }));
+    expect(b.roles).not.toContain("TcBillingReader");
+    expect(a.roles.filter((n) => b.roles.includes(n))).toEqual([]);
+    expect(a.policies.filter((n) => b.policies.includes(n))).toEqual([]);
+    // the shared account still has the billing role, owned by the pool stack
+    expect(a.roles).toContain("TcBillingReader");
+  });
+
+  it("with the default the two templates still collide on TcBillingReader (the reason for the parameter)", () => {
+    const a = created(pool, poolParams);
+    const b = created(dns, dnsParams());
+    expect(a.roles.filter((n) => b.roles.includes(n))).toEqual(["TcBillingReader"]);
+  });
+
+  it("the pool TcBillingReader reads cost of the whole account, so it covers pool and DNS usage", () => {
+    const role = roleByName(pool, "TcBillingReader");
+    const stmts = rolePolicyDocs(role).flatMap(statementsOf);
+    expect(stmts.every((s) => s.Effect === "Allow" && s.Resource === "*")).toBe(true);
+    expect(stmts.flatMap(actionsOf)).toEqual(["ce:GetCostAndUsage"]);
+    const boundary = resourcesOf(pool, "AWS::IAM::ManagedPolicy")[0].Properties.PolicyDocument;
+    expect(allowActions(boundary)).toContain("ce:GetCostAndUsage");
+    // no Condition on the cost statement: no tag or Region filter can hide the Route 53 lines
+    expect(stmts.some((s) => s.Condition !== undefined)).toBe(false);
+  });
+
+  it("the DNS stack accepts staging and production and no other stage", () => {
+    expect(dns.Parameters.ControlPlaneStage.AllowedValues).toEqual(["staging", "production"]);
+    expect(pool.Parameters.ControlPlaneStage.AllowedValues).toEqual(["staging", "production"]);
+  });
+
+  describe("model of sts:AssumeRole for the DNS roles", () => {
+    const dnsRoleFns = {
+      TcDnsProvisioner: ["provisioner"],
+      TcDnsReader: ["reader", "catalog-sync", "reconciler"],
+      TcBillingReader: ["reconciler"],
+    };
+    const fn = (account, name) => `arn:aws:iam::${account}:role/${name}`;
+    for (const stage of ["staging", "production"]) {
+      const account = stage === "staging" ? STG : PROD;
+      const other = stage === "staging" ? "production" : "staging";
+      const params = dnsParams({
+        ControlPlaneAccountId: account,
+        ControlPlaneStage: stage,
+        ExternalId: EXTERNAL_ID,
+      });
+      const asks = (role, callerArn, externalId = EXTERNAL_ID) =>
+        mayAssume(roleByName(dns, role), params, { callerArn, externalId });
+
+      it(`${stage}: the function roles named by roleName() may assume, with the ExternalId only (R3)`, () => {
+        for (const [role, fns] of Object.entries(dnsRoleFns)) {
+          for (const f of fns) {
+            expect(asks(role, fn(account, sstRole(stage, f))), `${role} <- ${f}`).toBe(true);
+            expect(asks(role, fn(account, sstRole(stage, f)), "wrong")).toBe(false);
+            expect(asks(role, fn(account, sstRole(stage, f)), null)).toBe(false);
+          }
+        }
+      });
+
+      it(`${stage}: the other stage's function roles and the web and admin roles (R1) cannot assume`, () => {
+        for (const role of Object.keys(dnsRoleFns)) {
+          for (const name of [
+            sstRole(other, "provisioner"),
+            sstRole(other, "reader"),
+            sstRole(other, "reconciler"),
+            sstRole(stage, "web"),
+            sstRole(stage, "admin"),
+            sstRole(other, "web"),
+            sstRole(other, "admin"),
+          ]) {
+            expect(asks(role, fn(account, name)), `${role} <- ${name}`).toBe(false);
+          }
+        }
+        // a function role that is not named for this role
+        expect(asks("TcDnsProvisioner", fn(account, sstRole(stage, "reader")))).toBe(false);
+        expect(asks("TcBillingReader", fn(account, sstRole(stage, "provisioner")))).toBe(false);
+      });
+    }
+  });
+
+  it("the DNS trust still uses aws:PrincipalArn plus ExternalId and only parameters", () => {
+    for (const role of resourcesOf(dns, "AWS::IAM::Role")) {
+      expect(trustProblems(role, dns), role.Properties.RoleName).toEqual([]);
+    }
+  });
+
+  it("the DNS Description fits CloudFormation limits and the parameter names the single-account rule", () => {
+    expect(Buffer.byteLength(dns.Description, "utf8")).toBeLessThanOrEqual(1024);
+    expect(Object.keys(dns.Parameters).length).toBeLessThanOrEqual(200);
+    expect(dns.Parameters.CreateBillingReader.Description).toMatch(/pool-roles/);
+    expect(dns.Parameters.CreateBillingReader.Description).toMatch(/false/);
+  });
+});

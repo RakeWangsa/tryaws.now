@@ -1,10 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   TiCON Cloud roles in tc-dns (Sections 6.3 and 12): TcDnsProvisioner, TcDnsReader and TcBillingReader,
-  with one permissions boundary. Deploy once, in tc-dns, with the DevOps admin role. tc-dns trusts
-  tc-platform only. Section 3.1 says staging also works with test zones in tc-dns. This template does not
-  open tc-dns to tc-platform-stg: the owner decides first how test zones are kept apart from customer
-  zones (JOURNEY, Needs decision).
+  with one permissions boundary. Deploy with the DevOps admin role. Control plane stage: staging or
+  production. Separate accounts: deploy once in tc-dns with CreateBillingReader=true. ONE account (owner
+  ruling): deploy pool-roles.yaml first, then this with CreateBillingReader=false. No test-zone split yet.
 # VERIFY: the exact Route 53 and Route 53 Domains actions that the real adapter calls (the adapter for
 # the AWS SDK is not in packages/aws yet: only the ports route53-port.ts and domains-port.ts exist).
 # VERIFY: RegisterDomain needs route53:CreateHostedZone, route53:GetHostedZone and
@@ -13,6 +12,11 @@ Description: >-
 # VERIFY: Route 53 Domains and Route 53 API calls are served from us-east-1, so the Region condition
 # below is us-east-1 only.
 
+# SECURITY NOTE (automated review, 2026-11-13): ControlPlaneStage=staging exists ONLY for the one-account
+# setup of the owner, where the staging stage and the DNS role live in the same small test account. Never
+# deploy a staging-trusted copy of this stack into a real, separate customer DNS account (tc-dns of the
+# three-account design): its roles can change and delete any hosted zone of the account, so a staging
+# function role must not be trusted there. In a multi-account setup keep ControlPlaneStage=production.
 Parameters:
   ControlPlaneAccountId:
     Type: String
@@ -24,16 +28,32 @@ Parameters:
     Description: The ExternalId of tc-dns, the same plain value as pool_accounts.external_id.
   ControlPlaneStage:
     Type: String
-    AllowedValues: [production]
+    AllowedValues: [staging, production]
     Default: production
     Description: >-
-      The SST stage of the control plane. The function roles it creates are named
+      The SST stage of the control plane (staging trusts the tc-staging-* function roles, production the
+      tc-production-* ones, never both). The function roles it creates are named
       tc-<stage>-<function>-role (infra/lib/stage.ts roleName), so the trust below names them exactly.
+  CreateBillingReader:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+    Description: >-
+      "true" (default, separate tc-dns account) creates TcBillingReader here. In ONE account shared with
+      the pool roles, pool-roles.yaml already owns TcBillingReader (its ce:GetCostAndUsage on Resource "*"
+      covers the whole account, Route 53 included): deploy pool-roles.yaml first, then this stack with
+      "false", or the second stack fails on the duplicate role name.
   MaxSessionSeconds:
     Type: Number
     Default: 3600
     MinValue: 3600
     MaxValue: 3600
+
+Conditions:
+  CreateBillingReaderRole:
+    Fn::Equals:
+      - Ref: CreateBillingReader
+      - "true"
 
 Resources:
   PermissionsBoundary:
@@ -198,6 +218,7 @@ Resources:
 
   TcBillingReader:
     Type: AWS::IAM::Role
+    Condition: CreateBillingReaderRole
     Properties:
       RoleName: TcBillingReader
       Description: Cost of tc-dns only. Assumed by the reconciler.
@@ -235,4 +256,8 @@ Resources:
 Outputs:
   RoleNames:
     Description: Names only. The platform builds the ARN from the account id in pool_accounts.
-    Value: TcDnsProvisioner,TcDnsReader,TcBillingReader
+    Value:
+      Fn::If:
+        - CreateBillingReaderRole
+        - TcDnsProvisioner,TcDnsReader,TcBillingReader
+        - TcDnsProvisioner,TcDnsReader
