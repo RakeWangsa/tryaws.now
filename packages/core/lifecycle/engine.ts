@@ -393,6 +393,13 @@ async function process(
           break;
         }
       }
+      // WPU-Y10. A subscription WITHOUT auto-renew has no renewal to try, but the customer's way to pay by hand
+      // needs a price too (renewNow refuses with prices_updating). While our rate is missing or stale the period
+      // end is held like a renewal: no grace, no suspension, so the platform's gap never costs the customer days.
+      if (!action.tryRenew && isFxRateUnavailable(await renewalQuote(tx, row, clock))) {
+        await holdForRate(work, deps, "period_end");
+        break;
+      }
       // WPU-Y9: a renewal that was held for the rate and now fails for the wallet starts its grace now.
       const fromHold = isHeld(row);
       if (fromHold) await releaseHold(work);
@@ -416,6 +423,19 @@ async function process(
     case "retain": {
       // WPU-Y1. A subscription is never retained (and so never destroyed) while its renewal cannot be priced.
       // One whose grace ran out during such a hold gets one renewal before it is retained.
+      // WPU-Y10. Without auto-renew nothing is ever charged here. While the rate cannot be priced the retention
+      // waits too; once the rate is back the grace runs from that moment (graceFrom), exactly as for a held renewal.
+      if (!row.autoRenew) {
+        if (isFxRateUnavailable(await renewalQuote(tx, row, clock))) {
+          await holdForRate(work, deps, "retain");
+          break;
+        }
+        if (isHeld(row)) {
+          await releaseHold(work);
+          await ensureSuspended(work);
+          break;
+        }
+      }
       if (row.autoRenew) {
         if (isHeld(row)) {
           const renewed = await renewSubscription(tx, row, clock, deps.log);
