@@ -353,6 +353,7 @@ const PRODUCTS = [
   "SELLER_SETTING_KEY",
   "amountInWords",
   "isValidBin",
+  "formatBin",
   "parseSellerDetails",
   "percentText",
   "sellerFieldErrors",
