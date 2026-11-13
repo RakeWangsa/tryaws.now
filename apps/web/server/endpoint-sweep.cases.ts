@@ -560,6 +560,42 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
     ],
   },
+  // WPU-Z6: the reply and the close of a support request. The request id comes from the form; the
+  // repositories of the session's customer answer another customer's request like a missing one.
+  "app/[locale]/(panel)/support/requests/[id]/actions.ts#addSupportMessageAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}support-thread-actions.test.ts`,
+        "authenticates, validates, rate limits, writes and audits, in that order (R9)",
+      ),
+      proof(
+        `${W}support-thread-actions.test.ts`,
+        "cross-tenant: another customer's request answers like a missing one and nothing is audited (R8)",
+      ),
+      proof(
+        "packages/db/test/support-repo.test.ts",
+        "addMessage refuses a blank or too long text (validation) and another customer's request (not_found), writing nothing",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/support/requests/[id]/actions.ts#closeSupportRequestAction": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}support-thread-actions.test.ts`,
+        "authenticates, validates, rate limits, closes and audits, in that order (R9)",
+      ),
+      proof(
+        `${W}support-thread-actions.test.ts`,
+        "cross-tenant: another customer's request answers like a missing one and nothing is audited (R8)",
+      ),
+      proof(
+        "packages/db/test/support-repo.test.ts",
+        "close closes the customer's own request once; a second close is a replay; another customer's is not_found",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/notifications/actions.ts#markNotificationsReadAction": {
     kind: "id",
     proof: [
@@ -1100,6 +1136,19 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
       ),
       // The page lists the bucket keys through the access-details function (bucketKeyList).
       ACCESS_DETAILS_REAL_DB,
+    ],
+  },
+  "app/[locale]/(panel)/support/requests/[id]/page.tsx": {
+    kind: "id",
+    proof: [
+      proof(
+        `${W}support-view.test.ts`,
+        "answers null for another customer's request like for a missing one, and writes nothing (R8)",
+      ),
+      proof(
+        "packages/db/test/support-repo.test.ts",
+        "thread of another customer's request, a missing one and a malformed id is not_found (R8)",
+      ),
     ],
   },
   "app/[locale]/(panel)/wallet/topup/[paymentId]/page.tsx": {

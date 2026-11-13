@@ -9,6 +9,7 @@ import type { KycActionDeps } from "./kyc-actions.ts";
 import type { ServerOpsDeps } from "./server-actions.ts";
 import type { SettingsDeps } from "./settings-actions.ts";
 import type { SupportActionDeps } from "./support-actions.ts";
+import type { SupportThreadDeps } from "./support-thread-actions.ts";
 import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
 import type { OrderActionDeps } from "./order-actions.ts";
 import { getOrdersRuntime } from "./orders-runtime.ts";
@@ -191,6 +192,19 @@ export function supportActionDeps(): SupportActionDeps {
           audit: repos.audit,
           rateLimits: repos.rateLimits,
         });
+      }),
+  };
+}
+
+/** The ports of the reply and the close of a support request (WPU-Z6): the customer's own repositories. */
+export function supportThreadActionDeps(): SupportThreadDeps {
+  return {
+    authenticate,
+    now: () => new Date(),
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({ support: repos.support, audit: repos.audit, rateLimits: repos.rateLimits });
       }),
   };
 }

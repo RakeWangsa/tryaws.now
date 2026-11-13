@@ -16,7 +16,7 @@ export const APP_NAV: readonly NavEntry<AppNavId>[] = [
   { id: "domains", href: "/domains", icon: "fa-sitemap", family: "domains" },
   { id: "wallet", href: "/wallet", icon: "fa-wallet" },
   { id: "invoices", href: "/invoices", icon: "fa-file-invoice" },
-  { id: "support", href: "/support/new", icon: "fa-life-ring" },
+  { id: "support", href: "/support/requests", icon: "fa-life-ring" },
   { id: "settings", href: "/settings/profile", icon: "fa-gear" },
 ];
 
