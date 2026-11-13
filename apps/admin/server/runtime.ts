@@ -35,6 +35,7 @@ import type { AbuseFlowDeps } from "./abuse-flow.ts";
 import type { CaseFlowDeps } from "./case-flow-common.ts";
 import type { SupportFlowDeps } from "./support-flow.ts";
 import { SUPPORT_REPLY_ENABLED } from "./support-reply.ts";
+import type { UnpaidRuleFlowDeps } from "./unpaid-rule-flow.ts";
 import { unavailableKycStore, type KycDocumentDeps } from "./kyc-documents.ts";
 import { rateSubject, resolveRateKey } from "./rate-subject.ts";
 import { makeSignIn, makeSignOut, type SignInDeps } from "./sign-in.ts";
@@ -272,6 +273,20 @@ export function reconciliationFlowDeps(): CaseFlowDeps {
   return {
     authorize: (roles) => requireAdmin([...roles]),
     limiter: adminLimiter("admin_reconciliation_action", CASE_ACTION_LIMIT),
+    run: runAsAdmin,
+    clock: { now: () => new Date() },
+  };
+}
+
+// The switch of the unpaid-usage job on /operations/unpaid-rule (WPU-Z4): the flow asks for the roles of the
+// direction (on: superadmin; off: ops or superadmin). 10 switches for each admin in 10 minutes.
+const UNPAID_RULE_LIMIT = 10;
+
+export function unpaidRuleFlowDeps(): UnpaidRuleFlowDeps {
+  ensureAdminAuth();
+  return {
+    authorize: (roles) => requireAdmin([...roles]),
+    limiter: adminLimiter("admin_unpaid_rule_action", UNPAID_RULE_LIMIT),
     run: runAsAdmin,
     clock: { now: () => new Date() },
   };

@@ -6,7 +6,8 @@ import { makeOpsAction } from "./ops-flow.ts";
 import { makePlanMarkAction } from "./plan-mark-flow.ts";
 import type { OpsActionKind } from "./ops-map.ts";
 import { isUuid } from "./schemas.ts";
-import { ensureAdminAuth, opsFlowDeps } from "./runtime.ts";
+import { makeUnpaidRuleAction } from "./unpaid-rule-flow.ts";
+import { ensureAdminAuth, opsFlowDeps, unpaidRuleFlowDeps } from "./runtime.ts";
 
 // A thin Server Action (R9 is inside makeOpsAction). The form carries the kind, the operation and the
 // reason; it carries no approver: the approver is the admin of the session.
@@ -45,4 +46,20 @@ export async function clearPlanChangeMarkAction(form: FormData): Promise<void> {
   const result = answer.ok ? (answer.replayed ? "replayed" : "ok") : answer.code;
   if (!isUuid(id)) redirect(localePath(locale, "/operations"));
   redirect(`${localePath(locale, `/operations/resources/${id.toLowerCase()}`)}?result=${result}`);
+}
+
+// WPU-Z4. The switch of the unpaid-usage job on /operations/unpaid-rule. The form carries the market, the
+// state asked for, the confirm box and the reason; it carries no admin, no role and no key.
+export async function switchUnpaidRuleAction(form: FormData): Promise<void> {
+  const rawLocale = text(form.get("locale"));
+  const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
+  ensureAdminAuth();
+  const answer = await makeUnpaidRuleAction(unpaidRuleFlowDeps())({
+    market: text(form.get("market")),
+    state: text(form.get("state")),
+    confirm: text(form.get("confirm")),
+    reason: text(form.get("reason")),
+  });
+  const result = answer.ok ? (answer.replayed ? "replayed" : "ok") : answer.code;
+  redirect(`${localePath(locale, "/operations/unpaid-rule")}?result=${result}`);
 }

@@ -36,6 +36,19 @@ describe("loadPageAdmin", () => {
     expect(state.rolesAsked).toEqual([["ops", "superadmin"]]);
   });
 
+  it("a page of its own may ask with its own roles (WPU-Z4: /operations/unpaid-rule is read by every role)", async () => {
+    state.result = { ok: true, value: { ...actor, role: "finance" } };
+    const roles = ["support", "finance", "ops", "superadmin"] as const;
+    expect(await loadPageAdmin("bn", "operations", roles)).toEqual({
+      kind: "ok",
+      admin: { ...actor, role: "finance" },
+    });
+    expect(state.rolesAsked).toEqual([["support", "finance", "ops", "superadmin"]]);
+    state.result = { ok: false, error: "forbidden" };
+    expect(await loadPageAdmin("bn", "operations", ["superadmin"])).toEqual({ kind: "denied" });
+    await expect(loadPageAdmin("en", "operations", roles)).resolves.toEqual({ kind: "denied" });
+  });
+
   it("sends a visitor without a session to the sign-in of the same locale", async () => {
     await expect(loadPageAdmin("bn", "today")).rejects.toThrow("NEXT_REDIRECT:/login");
     await expect(loadPageAdmin("en", "today")).rejects.toThrow("NEXT_REDIRECT:/en/login");
