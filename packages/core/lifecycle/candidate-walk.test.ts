@@ -51,6 +51,20 @@ function recorder() {
   return { visited, visit: async (rowId: string) => void visited.push(rowId) };
 }
 
+// No deadline: the time of the walk is never up.
+const never = (): boolean => false;
+
+// A deadline that is past once `n` rows were visited. `asked` holds, for each question, how many rows were visited
+// when it was asked.
+function deadlineAfter(rows: { readonly visited: readonly string[] }, n: number) {
+  const asked: number[] = [];
+  const pastDeadline = (): boolean => {
+    asked.push(rows.visited.length);
+    return rows.visited.length >= n;
+  };
+  return { asked, pastDeadline };
+}
+
 describe("the order of the candidate list (compareCandidateKeys)", () => {
   it("an earlier period end comes first, whatever the ids", () => {
     expect(compareCandidateKeys(key(9, END), key(1, LATER))).toBe(-1);
@@ -134,12 +148,13 @@ describe("the walk over every candidate (walkCandidates)", () => {
   it("reads page after page until a page is short, each from the last key of the page before", async () => {
     const list = listOf(keys(1, 7), 3);
     const rows = recorder();
-    const examined = await walkCandidates({
+    const walked = await walkCandidates({
       pageSize: 3,
       readPage: list.readPage,
       visit: rows.visit,
+      pastDeadline: never,
     });
-    expect(examined).toBe(7);
+    expect(walked).toEqual({ visited: 7, complete: true });
     expect(rows.visited).toEqual(keys(1, 7).map((k) => k.id));
     expect(list.reads).toEqual([null, key(3), key(6)]);
   });
@@ -147,9 +162,14 @@ describe("the walk over every candidate (walkCandidates)", () => {
   it("a list that is an exact multiple of the page size ends with one empty page", async () => {
     const list = listOf(keys(1, 6), 3);
     const rows = recorder();
-    expect(await walkCandidates({ pageSize: 3, readPage: list.readPage, visit: rows.visit })).toBe(
-      6,
-    );
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: list.readPage,
+        visit: rows.visit,
+        pastDeadline: never,
+      }),
+    ).toEqual({ visited: 6, complete: true });
     expect(list.reads).toEqual([null, key(3), key(6)]);
   });
 
@@ -157,8 +177,13 @@ describe("the walk over every candidate (walkCandidates)", () => {
     const list = listOf([], 500);
     const rows = recorder();
     expect(
-      await walkCandidates({ pageSize: 500, readPage: list.readPage, visit: rows.visit }),
-    ).toBe(0);
+      await walkCandidates({
+        pageSize: 500,
+        readPage: list.readPage,
+        visit: rows.visit,
+        pastDeadline: never,
+      }),
+    ).toEqual({ visited: 0, complete: true });
     expect(list.reads).toEqual([null]);
     expect(rows.visited).toEqual([]);
   });
@@ -169,12 +194,13 @@ describe("the walk over every candidate (walkCandidates)", () => {
     const renewable = key(1000, LATER); // a subscription of its own: an id that no held row has
     const list = listOf([...held, renewable], 500);
     const rows = recorder();
-    const examined = await walkCandidates({
+    const walked = await walkCandidates({
       pageSize: 500,
       readPage: list.readPage,
       visit: rows.visit,
+      pastDeadline: never,
     });
-    expect(examined).toBe(502);
+    expect(walked).toEqual({ visited: 502, complete: true });
     expect(rows.visited.at(-1)).toBe(renewable.id);
     expect(new Set(rows.visited).size).toBe(502);
     // the second page starts inside the tie of the held rows, after the 500th id
@@ -190,9 +216,14 @@ describe("the walk over every candidate (walkCandidates)", () => {
       [d!, movedB],
     ]);
     const rows = recorder();
-    expect(await walkCandidates({ pageSize: 3, readPage: walk.readPage, visit: rows.visit })).toBe(
-      4,
-    );
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: walk.readPage,
+        visit: rows.visit,
+        pastDeadline: never,
+      }),
+    ).toEqual({ visited: 4, complete: true });
     expect(rows.visited).toEqual([a!.id, b!.id, c!.id, d!.id]);
     expect(walk.reads).toEqual([null, c]);
   });
@@ -205,7 +236,12 @@ describe("the walk over every candidate (walkCandidates)", () => {
     ]);
     const rows = recorder();
     await expect(
-      walkCandidates({ pageSize: 2, readPage: walk.readPage, visit: rows.visit }),
+      walkCandidates({
+        pageSize: 2,
+        readPage: walk.readPage,
+        visit: rows.visit,
+        pastDeadline: never,
+      }),
     ).rejects.toThrow(CandidateCursorError);
     // key 2 was visited on the first page and is not visited again; nothing after the refused page is read
     expect(rows.visited).toEqual([id(1), id(2), id(3)]);
@@ -221,9 +257,9 @@ describe("the walk over every candidate (walkCandidates)", () => {
       return keys(1, 2);
     };
     const rows = recorder();
-    await expect(walkCandidates({ pageSize: 2, readPage, visit: rows.visit })).rejects.toBe(
-      failure,
-    );
+    await expect(
+      walkCandidates({ pageSize: 2, readPage, visit: rows.visit, pastDeadline: never }),
+    ).rejects.toBe(failure);
     expect(rows.visited).toEqual([id(1), id(2)]);
   });
 
@@ -239,8 +275,183 @@ describe("the walk over every candidate (walkCandidates)", () => {
       order.push(rowId);
       inFlight -= 1;
     };
-    await walkCandidates({ pageSize: 2, readPage: list.readPage, visit });
+    await walkCandidates({ pageSize: 2, readPage: list.readPage, visit, pastDeadline: never });
     expect(most).toBe(1);
     expect(order).toEqual(keys(1, 5).map((k) => k.id));
+  });
+});
+
+// WPU-Z12 review: the walk has an upper bound. Before, a pass read at most 500 rows; walking every candidate with no
+// deadline could take longer than the scheduler's run (55 s) and starve the jobs after it (metering, static IPs,
+// unpaid, invoices). The deadline is asked between rows, never during one.
+describe("the deadline of the walk (pastDeadline)", () => {
+  it("is asked before each row; once it is past the walk stops before the next row and reads no page after", async () => {
+    const list = listOf(keys(1, 7), 3);
+    const rows = recorder();
+    const deadline = deadlineAfter(rows, 4);
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: list.readPage,
+        visit: rows.visit,
+        pastDeadline: deadline.pastDeadline,
+      }),
+    ).toEqual({ visited: 4, complete: false });
+    expect(rows.visited).toEqual(keys(1, 4).map((k) => k.id));
+    // once before each row; the fifth answer is the first "past"
+    expect(deadline.asked).toEqual([0, 1, 2, 3, 4]);
+    // the page of rows 4 to 6 was read for row 4; rows 5 to 7 are left to the next walk
+    expect(list.reads).toEqual([null, key(3)]);
+  });
+
+  it("a row that was started is finished: the deadline is never asked during a visit", async () => {
+    const list = listOf(keys(1, 5), 5);
+    let late = false;
+    const started: string[] = [];
+    const finished: string[] = [];
+    const visit = async (rowId: string) => {
+      started.push(rowId);
+      if (rowId === id(2)) late = true; // the time runs out while row 2 is processed
+      await Promise.resolve();
+      finished.push(rowId);
+    };
+    expect(
+      await walkCandidates({
+        pageSize: 5,
+        readPage: list.readPage,
+        visit,
+        pastDeadline: () => late,
+      }),
+    ).toEqual({ visited: 2, complete: false });
+    expect(started).toEqual([id(1), id(2)]);
+    expect(finished).toEqual([id(1), id(2)]);
+  });
+
+  it("a deadline that passes when no row is left is no cut: after a short last page, or before an empty one", async () => {
+    // the list ends on a short page
+    let list = listOf(keys(1, 2), 3);
+    let rows = recorder();
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: list.readPage,
+        visit: rows.visit,
+        pastDeadline: deadlineAfter(rows, 2).pastDeadline,
+      }),
+    ).toEqual({ visited: 2, complete: true });
+
+    // the list ends on a full page: the next page is read, it is empty, so no row was left
+    list = listOf(keys(1, 3), 3);
+    rows = recorder();
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: list.readPage,
+        visit: rows.visit,
+        pastDeadline: deadlineAfter(rows, 3).pastDeadline,
+      }),
+    ).toEqual({ visited: 3, complete: true });
+    expect(list.reads).toEqual([null, key(3)]);
+
+    // one row more: the walk is cut before it
+    list = listOf(keys(1, 4), 3);
+    rows = recorder();
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: list.readPage,
+        visit: rows.visit,
+        pastDeadline: deadlineAfter(rows, 3).pastDeadline,
+      }),
+    ).toEqual({ visited: 3, complete: false });
+    expect(rows.visited).not.toContain(id(4));
+  });
+
+  it("a row visited before that comes back after the deadline is not a row left, and the deadline is not asked for it", async () => {
+    const [a, b, c] = keys(1, 3);
+    const movedB: CandidateKey = { id: b!.id, periodEnd: LATER };
+    const walk = scripted([[a!, b!, c!], [movedB]]);
+    const rows = recorder();
+    const deadline = deadlineAfter(rows, 3);
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: walk.readPage,
+        visit: rows.visit,
+        pastDeadline: deadline.pastDeadline,
+      }),
+    ).toEqual({ visited: 3, complete: true });
+    expect(deadline.asked).toEqual([0, 1, 2]);
+  });
+
+  it("a deadline that is past from the start visits nothing; an empty list is still complete", async () => {
+    const list = listOf(keys(1, 3), 3);
+    const rows = recorder();
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: list.readPage,
+        visit: rows.visit,
+        pastDeadline: () => true,
+      }),
+    ).toEqual({ visited: 0, complete: false });
+    expect(rows.visited).toEqual([]);
+    expect(list.reads).toEqual([null]);
+
+    const empty = listOf([], 3);
+    expect(
+      await walkCandidates({
+        pageSize: 3,
+        readPage: empty.readPage,
+        visit: rows.visit,
+        pastDeadline: () => true,
+      }),
+    ).toEqual({ visited: 0, complete: true });
+  });
+
+  it("the review's case: more held rows than the time allows stop the walk at its deadline; the next walk starts at the head again", async () => {
+    const held = keys(1, 501, END);
+    const renewable = key(1000, LATER);
+    const list = listOf([...held, renewable], 500);
+    const first = recorder();
+    expect(
+      await walkCandidates({
+        pageSize: 500,
+        readPage: list.readPage,
+        visit: first.visit,
+        pastDeadline: deadlineAfter(first, 300).pastDeadline,
+      }),
+    ).toEqual({ visited: 300, complete: false });
+    expect(first.visited).not.toContain(renewable.id);
+    expect(list.reads).toEqual([null]);
+
+    // No cursor outlives a walk: the next one reads from the head again (R7: a row visited again is a replay).
+    const second = recorder();
+    expect(
+      await walkCandidates({
+        pageSize: 500,
+        readPage: list.readPage,
+        visit: second.visit,
+        pastDeadline: never,
+      }),
+    ).toEqual({ visited: 502, complete: true });
+    expect(list.reads).toEqual([null, null, key(500, END)]);
+  });
+
+  it("a deadline that cannot answer stops the walk with its own error (R16)", async () => {
+    const list = listOf(keys(1, 3), 3);
+    const rows = recorder();
+    const broken = new Error("no clock");
+    await expect(
+      walkCandidates({
+        pageSize: 3,
+        readPage: list.readPage,
+        visit: rows.visit,
+        pastDeadline: () => {
+          throw broken;
+        },
+      }),
+    ).rejects.toBe(broken);
+    expect(rows.visited).toEqual([]);
   });
 });

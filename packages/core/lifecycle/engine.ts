@@ -29,6 +29,24 @@ import { walkCandidates } from "./candidate-walk";
 const HOUR_MS = 3_600_000;
 // The rows of one page of the pass's candidate list. WPU-Z12: a page, no longer the most rows of a pass.
 export const LIFECYCLE_LIMIT = 500;
+// WPU-Z12 review: the upper bound of a pass, in ms from its clock reading. No row starts after it. About a third of the
+// scheduler's run (55 s, infra/lib/functions.ts), so the jobs after the pass in the same run (metering, static IPs,
+// unpaid, invoices, rate watch) keep the rest. Before WPU-Z12 a pass read at most 500 rows.
+export const LIFECYCLE_BUDGET_MS = 20_000;
+
+/**
+ * WPU-Z12 review. The pass used up its time budget before the end of its candidate list. The rows it did are
+ * committed and their messages sent; the rest are candidates again on the next pass, which starts at the head. It is a
+ * failure of the job (R16): the scheduler's run then rejects and its Errors alarm fires, because a pass cut on every
+ * run would never reach the rows after the cut.
+ */
+export class LifecyclePassCutError extends Error {
+  constructor() {
+    // Fixed words only (R14): no id, no time.
+    super("lifecycle: the pass reached its time budget before the end of the candidate list");
+    this.name = "LifecyclePassCutError";
+  }
+}
 
 export interface LifecycleDeps {
   readonly runTx: RunTx;
@@ -41,6 +59,9 @@ export interface LifecycleDeps {
   // WPU-Z12: the rows of one page of the candidate list (LIFECYCLE_LIMIT by default). Not a cap: the pass
   // reads every page.
   readonly pageSize?: number;
+  // WPU-Z12 review: the time budget of the pass in ms (LIFECYCLE_BUDGET_MS by default). `clock` is read again before
+  // each row; once this much time has passed since the pass's own reading no row starts (LifecyclePassCutError).
+  readonly budgetMs?: number;
   // WPU-Y3: writes the "your wallet is low for the charge on <date>" message (a template of @tc/notify).
   // Without it that reminder is not sent; the renewal reminder is not affected.
   readonly notice?: NoticeWriter;
@@ -536,17 +557,26 @@ async function process(
 // the head again; a row processed again is a replay (R7). A failure of one subscription is counted and
 // logged by id and does not stop the others. A config or a page that cannot be read, or a list that does
 // not move past its cursor, stops the pass (R16), after the messages of what it did were sent.
+// WPU-Z12 review: the pass has an upper bound. The clock is read again before each row; once the budget
+// (LIFECYCLE_BUDGET_MS) is used up no row starts, one line with the counts is logged and the pass fails with
+// LifecyclePassCutError, so the jobs after it in the scheduler's run still run and its Errors alarm fires.
 export async function runLifecycle(deps: LifecycleDeps): Promise<LifecycleReport> {
   const now = deps.clock.now();
   if (Number.isNaN(now.getTime())) throw new Error("lifecycle: the clock gave no valid time");
   const pageSize = deps.pageSize ?? LIFECYCLE_LIMIT;
+  const budgetMs = deps.budgetMs ?? LIFECYCLE_BUDGET_MS;
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0) {
+    throw new RangeError("lifecycle: the time budget must be a positive number of milliseconds");
+  }
+  // A time that cannot be read is past the deadline (R16): NaN is never below the budget.
+  const pastDeadline = (): boolean => !(deps.clock.now().getTime() - now.getTime() < budgetMs);
 
   const config = await deps.runTx((tx) => readLifecycleConfig(tx));
   const horizon = Math.max(...config.reminderDays);
 
   const counts = { reminded: 0, renewed: 0, graced: 0, retained: 0, ended: 0, failed: 0 };
-  const outbox: QueueMessage[] = [];
   const visit = async (id: string): Promise<void> => {
+    let messages: readonly QueueMessage[] = [];
     try {
       // runTx can run its callback again: everything built here is local to one run.
       const result = await deps.runTx((tx) => process(tx, id, now, config, deps));
@@ -554,7 +584,7 @@ export async function runLifecycle(deps: LifecycleDeps): Promise<LifecycleReport
         counts[result.step] += 1;
         deps.log({ event: "lifecycle", action: result.step, subscriptionId: id });
       }
-      outbox.push(...result.messages);
+      messages = result.messages;
     } catch (error) {
       counts.failed += 1;
       // The name of the error and the id: never its message or its data (R14).
@@ -565,21 +595,25 @@ export async function runLifecycle(deps: LifecycleDeps): Promise<LifecycleReport
         error: error instanceof Error ? error.name : "unknown",
       });
     }
+    // After the row's commit and before the next row, so the deadline covers the sends too and the
+    // messages of the rows done are out whenever the pass stops. sendAfterCommit never throws.
+    if (deps.queue !== undefined) {
+      for (const message of messages) await sendAfterCommit(deps.queue, message);
+    }
   };
 
-  try {
-    const examined = await walkCandidates({
-      pageSize,
-      readPage: (after) =>
-        deps.runTx((tx) => lifecycleRepo(tx).listCandidates(now, horizon, pageSize, after)),
-      visit,
-    });
-    return { examined, ...counts };
-  } finally {
-    // Also when the walk stopped: the operations of the rows done are committed. sendAfterCommit
-    // never throws, so the error that stopped the pass is the one that leaves here.
-    if (deps.queue !== undefined) {
-      for (const message of outbox) await sendAfterCommit(deps.queue, message);
-    }
+  const walked = await walkCandidates({
+    pageSize,
+    readPage: (after) =>
+      deps.runTx((tx) => lifecycleRepo(tx).listCandidates(now, horizon, pageSize, after)),
+    visit,
+    pastDeadline,
+  });
+  const report: LifecycleReport = { examined: walked.visited, ...counts };
+  if (!walked.complete) {
+    // Counts and fixed words only (R14). The rows after the cut are candidates again on the next pass.
+    deps.log({ event: "lifecycle_pass_cut", budgetMs, ...report });
+    throw new LifecyclePassCutError();
   }
+  return report;
 }
