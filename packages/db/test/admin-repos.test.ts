@@ -215,6 +215,12 @@ const ADMIN_WRITE_CASES: Record<string, (r: AdminRepos) => Promise<unknown>> = {
     ),
   "support.close": async (r) =>
     r.support.close({ requestId: await seedSupportRequest() }, "answered"),
+  // WPU-Z5: a closed request opened again.
+  "support.reopen": async (r) => {
+    const requestId = await seedSupportRequest();
+    await t.pool.query("update support_requests set status = 'closed' where id = $1", [requestId]);
+    return r.support.reopen({ requestId }, "customer wrote again by phone");
+  },
   "customers.approveKyc": async (r) =>
     r.customers.approveKyc({ submissionId: await seedKyc(), at: AT }, "documents match"),
   "customers.rejectKyc": async (r) =>
