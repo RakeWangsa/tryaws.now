@@ -536,7 +536,8 @@ export async function runLifecycle(deps: LifecycleDeps): Promise<LifecycleReport
   const { config, ids } = await deps.runTx(async (tx) => {
     const config = await readLifecycleConfig(tx);
     const horizon = Math.max(...config.reminderDays);
-    return { config, ids: await lifecycleRepo(tx).listCandidates(now, horizon, limit) };
+    const page = await lifecycleRepo(tx).listCandidates(now, horizon, limit);
+    return { config, ids: page.map((k) => k.id) };
   });
 
   const counts = { reminded: 0, renewed: 0, graced: 0, retained: 0, ended: 0, failed: 0 };
