@@ -46,6 +46,16 @@ export interface UnpaidResourceRow {
   readonly unpaidSince: Date | null;
 }
 
+/** WPU-Y3c. Most operations of one resource that operationsOf reads; more than this fails closed (R16). */
+export const OPERATIONS_READ_CAP = 500;
+
+/** Throws when a read returned more rows than the cap allows (the query asks for cap + 1 to detect it). */
+export function assertWithinOperationCap(count: number): void {
+  if (count > OPERATIONS_READ_CAP) {
+    throw new RangeError("metering: too many operations on one resource to decide safely");
+  }
+}
+
 /**
  * WPU-Y3c. One operation of a resource as the unpaid job reads it: enough to tell its own suspend from
  * another one, and a destroy that ran (or is approved) from one that never did.
@@ -303,7 +313,9 @@ export function meteringRepo(tx: Tx) {
           kinds.map((k) => sql`${k}`),
           sql`, `,
         )})
-        order by created_at, id limit 500`);
+        order by created_at, id limit ${OPERATIONS_READ_CAP + 1}`);
+      // R16: a read that was cut short could drop the newest rows, which are the ones a guard needs.
+      assertWithinOperationCap(rows.length);
       return rows.map((r) => ({
         id: r.id,
         kind: r.kind,
