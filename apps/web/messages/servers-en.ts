@@ -182,6 +182,9 @@ export const serversEn: Same<typeof serversBn> = {
         keyFile: "Key file",
         keyFileHint:
           "This is the private key you saved when you created the key. On macOS or Linux run chmod 400 {file} once so that SSH accepts it. We never hold your private key.",
+        appPassword: "Application password",
+        appPasswordHint:
+          "The default password of the application on this image is kept on the server in {file}. Connect with SSH, then run this command to read it. Change the password after your first sign-in.",
         image: "Image",
         keyName: "Attached key",
         noKey: "No SSH key was attached to this server.",

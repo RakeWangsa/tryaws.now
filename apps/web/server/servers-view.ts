@@ -5,6 +5,7 @@ import {
   imageLogoOf,
   isBlueprintId,
   isImportableSshKey,
+  appPasswordFileOf,
   loginUserOf,
   storedLoginUserOf,
   minPowerOf,
@@ -281,6 +282,11 @@ export interface ServerDetail extends ServerRow {
   /** WPU-G13: the image the server runs and the user to log in with (null for Windows or unknown). */
   imageName: string | null;
   loginUser: string | null;
+  /**
+   * WPU-X3: where the image keeps its default application password, as its Lightsail guide names it (appPasswordFileOf
+   * of @tc/core), or null when no guide names a file (nothing is guessed, R16). Always null for Windows.
+   */
+  appPasswordFile: string | null;
   createdAt: Date;
 }
 
@@ -330,6 +336,7 @@ export async function loadServerDetail(
         imageId === null
           ? null
           : (storedLoginUserOf(resource.config) ?? option?.loginUser ?? loginUserOf(imageId)),
+      appPasswordFile: imageId === null ? null : appPasswordFileOf(imageId),
       createdAt: resource.createdAt,
     };
   });

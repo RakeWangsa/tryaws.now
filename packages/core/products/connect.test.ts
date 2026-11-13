@@ -7,6 +7,7 @@ import {
   isLightsailPackaged,
   appPasswordFileOf,
   storedLoginUserOf,
+  BITNAMI_STACKS,
 } from "./connect";
 
 describe("loginUserOf", () => {
@@ -103,5 +104,35 @@ describe("WPU-Y1 Lightsail-packaged images", () => {
     expect(appPasswordFileOf("wordpress_ls_1_0")).toBeNull();
     expect(appPasswordFileOf("nginx_ls_1_0")).toBeNull();
     expect(appPasswordFileOf("ubuntu_24_04")).toBeNull();
+  });
+});
+
+describe("WPU-X3 one list of Bitnami stacks", () => {
+  it("every Bitnami stack logs in as bitnami, and only a stack with a documented file names it", () => {
+    expect(BITNAMI_STACKS.length).toBeGreaterThanOrEqual(8);
+    for (const [prefix, hasFile] of BITNAMI_STACKS) {
+      expect(loginUserOf(prefix), prefix).toBe("bitnami");
+      expect(appPasswordFileOf(prefix), prefix).toBe(
+        hasFile ? "~/bitnami_application_password" : null,
+      );
+    }
+  });
+  it("keeps the files of the stacks the password helper knew", () => {
+    for (const id of [
+      "wordpress",
+      "lamp_8_bitnami",
+      "nodejs",
+      "mean",
+      "joomla",
+      "drupal",
+      "magento",
+      "nginx",
+    ])
+      expect(appPasswordFileOf(id), id).toBe("~/bitnami_application_password");
+    // GitLab (Bitnami) logs in as bitnami, but its password file is not named here: no guess (R16).
+    expect(loginUserOf("gitlab")).toBe("bitnami");
+    expect(appPasswordFileOf("gitlab")).toBeNull();
+    expect(appPasswordFileOf("plesk_ubuntu")).toBeNull();
+    expect(appPasswordFileOf(undefined)).toBeNull();
   });
 });

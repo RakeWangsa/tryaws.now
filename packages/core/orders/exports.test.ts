@@ -534,6 +534,9 @@ const SERVER_CONTROLS = [
   "firewallRuleKey",
   "keyFileName",
   "loginUserOf",
+  // WPU-X3: the password file of an app image on the Connect tab, and the one list of Bitnami stacks.
+  "appPasswordFileOf",
+  "BITNAMI_STACKS",
   "parseFirewallRules",
   "parseFirewallSources",
   "parseNewFirewallRule",
