@@ -7,7 +7,7 @@ import type { LinkComponent } from "./types";
 
 const VARIANTS = [
   ["primary", "btn btn-default-yellow-fill"],
-  ["secondary", "btn btn-default-pink-fill"],
+  ["secondary", "btn btn-default-pink-fill tc-btn-pink"],
   ["tertiary", "btn btn-default-pink"],
   ["destructive", "btn btn-danger tc-btn-danger"],
   ["default", "btn btn-default-fill"],
@@ -141,7 +141,7 @@ describe("Button", () => {
       expect(container.querySelector("button")).toBeNull();
       const anchor = container.querySelector("a") as HTMLAnchorElement;
       expect(anchor.getAttribute("href")).toBe("/plans");
-      expect(classesOf(anchor)).toEqual(expected("btn btn-default-pink-fill btn-sm"));
+      expect(classesOf(anchor)).toEqual(expected("btn btn-default-pink-fill tc-btn-pink btn-sm"));
       expect(anchor.hasAttribute("aria-disabled")).toBe(false);
       expect(anchor.hasAttribute("tabindex")).toBe(false);
       expect(unknownClasses(container)).toEqual([]);

@@ -811,3 +811,27 @@ div.tc-modal-open {
   outline: 2px solid var(--tc-focus);
   outline-offset: 2px;
 }
+
+/* ===== 10. Contrast on the dark page (WPU-X7) =====
+   Owner decision 2026-11-13. The first axe run (WPU-X6) measured two theme colors below WCAG 2.2 AA
+   (4.5:1 for normal text) on the dark page (#15212a page, #101920 card):
+   - muted text #6c757d (Bootstrap .text-muted, the muted token of 16.4): 3.49:1 -> #9aa4ad, 6.5:1;
+   - white on the accent pink #ee5586 (.btn-default-pink-fill, the current language pill): 3.34:1
+     -> a deeper pink #e51759, 4.57:1.
+   The theme's files are not edited (16.3) and its classes are not redefined (U1): the kit puts a tc-
+   class next to the theme class (as for tc-btn-danger) and the rules below name only that class. */
+:root {
+  --tc-muted-on-dark: #9aa4ad;
+  --tc-muted-on-light: #5c636a;
+  --tc-accent-pink-aa: #e51759;
+}
+.tc-muted {
+  color: var(--tc-muted-on-dark) !important;
+}
+[data-background="light"] .tc-muted {
+  color: var(--tc-muted-on-light) !important;
+}
+[data-color="pink"] .tc-btn-pink,
+[data-color="pink"] .tc-locale-link[aria-current="true"] {
+  background-color: var(--tc-accent-pink-aa) !important;
+}

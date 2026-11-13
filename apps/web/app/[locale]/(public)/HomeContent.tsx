@@ -55,7 +55,9 @@ export function HomeContent({
             <div className="col-md-8">
               <div className="wrapper">
                 <h1 className="heading mergecolor pb-2">{t("home.heroTitle")}</h1>
-                <h2 className="subheading fw-normal text-muted mb-4">{t("home.heroLead")}</h2>
+                <h2 className="subheading fw-normal text-muted tc-muted mb-4">
+                  {t("home.heroLead")}
+                </h2>
                 <p className="seccolor mb-4">{tAws("long")}</p>
                 <Button variant="primary" href={p("/pricing")} className="me-2">
                   {t("common.seePricing")}

@@ -18,7 +18,7 @@ export function ResetContent({
   if (!available) return <AuthUnavailableCard locale={locale} title={t("meta.reset")} />;
   return (
     <AuthCard title={t("reset.heading")}>
-      <p>{t("reset.intro")}</p>
+      <p className="mergecolor">{t("reset.intro")}</p>
       <ResetForm locale={locale} email={email} />
     </AuthCard>
   );

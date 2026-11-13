@@ -87,7 +87,7 @@ export function LegalContent({
                       <strong>{t("legal.draftTitle")}</strong> {t("legal.draftText")}
                     </div>
                     <div className="wrapper mt-5 bg-seccolorstyle noshadow">
-                      <h2 className="h5">
+                      <h2 className="h5 mergecolor">
                         <b>{title}</b>{" "}
                         <span className="float-end c-grey seccolor">{t("legal.version")}</span>
                       </h2>
