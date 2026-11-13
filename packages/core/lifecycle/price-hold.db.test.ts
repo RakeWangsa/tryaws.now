@@ -241,7 +241,7 @@ describe("a renewal that cannot be priced for another reason than the rate (WPU-
     expect(await status(f)).toBe("grace");
     expect(await opsOf(f, "suspend")).toBe(1);
     expect(await renewals(f)).toBe(0);
-    expect(await graceNotices(f)).toBe(1);
+    expect(await graceNotices(f)).toBe(2); // e-mail and SMS (enterGrace)
     expect(await marker(f)).toBeNull();
     expect(await graceFrom(f)).toBeNull();
     expect(heldLines(f)).toEqual([]);
