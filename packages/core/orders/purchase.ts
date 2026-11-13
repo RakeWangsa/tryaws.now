@@ -3,6 +3,7 @@ import { reserveCapacity, type Reservation } from "../capacity/reserve";
 import { DNS_ZONE_TERM_DAYS } from "../dns/zone";
 import { DOMAIN_TERM_DAYS } from "../domains/resolve";
 import { issueChargeInvoice } from "../invoices/charge";
+import { buildChargeSnapshot } from "../pricing/charge-snapshot";
 import { lockWallet } from "../ledger/balance";
 import { ledgerKey } from "../ledger/keys";
 import { postTransaction } from "../ledger/post";
@@ -229,6 +230,8 @@ export async function runPurchase(
         reference: { type: "order", id: orderId },
         idempotencyKey: ledgerKey.purchase(tokenHash),
         actor: { type: "customer", id: customerId },
+        // WPU-Y2: the exact price inputs, in the same transaction as the postings.
+        priceSnapshot: buildChargeSnapshot("purchase", priced.value.charge),
         postings,
       });
       if (!posted.ok) throw new Error("orders: the purchase posting was refused");

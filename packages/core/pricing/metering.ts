@@ -1,5 +1,6 @@
 import type { Minor } from "../types";
 import { D, isPositiveDecimal, parseDecimal, toMinor } from "./decimal";
+import type { ChargeInputs } from "./charge-snapshot";
 import { PricingInputError } from "./errors";
 
 // Spec 11 (metered items). The decimal arithmetic of metering lives here, inside the pricing engine
@@ -43,6 +44,8 @@ export interface MeteredUnitPrice {
   readonly totalMinor: Minor;
   readonly baseMinor: Minor;
   readonly steps: readonly { readonly code: string; readonly amountMinor: Minor }[];
+  /** WPU-Y2: the exact inputs of this unit price, saved with each charge made from it. */
+  readonly charge?: ChargeInputs;
 }
 
 /**

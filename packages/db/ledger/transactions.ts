@@ -20,6 +20,11 @@ export interface NewLedgerTransaction {
   readonly actorType: LedgerActorType;
   readonly actorId: string | null;
   readonly memo: string | null;
+  /**
+   * WPU-Y2: the ChargeSnapshot of the charge (validated by @tc/core before it gets here), written with the
+   * header. Absent or null: no snapshot (a kind that is not a sale, or a row from before the column).
+   */
+  readonly priceSnapshot?: unknown;
 }
 
 export interface NewLedgerEntry {
@@ -76,7 +81,7 @@ function toEntry(row: Row): StoredLedgerEntry {
   };
 }
 
-const HEADER_COLUMNS = sql`id, kind, reference_type, reference_id, idempotency_key, actor_type, actor_id, memo`;
+const HEADER_COLUMNS = sql`id, kind, reference_type, reference_id, idempotency_key, actor_type, actor_id, memo, price_snapshot`;
 
 async function withEntries(tx: Tx, header: Row): Promise<StoredLedgerTransaction> {
   const id = asText(header.id);
@@ -92,6 +97,7 @@ async function withEntries(tx: Tx, header: Row): Promise<StoredLedgerTransaction
     actorType: actorType(header.actor_type),
     actorId: asNullableText(header.actor_id),
     memo: asNullableText(header.memo),
+    priceSnapshot: header.price_snapshot ?? null,
     entries: (result.rows as Row[]).map(toEntry),
   };
 }
@@ -163,8 +169,12 @@ export async function insertLedgerTransaction(
   row: NewLedgerTransaction,
 ): Promise<string | null> {
   const id = uuidv7();
+  const snapshot =
+    row.priceSnapshot === undefined || row.priceSnapshot === null
+      ? null
+      : JSON.stringify(row.priceSnapshot);
   const result = await tx.execute(
-    sql`insert into ledger_transactions (id, kind, reference_type, reference_id, idempotency_key, actor_type, actor_id, memo) values (${id}, ${row.kind}, ${row.referenceType}, ${row.referenceId}, ${row.idempotencyKey}, ${row.actorType}, ${row.actorId}, ${row.memo}) on conflict (idempotency_key) do nothing returning id`,
+    sql`insert into ledger_transactions (id, kind, reference_type, reference_id, idempotency_key, actor_type, actor_id, memo, price_snapshot) values (${id}, ${row.kind}, ${row.referenceType}, ${row.referenceId}, ${row.idempotencyKey}, ${row.actorType}, ${row.actorId}, ${row.memo}, ${snapshot}::jsonb) on conflict (idempotency_key) do nothing returning id`,
   );
   const inserted = (result.rows as Row[])[0];
   return inserted === undefined ? null : asText(inserted.id);

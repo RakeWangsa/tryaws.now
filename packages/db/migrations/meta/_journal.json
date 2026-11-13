@@ -162,6 +162,13 @@
       "when": 1794517595847,
       "tag": "0024_domain_name_active_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794521195847,
+      "tag": "0025_charge_price_snapshot",
+      "breakpoints": true
     }
   ]
 }

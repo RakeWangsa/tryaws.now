@@ -124,6 +124,7 @@ export const EXPECTED_COLUMNS: Record<string, string[]> = {
     "actor_type text NOT NULL",
     "actor_id uuid NULL",
     "memo text NULL",
+    "price_snapshot jsonb NULL",
   ],
   ledger_entries: [
     "transaction_id uuid NOT NULL",

@@ -69,7 +69,12 @@ export async function snapshotPrice(
     value: {
       unit: "gb_month",
       perGbMonthMinor: quote.totalMinor,
-      breakdown: { totalMinor: quote.totalMinor, baseMinor: quote.baseMinor, steps: quote.steps },
+      breakdown: {
+        totalMinor: quote.totalMinor,
+        baseMinor: quote.baseMinor,
+        steps: quote.steps,
+        charge: one.value.charge,
+      },
       monthlyMinor,
     },
   };

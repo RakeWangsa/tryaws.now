@@ -1,4 +1,5 @@
 import { entryInForce, readPriceBook, type FxRateRow, type Tx } from "@tc/db";
+import type { ChargeInputs } from "../pricing/charge-snapshot";
 import {
   PricingInputError,
   isBookTerms,
@@ -99,6 +100,11 @@ export interface PricedItem {
   quote: PriceQuote;
   snapshot: PriceSnapshot;
   inForce: PricingInForce;
+  /**
+   * WPU-Y2: the exact inputs of this price (rate with its id and time, rule id, the price book terms, the
+   * AWS price and the quantity). buildChargeSnapshot turns them into what a charge stores.
+   */
+  charge: ChargeInputs;
   /** The margin in the quote and the reseller's share of it, in paisa (not part of the snapshot). */
   marginMinor: bigint;
   commissionMinor: bigint;
@@ -138,6 +144,19 @@ export async function quoteInForce(
       value: {
         quote: priced,
         snapshot,
+        charge: {
+          pricedAt: inForce.pricedAt,
+          awsPriceUsd: input.awsPriceUsd,
+          quantity: input.quantity ?? "1",
+          fx: {
+            id: inForce.fx.id,
+            rate: inForce.fx.rate,
+            effectiveFrom: inForce.fx.effectiveFrom,
+          },
+          rule: { id: inForce.rule.id, version: inForce.rule.value.version },
+          book: inForce.book,
+          quote: priced,
+        },
         inForce,
         marginMinor: booked.marginMinor,
         commissionMinor: booked.commissionMinor,

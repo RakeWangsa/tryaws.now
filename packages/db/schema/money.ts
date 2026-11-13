@@ -92,12 +92,19 @@ export const ledgerTransactions = pgTable(
     // No foreign key: it points at a customer or an admin.
     actorId: uuid("actor_id"),
     memo: text("memo"),
+    // WPU-Y2: the exact price inputs of the charge (ChargeSnapshot of @tc/core, schemaVersion 1), written
+    // with the header. NULL on a row from before the column and on every kind that is not a sale.
+    priceSnapshot: jsonb("price_snapshot"),
     createdAt: createdAt(),
   },
   (t) => [
     unique("ledger_transactions_idempotency_key_unique").on(t.idempotencyKey),
     index("ledger_transactions_reference_type_reference_id_idx").on(t.referenceType, t.referenceId),
     check("ledger_transactions_actor_type_check", inList(t.actorType, LEDGER_ACTOR_TYPES)),
+    check(
+      "ledger_transactions_price_snapshot_check",
+      sql`${t.priceSnapshot} IS NULL OR (jsonb_typeof(${t.priceSnapshot}) = 'object' AND ${t.kind} IN ('purchase', 'renewal', 'metered_charge'))`,
+    ),
     check(
       "ledger_transactions_actor_check",
       sql`(${t.actorType} = 'system') = (${t.actorId} IS NULL)`,

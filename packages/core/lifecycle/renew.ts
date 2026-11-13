@@ -7,7 +7,8 @@ import { salePostings } from "../ledger/sale-postings";
 import type { Logger } from "../operations/types";
 import { planPriceFor } from "./plan-change";
 import { parseSnapshot, type PriceSnapshot } from "../pricing/snapshot";
-import { quoteInForce } from "../rates/in-force";
+import { quoteInForce, type PricedItem } from "../rates/in-force";
+import { buildChargeSnapshot } from "../pricing/charge-snapshot";
 import type { Clock, Result } from "../types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -21,6 +22,16 @@ export async function renewalQuote(
   row: Pick<LifecycleRow, "market" | "priceSnapshot" | "resource">,
   clock: Clock,
 ): Promise<Result<PriceSnapshot>> {
+  const priced = await renewalPriced(tx, row, clock);
+  return priced.ok ? { ok: true, value: priced.value.snapshot } : priced;
+}
+
+// WPU-Y2: the same pricing with all its inputs, for the charge snapshot of the renewal.
+async function renewalPriced(
+  tx: Tx,
+  row: Pick<LifecycleRow, "market" | "priceSnapshot" | "resource">,
+  clock: Clock,
+): Promise<Result<PricedItem>> {
   let stored: PriceSnapshot;
   try {
     stored = parseSnapshot(row.priceSnapshot);
@@ -45,7 +56,7 @@ export async function renewalQuote(
     },
     clock,
   );
-  return priced.ok ? { ok: true, value: priced.value.snapshot } : priced;
+  return priced;
 }
 
 export type Renewed = {
@@ -67,9 +78,12 @@ export async function renewSubscription(
   log?: Logger,
 ): Promise<Result<Renewed>> {
   const balance = await lockWallet(tx, row.customerId);
-  const priced = await renewalQuote(tx, row, clock);
+  // The renewal is priced NOW (section 11: today's rate and rule), and the inputs are saved with the charge
+  // as a new snapshot (WPU-Y2): the invoice and a credit note are rebuilt from it, never recalculated.
+  const priced = await renewalPriced(tx, row, clock);
   if (!priced.ok) return priced;
-  const fresh = priced.value;
+  const fresh = priced.value.snapshot;
+  const charge = buildChargeSnapshot("renewal", priced.value.charge);
   const total = BigInt(fresh.totalMinor);
   if (balance < total) {
     return {
@@ -93,6 +107,7 @@ export async function renewSubscription(
     reference: { type: "subscription", id: row.id },
     idempotencyKey: ledgerKey.renewal(row.id, periodStart),
     actor: { type: "system" },
+    priceSnapshot: charge,
     postings,
   });
   if (!posted.ok) return { ok: false, error: posted.error };

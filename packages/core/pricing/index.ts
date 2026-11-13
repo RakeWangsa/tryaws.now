@@ -35,6 +35,19 @@ export {
   toSnapshot,
   type PriceSnapshot,
 } from "./snapshot";
+export {
+  CHARGE_SNAPSHOT_VERSION,
+  ChargeSnapshotError,
+  buildChargeSnapshot,
+  chargeSnapshotMatchesInputs,
+  chargeToPriceSnapshot,
+  parseChargeSnapshot,
+  readChargeSnapshot,
+  type ChargeInputs,
+  type ChargeKind,
+  type ChargeSnapshot,
+  type ChargeSnapshotRead,
+} from "./charge-snapshot";
 export type { PriceQuote, PricingRule, PricingStep, QuoteInput } from "./types";
 export { STEP_ACCOUNTS, accountFor, isPricingRule, validateRule, type StepCode } from "./validate";
 export { allowanceLevel, dailyMeteredChargeMinor, type AllowanceLevel } from "./metering";
