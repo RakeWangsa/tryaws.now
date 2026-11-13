@@ -54,10 +54,12 @@ describe("sitemap.xml", () => {
 describe("robots.txt", () => {
   it("allows the site, names the sitemap and keeps crawlers out of the panel and the sign-in pages, in both locales", () => {
     const file = robotsFile(ORIGIN);
+    const all = file.rules[0]!;
+    expect(all.userAgent).toBe("*");
     expect(file.sitemap).toBe(`${ORIGIN}/sitemap.xml`);
-    expect(file.rules.allow).toEqual(["/"]);
+    expect(all.allow).toEqual(["/"]);
     for (const path of ["/login", "/en/login", "/dashboard", "/en/wallet", "/api/", "/dev/"]) {
-      expect(file.rules.disallow, path).toContain(path);
+      expect(all.disallow, path).toContain(path);
     }
     // Nothing public is disallowed.
     for (const path of [
@@ -69,7 +71,7 @@ describe("robots.txt", () => {
       "/products/cloud-servers",
     ]) {
       expect(
-        file.rules.disallow.some((p) => p !== "/" && path.startsWith(p)),
+        all.disallow.some((p) => p !== "/" && path.startsWith(p)),
         path,
       ).toBe(false);
     }

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://raw.githubusercontent.com/bemoshiur/OmniRank/v0.4.0/schemas/omnirank.config.schema.json",
+  "site": {
+    "name": "TryAWS.now",
+    "legalName": "TiCON System Limited",
+    "url": "https://tryaws.now",
+    "entityType": "Organization",
+    "locales": [
+      { "code": "bn-BD", "path": "/", "default": true },
+      { "code": "en", "path": "/en" }
+    ]
+  },
+  "nap": {
+    "street": "Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230",
+    "city": "Dhaka",
+    "country": "BD"
+  },
+  "sameAs": {
+    "facebook": null,
+    "linkedin": null,
+    "x": null,
+    "youtube": null,
+    "wikidata": null,
+    "crunchbase": null
+  },
+  "stack": {
+    "framework": "next-app-router",
+    "srcDir": "apps/web/app",
+    "publicDir": "apps/web/public"
+  },
+  "crawlers": {
+    "allowAI": true,
+    "disallow": ["/api/", "/pay/", "/dev/", "/login", "/dashboard", "/wallet", "/support/"]
+  },
+  "geo": {
+    "license": "CC-BY-4.0",
+    "attribution": "TryAWS.now (TiCON System Limited)",
+    "answerBlockSelector": ".subheading"
+  },
+  "aeo": {
+    "answerBlock": {
+      "default": { "unit": "words", "min": 40, "max": 60 }
+    }
+  },
+  "indexing": {
+    "indexnowKeyFile": "apps/web/public/46b3c32493bcbc0dcd663ddeb2631c9d.txt",
+    "bing": true
+  },
+  "audit": {
+    "sampleSize": 0,
+    "failOn": [
+      "h1",
+      "canonical",
+      "title-length",
+      "description-length",
+      "schema",
+      "schema-fabrication",
+      "speakable",
+      "llms-txt",
+      "llms-full",
+      "facts-json",
+      "ai-allowlist",
+      "sitemap-health",
+      "noindex-in-sitemap",
+      "robots-sitemap",
+      "canonical-target",
+      "hreflang-noindex",
+      "lang",
+      "mixed-content",
+      "https-redirect"
+    ]
+  }
+}

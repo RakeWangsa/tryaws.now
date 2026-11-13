@@ -7,6 +7,11 @@ type Same<T> = { [K in keyof T]: T[K] extends string ? string : Same<T[K]> };
 export const publicEn: Same<typeof publicBn> = {
   Public: {
     crumb: { home: "Home" },
+    entity: {
+      statement:
+        "TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in US dollars and include VAT and fees; you pay in taka from a wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.",
+    },
+    updated: { label: "Last updated: <time>{date}</time>" },
     meta: {
       home: {
         title: "TryAWS.now: Cloud Server, built on Amazon Lightsail",
@@ -36,6 +41,8 @@ export const publicEn: Same<typeof publicBn> = {
       legal: {
         title: "Legal documents",
         description: "TryAWS.now terms, privacy, acceptable use and refund policy.",
+        descriptionOf:
+          "{title} of TryAWS.now, the prepaid cloud panel for Bangladesh. A draft that awaits final approval.",
       },
       soon: {
         description:
@@ -81,8 +88,6 @@ export const publicEn: Same<typeof publicBn> = {
     },
     home: {
       heroTitle: "Cloud Server, built on Amazon Lightsail",
-      heroLead:
-        "A prepaid cloud panel for Bangladesh. Prices in US dollars, wallet in taka, top up your wallet with EPS. Run everything from one panel.",
       plansTitle: "Popular Cloud Server plans",
       plansLead:
         "The lowest priced open plans right now. Every price comes straight from the price list.",
@@ -118,6 +123,8 @@ export const publicEn: Same<typeof publicBn> = {
     pricing: {
       heading: "Pricing",
       lead: "Cloud Server, built on Amazon Lightsail. Every price is for 30 days, in US dollars.",
+      answer:
+        "Every Cloud Server price on TryAWS.now is in US dollars for 30 days and already includes VAT and fees. At checkout you see the exchange rate of the day and the exact amount in taka before you confirm, and exactly that amount is taken from your wallet, which you top up with EPS.",
       tabsLabel: "Product type",
       tabCloudServers: "Cloud Server",
       tableTitle: "Compare plans",
@@ -134,6 +141,8 @@ export const publicEn: Same<typeof publicBn> = {
     cloudServers: {
       heading: "Cloud Server, built on Amazon Lightsail",
       lead: "Every Cloud Server is an Amazon Lightsail instance that runs in the AWS Region Singapore or Mumbai.",
+      answer:
+        "A Cloud Server on TryAWS.now is an Amazon Lightsail instance that runs in the AWS Region Singapore or Mumbai. You pick a plan and a location, see the price in US dollars for 30 days with VAT and fees included, pay in taka from your wallet, and manage the server from the TryAWS.now panel.",
       plansTitle: "Plans",
       featuresTitle: "What you get",
       features: {
@@ -189,6 +198,8 @@ export const publicEn: Same<typeof publicBn> = {
     help: {
       heading: "Frequently asked questions",
       lead: "The questions we hear most about TryAWS.now and Amazon Lightsail.",
+      answer:
+        "TryAWS.now sells Cloud Servers, built on Amazon Lightsail, in the AWS Region Singapore or Mumbai. You top up a wallet in taka with EPS and buy from it; prices are in US dollars, include VAT and fees, and are converted to taka at checkout. You complete an identity check once, and you get support through support requests.",
       listTitle: "Questions and answers",
       stillTitle: "Did not find an answer?",
       stillText: "Tell us on the support page.",
@@ -241,11 +252,19 @@ export const publicEn: Same<typeof publicBn> = {
           q: "Are prices in taka?",
           a: "Prices are shown in US dollars. Your wallet, top-ups and invoices are in Bangladeshi taka (BDT); the taka amount of an order is worked out at checkout with the exchange rate of the day.",
         },
+        vatInvoice: {
+          q: "Do I get a VAT invoice?",
+          a: "Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Prices include VAT of 5%. A VAT-registered business can have its BIN printed on the invoice.",
+        },
+        refunds: {
+          q: "Can I get a refund?",
+          a: "If a resource cannot be created after you paid, the full amount goes back to your wallet automatically. When we cancel a purchase or a renewal, the whole amount goes back to your wallet and you get a credit note in taka. For anything else, open a billing support request; the refund policy has the details.",
+        },
       },
     },
     support: {
       heading: "Support and contact",
-      lead: "TryAWS.now gives support through support requests, and our support team answers every request in writing. There is no support phone line and no support email address.",
+      lead: "TryAWS.now gives support through support requests only, and our support team answers every request in writing. With an account, open a request in the panel and follow the answers there. Without an account, use the form on the support page and we answer by email. There is no support phone line and no support email address.",
       customerTitle: "If you have an account",
       customerText:
         "Open a support request in the panel and follow it there: read our answers and reply in the same place. If you are not signed in, you sign in first.",

@@ -4,9 +4,11 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { cheapestOffer } from "../../../server/public/catalog.ts";
 import type { PublicCatalog } from "../../../server/public/catalog.ts";
-import { breadcrumbLd, organizationLd } from "../../../server/public/seo.ts";
+import { breadcrumbLd } from "../../../server/public/seo.ts";
+import { AnswerBlock } from "./_components/AnswerBlock.tsx";
 import { JsonLds } from "./_components/JsonLd.tsx";
 import { OfferCard } from "./_components/offers.tsx";
+import { useSiteLd } from "./_components/site-ld.ts";
 import type { Tr } from "./_components/offers.tsx";
 
 // `/` (index.html): the hero with the AWS statement of 16.13, three plan cards from the catalog (the
@@ -29,6 +31,7 @@ export function HomeContent({
   const t = useTranslations("Public") as unknown as Tr;
   const tAws = useTranslations("Aws");
   const p = (path: string): string => localePath(locale, path);
+  const site = useSiteLd(locale);
 
   // The cheapest offer of each family that has one; at most three cards.
   const cards =
@@ -45,7 +48,12 @@ export function HomeContent({
         origin={origin}
         nonce={nonce}
         build={(o) => [
-          organizationLd(o),
+          ...site(o, {
+            path: "/",
+            name: t("meta.home.title"),
+            description: t("meta.home.description"),
+            answer: true,
+          }),
           breadcrumbLd(o, locale, [{ name: t("crumb.home"), path: "/" }]),
         ]}
       />
@@ -55,9 +63,8 @@ export function HomeContent({
             <div className="col-md-8">
               <div className="wrapper">
                 <h1 className="heading mergecolor pb-2">{t("home.heroTitle")}</h1>
-                <h2 className="subheading fw-normal text-muted tc-muted mb-4">
-                  {t("home.heroLead")}
-                </h2>
+                {/* WPU-Z16: the answer block is the entity statement (who, what, where, how billed). */}
+                <AnswerBlock text={t("entity.statement")} />
                 <p className="seccolor mb-4">{tAws("long")}</p>
                 <Button variant="primary" href={p("/pricing")} className="me-2">
                   {t("common.seePricing")}

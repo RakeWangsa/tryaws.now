@@ -1,0 +1,257 @@
+{
+  "name": "TryAWS.now",
+  "url": "https://tryaws.now",
+  "entityType": "Organization",
+  "license": "CC-BY-4.0",
+  "attribution": "TryAWS.now (TiCON System Limited)",
+  "legalName": "TiCON System Limited",
+  "dateModified": "2026-11-14",
+  "locales": [
+    {
+      "code": "bn-BD",
+      "path": "/",
+      "default": true
+    },
+    {
+      "code": "en",
+      "path": "/en"
+    }
+  ],
+  "nap": {
+    "street": "Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230",
+    "city": "Dhaka",
+    "country": "BD"
+  },
+  "description": {
+    "bn": "TryAWS.now বাংলাদেশের মানুষ ও প্রতিষ্ঠানের জন্য একটি প্রিপেইড ক্লাউড প্যানেল। এখানে Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার কেনা যায়, যা Singapore বা Mumbai AWS Region থেকে চলে। মূল্য মার্কিন ডলারে দেখানো হয় এবং তাতে VAT ও ফি অন্তর্ভুক্ত; পরিশোধ হয় টাকায়, ওয়ালেট থেকে, যা EPS দিয়ে টপ আপ করা যায়। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।",
+    "en": "TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in US dollars and include VAT and fees; you pay in taka from a wallet that you top up with EPS. TryAWS.now sells, bills and supports the service."
+  },
+  "service": {
+    "product": {
+      "bn": "ক্লাউড সার্ভার",
+      "en": "Cloud Server"
+    },
+    "statement": {
+      "bn": "এখানে কেনা প্রতিটি সার্ভার, ডেটাবেস ও স্টোরেজ একটি Amazon Lightsail resource, যা Singapore বা Mumbai AWS Region থেকে চলে। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়। সবকিছু এই প্যানেল থেকেই চালানো যায়, আলাদা AWS account লাগে না।",
+      "en": "Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai). TryAWS.now sells, bills and supports the service. You manage everything from this panel and do not need an AWS account."
+    },
+    "regions": [
+      {
+        "code": "ap-southeast-1",
+        "name": "Singapore"
+      },
+      {
+        "code": "ap-south-1",
+        "name": "Mumbai"
+      }
+    ],
+    "prices": {
+      "bn": "মূল্য মার্কিন ডলারে (USD), ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত। টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয় এবং নিশ্চিত করার আগেই দেখানো হয়। ১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
+      "en": "Prices are in US dollars (USD), for 30 days, and include VAT and fees. The amount in taka is worked out at checkout with the exchange rate of the day, and you see it before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail."
+    },
+    "priceCurrency": "USD",
+    "paymentCurrency": "BDT",
+    "payment": "EPS",
+    "support": {
+      "bn": "TryAWS.now সাপোর্ট দেয় শুধু সাপোর্ট অনুরোধের মাধ্যমে, এবং প্রতিটি অনুরোধের লিখিত উত্তর দেয় আমাদের সাপোর্ট দল। অ্যাকাউন্ট থাকলে প্যানেলে অনুরোধ খুলুন এবং সেখানেই উত্তর দেখুন। অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম ব্যবহার করুন, আমরা ইমেইলে উত্তর দেব। সাপোর্টের কোনো ফোন লাইন বা ইমেইল ঠিকানা নেই।",
+      "en": "TryAWS.now gives support through support requests only, and our support team answers every request in writing. With an account, open a request in the panel and follow the answers there. Without an account, use the form on the support page and we answer by email. There is no support phone line and no support email address."
+    }
+  },
+  "faq": {
+    "bn": [
+      {
+        "q": "এটি কি সত্যিই AWS?",
+        "a": "হ্যাঁ, ১০০%। এখানে কেনা প্রতিটি সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট একটি Amazon Lightsail resource, যা আপনার বেছে নেওয়া AWS Region-এ চলে।"
+      },
+      {
+        "q": "আমি কি AWS account বা AWS console পাব?",
+        "a": "না। আপনি TryAWS.now প্যানেল থেকেই সবকিছু চালান। আলাদা AWS account বা AWS console লাগে না।"
+      },
+      {
+        "q": "বিল ও সাপোর্ট কে দেয়?",
+        "a": "TryAWS.now। আমরা বিক্রি করি ও বিল করি, আর প্যানেলের সাপোর্ট অনুরোধের মাধ্যমে সাপোর্ট দিই। সাপোর্টের কোনো ফোন লাইন নেই।"
+      },
+      {
+        "q": "আমার ডেটা কোথায় থাকে?",
+        "a": "সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট আপনার বেছে নেওয়া AWS Region-এ থাকে। CDN-এর কপি বিশ্বজুড়ে AWS-এর edge লোকেশনে থাকে। DNS বৈশ্বিক সেবা। আপনার অ্যাকাউন্ট ও পরিচয়পত্রের নথি AWS Singapore-এ রাখা হয়।"
+      },
+      {
+        "q": "কীভাবে টাকা দেব?",
+        "a": "প্রথমে EPS দিয়ে ওয়ালেটে টপ আপ করুন। তারপর ওয়ালেট থেকে সার্ভার কিনুন। ওয়ালেট ও সব পেমেন্ট টাকায়; অর্ডারের টাকার পরিমাণ চেকআউটে দেখানো হয়।"
+      },
+      {
+        "q": "মূল্যে কী কী অন্তর্ভুক্ত?",
+        "a": "প্রদর্শিত মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য এবং তাতে VAT ও ফি অন্তর্ভুক্ত। চেকআউটে সেদিনের বিনিময় হার ও টাকার পরিমাণ নিশ্চিত করার আগেই দেখানো হয়, এবং ঠিক সেই পরিমাণই কাটা হয়।"
+      },
+      {
+        "q": "কোন কোন লোকেশন আছে?",
+        "a": "শুরুতে দুটি AWS Region: Singapore ও Mumbai। প্ল্যানের ডেটা ট্রান্সফার লোকেশন অনুযায়ী আলাদা হতে পারে, তাই মূল্য তালিকায় প্রতিটি লোকেশনের মান আলাদা দেখানো হয়।"
+      },
+      {
+        "q": "সার্ভার কেনার আগে পরিচয় যাচাই লাগে?",
+        "a": "হ্যাঁ। সার্ভার কেনার আগে একবার পরিচয় যাচাই সম্পন্ন করতে হয়। কর্মী যাচাই করে ফল জানান।"
+      },
+      {
+        "q": "ডেটাবেস, স্টোরেজ ও অন্য পণ্য কবে?",
+        "a": "পণ্যগুলো ধাপে ধাপে খোলা হচ্ছে। যেটি এখনো খোলেনি, তার পাতায় আপনার ইমেইল দিলে খোলা হলে জানানো হবে।"
+      },
+      {
+        "q": "ইমেইল পাঠানোর জন্য পোর্ট ২৫ খোলা থাকে?",
+        "a": "না। বাইরে যাওয়া পোর্ট ২৫ বন্ধ থাকে। ইমেইল পাঠাতে একটি ইমেইল সেবার API বা অন্য পোর্ট ব্যবহার করুন।"
+      },
+      {
+        "q": "সাহায্য কোথায় পাব?",
+        "a": "প্যানেলে সাপোর্ট অনুরোধ খুলুন এবং সেখানেই আমাদের উত্তর দেখুন। অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম ব্যবহার করুন, আমরা ইমেইলে উত্তর দেব। সাপোর্টের কোনো ফোন লাইন বা ইমেইল ঠিকানা নেই।"
+      },
+      {
+        "q": "মূল্য কি টাকায়?",
+        "a": "মূল্য মার্কিন ডলারে দেখানো হয়। ওয়ালেট, টপ আপ ও ইনভয়েস বাংলাদেশি টাকায় (BDT); অর্ডারের টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয়।"
+      },
+      {
+        "q": "আমি কি VAT সহ কর চালানপত্র পাব?",
+        "a": "হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। মূল্যে ৫% VAT অন্তর্ভুক্ত। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।"
+      },
+      {
+        "q": "টাকা ফেরত পাওয়া যায় কি?",
+        "a": "পেমেন্টের পর কোনো resource তৈরি না হলে পুরো টাকা নিজে থেকেই ওয়ালেটে ফেরত যায়। আমরা কোনো কেনা বা নবায়ন বাতিল করলে পুরো টাকা ওয়ালেটে ফেরত যায় এবং আপনি টাকায় ক্রেডিট নোট পান। অন্য কিছুর জন্য বিল বিষয়ে সাপোর্ট অনুরোধ খুলুন; বিস্তারিত ফেরতের নীতিতে আছে।"
+      }
+    ],
+    "en": [
+      {
+        "q": "Is this real AWS?",
+        "a": "Yes, 100%. Every server, database, disk and bucket you buy here is an Amazon Lightsail resource that runs in the AWS Region you choose."
+      },
+      {
+        "q": "Do I get an AWS account or the AWS console?",
+        "a": "No. You run everything from the TryAWS.now panel. You do not need a separate AWS account or the AWS console."
+      },
+      {
+        "q": "Who bills me and who supports me?",
+        "a": "TryAWS.now. We sell and bill the service, and we support you through support requests in the panel. There is no support phone line."
+      },
+      {
+        "q": "Where is my data?",
+        "a": "Servers, databases, disks and buckets are in the AWS Region you choose. CDN copies are at AWS edge locations worldwide. DNS is a global service. Your account and identity documents are kept in AWS Singapore."
+      },
+      {
+        "q": "How do I pay?",
+        "a": "Top up your wallet with EPS first, then buy servers from the wallet. The wallet and all payments are in taka; the taka amount of an order is shown at checkout."
+      },
+      {
+        "q": "What does the price include?",
+        "a": "A displayed price is in US dollars, for 30 days, and includes VAT and fees. At checkout you see the exchange rate of the day and the amount in taka before you confirm, and you are charged exactly that amount."
+      },
+      {
+        "q": "Which locations are there?",
+        "a": "Two AWS Regions at the start: Singapore and Mumbai. The data transfer of a plan can differ by location, so the price list shows the value for each location."
+      },
+      {
+        "q": "Do I need an identity check before I buy a server?",
+        "a": "Yes. You complete an identity check once before you buy a server. Our staff review it and tell you the result."
+      },
+      {
+        "q": "When do databases, storage and other products come?",
+        "a": "Products open step by step. If one is not open yet, leave your email on its page and we will tell you when it opens."
+      },
+      {
+        "q": "Is outbound port 25 open for sending email?",
+        "a": "No. Outbound port 25 is closed. To send email, use the API of an email service or another port."
+      },
+      {
+        "q": "Where do I get help?",
+        "a": "Open a support request in the panel and read our answers there. Without an account, use the form on the support page and we answer by email. There is no support phone line or support email address."
+      },
+      {
+        "q": "Are prices in taka?",
+        "a": "Prices are shown in US dollars. Your wallet, top-ups and invoices are in Bangladeshi taka (BDT); the taka amount of an order is worked out at checkout with the exchange rate of the day."
+      },
+      {
+        "q": "Do I get a VAT invoice?",
+        "a": "Yes. For each purchase and renewal TiCON System Limited gives you a tax invoice (Mushak-6.3) in taka. Prices include VAT of 5%. A VAT-registered business can have its BIN printed on the invoice."
+      },
+      {
+        "q": "Can I get a refund?",
+        "a": "If a resource cannot be created after you paid, the full amount goes back to your wallet automatically. When we cancel a purchase or a renewal, the whole amount goes back to your wallet and you get a credit note in taka. For anything else, open a billing support request; the refund policy has the details."
+      }
+    ]
+  },
+  "pages": {
+    "bn": [
+      {
+        "title": "TryAWS.now: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
+        "url": "https://tryaws.now/"
+      },
+      {
+        "title": "মূল্য তালিকা: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
+        "url": "https://tryaws.now/pricing"
+      },
+      {
+        "title": "ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
+        "url": "https://tryaws.now/products/cloud-servers"
+      },
+      {
+        "title": "সাহায্য ও সাধারণ প্রশ্ন",
+        "url": "https://tryaws.now/help"
+      },
+      {
+        "title": "সাপোর্ট ও যোগাযোগ",
+        "url": "https://tryaws.now/support"
+      },
+      {
+        "title": "সেবার শর্তাবলি",
+        "url": "https://tryaws.now/legal/terms"
+      },
+      {
+        "title": "গোপনীয়তা নীতি",
+        "url": "https://tryaws.now/legal/privacy"
+      },
+      {
+        "title": "গ্রহণযোগ্য ব্যবহারের নীতি",
+        "url": "https://tryaws.now/legal/acceptable-use"
+      },
+      {
+        "title": "টাকা ফেরতের নীতি",
+        "url": "https://tryaws.now/legal/refund"
+      }
+    ],
+    "en": [
+      {
+        "title": "TryAWS.now: Cloud Server, built on Amazon Lightsail",
+        "url": "https://tryaws.now/en"
+      },
+      {
+        "title": "Pricing: Cloud Server, built on Amazon Lightsail",
+        "url": "https://tryaws.now/en/pricing"
+      },
+      {
+        "title": "Cloud Server, built on Amazon Lightsail",
+        "url": "https://tryaws.now/en/products/cloud-servers"
+      },
+      {
+        "title": "Help and frequently asked questions",
+        "url": "https://tryaws.now/en/help"
+      },
+      {
+        "title": "Support and contact",
+        "url": "https://tryaws.now/en/support"
+      },
+      {
+        "title": "Terms of service",
+        "url": "https://tryaws.now/en/legal/terms"
+      },
+      {
+        "title": "Privacy policy",
+        "url": "https://tryaws.now/en/legal/privacy"
+      },
+      {
+        "title": "Acceptable use policy",
+        "url": "https://tryaws.now/en/legal/acceptable-use"
+      },
+      {
+        "title": "Refund policy",
+        "url": "https://tryaws.now/en/legal/refund"
+      }
+    ]
+  },
+  "trademark": "Amazon Web Services, AWS, Amazon Lightsail and Amazon Route 53 are trademarks of Amazon.com, Inc. or its affiliates."
+}

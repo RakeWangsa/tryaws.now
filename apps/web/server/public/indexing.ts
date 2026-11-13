@@ -91,4 +91,14 @@ export const DISALLOWED_PREFIXES: readonly string[] = Object.freeze([
   "/settings",
   "/notifications",
   "/maintenance",
+  // WPU-Z16: the rest of the panel's routes (NEXT_PREFIXES), so no crawler group is invited in. The
+  // public /support page stays open; its panel pages are under /support/.
+  "/invoices",
+  "/billing",
+  "/dns",
+  "/domains",
+  "/load-balancers",
+  "/snapshots",
+  "/static-ips",
+  "/support/",
 ]);

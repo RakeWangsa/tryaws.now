@@ -42,19 +42,56 @@ export function sitemapEntries(origin: string | null, catalog: PublicCatalog): S
   );
 }
 
+/**
+ * WPU-Z16: the crawlers of the answer engines, each named in its own group so the allowance is explicit
+ * (checked 2026-11-14 against each vendor's page; JOURNEY records the VERIFY):
+ * - OpenAI: GPTBot (training), OAI-SearchBot (ChatGPT search), ChatGPT-User (fetches for a user);
+ * - Anthropic: ClaudeBot (training), Claude-User (fetches for a user), Claude-SearchBot (search);
+ * - Perplexity: PerplexityBot (search), Perplexity-User (fetches for a user);
+ * - Google: Google-Extended (a robots.txt token only: Gemini training and grounding; no crawler of its own);
+ * - Microsoft: bingbot (Bing, and through it Copilot);
+ * - Apple: Applebot-Extended (a robots.txt token only, for Apple's generative models).
+ * A crawler that matches a group of its own ignores the `*` group, so each group repeats the same
+ * disallowed prefixes: the panel, the sign-in pages, the API, the payment return and the dev pages.
+ */
+export const AI_CRAWLERS: readonly string[] = Object.freeze([
+  "GPTBot",
+  "OAI-SearchBot",
+  "ChatGPT-User",
+  "ClaudeBot",
+  "Claude-User",
+  "Claude-SearchBot",
+  "PerplexityBot",
+  "Perplexity-User",
+  "Google-Extended",
+  "bingbot",
+  "Applebot-Extended",
+]);
+
+export interface RobotsRule {
+  userAgent: string | string[];
+  allow: string[];
+  disallow: string[];
+}
+
 export interface RobotsFile {
-  rules: { userAgent: string; allow: string[]; disallow: string[] };
+  rules: RobotsRule[];
   /** Absent without an origin. */
   sitemap?: string;
 }
 
+/** The disallowed prefixes in both locales (bn has no prefix, en is under /en). */
+export function disallowedPaths(): string[] {
+  return DISALLOWED_PREFIXES.flatMap((prefix) => [prefix, `/en${prefix}`]);
+}
+
 export function robotsFile(origin: string | null): RobotsFile {
+  const disallow = disallowedPaths();
   return {
-    rules: {
-      userAgent: "*",
-      allow: ["/"],
-      disallow: DISALLOWED_PREFIXES.flatMap((prefix) => [prefix, `/en${prefix}`]),
-    },
+    rules: [
+      { userAgent: "*", allow: ["/"], disallow },
+      { userAgent: [...AI_CRAWLERS], allow: ["/"], disallow },
+    ],
     ...(origin !== null ? { sitemap: `${origin}/sitemap.xml` } : {}),
   };
 }

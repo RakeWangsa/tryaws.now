@@ -4,7 +4,9 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { breadcrumbLd } from "../../../../server/public/seo.ts";
 import { PublicSupportForm } from "./PublicSupportForm.tsx";
+import { AnswerBlock } from "../_components/AnswerBlock.tsx";
 import { JsonLds } from "../_components/JsonLd.tsx";
+import { useSiteLd } from "../_components/site-ld.ts";
 import type { Tr } from "../_components/offers.tsx";
 
 // `/support` (contact.html, without the map and the newsletter box): how to get support. Owner decision
@@ -26,12 +28,19 @@ export function SupportContent({
 }) {
   const t = useTranslations("Public") as unknown as Tr;
   const p = (path: string): string => localePath(locale, path);
+  const site = useSiteLd(locale);
   return (
     <>
       <JsonLds
         origin={origin}
         nonce={nonce}
         build={(o) => [
+          ...site(o, {
+            path: "/support",
+            name: t("meta.support.title"),
+            description: t("meta.support.description"),
+            answer: true,
+          }),
           breadcrumbLd(o, locale, [
             { name: t("crumb.home"), path: "/" },
             { name: t("support.heading"), path: "/support" },
@@ -44,7 +53,8 @@ export function SupportContent({
             <div className="col-lg-12">
               <div className="wrapper">
                 <h1 className="heading mb-0">{t("support.heading")}</h1>
-                <p className="seccolor">{t("support.lead")}</p>
+                {/* WPU-Z16: the lead is the answer block of the page. */}
+                <AnswerBlock text={t("support.lead")} />
               </div>
             </div>
           </div>

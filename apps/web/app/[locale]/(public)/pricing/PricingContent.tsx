@@ -4,7 +4,9 @@ import { useTranslations } from "next-intl";
 import type { PublicCatalog } from "../../../../server/public/catalog.ts";
 import { breadcrumbLd, productLd } from "../../../../server/public/seo.ts";
 import { localePath } from "@tc/ui/runtime";
+import { AnswerBlock } from "../_components/AnswerBlock.tsx";
 import { JsonLds } from "../_components/JsonLd.tsx";
+import { useSiteLd } from "../_components/site-ld.ts";
 import { OfferCard, OfferTable, offerName, orderHref } from "../_components/offers.tsx";
 import type { Tr } from "../_components/offers.tsx";
 
@@ -27,6 +29,7 @@ export function PricingContent({
   const families =
     catalog.state === "ok" ? catalog.families.filter((f) => f.offers.length > 0) : [];
   const offers = families.flatMap((family) => family.offers);
+  const site = useSiteLd(locale);
 
   return (
     <>
@@ -34,6 +37,12 @@ export function PricingContent({
         origin={origin}
         nonce={nonce}
         build={(o) => [
+          ...site(o, {
+            path: "/pricing",
+            name: t("meta.pricing.title"),
+            description: t("meta.pricing.description"),
+            answer: true,
+          }),
           breadcrumbLd(o, locale, [
             { name: t("crumb.home"), path: "/" },
             { name: t("pricing.heading"), path: "/pricing" },
@@ -60,6 +69,7 @@ export function PricingContent({
             <div className="col-lg-12">
               <div className="wrapper">
                 <h1 className="heading">{t("pricing.heading")}</h1>
+                <AnswerBlock text={t("pricing.answer")} />
                 <p className="seccolor">{t("pricing.lead")}</p>
               </div>
             </div>

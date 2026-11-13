@@ -247,13 +247,14 @@ function jsonLd(page: string): Record<string, unknown>[] {
 }
 
 describe("structured data (WPP-T3)", () => {
-  it("home has Organization and BreadcrumbList; help has FAQPage; products have Product", () => {
+  it("every page has Organization, WebSite and WebPage; help has FAQPage; products have Product", () => {
     const types = (id: string) => jsonLd(all[id]!("en")).map((b) => b["@type"]);
-    expect(types("home.data")).toEqual(["Organization", "BreadcrumbList"]);
-    expect(types("help.data")).toEqual(["BreadcrumbList", "FAQPage"]);
-    expect(types("pricing.data")).toEqual(["BreadcrumbList", "Product"]);
-    expect(types("cloud.data")).toEqual(["BreadcrumbList", "FAQPage", "Product"]);
-    expect(types("support.data")).toEqual(["BreadcrumbList"]);
+    const site = ["Organization", "WebSite", "WebPage"];
+    expect(types("home.data")).toEqual([...site, "BreadcrumbList"]);
+    expect(types("help.data")).toEqual([...site, "BreadcrumbList", "FAQPage"]);
+    expect(types("pricing.data")).toEqual([...site, "BreadcrumbList", "Product"]);
+    expect(types("cloud.data")).toEqual([...site, "BreadcrumbList", "FAQPage", "Product"]);
+    expect(types("support.data")).toEqual([...site, "BreadcrumbList"]);
   });
 
   it("the blocks contain no raw '<' (they cannot end the script block)", () => {

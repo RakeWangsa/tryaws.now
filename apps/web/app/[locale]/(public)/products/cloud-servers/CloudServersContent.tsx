@@ -1,10 +1,13 @@
-import { Accordion, Button, EmptyState, PlanPicker } from "@tc/ui";
+import { Button, EmptyState, PlanPicker } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { PublicCatalog, PublicOffer } from "../../../../../server/public/catalog.ts";
 import { breadcrumbLd, faqLd, productLd } from "../../../../../server/public/seo.ts";
+import { AnswerBlock } from "../../_components/AnswerBlock.tsx";
+import { FaqList } from "../../_components/FaqList.tsx";
 import { JsonLds } from "../../_components/JsonLd.tsx";
+import { useSiteLd } from "../../_components/site-ld.ts";
 import {
   OfferCard,
   OfferTable,
@@ -42,6 +45,7 @@ export function CloudServersContent({
   const t = useTranslations("Public") as unknown as Tr;
   const tAws = useTranslations("Aws");
   const offers = cloudOffers(catalog);
+  const site = useSiteLd(locale);
   const faq = FAQ_KEYS.map((key) => ({
     question: t(`help.items.${key}.q`),
     answer: t(`help.items.${key}.a`),
@@ -53,6 +57,12 @@ export function CloudServersContent({
         origin={origin}
         nonce={nonce}
         build={(o) => [
+          ...site(o, {
+            path: "/products/cloud-servers",
+            name: t("meta.cloudServers.title"),
+            description: t("meta.cloudServers.description"),
+            answer: true,
+          }),
           breadcrumbLd(o, locale, [
             { name: t("crumb.home"), path: "/" },
             { name: t("cloudServers.heading"), path: "/products/cloud-servers" },
@@ -81,6 +91,7 @@ export function CloudServersContent({
             <div className="col-lg-9">
               <div className="wrapper">
                 <h1 className="heading">{t("cloudServers.heading")}</h1>
+                <AnswerBlock text={t("cloudServers.answer")} />
                 <p className="seccolor">{t("cloudServers.lead")}</p>
                 <p className="seccolor">{tAws("long")}</p>
               </div>
@@ -169,14 +180,7 @@ export function CloudServersContent({
       <section className="sec-normal bg-colorstyle">
         <div className="container">
           <h2 className="section-heading mergecolor">{t("cloudServers.faqTitle")}</h2>
-          <Accordion
-            headingLevel={3}
-            items={faq.map((item, index) => ({
-              id: FAQ_KEYS[index] as string,
-              title: item.question,
-              content: <p className="seccolor">{item.answer}</p>,
-            }))}
-          />
+          <FaqList items={faq} />
           <Button variant="tertiary" href={localePath(locale, "/help")}>
             {t("home.help.faq.title")}
           </Button>
