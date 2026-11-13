@@ -282,10 +282,8 @@ export async function loadServerExtras(
           state: r.state,
           attachedToThis: f.attachedTo === id,
           attachedElsewhere: f.attachedTo !== null && f.attachedTo !== id,
-          // R12: with the disk flag off the switch is not shown (the action refuses it too).
-          autoRenew: diskFlagOn
-            ? autoRenewViewOf("disk", r, subscriptionOf.get(r.id) ?? null)
-            : null,
+          // R12: with the disk flag off the switch is "off only" (none once it is off).
+          autoRenew: autoRenewViewOf("disk", r, subscriptionOf.get(r.id) ?? null, diskFlagOn),
         };
       });
     const live = LIVE.includes(server.state);

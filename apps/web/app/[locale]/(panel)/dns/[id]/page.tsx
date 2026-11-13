@@ -38,11 +38,8 @@ export default async function DnsZonePage({ params, searchParams }: Props) {
   const screen = await loadZone(panel.session, id, newUuidV7());
   const editing =
     screen !== null && screen.state === "ready" ? pickEditing(screen.zone, edit) : null;
-  // WPU-Z14: the auto-renew switch of the zone (null: no own zone, no subscription, flag off).
-  const renew =
-    screen !== null && screen.state === "ready"
-      ? await loadAutoRenew(panel.session, "dns_zone", id)
-      : null;
+  // WPU-Z14: the auto-renew switch of the zone (null: no own zone, no subscription; flag off: off only).
+  const renew = screen !== null ? await loadAutoRenew(panel.session, "dns_zone", id) : null;
   return (
     <PanelFrame locale={locale} path={path} currentId="domains" panel={panel}>
       <ZoneContent

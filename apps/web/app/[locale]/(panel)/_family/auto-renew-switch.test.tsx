@@ -192,6 +192,123 @@ describe("the auto-renew switch on the detail page of each family (WPU-Z14)", ()
   });
 });
 
+// WPU-Z14 fix round 1: with the flag of the family off the detail loaders answer null (or flag_off for a
+// zone), so the page shows its empty state; the page still passes the "off only" switch while auto-renew
+// is on, so the renewals that keep charging can be stopped.
+const FLAG_OFF_PAGES: ReadonlyArray<readonly [string, string, Page]> = [
+  [
+    "windows_instance",
+    WINDOWS_ID,
+    (locale, renewal) => (
+      <ServerDetailContent
+        locale={locale}
+        numerals={numeralsOf(locale)}
+        server={null}
+        {...slot(renewal)}
+      />
+    ),
+  ],
+  [
+    "database",
+    DATABASE_ID,
+    (locale, renewal) => (
+      <DatabaseDetailContent
+        locale={locale}
+        numerals={numeralsOf(locale)}
+        database={null}
+        requestId={REQ}
+        {...slot(renewal)}
+      />
+    ),
+  ],
+  [
+    "bucket",
+    BUCKET_ID,
+    (locale, renewal) => (
+      <StorageDetailContent
+        locale={locale}
+        numerals={numeralsOf(locale)}
+        bucket={null}
+        requestId={REQ}
+        {...slot(renewal)}
+      />
+    ),
+  ],
+  [
+    "load_balancer",
+    LB_ID,
+    (locale, renewal) => (
+      <LoadBalancerDetailContent
+        locale={locale}
+        numerals={numeralsOf(locale)}
+        balancer={null}
+        requestId={REQ}
+        {...slot(renewal)}
+      />
+    ),
+  ],
+  [
+    "container_service",
+    SERVICE_ID,
+    (locale, renewal) => (
+      <ContainerDetailContent
+        locale={locale}
+        numerals={numeralsOf(locale)}
+        service={null}
+        requestId={REQ}
+        {...slot(renewal)}
+      />
+    ),
+  ],
+  [
+    "cdn",
+    CDN_ID,
+    (locale, renewal) => (
+      <CdnDetailContent
+        locale={locale}
+        numerals={numeralsOf(locale)}
+        cdn={null}
+        requestId={REQ}
+        {...slot(renewal)}
+      />
+    ),
+  ],
+  [
+    "dns_zone",
+    ZONE_ID,
+    (locale, renewal) => (
+      <ZoneContent
+        locale={locale}
+        screen={{ state: "flag_off" }}
+        editing={null}
+        saveAction={noop}
+        deleteAction={noop}
+        destroyAction={noop}
+        {...slot(renewal)}
+      />
+    ),
+  ],
+];
+
+describe("the off-only auto-renew switch with the flag of the family off (WPU-Z14 fix round 1)", () => {
+  it.each(FLAG_OFF_PAGES.map(([family, id, page]) => [family, id, page] as const))(
+    "%s: the empty page still offers to turn auto-renew off, never on, in bn and en",
+    (_family, id, page) => {
+      const offOnly = sw(id, { autoRenew: true, canTurnOn: false });
+      const en = html(page("en", offOnly), "en");
+      expect(en).toContain(`name="resourceId" value="${id}"`);
+      expect(en).toContain('name="autoRenew" value="off"');
+      expect(en).toContain("Turn auto-renew off");
+      expect(en).not.toContain("Turn auto-renew on");
+      expect(en).not.toMatch(/<button[^>]*disabled/);
+      const bn = html(page("bn", offOnly), "bn");
+      expect(bn).toContain("স্বয়ংক্রিয় নবায়ন বন্ধ করুন");
+      // no switch once it is off (the page passes none)
+      expect(html(page("en", null), "en")).not.toContain('name="autoRenew"');
+    },
+  );
+});
+
 describe("the auto-renew switch of each disk on the Storage tab of its server (WPU-Z14)", () => {
   const page = (locale: Locale, data = extras()) =>
     html(
@@ -216,6 +333,22 @@ describe("the auto-renew switch of each disk on the Storage tab of its server (W
     const bn = page("bn");
     expect(bn).toContain("স্বয়ংক্রিয় নবায়ন চালু করুন");
     expect(bn).toContain("স্বয়ংক্রিয় নবায়ন বন্ধ করুন");
+  });
+
+  it("with the disk flag off a disk that renews keeps an off-only switch (fix round 1)", () => {
+    const base = extras();
+    const data = {
+      ...base,
+      disks: base.disks.map((d) => ({
+        ...d,
+        autoRenew: { resourceId: d.id, autoRenew: true, canTurnOn: false },
+      })),
+      freeDisks: base.freeDisks.map((d) => ({ ...d, autoRenew: null })),
+    };
+    const en = page("en", data);
+    expect(en).toContain(`name="resourceId" value="${DISK_ID}"`);
+    expect(en).toContain("Turn auto-renew off");
+    expect(en).not.toContain("Turn auto-renew on");
   });
 
   it("a disk without a switch (flag off, no subscription) shows none", () => {

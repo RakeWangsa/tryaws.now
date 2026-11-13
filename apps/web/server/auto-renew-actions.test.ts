@@ -121,16 +121,16 @@ const wrote = (calls: string[]): boolean =>
 
 describe("setResourceAutoRenewCore (WPU-Z14)", () => {
   it.each(SWITCH_FAMILIES.map((family) => [family]))(
-    "%s: authenticates, checks the flag and the ownership, rate limits, switches and audits, in that order (R9)",
+    "%s: authenticates, checks the flag (turning on only) and the ownership, rate limits, switches and audits, in that order (R9)",
     async (family) => {
       const off = world({ rows: [row(family)] });
       expect(
         await setResourceAutoRenewCore(off.deps, family, { resourceId: ID, autoRenew: "off" }),
       ).toEqual({ ok: true, done: "autoRenewOff" });
+      // Turning it off stops a charge: the flag is not asked (it is for turning it on only).
       expect(off.calls).toEqual([
         "authenticate",
         `store:${CUSTOMER}`,
-        "flag",
         "own",
         "rate:subscription.auto_renew",
         `autoRenew:${ID}:false`,
@@ -140,7 +140,12 @@ describe("setResourceAutoRenewCore (WPU-Z14)", () => {
       expect(
         await setResourceAutoRenewCore(on.deps, family, { resourceId: ID, autoRenew: "on" }),
       ).toEqual({ ok: true, done: "autoRenewOn" });
-      expect(on.calls.slice(-2)).toEqual([
+      expect(on.calls).toEqual([
+        "authenticate",
+        `store:${CUSTOMER}`,
+        "flag",
+        "own",
+        "rate:subscription.auto_renew",
         `autoRenew:${ID}:true`,
         `audit:subscription.auto_renew_on:${ID}`,
       ]);
@@ -205,12 +210,41 @@ describe("setResourceAutoRenewCore (WPU-Z14)", () => {
     }
   });
 
-  it("the flag of the family off is flag_off (R12), the rate limit refused is rate_limited; nothing is written", async () => {
-    const off = world({ flag: false });
-    expect(
-      await setResourceAutoRenewCore(off.deps, "database", { resourceId: ID, autoRenew: "off" }),
-    ).toEqual({ ok: false, error: "flag_off" });
-    expect(wrote(off.calls)).toBe(false);
+  it.each(SWITCH_FAMILIES.map((family) => [family]))(
+    "%s with its flag off (R12): turning it on is flag_off and writes nothing; turning it off still stops the renewals",
+    async (family) => {
+      const on = world({
+        rows: [row(family)],
+        flag: false,
+        sub: subscription({ autoRenew: false }),
+      });
+      expect(
+        await setResourceAutoRenewCore(on.deps, family, { resourceId: ID, autoRenew: "on" }),
+      ).toEqual({ ok: false, error: "flag_off" });
+      expect(wrote(on.calls)).toBe(false);
+      expect(on.calls.some((c) => c.startsWith("rate"))).toBe(false);
+      const off = world({ rows: [row(family)], flag: false });
+      expect(
+        await setResourceAutoRenewCore(off.deps, family, { resourceId: ID, autoRenew: "off" }),
+      ).toEqual({ ok: true, done: "autoRenewOff" });
+      expect(off.calls).toEqual([
+        "authenticate",
+        `store:${CUSTOMER}`,
+        "own",
+        "rate:subscription.auto_renew",
+        `autoRenew:${ID}:false`,
+        `audit:subscription.auto_renew_off:${ID}`,
+      ]);
+      // and another customer's row is still one answer with a missing one, with the flag off (R8)
+      const foreign = world({ rows: [], flag: false });
+      expect(
+        await setResourceAutoRenewCore(foreign.deps, family, { resourceId: ID, autoRenew: "off" }),
+      ).toEqual({ ok: false, error: "not_found" });
+      expect(wrote(foreign.calls)).toBe(false);
+    },
+  );
+
+  it("the rate limit refused is rate_limited; nothing is written", async () => {
     const limited = world({ allowed: false });
     expect(
       await setResourceAutoRenewCore(limited.deps, "database", { resourceId: ID, autoRenew: "on" }),
@@ -267,10 +301,16 @@ describe("setResourceAutoRenewCore (WPU-Z14)", () => {
 // added to autoRenewAtPurchase without a switch fails here.
 describe("WPU-Z14: every family bought with auto-renew on has a switch that turns it off", () => {
   const OWN_SWITCH = ["linux_instance", "domain"];
+  // A disk has a switch (a row of the Storage tab of its server) but is bought with auto-renew OFF: that row
+  // can become unreachable (review ruling of WPU-Z14).
+  const SWITCH_BUT_OFF = ["disk"];
 
-  it("the families bought with auto-renew on are exactly those with a switch", () => {
+  it("the families bought with auto-renew on are exactly those with a switch, but a disk", () => {
     const on = FEATURE_FLAGS.filter((family) => autoRenewAtPurchase(family));
-    expect([...on].sort()).toEqual([...OWN_SWITCH, ...SWITCH_FAMILIES].sort());
+    expect([...on].sort()).toEqual(
+      [...OWN_SWITCH, ...SWITCH_FAMILIES.filter((f) => !SWITCH_BUT_OFF.includes(f))].sort(),
+    );
+    expect(autoRenewAtPurchase("disk")).toBe(false);
     for (const family of SWITCH_FAMILIES) expect(OWN_SWITCH).not.toContain(family);
   });
 
@@ -305,6 +345,17 @@ describe("autoRenewViewOf (WPU-Z14)", () => {
         subscription({ status: "retained", autoRenew: false }),
       ),
     ).toEqual({ resourceId: ID, autoRenew: false, canTurnOn: false });
+  });
+
+  it("with the flag off the switch is off only: shown while on (and cannot turn on), none once off", () => {
+    expect(autoRenewViewOf("database", row("database"), subscription(), false)).toEqual({
+      resourceId: ID,
+      autoRenew: true,
+      canTurnOn: false,
+    });
+    expect(
+      autoRenewViewOf("database", row("database"), subscription({ autoRenew: false }), false),
+    ).toBeNull();
   });
 
   it("no switch: no row, a row of another family, no subscription, another row's subscription, ended, destroyed", () => {

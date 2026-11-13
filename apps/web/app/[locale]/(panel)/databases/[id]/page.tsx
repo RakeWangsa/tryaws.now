@@ -58,8 +58,8 @@ export default async function DatabaseDetailPage({ params, searchParams }: Props
   const path = `/databases/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const database = await loadDatabaseDetail(panel.session, id);
-  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
-  const renew = database === null ? null : await loadAutoRenew(panel.session, "database", id);
+  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription; flag off: off only).
+  const renew = await loadAutoRenew(panel.session, "database", id);
   const tab = one(query["tab"]);
   // WPU-Y8: read once on page load (the tabs are all rendered; no timer, no polling).
   const metricsScreen =

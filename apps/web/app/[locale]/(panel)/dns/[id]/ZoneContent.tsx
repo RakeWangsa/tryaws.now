@@ -99,16 +99,20 @@ export function ZoneContent({
     );
   }
   if (screen.state === "flag_off") {
+    // WPU-Z14: an "off only" auto-renew switch while renewals still charge (built by the page).
     return (
-      <EmptyState
-        title={t("flagOff.title")}
-        description={t("flagOff.body")}
-        action={
-          <Button variant="primary" href={listHref}>
-            {t("detail.back")}
-          </Button>
-        }
-      />
+      <>
+        <EmptyState
+          title={t("flagOff.title")}
+          description={t("flagOff.body")}
+          action={
+            <Button variant="primary" href={listHref}>
+              {t("detail.back")}
+            </Button>
+          }
+        />
+        {renewal}
+      </>
     );
   }
 

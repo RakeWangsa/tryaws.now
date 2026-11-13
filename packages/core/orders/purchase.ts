@@ -44,18 +44,20 @@ type Repos = ReturnType<typeof customerRepos>;
  * - the customer can turn auto-renew off in the panel: the Billing tab of a Linux server
  *   (`setAutoRenewCore`), the domain page (`setDomainAutoRenewCore`) and, since WPU-Z14, the detail page of
  *   every other family with a subscription (`setResourceAutoRenewCore` of apps/web/server/
- *   auto-renew-actions.ts; a disk's switch is on the Storage tab of its server). Without a switch the
+ *   auto-renew-actions.ts). Without a switch the
  *   wallet would be charged every period with no way to stop it but deleting the resource.
  * - the renewal gives the next period of the service. Since WPU-Z13 a domain's renewal charge queues the
  *   renewal at the registry (`renew_domain`; RegisterDomain still sends AutoRenew=false) and is given back
  *   when the registry refuses it.
- * A static IP and a backup are parts of a server with no subscription or switch of their own: off. The
- * order review shows its auto-renew line exactly for these families (apps/web ReviewContent).
+ * A static IP and a backup are parts of a server with no subscription or switch of their own: off. A disk
+ * is off too (WPU-Z14 review ruling): its only switch is a row of the Storage tab of a live Linux server of
+ * its Region, and a disk can lose that place (its server destroyed, no live server in the Region), so it
+ * could be charged every period with no switch to stop it. The order review shows its auto-renew line
+ * exactly for these families (apps/web ReviewContent).
  */
 const AUTO_RENEW_AT_PURCHASE: ReadonlySet<string> = new Set([
   "linux_instance",
   "windows_instance",
-  "disk",
   "database",
   "bucket",
   "load_balancer",

@@ -134,6 +134,11 @@ export async function frame(
     destructive: boolean;
     limits: readonly CustomerLimit[];
     own?: { family: string; id: string };
+    /**
+     * WPU-Z14: false skips the flag of the family (R12). Only for an action that stops a charge (turning
+     * auto-renew off): a closed family must not keep charging a customer who cannot stop it. Default true.
+     */
+    checkFlag?: boolean;
   },
   parse: () => { ok: true } | { ok: false; fields: Record<string, string> },
   body: (
@@ -151,7 +156,7 @@ export async function frame(
   if (!parsed.ok) return fail("validation", parsed.fields);
   try {
     return await deps.store(session.customerId, async (repos) => {
-      if (!(await repos.flagOn())) throw new Refusal("flag_off");
+      if (spec.checkFlag !== false && !(await repos.flagOn())) throw new Refusal("flag_off");
       const owned =
         spec.own === undefined ? null : await ownResource(repos, spec.own.family, spec.own.id);
       const decision = await repos.rateLimits.consume(spec.limits, deps.now());

@@ -50,8 +50,8 @@ export default async function CdnDetailPage({ params, searchParams }: Props) {
   const path = `/cdn/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const cdn = await loadCdnDetail(panel.session, id);
-  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
-  const renew = cdn === null ? null : await loadAutoRenew(panel.session, "cdn", id);
+  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription; flag off: off only).
+  const renew = await loadAutoRenew(panel.session, "cdn", id);
   const tab = one(query["tab"]);
   return (
     <PanelFrame locale={locale} path={path} currentId="cdn" panel={panel}>

@@ -453,11 +453,10 @@ describe("/orders/review", () => {
     expect(en).not.toContain("Price in US dollars");
   });
 
-  // WPU-Z14: every family with a subscription is bought with auto-renew on, and each has the switch on the
+  // WPU-Z14: every family with a subscription but a disk is bought with auto-renew on, and each has the switch on the
   // page of the service, so the review says it is on and points there for each of them.
   it.each([
     "windows_instance",
-    "disk",
     "database",
     "bucket",
     "load_balancer",
@@ -480,9 +479,9 @@ describe("/orders/review", () => {
     },
   );
 
-  // A family with no subscription or switch of its own (a static IP, a backup) is bought with it off: its
-  // review must not say it is on.
-  it.each(["static_ip", "backup"])(
+  // A family with no subscription or switch of its own (a static IP, a backup) and a disk (its switch can
+  // become unreachable, WPU-Z14 review ruling) are bought with it off: the review must not say it is on.
+  it.each(["static_ip", "backup", "disk"])(
     "WPU-Z14: the review of a %s says nothing about auto-renew being on, in bn and en",
     async (fam) => {
       state.verdict = { ok: true, claims: { ...claims, fam } };

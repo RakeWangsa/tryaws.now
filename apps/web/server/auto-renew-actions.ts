@@ -7,8 +7,8 @@ import { formObject, formText } from "./form-schema.ts";
 // WPU-Z14 (owner decision of 2026-11-13: auto-renew on at purchase for every family). The auto-renew switch
 // of every family with a subscription that has no switch of its own: the Billing tab of a Linux server
 // (`setAutoRenewCore` of extras-actions.ts) and the domain page (`setDomainAutoRenewCore`) keep theirs.
-// R9 in the frame of family-actions.ts: authenticate, authorize (the flag of the family and the ownership
-// of the row, checked before the rate limit: another customer's row and a missing one are one answer and
+// R9 in the frame of family-actions.ts: authenticate, authorize (the flag of the family, for turning it on
+// only, and the ownership of the row, checked before the rate limit: another customer's row and a missing one are one answer and
 // consume nothing, R8), validate with zod, rate limit, execute, audit. It is a switch on the customer's own
 // subscription row (R1: nothing here calls AWS); setting the same value twice is the same row (R7).
 
@@ -59,6 +59,9 @@ export async function setResourceAutoRenewCore(
     {
       destructive: false,
       limits: AUTO_RENEW_LIMIT,
+      // R12 guards turning it ON only: turning it OFF stops a charge, so it stays possible with the flag
+      // of the family off (renewals keep charging until it is off).
+      checkFlag: on,
       ...(parsed.success ? { own: { family, id: resourceId } } : {}),
     },
     () => (parsed.success ? { ok: true } : { ok: false, fields: bad }),

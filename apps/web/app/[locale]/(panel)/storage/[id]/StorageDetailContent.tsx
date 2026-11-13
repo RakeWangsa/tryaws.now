@@ -60,16 +60,21 @@ export function StorageDetailContent({
   const listHref = localePath(locale, "/storage");
 
   if (bucket === null) {
+    // WPU-Z14: with the flag of the family off the page has no detail, but an "off only" auto-renew switch
+    // (built by the page while auto-renew is still on) lets the customer stop the renewals.
     return (
-      <EmptyState
-        title={t("detail.notFound.title")}
-        description={t("detail.notFound.body")}
-        action={
-          <Button variant="primary" href={listHref}>
-            {t("detail.back")}
-          </Button>
-        }
-      />
+      <>
+        <EmptyState
+          title={t("detail.notFound.title")}
+          description={t("detail.notFound.body")}
+          action={
+            <Button variant="primary" href={listHref}>
+              {t("detail.back")}
+            </Button>
+          }
+        />
+        {renewal}
+      </>
     );
   }
 

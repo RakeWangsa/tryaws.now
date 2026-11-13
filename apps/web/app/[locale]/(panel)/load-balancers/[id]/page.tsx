@@ -52,8 +52,8 @@ export default async function LoadBalancerDetailPage({ params, searchParams }: P
   const path = `/load-balancers/${encodeURIComponent(id)}`;
   const panel = await startPanelPage(path);
   const balancer = await loadLoadBalancerDetail(panel.session, id);
-  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription, flag off).
-  const renew = balancer === null ? null : await loadAutoRenew(panel.session, "load_balancer", id);
+  // WPU-Z14: the auto-renew switch of the Overview tab (null: no own row, no subscription; flag off: off only).
+  const renew = await loadAutoRenew(panel.session, "load_balancer", id);
   const tab = one(query["tab"]);
   // WPU-Y8: read once on page load, only for a balancer that exists for this customer (R8).
   const targetHealth =

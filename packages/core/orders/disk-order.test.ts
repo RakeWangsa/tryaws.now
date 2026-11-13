@@ -130,10 +130,13 @@ describe("addDisk", () => {
       resourceId,
     ]);
     expect(ops.rows).toEqual([{ kind: "create", state: "queued" }]);
-    const subs = await t.pool.query("select status from subscriptions where resource_id = $1", [
-      resourceId,
-    ]);
-    expect(subs.rows).toEqual([{ status: "active" }]);
+    const subs = await t.pool.query(
+      "select status, auto_renew from subscriptions where resource_id = $1",
+      [resourceId],
+    );
+    // WPU-Z14 review ruling: a disk opens with auto-renew OFF (its switch on the Storage tab of a server can
+    // become unreachable, so the wallet must not be charged every period by itself).
+    expect(subs.rows).toEqual([{ status: "active", auto_renew: false }]);
   });
 
   it("twice the size costs twice the GB: the quantity is the size", async () => {

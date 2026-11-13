@@ -119,8 +119,10 @@ export default async function ServerDetailPage({ params, searchParams }: Props) 
   const history = server === null ? null : await loadResourceHistory(panel.session, id);
   // WPU-Z14: a Windows server has no Billing tab; its auto-renew switch is on the Overview tab. A Linux
   // server keeps the switch of its Billing tab.
+  // With the Windows flag off the detail is null; loadAutoRenew then gives the "off only" switch of the
+  // customer's own Windows server (null for any other row).
   const renew =
-    server !== null && server.family === "windows_instance"
+    server === null || server.family === "windows_instance"
       ? await loadAutoRenew(panel.session, "windows_instance", id)
       : null;
   const tab = one(query["tab"]);
