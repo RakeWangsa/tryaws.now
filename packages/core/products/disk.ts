@@ -10,9 +10,12 @@ import type { ResolvedProduct } from "./instance";
 // quantity. The price of the order is the pricing engine's `quote` of that price times the size
 // (R4); nothing here multiplies money.
 
-/** Lightsail block storage: 8 GB to 16,384 GB (the limits of the disk adapter in packages/aws). */
+/**
+ * Lightsail block storage: 8 GB to 16,000 GB per disk (the Lightsail quotas page,
+ * https://docs.aws.amazon.com/general/latest/gr/lightsail.html; the limits of the disk adapter in packages/aws).
+ */
 export const MIN_DISK_GB = 8;
-export const MAX_DISK_GB = 16_384;
+export const MAX_DISK_GB = 16_000;
 
 /** The only `aws_id` of the anchor row. The catalog sync never writes the family `disk`. */
 export const DISK_ANCHOR_AWS_ID = "block-storage-gb";

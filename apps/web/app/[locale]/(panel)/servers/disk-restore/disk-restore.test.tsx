@@ -24,7 +24,7 @@ const option = (over: Partial<DiskRestoreOption> = {}): DiskRestoreOption => ({
   sourceDestroyed: false,
   region: "ap-south-1",
   minGb: 100,
-  maxGb: 16384,
+  maxGb: 16000,
   productId: "0190bbbb-0000-7000-8000-000000000001",
   perGbMinor: 1250n,
   createdAt: new Date("2026-11-01T00:00:00Z"),

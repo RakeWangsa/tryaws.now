@@ -181,9 +181,12 @@ describe("disk adapter: create", () => {
   it("parseConfig refuses a size outside the Lightsail range", () => {
     const { adapter } = setup();
     const ok = { productId: null, region: "ap-southeast-1", displayName: "d" };
-    for (const sizeGb of [0, 7, 16385, 1.5, "32", undefined]) {
+    for (const sizeGb of [0, 7, 16001, 16384, 1.5, "32", undefined]) {
       expect(() => adapter.parseConfig({ ...ok, sizeGb })).toThrow();
     }
+    // The quotas page: 8 GB minimum, 16,000 GB maximum per block storage disk.
+    expect(adapter.parseConfig({ ...ok, sizeGb: 16000 })).toMatchObject({ sizeGb: 16000 });
+    expect(adapter.parseConfig({ ...ok, sizeGb: 8 })).toMatchObject({ sizeGb: 8 });
   });
 });
 

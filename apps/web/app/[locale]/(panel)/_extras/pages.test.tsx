@@ -177,7 +177,7 @@ describe("/servers/[id] with the tabs of WP5-T6", () => {
     expect(en).toContain('name="productId" value="0190aaaa-0000-7000-8000-0000000000d9"');
     expect(en).toContain('name="region" value="ap-south-1"');
     expect(en).toContain('name="serverId" value="0190aaaa-0000-7000-8000-0000000000a1"');
-    expect(en).toContain("A whole number from 8 to 16384 GB.");
+    expect(en).toContain("A whole number from 8 to 16000 GB.");
     expect(en).not.toContain("Buying a new disk is coming soon");
     const bn = await detailHtml("bn");
     expect(bn).toContain("নতুন ডিস্ক যোগ করুন");

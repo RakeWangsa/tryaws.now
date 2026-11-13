@@ -84,7 +84,7 @@ export function extras(over: Partial<ServerExtras> = {}): ServerExtras {
         autoRenew: { resourceId: FREE_DISK_ID, autoRenew: false, canTurnOn: true },
       },
     ],
-    diskOffer: { productId: "0190aaaa-0000-7000-8000-0000000000d9", minGb: 8, maxGb: 16384 },
+    diskOffer: { productId: "0190aaaa-0000-7000-8000-0000000000d9", minGb: 8, maxGb: 16000 },
     billing: {
       status: "active",
       periodStart: new Date("2026-11-01T00:00:00Z"),

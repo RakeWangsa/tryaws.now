@@ -21,7 +21,7 @@ it("has one active `disk` anchor row for each of the three launch Regions", asyn
       feature_flag: "disk",
       active: true,
     });
-    expect(row.specs).toEqual({ unit: "gb", minGb: 8, maxGb: 16384 });
+    expect(row.specs).toEqual({ unit: "gb", minGb: 8, maxGb: 16000 });
   }
 });
 

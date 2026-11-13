@@ -39,10 +39,14 @@ export interface DiskConfig {
 
 const REGION = /^[a-z]{2}-[a-z]+-\d$/;
 const DISPLAY_NAME = /^[A-Za-z0-9 ._-]{1,60}$/;
-// Lightsail block storage: 8 GB to 16,384 GB. VERIFY against the current quotas page.
+// WPU-Z19: Lightsail block storage, per the quotas page (https://docs.aws.amazon.com/general/latest/gr/lightsail.html,
+// read 2026-11-14): "Minimum block storage disk space ... 8 Gigabytes", "Maximum block storage disk space ... 16,000
+// Gigabytes" per disk, in each supported Region. 16,384 is on no AWS page.
 const MIN_GB = 8;
-const MAX_GB = 16_384;
-// The Linux device names Lightsail offers for an additional disk. VERIFY in tc-pool-dev.
+const MAX_GB = 16_000;
+// WPU-Z19: the AttachDisk `diskPath` value only (the API reference's example is /dev/xvdf). It is NOT the Linux device
+// name: on instances created after 2023-06-29 (all of this platform's) the extra disk shows as /dev/nvme1n1 and up, in
+// an order that is not guaranteed; the panel tells the customer to find it with lsblk. The range f-p: tc-pool-dev.
 const DISK_PATH = /^\/dev\/xvd[f-p]$/;
 const ATTACH_STATES = new Set(["active", "stopped"]);
 
