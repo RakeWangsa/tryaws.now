@@ -18,13 +18,14 @@ const code = (file) =>
 const alarms = code("infra/stacks/alarms.ts");
 const functions = raw("infra/lib/functions.ts");
 
-function eventsOfInfra() {
-  const block = functions.match(/export const ALERT_LOG_EVENTS = \{([\s\S]*?)\} as const;/);
-  expect(block).not.toBeNull();
+function constantsOfInfra(name) {
+  const block = functions.match(new RegExp(`export const ${name} = \\{([\\s\\S]*?)\\} as const;`));
+  expect(block, name).not.toBeNull();
   return Object.fromEntries(
     [...block[1].matchAll(/^\s*(\w+): "([a-z_]+)",?$/gm)].map((m) => [m[1], m[2]]),
   );
 }
+const eventsOfInfra = () => constantsOfInfra("ALERT_LOG_EVENTS");
 
 describe("the log events of the alerts exist in the code that writes them", () => {
   const events = eventsOfInfra();
@@ -32,6 +33,7 @@ describe("the log events of the alerts exist in the code that writes them", () =
     capacityReleaseProblem: "packages/core/capacity/release.ts",
     creditNoteStuck: "packages/core/invoices/credit-note.ts",
     fxRateStaleWarning: "packages/core/rates/fx-watch.ts",
+    lifecycleRenewalHeld: "packages/core/lifecycle/engine.ts",
     reconcileFindings: "functions/reconciler/reconcile.ts",
     reconcileIncomplete: "functions/reconciler/reconcile.ts",
     reconcileStaleOperations: "functions/reconciler/reconcile.ts",
@@ -50,6 +52,17 @@ describe("the log events of the alerts exist in the code that writes them", () =
     const literal = new RegExp(`event: "${name}"`).test(text);
     const constant = new RegExp(`= "${name}"`).test(text);
     expect(literal || constant, `${name} in ${file}`).toBe(true);
+  });
+
+  // WPU-Z1: an alert that matches a `reason` next to the event. The value is written by the same code, so a
+  // rename of either cannot silence the alarm.
+  it("every reason an alert matches is written by the code that writes its event", () => {
+    const reasons = constantsOfInfra("ALERT_LOG_REASONS");
+    const reasonWriters = { renewalPriceUnavailable: "packages/core/lifecycle/engine.ts" };
+    expect(Object.keys(reasons).sort()).toEqual(Object.keys(reasonWriters).sort());
+    for (const [key, file] of Object.entries(reasonWriters)) {
+      expect(raw(file), `${reasons[key]} in ${file}`).toContain(`reason: "${reasons[key]}"`);
+    }
   });
 
   it("the alerting lines carry severity alert (a person is meant to read them)", () => {
@@ -73,6 +86,7 @@ describe("infra/stacks/alarms.ts", () => {
       "CapacityReleaseAlarm",
       "CreditNoteStuckAlarm",
       "FxRateStaleAlarm",
+      "RenewalPriceHoldAlarm",
       "ReconcileBadAlarm",
       "ReconcileSilentAlarm",
     ]) {
@@ -82,6 +96,7 @@ describe("infra/stacks/alarms.ts", () => {
       "capacityReleaseProblem",
       "creditNoteStuck",
       "fxRateStaleWarning",
+      "lifecycleRenewalHeld",
       "reconcileFindings",
       "reconcileIncomplete",
       "reconcileStaleOperations",
@@ -97,6 +112,50 @@ describe("infra/stacks/alarms.ts", () => {
     expect(alarms).toMatch(/"CreditNoteStuckFilter", schedulerFunction/);
     expect(alarms).toMatch(/"FxRateStaleFilter", schedulerFunction/);
     expect(alarms).toMatch(/workers\.provisioner\?\.nodes\.function/);
+  });
+
+  // WPU-Z1: a renewal held because it could not be priced for another reason than the rate. The filter is on the
+  // scheduler's log group, matches the event AND the reason, and one line in 5 minutes alarms on the alarm topic.
+  it("alarms on one renewal held for a price that cannot be had (not the rate), from the scheduler's log", () => {
+    const at = alarms.indexOf('new aws.cloudwatch.LogMetricFilter("RenewalPriceHoldFilter"');
+    expect(at).toBeGreaterThan(-1);
+    const filter = alarms.slice(at, alarms.indexOf("metricTransformation", at));
+    expect(filter).toContain("logGroupName: $interpolate`/aws/lambda/${schedulerFunction?.name}`");
+    // The pattern, with the constants of infra/lib/functions.ts put in, is exactly the one of the task.
+    const template = filter.match(/pattern: `([^`]*)`/);
+    expect(template).not.toBeNull();
+    const events = eventsOfInfra();
+    const reasons = constantsOfInfra("ALERT_LOG_REASONS");
+    const pattern = template[1]
+      .replaceAll("${ALERT_LOG_EVENTS.lifecycleRenewalHeld}", events.lifecycleRenewalHeld)
+      .replaceAll("${ALERT_LOG_REASONS.renewalPriceUnavailable}", reasons.renewalPriceUnavailable);
+    expect(pattern).toBe(
+      '{ $.event = "lifecycle_renewal_held" && $.reason = "price_unavailable" }',
+    );
+    const transformation = alarms.slice(alarms.indexOf("metricTransformation", at));
+    expect(transformation).toMatch(
+      /^metricTransformation: \{ name: "RenewalPriceHold", namespace: ALERT_METRIC_NAMESPACE, value: "1", defaultValue: "0", \}/,
+    );
+    // The alarm is the shared alertAlarm: Sum over 300 seconds, one period, one line or more, to the topic.
+    expect(alarms).toMatch(/alertAlarm\( ?"RenewalPriceHoldAlarm", "RenewalPriceHold",/);
+    // `code` drops the comments: the helper ends where the next declaration of the file begins.
+    const shared = alarms.slice(
+      alarms.indexOf("const alertAlarm"),
+      alarms.indexOf("const provisionerFunction"),
+    );
+    expect(shared).toContain("new aws.cloudwatch.MetricAlarm(id,");
+    for (const part of [
+      'statistic: "Sum"',
+      "period: 300",
+      "evaluationPeriods: 1",
+      "threshold: 1",
+      'comparisonOperator: "GreaterThanOrEqualToThreshold"',
+      'treatMissingData: "notBreaching"',
+      "alarmActions: [topic.arn]",
+    ]) {
+      expect(shared, part).toContain(part);
+    }
+    expect(alarms).toMatch(/return \{[^}]*renewalPriceHoldAlarm,/);
   });
 
   it("alarms on silence: no reconcile run for three hours, missing data breaches", () => {
