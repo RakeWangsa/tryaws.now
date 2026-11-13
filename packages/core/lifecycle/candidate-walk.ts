@@ -20,10 +20,10 @@ export function compareCandidateKeys(a: CandidateKey, b: CandidateKey): number {
 }
 
 /**
- * The cursor of the page after `page`, or null when the walk is over: a page shorter than `pageSize` (an empty one
- * too) is the last. Every key of the page must be in the exact form of the list and strictly after the cursor and the
- * key before it, so the cursor only moves forward: no row is read twice or skipped by the cursor, and the walk ends.
- * A page that breaks this throws CandidateCursorError, short or not (R16).
+ * The cursor of the page after `page`, or null when the walk is over: a page shorter than `pageSize`, and an empty
+ * page whatever `pageSize` is, is the last. Every key of the page must be in the exact form of the list and strictly
+ * after the cursor and the key before it, so a cursor that is returned always moved forward: no row is read twice or
+ * skipped by the cursor, and the walk ends. A page that breaks this throws CandidateCursorError, short or not (R16).
  */
 export function nextCandidateCursor(
   after: CandidateKey | null,
@@ -37,7 +37,7 @@ export function nextCandidateCursor(
     }
     last = key;
   }
-  return page.length < pageSize ? null : last;
+  return page.length === 0 || page.length < pageSize ? null : last;
 }
 
 export interface CandidateWalk {

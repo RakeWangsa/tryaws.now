@@ -87,6 +87,12 @@ describe("the cursor of the next page (nextCandidateCursor)", () => {
     expect(nextCandidateCursor(null, [], 3)).toBeNull();
   });
 
+  it("an empty page ends the walk whatever the page size: a cursor that is not null always moved forward", () => {
+    for (const pageSize of [0, -1, Number.NaN]) {
+      expect(nextCandidateCursor(key(6), [], pageSize)).toBeNull();
+    }
+  });
+
   it("ties on the period end are broken by the id, so a page may end inside a tie", () => {
     expect(nextCandidateCursor(key(2), [key(3), key(4), key(1, LATER)], 3)).toEqual(key(1, LATER));
   });
