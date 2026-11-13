@@ -1,11 +1,6 @@
 import { expect, it } from "vitest";
-import {
-  databaseUrl,
-  databaseUrlFromEnv,
-  DATABASE_URL_ERROR,
-  envLinks,
-  LOCAL_DATABASE_URL,
-} from "../env";
+import { databaseUrl, databaseUrlFromEnv, DATABASE_URL_ERROR, LOCAL_DATABASE_URL } from "../env";
+import { envLinks } from "../links";
 
 // A password that URL syntax would break, and that must never appear in an error.
 const PASSWORD = "p@ss:w/ord#1?x";

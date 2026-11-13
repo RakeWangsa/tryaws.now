@@ -1,7 +1,7 @@
-import { Resource } from "sst/resource";
 import { expect, it } from "vitest";
 import { DB_PASSWORD_SECRET as INFRA_NAMES, DB_ROLES } from "../../infra/lib/functions";
-import { DB_PASSWORD_SECRETS, envLinks, MIGRATOR_ERROR, readMigratorConfig } from "./config";
+import { envLinks } from "@tc/db/links";
+import { DB_PASSWORD_SECRETS, MIGRATOR_ERROR, readMigratorConfig } from "./config";
 
 const MASTER_PASSWORD = "m@ster:pw/#1";
 const env = (over: Record<string, string | undefined> = {}) => {
@@ -88,8 +88,8 @@ it("does not read DATABASE_URL (a deploy never takes the master user from a vari
 });
 
 it("with its default links, the SST SDK, nothing linked fails with the fixed message (WPU-Z15)", () => {
-  // The SDK's own Resource throws for a name that is not linked; the reader must not pass it on.
-  expect(() => (Resource as unknown as Record<string, unknown>)["Postgres"]).toThrow();
+  // The SDK's own Resource throws for a name that is not linked (packages/db/test/links.test.ts); the
+  // reader must not pass it on.
   expect(() => readMigratorConfig({ MIGRATIONS_DIR: "/var/task/migrations" })).toThrow(
     new RegExp(`^${MIGRATOR_ERROR}$`),
   );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { Resource } from "sst/resource";
-import { envLinks, LOCAL_TEST_ONLY_RATE_KEY, rateSubject, resolveRateKey } from "./rate-subject.ts";
+import { envLinks } from "@tc/db/links";
+import { LOCAL_TEST_ONLY_RATE_KEY, rateSubject, resolveRateKey } from "./rate-subject.ts";
 
 const KEY = "k".repeat(40);
 const withSecret = (extra: Record<string, string | undefined> = {}) => ({
@@ -43,8 +43,8 @@ describe("resolveRateKey (R3, R16)", () => {
 
 describe("resolveRateKey with its default links, the SST SDK (WPU-Z15)", () => {
   it("nothing linked: the fixed refusal in a deployed stage, not the error of the SDK", () => {
-    // The SDK's own Resource throws for a name that is not linked; the reader must not pass it on.
-    expect(() => (Resource as unknown as Record<string, unknown>)["AdminIpLimitKey"]).toThrow();
+    // The SDK's own Resource throws for a name that is not linked (packages/db/test/links.test.ts); the
+    // reader must not pass it on.
     for (const stage of ["staging", "production", undefined]) {
       expect(() => resolveRateKey({ TC_STAGE: stage })).toThrow(
         /^admin: rate-limit key is not available$/,

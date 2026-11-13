@@ -2,7 +2,8 @@ import { createMemoryQueue, type OrdersDeps } from "@tc/core";
 import { describe, expect, it } from "vitest";
 import { assembleOrdersDeps } from "./orders-deps.ts";
 import type { WebConfig } from "./config.ts";
-import { envLinks, linkedSecrets } from "./secrets.ts";
+import { envLinks } from "@tc/db/links";
+import { linkedSecrets } from "./secrets.ts";
 
 const clock = { now: () => new Date("2026-11-12T00:00:00Z") };
 const run = (async () => {

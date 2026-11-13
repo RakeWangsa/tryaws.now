@@ -20,6 +20,8 @@ it("@tc/db has its migration scripts, its entry and its testing entry", () => {
     ".": "./index.ts",
     // WPU-I5: the one length rule of the buyer texts, light enough for packages/core to import without the driver.
     "./buyer-rules": "./repositories/customer/buyer-rules.ts",
+    // WPU-Z15: the one reader of linked SST values (sstLinks, envLinks, secretValue), without the driver.
+    "./links": "./links.ts",
     "./migrate": "./migrate.ts",
     "./testing": "./testing/index.ts",
   });

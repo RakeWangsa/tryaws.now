@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@tc/core": "workspace:*",
-    "@tc/db": "workspace:*",
-    "sst": "4.17.2"
+    "@tc/db": "workspace:*"
   }
 }

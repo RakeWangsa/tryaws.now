@@ -54,6 +54,7 @@ const EXPORTS = {
   "packages/db": {
     ".": "./index.ts",
     "./buyer-rules": "./repositories/customer/buyer-rules.ts",
+    "./links": "./links.ts",
     "./migrate": "./migrate.ts",
     "./testing": "./testing/index.ts",
   },

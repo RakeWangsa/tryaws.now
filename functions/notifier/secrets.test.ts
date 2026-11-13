@@ -1,6 +1,6 @@
-import { Resource } from "sst/resource";
+import { envLinks, sstLinks } from "@tc/db/links";
 import { expect, it } from "vitest";
-import { envLinks, linkedSecret, sstLinks } from "./secrets";
+import { linkedSecret } from "./secrets";
 
 // WPU-Z3: the reader of the two SMS secrets. Obviously fake values (R3). The links of these tests come
 // from the SST_RESOURCE_<Name> variables of an environment object (envLinks); the run-time path through
@@ -39,8 +39,8 @@ it("reads only the variable of the name it is asked for", () => {
 });
 
 it("the SST SDK, with nothing linked, gives undefined and not an error (WPU-Z15)", () => {
-  // The SDK's own Resource throws for a name that is not linked; the reader must not pass it on.
-  expect(() => (Resource as unknown as Record<string, unknown>)["SmsApiKey"]).toThrow();
+  // The SDK's own Resource throws for a name that is not linked (packages/db/test/links.test.ts); the
+  // reader must not pass it on.
   expect(linkedSecret(sstLinks, "SmsApiKey")).toBeUndefined();
   expect(linkedSecret(sstLinks, "SmsSenderId")).toBeUndefined();
 });

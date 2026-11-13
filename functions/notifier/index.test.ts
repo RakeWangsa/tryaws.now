@@ -1,7 +1,7 @@
 import { inspect } from "node:util";
 import { afterEach, expect, it, vi } from "vitest";
 import { handler, loadSesTransport, loadSmsProvider } from "./index";
-import { envLinks } from "./secrets";
+import { envLinks } from "@tc/db/links";
 import { NOTIFIER_CONFIG_ERROR } from "./config";
 
 afterEach(() => vi.unstubAllEnvs());

@@ -55,7 +55,8 @@ const FAKE = {
 async function load() {
   vi.resetModules();
   const runtime = await import("./runtime.ts");
-  const { envLinks, linkedSecrets } = await import("./secrets.ts");
+  const { envLinks } = await import("@tc/db/links");
+  const { linkedSecrets } = await import("./secrets.ts");
   const assembleRuntime = (env: Record<string, string | undefined>) =>
     runtime.assembleRuntime(env, linkedSecrets(envLinks(env)));
   return { ...runtime, assembleRuntime };

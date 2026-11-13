@@ -1,6 +1,6 @@
-import { Resource } from "sst/resource";
+import { envLinks } from "@tc/db/links";
 import { describe, expect, it } from "vitest";
-import { envLinks, linkedSecrets } from "./secrets.ts";
+import { linkedSecrets } from "./secrets.ts";
 
 // The links of these tests come from the SST_RESOURCE_<Name> variables of an environment object
 // (envLinks); the run-time path through the SST SDK is secrets-sst.test.ts (WPU-Z15).
@@ -56,8 +56,8 @@ describe("linkedSecrets", () => {
   });
 
   it("by default reads the SST SDK, which answers undefined, not an error, when nothing is linked", () => {
-    // The SDK's own Resource throws for a name that is not linked; the port must not (R16).
-    expect(() => (Resource as unknown as Record<string, unknown>)["EpsHashKey"]).toThrow();
+    // The SDK's own Resource throws for a name that is not linked (packages/db/test/links.test.ts); the
+    // port must not (R16).
     const source = linkedSecrets();
     for (const name of ["EpsHashKey", "OtpHashKey", "SmsApiKey"] as const) {
       expect(source(name)).toBeUndefined();

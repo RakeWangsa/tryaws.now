@@ -1,4 +1,4 @@
-import { Resource } from "sst/resource";
+import { secretValue, sstLinks, type LinkSource } from "@tc/db/links";
 
 // The configuration of the migrator, read from the environment of the Lambda and its links. The master
 // user comes from the linked Postgres component (host, port, username, password, database) and the
@@ -7,7 +7,8 @@ import { Resource } from "sst/resource";
 //
 // WPU-Z15: at run time the links are read through the SST SDK. SST 4.17.2 hands a deployed function
 // its links only in an encrypted file (SST_KEY_FILE, SST_KEY), which the SDK's Resource decrypts; only
-// `sst dev` sets the variables SST_RESOURCE_<Name>.
+// `sst dev` sets the variables SST_RESOURCE_<Name>. The links are read through @tc/db/links, the one
+// reader of linked values.
 
 export const MIGRATOR_ERROR = "migrator: the configuration is not valid";
 
@@ -33,35 +34,6 @@ type Env = Readonly<Record<string, string | undefined>>;
 
 const HOST = /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/;
 const NAME = /^[A-Za-z0-9_]{1,63}$/;
-
-/** The properties of one linked SST resource; undefined when it is not linked or cannot be read. */
-export type LinkSource = (name: string) => unknown;
-
-// The links at run time. A name that is not linked, or links that cannot be loaded (a malformed
-// variable, a file that does not decrypt), give undefined. The error is dropped unread: its text may
-// quote the input (R3, R14).
-export const sstLinks: LinkSource = (name) => {
-  try {
-    const links = Resource as unknown as Readonly<Record<string, unknown>>;
-    return name in links ? links[name] : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-// Tests: the same links as the variables SST_RESOURCE_<Name> of an environment object, each the JSON
-// of one link (the form of `sst dev`).
-export function envLinks(env: Env): LinkSource {
-  return (name) => {
-    const raw = env[`SST_RESOURCE_${name}`];
-    if (typeof raw !== "string") return undefined;
-    try {
-      return JSON.parse(raw) as unknown;
-    } catch {
-      return undefined;
-    }
-  };
-}
 
 function linked(links: LinkSource, name: string): Record<string, unknown> | undefined {
   const link = links(name);
@@ -101,7 +73,7 @@ export function readMigratorConfig(env: Env, links: LinkSource = sstLinks): Migr
 
   const rolePasswords = {} as Record<RoleName, string>;
   for (const [role, secret] of Object.entries(DB_PASSWORD_SECRETS) as [RoleName, string][]) {
-    const value = text(linked(links, secret)?.value);
+    const value = secretValue(links(secret));
     if (value === undefined) return fail();
     rolePasswords[role] = value;
   }

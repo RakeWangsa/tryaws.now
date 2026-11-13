@@ -12,7 +12,8 @@ import type { NotifierReport, SesTransport, SmsProvider } from "@tc/notify";
 import { withTx } from "@tc/db";
 import { buildNotifierHandler, type LambdaContextLike } from "./build";
 import { readNotifierConfig } from "./config";
-import { linkedSecret, sstLinks, type LinkSource } from "./secrets";
+import { sstLinks, type LinkSource } from "@tc/db/links";
+import { linkedSecret } from "./secrets";
 import { sesTransportFromEnv } from "./ses";
 
 export { createNotifierHandler, STOP_MARGIN_MS } from "./handler";
