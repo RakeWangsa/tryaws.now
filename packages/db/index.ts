@@ -463,6 +463,7 @@ export { meteringRepo } from "./repositories/system/metering";
 export type {
   DetachedIpRow,
   MeteringRepo,
+  ResourceOpRow,
   TransferRow,
   UnpaidFlagKey,
   UnpaidResourceRow,

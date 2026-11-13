@@ -1,4 +1,10 @@
-import type { LifecycleRow, SubscriptionStatus, Tx, UnpaidResourceRow } from "@tc/db";
+import type {
+  LifecycleRow,
+  ResourceOpRow,
+  SubscriptionStatus,
+  Tx,
+  UnpaidResourceRow,
+} from "@tc/db";
 import { describe, expect, it } from "vitest";
 import type { Notice } from "../lifecycle/notice";
 import { R13_APPROVAL_UNTIL } from "../lifecycle/unpaid";
@@ -45,6 +51,20 @@ interface World {
   finalBackups: string[];
   ipPrice: StaticIpPrice | null;
   opStates: Record<string, string>;
+  deletedAt: Date | null;
+  /** WPU-Y3c. Operations that exist before the run (an admin suspend, a retention destroy, ...). */
+  seed: Seed[];
+  /** WPU-Y3c. Operations whose cancel loses the race (they started in the meantime). */
+  cancelLoses: string[];
+}
+
+interface Seed {
+  key: string;
+  kind: string;
+  state: string;
+  approved?: boolean;
+  attempts?: number;
+  at?: number;
 }
 
 function build(init: Partial<World> = {}) {
@@ -62,10 +82,27 @@ function build(init: Partial<World> = {}) {
     finalBackups: [],
     ipPrice: null,
     opStates: {},
+    deletedAt: null,
+    seed: [],
+    cancelLoses: [],
     ...init,
   };
   const posted = new Map<string, PostTransactionInput>();
-  const ops = new Map<string, { kind: string; state: string }>();
+  const ops = new Map<
+    string,
+    { kind: string; state: string; approved: boolean; attempts: number; at: number }
+  >();
+  let seq = 0;
+  const cancelled: string[] = [];
+  w.seed.forEach((o, i) =>
+    ops.set(o.key, {
+      kind: o.kind,
+      state: o.state,
+      approved: o.approved ?? false,
+      attempts: o.attempts ?? 0,
+      at: o.at ?? 1000 + i,
+    }),
+  );
   const notices = new Map<string, Notice>();
   const keys: string[] = [];
   const calls = {
@@ -76,6 +113,7 @@ function build(init: Partial<World> = {}) {
     chargedQueries: 0,
     episode: undefined as number | undefined,
     balanceReads: 0,
+    superseded: 0,
   };
   const fake: UnpaidOps = {
     enabled: async () => w.enabled,
@@ -106,7 +144,12 @@ function build(init: Partial<World> = {}) {
         periodEnd: w.periodEnd,
         autoRenew: true,
         status: w.status,
-        resource: { family: w.family, state: w.state, config: { ...w.config }, deletedAt: null },
+        resource: {
+          family: w.family,
+          state: w.state,
+          config: { ...w.config },
+          deletedAt: w.deletedAt,
+        },
       }) satisfies LifecycleRow,
     usage: async (_tx, _r, _m, from, to) =>
       w.usage.filter((u) => u.period >= from && u.period <= to),
@@ -127,7 +170,37 @@ function build(init: Partial<World> = {}) {
       calls.balanceReads += 1;
       return w.balance;
     },
-    supersedeFinal: async () => w.finalBackups,
+    supersedeFinal: async () => {
+      calls.superseded += 1;
+      return w.finalBackups;
+    },
+    resourceOps: async (_tx, _r, kinds) =>
+      [...ops.entries()]
+        .filter(([, o]) => kinds.includes(o.kind as never))
+        .map(([key, o]): ResourceOpRow => ({
+          id: key,
+          kind: o.kind,
+          key,
+          state: o.state,
+          approved: o.approved,
+          attempts: o.attempts,
+          createdAtMs: o.at,
+        })),
+    cancel: async (_tx, id) => {
+      const o = ops.get(id);
+      if (
+        o === undefined ||
+        w.cancelLoses.includes(id) ||
+        !["queued", "needs_approval"].includes(o.state) ||
+        o.approved ||
+        o.attempts > 0
+      ) {
+        return false;
+      }
+      o.state = "failed";
+      cancelled.push(id);
+      return true;
+    },
     post: async (_tx, input): Promise<Result<{ transactionId: string }>> => {
       if (posted.has(input.idempotencyKey)) return { ok: true, value: { transactionId: "x" } };
       const wallet = input.postings.find((p) => p.account.type === "customer_wallet")!;
@@ -165,7 +238,14 @@ function build(init: Partial<World> = {}) {
         input.kind === "destroy" && w.approvalUntil && NOW < w.approvalUntil
           ? "needs_approval"
           : "queued";
-      ops.set(input.key, { kind: input.kind, state });
+      seq += 1;
+      ops.set(input.key, {
+        kind: input.kind,
+        state,
+        approved: false,
+        attempts: 0,
+        at: Date.now() + seq,
+      });
       keys.push(input.key);
       return { operationId: "0190e000-0000-7000-8000-000000000001", created: true, state };
     },
@@ -177,10 +257,20 @@ function build(init: Partial<World> = {}) {
       calls.retain += 1;
       calls.episode = episode;
       w.status = "retained";
-      ops.set(`lifecycle:final-snapshot:${row.id}`, { kind: "final_snapshot", state: "queued" });
+      seq += 1;
+      ops.set(`lifecycle:final-snapshot:${row.id}`, {
+        kind: "final_snapshot",
+        state: "queued",
+        approved: false,
+        attempts: 0,
+        at: Date.now() + seq,
+      });
       ops.set(`lifecycle:destroy:${row.id}`, {
         kind: "destroy",
         state: w.approvalUntil && NOW < w.approvalUntil ? "needs_approval" : "queued",
+        approved: false,
+        attempts: 0,
+        at: Date.now() + seq,
       });
       return [];
     },
@@ -197,7 +287,7 @@ function build(init: Partial<World> = {}) {
       },
       ops: fake,
     });
-  return { w, run, posted, ops, notices, calls, logs, keys };
+  return { w, run, posted, ops, notices, calls, logs, keys, cancelled };
 }
 
 // Every Dhaka day that ended between two ISO days, as usage rows of 30 GB.
@@ -746,64 +836,373 @@ describe("the unpaid static IP hours stay in the mark (finding 3)", () => {
   });
 });
 
-// Finding 4 (MEDIUM).
-describe("a suspend that has not run yet when the customer pays (finding 4)", () => {
-  it("queues the resume anyway (it runs after the suspend) and ends the episode", async () => {
+// Finding 4 (MEDIUM), reworked by WPU-Y3c (security review, suspension bypass).
+const OWN = (n: number) => `unpaid:suspend:${RES}:${sinceMs(since(2 * DAY))}:${n}`;
+
+describe("a suspend of the job that has not run yet when the customer pays (WPU-Y3c, 1)", () => {
+  it("cancels its own queued suspend and queues no resume", async () => {
     const t = build({
       state: "active", // the suspend is queued, not done
+      seed: [{ key: OWN(1), kind: "suspend", state: "queued" }],
       config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
       usage: days("2026-11-15", "2026-11-19"),
       balance: 100_000n,
     });
     const report = await t.run();
-    expect(report.resumed).toBe(1);
-    expect([...t.ops.values()].map((o) => o.kind)).toEqual(["resume"]);
+    expect(t.cancelled).toEqual([OWN(1)]);
+    expect(report.suspendsCancelled).toBe(1);
+    expect(report.resumed).toBe(0);
+    expect(t.keys.some((k) => k.startsWith("unpaid:resume:"))).toBe(false);
     expect(t.w.config.unpaidSince).toBeUndefined();
+  });
+
+  it("cancels every day's queued suspend of the episode", async () => {
+    const t = build({
+      state: "active",
+      seed: [
+        { key: OWN(1), kind: "suspend", state: "queued" },
+        { key: OWN(2), kind: "suspend", state: "queued" },
+      ],
+      config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    await t.run();
+    expect(t.cancelled.sort()).toEqual([OWN(1), OWN(2)]);
+    expect(t.ops.size).toBe(2); // the two (failed) suspends; no resume
+  });
+
+  it("queues the resume when the suspend started in the meantime (the cancel lost the race)", async () => {
+    const t = build({
+      state: "active",
+      seed: [{ key: OWN(1), kind: "suspend", state: "queued" }],
+      cancelLoses: [OWN(1)],
+      config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([]);
+    expect(report.resumed).toBe(1);
+    expect(t.keys.filter((k) => k.startsWith("unpaid:resume:"))).toHaveLength(1);
+  });
+
+  it("queues the resume (after it) when its own suspend is running", async () => {
+    const t = build({
+      state: "active",
+      seed: [{ key: OWN(1), kind: "suspend", state: "running" }],
+      config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([]);
+    expect(report.resumed).toBe(1);
   });
 
   it("does the same when the suspend already ran in the meantime", async () => {
     const t = build({
       state: "suspended",
+      seed: [{ key: OWN(1), kind: "suspend", state: "succeeded" }],
       config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
       usage: days("2026-11-15", "2026-11-19"),
       balance: 100_000n,
     });
     await t.run();
-    expect([...t.ops.values()].map((o) => o.kind)).toEqual(["resume"]);
+    expect(t.keys.filter((k) => k.startsWith("unpaid:resume:"))).toHaveLength(1);
+  });
+
+  it("queues no resume for a flag without a suspend (nothing to undo)", async () => {
+    const t = build({
+      state: "active",
+      config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
+      usage: days("2026-11-15", "2026-11-19"),
+      balance: 100_000n,
+    });
+    const report = await t.run();
+    expect(report.resumed).toBe(0);
+    expect(t.ops.size).toBe(0);
+  });
+
+  it("needs a subscription that is active and not past its period end, also for an unfinished suspend", async () => {
+    for (const extra of [
+      { status: "grace" as const },
+      { periodEnd: new Date("2026-11-19T00:00:00Z") },
+    ]) {
+      const t = build({
+        state: "active",
+        seed: [{ key: OWN(1), kind: "suspend", state: "running" }],
+        config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
+        usage: days("2026-11-15", "2026-11-19"),
+        balance: 100_000n,
+        ...extra,
+      });
+      const report = await t.run();
+      expect(report.resumed).toBe(0);
+      expect(t.keys.some((k) => k.startsWith("unpaid:resume:"))).toBe(false);
+      expect(t.w.config.unpaidSince).toBeUndefined();
+    }
   });
 });
 
-// Finding 5 (MEDIUM).
-describe("the final snapshot after a payment that came after day 7 (finding 5)", () => {
-  it("is no longer a final snapshot and its removal is queued (R13 approval applies at insert)", async () => {
-    const t = build({
-      state: "suspended",
-      status: "retained",
-      finalBackups: ["0190f000-0000-7000-8000-000000000001"],
-      config: {
-        unpaidSince: since(9 * DAY),
-        unpaidSuspended: true,
-        unpaidRetained: true,
-        unpaidRetainedFrom: "active",
-      },
-      usage: days("2026-11-10", "2026-11-19"),
-      balance: 100_000n,
-    });
-    await t.run();
-    expect(t.keys).toContain("unpaid:final-delete:0190f000-0000-7000-8000-000000000001");
-    expect([...t.ops.values()].map((o) => o.kind).sort()).toEqual(["delete_backup", "resume"]);
+describe("another suspend of the resource is never undone by the payment (WPU-Y3c, 1)", () => {
+  // a fresh config for each test: the fake world edits it
+  const base = () => ({
+    config: { unpaidSince: since(2 * DAY), unpaidSuspended: true } as Record<string, unknown>,
+    usage: days("2026-11-15", "2026-11-19"),
+    balance: 100_000n,
+  });
+  const admin = (state: string) => ({
+    key: "abuse-suspend:0190c000-0000-7000-8000-000000000001",
+    kind: "suspend",
+    state,
   });
 
-  it("queues nothing for a subscription that was not retained by this job", async () => {
+  it("an admin suspend that is queued: own queued suspend is cancelled, no resume", async () => {
+    const t = build({
+      ...base(),
+      state: "active",
+      seed: [{ key: OWN(1), kind: "suspend", state: "queued" }, admin("queued")],
+    });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([OWN(1)]);
+    expect(report.resumed).toBe(0);
+    expect(t.keys.some((k) => k.startsWith("unpaid:resume:"))).toBe(false);
+  });
+
+  it.each(["queued", "running", "waiting", "needs_attention"])(
+    "an admin suspend that is %s blocks the resume of a suspended resource",
+    async (state) => {
+      const t = build({ ...base(), state: "suspended", seed: [admin(state)] });
+      const report = await t.run();
+      expect(report.resumed).toBe(0);
+      expect(t.ops.size).toBe(1);
+      expect(t.w.config.unpaidSince).toBeUndefined();
+    },
+  );
+
+  it("an admin suspend that is done and not resumed blocks the resume", async () => {
+    const t = build({ ...base(), state: "suspended", seed: [admin("succeeded")] });
+    expect((await t.run()).resumed).toBe(0);
+  });
+
+  it("an admin suspend that was resumed afterwards does not block", async () => {
+    const t = build({
+      ...base(),
+      state: "suspended",
+      seed: [
+        { ...admin("succeeded"), at: 10 },
+        { key: "abuse-resume:1", kind: "resume", state: "succeeded", at: 20 },
+      ],
+    });
+    expect((await t.run()).resumed).toBe(1);
+  });
+
+  it("a resume that is older than the admin suspend does not lift it", async () => {
+    const t = build({
+      ...base(),
+      state: "suspended",
+      seed: [
+        { key: "abuse-resume:1", kind: "resume", state: "succeeded", at: 10 },
+        { ...admin("succeeded"), at: 20 },
+      ],
+    });
+    expect((await t.run()).resumed).toBe(0);
+  });
+
+  it("a failed admin suspend does not block", async () => {
+    const t = build({ ...base(), state: "suspended", seed: [admin("failed")] });
+    expect((await t.run()).resumed).toBe(1);
+  });
+
+  it("a queued lifecycle suspend blocks; a done one (the grace of an earlier period) does not", async () => {
+    const life = (state: string) => ({
+      key: `lifecycle:suspend:${SUB}:2026-11-01T00:00:00.000Z`,
+      kind: "suspend",
+      state,
+    });
+    const blocked = build({ ...base(), state: "suspended", seed: [life("queued")] });
+    expect((await blocked.run()).resumed).toBe(0);
+    const free = build({ ...base(), state: "suspended", seed: [life("succeeded")] });
+    expect((await free.run()).resumed).toBe(1);
+  });
+
+  it("a suspend of an unknown origin that is done and not resumed blocks (R16)", async () => {
+    const t = build({
+      ...base(),
+      state: "suspended",
+      seed: [{ key: "something:else", kind: "suspend", state: "succeeded" }],
+    });
+    expect((await t.run()).resumed).toBe(0);
+  });
+
+  it("never cancels a suspend that is not its own", async () => {
+    const t = build({ ...base(), state: "active", seed: [admin("queued")] });
+    await t.run();
+    expect(t.cancelled).toEqual([]);
+  });
+
+  it("the cancel of its own suspend is a replay on a second run (R7)", async () => {
+    const t = build({
+      ...base(),
+      state: "active",
+      seed: [{ key: OWN(1), kind: "suspend", state: "queued" }],
+    });
+    await t.run();
+    // the episode is cleared; a second run finds nothing to do
+    const again = await t.run();
+    expect(again.examined).toBe(0);
+    expect(t.cancelled).toEqual([OWN(1)]);
+  });
+});
+
+// Finding 5 (MEDIUM), reworked by WPU-Y3c (security review, R13).
+const FINAL = "0190f000-0000-7000-8000-000000000001";
+const retainedPaid = (extra: Partial<World> = {}) =>
+  build({
+    state: "suspended",
+    status: "retained",
+    finalBackups: [FINAL],
+    config: {
+      unpaidSince: since(9 * DAY),
+      unpaidSuspended: true,
+      unpaidRetained: true,
+      unpaidRetainedFrom: "active",
+    },
+    usage: days("2026-11-10", "2026-11-19"),
+    balance: 100_000n,
+    ...extra,
+  });
+const DESTROY = `lifecycle:destroy:${SUB}:2026-12-20T00:00:00.000Z`;
+const DESTROY_SALTED = `${DESTROY}:u${sinceMs(since(9 * DAY))}`;
+
+describe("the final snapshot after a payment that came after day 7 (WPU-Y3c, 2)", () => {
+  it("never queues a delete_backup: the deletion is left to the customer or an approved admin", async () => {
+    const t = retainedPaid();
+    const report = await t.run();
+    expect(t.keys.some((k) => k.startsWith("unpaid:final-delete:"))).toBe(false);
+    expect([...t.ops.values()].some((o) => o.kind === "delete_backup")).toBe(false);
+    expect(report.finalReleased).toBe(1);
+  });
+
+  it("with no destroy at all (never ran): the flag is cleared", async () => {
+    const t = retainedPaid();
+    await t.run();
+    expect(t.calls.superseded).toBe(1);
+  });
+
+  it.each([
+    ["needs_approval", "waiting for an admin"],
+    ["queued", "queued after the R13 date"],
+  ])("a destroy that is %s (%s) is cancelled first, then the flag is cleared", async (state) => {
+    const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state }] });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([DESTROY]);
+    expect(t.calls.superseded).toBe(1);
+    expect(report.finalReleased).toBe(1);
+    expect(report.finalHeld).toBe(0);
+  });
+
+  it("looks at the episode-salted destroy too", async () => {
+    const t = retainedPaid({
+      seed: [
+        { key: DESTROY, kind: "destroy", state: "failed" },
+        { key: DESTROY_SALTED, kind: "destroy", state: "succeeded" },
+      ],
+    });
+    const report = await t.run();
+    expect(t.calls.superseded).toBe(0);
+    expect(report.finalHeld).toBe(1);
+  });
+
+  it.each(["running", "waiting", "succeeded", "needs_attention"])(
+    "a destroy that is %s stops it: the flag stays, nothing is deleted",
+    async (state) => {
+      const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state }] });
+      const report = await t.run();
+      expect(t.cancelled).toEqual([]);
+      expect(t.calls.superseded).toBe(0);
+      expect(report.finalReleased).toBe(0);
+      expect(report.finalHeld).toBe(1);
+      expect(t.keys.some((k) => k.startsWith("unpaid:final-delete:"))).toBe(false);
+    },
+  );
+
+  it("an approved destroy stops it, even when it is only queued", async () => {
+    const t = retainedPaid({
+      seed: [{ key: DESTROY, kind: "destroy", state: "queued", approved: true }],
+    });
+    const report = await t.run();
+    expect(t.cancelled).toEqual([]);
+    expect(t.calls.superseded).toBe(0);
+    expect(report.finalHeld).toBe(1);
+  });
+
+  it("a destroy that failed after it ran stops it (partial destroy, R16)", async () => {
+    const t = retainedPaid({
+      seed: [{ key: DESTROY, kind: "destroy", state: "failed", attempts: 2 }],
+    });
+    const report = await t.run();
+    expect(t.calls.superseded).toBe(0);
+    expect(report.finalHeld).toBe(1);
+  });
+
+  it("a destroy that failed without ever running (or was cancelled) lets it go on", async () => {
+    const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state: "failed" }] });
+    const report = await t.run();
+    expect(t.calls.superseded).toBe(1);
+    expect(report.finalReleased).toBe(1);
+  });
+
+  it("a destroy whose cancel loses the race stops it", async () => {
+    const t = retainedPaid({
+      seed: [{ key: DESTROY, kind: "destroy", state: "queued" }],
+      cancelLoses: [DESTROY],
+    });
+    const report = await t.run();
+    expect(t.calls.superseded).toBe(0);
+    expect(report.finalHeld).toBe(1);
+  });
+
+  it("a resource in a state that is not live is not touched", async () => {
+    const t = retainedPaid({ state: "destroyed" });
+    await t.run();
+    expect(t.calls.superseded).toBe(0);
+  });
+
+  it("stops when the resource has a deletion time", async () => {
+    const t = retainedPaid({ deletedAt: new Date("2026-11-19T00:00:00Z") });
+    const report = await t.run();
+    expect(t.calls.superseded).toBe(0);
+    expect(report.finalHeld).toBe(1);
+  });
+
+  it("still ends the episode and restores the status when it is held", async () => {
+    const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state: "running" }] });
+    await t.run();
+    expect(t.calls.setStatus).toEqual(["active"]);
+    expect(t.w.config.unpaidSince).toBeUndefined();
+  });
+
+  it("a second run does nothing new", async () => {
+    const t = retainedPaid({ seed: [{ key: DESTROY, kind: "destroy", state: "needs_approval" }] });
+    await t.run();
+    const again = await t.run();
+    expect(again.examined).toBe(0);
+    expect(t.cancelled).toEqual([DESTROY]);
+  });
+
+  it("does nothing for a subscription that was not retained by this job", async () => {
     const t = build({
       state: "suspended",
       status: "active",
-      finalBackups: ["0190f000-0000-7000-8000-000000000001"],
+      finalBackups: [FINAL],
       config: { unpaidSince: since(2 * DAY), unpaidSuspended: true },
       usage: days("2026-11-15", "2026-11-19"),
       balance: 100_000n,
     });
     await t.run();
+    expect(t.calls.superseded).toBe(0);
     expect(t.keys.some((k) => k.startsWith("unpaid:final-delete:"))).toBe(false);
   });
 });

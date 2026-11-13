@@ -46,6 +46,22 @@ export interface UnpaidResourceRow {
   readonly unpaidSince: Date | null;
 }
 
+/**
+ * WPU-Y3c. One operation of a resource as the unpaid job reads it: enough to tell its own suspend from
+ * another one, and a destroy that ran (or is approved) from one that never did.
+ */
+export interface ResourceOpRow {
+  readonly id: string;
+  readonly kind: string;
+  readonly key: string;
+  readonly state: string;
+  /** An admin approved it (`approved_by` is set). */
+  readonly approved: boolean;
+  readonly attempts: number;
+  /** `created_at` in ms: the order in which the provisioner takes operations of one resource. */
+  readonly createdAtMs: number;
+}
+
 export type UnpaidFlagKey = "unpaidSuspended" | "unpaidRetained" | "unpaidRetainedFrom";
 
 // A Dhaka hour bucket as the static IP charge keys it: YYYY-MM-DDTHH.
@@ -262,6 +278,56 @@ export function meteringRepo(tx: Tx) {
           and config ->> 'final' = 'true' and state <> 'destroyed'
         returning id`);
       return rows.map((r) => r.id);
+    },
+
+    // WPU-Y3c. The operations of one resource of the given kinds, oldest first (the order the provisioner
+    // takes them). Read only; worker_rw may SELECT operations.
+    async operationsOf(resourceId: string, kinds: readonly string[]): Promise<ResourceOpRow[]> {
+      if (!isUuid(resourceId)) throw new TypeError("metering: resourceId is not a UUID");
+      if (kinds.length === 0 || kinds.length > 10 || !kinds.every((k) => METRIC.test(k))) {
+        throw new TypeError("metering: the operation kinds have the wrong form");
+      }
+      const { rows } = await tx.execute<{
+        id: string;
+        kind: string;
+        key: string;
+        state: string;
+        approved: boolean;
+        attempts: number;
+        created_ms: string;
+      }>(sql`
+        select id, kind, idempotency_key as key, state, (approved_by is not null) as approved,
+          attempts, (extract(epoch from created_at) * 1000)::bigint::text as created_ms
+        from operations
+        where resource_id = ${resourceId} and kind in (${sql.join(
+          kinds.map((k) => sql`${k}`),
+          sql`, `,
+        )})
+        order by created_at, id limit 500`);
+      return rows.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        key: r.key,
+        state: r.state,
+        approved: r.approved,
+        attempts: Number(r.attempts),
+        createdAtMs: Number(r.created_ms),
+      }));
+    },
+
+    // WPU-Y3c. The system-level cancel: an operation that has not started (queued, or waiting for
+    // approval that nobody gave) becomes `failed` (final) with a fixed note. One conditional UPDATE, so
+    // an operation that the provisioner claimed in the meantime, or that an admin approved, is left
+    // alone (returns false) and a second call changes nothing (R7). The unique idempotency key stays, so
+    // the same request can never queue the work again. worker_rw may update state and last_error.
+    async cancelUnstarted(operationId: string): Promise<boolean> {
+      if (!isUuid(operationId)) throw new TypeError("metering: operationId is not a UUID");
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        update operations set state = 'failed', last_error = 'cancelled: the unpaid usage was paid'
+        where id = ${operationId} and state in ('queued', 'needs_approval')
+          and approved_by is null and attempts = 0
+        returning id`);
+      return rows.length === 1;
     },
 
     // WPU-Y3. The resources that still exist on AWS and have an unpaid charge, in id order after
