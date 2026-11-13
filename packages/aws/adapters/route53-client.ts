@@ -2,6 +2,7 @@ import {
   ChangeResourceRecordSetsCommand,
   CreateHostedZoneCommand,
   DeleteHostedZoneCommand,
+  GetChangeCommand,
   GetHostedZoneCommand,
   ListHostedZonesByNameCommand,
   ListResourceRecordSetsCommand,
@@ -113,6 +114,16 @@ function fail(error: unknown, operation: string): AwsError {
 const isCode = (error: unknown, code: string): boolean =>
   error instanceof AwsError && error.code === code;
 
+// WPU-Z19: the id of a change, as GetChange takes it.
+const CHANGE_ID = /^[A-Z0-9]{1,32}$/;
+
+/** ChangeInfo.Id without "/change/"; null when the answer has none that is well formed. */
+function changeIdOf(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const id = raw.startsWith("/change/") ? raw.slice("/change/".length) : raw;
+  return CHANGE_ID.test(id) ? id : null;
+}
+
 function plainId(raw: unknown, operation: string): string {
   if (typeof raw !== "string") throw invalidAnswer(operation);
   const id = raw.startsWith("/hostedzone/") ? raw.slice("/hostedzone/".length) : raw;
@@ -215,7 +226,7 @@ export function createRoute53Port(client: Route53Like | Route53Client): Route53P
         throw validation("CreateHostedZone");
       }
       try {
-        const out = await send<Parameters<typeof zoneOf>[0]>(
+        const out = await send<Parameters<typeof zoneOf>[0] & { ChangeInfo?: { Id?: string } }>(
           new CreateHostedZoneCommand({
             Name: name.value,
             CallerReference: input.callerReference,
@@ -223,7 +234,11 @@ export function createRoute53Port(client: Route53Like | Route53Client): Route53P
           }),
           "CreateHostedZone",
         );
-        return { zone: zoneOf(out, "CreateHostedZone"), created: true };
+        return {
+          zone: zoneOf(out, "CreateHostedZone"),
+          created: true,
+          changeId: changeIdOf(out.ChangeInfo?.Id),
+        };
       } catch (error) {
         // The reference was used: the first call made the zone. Find it by its name and its generated
         // comment (the comment is unique per resource), or fail closed.
@@ -239,8 +254,20 @@ export function createRoute53Port(client: Route53Like | Route53Client): Route53P
         }
         const zone = await getZone((mine[0] as { id: string }).id);
         if (zone === null) throw invalidAnswer("CreateHostedZone");
-        return { zone, created: false };
+        return { zone, created: false, changeId: null };
       }
+    },
+
+    async getChangeStatus(changeId) {
+      if (typeof changeId !== "string" || !CHANGE_ID.test(changeId)) throw validation("GetChange");
+      const out = await send<{ ChangeInfo?: { Status?: string } }>(
+        new GetChangeCommand({ Id: changeId }),
+        "GetChange",
+      );
+      const status = out.ChangeInfo?.Status;
+      if (status === "PENDING") return "pending";
+      if (status === "INSYNC") return "insync";
+      throw invalidAnswer("GetChange");
     },
 
     async getHostedZone(hostedZoneId) {

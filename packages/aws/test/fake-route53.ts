@@ -8,6 +8,8 @@ const key = (s: { name: string; type: string }): string => `${s.name.toLowerCase
 export function createFakeRoute53() {
   const zones = new Map<string, { zone: R53Zone; ref: string; sets: Map<string, R53RecordSet> }>();
   const calls: { op: string; detail?: unknown }[] = [];
+  /** WPU-Z19: the changes of CreateHostedZone and their GetChange status (INSYNC unless a test says PENDING). */
+  const changes = new Map<string, "pending" | "insync">();
   let next = 1;
 
   const find = (id: string) => {
@@ -20,7 +22,8 @@ export function createFakeRoute53() {
     async createHostedZone(input) {
       calls.push({ op: "createHostedZone", detail: { callerReference: input.callerReference } });
       for (const z of zones.values()) {
-        if (z.ref === input.callerReference) return { zone: z.zone, created: false };
+        if (z.ref === input.callerReference)
+          return { zone: z.zone, created: false, changeId: null };
       }
       const id = `Z${String(next++).padStart(6, "0")}`;
       const zone: R53Zone = {
@@ -44,7 +47,15 @@ export function createFakeRoute53() {
       sets.set(key(ns), ns);
       sets.set(key(soa), soa);
       zones.set(id, { zone, ref: input.callerReference, sets });
-      return { zone, created: true };
+      const changeId = `C${id}`;
+      changes.set(changeId, "insync");
+      return { zone, created: true, changeId };
+    },
+    async getChangeStatus(changeId) {
+      calls.push({ op: "getChangeStatus", detail: changeId });
+      const status = changes.get(changeId);
+      if (status === undefined) throw new AwsError({ code: "not_found", retryable: false });
+      return status;
     },
     async getHostedZone(id) {
       calls.push({ op: "getHostedZone" });
@@ -93,6 +104,7 @@ export function createFakeRoute53() {
     port,
     calls,
     zones,
+    changes,
     /** Puts a set in a zone without going through the adapter. */
     seed(id: string, set: R53RecordSet) {
       find(id).sets.set(key(set), set);

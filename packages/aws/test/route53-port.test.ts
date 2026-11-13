@@ -41,16 +41,23 @@ const hostedZone = (id = "Z0TESTZONE1", name = "shop.example.") => ({
 });
 
 describe("createHostedZone", () => {
-  it("creates a public zone with a generated reference and comment, and returns the id and name servers", async () => {
-    const { port, calls } = fake({ CreateHostedZone: () => hostedZone() });
+  it("creates a public zone with a generated reference and comment, and returns the id, name servers and change", async () => {
+    const { port, calls } = fake({
+      CreateHostedZone: () => ({
+        ...hostedZone(),
+        ChangeInfo: { Id: "/change/C0CHANGE1", Status: "PENDING" },
+      }),
+    });
     const out = await port.createHostedZone({
       name: "shop.example",
       callerReference: REF,
       comment: COMMENT,
     });
+    // WPU-Z19: the change of the create, which GetChange follows until INSYNC.
     expect(out).toEqual({
       created: true,
       zone: { id: "Z0TESTZONE1", name: "shop.example.", nameServers: NS },
+      changeId: "C0CHANGE1",
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.input).toEqual({
@@ -84,6 +91,8 @@ describe("createHostedZone", () => {
       comment: COMMENT,
     });
     expect(out.created).toBe(false);
+    // The change of the first call is not known on a repeat.
+    expect(out.changeId).toBeNull();
     expect(out.zone.id).toBe("Z0TESTZONE1");
     expect(out.zone.nameServers).toEqual(NS);
     expect(calls.map((c) => c.op)).toEqual([
@@ -268,6 +277,33 @@ describe("listRecordSets", () => {
       },
     });
     await expect(port.listRecordSets("Z0GONE")).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+// WPU-Z19 (verify review, JOURNEY.md:1796): "the initial status of the hosted zone is PENDING ... When the NS and SOA
+// records are available, the status of the zone changes to INSYNC" (CreateHostedZone); GetChange reads it.
+describe("getChangeStatus", () => {
+  it("reads GetChange: PENDING is pending, INSYNC is insync", async () => {
+    for (const [status, ours] of [
+      ["PENDING", "pending"],
+      ["INSYNC", "insync"],
+    ] as const) {
+      const { port, calls } = fake({
+        GetChange: () => ({ ChangeInfo: { Id: "/change/C0CHANGE1", Status: status } }),
+      });
+      expect(await port.getChangeStatus("C0CHANGE1")).toBe(ours);
+      expect(calls[0]?.input).toEqual({ Id: "C0CHANGE1" });
+    }
+  });
+
+  it("an unknown status is an invalid answer, a bad id is refused with no call", async () => {
+    const { port, calls } = fake({ GetChange: () => ({ ChangeInfo: { Status: "SOMETHING" } }) });
+    await expect(port.getChangeStatus("C0CHANGE1")).rejects.toBeInstanceOf(AwsError);
+    calls.length = 0;
+    for (const bad of ["", "/change/C1", "c1; x", "C".repeat(40)]) {
+      await expect(port.getChangeStatus(bad)).rejects.toMatchObject({ code: "validation" });
+    }
+    expect(calls).toHaveLength(0);
   });
 });
 
