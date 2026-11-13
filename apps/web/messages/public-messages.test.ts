@@ -210,4 +210,40 @@ describe("legal drafts (WPU-Z7)", () => {
       for (const rule of rules[locale]) expect(aupOf(tree), `${locale} ${rule}`).toContain(rule);
     }
   });
+
+  it("promises a tax invoice and a credit note only for purchases and renewals; charges by use are a gap note", () => {
+    // Spec 9.3 and packages/core/invoices: a tax invoice for each purchase and each renewal, and a credit
+    // note only for the full reversal of a charge with an issued invoice (credit-note.ts). Charges by use
+    // (backup storage by the day, a static IP by the hour) get neither: an open owner decision (JOURNEY,
+    // WPU-I2 ruling 5 and WPU-I5), so the drafts carry a gap note there instead of a promise.
+    const words = {
+      en: { purchase: "purchase", renewal: "renewal", byUse: /charges? by use/ },
+      bn: { purchase: "কেনা", renewal: "নবায়ন", byUse: /ব্যবহারভিত্তিক/ },
+    } as const;
+    for (const [locale, tree] of LOCALES) {
+      const { terms, refund } = legalDocs(tree);
+      const promises = {
+        "terms.wallet.p4": terms!.sections["wallet"]!["p4"]!,
+        "terms.invoices.p1": terms!.sections["invoices"]!["p1"]!,
+        "terms.invoices.p2": terms!.sections["invoices"]!["p2"]!,
+        "refund.reversal.p1": refund!.sections["reversal"]!["p1"]!,
+      };
+      for (const [where, text] of Object.entries(promises)) {
+        const promise = text.replace(GAP[locale], "");
+        expect(promise, `${locale} ${where}`).toContain(words[locale].purchase);
+        expect(promise, `${locale} ${where}`).toContain(words[locale].renewal);
+        expect(promise, `${locale} ${where}`).not.toMatch(words[locale].byUse);
+      }
+      for (const [where, section] of Object.entries({
+        "terms.invoices": terms!.sections["invoices"]!,
+        "refund.reversal": refund!.sections["reversal"]!,
+      })) {
+        const notes = Object.values(section).flatMap((text) => text.match(GAP[locale]) ?? []);
+        expect(
+          notes.some((note) => words[locale].byUse.test(note)),
+          `${locale} ${where}: a gap note on charges by use`,
+        ).toBe(true);
+      }
+    }
+  });
 });

@@ -35,7 +35,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         p1: "MeghVPS is prepaid. You add money to your wallet in taka (BDT) through EPS, and every purchase, renewal and charge by use is paid from the wallet. There is no credit and no bill to pay later.",
         p2: "We add a top-up to your wallet only after EPS has confirmed the same payment and the same amount to us directly. The smallest and the largest top-up amounts are shown when you top up.",
         p3: "If EPS reports a payment as successful but the amount does not match, we do not add it to your wallet. Our finance staff check it, and the panel shows the payment as pending with a note to contact support.",
-        p4: "For a top-up you get a payment receipt. A tax invoice is issued when a service is charged.",
+        p4: "For a top-up you get a payment receipt. A tax invoice is issued for each purchase and each renewal.",
       },
       prices: {
         title: "6. Prices and checkout",
@@ -79,7 +79,8 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       invoices: {
         title: "12. Invoices",
         p1: "For each purchase and renewal you get a tax invoice (Mushak-6.3) in taka, issued by {company}. Invoices show no amounts in US dollars.",
-        p2: "When we cancel a charge and return the money to your wallet, you get a credit note in taka. You find your invoices, receipts and credit notes in the panel, and we email each invoice.",
+        p2: "When we cancel a purchase or a renewal and return the whole amount to your wallet, you get a credit note in taka for its invoice. You find your invoices, receipts and credit notes in the panel, and we email each invoice.",
+        p3: "[To be decided: whether and how charges by use get a tax invoice, and a credit note when one is cancelled.]",
       },
       support: {
         title: "13. Support",
@@ -217,7 +218,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       reversal: {
         title: "4. Cancelled charges and partial refunds",
-        p1: "When we cancel a charge, we cancel all of it: the money goes back to your wallet and you get a credit note in taka.",
+        p1: "When we cancel a purchase or a renewal, we cancel all of it: the whole amount goes back to your wallet and you get a credit note in taka for its invoice. [To be decided: whether a charge by use gets a credit note when it is cancelled.]",
         p2: "A refund of part of a charge is only made by hand, after two members of our staff have approved it, and the reason is recorded. [To be decided: when a partial refund is given.]",
       },
       payout: {
