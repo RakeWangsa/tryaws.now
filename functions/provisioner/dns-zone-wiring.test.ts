@@ -26,7 +26,9 @@ function fakePort(over: Partial<Route53Port> = {}): Route53Port {
     createHostedZone: async ({ name }) => ({
       zone: { id: "Z0TESTZONE1", name: `${name}.`, nameServers: NS },
       created: true,
+      changeId: "C0CHANGE1",
     }),
+    getChangeStatus: async () => "insync",
     getHostedZone: async () => ({ id: "Z0TESTZONE1", name: "x.", nameServers: NS }),
     findHostedZonesByName: async () => [],
     listRecordSets: async () => [
@@ -126,6 +128,15 @@ describe("dns_zone in the provisioner", () => {
         ])
       ).rows[0],
     ).toEqual({ pool_account_id: null, product_id: null });
+    // WPU-Z19: CreateHostedZone, then a wait for GetChange INSYNC; the zone is active only after it.
+    const first = await runStep(deps, message(id, zone.resourceId));
+    expect(first).toMatchObject({ outcome: "advanced", to: "waiting" });
+    expect(await operationRow(t.pool, id)).toMatchObject({ state: "waiting", step: "wait_insync" });
+    expect(
+      (await t.pool.query("select state from resources where id = $1", [zone.resourceId])).rows[0],
+    ).toEqual({ state: "creating" });
+    // The sweeper queues a due wait again (the time the adapter named is not waited for here).
+    await t.pool.query("update operations set state = 'queued' where id = $1", [id]);
     const out = await runStep(deps, message(id, zone.resourceId));
     expect(out).toMatchObject({ outcome: "advanced", to: "succeeded" });
     expect(await operationRow(t.pool, id)).toMatchObject({ state: "succeeded" });
