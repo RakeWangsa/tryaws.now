@@ -163,6 +163,37 @@ Resources:
               - cloudtrail:*
               - guardduty:*
             Resource: "*"
+          # ONE ACCOUNT (WPU-Z11, security review): the Allow above is on "*" because SST names many
+          # resources itself; these two Deny statements keep a role of the production stage away from the
+          # data, secrets and functions of the staging stage that shares the account: what SST tags
+          # sst:stage=staging (KMS keys, tables, queues, topics, secrets, functions), and the staging names
+          # where a service does not evaluate resource tags (S3 objects, SSM parameters, the SST state).
+          # Separate accounts remain the stronger isolation (docs/runbooks/go-live.md).
+          - Sid: NeverWhatSstTaggedForTheOtherStage
+            Effect: Deny
+            Action: "*"
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:ResourceTag/sst:stage: staging
+          - Sid: NeverANameOfTheOtherStage
+            Effect: Deny
+            Action: "*"
+            Resource:
+              - arn:aws:s3:::ticon-cloud-staging-*
+              - arn:aws:s3:::sst-state-*/*/ticon-cloud/staging*
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/staging"
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/ticon-cloud/staging/*"
+              - Fn::Sub: "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:dynamodb:*:${AWS::AccountId}:table/ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:sqs:*:${AWS::AccountId}:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:tc-staging-*"
+              - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:tc-staging-*"
+              - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:kms:*:${AWS::AccountId}:alias/tc-staging-*"
+              - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/tc-staging-*"
+              - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/ticon-cloud-staging-*"
   TcCiDeployProduction:
     Type: AWS::IAM::Role
     Properties:

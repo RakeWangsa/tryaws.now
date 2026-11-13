@@ -402,7 +402,9 @@ describe("one account: fixed names are unique and each deploy role stays in its 
   const named = (file) => {
     const t = parse(read(join(root, "infra", "org", file)));
     return Object.values(t.Resources).flatMap((r) =>
-      [r.Properties?.RoleName, r.Properties?.ManagedPolicyName].filter((n) => typeof n === "string"),
+      [r.Properties?.RoleName, r.Properties?.ManagedPolicyName].filter(
+        (n) => typeof n === "string",
+      ),
     );
   };
 
@@ -455,13 +457,50 @@ describe("one account: fixed names are unique and each deploy role stays in its 
     });
   });
 
+  // WPU-Z11 (security review): a role CREATED by one stage (it carries that stage's boundary) cannot read
+  // or change the data, secrets or functions of the other stage in the shared account.
+  describe.each(ROLES.filter((r) => r.other))("boundary of $name", ({ file, stage, other }) => {
+    const [boundary] = resources(tpl[file], "AWS::IAM::ManagedPolicy");
+    const statements = expand(boundary.Properties.PolicyDocument.Statement);
+
+    it(`denies every action on what SST tags sst:stage=${other}`, () => {
+      const s = statements.find((x) => x.Sid === "NeverWhatSstTaggedForTheOtherStage");
+      expect(s).toMatchObject({ Effect: "Deny", Action: "*", Resource: "*" });
+      expect(s.Condition).toEqual({ StringEquals: { "aws:ResourceTag/sst:stage": other } });
+    });
+
+    it(`denies every action on the ${other} secrets, parameters, state, data and functions by name`, () => {
+      const s = statements.find((x) => x.Sid === "NeverANameOfTheOtherStage");
+      expect(s).toMatchObject({ Effect: "Deny", Action: "*" });
+      const text = resourceText(s);
+      for (const part of [
+        `arn:aws:s3:::ticon-cloud-${other}-*`,
+        `sst-state-*/*/ticon-cloud/${other}*`,
+        `parameter/sst/passphrase/ticon-cloud/${other}"`,
+        `parameter/sst/ticon-cloud/${other}/*`,
+        `secret:ticon-cloud-${other}-*`,
+        `table/ticon-cloud-${other}-*`,
+        `:ticon-cloud-${other}-*`,
+        `function:tc-${other}-*`,
+        `function:ticon-cloud-${other}-*`,
+        `alias/tc-${other}-*`,
+      ]) {
+        expect(text, part).toContain(part);
+      }
+      expect(text).not.toContain(`-${stage}-`);
+      expect(text).not.toContain(`/${stage}`);
+    });
+  });
+
   it("the staging role changes only the DNS records of the two staging names", () => {
     const s = inlineStatements("ci-deploy-staging.yaml").find(
       (x) => x.Sid === "OnlyTheDnsRecordsOfTheStage",
     );
     expect(s).toMatchObject({ Effect: "Deny", Action: "route53:ChangeResourceRecordSets" });
     expect(
-      s.Condition["ForAnyValue:StringNotLike"]["route53:ChangeResourceRecordSetsNormalizedRecordNames"],
+      s.Condition["ForAnyValue:StringNotLike"][
+        "route53:ChangeResourceRecordSetsNormalizedRecordNames"
+      ],
     ).toEqual([
       { Ref: "WebDomain" },
       { "Fn::Sub": "*.${WebDomain}" },
@@ -584,7 +623,8 @@ describe("plan role: minimal customer-managed read policy, no data-plane reads",
   // kms:Decrypt of the caller on aws/ssm. Both Deny branches exempt exactly that decryption, by the
   // encryption context PARAMETER_ARN of the production passphrase (not staging's, in one account).
   it("exempts only the decryption of the production SST passphrase from the kms:Decrypt deny", () => {
-    const passphrase = "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/production";
+    const passphrase =
+      "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/production";
     const decryptDeny = statements.filter((s) => s.Effect === "Deny" && s.Action === "kms:Decrypt");
     expect(decryptDeny).toHaveLength(2);
     for (const s of decryptDeny) {

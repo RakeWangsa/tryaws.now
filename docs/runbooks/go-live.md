@@ -4,6 +4,8 @@ Rules: R3 (no long-lived AWS keys; CI uses GitHub OIDC), R12 (every product flag
 
 What the controller did already (2026-11-13): the SES identity `tryaws.now` is verified; every GitHub environment variable of `staging`, `production` and `production-plan` is set (account, domains `staging.tryaws.now` / `admin-staging.tryaws.now` and `tryaws.now` / `admin.tryaws.now`, admin allowlist, alarm e-mails, `TC_PROBE_SOURCES=198.51.100.1/32` until the NAT address is known, `TC_VPC_CIDR=172.26.0.0/16`, `TC_STAGE_SIZE=lean`, the SES values and the three CI role ARNs of `TcCiDeployStaging`, `TcCiPlanProduction` and `TcCiDeployProduction`); the environment `production` accepts deployments only from tags `v*`.
 
+Isolation in the one account: each CI deploy role changes only its own stage, and every role a stage creates carries that stage's permissions boundary (`TcCiRoleBoundaryStaging` or `TcCiRoleBoundaryProduction`), which denies the other stage's tagged resources and its secret, parameter, state, bucket, table, queue, topic, function and key-alias names. That is a policy guard, not an account wall: separate accounts for staging and production remain the stronger option, and the way back is the three-account design of [single-account-lean.md](single-account-lean.md).
+
 ## Trigger
 
 The owner decides to put the platform live, or to repeat a step of this page after a change of the CI roles, the secrets or the domains.
