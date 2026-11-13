@@ -86,6 +86,7 @@ const { default: Reconciliation } = await import("./app/[locale]/reconciliation/
 
 const LOCALES: readonly Locale[] = ["bn", "en"];
 const CREATED = new Date("2026-11-10T06:00:00.000Z");
+const LAST_ACTIVITY = new Date("2026-11-12T09:30:00.000Z");
 const ok = (value: unknown) => ({ ok: true, value, replayed: false });
 
 const requestRow = (over: Partial<SupportRequestRow> = {}): SupportRequestRow => ({
@@ -99,11 +100,30 @@ const requestRow = (over: Partial<SupportRequestRow> = {}): SupportRequestRow =>
   relatedResourceId: null,
   handledBy: null,
   createdAt: CREATED,
+  lastActivityAt: LAST_ACTIVITY,
   ...over,
 });
 const requestDetail = (over: Partial<SupportRequestDetail> = {}): SupportRequestDetail => ({
   ...requestRow(),
   message: "Please <b>refund</b> me",
+  // WPU-Z5: the thread after the request, oldest first.
+  messages: [
+    {
+      id: "m1",
+      authorType: "admin",
+      adminId: ADMIN_ID,
+      body: "We refunded it.\nIt shows tomorrow.",
+      createdAt: CREATED,
+    },
+    {
+      id: "m2",
+      authorType: "customer",
+      adminId: null,
+      body: "Thanks <i>a lot</i>",
+      createdAt: LAST_ACTIVITY,
+    },
+  ],
+  hasEarlier: false,
   audit: [
     { id: "a1", action: "support.close", actorId: ADMIN_ID, reason: "solved", createdAt: CREATED },
   ],
@@ -212,7 +232,51 @@ describe("/support", () => {
   it("passes only the filters of ours to the repository", async () => {
     await SupportList(list("en", { status: "closed", after: "x", evil: "1" }));
     await SupportList(list("en", { status: "all", after: CASE_ID }));
-    expect(seen["supportList"]).toEqual([{ status: "closed" }, { after: CASE_ID }]);
+    await SupportList(list("en", { status: "answered" }));
+    await SupportList(list("en", { status: "resolved" }));
+    expect(seen["supportList"]).toEqual([
+      { status: "closed" },
+      { after: CASE_ID },
+      { status: "answered" },
+      { status: "open" },
+    ]);
+  });
+
+  it.each(LOCALES)(
+    "WPU-Z5: the list shows the three states, a filter with each and the last activity (%s)",
+    async (locale) => {
+      state.repos["support"] = {
+        list: async () =>
+          ok({
+            rows: [
+              requestRow(),
+              requestRow({ id: CASE_ID, status: "answered", subject: "Slow server" }),
+              requestRow({ id: RESOURCE_ID, status: "closed", subject: "Old question" }),
+            ],
+            nextAfter: null,
+          }),
+      };
+      const html = inProvider(await SupportList(list(locale)), locale);
+      const m = msgs(locale);
+      for (const status of ["open", "answered", "closed"] as const) {
+        // the default state of the queue (open) is the selected option
+        expect(html).toMatch(
+          new RegExp(`<option value="${status}"( selected="")?>${m.filter[status]}</option>`),
+        );
+        expect(html).toContain(`>${m.status[status]}</span>`);
+      }
+      expect(html).toContain('<option value="open" selected="">');
+      expect(html).toContain(`<option value="all">${m.filter.all}</option>`);
+      expect(html).toContain(m.support.table.lastActivity);
+      // the state is a word, never a color alone (U11)
+      expect(html).toMatch(/class="badge[^"]*">[^<]+<\/span>/);
+    },
+  );
+
+  it("the filter keeps the chosen state selected", async () => {
+    const html = inProvider(await SupportList(list("en", { status: "answered" })), "en");
+    expect(html).toMatch(/<select[^>]*name="status"/);
+    expect(html).toContain('<option value="answered" selected="">');
   });
 
   it("an empty queue and an unavailable store show their own states, with no data", async () => {
@@ -251,6 +315,73 @@ describe("/support", () => {
       expect(html).not.toMatch(/name="(adminId|actor|approver|handledBy)"/);
     },
   );
+
+  it.each(LOCALES)(
+    "WPU-Z5: the detail shows the whole thread oldest first, with authors, times and line breaks, escaped (%s)",
+    async (locale) => {
+      const html = inProvider(await SupportDetail(one(locale, REQUEST_ID)), locale);
+      const m = msgs(locale);
+      expect(html).toContain(m.support.thread.title);
+      // the request is the first entry, then the admin's reply, then the customer's
+      const first = html.indexOf("Please &lt;b&gt;refund&lt;/b&gt; me");
+      const adminReply = html.indexOf("We refunded it.<br/>It shows tomorrow.");
+      const customerReply = html.indexOf("Thanks &lt;i&gt;a lot&lt;/i&gt;");
+      expect(first).toBeGreaterThan(0);
+      expect(adminReply).toBeGreaterThan(first);
+      expect(customerReply).toBeGreaterThan(adminReply);
+      expect(html).not.toContain("<i>a lot");
+      expect(html).toContain(`${m.support.thread.admin} ${ADMIN_ID.slice(0, 8)}`);
+      expect(html.split(m.support.thread.customer).length - 1).toBeGreaterThanOrEqual(2);
+      expect(html).toContain(m.support.table.lastActivity);
+      expect(html).not.toContain(m.support.thread.earlier);
+    },
+  );
+
+  it("a visitor's request is labelled Visitor, the address stays masked, and earlier replies are announced", async () => {
+    state.repos["support"] = {
+      detail: async () =>
+        ok(
+          requestDetail({
+            customerId: null,
+            name: "Guest",
+            emailMasked: "g***@example.test",
+            messages: [
+              {
+                id: "m1",
+                authorType: "visitor",
+                adminId: null,
+                body: "Hello again",
+                createdAt: CREATED,
+              },
+            ],
+            hasEarlier: true,
+          }),
+        ),
+    };
+    const html = inProvider(await SupportDetail(one("en", REQUEST_ID)), "en");
+    const m = msgs("en");
+    expect(html.split(m.support.thread.visitor).length - 1).toBeGreaterThanOrEqual(2);
+    expect(html).toContain("g***@example.test");
+    expect(html).not.toMatch(/guest@|g[a-z]+@example/i);
+    expect(html).toContain(m.support.thread.earlier);
+    expect(html).not.toContain(`/customers/`);
+  });
+
+  it("an answered request offers reply and close; a closed one offers only reopen, with a reason", async () => {
+    state.repos["support"] = { detail: async () => ok(requestDetail({ status: "answered" })) };
+    let html = inProvider(await SupportDetail(one("en", REQUEST_ID)), "en");
+    expect(html).toContain('name="kind" value="replyByEmail"');
+    expect(html).toContain('name="kind" value="closeRequest"');
+    expect(html).not.toContain('value="reopenRequest"');
+    state.repos["support"] = { detail: async () => ok(requestDetail({ status: "closed" })) };
+    html = inProvider(await SupportDetail(one("en", REQUEST_ID)), "en");
+    expect(html).toContain('name="kind" value="reopenRequest"');
+    expect(html).toContain('id="reason-reopen"');
+    expect(html).toContain(msgs("en").support.reopen.title);
+    expect(html).toContain(msgs("en").support.reply.closedHint);
+    expect(html).not.toContain('value="replyByEmail"');
+    expect(html).not.toContain('value="closeRequest"');
+  });
 
   it("while the template is not registered the reply form is replaced by a hint; a closed request has none", async () => {
     state.replyEnabled = false;
