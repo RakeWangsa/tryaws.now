@@ -3175,7 +3175,7 @@ TASKS["WPU-B7"] = [
 // WPU-B8: the lean stage size (TC_STAGE_SIZE, budget alarm). Local proof only, no AWS call.
 TASKS["WPU-B8"] = [specSync, baselineSync, lint, typecheck, format, repo];
 
-// WPU-B1: the brand rename from TiCON Cloud to MeghVPS. Messages, mail and SMS text, invoice text, page titles
+// WPU-B1: the brand rename from the first brand name to MeghVPS. Messages, mail and SMS text, invoice text, page titles
 // and the site name (web, admin, ui, notify, core invoices) and the repository test that fails when the old
 // name returns to a customer-facing file. No AWS call.
 const brandWeb = {
@@ -3817,6 +3817,31 @@ TASKS["WPU-Z19"] = [
 
 // WPU-Y1: app images move to the Lightsail-packaged blueprints (core tables and defaults; no DB change).
 TASKS["WPU-Y1"] = [specSync, baselineSync, lint, typecheck, format, core, repo];
+
+// WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now with its BIN and trade licence on every page, e-mail,
+// invoice, GEO file and JSON-LD; the legal pages are approved (no draft notice); the SST app and every text of
+// the first brand name are TryAWS.now (tryaws-now). brandNotify and brandWeb include PostgreSQL tests.
+TASKS["WPU-Y6"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  brandCore,
+  brandNotify,
+  brandWeb,
+  admin,
+  ui,
+  invoiceRenderer,
+  infraTest(
+    "brand",
+    "WPU-Y6: no old company or first brand name outside the kept records",
+    "brand",
+  ),
+  infraTest("infra-ci-oidc", "the CI roles name the SST app tryaws-now", "infra-ci-oidc"),
+  infraTest("staging-on-demand", "the SST tags name the app tryaws-now", "staging-on-demand"),
+  repo,
+];
 
 // WPU-Z17: Gennet answers are read by their status code.
 TASKS["WPU-Z17"] = [specSync, baselineSync, lint, typecheck, format, notifyAll, notifierFn, repo];

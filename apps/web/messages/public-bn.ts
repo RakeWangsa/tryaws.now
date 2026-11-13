@@ -2,8 +2,8 @@ import { legalDocsBn } from "./legal-bn.ts";
 
 // Namespace `Public` of the public site (WPP-T1 to WPP-T4). Bengali is written first (rule U5);
 // `public-en.ts` is typed from this tree, so a missing key fails `tsc`. The AWS statements themselves
-// live in the shell messages (`Aws`, 16.13) and are not repeated here. The legal documents are DRAFTS
-// in `legal-bn.ts` (WPU-Z7) that wait for the owner's approval of their exact text.
+// live in the shell messages (`Aws`, 16.13) and are not repeated here. The legal documents are in
+// `legal-bn.ts` (WPU-Z7), approved by the owner on 2026-11-14 (WPU-Y6).
 export const publicBn = {
   Public: {
     crumb: { home: "হোম" },
@@ -46,8 +46,7 @@ export const publicBn = {
         title: "আইনি নথি",
         description: "TryAWS.now-এর শর্তাবলি, গোপনীয়তা, গ্রহণযোগ্য ব্যবহার ও ফেরতের নীতি।",
         // WPU-Z16: one description per document, so no two legal pages share one (OmniRank).
-        descriptionOf:
-          "{title}: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি। খসড়া, চূড়ান্ত অনুমোদনের অপেক্ষায়।",
+        descriptionOf: "{title}: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।",
       },
       soon: {
         description: "এই পণ্য এখনো খোলা হয়নি। খোলা হলে ইমেইলে জানাতে আপনার ঠিকানা দিন।",
@@ -256,7 +255,7 @@ export const publicBn = {
         // WPU-Z16: what people ask AI assistants about this offer; facts of the terms and refund drafts.
         vatInvoice: {
           q: "আমি কি VAT সহ কর চালানপত্র পাব?",
-          a: "হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TiCON System Limited আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।",
+          a: "হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TryAWS.now আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।",
         },
         refunds: {
           q: "টাকা ফেরত পাওয়া যায় কি?",
@@ -312,11 +311,9 @@ export const publicBn = {
       heading: "আইনি নথি",
       sidebarTitle: "নথি",
       sidebarLabel: "আইনি নথির তালিকা",
-      // WPU-Z7: shown until the owner approves the exact texts (manual proof wp9-t5-legal-final).
-      draftTitle: "খসড়া — চূড়ান্ত অনুমোদনের অপেক্ষায়",
-      draftText:
-        "এই লেখা একটি খসড়া। চূড়ান্ত অনুমোদনের পরই এটি কার্যকর হবে, তার আগে এতে পরিবর্তন হতে পারে। তৃতীয় বন্ধনীর ভেতরের বিষয়গুলোর সিদ্ধান্ত এখনো বাকি।",
-      version: "সংস্করণ: খসড়া ১, ১৩ নভেম্বর ২০২৬",
+      // WPU-Y6: the texts are approved by the owner (2026-11-14); no draft notice. The version line and
+      // LEGAL_VERSIONS (server/auth/legal.ts) move together.
+      version: "সংস্করণ ১, ১৪ নভেম্বর ২০২৬",
       docs: legalDocsBn,
     },
     system: {

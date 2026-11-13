@@ -257,6 +257,11 @@ export function PublicShell({
                     <strong>{t("footer.companyName")}</strong>
                   </p>
                   <p className="contact">{t("footer.address")}</p>
+                  <p className="contact">
+                    {t("footer.bin")}
+                    <br />
+                    {t("footer.tradeLicense")}
+                  </p>
                 </div>
                 <div className="col-lg-6">{paymentBanner}</div>
               </div>

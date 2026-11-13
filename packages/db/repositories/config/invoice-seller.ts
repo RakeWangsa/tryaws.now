@@ -8,7 +8,7 @@ import { isMarketCode } from "./args";
 //
 //   { "v": 1, "version": <1,2,3...>, "legalNameBn": "...", "legalNameEn": "...", "bin": "<13 digits>",
 //     "addressBn": "...", "addressEn": "...", "signatoryName": "...", "signatoryDesignation": "...",
-//     "vatCircle"?: "...", "phone"?: "...", "email"?: "..." }
+//     "vatCircle"?: "...", "tradeLicense"?: "...", "phone"?: "...", "email"?: "..." }
 //
 // `version` counts the saves (the older values stay in the audit log with before and after). Nothing is
 // seeded and nothing is defaulted: no row, or a row that does not parse, means an invoice is not issued
@@ -28,6 +28,7 @@ export interface SellerRow {
   readonly signatoryName: string;
   readonly signatoryDesignation: string;
   readonly vatCircle?: string;
+  readonly tradeLicense?: string;
   readonly phone?: string;
   readonly email?: string;
 }
@@ -42,6 +43,7 @@ const REQUIRED = [
 ] as const;
 const OPTIONAL = [
   ["vatCircle", 200],
+  ["tradeLicense", 60],
   ["phone", 20],
   ["email", 120],
 ] as const;

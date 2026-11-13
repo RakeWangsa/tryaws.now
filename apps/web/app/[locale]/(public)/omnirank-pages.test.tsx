@@ -201,8 +201,17 @@ describe("structured data (OmniRank gates schema, schema-required, speakable)", 
           "@id": `${ORIGIN}/#organization`,
           name: "TryAWS.now",
           url: `${ORIGIN}/`,
-          legalName: "TiCON System Limited",
+          // WPU-Y6 (owner, 2026-11-14): the company is TryAWS.now, with its BIN and trade licence.
+          legalName: "TryAWS.now",
           description: MESSAGES[locale].entity.statement,
+          identifier: [
+            { "@type": "PropertyValue", propertyID: "BIN", value: "008073062-0507" },
+            {
+              "@type": "PropertyValue",
+              propertyID: "Trade License",
+              value: "TRAD/DNCC/098737/2020",
+            },
+          ],
         });
         expect(org.sameAs).toBeUndefined();
         const site = blocks.find((b) => b["@type"] === "WebSite")!;

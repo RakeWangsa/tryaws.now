@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  TiCON Cloud CI role TcCiDeployProduction and its permissions boundary TcCiRoleBoundaryProduction. Assumed through GitHub OIDC by the production deploy job only, at a v* tag. Changes the production stage only, also in an account shared with staging. Full notes are in the comments at the top of this file.
+  TryAWS.now CI role TcCiDeployProduction and its permissions boundary TcCiRoleBoundaryProduction. Assumed through GitHub OIDC by the production deploy job only, at a v* tag. Changes the production stage only, also in an account shared with staging. Full notes are in the comments at the top of this file.
 # Description (moved from the Description field: CloudFormation allows at most 1024 characters):
-# TiCON Cloud CI role TcCiDeployProduction (R3, B.1 of docs/analysis/pending-audit.md) and the permissions
+# TryAWS.now CI role TcCiDeployProduction (R3, B.1 of docs/analysis/pending-audit.md) and the permissions
 # boundary TcCiRoleBoundaryProduction that every role it creates must carry. Assumed by the job `deploy` of
 # .github/workflows/deploy-production.yml through GitHub OIDC. It is the ONLY production deploy role. The
 # trust is the three conditions that workflow documents: aud, sub = the GitHub environment `production`, and
@@ -15,11 +15,11 @@ Description: >-
 # The organisation, the repository and their ids are parameters; no account id or name is written here.
 # ONE ACCOUNT (owner decision 2026-11-13): staging and production may share the account. Every fixed name
 # here is unique to production (TcCiRoleBoundaryProduction, TcCiDeployProduction), every IAM write is
-# limited to the names of the production stage (tc-production-*, ticon-cloud-production-*), and the last
+# limited to the names of the production stage (tc-production-*, tryaws-now-production-*), and the last
 # statements deny every action on the staging stage: on what SST tags sst:stage=staging, on the staging
 # names and on the SST state and passphrase of staging.
 # PRIVILEGE ESCALATION GUARD: the role can create, change and pass only roles named tc-production-* (the
-# function and platform roles of infra/lib/stage.ts roleName) and ticon-cloud-production-* (the roles SST
+# function and platform roles of infra/lib/stage.ts roleName) and tryaws-now-production-* (the roles SST
 # names itself), and only when the role carries the boundary below (infra/app.ts attaches it to every role);
 # it can attach only the listed AWS managed policies; it can pass a role only to the listed services; it can
 # never remove or replace the boundary, change the boundary policy, touch the CI roles, mint users or keys,
@@ -40,8 +40,9 @@ Description: >-
 # the RDS proxy, the Cron scheduler, the NAT instance and the CloudFront edge function). The same boundary
 # was proven at the staging deploy first; read any AccessDenied in the role's CloudTrail, widen the boundary
 # by pull request (never remove the Deny statements) and record it in JOURNEY.md.
-# VERIFY: SST 4.17.2 names an unnamed role ticon-cloud-<stage>-<logical name>-<random> only while the logical
-# name has at most 32 characters on production (35 on staging): longer names lose the app name
+# VERIFY: SST 4.17.2 names an unnamed role tryaws-now-<stage>-<logical name>-<random> only while the logical
+# name has at most 33 characters on production (36 on staging; WPU-Y6: the app name tryaws-now is one
+# character shorter than before): longer names lose the app name
 # (components/naming.ts prefixName). The roles of infra/stacks have fixed names (tc-<stage>-<part>-role);
 # infra/stacks/web.ts gives the two ISR revalidation subscriber roles fixed names too; every other role SST
 # creates today has a short logical name (read in the SST sources). Check the role names after the first
@@ -190,20 +191,20 @@ Resources:
             Effect: Deny
             Action: "*"
             Resource:
-              - arn:aws:s3:::ticon-cloud-staging-*
-              - arn:aws:s3:::sst-state-*/*/ticon-cloud/staging*
-              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/staging"
-              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/ticon-cloud/staging/*"
-              - Fn::Sub: "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:ticon-cloud-staging-*"
-              - Fn::Sub: "arn:aws:dynamodb:*:${AWS::AccountId}:table/ticon-cloud-staging-*"
-              - Fn::Sub: "arn:aws:sqs:*:${AWS::AccountId}:ticon-cloud-staging-*"
-              - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:ticon-cloud-staging-*"
+              - arn:aws:s3:::tryaws-now-staging-*
+              - arn:aws:s3:::sst-state-*/*/tryaws-now/staging*
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/tryaws-now/staging"
+              - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/tryaws-now/staging/*"
+              - Fn::Sub: "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:tryaws-now-staging-*"
+              - Fn::Sub: "arn:aws:dynamodb:*:${AWS::AccountId}:table/tryaws-now-staging-*"
+              - Fn::Sub: "arn:aws:sqs:*:${AWS::AccountId}:tryaws-now-staging-*"
+              - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:tryaws-now-staging-*"
               - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:tc-staging-*"
               - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:tc-staging-*"
-              - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:tryaws-now-staging-*"
               - Fn::Sub: "arn:aws:kms:*:${AWS::AccountId}:alias/tc-staging-*"
               - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/tc-staging-*"
-              - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/ticon-cloud-staging-*"
+              - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/tryaws-now-staging-*"
   TcCiDeployProduction:
     Type: AWS::IAM::Role
     Properties:
@@ -288,7 +289,7 @@ Resources:
                   - iam:ListRoleTags
                 Resource:
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-production-*"
-                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-production-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tryaws-now-production-*"
               - Sid: ReadTheRdsServiceLinkedRole
                 Effect: Allow
                 Action: iam:GetRole
@@ -305,7 +306,7 @@ Resources:
                   - iam:UpdateAssumeRolePolicy
                 Resource:
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-production-*"
-                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-production-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tryaws-now-production-*"
                 Condition:
                   StringEquals:
                     iam:PermissionsBoundary:
@@ -315,7 +316,7 @@ Resources:
                 Action: iam:AttachRolePolicy
                 Resource:
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-production-*"
-                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-production-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tryaws-now-production-*"
                 Condition:
                   StringEquals:
                     iam:PermissionsBoundary:
@@ -335,7 +336,7 @@ Resources:
                   - iam:UpdateRoleDescription
                 Resource:
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-production-*"
-                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-production-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tryaws-now-production-*"
               - Sid: InstanceProfilesOfTheStage
                 Effect: Allow
                 Action:
@@ -354,7 +355,7 @@ Resources:
                 Action: iam:PassRole
                 Resource:
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-production-*"
-                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-production-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tryaws-now-production-*"
                 Condition:
                   StringEquals:
                     iam:PassedToService:
@@ -450,31 +451,31 @@ Resources:
                 Action: "*"
                 Resource:
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tc-staging-*"
-                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:role/tryaws-now-staging-*"
                   - Fn::Sub: "arn:aws:iam::${AWS::AccountId}:instance-profile/tc-staging-*"
                   - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:tc-staging-*"
-                  - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:lambda:*:${AWS::AccountId}:function:tryaws-now-staging-*"
                   - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/tc-staging-*"
-                  - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/ticon-cloud-staging-*"
-                  - arn:aws:s3:::ticon-cloud-staging-*
-                  - arn:aws:s3:::sst-state-*/*/ticon-cloud/staging*
-                  - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/staging"
-                  - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/ticon-cloud/staging/*"
-                  - Fn::Sub: "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:ticon-cloud-staging-*"
-                  - Fn::Sub: "arn:aws:sqs:*:${AWS::AccountId}:ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:logs:*:${AWS::AccountId}:log-group:/aws/lambda/tryaws-now-staging-*"
+                  - arn:aws:s3:::tryaws-now-staging-*
+                  - arn:aws:s3:::sst-state-*/*/tryaws-now/staging*
+                  - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/tryaws-now/staging"
+                  - Fn::Sub: "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/tryaws-now/staging/*"
+                  - Fn::Sub: "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:tryaws-now-staging-*"
+                  - Fn::Sub: "arn:aws:sqs:*:${AWS::AccountId}:tryaws-now-staging-*"
                   - Fn::Sub: "arn:aws:sns:*:${AWS::AccountId}:tc-staging-*"
-                  - Fn::Sub: "arn:aws:dynamodb:*:${AWS::AccountId}:table/ticon-cloud-staging-*"
-                  - Fn::Sub: "arn:aws:rds:*:${AWS::AccountId}:db:ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:dynamodb:*:${AWS::AccountId}:table/tryaws-now-staging-*"
+                  - Fn::Sub: "arn:aws:rds:*:${AWS::AccountId}:db:tryaws-now-staging-*"
                   - Fn::Sub: "arn:aws:rds:*:${AWS::AccountId}:snapshot:tc-staging-*"
-                  - Fn::Sub: "arn:aws:scheduler:*:${AWS::AccountId}:schedule/*/ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:scheduler:*:${AWS::AccountId}:schedule/*/tryaws-now-staging-*"
                   - Fn::Sub: "arn:aws:cloudwatch:*:${AWS::AccountId}:alarm:tc-staging-*"
                   - Fn::Sub: "arn:aws:kms:*:${AWS::AccountId}:alias/tc-staging-*"
                   - Fn::Sub: "arn:aws:budgets::${AWS::AccountId}:budget/tc-staging-*"
                   # VERIFY (fix round 1): SST names a CloudFront Function with physicalName(64), which is
-                  # ticon-cloud-<stage>-<name>-<random> or, when the app name is cut, <app part>-<stage>-<name>
+                  # tryaws-now-<stage>-<name>-<random> or, when the app name is cut, <app part>-<stage>-<name>
                   # (components/naming.ts prefixName); both match the two patterns below for the names of
                   # infra/stacks today. Check the function names after the first deploy.
-                  - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/ticon-cloud-staging-*"
+                  - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/tryaws-now-staging-*"
                   - Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:function/*-staging-*"
                   # The WAF web ACL and IP sets of infra/stacks/waf.ts are named tc-<stage>-* (resourceName).
                   - Fn::Sub: "arn:aws:wafv2:*:${AWS::AccountId}:*/webacl/tc-staging-*"

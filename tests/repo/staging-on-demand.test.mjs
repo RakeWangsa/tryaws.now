@@ -323,11 +323,11 @@ describe("requirements 5, 9 and 10: the monthly budget of a lean stage", () => {
   });
 
   it("filters on the tags SST puts on every resource: the app AND the stage", () => {
-    expect(sstTags("ticon-cloud", "staging")).toEqual({
-      "sst:app": "ticon-cloud",
+    expect(sstTags("tryaws-now", "staging")).toEqual({
+      "sst:app": "tryaws-now",
       "sst:stage": "staging",
     });
-    expect(Object.isFrozen(sstTags("ticon-cloud", "production"))).toBe(true);
+    expect(Object.isFrozen(sstTags("tryaws-now", "production"))).toBe(true);
   });
 });
 

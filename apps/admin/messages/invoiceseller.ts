@@ -51,6 +51,7 @@ export const invoiceSellerBn = {
       addressBn: "ঠিকানা (বাংলা)",
       addressEn: "ঠিকানা (ইংরেজি)",
       vatCircle: "ভ্যাট সার্কেল / কমিশনারেট (ঐচ্ছিক)",
+      tradeLicense: "ট্রেড লাইসেন্স নম্বর (ঐচ্ছিক)",
       signatoryName: "স্বাক্ষরকারীর নাম",
       signatoryDesignation: "স্বাক্ষরকারীর পদবি",
       phone: "ফোন (ঐচ্ছিক)",

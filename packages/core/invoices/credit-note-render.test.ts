@@ -171,7 +171,7 @@ describe("the credit note (Mushak-6.7, ruling 6)", () => {
       "en",
     );
     expect(html).toContain("Example Services Limited");
-    expect(html).toContain("1234567890123");
+    expect(html).toContain("123456789-0123");
     expect(html).toContain("&lt;b&gt;Rahim&lt;/b&gt;");
   });
 

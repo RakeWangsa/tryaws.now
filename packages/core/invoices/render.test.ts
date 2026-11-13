@@ -116,15 +116,28 @@ describe("renderInvoiceHtml", () => {
       "en",
     );
     expect(en).toContain("Example Services Limited");
-    expect(en).toContain("1234567890123");
+    expect(en).toContain("123456789-0123");
     expect(en).toContain("Road 1, Dhaka");
     expect(en).toContain("Dhaka South");
     expect(en).not.toContain("NID");
     expect(en).toContain("1990123456789");
     const bn = plain(renderInvoiceHtml(doc, "bn"));
     expect(bn).toContain("উদাহরণ সার্ভিসেস লিমিটেড");
-    expect(bn).toContain("১২৩৪৫৬৭৮৯০১২৩");
+    expect(bn).toContain("১২৩৪৫৬৭৮৯-০১২৩");
     expect(bn).toContain("১ নম্বর রোড, ঢাকা");
+  });
+  // WPU-Y6 (owner, 2026-11-14): the seller is printed with its BIN as the owner gives it (9 and 4 digits
+  // with a hyphen) and, when entered, its trade licence number.
+  it("prints the seller BIN as 008073062-0507 and the trade licence when it is entered", () => {
+    const owner = { ...seller, bin: "0080730620507", tradeLicense: "TRAD/DNCC/098737/2020" };
+    const en = renderInvoiceHtml({ ...doc, seller: owner }, "en");
+    expect(en).toContain("<strong>BIN:</strong> 008073062-0507");
+    expect(en).toContain("<strong>Trade License:</strong> TRAD/DNCC/098737/2020");
+    const bn = plain(renderInvoiceHtml({ ...doc, seller: owner }, "bn"));
+    expect(bn).toContain("০০৮০৭৩০৬২-০৫০৭");
+    expect(bn).toContain("ট্রেড লাইসেন্স");
+    expect(bn).toContain("TRAD/DNCC/098737/2020");
+    expect(renderInvoiceHtml(doc, "en")).not.toContain("Trade License");
   });
   it("splits the stored VAT line from the rest, never recomputing it", () => {
     const en = renderInvoiceHtml(doc, "en");

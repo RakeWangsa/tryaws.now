@@ -91,6 +91,23 @@ describe.each(TEMPLATE_IDS)("template %s", (id) => {
   });
 });
 
+// WPU-Y6 (owner, 2026-11-14): every e-mail footer names the company TryAWS.now with its BIN and trade
+// licence, exactly as the owner gave them, never the old legal name.
+it("the e-mail footer names the company TryAWS.now with its BIN and trade licence", () => {
+  for (const locale of ["bn", "en"] as const) {
+    const address = SHARED[locale].address;
+    expect(address.startsWith("TryAWS.now, ")).toBe(true);
+    expect(address).toContain("BIN: 008073062-0507");
+    expect(address).toContain("Trade License: TRAD/DNCC/098737/2020");
+    const id = TEMPLATE_IDS[0];
+    const email = renderEmail(id, parsed(id), ctx(locale));
+    for (const part of [email.text, email.html]) {
+      expect(part).toContain("BIN: 008073062-0507");
+      expect(part).not.toMatch(/TiCON System/i);
+    }
+  }
+});
+
 it("the two catalogs have the same placeholders in every string", () => {
   const names = (s: string) => [...s.matchAll(/\{([A-Za-z]+)\}/g)].map((m) => m[1]).sort();
   for (const id of TEMPLATE_IDS) {

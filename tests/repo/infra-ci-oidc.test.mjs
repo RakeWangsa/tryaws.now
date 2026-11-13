@@ -200,12 +200,12 @@ describe("deploy roles: no privilege escalation through IAM", () => {
     [
       "ci-deploy-staging.yaml",
       "staging",
-      ["role/tc-staging-*", "role/ticon-cloud-staging-*", "instance-profile/tc-staging-*"],
+      ["role/tc-staging-*", "role/tryaws-now-staging-*", "instance-profile/tc-staging-*"],
     ],
     [
       "ci-deploy-production.yaml",
       "production",
-      ["role/tc-production-*", "role/ticon-cloud-production-*", "instance-profile/tc-production-*"],
+      ["role/tc-production-*", "role/tryaws-now-production-*", "instance-profile/tc-production-*"],
     ],
   ];
 
@@ -454,11 +454,11 @@ describe("one account: fixed names are unique and each deploy role stays in its 
       const text = resourceText(names);
       for (const part of [
         `role/tc-${other}-*`,
-        `role/ticon-cloud-${other}-*`,
+        `role/tryaws-now-${other}-*`,
         `function:tc-${other}-*`,
-        `function:ticon-cloud-${other}-*`,
-        `parameter/sst/passphrase/ticon-cloud/${other}`,
-        `sst-state-*/*/ticon-cloud/${other}*`,
+        `function:tryaws-now-${other}-*`,
+        `parameter/sst/passphrase/tryaws-now/${other}`,
+        `sst-state-*/*/tryaws-now/${other}*`,
         `budget/tc-${other}-*`,
       ]) {
         expect(text, part).toContain(part);
@@ -470,7 +470,7 @@ describe("one account: fixed names are unique and each deploy role stays in its 
     it(`denies the CloudFront Functions and the WAF of the ${other} stage by name`, () => {
       const text = resourceText(statements.find((s) => s.Sid === "NeverANameOfTheOtherStage"));
       for (const part of [
-        `cloudfront::\${AWS::AccountId}:function/ticon-cloud-${other}-*`,
+        `cloudfront::\${AWS::AccountId}:function/tryaws-now-${other}-*`,
         `cloudfront::\${AWS::AccountId}:function/*-${other}-*`,
         `:*/webacl/tc-${other}-*`,
         `:*/ipset/tc-${other}-*`,
@@ -550,15 +550,15 @@ describe("one account: fixed names are unique and each deploy role stays in its 
       expect(s).toMatchObject({ Effect: "Deny", Action: "*" });
       const text = resourceText(s);
       for (const part of [
-        `arn:aws:s3:::ticon-cloud-${other}-*`,
-        `sst-state-*/*/ticon-cloud/${other}*`,
-        `parameter/sst/passphrase/ticon-cloud/${other}"`,
-        `parameter/sst/ticon-cloud/${other}/*`,
-        `secret:ticon-cloud-${other}-*`,
-        `table/ticon-cloud-${other}-*`,
-        `:ticon-cloud-${other}-*`,
+        `arn:aws:s3:::tryaws-now-${other}-*`,
+        `sst-state-*/*/tryaws-now/${other}*`,
+        `parameter/sst/passphrase/tryaws-now/${other}"`,
+        `parameter/sst/tryaws-now/${other}/*`,
+        `secret:tryaws-now-${other}-*`,
+        `table/tryaws-now-${other}-*`,
+        `:tryaws-now-${other}-*`,
         `function:tc-${other}-*`,
-        `function:ticon-cloud-${other}-*`,
+        `function:tryaws-now-${other}-*`,
         `alias/tc-${other}-*`,
       ]) {
         expect(text, part).toContain(part);
@@ -653,12 +653,12 @@ describe("plan role: minimal customer-managed read policy, no data-plane reads",
     // WPU-Z11 fix round 1: objects of the production stage only (the bucket is shared with staging).
     const objects = statements.find((s) => s.Sid === "TheProductionStateObjectsOnly");
     expect(objects.Action).toBe("s3:GetObject");
-    expect(objects.Resource).toBe("arn:aws:s3:::sst-state-*/*/ticon-cloud/production*");
+    expect(objects.Resource).toBe("arn:aws:s3:::sst-state-*/*/tryaws-now/production*");
     const params = statements.find((s) => s.Sid === "TheSstPassphraseAndBootstrapParameterOnly");
     for (const r of list(params.Resource)) expect(JSON.stringify(r)).toContain("parameter/sst/");
     expect(JSON.stringify(params.Resource)).not.toContain("parameter/*");
     const noObject = statements.find((s) => s.Sid === "NoObjectReadOutsideTheStateBucket");
-    expect(noObject.NotResource).toBe("arn:aws:s3:::sst-state-*/*/ticon-cloud/production*");
+    expect(noObject.NotResource).toBe("arn:aws:s3:::sst-state-*/*/tryaws-now/production*");
     const noParam = statements.find((s) => s.Sid === "NoParameterReadOutsideSst");
     expect(JSON.stringify(noParam.NotResource)).toContain("parameter/sst/*");
   });
@@ -705,7 +705,7 @@ describe("plan role: minimal customer-managed read policy, no data-plane reads",
   // encryption context PARAMETER_ARN of the production passphrase (not staging's, in one account).
   it("exempts only the decryption of the production SST passphrase from the kms:Decrypt deny", () => {
     const passphrase =
-      "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/ticon-cloud/production";
+      "arn:aws:ssm:*:${AWS::AccountId}:parameter/sst/passphrase/tryaws-now/production";
     const decryptDeny = statements.filter((s) => s.Effect === "Deny" && s.Action === "kms:Decrypt");
     expect(decryptDeny).toHaveLength(2);
     for (const s of decryptDeny) {
