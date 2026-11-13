@@ -1,4 +1,5 @@
 import { lifecycleRepo, type Tx } from "@tc/db";
+import type { Logger } from "../operations/types";
 import type { Clock, Result } from "../types";
 import { releaseServerDisks } from "./attached-disks";
 
@@ -12,7 +13,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // still destroyed, and on a second call (`conflict`: the first call changed the state).
 export async function completeRestore(
   tx: Tx,
-  input: { subscriptionId: string; clock: Clock },
+  input: {
+    subscriptionId: string;
+    clock: Clock;
+    /** WPU-X1: the release of the server's disks logs the ids of the operations it ends (R14). */
+    log?: Logger;
+  },
 ): Promise<Result<{ periodEnd: Date }>> {
   const repo = lifecycleRepo(tx);
   const row = await repo.lock(input.subscriptionId);
@@ -31,7 +37,11 @@ export async function completeRestore(
   // this needs worker_rw (releaseServerDisks reads operations.payload and step, which web_rw may not read); a
   // restore flow of the web tier must hand the subscription to a worker job, never call this as web_rw.
   if (row.resource.family === "linux_instance" || row.resource.family === "windows_instance") {
-    await releaseServerDisks(tx, { customerId: row.customerId, serverId: row.resourceId });
+    await releaseServerDisks(
+      tx,
+      { customerId: row.customerId, serverId: row.resourceId },
+      input.log,
+    );
   }
   return { ok: true, value: { periodEnd } };
 }

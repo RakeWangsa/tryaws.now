@@ -35,7 +35,7 @@ import {
 import { snapshotPrice } from "../products/snapshot-price";
 import { staticIpHourPrice, type StaticIpPrice } from "../products/static-ip-price";
 import type { Clock, Result } from "../types";
-import { viewDestroys, viewSuspends } from "./unpaid-undo";
+import { finalSnapshotUnstarted, viewDestroys, viewSuspends } from "./unpaid-undo";
 import { CATCH_UP_DAYS, SNAPSHOT_METRIC, dhakaDay, meteredSnapshot } from "./run";
 import {
   STATIC_IP_CATCH_UP_HOURS,
@@ -167,7 +167,7 @@ export interface UnpaidOps {
    * WPU-Y4 fix round 2. A server that leaves `retained` gives the disks retained with it their status back
    * (releaseServerDisks). Optional: absent means a world without it.
    */
-  releaseDisks?(tx: Tx, row: LifecycleRow): Promise<void>;
+  releaseDisks?(tx: Tx, row: LifecycleRow, log?: Logger): Promise<void>;
 }
 
 export const defaultUnpaidOps: UnpaidOps = {
@@ -213,10 +213,10 @@ export const defaultUnpaidOps: UnpaidOps = {
   supersedeFinal: (tx, resourceId) => meteringRepo(tx).supersedeFinalBackups(resourceId),
   resourceOps: (tx, resourceId, kinds) => meteringRepo(tx).operationsOf(resourceId, kinds),
   cancel: (tx, operationId) => meteringRepo(tx).cancelUnstarted(operationId),
-  releaseDisks: async (tx, row) => {
+  releaseDisks: async (tx, row, log) => {
     if (row.resource.family !== "linux_instance" && row.resource.family !== "windows_instance")
       return;
-    await releaseServerDisks(tx, { customerId: row.customerId, serverId: row.resourceId });
+    await releaseServerDisks(tx, { customerId: row.customerId, serverId: row.resourceId }, log);
   },
 };
 
@@ -483,6 +483,21 @@ async function releaseFinalSnapshots(
   for (const op of view.toCancel) {
     if (!(await ops.cancel(tx, op.id))) return held("destroy_not_cancelled");
   }
+  // WPU-X1: the retention is over, so its final snapshot that never started is ended (it would make a snapshot
+  // that nobody asked for, billed every day). One that started (or whose cancel loses the race with a claim)
+  // finishes: its backup is an ordinary one (superseded below, or not final from the start when its row comes
+  // after this commit: ensureFinalBackup of @tc/db). Ids and fixed words only in the log (R14).
+  for (const op of await ops.resourceOps(tx, row.resourceId, ["final_snapshot"])) {
+    if (!finalSnapshotUnstarted(op)) continue;
+    if (await ops.cancel(tx, op.id)) {
+      deps.log({
+        event: "unpaid",
+        action: "final_snapshot_ended",
+        resourceId: row.resourceId,
+        operationId: op.id,
+      });
+    }
+  }
   const released = (await ops.supersedeFinal(tx, row.resourceId)).length;
   count.finalReleased += released;
   // WPU-Y10: the customer is told once for each resource and episode that the former final snapshot is an
@@ -561,7 +576,7 @@ async function processOne(
       await ops.setStatus(tx, row.id, status);
       await releaseFinalSnapshots(tx, ops, deps, row, count, sinceMs);
       // WPU-Y4 fix round 2: the disks retained with the server are given back in the same transaction.
-      await ops.releaseDisks?.(tx, row);
+      await ops.releaseDisks?.(tx, row, deps.log);
     }
     // WPU-Y3c. A suspend of the job that has not started is CANCELLED, not answered with a blind resume
     // (the review found that a resume could lift an admin's suspension queued in the meantime). A resume

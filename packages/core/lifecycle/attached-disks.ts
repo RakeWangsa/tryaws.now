@@ -1,5 +1,6 @@
 import {
   clearRetainedWithServer,
+  type DiskRetentionOp,
   endDiskRetentionOps,
   lifecycleRepo,
   listDisksRetainedWithServer,
@@ -8,6 +9,7 @@ import {
   recordDiskHeld,
   type Tx,
 } from "@tc/db";
+import type { Logger } from "../operations/types";
 
 // WPU-Y4 fix round 2. A server that leaves `retained` (the unpaid rule's payback, completeRestore) takes back the
 // disks the cascade retained with it (retainAttachedDisks of @tc/db): in the same transaction each disk subscription
@@ -29,14 +31,30 @@ export interface ReleasedDisks {
 const DELETE_STEP = "delete_disk";
 
 /**
+ * WPU-X1. A final snapshot that started: it runs or waits (wait_snapshot), it is at a step, or the provisioner
+ * claimed it before. Its AWS snapshot may exist already, so a release lets it finish (its backup then ends as an
+ * ordinary, deletable one: ensureFinalBackup and markFinalBackup of @tc/db) instead of ending it, which would leave
+ * a snapshot that is billed and cannot be deleted. Pure.
+ */
+export function finalSnapshotStarted(
+  op: Pick<DiskRetentionOp, "kind" | "state" | "step" | "attempts">,
+): boolean {
+  if (op.kind !== "final_snapshot") return false;
+  return op.state === "running" || op.state === "waiting" || op.step !== null || op.attempts > 0;
+}
+
+const ENDED = ["succeeded", "failed"];
+
+/**
  * Fix round 4: a disk is given back unless DeleteDisk may already have been sent (a destroy at the delete step,
  * running, or one that succeeded). Fix round 5: every other destroy and final snapshot of the disk is ended
- * (`failed`) in the same transaction, approved or not, under the lock of its row.
+ * (`failed`) in the same transaction, approved or not, under the lock of its row. WPU-X1: except a final snapshot
+ * that started (finalSnapshotStarted), which finishes as an ordinary backup; the ids of the ended rows are logged.
  */
 export async function releaseServerDisks(
   tx: Tx,
   input: { readonly customerId: string; readonly serverId: string },
-  log?: (line: Record<string, unknown>) => void,
+  log?: Logger,
 ): Promise<ReleasedDisks> {
   const disks = await listDisksRetainedWithServer(tx, input);
   const metering = meteringRepo(tx);
@@ -68,15 +86,31 @@ export async function releaseServerDisks(
       });
       continue;
     }
-    // Fix round 5 (N1): every destroy and final snapshot of the disk that is not running and has not ended is
-    // ended (queued, waiting, needs_approval, needs_attention, approved or not), so none stays alive under the
-    // period's key and a later retention of the disk gets fresh rows (insertFreshOperation).
-    await endDiskRetentionOps(tx, {
+    // Fix round 5 (N1): every destroy of the disk that is not running and has not ended is ended (queued,
+    // waiting, needs_approval, needs_attention, approved or not), so none stays alive under the period's key and
+    // a later retention of the disk gets fresh rows (insertFreshOperation). WPU-X1: a final snapshot is ended
+    // only when it never started; a started one finishes and its backup is an ordinary one (superseded below, or
+    // made not final by ensureFinalBackup when its row comes after this release).
+    const ended = await endDiskRetentionOps(tx, {
       diskId: disk.diskId,
       operationIds: ops
-        .filter((op) => !["running", "succeeded", "failed"].includes(op.state))
+        .filter(
+          (op) => op.state !== "running" && !ENDED.includes(op.state) && !finalSnapshotStarted(op),
+        )
         .map((op) => op.id),
     });
+    // One line for each ended operation: ids and fixed words only (R14).
+    const kindOf = new Map(ops.map((op) => [op.id, op.kind]));
+    for (const operationId of ended) {
+      log?.({
+        event: "attached_disks",
+        action: "ended",
+        diskId: disk.diskId,
+        serverId: input.serverId,
+        operationId,
+        kind: kindOf.get(operationId) ?? "unknown",
+      });
+    }
     await metering.supersedeFinalBackups(disk.diskId);
     await lifecycleRepo(tx).setStatus(disk.subscriptionId, disk.from);
     await clear();

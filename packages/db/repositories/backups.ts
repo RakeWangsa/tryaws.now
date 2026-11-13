@@ -10,6 +10,16 @@ import { isUuid } from "./scope";
 // R13 and the lifecycle guard: a final snapshot is a child `backup` resource with config.final =
 // true, made by the adapter. The guard (resourceOfOperation) counts it only when it is `active` and
 // was created at or after the latest final_snapshot operation of the parent.
+//
+// WPU-X1. A retention can end while its final snapshot runs (a revived server gives its disks back,
+// the unpaid payback, a restore): the release makes the final rows of the parent ordinary
+// (supersedeFinalBackups) and leaves a started final_snapshot to finish. That snapshot must end as an
+// ordinary backup, `active` and not final: metered like any snapshot and deletable by the customer,
+// never `creating` for ever nor final (billed and undeletable). So a row made after the release is not
+// final, and markFinalBackup accepts the superseded row of the same operation.
+
+// The subscription statuses of a parent whose retention has ended (a release gives back one of these).
+const RELEASED_STATUSES = ["active", "grace"];
 
 /** The child backup rows of a parent that are not destroyed. */
 export async function listBackupsOf(
@@ -45,8 +55,17 @@ export async function ensureFinalBackup(
     limit 1`);
   const existing = found.rows[0];
   if (existing !== undefined) return { id: existing.id };
+  // WPU-X1. Under a share lock of the parent's subscription: a release locks it FOR UPDATE, so this
+  // waits for a release that runs and reads its result (READ COMMITTED reads the newest row after the
+  // lock), and a release that comes later waits for this row and supersedes it. A parent whose
+  // subscription is active or in grace has no retention left: its snapshot is an ordinary backup.
+  const sub = await tx.execute<{ status: string }>(sql`
+    select status from subscriptions
+    where resource_id = ${parentResourceId} and customer_id = ${customerId}
+    for share`);
+  const released = sub.rows.some((r) => RELEASED_STATUSES.includes(r.status));
   const id = uuidv7();
-  const config = JSON.stringify({ final: true, finalOperation: operationId });
+  const config = JSON.stringify({ final: !released, finalOperation: operationId });
   const inserted = await tx.execute<{ id: string }>(sql`
     insert into resources (id, customer_id, family, pool_account_id, region, parent_resource_id, state, config)
     select ${id}, p.customer_id, 'backup', p.pool_account_id, p.region, p.id, 'creating', ${config}::jsonb
@@ -57,17 +76,31 @@ export async function ensureFinalBackup(
   return { id };
 }
 
-/** The snapshot is available: the row becomes `active` with its AWS name and size. */
+/**
+ * The snapshot is available: the row of this final_snapshot operation becomes `active` with its AWS
+ * name and size. WPU-X1: the row may have stopped being final while the snapshot ran (a release); it is
+ * marked all the same and stays an ordinary backup. Only the row the operation made (config.finalOperation)
+ * is marked, never another backup (R16).
+ */
 export async function markFinalBackup(
   tx: Tx,
-  input: { id: string; customerId: string; awsName: string; sizeGb: number | null },
+  input: {
+    id: string;
+    customerId: string;
+    operationId: string;
+    awsName: string;
+    sizeGb: number | null;
+  },
 ): Promise<void> {
-  if (!isUuid(input.id) || !isUuid(input.customerId)) throw new Error("final backup: invalid id");
+  if (!isUuid(input.id) || !isUuid(input.customerId) || !isUuid(input.operationId)) {
+    throw new Error("final backup: invalid id");
+  }
   const merge = JSON.stringify(input.sizeGb === null ? {} : { sizeGb: input.sizeGb });
   const result = await tx.execute(sql`
     update resources
     set state = 'active', aws_name = coalesce(aws_name, ${input.awsName}), config = config || ${merge}::jsonb
     where id = ${input.id} and customer_id = ${input.customerId} and family = 'backup'
-      and config ->> 'final' = 'true' and state in ('creating', 'active')`);
+      and config ->> 'finalOperation' = ${input.operationId}
+      and config ->> 'final' in ('true', 'false') and state in ('creating', 'active')`);
   if ((result.rowCount ?? 0) !== 1) throw new Error("final backup: not found");
 }
