@@ -57,6 +57,8 @@ const EXPORTS = {
     "./buyer-rules": "./repositories/customer/buyer-rules.ts",
     "./links": "./links.ts",
     "./migrate": "./migrate.ts",
+    // The pool account seed, for the migrator only; the apps may not import it (WPU-X4, review M1).
+    "./seed-pool": "./seed-pool.ts",
     "./testing": "./testing/index.ts",
   },
   "packages/eps": { ".": "./index.ts", "./redirect": "./redirect.ts" },

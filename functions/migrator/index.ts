@@ -7,6 +7,7 @@
 // that Node trusts the certificate chain of that host for sslmode verify-full, and that MIGRATIONS_DIR
 // (copyFiles of the Migrator function) holds the migrations folder next to the bundle.
 import { bootstrapFirstSuperadmin, createDatabase } from "@tc/db";
+import { seedPoolAccount } from "@tc/db/seed-pool";
 import { ensureSystemAccounts } from "@tc/core";
 import { readMigrationHashes, runMigrations } from "@tc/db/migrate";
 import { readMigratorConfig } from "./config";
@@ -54,6 +55,34 @@ export const handler = async (event?: unknown): Promise<MigratorReport> => {
         return await db.transaction((tx) => bootstrapFirstSuperadmin(tx, sub), {
           isolationLevel: "read committed",
         });
+      } finally {
+        await pool.end();
+      }
+    },
+    seedPoolAccount: async (url, input) => {
+      // WPU-X4: as the master user, which owns pool_accounts and pool_capacity. seedPoolAccount runs
+      // begin, its statements and commit (or rollback) itself, so all of them go to ONE checked-out
+      // connection (the same discipline as the CLI, scripts/seed-pool-account.mjs). With the audit
+      // option: one audit_log row (actor system) in that transaction when it wrote something (M2).
+      const { pool } = createDatabase(url, { max: 1 });
+      pool.on("error", () => {});
+      try {
+        const client = await pool.connect();
+        try {
+          return await seedPoolAccount(
+            async (sql, params) => {
+              const result = await client.query(
+                sql,
+                params === undefined ? undefined : [...params],
+              );
+              return { rows: result.rows as Record<string, unknown>[] };
+            },
+            input,
+            { audit: true },
+          );
+        } finally {
+          client.release();
+        }
       } finally {
         await pool.end();
       }

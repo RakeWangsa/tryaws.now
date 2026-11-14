@@ -123,6 +123,20 @@ const SYSTEM_WRITES = {
   message:
     "R8/R10: customer actions use customerRepos(...).operations.request; admin decisions go through adminRepos(...).",
 };
+// WPU-X4 (review M1): the pool account seed writes pool_accounts and pool_capacity as the table owner.
+// Only the migrator (functions/) and the CLI (scripts/) use it; the apps change capacity through the
+// audited admin repositories (R10).
+const SEED_POOL_MESSAGE =
+  "WPU-X4: the pool account seed is for the migrator and the CLI only; the apps use the audited admin repositories (R10).";
+const SEED_POOL = {
+  message: SEED_POOL_MESSAGE,
+  group: ["@tc/db/seed-pool", "**/packages/db/seed-pool", "**/packages/db/seed-pool.*"],
+};
+const SEED_POOL_DYNAMIC = {
+  selector:
+    "ImportExpression[source.value=/^@tc\\/db\\/seed-pool$|(^|\\/)packages\\/db\\/seed-pool(\\.[a-z]+)?$/]",
+  message: SEED_POOL_MESSAGE,
+};
 // packages/core already bans the SDK clients and @tc/aws through PURE_CORE, so R1 adds the
 // function packages and the path forms.
 const R1_PATHS = { ...R1, group: ["@tc/fn-*", "@tc/fn-*/*", ...R1_PATH_FORMS] };
@@ -185,6 +199,7 @@ const DYNAMIC_IMPORT_SYNTAX = [
   SDK_DYNAMIC,
   NO_HIDDEN_LOADER,
   NO_QUERY,
+  SEED_POOL_DYNAMIC,
   {
     selector: 'ImportExpression:not([source.type="Literal"])',
     message:
@@ -256,7 +271,16 @@ export default tseslint.config(
   {
     // apps/**: the same, plus the modules that only a server process may use.
     files: ["apps/**"],
-    rules: restrict(R1, SDK, SDK_FUNCTIONS_ONLY, DECIMAL, AWS_LOADERS, APP_MODULES, SYSTEM_WRITES),
+    rules: restrict(
+      R1,
+      SDK,
+      SDK_FUNCTIONS_ONLY,
+      DECIMAL,
+      AWS_LOADERS,
+      APP_MODULES,
+      SYSTEM_WRITES,
+      SEED_POOL,
+    ),
   },
   {
     // packages/db: R1, the SDK rule, R4, and the direction of the dependency on packages/core.

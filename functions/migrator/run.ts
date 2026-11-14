@@ -5,6 +5,14 @@ import {
   type FirstAdminDecision,
   type FirstAdminOutcome,
 } from "@tc/db";
+import {
+  accountSuffix,
+  isPoolSeedConflict,
+  poolAccountDecision,
+  type PoolAccountDecision,
+  type SeedPoolInput,
+  type SeedPoolResult,
+} from "@tc/db/seed-pool";
 import type { MigratorConfig } from "./config";
 import { ensureRoles, type Queryable } from "./roles";
 
@@ -37,6 +45,11 @@ export interface MigratorDeps {
    * admin_users has no row at all (bootstrapFirstSuperadmin of @tc/db). Idempotent.
    */
   readonly bootstrapFirstAdmin: (url: string, sub: string) => Promise<FirstAdminOutcome>;
+  /**
+   * WPU-X4: as the table owner, seedPoolAccount of @tc/db (one transaction on one connection): the
+   * pool account and its capacity cells when absent; never changes an existing row. Idempotent.
+   */
+  readonly seedPoolAccount: (url: string, input: SeedPoolInput) => Promise<SeedPoolResult>;
   readonly log: Logger;
 }
 
@@ -48,6 +61,8 @@ export interface MigratorReport {
   readonly systemAccountsCreated: number;
   /** WPU-Z18: what the first-superadmin bootstrap did; never the sub. */
   readonly firstAdmin: FirstAdminDecision;
+  /** WPU-X4: what the pool account bootstrap did; never the account id or the ExternalId. */
+  readonly poolAccount: PoolAccountDecision;
 }
 
 const APPLIED_MIGRATIONS =
@@ -94,8 +109,15 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       : undefined;
   if (action !== "migrate") throw new Error("migrator: unknown action");
 
-  let step: "connect" | "tls" | "roles" | "verify" | "migrate" | "accounts" | "first_admin" =
-    "connect";
+  let step:
+    | "connect"
+    | "tls"
+    | "roles"
+    | "verify"
+    | "migrate"
+    | "accounts"
+    | "first_admin"
+    | "pool_account" = "connect";
   let client: MasterConnection | undefined;
   let refused = false;
   let changed = 0;
@@ -145,6 +167,48 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       log({ event: "migrator_first_admin", decision: firstAdmin, subPrefix: subPrefix(plan.sub) });
     }
 
+    // WPU-X4: the one pool account and its capacity cells, from TC_POOL_ACCOUNT_IDS (exactly one id) and
+    // TC_POOL_EXTERNAL_ID, with the alias pool-1, tier new and the seed's placeholder limits. Unset,
+    // several ids or a malformed value write nothing. An existing account is never changed (R7). A row
+    // that differs (same id with another name, tier or ExternalId, or pool-1 on another id) is left as
+    // it is and logged `skipped: differs`: a stale, non-secret variable must never block every later
+    // deploy, hotfixes included (review round 1); the CLI stays strict. Any other error fails the
+    // deploy, as every other error of a migrator step does (R16). The seed writes its audit row in the
+    // same transaction (review M2). The log holds the decision and at most the last 4 digits of the
+    // account id, never the ExternalId (R14).
+    step = "pool_account";
+    const poolPlan = poolAccountDecision({
+      stage: config.stage,
+      accountIds: config.poolAccountIds,
+      externalId: config.poolExternalId,
+    });
+    let poolAccount: PoolAccountDecision;
+    if (poolPlan.kind === "skip") {
+      poolAccount = poolPlan.decision;
+      log({ event: "migrator_pool_account", decision: poolAccount });
+    } else {
+      const suffix = accountSuffix(poolPlan.input.awsAccountId);
+      let seeded: SeedPoolResult | undefined;
+      try {
+        seeded = await deps.seedPoolAccount(config.masterUrl, poolPlan.input);
+      } catch (error) {
+        // The seed rolled its transaction back: nothing was written.
+        if (!isPoolSeedConflict(error)) throw error;
+      }
+      if (seeded === undefined) {
+        poolAccount = "skipped: differs";
+        log({ event: "migrator_pool_account", decision: poolAccount, accountSuffix: suffix });
+      } else {
+        poolAccount = seeded.accountCreated ? "inserted" : "skipped: exists";
+        log({
+          event: "migrator_pool_account",
+          decision: poolAccount,
+          accountSuffix: suffix,
+          cellsCreated: seeded.cellsCreated,
+        });
+      }
+    }
+
     const report: MigratorReport = {
       rolesCreated: roles.created,
       rolesEnabled: roles.enabled,
@@ -152,6 +216,7 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       migrationsApplied: after - before,
       systemAccountsCreated: accounts.created,
       firstAdmin,
+      poolAccount,
     };
     log({ event: "migrator_done", ...report });
     return report;
@@ -172,6 +237,7 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     if (step === "verify") throw new Error("migrator: could not check the applied migrations");
     if (step === "accounts") throw new Error("migrator: could not prepare the ledger accounts");
     if (step === "first_admin") throw new Error("migrator: could not bootstrap the first admin");
+    if (step === "pool_account") throw new Error("migrator: could not register the pool account");
     throw new Error("migrator: the migrations failed");
   } finally {
     await client?.end().catch(() => undefined);

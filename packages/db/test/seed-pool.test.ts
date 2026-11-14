@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { QUOTA_CODES } from "../schema/provisioning";
 import {
   DEFAULT_LIMITS,
+  isPoolSeedConflict,
   LAUNCH_REGIONS,
   planPoolSeed,
+  poolAccountDecision,
+  POOL_BOOTSTRAP_ACTION,
   seedPoolAccount,
   type SeedPoolInput,
   type SeedQuery,
@@ -194,6 +197,9 @@ describe("seedPoolAccount (database)", () => {
         run((q) => seedPoolAccount(q, input(other))),
         JSON.stringify(other),
       ).rejects.toThrow(/^seed-pool: .*differs/);
+      // WPU-X4: the migrator tells this refusal apart from a database failure
+      const error = await run((q) => seedPoolAccount(q, input(other))).catch((e: unknown) => e);
+      expect(isPoolSeedConflict(error), JSON.stringify(other)).toBe(true);
     }
     expect(await count("pool_accounts")).toBe(1);
   });
@@ -203,7 +209,132 @@ describe("seedPoolAccount (database)", () => {
     await expect(
       run((q) => seedPoolAccount(q, input({ awsAccountId: "222222222222" }))),
     ).rejects.toThrow(/^seed-pool: .*name/);
+    const error = await run((q) =>
+      seedPoolAccount(q, input({ awsAccountId: "222222222222" })),
+    ).catch((e: unknown) => e);
+    expect(isPoolSeedConflict(error)).toBe(true);
     expect(await count("pool_accounts")).toBe(1);
+  });
+
+  it("a database failure is not a conflict", async () => {
+    const error = await run((q) =>
+      seedPoolAccount((sql, params) => {
+        if (/insert into pool_capacity/.test(sql)) throw new Error("boom");
+        return q(sql, params);
+      }, input()),
+    ).catch((e: unknown) => e);
+    expect(isPoolSeedConflict(error)).toBe(false);
+  });
+
+  // WPU-X4: the plan of the migrator step, run against PostgreSQL: inserted, then exists, never a change.
+  it("the migrator plan inserts pool-1 once; a second deploy finds it and changes nothing (R7)", async () => {
+    const plan = poolAccountDecision({
+      stage: "staging",
+      accountIds: ACCOUNT,
+      externalId: "tc-pool-ext-placeholder-0001",
+    });
+    if (plan.kind !== "run") throw new Error("expected a run plan");
+    const first = await run((q) => seedPoolAccount(q, plan.input));
+    expect(first).toMatchObject({ accountCreated: true, cellsCreated: 26 });
+    await t.pool.query(
+      "update pool_capacity set quota_limit = 42, used = 3 where pool_account_id = $1 and quota_code = 'bucket'",
+      [first.accountId],
+    );
+    const again = await run((q) => seedPoolAccount(q, plan.input));
+    expect(again).toMatchObject({ accountCreated: false, cellsCreated: 0, cellsExisting: 26 });
+    const { rows } = await t.pool.query(
+      "select name, tier, status from pool_accounts where aws_account_id = $1",
+      [ACCOUNT],
+    );
+    expect(rows).toEqual([{ name: "pool-1", tier: "new", status: "active" }]);
+    const cell = await t.pool.query(
+      "select quota_limit, used from pool_capacity where pool_account_id = $1 and quota_code = 'bucket'",
+      [first.accountId],
+    );
+    expect(cell.rows).toEqual([{ quota_limit: 42, used: 3 }]);
+  });
+
+  // WPU-X4 review M2: the migrator's write is audited like the first superadmin (actor system, the
+  // reason, before and after), in the same transaction. Never the ExternalId or the full account id.
+  const auditRows = async (accountId: string) =>
+    (
+      await t.pool.query(
+        `select actor_type, actor_id, action, target_type, target_id, ip, user_agent, metadata
+           from audit_log where target_type = 'pool_account' and target_id = $1 order by created_at`,
+        [accountId],
+      )
+    ).rows as Record<string, unknown>[];
+
+  it("with the audit option writes one audit row on the first run and none on a run that changes nothing", async () => {
+    const first = await run((q) => seedPoolAccount(q, input(), { audit: true }));
+    const rows = await auditRows(first.accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actor_type: "system",
+      actor_id: null,
+      action: POOL_BOOTSTRAP_ACTION,
+      target_type: "pool_account",
+      target_id: first.accountId,
+      ip: null,
+      user_agent: null,
+      metadata: {
+        reason: "pool account bootstrap",
+        before: null,
+        after: {
+          name: "tc-pool-one",
+          tier: "new",
+          status: "active",
+          accountSuffix: "1111",
+          accountCreated: true,
+          cellsCreated: 26,
+        },
+      },
+    });
+    const text = JSON.stringify(rows);
+    expect(text).not.toContain("tc-ext-placeholder-1");
+    expect(text).not.toContain(ACCOUNT);
+    await run((q) => seedPoolAccount(q, input(), { audit: true }));
+    expect(await auditRows(first.accountId)).toHaveLength(1);
+  });
+
+  it("with the audit option audits a run that only fills in missing cells", async () => {
+    const first = await run((q) => seedPoolAccount(q, input(), { audit: true }));
+    await t.pool.query(
+      "delete from pool_capacity where pool_account_id = $1 and region = 'us-east-1'",
+      [first.accountId],
+    );
+    await run((q) => seedPoolAccount(q, input(), { audit: true }));
+    const rows = await auditRows(first.accountId);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.metadata).toMatchObject({
+      after: { accountCreated: false, cellsCreated: 8 },
+    });
+  });
+
+  it("without the option (the CLI) writes no audit row, and a refused or failed run writes none", async () => {
+    const first = await run((q) => seedPoolAccount(q, input()));
+    expect(await auditRows(first.accountId)).toHaveLength(0);
+    await run((q) => seedPoolAccount(q, input({ tier: "trusted" }), { audit: true })).catch(
+      () => undefined,
+    );
+    expect(await auditRows(first.accountId)).toHaveLength(0);
+  });
+
+  it("rolls the audit row back with the seed when a later statement fails", async () => {
+    await expect(
+      run((q) =>
+        seedPoolAccount(
+          (sql, params) => {
+            if (/insert into audit_log/.test(sql)) throw new Error("boom");
+            return q(sql, params);
+          },
+          input(),
+          { audit: true },
+        ),
+      ),
+    ).rejects.toThrow();
+    expect(await count("pool_accounts")).toBe(0);
+    expect(await count("pool_capacity")).toBe(0);
   });
 
   it("rolls back as a whole when a statement fails midway", async () => {

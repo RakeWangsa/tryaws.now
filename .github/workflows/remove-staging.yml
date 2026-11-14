@@ -48,6 +48,7 @@ jobs:
       TC_POOL_ACCOUNT_IDS: ${{ vars.TC_POOL_ACCOUNT_IDS }}
       TC_DNS_ACCOUNT_ID: ${{ vars.TC_DNS_ACCOUNT_ID }}
       TC_DNS_EXTERNAL_ID: ${{ vars.TC_DNS_EXTERNAL_ID }}
+      TC_POOL_EXTERNAL_ID: ${{ vars.TC_POOL_EXTERNAL_ID }}
       TC_DOMAIN_WEB: ${{ vars.TC_DOMAIN_WEB }}
       TC_DOMAIN_ADMIN: ${{ vars.TC_DOMAIN_ADMIN }}
       TC_ADMIN_ALLOWLIST: ${{ vars.TC_ADMIN_ALLOWLIST }}

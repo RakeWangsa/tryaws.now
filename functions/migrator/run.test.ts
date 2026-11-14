@@ -1,4 +1,5 @@
 import type { LogEvent } from "@tc/core";
+import { PoolSeedConflictError } from "@tc/db/seed-pool";
 import { expect, it } from "vitest";
 import { runMigrator, type MigratorDeps, type Queryable } from "./run";
 
@@ -94,6 +95,17 @@ const build = (srv = server()) => {
         adminId: "0190f0e0-0000-7000-8000-000000000001",
       });
     },
+    seedPoolAccount: (url, input) => {
+      calls.push(
+        `pool ${url === CONFIG.masterUrl ? "master" : "other"} ${input.awsAccountId} ${input.name} ${input.tier ?? "-"} ${input.stage}`,
+      );
+      return Promise.resolve({
+        accountId: "0190f0e0-0000-7000-8000-0000000000aa",
+        accountCreated: true,
+        cellsCreated: 26,
+        cellsExisting: 0,
+      });
+    },
     log: (e) => logs.push(e),
   };
   return { deps, logs, calls, srv };
@@ -109,6 +121,7 @@ it("checks TLS, creates the roles, runs the migrations and returns counts only",
     migrationsApplied: 5,
     systemAccountsCreated: 8,
     firstAdmin: "skipped: no secret",
+    poolAccount: "skipped: not configured",
   });
   expect(calls).toEqual(["connect master", "migrate /var/task/migrations", "accounts"]);
   expect(srv.client.ended).toBe(true);
@@ -359,4 +372,177 @@ it("does not bootstrap when the accounts failed, and fails with fixed text when 
   const text = JSON.stringify(failing.logs);
   expect(text).not.toContain(SUB);
   expect(text).not.toContain("SECRET-1");
+});
+
+// WPU-X4: the pool account, from TC_POOL_ACCOUNT_IDS and TC_POOL_EXTERNAL_ID, after the first admin.
+const POOL_ID = "111122223333";
+const POOL_EXT = "tc-pool-ext-placeholder-0001";
+const withPool = (
+  over: { stage?: string; poolAccountIds?: string; poolExternalId?: string } = {},
+  srv = server(),
+) => {
+  const b = build(srv);
+  const config = {
+    ...CONFIG,
+    firstAdminSub: SUB,
+    stage: "staging",
+    poolAccountIds: POOL_ID,
+    poolExternalId: POOL_EXT,
+    ...over,
+  };
+  return { ...b, deps: { ...b.deps, config } };
+};
+const existing = () =>
+  Promise.resolve({
+    accountId: "0190f0e0-0000-7000-8000-0000000000aa",
+    accountCreated: false,
+    cellsCreated: 0,
+    cellsExisting: 26,
+  });
+
+it("registers pool-1 (tier new) after the first admin, and logs the decision and the last 4 digits only", async () => {
+  const { deps, calls, logs } = withPool();
+  const out = await runMigrator(deps, { action: "migrate" });
+  expect(out.poolAccount).toBe("inserted");
+  expect(calls).toEqual([
+    "connect master",
+    "migrate /var/task/migrations",
+    "accounts",
+    `first-admin master ${SUB}`,
+    `pool master ${POOL_ID} pool-1 new staging`,
+  ]);
+  expect(logs).toContainEqual({
+    event: "migrator_pool_account",
+    decision: "inserted",
+    accountSuffix: "3333",
+    cellsCreated: 26,
+  });
+  const text = JSON.stringify(logs);
+  expect(text).not.toContain(POOL_ID);
+  expect(text).not.toContain(POOL_EXT);
+  expect(text).not.toContain(POOL_EXT.slice(0, 8));
+  expect(text).not.toContain("0190f0e0-0000-7000-8000-0000000000aa");
+});
+
+it("a second deploy finds the account and reports skipped: exists (R7)", async () => {
+  const { deps, logs } = withPool();
+  const out = await runMigrator({ ...deps, seedPoolAccount: existing }, { action: "migrate" });
+  expect(out.poolAccount).toBe("skipped: exists");
+  expect(logs).toContainEqual({
+    event: "migrator_pool_account",
+    decision: "skipped: exists",
+    accountSuffix: "3333",
+    cellsCreated: 0,
+  });
+});
+
+it("does not touch pool_accounts when not configured, for several accounts, or for a malformed value", async () => {
+  const cases: [Record<string, string | undefined>, string][] = [
+    [{ poolExternalId: undefined }, "skipped: not configured"],
+    [{ poolExternalId: "" }, "skipped: not configured"],
+    [{ poolAccountIds: `${POOL_ID},444455556666` }, "skipped: several pool accounts"],
+    [{ poolExternalId: "too-short" }, "skipped: malformed"],
+    [{ poolExternalId: "tc pool ext with a space" }, "skipped: malformed"],
+    [{ poolAccountIds: "12345" }, "skipped: malformed"],
+    [{ poolAccountIds: undefined }, "skipped: malformed"],
+    [{ stage: undefined }, "skipped: malformed"],
+  ];
+  for (const [over, decision] of cases) {
+    const { deps, calls, logs } = withPool(over);
+    const out = await runMigrator(deps, { action: "migrate" });
+    expect(out.poolAccount, JSON.stringify(over)).toBe(decision);
+    expect(
+      calls.some((c) => c.startsWith("pool ")),
+      JSON.stringify(over),
+    ).toBe(false);
+    expect(logs).toContainEqual({ event: "migrator_pool_account", decision });
+    const text = JSON.stringify(logs);
+    expect(text).not.toContain(POOL_ID);
+    expect(text).not.toContain(POOL_EXT);
+    for (const value of Object.values(over)) {
+      if (typeof value === "string" && value !== "") expect(text).not.toContain(value);
+    }
+  }
+});
+
+it("passes the production confirmation only on the production stage", async () => {
+  const seen: boolean[] = [];
+  for (const stage of ["staging", "production"]) {
+    const { deps } = withPool({ stage });
+    await runMigrator(
+      {
+        ...deps,
+        seedPoolAccount: (_url, input) => {
+          seen.push(input.confirmProduction === true);
+          return existing();
+        },
+      },
+      { action: "migrate" },
+    );
+  }
+  expect(seen).toEqual([false, true]);
+});
+
+// Review round 1: a stale, non-secret variable must never block every later deploy (hotfixes
+// included). A row that differs is left as it is and the deploy goes on; the CLI stays strict.
+it("a row that differs is skipped: logged as skipped: differs, nothing written, the deploy goes on", async () => {
+  const { deps, logs } = withPool();
+  const out = await runMigrator(
+    {
+      ...deps,
+      seedPoolAccount: () =>
+        Promise.reject(
+          new PoolSeedConflictError(
+            "the account exists and differs in name, tier or ExternalId; nothing was changed.",
+          ),
+        ),
+    },
+    { action: "migrate" },
+  );
+  expect(out.poolAccount).toBe("skipped: differs");
+  expect(logs).toContainEqual({
+    event: "migrator_pool_account",
+    decision: "skipped: differs",
+    accountSuffix: "3333",
+  });
+  expect(logs.some((e) => e.event === "migrator_refused" || e.event === "migrator_failed")).toBe(
+    false,
+  );
+  expect(logs.some((e) => e.event === "migrator_done")).toBe(true);
+  const text = JSON.stringify(logs);
+  expect(text).not.toContain(POOL_EXT);
+  expect(text).not.toContain(POOL_ID);
+  expect(text).not.toContain("differs in name");
+});
+
+it("a database failure of the pool step fails the deploy with fixed text and no cause", async () => {
+  const { deps, logs } = withPool();
+  try {
+    await runMigrator(
+      {
+        ...deps,
+        seedPoolAccount: () =>
+          Promise.reject(new Error(`dup ${POOL_ID} ${POOL_EXT} postgres://m:SECRETMASTER@h/d`)),
+      },
+      { action: "migrate" },
+    );
+    expect.unreachable();
+  } catch (error) {
+    expect((error as Error).message).toBe("migrator: could not register the pool account");
+    expect((error as Error).cause).toBeUndefined();
+  }
+  expect(logs).toContainEqual({ event: "migrator_failed", step: "pool_account" });
+  const text = JSON.stringify(logs);
+  for (const v of [POOL_ID, POOL_EXT, "SECRETMASTER"]) expect(text).not.toContain(v);
+});
+
+it("does not register the pool account when the first admin step failed", async () => {
+  const { deps, calls } = withPool();
+  await expect(
+    runMigrator(
+      { ...deps, bootstrapFirstAdmin: () => Promise.reject(new Error("x")) },
+      { action: "migrate" },
+    ),
+  ).rejects.toThrow("migrator: could not bootstrap the first admin");
+  expect(calls.some((c) => c.startsWith("pool "))).toBe(false);
 });

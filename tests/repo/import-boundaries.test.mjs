@@ -224,6 +224,11 @@ it.each([
   // The system writes of operations are not for the apps.
   ["apps/web/x.ts", 'import { enqueueOperation } from "@tc/core";', "R8/R10:"],
   ["apps/admin/x.ts", 'import { approveOperation } from "@tc/db";', "R8/R10:"],
+  // WPU-X4 review M1: the pool account seed (master user, table owner) is the migrator's and the CLI's.
+  ["apps/web/x.ts", 'import { seedPoolAccount } from "@tc/db/seed-pool";', "WPU-X4:"],
+  ["apps/admin/x.tsx", 'export * from "@tc/db/seed-pool";', "WPU-X4:"],
+  ["apps/admin/x.ts", 'import "../../packages/db/seed-pool";', "WPU-X4:"],
+  ["apps/web/x.ts", 'await import("@tc/db/seed-pool");', "WPU-X4:"],
   [
     "packages/db/operations/x.ts",
     'import { sql } from "drizzle-orm";\nsql.raw("select 1");',

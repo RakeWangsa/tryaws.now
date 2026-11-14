@@ -94,6 +94,26 @@ function refuse(message: string): never {
   throw new Error(`seed-pool: ${message}`);
 }
 
+/**
+ * WPU-X4: the two refusals that mean "a row exists that does not match the input" (not a database
+ * failure). Same `seed-pool: <fixed text>` message as every other refusal, so the CLI prints the same;
+ * the migrator tells it apart by its name (isPoolSeedConflict).
+ */
+export class PoolSeedConflictError extends Error {
+  constructor(message: string) {
+    super(`seed-pool: ${message}`);
+    this.name = "PoolSeedConflictError";
+  }
+}
+
+export function isPoolSeedConflict(error: unknown): boolean {
+  return error instanceof Error && error.name === "PoolSeedConflictError";
+}
+
+function conflict(message: string): never {
+  throw new PoolSeedConflictError(message);
+}
+
 function isQuotaCode(value: string): value is SeedQuotaCode {
   return (QUOTA_CODE_LIST as readonly string[]).includes(value);
 }
@@ -213,9 +233,24 @@ export interface SeedPoolResult {
   readonly cellsExisting: number;
 }
 
+/** WPU-X4 review M2: the audit row of a bootstrap by the migrator (the same shape as the first superadmin's). */
+export const POOL_BOOTSTRAP_ACTION = "pool_account.bootstrap";
+export const POOL_BOOTSTRAP_REASON = "pool account bootstrap";
+
+export interface SeedPoolOptions {
+  /**
+   * Write one audit_log row (actor `system`) in the same transaction when the run created the account
+   * or a capacity cell. The migrator sets it; the CLI does not (its operator writes the Log section of
+   * the runbook). The row holds the alias, tier, status, the last 4 digits of the account id and the
+   * counts, never the ExternalId (R14).
+   */
+  readonly audit?: boolean;
+}
+
 export async function seedPoolAccount(
   query: SeedQuery,
   input: SeedPoolInput,
+  options: SeedPoolOptions = {},
 ): Promise<SeedPoolResult> {
   const plan = planPoolSeed(input);
   const { account } = plan;
@@ -225,7 +260,7 @@ export async function seedPoolAccount(
       "select id from pool_accounts where name = $1 and aws_account_id <> $2",
       [account.name, account.awsAccountId],
     );
-    if (sameName.rows.length > 0) refuse("the name belongs to another AWS account.");
+    if (sameName.rows.length > 0) conflict("the name belongs to another AWS account.");
 
     const inserted = await query(
       `insert into pool_accounts (id, aws_account_id, name, tier, role_arn, external_id, status)
@@ -251,7 +286,9 @@ export async function seedPoolAccount(
         row.tier !== account.tier ||
         row.external_id !== account.externalId
       ) {
-        refuse("the account exists and differs in name, tier or ExternalId; nothing was changed.");
+        conflict(
+          "the account exists and differs in name, tier or ExternalId; nothing was changed.",
+        );
       }
       accountId = row.id as string;
     }
@@ -264,15 +301,119 @@ export async function seedPoolAccount(
        returning id`,
       [accountId, JSON.stringify(plan.cells)],
     );
+    const cellsCreated = added.rows.length;
+    const cellsExisting = plan.cells.length - cellsCreated;
+    if (options.audit === true && (accountCreated || cellsCreated > 0)) {
+      // The columns and values of insertAudit (repositories/audit-log.ts) for a system actor: no
+      // actor id, no IP, no user agent, the reason with before and after in metadata (R10 shape).
+      // Plain SQL because this file has no import at run time (the CLI loads it directly).
+      const metadata = {
+        reason: POOL_BOOTSTRAP_REASON,
+        before: accountCreated ? null : { cellsExisting },
+        after: {
+          name: account.name,
+          tier: account.tier,
+          status: "active",
+          accountSuffix: accountSuffix(account.awsAccountId),
+          accountCreated,
+          cellsCreated,
+        },
+      };
+      await query(
+        `insert into audit_log (id, actor_type, actor_id, action, target_type, target_id, ip, user_agent, metadata)
+         values (gen_random_uuid(), 'system', null, $1, 'pool_account', $2, null, null, $3::jsonb)`,
+        [POOL_BOOTSTRAP_ACTION, accountId, JSON.stringify(metadata)],
+      );
+    }
     await query("commit");
-    return {
-      accountId,
-      accountCreated,
-      cellsCreated: added.rows.length,
-      cellsExisting: plan.cells.length - added.rows.length,
-    };
+    return { accountId, accountCreated, cellsCreated, cellsExisting };
   } catch (error) {
     await query("rollback");
     throw error;
   }
+}
+
+// ---- WPU-X4: the bootstrap by the migrator at deploy time ---------------------------------------------
+// The database is private (R2) and has no bastion, so on staging and production the CLI above cannot
+// reach it. The migrator (functions/migrator, in the VPC, master user) runs this decision at every deploy
+// and, for a run plan, seedPoolAccount above with the same idempotent SQL. Only the one-account stage is
+// covered: several pool accounts stay with the CLI and the audited admin path.
+
+/** The fixed alias and tier of the account that the migrator registers. */
+export const MIGRATOR_POOL_NAME = "pool-1";
+export const MIGRATOR_POOL_TIER = "new";
+
+/** The AllowedPattern of the ExternalId parameter of infra/org/pool-roles.yaml (stricter than EXTERNAL_ID). */
+const POOL_ROLES_EXTERNAL_ID = /^[A-Za-z0-9+=,.@:/_-]{16,1224}$/;
+/** The two stages a deploy hands the migrator in TC_STAGE (infra/lib/stage.ts, tcStage). */
+const DEPLOY_STAGES = ["staging", "production"] as const;
+
+export type PoolAccountDecision =
+  | "inserted"
+  | "skipped: exists"
+  | "skipped: not configured"
+  | "skipped: several pool accounts"
+  | "skipped: malformed"
+  // review round 1: a row that differs (PoolSeedConflictError) is left as it is; the deploy goes on.
+  | "skipped: differs";
+
+export type PoolAccountPlan =
+  | {
+      readonly kind: "skip";
+      readonly decision:
+        "skipped: not configured" | "skipped: several pool accounts" | "skipped: malformed";
+    }
+  | { readonly kind: "run"; readonly input: SeedPoolInput };
+
+export interface PoolAccountRaw {
+  /** TC_STAGE of the function: staging or production. */
+  readonly stage?: string | undefined;
+  /** TC_POOL_ACCOUNT_IDS as the deploy has it: a comma list of 12-digit ids. */
+  readonly accountIds?: string | undefined;
+  /** TC_POOL_EXTERNAL_ID: the plain ExternalId of the tc-pool-roles stack (not a secret, 6.3). */
+  readonly externalId?: string | undefined;
+}
+
+/**
+ * The decision before the database. No ExternalId: not configured. More than one id: left to the manual
+ * path. Anything not well formed: malformed. All three write nothing (R16). A production deploy that
+ * carries the variable is the explicit confirmation that the CLI asks for with --confirm-production.
+ */
+export function poolAccountDecision(raw: PoolAccountRaw): PoolAccountPlan {
+  const externalId = raw.externalId;
+  if (externalId === undefined || externalId.trim() === "") {
+    return { kind: "skip", decision: "skipped: not configured" };
+  }
+  const ids = (raw.accountIds ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value !== "");
+  if (ids.length > 1) return { kind: "skip", decision: "skipped: several pool accounts" };
+  const awsAccountId = ids[0];
+  const stage = raw.stage;
+  if (
+    awsAccountId === undefined ||
+    !ACCOUNT_ID.test(awsAccountId) ||
+    !POOL_ROLES_EXTERNAL_ID.test(externalId) ||
+    stage === undefined ||
+    !(DEPLOY_STAGES as readonly string[]).includes(stage)
+  ) {
+    return { kind: "skip", decision: "skipped: malformed" };
+  }
+  return {
+    kind: "run",
+    input: {
+      stage,
+      confirmProduction: stage === "production",
+      awsAccountId,
+      externalId,
+      name: MIGRATOR_POOL_NAME,
+      tier: MIGRATOR_POOL_TIER,
+    },
+  };
+}
+
+/** At most the last 4 digits of an AWS account id: the only part a log may hold (R14). */
+export function accountSuffix(awsAccountId: string): string {
+  return awsAccountId.slice(-4);
 }

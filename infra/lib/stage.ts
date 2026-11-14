@@ -118,6 +118,11 @@ export interface StageConfig {
   readonly dnsAccountId: string;
   // sts:ExternalId of the tc-dns roles: a plain value, not a secret (6.3)
   readonly dnsExternalId: string;
+  // WPU-X4: the sts:ExternalId of the tc-pool-roles stack of the ONE pool account (TC_POOL_EXTERNAL_ID),
+  // a plain value (6.3). Optional on every stage: null when unset. Handed to the migrator only, which
+  // registers the pool account with it (poolAccountDecision of @tc/db checks the pattern of
+  // infra/org/pool-roles.yaml; a malformed value is skipped there, it never fails the deploy).
+  readonly poolExternalId: string | null;
   // C.5: the public /32 addresses of the stage's NAT (TC_PROBE_SOURCES) that the bootstrap beacon port
   // of a new Linux server is opened to during create: the two NAT gateways of a full stage, the ONE NAT
   // instance of a lean stage (WPU-Z10), and the network of the Lightsail VPC of the pool account
@@ -312,6 +317,7 @@ export function readStageConfig(stage: string, env: Env): StageConfig {
     poolAccountIds,
     dnsAccountId,
     dnsExternalId: need(env, "TC_DNS_EXTERNAL_ID"),
+    poolExternalId: optional(env, "TC_POOL_EXTERNAL_ID") ?? null,
     probeSources: probeRaw === undefined ? [] : parseProbeSourcesConfig(probeRaw),
     vpcCidr: vpcRaw === undefined ? null : parseVpcCidrConfig(vpcRaw),
     size: parseStageSize(env[STAGE_SIZE_VARIABLE]),

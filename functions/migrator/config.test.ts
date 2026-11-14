@@ -125,3 +125,25 @@ it("reads the raw value of FirstAdminSub, and undefined when it is not linked or
   expect(read(env()).firstAdminSub).toBeUndefined();
   expect(read(env({ SST_RESOURCE_FirstAdminSub: "not json" })).firstAdminSub).toBeUndefined();
 });
+
+// WPU-X4: the pool account bootstrap. Plain environment values (an ExternalId is not a secret, 6.3),
+// handed on raw; the decision is poolAccountDecision of @tc/db. Unset is never a failure of the config.
+it("reads TC_STAGE, TC_POOL_ACCOUNT_IDS and TC_POOL_EXTERNAL_ID raw, and undefined when unset", () => {
+  const config = read(
+    env({
+      TC_STAGE: "staging",
+      TC_POOL_ACCOUNT_IDS: "111122223333",
+      TC_POOL_EXTERNAL_ID: "tc-pool-ext-placeholder-0001",
+    }),
+  );
+  expect(config.stage).toBe("staging");
+  expect(config.poolAccountIds).toBe("111122223333");
+  expect(config.poolExternalId).toBe("tc-pool-ext-placeholder-0001");
+  const bare = read(env());
+  expect(bare.stage).toBeUndefined();
+  expect(bare.poolAccountIds).toBeUndefined();
+  expect(bare.poolExternalId).toBeUndefined();
+  expect(read(env({ TC_POOL_EXTERNAL_ID: "" })).poolExternalId).toBeUndefined();
+  // a malformed value is not a config failure either: the migrations must still run
+  expect(() => read(env({ TC_POOL_EXTERNAL_ID: "bad id" }))).not.toThrow();
+});
