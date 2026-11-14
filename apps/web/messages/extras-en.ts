@@ -113,7 +113,7 @@ export const extrasEn: Same<typeof extrasBn> = {
         error: {
           limit_reached: "You have reached the limit of servers.",
           capacity_full: "There is no room in this location right now. Please try again later.",
-          kyc_required: "Complete the identity check first.",
+          kyc_required: "Finish the account setup first: e-mail, mobile number and authenticator.",
           forbidden: "This is not open for you.",
         },
       },
@@ -174,7 +174,7 @@ export const extrasEn: Same<typeof extrasBn> = {
         error: {
           limit_reached: "You have reached your limit.",
           capacity_full: "There is no room in this location right now. Please try again later.",
-          kyc_required: "Complete the identity check first.",
+          kyc_required: "Finish the account setup first: e-mail, mobile number and authenticator.",
           forbidden: "This is not open for you.",
         },
       },
@@ -308,8 +308,9 @@ export const extrasEn: Same<typeof extrasBn> = {
     alerts: {
       title: "Alerts",
       none: "There are no alerts.",
-      kyc: "Identity verification is pending. You cannot buy a new server until it is done.",
-      kycAction: "Finish verification",
+      setup:
+        "Your account setup is not finished. Verify your e-mail and mobile number and switch on an authenticator app before you buy.",
+      setupAction: "Finish the setup",
       lowBalance: "Your wallet does not cover the renewals of the next 7 days.",
       grace: "The term of {name} is over; it is suspended. Renew it to start it again.",
       graceNoName: "The term of a resource is over; it is suspended. Renew it to start it again.",
@@ -360,7 +361,8 @@ export const extrasEn: Same<typeof extrasBn> = {
       introNext: "Finish setting up your first server so it is safe and recoverable.",
       progress: "{done} of {total} steps done.",
       phone: "Verify your phone number",
-      kyc: "Complete identity verification (KYC)",
+      email: "Verify your e-mail address",
+      totp: "Switch on an authenticator app",
       topUp: "Top up your wallet",
       sshKey: "Add an SSH key",
       server: "Create your first Cloud Server",
@@ -372,7 +374,8 @@ export const extrasEn: Same<typeof extrasBn> = {
       locked: "After your first server",
       hint: {
         phone: "We use it for sign-in codes and important notices.",
-        kyc: "Identity verification must be finished before you can buy a server.",
+        email: "We confirm your address when you sign in for the first time.",
+        totp: "A 6-digit code from an app on your phone protects your wallet. It is needed before you buy.",
         topUp: "Servers are prepaid from your wallet.",
         sshKey: "The key lets you sign in to the server without a password.",
         server: "Choose a Region, a plan and the key, then review the price.",

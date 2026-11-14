@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// WPU-X11: a customer who may buy has the three account setup facts; KYC is not read.
+const AT = new Date("2026-11-14T00:00:00Z");
 
 const seen = { customerIds: [] as string[] };
 const state = {
-  profile: { market: "BD", kycStatus: "verified" } as unknown,
+  profile: {
+    market: "BD",
+    kycStatus: "none",
+    emailVerifiedAt: AT,
+    phoneVerifiedAt: AT,
+    totpEnabledAt: AT,
+  } as unknown,
   flags: {} as Record<string, boolean | null>,
   resources: [] as Array<Record<string, unknown>>,
   catalog: [] as Array<Record<string, unknown>>,
@@ -24,7 +32,9 @@ vi.mock("@tc/db", () => ({
   readFeatureFlag: async (_tx: unknown, key: string) => state.flags[key] ?? null,
   listCatalogProducts: async () => state.catalog,
 }));
-vi.mock("@tc/core", () => ({
+vi.mock("@tc/core", async () => ({
+  // WPU-X11: the real account setup predicate of the buy gate.
+  missingSetupSteps: (await import("../../../packages/core/account/setup.ts")).missingSetupSteps,
   priceCatalog: async (_tx: unknown, rows: Array<Record<string, unknown>>) =>
     state.priced
       ? { ok: true, value: rows.map((r) => ({ ...r, priceBdt: { totalMinor: 180000n } })) }
@@ -68,7 +78,13 @@ const balancer = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   seen.customerIds = [];
-  state.profile = { market: "BD", kycStatus: "verified" };
+  state.profile = {
+    market: "BD",
+    kycStatus: "none",
+    emailVerifiedAt: AT,
+    phoneVerifiedAt: AT,
+    totpEnabledAt: AT,
+  };
   state.flags = { load_balancer: true };
   state.resources = [];
   state.catalog = [
@@ -93,7 +109,7 @@ describe("loadBalancerConfigOf", () => {
 });
 
 describe("loadLoadBalancerConfigurator", () => {
-  it("is flag_off with the flag off or missing (R12, R16), and asks for identity verification", async () => {
+  it("is flag_off with the flag off or missing (R12, R16), and asks for the account setup (WPU-X11)", async () => {
     for (const flags of [{ load_balancer: false }, {}] as Record<string, boolean | null>[]) {
       state.flags = flags;
       expect(await loadLoadBalancerConfigurator(session, () => new Date())).toEqual({
@@ -101,9 +117,16 @@ describe("loadLoadBalancerConfigurator", () => {
       });
     }
     state.flags = { load_balancer: true };
-    state.profile = { market: "BD", kycStatus: "pending" };
+    state.profile = {
+      market: "BD",
+      kycStatus: "verified",
+      emailVerifiedAt: AT,
+      phoneVerifiedAt: AT,
+      totpEnabledAt: null,
+    };
     expect(await loadLoadBalancerConfigurator(session, () => new Date())).toEqual({
-      state: "kyc_required",
+      state: "account_setup_required",
+      missing: ["totp"],
     });
   });
 

@@ -13,6 +13,12 @@ export interface RequestMeta {
   /** The viewer address (CloudFront-Viewer-Address), already checked. */
   ip: string;
   userAgent?: string;
+  /**
+   * WPU-X11 round 2: the tokens of this sign-in answered the authenticator challenge. Absent when the
+   * provider gave tokens without one, which for a customer whose platform copy says "on" means the
+   * authenticator was switched off outside the panel (recordSignIn then clears the copy).
+   */
+  totpVerified?: true;
 }
 
 export interface AuthPorts {
@@ -24,6 +30,25 @@ export interface AuthPorts {
     | { ok: false; reason: "unauthenticated" | "unavailable" }
   >;
   limit(action: AuthAction, who: Who, key: string): Promise<LimitAnswer>;
+  /**
+   * WPU-X11 round 2: like `limit` but all or nothing: a refused reservation counts nothing (the transaction
+   * rolls back), so being blocked and retrying never uses up the longer window.
+   */
+  limitReserve(action: AuthAction, who: Who, key: string): Promise<LimitAnswer>;
+  /** WPU-X11 round 2: the same rules as `limit`, read and never counted. */
+  limitPeek(action: AuthAction, who: Who, key: string): Promise<LimitAnswer>;
+  /**
+   * WPU-X11 round 2: gives back one hit that `limit` counted for the same rules, in the window of `at`.
+   * The sign-in reserves the attempt with `limit` before the provider is asked and releases it unless the
+   * attempt was a wrong code. False when it could not: the hit then stays counted.
+   */
+  limitRelease(action: "signin_code", who: Who, key: string, at: Date): Promise<boolean>;
+  /**
+   * WPU-X11 round 2: queues the email "a correct password, too many wrong authenticator codes" for the
+   * address that typed the password (the sign-in knows the address, not the customer). Never throws: the
+   * answer to the customer does not depend on it. `key` is the limiter key, for the one-per-window dedupe.
+   */
+  noticeTotpBlocked(input: { email: string; ip: string; key: string }): Promise<void>;
   register(input: {
     email: string;
     phone: string;

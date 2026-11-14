@@ -815,6 +815,31 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     kind: "session",
     proof: [proof(`${W}settings-actions.test.ts`, "needs a fresh sign-in")],
   },
+  // WPU-X11: the authenticator of the session's customer; no id comes from the form.
+  "app/[locale]/(panel)/settings/security/actions.ts#startTotpAction": {
+    kind: "session",
+    proof: [
+      proof(`${W}totp-actions.test.ts`, "needs a fresh sign-in (6.1) and refuses before any call"),
+    ],
+  },
+  "app/[locale]/(panel)/settings/security/actions.ts#confirmTotpAction": {
+    kind: "session",
+    proof: [
+      proof(
+        `${W}totp-actions.test.ts`,
+        "verifies the code, switches TOTP on at Cognito, then stores the time, ends the sessions, audits, tells the customer, and signs out everywhere",
+      ),
+    ],
+  },
+  "app/[locale]/(panel)/settings/security/actions.ts#disableTotpAction": {
+    kind: "session",
+    proof: [
+      proof(
+        `${W}totp-actions.test.ts`,
+        "needs a fresh sign-in and refuses when the authenticator is not on",
+      ),
+    ],
+  },
   "app/[locale]/(panel)/settings/ssh-keys/actions.ts#addSshKeyAction": {
     kind: "session",
     proof: [

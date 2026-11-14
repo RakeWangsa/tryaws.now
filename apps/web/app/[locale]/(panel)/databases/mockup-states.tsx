@@ -72,7 +72,7 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "databases_new.ready": configure(configurator()),
   "databases_new.empty": configure(configurator({ plans: [] })),
   "databases_new.flag_off": configure({ state: "flag_off" }),
-  "databases_new.kyc_required": configure({ state: "kyc_required" }),
+  "databases_new.kyc_required": configure({ state: "account_setup_required", missing: ["totp"] }),
   "databases_new.loading": fixed(() => <ScreenLoading lines={[4, 6, 2]} />),
   "databases_new.error": fixed(errorNode),
   // /databases/[id]

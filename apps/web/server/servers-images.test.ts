@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// WPU-X11: a customer who may buy has the three account setup facts; KYC is not read.
+const AT = new Date("2026-11-14T00:00:00Z");
 
 // WPU-G3 and WPU-G13 in the loaders of the server screens: the images the wizard offers per Region (active
 // at AWS and switched on by an admin), and the login user of the image a server runs.
 const state = vi.hoisted(() => ({
   flags: { linux_instance: true } as Record<string, boolean | null>,
-  kyc: "verified",
+  totp: true,
   images: {} as Record<string, unknown[]>,
   switches: { state: "none" } as unknown,
   keys: [] as unknown[],
@@ -15,7 +17,15 @@ const state = vi.hoisted(() => ({
 vi.mock("@tc/db", () => ({
   withTx: async (fn: (tx: unknown) => unknown) => fn({}),
   customerRepos: () => ({
-    profile: { get: async () => ({ market: "BD", kycStatus: state.kyc }) },
+    profile: {
+      get: async () => ({
+        market: "BD",
+        kycStatus: "none",
+        emailVerifiedAt: AT,
+        phoneVerifiedAt: AT,
+        totpEnabledAt: state.totp ? AT : null,
+      }),
+    },
     resources: { get: async () => state.resource, list: async () => [] },
     sshKeys: { list: async () => state.keys, get: async () => null },
   }),
@@ -67,7 +77,7 @@ const img = (id: string, kind: "os" | "app", name = id, loginUser: string | null
 
 beforeEach(() => {
   state.flags = { linux_instance: true };
-  state.kyc = "verified";
+  state.totp = true;
   state.images = {};
   state.switches = { state: "none" };
   state.keys = [];
@@ -176,12 +186,15 @@ describe("loadConfigurator: the images of each Region", () => {
     expect(screen.images["ap-southeast-1"]?.map((i) => i.id)).toEqual(["ubuntu_22_04"]);
   });
 
-  it("the flag off and a customer without KYC get their states and read no images", async () => {
+  it("the flag off and a customer without an authenticator (WPU-X11) get their states and read no images", async () => {
     state.flags = {};
     expect(await loadConfigurator(session, now)).toEqual({ state: "flag_off" });
     state.flags = { linux_instance: true };
-    state.kyc = "pending";
-    expect(await loadConfigurator(session, now)).toEqual({ state: "kyc_required" });
+    state.totp = false;
+    expect(await loadConfigurator(session, now)).toEqual({
+      state: "account_setup_required",
+      missing: ["totp"],
+    });
     expect(state.asked).toEqual([]);
   });
 });

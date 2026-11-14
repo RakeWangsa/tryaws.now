@@ -25,7 +25,7 @@ describe("the dashboard guide", () => {
       expect(out).toContain(locale === "bn" ? "শুরু করার ধাপ" : "Getting started");
       for (const href of [
         "/settings/profile",
-        "/settings/kyc",
+        "/settings/security",
         "/wallet/topup",
         "/settings/ssh-keys",
         "/servers/new",
@@ -51,8 +51,9 @@ describe("the dashboard guide", () => {
       dashboard({
         guideServerId: SERVER_ID,
         onboarding: onboardingSteps({
+          emailVerified: true,
           phoneVerified: true,
-          kycVerified: true,
+          totpEnabled: true,
           toppedUp: true,
           sshKeys: 1,
           servers: 1,
@@ -72,8 +73,9 @@ describe("the dashboard guide", () => {
       "en",
       dashboard({
         onboarding: onboardingSteps({
+          emailVerified: true,
           phoneVerified: true,
-          kycVerified: true,
+          totpEnabled: true,
           toppedUp: true,
           sshKeys: 1,
           servers: 1,

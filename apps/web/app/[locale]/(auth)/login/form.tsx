@@ -59,6 +59,26 @@ export function LoginForm({ locale, next }: { locale: Locale; next: string }) {
               {...(error("password") !== undefined ? { error: error("password") as string } : {})}
             />
           </div>
+          {values["totpStep"] === "1" ? (
+            // WPU-X11: the authenticator step, shown after the provider asked for the code. The flag is
+            // posted again so a wrong code keeps the field; the code itself is never given back.
+            <div className="col-md-6 position-relative">
+              <input type="hidden" name="totpStep" value="1" />
+              <Field
+                name="totpCode"
+                label={t("field.totpCode")}
+                hint={t("hint.totpCode")}
+                icon="fas fa-shield-alt"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                maxLength={12}
+                required
+                spellCheck={false}
+                autoCapitalize="off"
+                {...(error("totpCode") !== undefined ? { error: error("totpCode") as string } : {})}
+              />
+            </div>
+          ) : null}
         </div>
       )}
     </AuthForm>

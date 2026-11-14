@@ -280,6 +280,15 @@ export const BN: Catalog = {
     "ইমেইল ঠিকানা পরিবর্তন",
     "TryAWS.now: আপনার ইমেইল ঠিকানা বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
   ),
+  security_totp_blocked: {
+    subject: "নিরাপত্তা সতর্কতা: ভুল অথেনটিকেটর কোড",
+    headline: "ভুল অথেনটিকেটর কোড",
+    body: [
+      "{time}-এ কেউ আপনার সঠিক পাসওয়ার্ড দিয়ে সাইন ইনের চেষ্টা করেছে{where}, কিন্তু অথেনটিকেটরের কোড বারবার ভুল দিয়েছে। নিরাপত্তার জন্য কিছুক্ষণ সাইন ইন বন্ধ রাখা হয়েছে।",
+      "এটি আপনি না হলে আপনার পাসওয়ার্ড কারও হাতে গেছে। এখনই পাসওয়ার্ড বদলান এবং আমাদের সাপোর্টে জানান।",
+    ],
+    extra: { from_ip: " (আইপি {ip} থেকে)" },
+  },
   security_phone_changed: SECURITY_BN(
     "ফোন নম্বর পরিবর্তন",
     "TryAWS.now: আপনার ফোন নম্বর বদলানো হয়েছে। আপনি না হলে এখনই সাপোর্টে জানান।",
@@ -555,6 +564,15 @@ export const EN: Catalog = {
     "email changed",
     "TryAWS.now: your email address was changed. If it was not you, tell support now.",
   ),
+  security_totp_blocked: {
+    subject: "Security alert: wrong authenticator codes",
+    headline: "Wrong authenticator codes",
+    body: [
+      "On {time}, someone signed in with your correct password{where} but gave the authenticator code wrong several times. Sign-in is paused for a while for your safety.",
+      "If this was not you, someone else may know your password. Change it now and tell our support.",
+    ],
+    extra: { from_ip: " from IP {ip}" },
+  },
   security_phone_changed: SECURITY_EN(
     "Your phone number was changed",
     "phone changed",

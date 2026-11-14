@@ -248,9 +248,21 @@ describe("/servers/new", () => {
     expect(en).toContain("Order summary");
   });
 
-  it("shows what to do next when KYC is not verified, and the empty state without plans", async () => {
-    state.configurator = { state: "kyc_required" };
-    expect(await renderPage(NewServerPage as never, "en")).toContain("Verify your identity first");
+  it("WPU-X11: shows the account setup steps when they are not done, and the empty state without plans", async () => {
+    state.configurator = { state: "account_setup_required", missing: ["phone", "totp"] };
+    const en = await renderPage(NewServerPage as never, "en");
+    expect(en).toContain("Finish your account setup before you buy");
+    expect(en).toContain("no documents are needed");
+    // The e-mail step is done (an icon and a word), the missing steps link to where they are done.
+    expect(en).toContain("1. Verify your e-mail");
+    expect(en).toContain('href="/en/verify"');
+    expect(en).toContain('href="/en/settings/security"');
+    expect(en).toContain("Done");
+    expect(en).toContain("To do");
+    expect(en).not.toMatch(/identity|KYC|document number|upload/i);
+    const bn = await renderPage(NewServerPage as never, "bn");
+    expect(bn).toContain("কেনার আগে অ্যাকাউন্ট সেটআপ শেষ করুন");
+    expect(bn).toContain('href="/verify"');
     state.configurator = configurator({ plans: [], regions: [] });
     expect(await renderPage(NewServerPage as never, "bn")).toContain(
       "এখন কোনো প্ল্যান বিক্রির জন্য নেই",

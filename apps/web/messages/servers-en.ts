@@ -7,7 +7,8 @@ export const serversEn: Same<typeof serversBn> = {
     error: {
       unauthenticated: "Your session has ended. Please sign in again.",
       forbidden: "Your account is not allowed to do this.",
-      kyc_required: "You need to finish identity verification before you can buy a server.",
+      kyc_required:
+        "Finish the account setup before you buy a server: verify your e-mail and mobile number and switch on an authenticator app.",
       flag_off: "This service is not open for you yet.",
       limit_reached: "Your account has reached its server limit. Write to support to raise it.",
       validation: "Some details are wrong. Fix the marked fields and try again.",
@@ -39,11 +40,6 @@ export const serversEn: Same<typeof serversBn> = {
     flagOff: {
       title: "Cloud Servers are coming soon",
       body: "This service is not open in your market yet. You will be able to buy it here once it opens.",
-    },
-    kycRequired: {
-      title: "Verify your identity first",
-      body: "Identity verification must be complete before you can buy a server. Come back here when it is done.",
-      action: "Write to support",
     },
     list: {
       caption: "Your Cloud Servers",

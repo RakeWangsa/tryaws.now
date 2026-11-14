@@ -16,7 +16,14 @@ const state = vi.hoisted(() => ({
   balance: 250_000n,
   hourPrice: 74n as bigint | null,
   payments: [] as unknown[],
-  profile: { market: "BD", phoneVerifiedAt: null as Date | null, kycStatus: "none" },
+  // WPU-X11: a signed-in customer has a verified e-mail; no mobile, no authenticator yet.
+  profile: {
+    market: "BD",
+    phoneVerifiedAt: null as Date | null,
+    kycStatus: "none",
+    emailVerifiedAt: new Date("2026-11-01T00:00:00Z") as Date | null,
+    totpEnabledAt: null as Date | null,
+  },
   catalog: new Map<string, unknown>(),
 }));
 
@@ -111,7 +118,13 @@ beforeEach(() => {
   state.keys = [];
   state.balance = 250_000n;
   state.payments = [];
-  state.profile = { market: "BD", phoneVerifiedAt: null, kycStatus: "none" };
+  state.profile = {
+    market: "BD",
+    phoneVerifiedAt: null,
+    kycStatus: "none",
+    emailVerifiedAt: new Date("2026-11-01T00:00:00Z"),
+    totpEnabledAt: null,
+  };
   state.catalog = new Map([["plan-small", { id: "plan-small", specs: { diskGb: 40 } }]]);
 });
 
@@ -372,12 +385,29 @@ describe("loadDashboard: the first-use guide", () => {
   const stepOf = async (key: string) =>
     (await loadDashboard(session, NOW)).onboarding.steps.find((s) => s.key === key);
 
-  it("a brand-new customer is at the first step, nothing done, the server steps locked", async () => {
+  it("a brand-new customer is at the phone step, only the e-mail done, the server steps locked", async () => {
     state.balance = 0n;
     const view = await loadDashboard(session, NOW);
     expect(view.onboarding).toMatchObject({ next: "phone", started: false, complete: false });
-    expect(view.onboarding.steps.filter((s) => s.done)).toEqual([]);
+    expect(view.onboarding.steps.filter((s) => s.done).map((s) => s.key)).toEqual(["email"]);
+    expect(view.alerts.setupMissing).toEqual(["phone", "totp"]);
     expect(view.guideServerId).toBeNull();
+  });
+
+  it("WPU-X11: after the mobile is verified the guide leads to the authenticator, then the alert is gone", async () => {
+    state.profile = { ...state.profile, phoneVerifiedAt: new Date("2026-11-02T00:00:00Z") };
+    const before = await loadDashboard(session, NOW);
+    expect(before.onboarding.next).toBe("totp");
+    expect(before.alerts.setupMissing).toEqual(["totp"]);
+    state.profile = { ...state.profile, totpEnabledAt: new Date("2026-11-03T00:00:00Z") };
+    const after = await loadDashboard(session, NOW);
+    expect(after.alerts.setupMissing).toEqual([]);
+    expect(after.onboarding.steps.find((s) => s.key === "totp")).toMatchObject({ done: true });
+  });
+
+  it("WPU-X11: a fact that is not a time counts as not done (R16)", async () => {
+    state.profile = { ...state.profile, emailVerifiedAt: "yes" as unknown as Date };
+    expect((await loadDashboard(session, NOW)).alerts.setupMissing).toContain("email");
   });
 
   it("the key step is done by a saved key, the top-up step by a payment or a balance", async () => {

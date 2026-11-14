@@ -72,6 +72,8 @@ export const EXPECTED_COLUMNS: Record<string, string[]> = {
     "billing_name text NULL",
     "billing_address text NULL",
     "customer_bin text NULL",
+    "email_verified_at timestamptz NULL",
+    "totp_enabled_at timestamptz NULL",
   ],
   kyc_submissions: [
     "customer_id uuid NOT NULL",

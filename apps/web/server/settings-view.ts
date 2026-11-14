@@ -3,6 +3,24 @@ import { maskPhone } from "@tc/core";
 import { customerRepos, withTx } from "@tc/db";
 import type { BillingProfile, CustomerProfile } from "@tc/db";
 
+/**
+ * WPU-X11: is the authenticator on, read for the session's customer only (R8). null when the row cannot
+ * be read or the authenticator is not configured: the screen then offers nothing (R16).
+ */
+export async function loadTotpEnabled(
+  session: Pick<CustomerSession, "customerId">,
+  configured: boolean,
+): Promise<boolean | null> {
+  if (!configured) return null;
+  try {
+    const profile = await withTx((tx) => customerRepos(tx, session.customerId).profile.get());
+    if (profile === null) return null;
+    return profile.totpEnabledAt instanceof Date;
+  } catch {
+    return null;
+  }
+}
+
 // What /settings/profile shows. The phone number is masked on the screen; the full number is not
 // sent to the browser (R14). `open` is false when the identity or SMS adapters are not configured:
 // the change forms are then replaced by the "not open" state (R16).

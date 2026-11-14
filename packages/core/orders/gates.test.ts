@@ -8,9 +8,12 @@ import {
   type ProductFacts,
 } from "./gates";
 
+const AT = new Date("2026-11-14T10:00:00Z");
 const OK: CustomerFacts = {
   status: "active",
-  kycStatus: "verified",
+  emailVerifiedAt: AT,
+  phoneVerifiedAt: AT,
+  totpEnabledAt: AT,
   riskTier: "new",
   market: "BD",
 };
@@ -34,10 +37,29 @@ describe("checkCustomer", () => {
     }
   });
 
-  it("refuses every KYC value but verified as kyc_required", () => {
-    for (const kycStatus of ["none", "pending", "rejected", "VERIFIED", "", "unknown"]) {
-      expect(checkCustomer({ ...OK, kycStatus })).toEqual({ ok: false, error: "kyc_required" });
-    }
+  // WPU-X11: the account setup replaced KYC. The error code stays `kyc_required` (a Section F contract,
+  // not changed inside a task); `data.missing` names the steps that are not done.
+  it("refuses a customer without e-mail, mobile or authenticator, naming what is missing", () => {
+    expect(checkCustomer({ ...OK, totpEnabledAt: null })).toEqual({
+      ok: false,
+      error: "kyc_required",
+      data: { missing: ["totp"] },
+    });
+    expect(checkCustomer({ ...OK, phoneVerifiedAt: null })).toEqual({
+      ok: false,
+      error: "kyc_required",
+      data: { missing: ["phone"] },
+    });
+    expect(checkCustomer({ ...OK, emailVerifiedAt: null, totpEnabledAt: null })).toEqual({
+      ok: false,
+      error: "kyc_required",
+      data: { missing: ["email", "totp"] },
+    });
+  });
+
+  it("does not read a KYC status: none with the three steps done may buy", () => {
+    const row = { ...OK, kycStatus: "none" } as CustomerFacts;
+    expect(checkCustomer(row).ok).toBe(true);
   });
 
   it("refuses an unknown risk tier as forbidden", () => {
@@ -46,8 +68,8 @@ describe("checkCustomer", () => {
     }
   });
 
-  it("checks the status before the KYC", () => {
-    expect(checkCustomer({ ...OK, status: "suspended", kycStatus: "none" })).toEqual({
+  it("checks the status before the account setup", () => {
+    expect(checkCustomer({ ...OK, status: "suspended", totpEnabledAt: null })).toEqual({
       ok: false,
       error: "forbidden",
     });

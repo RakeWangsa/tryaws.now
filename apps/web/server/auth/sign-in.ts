@@ -1,4 +1,4 @@
-import { parseSignInForm } from "@tc/core";
+import { parseOtpCode, parseSignInForm } from "@tc/core";
 import type { ActionContext } from "./context.ts";
 import { done, failure, gate, localeOf, logAuth, userAgentOf } from "./common.ts";
 import { landingAfterSignIn, landingPath } from "./landing.ts";
@@ -24,6 +24,14 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   const parsed = parseSignInForm(form);
   if (!parsed.ok) return failure(ctx, "invalid", { fields: parsed.fields, form });
   const { email, password } = parsed.value;
+  // WPU-X11: the authenticator code, optional (only a customer with TOTP on is asked for it).
+  const rawCode = form["totpCode"];
+  let totpCode: string | undefined;
+  if (rawCode !== undefined && rawCode !== "") {
+    const code = typeof rawCode === "string" ? parseOtpCode(rawCode) : null;
+    if (code === null) return failure(ctx, "invalid", { fields: { totpCode: "invalid" }, form });
+    totpCode = code;
+  }
 
   // 4. Rate limit: the pair of address and email, the address, and the email.
   const limit = await ctx.ports.limit("signin", { ip: guard.ip, email }, guard.key);
@@ -31,23 +39,79 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
     return failure(ctx, "rate_limited", { form, retryAfterSeconds: limit.retryAfterSeconds });
   }
 
+  // WPU-X11 round 2: the wrong-code limit (5 in 15 minutes, 20 a day, per address typed) guards the
+  // account, so it is only touched by a request that has already proved the PASSWORD. The provider runs the
+  // password step and, only when that answered the authenticator challenge, asks `beforeCode`; there the
+  // attempt is RESERVED with one atomic count (a check followed by a count would let N parallel guesses all
+  // pass the check first). Someone without the password never gets to the hook, so a flood of sign-ins with
+  // a wrong password and a code cannot fill the owner's counters. The password guesses themselves stay under
+  // the limits above (per address and pair, and the ceiling per address typed). The hit is given back below
+  // unless the attempt turns out to be a wrong code.
+  const step = totpCode !== undefined ? { ...form, totpStep: "1" } : form;
+  const codeWho = { ip: guard.ip, email };
+  const reservation: { at: Date | null; waitSeconds: number } = { at: null, waitSeconds: 60 };
+  const beforeCode = async (): Promise<boolean> => {
+    const at = ctx.clock.now();
+    const reserved = await ctx.ports.limitReserve("signin_code", codeWho, guard.key);
+    if (!reserved.allowed) {
+      reservation.waitSeconds = reserved.retryAfterSeconds;
+      return false;
+    }
+    reservation.at = at;
+    return true;
+  };
+
   // 5. Execute.
-  const answer = await guard.identity.signIn({ email, password });
+  // The code step stays on the form after a failure of a sign-in that carried a code (a flag, never the code).
+  const answer = await guard.identity.signIn({
+    email,
+    password,
+    ...(totpCode !== undefined ? { totpCode, beforeCode } : {}),
+  });
+  // Only a wrong code after a correct password keeps its reservation; every other outcome gives it back
+  // (a right code, a wrong password, the provider unavailable or limiting, another challenge). If the
+  // release cannot be made the hit stays counted: the safe direction.
+  if (reservation.at !== null && !(!answer.ok && answer.kind === "code_denied")) {
+    const given = await ctx.ports.limitRelease("signin_code", codeWho, guard.key, reservation.at);
+    if (!given) logAuth(ctx, "auth.signin", "code_limit_release_failed");
+  }
   if (!answer.ok) {
     logAuth(ctx, "auth.signin", answer.kind);
     switch (answer.kind) {
       case "rate_limited":
-        return failure(ctx, "rate_limited", { form, retryAfterSeconds: 60 });
+        return failure(ctx, "rate_limited", { form: step, retryAfterSeconds: 60 });
       case "unavailable":
-        return failure(ctx, "unavailable", { form });
+        return failure(ctx, "unavailable", { form: step });
+      case "code_limited":
+        // The password was right and the wrong-code limit is used up: the screen says to wait, nothing more.
+        return failure(ctx, "rate_limited", {
+          form: step,
+          retryAfterSeconds: reservation.waitSeconds,
+        });
+      case "code_denied": {
+        // The password was right and the code was not: its reservation stays counted. When that filled
+        // the limit the customer is told by email and the screen says to wait; until then the screen
+        // stays the generic answer.
+        const blocked = await noticeIfBlocked(ctx, guard, email);
+        if (blocked !== null) {
+          return failure(ctx, "rate_limited", { form: step, retryAfterSeconds: blocked });
+        }
+        return failure(ctx, "sign_in_failed", { form: step });
+      }
       default:
-        return failure(ctx, "sign_in_failed", { form });
+        // A wrong password and a wrong, reused or expired code are one answer (no enumeration).
+        return failure(ctx, "sign_in_failed", { form: step });
     }
   }
   if (answer.value.kind === "challenge") {
-    // TOTP is switched on in WP2-T5, so nobody can have it yet (open point 16): refuse closed.
     logAuth(ctx, "auth.signin", "challenge");
-    return failure(ctx, "totp_unsupported", { form });
+    // WPU-X11: the password was right and the authenticator is on: ask for the code. The provider
+    // answers a code only with the password again (the Cognito Session never leaves the adapter).
+    if (answer.value.challenge === "totp" && totpCode === undefined) {
+      return failure(ctx, "totp_required", { form: { ...form, totpStep: "1" } });
+    }
+    // Another challenge (a new password, MFA setup, ...) has no screen here: refuse closed (R16).
+    return failure(ctx, "unavailable", { form });
   }
 
   const signedIn = await ctx.ports.completeSignIn({
@@ -71,6 +135,8 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
     ({ phoneVerified } = await ctx.ports.recordSignIn(signedIn.session, {
       ip: guard.ip,
       ...(userAgent !== undefined ? { userAgent } : {}),
+      // WPU-X11 round 2: whether these tokens answered the authenticator challenge of this flow.
+      ...(answer.value.totpVerified === true ? { totpVerified: true as const } : {}),
     }));
   } catch {
     logAuth(ctx, "auth.signin", "audit_failed");
@@ -81,4 +147,26 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   return done(landingAfterSignIn(localeOf(form), form["next"], phoneVerified), {
     setCookies: signedIn.cookies,
   });
+}
+/**
+ * WPU-X11 round 2. One authenticator code failed after a correct password, and its reservation stays
+ * counted. When that filled the limit (5 in 15 minutes or 20 a day), queue the email to the address that
+ * typed the password and return the seconds to wait; otherwise null. The notice never changes what the
+ * screen says beyond that wait, and a notice that cannot be queued is dropped (the sign-in is refused
+ * either way). The email has a dedupe key per address and quarter hour, so parallel failures send one.
+ */
+async function noticeIfBlocked(
+  ctx: ActionContext,
+  guard: { ip: string; key: string },
+  email: string,
+): Promise<number | null> {
+  const full = await ctx.ports.limitPeek("signin_code", { ip: guard.ip, email }, guard.key);
+  if (full.allowed) return null;
+  logAuth(ctx, "auth.signin", "code_limit");
+  try {
+    await ctx.ports.noticeTotpBlocked({ email, ip: guard.ip, key: guard.key });
+  } catch {
+    logAuth(ctx, "auth.signin", "notice_failed");
+  }
+  return full.retryAfterSeconds;
 }

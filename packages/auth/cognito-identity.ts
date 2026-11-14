@@ -85,6 +85,16 @@ const SIGN_IN: Fold = new Map<string, IdpFailure | "ok">([
   ...LIMITS,
 ]);
 const REVOKE: Fold = new Map<string, IdpFailure | "ok">(LIMITS);
+// WPU-X11: the answer to the authenticator code of a sign-in. The password was right (the first call
+// answered the challenge), so a refusal here is a wrong, reused or expired code: `code_denied`.
+const TOTP_ANSWER: Fold = new Map<string, IdpFailure | "ok">([
+  ["CodeMismatchException", "code_denied"],
+  ["NotAuthorizedException", "code_denied"],
+  ["ExpiredCodeException", "code_denied"],
+  ["UserNotFoundException", "denied"],
+  ...LIMITS,
+]);
+const TOTP_CODE = /^[0-9]{6}$/;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -180,6 +190,74 @@ export function cognitoIdentityProvider(
     return outcome === "ok" ? success(true as const) : fail(outcome);
   }
 
+  // The tokens of a sign-in, checked before they are trusted; anything odd is unavailable (R16).
+  function tokensOf(result: Record<string, unknown>, viaTotp = false): IdpResult<SignInOutcome> {
+    const accessToken = result["AccessToken"];
+    const refreshToken = result["RefreshToken"];
+    const expiresIn = result["ExpiresIn"];
+    if (
+      typeof accessToken !== "string" ||
+      accessToken.length === 0 ||
+      accessToken.length > MAX_TOKEN_CHARS ||
+      typeof refreshToken !== "string" ||
+      refreshToken.length === 0 ||
+      refreshToken.length > MAX_TOKEN_CHARS ||
+      typeof expiresIn !== "number" ||
+      !Number.isInteger(expiresIn) ||
+      expiresIn < MIN_EXPIRES_IN ||
+      expiresIn > MAX_EXPIRES_IN
+    ) {
+      return unavailable();
+    }
+    return success({
+      kind: "tokens",
+      accessToken,
+      refreshToken,
+      expiresInSeconds: expiresIn,
+      ...(viaTotp ? { totpVerified: true as const } : {}),
+    });
+  }
+
+  // WPU-X11: RespondToAuthChallenge with the authenticator code. A wrong, reused or expired code is
+  // `denied`, the same answer as a wrong password. Only plain tokens are a sign-in: another challenge
+  // after the code is unavailable (R16).
+  async function answerTotp(
+    username: string,
+    session: string,
+    code: string,
+  ): Promise<IdpResult<SignInOutcome>> {
+    if (!TOTP_CODE.test(code)) return fail("code_denied");
+    // The customer client has a secret (WPU-X12 round 4), so the answer carries SECRET_HASH over the
+    // `username` of this call, like InitiateAuth in signIn; both go through this one `post`, which owns
+    // the ClientId. `username` is the one Cognito named in the challenge when it named one (see signIn).
+    const answer = await post("RespondToAuthChallenge", {
+      ChallengeName: "SOFTWARE_TOKEN_MFA",
+      Session: session,
+      ChallengeResponses: {
+        USERNAME: username,
+        SOFTWARE_TOKEN_MFA_CODE: code,
+        SECRET_HASH: secretHash(customerSecret, username, clientId),
+      },
+    });
+    if (answer === null) return unavailable();
+    if (answer.status === 200) {
+      if (answer.body["ChallengeName"] !== undefined) return unavailable();
+      const result = asRecord(answer.body["AuthenticationResult"]);
+      return result === undefined ? unavailable() : tokensOf(result, true);
+    }
+    const f = folded(answer, TOTP_ANSWER);
+    return f !== undefined && !f.ok ? f : unavailable();
+  }
+
+  // The username a challenge names (ChallengeParameters.USER_ID_FOR_SRP), when it is a plain one: text of
+  // at most 128 characters without spaces, quotes or control characters. Anything else is not trusted and
+  // the caller falls back to the address (a malformed value is never put into a request).
+  function usernameOfChallenge(body: Record<string, unknown>): string | undefined {
+    const params = asRecord(body["ChallengeParameters"]);
+    const name = params?.["USER_ID_FOR_SRP"];
+    return typeof name === "string" && /^[A-Za-z0-9@._+:-]{1,128}$/.test(name) ? name : undefined;
+  }
+
   async function simple(
     target: string,
     body: Record<string, unknown>,
@@ -256,33 +334,38 @@ export function cognitoIdentityProvider(
       if (answer === null) return unavailable();
       if (answer.status === 200) {
         const result = asRecord(answer.body["AuthenticationResult"]);
-        if (result !== undefined) {
-          const accessToken = result["AccessToken"];
-          const refreshToken = result["RefreshToken"];
-          const expiresIn = result["ExpiresIn"];
-          if (
-            typeof accessToken !== "string" ||
-            accessToken.length === 0 ||
-            accessToken.length > MAX_TOKEN_CHARS ||
-            typeof refreshToken !== "string" ||
-            refreshToken.length === 0 ||
-            refreshToken.length > MAX_TOKEN_CHARS ||
-            typeof expiresIn !== "number" ||
-            !Number.isInteger(expiresIn) ||
-            expiresIn < MIN_EXPIRES_IN ||
-            expiresIn > MAX_EXPIRES_IN
-          ) {
-            return unavailable();
-          }
-          return success({
-            kind: "tokens",
-            accessToken,
-            refreshToken,
-            expiresInSeconds: expiresIn,
-          });
-        }
+        if (result !== undefined) return tokensOf(result);
         const name = answer.body["ChallengeName"];
         if (typeof name === "string" && name.length > 0) {
+          // WPU-X11: the customer's authenticator. The code answers the challenge of THIS flow, with its
+          // Session, here; the Session is never returned. A code is sent for SOFTWARE_TOKEN_MFA only.
+          const session = answer.body["Session"];
+          if (
+            name === "SOFTWARE_TOKEN_MFA" &&
+            i.totpCode !== undefined &&
+            typeof session === "string" &&
+            session.length > 0 &&
+            session.length <= MAX_ANSWER_CHARS
+          ) {
+            // AWS guide, "Computing secret hash values" and the RespondToAuthChallenge reference: the
+            // answer to a challenge is hashed with the username Cognito expects, which the challenge
+            // gives as USER_ID_FOR_SRP. In a pool that signs in by e-mail that username can be the
+            // internal one (the sub), not the address; the hash over the address is then refused
+            // ("Unable to verify secret hash"). Use the one Cognito named; the address only when it
+            // named none. VERIFY on staging (JOURNEY WPU-X11 round 2).
+            // The password is proven now. The caller may still refuse the code (its wrong-code limit); a
+            // refusal, or a hook that throws, sends nothing (R16).
+            if (i.beforeCode !== undefined) {
+              let go: boolean;
+              try {
+                go = (await i.beforeCode()) === true;
+              } catch {
+                go = false;
+              }
+              if (!go) return fail("code_limited");
+            }
+            return answerTotp(usernameOfChallenge(answer.body) ?? i.email, session, i.totpCode);
+          }
           return success({
             kind: "challenge",
             challenge: name === "SOFTWARE_TOKEN_MFA" ? "totp" : "other",

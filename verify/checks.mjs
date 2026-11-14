@@ -4070,6 +4070,30 @@ TASKS["WPU-X12"] = [
   repo,
 ];
 
+// WPU-X11 (owner decision 2026-11-14, "KYC IS not need for customer, only email and mobile verification then
+// 2fa authenticator"): the buy condition is a verified e-mail, a verified mobile and an authenticator (TOTP)
+// that is on, not KYC. core runs canBuy (truth table), checkCustomer and the draft and purchase gate cases
+// against PostgreSQL; db migration 0030 (two columns, grants, backfill) and the profile methods with their
+// cross-tenant test; auth the TOTP challenge of the sign-in and the three Cognito TOTP calls; web the
+// enrolment, sign-in, buy screens, dashboard checklist, QR code and texts; repo the journal and verify wiring.
+// Round 2 (security review): db adds peekRateLimits and revokeSessions with their cross-tenant cases; auth the
+// code_denied answer, the totpVerified flag, GetUser, GlobalSignOut and the auth_time cut-off; notify the
+// security_totp_blocked email; web the order of the switch-off, the end of every session, the Cognito check
+// before every draft and purchase, the sign-in reconcile and the wrong-code limit.
+TASKS["WPU-X11"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  db,
+  auth,
+  notifyAll,
+  web,
+  repo,
+];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

@@ -1,3 +1,4 @@
+import { missingSetupSteps, type AccountSetupStep } from "@tc/core";
 import type { CustomerSession } from "@tc/auth";
 import {
   DEFAULT_LIFECYCLE_CONFIG,
@@ -476,12 +477,13 @@ export interface DashboardView {
   families: { family: string; count: number }[];
   renewals: { resourceId: string; name: string; periodEnd: Date; amountMinor: bigint | null }[];
   alerts: {
-    kycPending: boolean;
+    /** WPU-X11: the account setup steps not done (e-mail, mobile, authenticator); empty = may buy. */
+    setupMissing: AccountSetupStep[];
     lowBalance: boolean;
     inGrace: { resourceId: string; name: string }[];
   };
   operations: { id: string; kind: string; state: string; name: string; createdAt: Date }[];
-  /** WPU-G5: the first-use guide (phone, KYC, top-up, key, first server, firewall, snapshot). */
+  /** WPU-G5: the first-use guide (WPU-X11: e-mail, phone, authenticator, top-up, key, server, firewall, snapshot). */
   onboarding: Onboarding;
   /** The server the follow-up steps (firewall, snapshot) point to: the oldest live server. */
   guideServerId: string | null;
@@ -524,6 +526,8 @@ export async function loadDashboard(session: CustomerSession, now: Date): Promis
     }));
     const dueTotal = renewals.reduce((sum, r) => sum + (r.amountMinor ?? 0n), 0n);
     const phoneVerified = profile.phoneVerifiedAt !== null;
+    // WPU-X11: the same predicate as the buy gate; a value that is not a time is not done (R16).
+    const setupMissing = missingSetupSteps(profile);
     const servers = live.filter((r) => r.family === FAMILY || r.family === "windows_instance");
     return {
       state: "ready",
@@ -531,7 +535,7 @@ export async function loadDashboard(session: CustomerSession, now: Date): Promis
       families: [...counts].map(([family, count]) => ({ family, count })),
       renewals,
       alerts: {
-        kycPending: profile.kycStatus !== "verified",
+        setupMissing,
         lowBalance: dueTotal > balance,
         inGrace: subs
           .filter((s) => s.status === "grace")
@@ -545,8 +549,9 @@ export async function loadDashboard(session: CustomerSession, now: Date): Promis
         createdAt: o.createdAt,
       })),
       onboarding: onboardingSteps({
+        emailVerified: !setupMissing.includes("email"),
         phoneVerified,
-        kycVerified: profile.kycStatus === "verified",
+        totpEnabled: !setupMissing.includes("totp"),
         toppedUp: payments.length > 0 || balance > 0n,
         sshKeys: keys.length,
         servers: servers.length,

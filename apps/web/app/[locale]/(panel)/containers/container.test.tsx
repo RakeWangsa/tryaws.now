@@ -60,7 +60,9 @@ describe("/containers/new", () => {
 
   it("each state that cannot buy says why and what to do next", () => {
     expect(render("containers_new.flag_off")).toContain("Container Service is coming soon");
-    expect(render("containers_new.kyc_required")).toContain("Verify your identity first");
+    expect(render("containers_new.kyc_required")).toContain(
+      "Finish your account setup before you buy",
+    );
     expect(render("containers_new.empty")).toContain("No plan is for sale right now");
   });
 });

@@ -33,7 +33,10 @@ export { REGION };
 export interface KitOptions {
   /** The wallet balance after the top-up. Default 10 000 000 paisa. */
   readonly balanceMinor?: bigint;
+  /** WPU-X11: KYC is no longer a buy condition; the default is now `none`. */
   readonly kycStatus?: string;
+  /** WPU-X11: the account setup steps that are done. Default all three (the buyer may buy). */
+  readonly setup?: { readonly email?: boolean; readonly phone?: boolean; readonly totp?: boolean };
   readonly riskTier?: "new" | "trusted";
   readonly status?: string;
   /** The vCPU and static IP limits of the pool cell. Default 40 and 50. */
@@ -77,10 +80,10 @@ export interface Kit extends Buyer {
   draft(over?: Record<string, unknown>, buyer?: Buyer): Promise<OrderDraft>;
   /** Another customer with a funded wallet and a row in the state given. */
   newBuyer(
-    options?: Pick<KitOptions, "balanceMinor" | "kycStatus" | "riskTier" | "status">,
+    options?: Pick<KitOptions, "balanceMinor" | "kycStatus" | "setup" | "riskTier" | "status">,
   ): Promise<Buyer>;
   /** Updates columns of the customers row as the owner (the session is not touched). */
-  setCustomer(customerId: string, columns: Record<string, string>): Promise<void>;
+  setCustomer(customerId: string, columns: Record<string, string | null>): Promise<void>;
   setFlag(state: "on" | "off" | "missing"): Promise<void>;
   /**
    * Inserts a rate that is in force a minute after START (or at `at`) and moves the clock just past it (inside the
@@ -146,7 +149,11 @@ export async function makeKit(t: TempDatabaseHandle, options: KitOptions = {}): 
 
   const newBuyer: Kit["newBuyer"] = async (over = {}) => {
     const customerId = await newCustomer(t.pool, {
-      kyc_status: over.kycStatus ?? "verified",
+      kyc_status: over.kycStatus ?? "none",
+      email_verified_at: over.setup?.email === false ? null : START.toISOString(),
+      phone: "+8801700000000",
+      phone_verified_at: over.setup?.phone === false ? null : START.toISOString(),
+      totp_enabled_at: over.setup?.totp === false ? null : START.toISOString(),
       risk_tier: over.riskTier ?? "new",
       status: over.status ?? "active",
     });
@@ -241,7 +248,15 @@ export async function makeKit(t: TempDatabaseHandle, options: KitOptions = {}): 
     },
     async setCustomer(customerId, columns) {
       for (const [column, value] of Object.entries(columns)) {
-        if (!["kyc_status", "risk_tier", "status"].includes(column)) {
+        const allowed = [
+          "kyc_status",
+          "risk_tier",
+          "status",
+          "email_verified_at",
+          "phone_verified_at",
+          "totp_enabled_at",
+        ];
+        if (!allowed.includes(column)) {
           throw new Error("orders kit: not a column the kit changes");
         }
         await t.pool.query(`update customers set ${column} = $2 where id = $1`, [

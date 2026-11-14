@@ -52,11 +52,16 @@ export async function authenticateCustomer(
       return deny("unauthenticated", "unknown_subject");
     }
 
-    // 4. Sign-out everywhere, password change and suspension set sessions_valid_after. Written so
-    // that a cut-off that is not a valid time refuses (NaN makes the comparison false).
+    // 4. Sign-out everywhere, password change, suspension and (WPU-X11) switching the authenticator on
+    // or off set sessions_valid_after. Written so that a cut-off that is not a valid time refuses (NaN
+    // makes the comparison false). Both times must be at or after it: a refresh gives a new iat but keeps
+    // the auth_time of the sign-in, so a session that started before the cut-off cannot live on through
+    // its refresh token even if the provider's own sign-out failed.
     if (identity.sessionsValidAfter !== null) {
       const cutOff = identity.sessionsValidAfter.getTime();
-      if (!(token.issuedAt.getTime() >= cutOff)) return deny("unauthenticated", "revoked");
+      if (!(token.issuedAt.getTime() >= cutOff) || !(token.authTime.getTime() >= cutOff)) {
+        return deny("unauthenticated", "revoked");
+      }
     }
 
     // 5. Revocation first, status second: a revoked token of a suspended customer is unauthenticated.

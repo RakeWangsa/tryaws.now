@@ -1,3 +1,4 @@
+import { clearCookieSpecs } from "@tc/auth";
 import type { CookieSpec } from "@tc/auth";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -84,6 +85,15 @@ export const runAction = makeRunner({
   jar: async () => (await cookies()) as unknown as CookieJar,
   redirect,
 });
+
+/**
+ * WPU-X11 round 2: clears the two session cookies from a Server Action that ended every session of the
+ * customer (the authenticator was switched on or off). The cookies come only from the specs of @tc/auth.
+ */
+export async function clearSessionCookies(): Promise<void> {
+  const jar = (await cookies()) as unknown as CookieJar;
+  await apply(jar, { setCookies: [], clearCookies: clearCookieSpecs(), pending: null });
+}
 
 /** The form of a posted FormData: text and files by name, the last value of a repeated name. */
 export function formOf(data: FormData): Record<string, unknown> {

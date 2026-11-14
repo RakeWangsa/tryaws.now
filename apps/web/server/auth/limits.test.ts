@@ -1,7 +1,14 @@
 import { emailSubject, ipSubject } from "@tc/notify";
 import type { LimitDecision, LimitRule } from "@tc/db";
-import { describe, expect, it } from "vitest";
-import { AUTH_LIMITS, buildRules, enforceAuthLimit } from "./limits.ts";
+import { describe, expect, it, vi } from "vitest";
+import {
+  AUTH_LIMITS,
+  buildRules,
+  enforceAuthLimit,
+  peekAuthLimit,
+  releaseAuthLimit,
+  reserveAuthLimit,
+} from "./limits.ts";
 
 const KEY = "k".repeat(40);
 const clock = { now: () => new Date("2026-11-12T10:00:00.000Z") };
@@ -39,6 +46,110 @@ describe("AUTH_LIMITS: the table of open point 8", () => {
       ["email", "email", 8, 3600],
       ["ip", "address", 20, 3600],
     ]);
+    // WPU-X11 round 2: failed authenticator codes after a correct password, per address typed, not per
+    // network: an attacker with the password changes address, the account is what is guarded.
+    expect(pick("signin_code")).toEqual([
+      ["email", "email", 5, 900],
+      ["email", "email", 20, 86_400],
+    ]);
+  });
+});
+
+describe("peekAuthLimit (WPU-X11 round 2)", () => {
+  const peeked: LimitRule[][] = [];
+  const peek = async (_tx: unknown, rules: readonly LimitRule[]): Promise<LimitDecision> => {
+    peeked.push([...rules]);
+    return rules.some((r) => r.windowSeconds === 86_400)
+      ? { allowed: false, action: "auth.signin_code", retryAfterSeconds: 321 }
+      : { allowed: true };
+  };
+
+  it("builds the same rules as the consuming call and answers with the retry time of the refusing rule", async () => {
+    const out = await peekAuthLimit(run, KEY, clock, "signin_code", who, peek as never);
+    expect(out).toEqual({ allowed: false, retryAfterSeconds: 321 });
+    expect(peeked.at(-1)).toEqual(buildRules(KEY, "signin_code", who));
+    expect(JSON.stringify(peeked.at(-1))).not.toContain("example.test");
+  });
+
+  it("refuses when the rules cannot be built, or when the read fails (R16)", async () => {
+    expect(
+      await peekAuthLimit(run, KEY, clock, "signin_code", { ...who, ip: "nope" }, peek as never),
+    ).toEqual({ allowed: false, retryAfterSeconds: 60 });
+    const failing = async () => {
+      throw new Error("db down");
+    };
+    expect(await peekAuthLimit(run, KEY, clock, "signin_code", who, failing as never)).toEqual({
+      allowed: false,
+      retryAfterSeconds: 60,
+    });
+  });
+});
+
+describe("reserveAuthLimit (all or nothing)", () => {
+  it("rolls the transaction back when any rule refuses, and answers with that rule's retry time", async () => {
+    let committed = false;
+    const refuse = async (): Promise<LimitDecision> => ({
+      allowed: false,
+      action: "auth.signin_code",
+      retryAfterSeconds: 77,
+    });
+    // A runner like withTx: the callback's throw is a rollback, only its return is a commit.
+    const rollingBack = async <T>(fn: (tx: never) => Promise<T>): Promise<T> => {
+      const out = await fn({} as never);
+      committed = true;
+      return out;
+    };
+    const out = await reserveAuthLimit(
+      rollingBack,
+      KEY,
+      clock,
+      "signin_code",
+      who,
+      refuse as never,
+    );
+    expect(out).toEqual({ allowed: false, retryAfterSeconds: 77 });
+    expect(committed).toBe(false);
+  });
+
+  it("commits when every rule counts, refuses when the rules cannot be built or the call fails (R16)", async () => {
+    let committed = false;
+    const ok = async (): Promise<LimitDecision> => ({ allowed: true });
+    const runner = async <T>(fn: (tx: never) => Promise<T>): Promise<T> => {
+      const out = await fn({} as never);
+      committed = true;
+      return out;
+    };
+    expect(await reserveAuthLimit(runner, KEY, clock, "signin_code", who, ok as never)).toEqual({
+      allowed: true,
+    });
+    expect(committed).toBe(true);
+    expect(
+      await reserveAuthLimit(
+        runner,
+        KEY,
+        clock,
+        "signin_code",
+        { ...who, ip: "nope" },
+        ok as never,
+      ),
+    ).toEqual({ allowed: false, retryAfterSeconds: 60 });
+    const failing = async () => {
+      throw new Error("db down");
+    };
+    expect(
+      await reserveAuthLimit(runner, KEY, clock, "signin_code", who, failing as never),
+    ).toEqual({ allowed: false, retryAfterSeconds: 60 });
+  });
+
+  it("the release only takes the wrong-code action (the type, and at run time): nothing else is ever given back", async () => {
+    const released = vi.fn(async () => {});
+    for (const action of ["signin", "signup", "forgot", "reset", "confirm", "resend"]) {
+      // @ts-expect-error: only "signin_code" may be given back
+      expect(await releaseAuthLimit(run, KEY, clock.now(), action, who, released)).toBe(false);
+    }
+    expect(released).not.toHaveBeenCalled();
+    expect(await releaseAuthLimit(run, KEY, clock.now(), "signin_code", who, released)).toBe(true);
+    expect(released).toHaveBeenCalledTimes(1);
   });
 });
 

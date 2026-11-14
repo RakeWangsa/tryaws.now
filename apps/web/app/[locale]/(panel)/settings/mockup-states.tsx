@@ -58,7 +58,7 @@ export const profile =
     );
 
 export const security =
-  (open: boolean): Renderer =>
+  (open: boolean, totpEnabled: boolean | null = false): Renderer =>
   (locale) =>
     inProvider(
       locale,
@@ -67,6 +67,7 @@ export const security =
         changePassword={never}
         signInHref="/login?next=/settings/security"
         profileHref="/settings/profile"
+        totp={{ enabled: totpEnabled, start: never, confirm: never, disable: never }}
       />,
     );
 
@@ -81,4 +82,6 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   }),
   "settings.security.open": security(true),
   "settings.security.closed": security(false),
+  // WPU-X11: the authenticator switched on (the off state is "settings.security.open").
+  "settings.security.totp_on": security(true, true),
 };

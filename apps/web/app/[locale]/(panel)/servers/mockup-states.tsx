@@ -101,7 +101,7 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "new.ready": configure(configurator()),
   "new.empty": configure(configurator({ plans: [], regions: [] })),
   "new.flag_off": configure({ state: "flag_off" }),
-  "new.kyc_required": configure({ state: "kyc_required" }),
+  "new.kyc_required": configure({ state: "account_setup_required", missing: ["totp"] }),
   "new.loading": fixed(() => <ScreenLoading lines={[4, 6, 2]} />),
   "new.error": fixed(errorNode),
   // /orders/review

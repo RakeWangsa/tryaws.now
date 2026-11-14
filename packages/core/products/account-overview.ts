@@ -5,9 +5,12 @@
 // ----- Onboarding ------------------------------------------------------------------------------
 
 /** The steps of a first launch in the order a customer meets them. */
+// WPU-X11 (owner decision 2026-11-14): the account setup is e-mail, mobile and authenticator; the KYC
+// step is gone (KYC is no longer a buy condition).
 export const ONBOARDING_STEP_KEYS = [
+  "email",
   "phone",
-  "kyc",
+  "totp",
   "topUp",
   "sshKey",
   "server",
@@ -17,8 +20,10 @@ export const ONBOARDING_STEP_KEYS = [
 export type OnboardingStepKey = (typeof ONBOARDING_STEP_KEYS)[number];
 
 export interface OnboardingInput {
+  emailVerified: boolean;
   phoneVerified: boolean;
-  kycVerified: boolean;
+  /** The authenticator (TOTP) is on: customers.totp_enabled_at is set. */
+  totpEnabled: boolean;
   toppedUp: boolean;
   /** Public keys the customer has saved. */
   sshKeys: number;
@@ -51,8 +56,9 @@ const count = (n: number): boolean => Number.isSafeInteger(n) && n > 0;
 export function onboardingSteps(input: OnboardingInput): Onboarding {
   const hasServer = count(input.servers);
   const steps: OnboardingStep[] = [
+    { key: "email", done: input.emailVerified, locked: false },
     { key: "phone", done: input.phoneVerified, locked: false },
-    { key: "kyc", done: input.kycVerified, locked: false },
+    { key: "totp", done: input.totpEnabled, locked: false },
     { key: "topUp", done: input.toppedUp, locked: false },
     { key: "sshKey", done: count(input.sshKeys), locked: false },
     { key: "server", done: hasServer, locked: false },

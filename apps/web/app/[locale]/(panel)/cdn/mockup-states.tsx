@@ -86,7 +86,7 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "cdn_new.empty": configure(configurator({ plans: [] })),
   "cdn_new.no_origin": configure(configurator({ origins: [] })),
   "cdn_new.flag_off": configure({ state: "flag_off" }),
-  "cdn_new.kyc_required": configure({ state: "kyc_required" }),
+  "cdn_new.kyc_required": configure({ state: "account_setup_required", missing: ["totp"] }),
   "cdn_new.loading": fixed(() => <ScreenLoading lines={[4, 6, 2]} />),
   "cdn_new.error": fixed(errorNode),
   // /cdn/[id]

@@ -113,6 +113,8 @@ export const SAMPLES: Record<TemplateId, { data: Record<string, unknown>; channe
   security_totp_changed: { data: { at }, channels: ["email", "sms", "in_app"] },
   security_email_changed: { data: { at }, channels: ["email", "sms", "in_app"] },
   security_phone_changed: { data: { at }, channels: ["email", "sms", "in_app"] },
+  // WPU-X11 round 2: email only. The sign-in knows the address that typed the right password, not the customer.
+  security_totp_blocked: { data: { at, ip: "203.0.113.7" }, channels: ["email"] },
   domain_contact_pending: { data: { domain: "example.com" }, channels: ["email", "in_app"] },
   domain_renewal_reminder: {
     data: { domain: "example.com", days: 7, expiresAt: at },

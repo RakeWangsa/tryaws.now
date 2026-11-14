@@ -1,3 +1,4 @@
+import { missingSetupSteps } from "../account/setup";
 import type { RiskTier } from "../capacity/types";
 import { decimalAtMost } from "../pricing/index";
 import type { Result } from "../types";
@@ -5,7 +6,10 @@ import type { Result } from "../types";
 /** The customer row as read under the wallet lock. The session's copy is never an input (R16). */
 export interface CustomerFacts {
   readonly status: string;
-  readonly kycStatus: string;
+  /** WPU-X11: the three facts of the account setup (packages/core/account/setup.ts). */
+  readonly emailVerifiedAt: Date | null;
+  readonly phoneVerifiedAt: Date | null;
+  readonly totpEnabledAt: Date | null;
   readonly riskTier: string;
   readonly market: string;
 }
@@ -17,15 +21,18 @@ function isRiskTier(text: string): text is RiskTier {
 }
 
 /**
- * No row, a status other than `active` and an unknown tier are `forbidden`; any KYC value but the
- * exact text `verified` is `kyc_required`. Fails closed on text it does not know.
+ * No row, a status other than `active` and an unknown tier are `forbidden`. WPU-X11 (owner decision
+ * 2026-11-14): a customer whose e-mail, mobile or authenticator step is not done is `kyc_required`, with
+ * `data.missing` naming the steps; KYC itself is no longer read. The code keeps its contract name (Section
+ * F, ErrorCode); it now means "account setup required". Fails closed on values it does not know.
  */
 export function checkCustomer(
   facts: CustomerFacts | null,
 ): Result<{ riskTier: RiskTier; market: string }> {
   if (facts === null) return { ok: false, error: "forbidden" };
   if (facts.status !== "active") return { ok: false, error: "forbidden" };
-  if (facts.kycStatus !== "verified") return { ok: false, error: "kyc_required" };
+  const missing = missingSetupSteps(facts);
+  if (missing.length > 0) return { ok: false, error: "kyc_required", data: { missing } };
   if (!isRiskTier(facts.riskTier)) return { ok: false, error: "forbidden" };
   return { ok: true, value: { riskTier: facts.riskTier, market: facts.market } };
 }

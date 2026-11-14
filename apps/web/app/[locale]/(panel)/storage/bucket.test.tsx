@@ -63,7 +63,9 @@ describe("/storage/new", () => {
 
   it("each state that cannot buy says why and what to do next", () => {
     expect(render("storage_new.flag_off")).toContain("Object Storage is coming soon");
-    expect(render("storage_new.kyc_required")).toContain("Verify your identity first");
+    expect(render("storage_new.kyc_required")).toContain(
+      "Finish your account setup before you buy",
+    );
     expect(render("storage_new.empty")).toContain("No plan is for sale right now");
   });
 });

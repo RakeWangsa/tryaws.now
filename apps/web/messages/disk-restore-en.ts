@@ -37,7 +37,7 @@ export const diskRestoreEn: Same<typeof diskRestoreBn> = {
     error: {
       limit_reached: "You have reached your limit.",
       capacity_full: "There is no room in this location right now. Please try again later.",
-      kyc_required: "Complete the identity check first.",
+      kyc_required: "Finish the account setup first: e-mail, mobile number and authenticator.",
       forbidden: "This is not open for you.",
     },
   },

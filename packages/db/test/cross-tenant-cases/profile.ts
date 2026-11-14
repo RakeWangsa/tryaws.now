@@ -53,5 +53,21 @@ export const profileCases: CaseSet = defineCaseSet<{ customerId: string }>({
           }),
         ),
     },
+    // WPU-X11: the two facts of the account setup, written by the server for the session's customer only.
+    "profile.markEmailVerified": {
+      kind: "self-write",
+      run: (c) =>
+        asCustomer(c, (r) => r.profile.markEmailVerified(new Date("2026-11-14T10:00:00.000Z"))),
+    },
+    "profile.revokeSessions": {
+      kind: "self-write",
+      run: (c) =>
+        asCustomer(c, (r) => r.profile.revokeSessions(new Date("2026-11-14T10:00:00.000Z"))),
+    },
+    "profile.setTotpEnabled": {
+      kind: "self-write",
+      run: (c) =>
+        asCustomer(c, (r) => r.profile.setTotpEnabled(new Date("2026-11-14T10:00:00.000Z"))),
+    },
   }),
 });

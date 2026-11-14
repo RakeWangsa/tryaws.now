@@ -10,6 +10,7 @@ import type { CustomerOperation, ResourceSummary } from "@tc/db";
 // the generated name of R11, a pure function of the resource id, never the text the customer typed.
 
 import { bucketVersioningOf } from "./console-view.ts";
+import { accountSetupGate, type AccountSetupRequired } from "./account-setup.ts";
 const FLAG = "bucket";
 const FAMILY = "bucket";
 const REGION = /^[a-z]{2}-[a-z]+-\d$/;
@@ -60,7 +61,7 @@ export interface BucketPlanOption {
 }
 
 export type BucketConfiguratorScreen =
-  { state: "flag_off" } | { state: "kyc_required" } | { state: "ready"; plans: BucketPlanOption[] };
+  { state: "flag_off" } | AccountSetupRequired | { state: "ready"; plans: BucketPlanOption[] };
 
 function positiveInt(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
@@ -76,7 +77,9 @@ export async function loadBucketConfigurator(
     if (profile === null) throw new Error("bucket: no customer row");
     // R12, R16: a flag that is off or unreadable shows the flag-off state.
     if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return { state: "flag_off" };
-    if (profile.kycStatus !== "verified") return { state: "kyc_required" };
+    // WPU-X11: e-mail, mobile and authenticator, the same predicate as the purchase gate (not KYC).
+    const setup = accountSetupGate(profile);
+    if (setup !== null) return setup;
 
     const rows = await listCatalogProducts(tx, FAMILY);
     const priced = await priceCatalog(tx, rows, { market: profile.market }, { now });

@@ -12,11 +12,6 @@ export const bucketEn: Same<typeof bucketBn> = {
       title: "Object Storage is coming soon",
       body: "This service is not open in your market yet. You will be able to buy it here once it opens.",
     },
-    kycRequired: {
-      title: "Verify your identity first",
-      body: "Identity verification must be complete before you can buy Object Storage. Come back here when it is done.",
-      action: "Write to support",
-    },
     state: {
       creating: "Creating",
       active: "On",

@@ -205,7 +205,7 @@ describe("PlaceForm (placeOrder)", () => {
   });
 
   it.each([
-    ["kyc_required", "You need to finish identity verification"],
+    ["kyc_required", "Finish the account setup before you buy a server"],
     ["insufficient_balance", "Your wallet balance is not enough"],
     ["forbidden", "not allowed to do this"],
     ["draft_expired", "The price has expired"],

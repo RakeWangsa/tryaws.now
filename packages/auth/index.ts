@@ -57,6 +57,8 @@ export { registerAccount } from "./register";
 export type { AccountRegistered, RegisterDeps } from "./register";
 export { cognitoIdentityProvider } from "./cognito-identity";
 export type { IdpFact } from "./cognito-identity";
+export { cognitoTotpPort } from "./cognito-totp";
+export type { TotpPort } from "./cognito-totp";
 export type {
   IdentityProvider,
   IdpFailure,

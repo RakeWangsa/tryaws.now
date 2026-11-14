@@ -53,7 +53,7 @@ export interface OrderActionDeps {
   /** The verified session of the request, or null (R16). */
   authenticate(): Promise<OrderSession | null>;
   /** One count against the draft limit of the customer; a failure to count is a refusal. */
-  rateLimit(session: OrderSession): Promise<{ allowed: boolean }>;
+  rateLimit(session: OrderSession, kind?: "draft" | "place"): Promise<{ allowed: boolean }>;
   /** null = the order functions are not configured. */
   orders: Pick<Orders, "createOrderDraft" | "placeOrder"> | null;
   /**
@@ -82,6 +82,16 @@ export type PlaceActionResult =
       };
     }
   | { ok: false; error: PublicError; fields?: Record<string, string> };
+
+/**
+ * WPU-X11 round 2: the purchase limit of the web tier, before the order port. Every purchase makes one Cognito
+ * GetUser (mfa-gate.ts) whose quota is shared by the whole pool, so one scripted customer must not be able to
+ * use it up. Its own action name, so it does not count twice with the order code's own limiter (open point 13).
+ */
+export const PLACE_RATE_LIMITS = Object.freeze([
+  Object.freeze({ action: "order.place.web", limit: 10, windowSeconds: 60 }),
+  Object.freeze({ action: "order.place.web", limit: 60, windowSeconds: 3600 }),
+]);
 
 /** 30 drafts a minute per customer; a draft writes nothing, but it reads and signs. */
 export const DRAFT_RATE_LIMITS = Object.freeze([
@@ -192,6 +202,14 @@ export async function placeOrderCore(
   if (Object.keys(fields).length > 0) return { ok: false, error: "validation", fields };
 
   if (deps.orders === null) return { ok: false, error: "unavailable" };
+  // R9: rate limit after validation and before the order port (which asks Cognito once per call).
+  try {
+    if (!(await deps.rateLimit(session, "place")).allowed) {
+      return { ok: false, error: "rate_limited" };
+    }
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
   const result = await deps.orders.placeOrder(session, {
     token: token as string,
     idempotencyKey: idempotencyKey as string,

@@ -8,7 +8,13 @@ import { loginRedirect } from "../../../../../server/panel.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
 import { getRuntime } from "../../../../../server/runtime.ts";
 import { PanelFrame } from "../../PanelFrame.tsx";
-import { changePasswordAction } from "./actions.ts";
+import { loadTotpEnabled } from "../../../../../server/settings-view.ts";
+import {
+  changePasswordAction,
+  confirmTotpAction,
+  disableTotpAction,
+  startTotpAction,
+} from "./actions.ts";
 import { SecurityContent } from "./SecurityContent.tsx";
 
 export const dynamic = "force-dynamic";
@@ -22,13 +28,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: t("Settings.security.meta.title"), robots: { index: false, follow: false } };
 }
 
-/** /settings/security (16.10): the password. */
+/** /settings/security (16.10): the password and (WPU-X11) the authenticator app. */
 export default async function SecurityPage({ params }: Props) {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
   const t = await getTranslations({ locale });
   const panel = await startPanelPage("/settings/security");
-  const { account } = await getRuntime();
+  const { account, totp } = await getRuntime();
+  const totpEnabled = await loadTotpEnabled(panel.session, totp !== null);
   return (
     <PanelFrame locale={locale} path="/settings/security" currentId="settings" panel={panel}>
       <h1 className="h3 mergecolor mb-4">{t("Settings.security.heading")}</h1>
@@ -37,6 +44,12 @@ export default async function SecurityPage({ params }: Props) {
         changePassword={changePasswordAction}
         signInHref={loginRedirect(locale, "/settings/security")}
         profileHref={localePath(locale, "/settings/profile")}
+        totp={{
+          enabled: totpEnabled,
+          start: startTotpAction,
+          confirm: confirmTotpAction,
+          disable: disableTotpAction,
+        }}
       />
     </PanelFrame>
   );

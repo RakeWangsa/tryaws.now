@@ -162,4 +162,36 @@ describe("/settings/security", () => {
     expect(html).not.toContain('type="password"');
     expect(html).toMatch(/[ঀ-৿]/);
   });
+
+  // WPU-X11: the authenticator app, one of the three steps before buying.
+  it("offers to switch the authenticator on, bn first then en, with the state in words and an icon", () => {
+    const bn = security(true, false)("bn");
+    expect(bn).toContain("অথেনটিকেটর অ্যাপ (দুই ধাপের সাইন ইন)");
+    expect(bn).toContain("চালু নেই");
+    expect(bn).toContain("অথেনটিকেটর চালু করুন");
+    const en = security(true, false)("en");
+    expect(en).toContain("Switch on the authenticator");
+    expect(en).toContain("Off");
+    expect(en).toContain("far fa-circle");
+    // No secret and no code field before the server answered the start action (U9).
+    expect(en).not.toContain('name="code"');
+    expect(en).not.toContain("otpauth://");
+    expect(en).toContain("last 10 minutes");
+  });
+
+  it("when it is on, says so and offers to switch it off, which blocks buying again", () => {
+    const en = security(true, true)("en");
+    expect(en).toContain("fas fa-check-circle");
+    expect(en).toContain("Switch off the authenticator");
+    expect(en).toContain("you cannot buy anything new until you switch it on again");
+    expect(en).not.toContain("Switch on the authenticator");
+    expect(security(true, true)("bn")).toContain("চালু আছে");
+  });
+
+  it("offers nothing when the state cannot be read (R16)", () => {
+    const en = security(true, null)("en");
+    expect(en).not.toContain("Switch on the authenticator");
+    expect(en).not.toContain("Switch off the authenticator");
+    expect(en).toContain("This change is not open yet");
+  });
 });

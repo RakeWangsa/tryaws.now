@@ -10,6 +10,7 @@ import type {
 import type { Clock } from "@tc/core";
 import type { Stage } from "../config.ts";
 import { getFakeState } from "./outbox.ts";
+import { acceptTotp } from "./totp.ts";
 
 // Development and test only (open point 3): an in-memory identity provider for the Playwright smoke
 // and the unit tests. It is the only implementation of IdentityProvider in memory. It issues the
@@ -27,6 +28,8 @@ const fail = (
     | "expired_code"
     | "invalid_password"
     | "denied"
+    | "code_denied"
+    | "code_limited"
     | "not_confirmed"
     | "rate_limited"
     | "unavailable",
@@ -104,11 +107,38 @@ export class InMemoryIdentityProvider implements IdentityProvider {
     return ok(true);
   }
 
-  async signIn(i: { email: string; password: string }): Promise<IdpResult<SignInOutcome>> {
+  async signIn(i: {
+    email: string;
+    password: string;
+    totpCode?: string;
+    beforeCode?: () => Promise<boolean>;
+  }): Promise<IdpResult<SignInOutcome>> {
     const state = getFakeState();
     const user = state.users.get(i.email);
     if (user === undefined || user.password !== i.password) return fail("denied");
     if (!user.confirmed) return fail("not_confirmed");
+    let viaTotp = false;
+    // WPU-X11: as the Cognito adapter does, a customer with an authenticator gets the challenge without
+    // a code, and a wrong or reused code is `denied`.
+    if (user.totpEnabled === true && user.totpSecret !== undefined) {
+      if (i.totpCode === undefined) return ok({ kind: "challenge", challenge: "totp" });
+      // The password is proven: the caller may refuse the code (its wrong-code limit), as in the adapter.
+      if (i.beforeCode !== undefined) {
+        let go: boolean;
+        try {
+          go = (await i.beforeCode()) === true;
+        } catch {
+          go = false;
+        }
+        if (!go) return fail("code_limited");
+      }
+      state.totpAnswerCalls += 1;
+      // The password was right: a wrong or reused code is code_denied, as in the Cognito adapter.
+      if (!acceptTotp(user, user.totpSecret, i.totpCode, this.clock.now())) {
+        return fail("code_denied");
+      }
+      viaTotp = true;
+    }
     user.refreshCount += 1;
     const refreshToken = `fake-rt.${user.sub}.${user.refreshCount}`;
     state.issuedRefresh.add(refreshToken);
@@ -117,6 +147,7 @@ export class InMemoryIdentityProvider implements IdentityProvider {
       accessToken: `dev.${user.sub}`,
       refreshToken,
       expiresInSeconds: 3600,
+      ...(viaTotp ? { totpVerified: true as const } : {}),
     });
   }
 

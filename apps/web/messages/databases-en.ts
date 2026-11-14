@@ -12,11 +12,6 @@ export const databasesEn: Same<typeof databasesBn> = {
       title: "Databases are coming soon",
       body: "This service is not open in your market yet. You will be able to buy it here once it opens.",
     },
-    kycRequired: {
-      title: "Verify your identity first",
-      body: "Identity verification must be complete before you can buy a database. Come back here when it is done.",
-      action: "Write to support",
-    },
     state: {
       creating: "Creating",
       active: "Running",

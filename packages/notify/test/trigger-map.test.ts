@@ -50,6 +50,12 @@ const TABLE: ReadonlyArray<{
     sms: "yes",
   },
   {
+    row: "WPU-X11: a correct password with too many wrong authenticator codes (email only)",
+    templates: ["security_totp_blocked"],
+    sms: "no",
+    bell: false,
+  },
+  {
     row: "Domain: contact pending, reminders 60, 30 and 7 days (SMS at 7)",
     templates: ["domain_contact_pending"],
     sms: "no",

@@ -28,6 +28,7 @@ Commands cited in these pages: `pnpm verify --task <id>`, `pnpm db:up`, `pnpm db
 | [domain-registration-problem.md](domain-registration-problem.md)                 | domain registration problem                             |
 | [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 | abuse notice                                            |
 | [kyc-review.md](kyc-review.md)                                                   | KYC review                                              |
+| [customer-mfa-reset.md](customer-mfa-reset.md)                                   | customer authenticator (TOTP) reset                     |
 | [bucket-access-key-orphan.md](bucket-access-key-orphan.md)                       | bucket access key, orphan after a lost answer           |
 | [secret-rotation.md](secret-rotation.md)                                         | secret rotation                                         |
 | [sms-gateway.md](sms-gateway.md)                                                 | SMS gateway (Gennet), secrets, test send                |
@@ -60,6 +61,7 @@ Filled in by the owner when a person has read the page against the admin app and
 | [domain-registration-problem.md](domain-registration-problem.md)                 |                                |
 | [abuse-notice-and-suspension.md](abuse-notice-and-suspension.md)                 |                                |
 | [kyc-review.md](kyc-review.md)                                                   |                                |
+| [customer-mfa-reset.md](customer-mfa-reset.md)                                   |                                |
 | [bucket-access-key-orphan.md](bucket-access-key-orphan.md)                       |                                |
 | [secret-rotation.md](secret-rotation.md)                                         |                                |
 | [sms-gateway.md](sms-gateway.md)                                                 |                                |

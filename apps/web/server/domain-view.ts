@@ -9,6 +9,7 @@ import {
 } from "@tc/core";
 import { customerRepos, listTlds, readFeatureFlag, withTx } from "@tc/db";
 import type { Tx } from "@tc/db";
+import { accountSetupGate, type AccountSetupRequired } from "./account-setup.ts";
 
 // What the domain screens show (WP7-T4, 16.10), read through the repositories of the session's customer
 // (R8). A database error is thrown, never answered with an empty list (R16). Nothing here returns an
@@ -116,7 +117,7 @@ export async function loadDomainSearch(
 
 export type DomainOrderScreen =
   | { state: "flag_off" }
-  | { state: "kyc_required" }
+  | AccountSetupRequired
   | { state: "invalid" }
   | {
       state: "ready";
@@ -140,7 +141,9 @@ export async function loadDomainOrder(
     if ((await readFeatureFlag(tx, DOMAIN_FLAG, profile.market)) !== true) {
       return { state: "flag_off" };
     }
-    if (profile.kycStatus !== "verified") return { state: "kyc_required" };
+    // WPU-X11: e-mail, mobile and authenticator, the same predicate as the purchase gate (not KYC).
+    const setup = accountSetupGate(profile);
+    if (setup !== null) return setup;
     const priced = await priceTlds(tx, profile.market, now);
     const name = normalizeDomainName(
       rawName,

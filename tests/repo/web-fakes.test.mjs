@@ -96,6 +96,8 @@ it("runtime.ts imports the fakes only through a literal dynamic import()", () =>
     "./fakes/outbox.ts",
     "./fakes/reader-fake.ts",
     "./fakes/renderer-fake.ts",
+    // WPU-X11: the in-memory authenticator next to the fake identity.
+    "./fakes/totp.ts",
   ]);
   // Every import( in the file has a string literal: nothing is computed.
   const all = stripComments(text).match(/\bimport\s*\(/g) ?? [];
