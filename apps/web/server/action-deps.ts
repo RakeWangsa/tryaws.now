@@ -13,6 +13,7 @@ import type { SupportActionDeps } from "./support-actions.ts";
 import type { SupportThreadDeps } from "./support-thread-actions.ts";
 import { openDraftToken } from "./draft-envelope.ts";
 import { mfaGuardedOrders } from "./mfa-gate.ts";
+import { consumeAllOrNothing } from "./place-limit.ts";
 import type { TotpDeps } from "./totp-actions.ts";
 import { clearTotpDrift } from "./totp-drift.ts";
 import { DRAFT_RATE_LIMITS, PLACE_RATE_LIMITS } from "./order-actions.ts";
@@ -43,12 +44,13 @@ export async function orderActionDeps(): Promise<OrderActionDeps> {
   return {
     authenticate,
     rateLimit: (session, kind) =>
-      withTx((tx) =>
-        customerRepos(tx, session.customerId).rateLimits.consume(
-          kind === "place" ? PLACE_RATE_LIMITS : DRAFT_RATE_LIMITS,
-          new Date(),
-        ),
-      ),
+      // The purchase has two rules of one action, so a refusal must not leave the other one counted
+      // (all or nothing, place-limit.ts). The draft has one rule and keeps the plain consume.
+      kind === "place"
+        ? consumeAllOrNothing(withTx, session.customerId, PLACE_RATE_LIMITS, new Date())
+        : withTx((tx) =>
+            customerRepos(tx, session.customerId).rateLimits.consume(DRAFT_RATE_LIMITS, new Date()),
+          ),
     // WPU-X11 round 2: every draft and purchase of every family first asks Cognito whether the authenticator
     // is still on (mfa-gate.ts); the platform copy is cleared when it is not.
     orders:

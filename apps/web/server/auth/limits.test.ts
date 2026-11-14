@@ -111,6 +111,18 @@ describe("reserveAuthLimit (all or nothing)", () => {
     expect(committed).toBe(false);
   });
 
+  it("answers with the time its count used, the one consume was given (the release needs that window)", async () => {
+    const used: Date[] = [];
+    const ok = async (_tx: unknown, _rules: unknown, now: Date): Promise<LimitDecision> => {
+      used.push(now);
+      return { allowed: true };
+    };
+    const ticking = { now: () => new Date(used.length === 0 ? 1_000 : 9_999_999) };
+    const out = await reserveAuthLimit(run, KEY, ticking, "signin_code", who, ok as never);
+    expect(out).toEqual({ allowed: true, at: used[0] });
+    expect(used).toHaveLength(1);
+  });
+
   it("commits when every rule counts, refuses when the rules cannot be built or the call fails (R16)", async () => {
     let committed = false;
     const ok = async (): Promise<LimitDecision> => ({ allowed: true });
@@ -121,6 +133,7 @@ describe("reserveAuthLimit (all or nothing)", () => {
     };
     expect(await reserveAuthLimit(runner, KEY, clock, "signin_code", who, ok as never)).toEqual({
       allowed: true,
+      at: clock.now(),
     });
     expect(committed).toBe(true);
     expect(

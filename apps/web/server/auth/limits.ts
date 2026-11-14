@@ -183,7 +183,7 @@ export async function reserveAuthLimit(
   action: AuthAction,
   who: Who,
   consume: Consume = consumeRateLimits,
-): Promise<{ allowed: true } | { allowed: false; retryAfterSeconds: number }> {
+): Promise<{ allowed: true; at: Date } | { allowed: false; retryAfterSeconds: number }> {
   try {
     const rules = buildRules(key, action, who);
     if (rules === null) return { allowed: false, retryAfterSeconds: 60 };
@@ -192,7 +192,8 @@ export async function reserveAuthLimit(
       const decision = await consume(tx, rules, now);
       if (!decision.allowed) throw new Refused(decision.retryAfterSeconds);
     });
-    return { allowed: true };
+    // The time the count used: the release must name the same window.
+    return { allowed: true, at: now };
   } catch (error) {
     return {
       allowed: false,
