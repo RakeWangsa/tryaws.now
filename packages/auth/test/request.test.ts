@@ -146,6 +146,19 @@ describe("refreshForProxy", () => {
     expect(out.cookieHeader).not.toContain(nearEnd);
   });
 
+  // WPU-X12 round 4: the customer client has a secret, so there is no default port that could refresh
+  // without it. A runtime without a port refreshes nothing and sends nothing to Cognito (R16).
+  it("a runtime without a refresh port keeps the cookies and calls nobody", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const out = await refreshForProxy(
+      runtime(),
+      req(`theme=dark; ${REFRESH_COOKIE}=${OLD_REFRESH}`),
+    );
+    expect(out).toEqual({ action: "none" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
   it("refreshForProxy returns none for a fresh token", async () => {
     const { port, refresh } = portOf({ kind: "refreshed", accessToken: issuer.sign() });
     const out = await refreshForProxy(

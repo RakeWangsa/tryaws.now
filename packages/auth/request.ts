@@ -1,5 +1,5 @@
 import type { AuthConfig } from "./config";
-import { cognitoRefreshPort, needsRefresh, refreshSession } from "./refresh";
+import { needsRefresh, refreshSession } from "./refresh";
 import type { RefreshOutcome, RefreshPort } from "./refresh";
 import { parseCookieHeader } from "./cookies";
 import { authenticateCustomer } from "./session";
@@ -25,6 +25,13 @@ interface Built {
   readonly port: RefreshPort;
 }
 
+// WPU-X12 round 4: the customer app client has a secret, so there is no default port that could refresh
+// without it. A runtime that is handed no port refreshes nothing: the cookies stay and the next
+// verification decides (R16).
+const NO_REFRESH: RefreshPort = {
+  refresh: () => Promise.resolve({ kind: "unavailable" }),
+};
+
 // The verifier holds the JWKS cache, so a default one is built once per runtime object, not per request.
 const built = new WeakMap<AuthRuntimeLike, Built>();
 
@@ -45,7 +52,7 @@ function build(runtime: AuthRuntimeLike): Built {
   const made: Built = {
     session: { verifier, lookup, ...(onDenied ? { onDenied } : {}) },
     clock: runtime.clock ?? { now: () => new Date() },
-    port: runtime.port ?? cognitoRefreshPort(runtime.config.customer),
+    port: runtime.port ?? NO_REFRESH,
   };
   built.set(runtime, made);
   return made;

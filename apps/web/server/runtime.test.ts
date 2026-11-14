@@ -235,6 +235,13 @@ describe("assembleRuntime: the auth parts", () => {
     SST_RESOURCE_CustomerSignUpClient:
       '{"id":"1example23456789","secret":"13ka4h7u28d9oo44tqpq9djqsfvhvu8rk4d2ighvpu0k8fj1c2r9"}',
   };
+  // Round 4: the token-issuing customer client has a secret too; its link carries the same client id as
+  // COGNITO_CUSTOMER_CLIENT_ID. A made-up value (R3).
+  const CUSTOMER_LINK = {
+    SST_RESOURCE_CustomerAppClient:
+      '{"id":"abcdefghij1234567890","secret":"customer0app0client0secret0abcdef"}',
+  };
+  const LINKS = { ...SIGN_UP_LINK, ...CUSTOMER_LINK };
   const KEYS = {
     SST_RESOURCE_AuthLimitKey:
       '{"type":"sst.sst.Secret","value":"planted-authkey-7777-0123456789abcdef"}',
@@ -258,7 +265,7 @@ describe("assembleRuntime: the auth parts", () => {
     expect((await assembleRuntime({ ...STAGING })).runtime.identity).toBeNull();
     const bad = { COGNITO_CUSTOMER_POOL_ID: "nope", COGNITO_CUSTOMER_CLIENT_ID: "x" };
     expect((await assembleRuntime({ ...STAGING, ...bad })).runtime.identity).toBeNull();
-    const ok = await assembleRuntime({ ...STAGING, ...POOL, ...SIGN_UP_LINK });
+    const ok = await assembleRuntime({ ...STAGING, ...POOL, ...LINKS });
     expect(typeof ok.runtime.identity?.signUp).toBe("function");
   });
 
@@ -273,9 +280,58 @@ describe("assembleRuntime: the auth parts", () => {
       '{"id":"1example23456789","secret":"not-configured"}',
       '{"id":"bad id","secret":"13ka4h7u28d9oo44tqpq9djqsfvhvu8rk4d2ighvpu0k8fj1c2r9"}',
     ]) {
-      const env = { ...STAGING, ...POOL, SST_RESOURCE_CustomerSignUpClient: raw };
+      const env = {
+        ...STAGING,
+        ...POOL,
+        ...CUSTOMER_LINK,
+        SST_RESOURCE_CustomerSignUpClient: raw,
+      };
       expect((await assembleRuntime(env)).runtime.identity, raw).toBeNull();
     }
+  });
+
+  // Round 4: the same for the customer client's link, which must also name the client of the pool.
+  it("without the customer client link, or with a malformed or foreign one, identity is null", async () => {
+    const { assembleRuntime } = await load();
+    expect(
+      (await assembleRuntime({ ...STAGING, ...POOL, ...SIGN_UP_LINK })).runtime.identity,
+    ).toBeNull();
+    for (const raw of [
+      "not json",
+      '{"id":"abcdefghij1234567890"}',
+      '{"id":"abcdefghij1234567890","secret":"not-configured"}',
+      '{"id":"zyxwvutsrq0987654321","secret":"customer0app0client0secret0abcdef"}',
+    ]) {
+      const env = { ...STAGING, ...POOL, ...SIGN_UP_LINK, SST_RESOURCE_CustomerAppClient: raw };
+      expect((await assembleRuntime(env)).runtime.identity, raw).toBeNull();
+    }
+  });
+
+  // Round 4 (security review, low): a trigger refusal is folded to "ok" for the page and logged on its own
+  // as a fixed reason, with no address, so an alarm can match it.
+  it("logs a refusing trigger as trigger_refused, with no address, and answers ok", async () => {
+    const refused = () =>
+      new Response(JSON.stringify({ __type: "UserLambdaValidationException", message: "x" }), {
+        status: 400,
+      });
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(refused()));
+    const lines: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+      lines.push(String(line));
+    });
+    const { assembleRuntime } = await load();
+    const { runtime } = await assembleRuntime({ ...STAGING, ...POOL, ...LINKS });
+    const email = "planted.person@example.test";
+    expect(await runtime.identity?.forgotPassword(email)).toEqual({ ok: true, value: true });
+    expect(await runtime.identity?.resendConfirmationCode(email)).toEqual({
+      ok: true,
+      value: true,
+    });
+    expect(lines).toEqual([
+      JSON.stringify({ event: "auth.forgot", reason: "trigger_refused" }),
+      JSON.stringify({ event: "auth.resend", reason: "trigger_refused" }),
+    ]);
+    expect(lines.join("")).not.toContain(email);
   });
 
   // WPU-Z3: the SMS gateway (Gennet). Planted values, never real ones (R3).

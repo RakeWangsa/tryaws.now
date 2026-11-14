@@ -1,3 +1,4 @@
+import { envLinks } from "@tc/db/links";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const POOL = {
@@ -38,6 +39,38 @@ describe("proxyAuthRuntime", () => {
     });
     expect(runtime?.verifier).toBeUndefined();
     expect(runtime?.port).toBeUndefined();
+  });
+
+  // Round 4: the customer client has a secret, so the refresh of the proxy needs it. It comes from the
+  // SST link CustomerAppClient (the proxy runs in the server function that holds the links); without a
+  // good link there is no port of ours and the default refreshes nothing (R16).
+  it("builds the refresh port from the customer client link when it is readable", async () => {
+    const { proxyAuthRuntime } = await load();
+    const links = envLinks({
+      SST_RESOURCE_CustomerAppClient: JSON.stringify({
+        id: POOL.COGNITO_CUSTOMER_CLIENT_ID,
+        secret: "customer0app0client0secret0abcdef",
+      }),
+    });
+    const runtime = await proxyAuthRuntime({ ...REAL, ...POOL }, links);
+    expect(typeof runtime?.port?.refresh).toBe("function");
+    expect(JSON.stringify(runtime)).not.toContain("customer0app0client0secret0abcdef");
+  });
+
+  it("without a good link or with another client's link there is no port (and no throw)", async () => {
+    const { proxyAuthRuntime } = await load();
+    for (const raw of [
+      undefined,
+      "not json",
+      JSON.stringify({ id: POOL.COGNITO_CUSTOMER_CLIENT_ID }),
+      JSON.stringify({ id: "zyxwvutsrq0987654321", secret: "customer0app0client0secret0abcdef" }),
+    ]) {
+      delete (globalThis as Record<string, unknown>)["__tcProxyAuthRuntime"];
+      const links = envLinks(raw === undefined ? {} : { SST_RESOURCE_CustomerAppClient: raw });
+      const runtime = await proxyAuthRuntime({ ...REAL, ...POOL }, links);
+      expect(runtime?.config.customer.userPoolId, String(raw)).toBe(POOL.COGNITO_CUSTOMER_POOL_ID);
+      expect(runtime?.port, String(raw)).toBeUndefined();
+    }
   });
 
   it("is memoised", async () => {

@@ -6,21 +6,10 @@
 //   a self sign-up from any client but CustomerSignUpClient;
 // - the custom message trigger refuses to render the sign-up and resend codes for any other client, and
 //   a trigger that throws makes Cognito send nothing.
-// The id of CustomerSignUpClient reaches both functions as SIGN_UP_CLIENT_ID (an id, not a secret,
-// infra/stacks/auth.ts). A missing or malformed value refuses every self sign-up (R16). The error texts
-// are fixed and hold no id, user name or attribute (R14).
-
-export const SIGN_UP_CLIENT_ENV = "SIGN_UP_CLIENT_ID";
-
-// The pattern of a Cognito app client id (packages/auth/config.ts CLIENT_ID).
-const CLIENT_ID = /^[A-Za-z0-9]{10,64}$/;
-
-export function signUpClientIdFrom(
-  env: Readonly<Record<string, string | undefined>>,
-): string | null {
-  const value = env[SIGN_UP_CLIENT_ENV];
-  return typeof value === "string" && CLIENT_ID.test(value) ? value : null;
-}
+// Round 3: the custom message trigger also refuses a customer password-reset code from any other client.
+// The id of CustomerSignUpClient (and the customer pool id) reach both functions through SSM (config.ts).
+// No configuration refuses every guarded decision (R16). The error texts are fixed and hold no id, user
+// name or attribute (R14).
 
 export interface CallerContext {
   readonly awsSdkVersion?: string;

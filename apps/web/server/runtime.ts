@@ -1,8 +1,10 @@
 import {
+  CUSTOMER_CLIENT_LINK,
   SIGN_UP_CLIENT_LINK,
   authConfigFromEnv,
   cognitoIdentityProvider,
   configureAuth,
+  customerClientFromLink,
   signUpClientFromLink,
 } from "@tc/auth";
 import { sstLinks, type LinkSource } from "@tc/db/links";
@@ -218,12 +220,26 @@ export async function assembleRuntime(
     identity = fake.createFakeIdentity({ stage: config.stage, fakes: config.fakes });
   } else {
     try {
-      // WPU-X12: sign-up, its confirmation and the resend go through the server-only sign-up client
-      // (a secret, the only client that may write email); its id and secret arrive only as the SST link
-      // of the web server function, never as an environment variable and never in a client bundle.
+      // WPU-X12: sign-up, its confirmation, the resend and the password reset go through the
+      // server-only sign-up client (a secret, the only client that may write email); round 4: sign-in and
+      // the revocation through the customer client, which has a secret too. The two secrets arrive only
+      // as the SST links of the web server function, never as an environment variable and never in a
+      // client bundle; the customer link must name the client of COGNITO_CUSTOMER_CLIENT_ID.
+      const pool = authConfigFromEnv(env).customer;
       identity = cognitoIdentityProvider(
-        authConfigFromEnv(env).customer,
-        signUpClientFromLink(links(SIGN_UP_CLIENT_LINK)),
+        pool,
+        {
+          signUp: signUpClientFromLink(links(SIGN_UP_CLIENT_LINK)),
+          customer: customerClientFromLink(links(CUSTOMER_CLIENT_LINK), pool.clientId),
+        },
+        fetch,
+        // A refusing trigger answers "ok" to the page and is logged here as its own fixed reason (no
+        // address), so an alarm can match it: someone is asking the public client for codes.
+        (fact) =>
+          writeLog({
+            event: fact.op === "forgotPassword" ? "auth.forgot" : "auth.resend",
+            reason: fact.kind,
+          }),
       );
     } catch {
       // Pool variables or the sign-up client link missing or malformed: the screens show "not
