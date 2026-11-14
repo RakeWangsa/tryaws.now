@@ -84,7 +84,8 @@ describe("reviewFromToken", () => {
       reviewFromToken(() => ({ ok: false, reason: "signature" }), "t", CUSTOMER, 0n).state,
     ).toBe("invalid");
     expect(reviewFromToken(() => ok, undefined, CUSTOMER, 0n).state).toBe("invalid");
-    expect(reviewFromToken(() => ok, "x".repeat(5000), CUSTOMER, 0n).state).toBe("invalid");
+    // WPU-X10 review: the limit is that of an envelope of the largest draft (MAX_ENVELOPED_TOKEN, 5600).
+    expect(reviewFromToken(() => ok, "x".repeat(5601), CUSTOMER, 0n).state).toBe("invalid");
   });
 
   it("is invalid when the snapshot cannot be read (fail closed)", () => {

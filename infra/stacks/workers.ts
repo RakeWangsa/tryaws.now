@@ -21,6 +21,7 @@ import {
   type FunctionSpec,
 } from "../lib/functions";
 import { workerLogRetention } from "../lib/lean";
+import { DOMAIN_CONTACT_PURPOSE } from "../lib/kms";
 import { assumableRoleArns, roleName, type StageConfig } from "../lib/stage";
 import type { Database } from "./database";
 import type { Messaging } from "./messaging";
@@ -72,7 +73,18 @@ function permissionsOf(spec: FunctionSpec, inputs: WorkerInputs) {
   if (spec.dir === "provisioner") {
     // WPU-X10: opens the sealed registrant contact of a domain order (packages/aws/contact-unseal.ts). Decrypt
     // only, on this key only; the web role seals (kms:Encrypt, web.ts) and no other role has a grant.
-    permissions.push({ actions: ["kms:Decrypt"], resources: [storage.domainContactKey.arn] });
+    // Review fix 2: only for the encryption context of the seal (the key policy asks the same, infra/lib/kms.ts).
+    permissions.push({
+      actions: ["kms:Decrypt"],
+      resources: [storage.domainContactKey.arn],
+      conditions: [
+        {
+          test: "StringEquals",
+          variable: "kms:EncryptionContext:tc:purpose",
+          values: [DOMAIN_CONTACT_PURPOSE],
+        },
+      ],
+    });
   }
   if (spec.dir === "invoice-renderer") {
     permissions.push(

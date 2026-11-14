@@ -11,6 +11,7 @@
 //
 // NOT TYPE-CHECKED, see network.ts.
 import { ADMIN_SECRETS, DB_PASSWORD_SECRET, WEB_SECRETS } from "../lib/functions";
+import { DOMAIN_CONTACT_PURPOSE } from "../lib/kms";
 import { roleName, type StageConfig } from "../lib/stage";
 import type { Auth } from "./auth";
 import type { Database } from "./database";
@@ -75,6 +76,18 @@ function cdnTransform(
       },
     };
   };
+}
+
+// The IAM form of the `conditions` of a FunctionPermissionArgs: { test: { variable: values } }. NOT TYPE-CHECKED.
+function conditionOf(conditions: unknown) {
+  return $output(conditions).apply((list) =>
+    Object.fromEntries(
+      (list as { test: string; variable: string; values: string[] }[]).map((c) => [
+        c.test,
+        { [c.variable]: c.values },
+      ]),
+    ),
+  );
 }
 
 export function web(inputs: WebInputs) {
@@ -175,7 +188,18 @@ export function web(inputs: WebInputs) {
       },
       { actions: ["kms:Decrypt"], resources: [storage.filesKey.arn] },
       // WPU-X10: seal only (kms:Encrypt) with the domain-contact key; the provisioner alone may Decrypt (R1).
-      { actions: ["kms:Encrypt"], resources: [storage.domainContactKey.arn] },
+      // Review fix 2: only for the encryption context of the seal (the key policy asks the same, infra/lib/kms.ts).
+      {
+        actions: ["kms:Encrypt"],
+        resources: [storage.domainContactKey.arn],
+        conditions: [
+          {
+            test: "StringEquals",
+            variable: "kms:EncryptionContext:tc:purpose",
+            values: [DOMAIN_CONTACT_PURPOSE],
+          },
+        ],
+      },
       { actions: ["cognito-idp:AdminUserGlobalSignOut"], resources: [auth.customers.arn] },
     ]),
     transform: {
@@ -260,6 +284,8 @@ export function web(inputs: WebInputs) {
         Effect: "Allow",
         Action: p.actions,
         Resource: p.resources,
+        // WPU-X10 review: a grant with conditions (the domain-contact key) keeps them in the output.
+        ...(p.conditions === undefined ? {} : { Condition: conditionOf(p.conditions) }),
       })),
     }),
   );

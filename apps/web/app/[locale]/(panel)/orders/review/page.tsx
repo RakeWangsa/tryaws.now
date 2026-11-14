@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { routing } from "../../../../../i18n/routing.ts";
+import { openDraftToken } from "../../../../../server/draft-envelope.ts";
 import { getOrdersRuntime } from "../../../../../server/orders-runtime.ts";
 import { familyScreen } from "../../../../../server/family-screens.ts";
 import { startPanelPage } from "../../../../../server/panel-page.ts";
@@ -46,7 +47,13 @@ export default async function ReviewPage({ params, searchParams }: Props) {
     runtime === null
       ? { state: "unavailable" }
       : reviewFromToken(
-          (text) => verifyDraft(runtime.secrets, text, runtime.now()),
+          // WPU-X10 review: the URL holds the envelope of the draft; an envelope that does not open is invalid.
+          (text) => {
+            const opened = openDraftToken(runtime.secrets, text);
+            return opened === null
+              ? { ok: false, reason: "malformed" }
+              : verifyDraft(runtime.secrets, opened, runtime.now());
+          },
           typeof token === "string" ? token : undefined,
           panel.session.customerId,
           panel.balanceMinor,
