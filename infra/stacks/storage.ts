@@ -102,7 +102,9 @@ export function storage(config: StageConfig) {
     effect: "deny" as const,
     principals: "*" as const,
     actions: ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"],
-    paths: ["*"],
+    // "" is the bucket itself (s3:ListBucket), "*" its objects (GetObject): S3 refuses a statement with an
+    // action that matches none of its resources (MalformedPolicy, staging deploy of 2026-11-14).
+    paths: ["", "*"],
     conditions: [{ test: "ArnEquals", variable: "aws:PrincipalArn", values: [webRoleArn] }],
   };
 

@@ -534,6 +534,9 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
   it("denies GetObject on kyc to the web role and gives the web role no way to read kyc (WP2-T4 proof)", () => {
     expect(storage).toMatch(/effect: "deny"/);
     expect(storage).toContain('actions: ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"]');
+    // s3:ListBucket applies to the bucket, GetObject to the objects: S3 refuses a statement whose action
+    // matches none of its resources (MalformedPolicy, staging deploy 2026-11-14), so both paths.
+    expect(storage).toMatch(/s3:ListBucket"\],\s*paths: \["", "\*"\],/);
     expect(storage).toContain('roleName(stage, "web")');
     expect(storage).toMatch(
       /privateBucket\("Kyc", kycKey, forceEmptyBuckets, \[ ?denyWebRead, \.\.\.kycEncryptionOnly\]\)/,
