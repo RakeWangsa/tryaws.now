@@ -3998,6 +3998,26 @@ TASKS["WPU-X4"] = [
 // superadmin creates adjustments too (db repository and the admin app's role table, page and texts).
 TASKS["WPU-X5"] = [specSync, baselineSync, lint, typecheck, format, core, db, admin, repo];
 
+// WPU-X8 (briefed as WPU-X6, an id already taken by the a11y smoke; first staging deploy 2026-11-14 found no
+// market): the migrator runs seedLaunchData as the table owner right after the migrations, staging only for
+// TC_STAGE exactly "staging", production with the owner's top-up limits (100 to 50,000 BDT), no FX rate and
+// every flag off. The migrator check includes PostgreSQL (launch-seed.test.ts: migrate + seed on a fresh
+// database, a second run writes nothing); db holds launchSeedInputFor; repo holds the journal and verify wiring.
+TASKS["WPU-X8"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "migrator",
+    "functions/migrator: the launch_seed step (order, stage mapping, R14 log, failure) and the seed on PostgreSQL",
+    "@tc/fn-migrator",
+  ),
+  db,
+  repo,
+];
+
 // WPU-X2 (owner round 5): the domain renewal rules (30 days before expiry, the refund when the registry
 // refuses) in the terms and the refund policy, en and bn, with LEGAL_VERSIONS moved to version 2. The text
 // waits for the owner's approval before merge.

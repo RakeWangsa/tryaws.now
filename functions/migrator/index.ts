@@ -11,6 +11,7 @@ import { seedPoolAccount } from "@tc/db/seed-pool";
 import { ensureSystemAccounts } from "@tc/core";
 import { readMigrationHashes, runMigrations } from "@tc/db/migrate";
 import { readMigratorConfig } from "./config";
+import { seedLaunchAsOwner } from "./launch-seed";
 import { runMigrator, type MigratorReport, type MigratorDeps } from "./run";
 
 export { runMigrator } from "./run";
@@ -34,6 +35,8 @@ export const handler = async (event?: unknown): Promise<MigratorReport> => {
     },
     migrate: runMigrations,
     fileHashes: readMigrationHashes,
+    seedLaunchData: seedLaunchAsOwner,
+    now: () => new Date(),
     ensureSystemAccounts: async (url) => {
       // As the master user, which owns the tables: the platform accounts are written by no other role.
       const { db, pool } = createDatabase(url, { max: 1 });

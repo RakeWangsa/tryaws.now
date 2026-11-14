@@ -96,6 +96,53 @@ export function seedEnvironmentFor(
   return nonProductionStages.includes(stage) ? "staging" : "production";
 }
 
+// WPU-X6 (owner decision 2026-11-14, chat): the top-up limits of market BD in production, 100 BDT to 50,000 BDT
+// per payment (the same values as LAUNCH_MARKET, decided for production on their own), no quick amounts, active.
+// The production seed still writes no FX rate and no flag that is on.
+export const PRODUCTION_LAUNCH_MARKET_LIMITS: MarketLimits = Object.freeze({
+  topupMinMinor: 10_000n,
+  topupMaxMinor: 5_000_000n,
+  quickAmounts: Object.freeze([] as number[]),
+  active: true,
+});
+
+/** The values of TC_STAGE that seed the staging data (infra/lib/stage.ts tcStage gives only staging or production). */
+export const LAUNCH_SEED_STAGING_STAGES: readonly string[] = Object.freeze(["staging"]);
+
+export interface LaunchSeedInput {
+  environment: SeedEnvironment;
+  at: Date;
+  market?: MarketLimits;
+}
+
+/**
+ * WPU-X6: what the migrator hands seedLaunchData for the TC_STAGE of the deploy. Staging only when the stage is
+ * exactly "staging"; a missing, empty or unknown stage is production (seedEnvironmentFor, fail closed): the worst
+ * outcome of a wrong stage is then a staging stage with every flag off and no rate, never production with the
+ * test rate and flags on (R12, R16). Production always carries PRODUCTION_LAUNCH_MARKET_LIMITS.
+ */
+export function launchSeedInputFor(stage: string | undefined, at: Date): LaunchSeedInput {
+  const environment = seedEnvironmentFor(stage ?? "", LAUNCH_SEED_STAGING_STAGES);
+  return environment === "staging"
+    ? { environment, at }
+    : { environment, at, market: PRODUCTION_LAUNCH_MARKET_LIMITS };
+}
+
+/** What a log line may hold of a SeedResult: booleans and a count, no key names (R14 keeps logs to counts). */
+export function launchSeedSummary(result: SeedResult): {
+  market: boolean;
+  fxRate: boolean;
+  pricingRule: boolean;
+  flagsAdded: number;
+} {
+  return {
+    market: result.market,
+    fxRate: result.fxRate,
+    pricingRule: result.pricingRule,
+    flagsAdded: result.flagsAdded.length,
+  };
+}
+
 const EMPTY = (): SeedResult => ({
   market: false,
   fxRate: false,

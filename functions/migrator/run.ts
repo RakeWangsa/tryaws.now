@@ -1,9 +1,14 @@
 import type { Logger } from "@tc/core";
 import {
   firstAdminDecision,
+  launchSeedInputFor,
+  launchSeedSummary,
   subPrefix,
   type FirstAdminDecision,
   type FirstAdminOutcome,
+  type LaunchSeedInput,
+  type SeedEnvironment,
+  type SeedResult,
 } from "@tc/db";
 import {
   accountSuffix,
@@ -41,6 +46,13 @@ export interface MigratorDeps {
   /** C.10: creates the platform ledger accounts that do not exist yet, as the table owner. Idempotent. */
   readonly ensureSystemAccounts: (url: string) => Promise<{ readonly created: number }>;
   /**
+   * WPU-X6: in one transaction as the table owner, seedLaunchData of @tc/db (market BD, rule, flags, config
+   * prices, adjustment limit). Inserts only what is missing, so a second deploy writes nothing (R7).
+   */
+  readonly seedLaunchData: (url: string, input: LaunchSeedInput) => Promise<SeedResult>;
+  /** The clock of the launch seed (`at`); the handler passes `() => new Date()`. */
+  readonly now: () => Date;
+  /**
    * WPU-Z18: in one transaction as the table owner, inserts one superadmin for `sub` only when
    * admin_users has no row at all (bootstrapFirstSuperadmin of @tc/db). Idempotent.
    */
@@ -59,10 +71,20 @@ export interface MigratorReport {
   readonly rolesUnchanged: number;
   readonly migrationsApplied: number;
   readonly systemAccountsCreated: number;
+  /** WPU-X6: what the launch seed inserted: the environment, booleans and the count of flags added. */
+  readonly launchSeed: LaunchSeedReport;
   /** WPU-Z18: what the first-superadmin bootstrap did; never the sub. */
   readonly firstAdmin: FirstAdminDecision;
   /** WPU-X4: what the pool account bootstrap did; never the account id or the ExternalId. */
   readonly poolAccount: PoolAccountDecision;
+}
+
+export interface LaunchSeedReport {
+  readonly environment: SeedEnvironment;
+  readonly market: boolean;
+  readonly fxRate: boolean;
+  readonly pricingRule: boolean;
+  readonly flagsAdded: number;
 }
 
 const APPLIED_MIGRATIONS =
@@ -120,6 +142,7 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     | "roles"
     | "verify"
     | "migrate"
+    | "launch_seed"
     | "accounts"
     | "first_admin"
     | "pool_account" = "connect";
@@ -151,6 +174,22 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     const before = await migrationCount(client);
     await deps.migrate(config.masterUrl, config.migrationsDir);
     const after = await migrationCount(client);
+
+    // WPU-X6: the launch data of market BD (the market, the market pricing rule, the twelve flags, the config
+    // prices, the adjustment limit of WPU-X5; on staging also the test FX rate), as the table owner, in one
+    // transaction. It runs first after the migrations: sign-up and every sale need the market, and none of the
+    // later steps depends on it (the ledger accounts are per currency, admin_users and pool_accounts have no
+    // market), so a later step that fails never leaves a stage without its market. The environment comes from
+    // TC_STAGE: staging only for exactly "staging", anything else (production, missing, unknown) is production
+    // with the owner's limits, every flag off and no rate (R12, R16). Inserts only what is missing (R7).
+    step = "launch_seed";
+    const seedInput = launchSeedInputFor(config.stage, deps.now());
+    const seeded = await deps.seedLaunchData(config.masterUrl, seedInput);
+    const launchSeed: LaunchSeedReport = {
+      environment: seedInput.environment,
+      ...launchSeedSummary(seeded),
+    };
+    log({ event: "migrator_launch_seed", ...launchSeed });
 
     // C.10: the platform ledger accounts (postTransaction never creates one). Runs after the
     // migrations, as the table owner, and is idempotent: a second run creates none.
@@ -220,10 +259,13 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       rolesUnchanged: roles.unchanged,
       migrationsApplied: after - before,
       systemAccountsCreated: accounts.created,
+      launchSeed,
       firstAdmin,
       poolAccount,
     };
-    log({ event: "migrator_done", ...report });
+    // A log line is flat: the launch seed has its own line above, so only its environment is repeated here.
+    const { launchSeed: seedReport, ...flat } = report;
+    log({ event: "migrator_done", ...flat, launchSeedEnvironment: seedReport.environment });
     return report;
     /* eslint-disable preserve-caught-error -- the cause is dropped on purpose (R14), see below */
   } catch (error) {
@@ -244,6 +286,7 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     if (step === "tls") throw new Error("migrator: could not check the connection");
     if (step === "roles") throw new Error("migrator: could not prepare the roles");
     if (step === "verify") throw new Error("migrator: could not check the applied migrations");
+    if (step === "launch_seed") throw new Error("migrator: could not seed the launch data");
     if (step === "accounts") throw new Error("migrator: could not prepare the ledger accounts");
     if (step === "first_admin") throw new Error("migrator: could not bootstrap the first admin");
     if (step === "pool_account") throw new Error("migrator: could not register the pool account");

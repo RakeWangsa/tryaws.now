@@ -1,4 +1,5 @@
 import type { LogEvent } from "@tc/core";
+import { FEATURE_FLAG_KEYS, type LaunchSeedInput, type SeedResult } from "@tc/db";
 import { PoolSeedConflictError } from "@tc/db/seed-pool";
 import { expect, it } from "vitest";
 import { runMigrator, sqlstateOf, type MigratorDeps, type Queryable } from "./run";
@@ -22,6 +23,15 @@ const FILES = [
   { folderMillis: 2000, hash: "hash-b" },
 ];
 let accountsCreated = 8;
+const NOW = new Date("2026-11-14T06:00:00.000Z");
+// What the fake seed reports: a first run on a fresh database (twelve flags).
+let launchSeedResult: SeedResult = {
+  market: true,
+  fxRate: false,
+  pricingRule: true,
+  flagsAdded: [...FEATURE_FLAG_KEYS],
+};
+const PROD_SEED = "launch-seed master production 10000-5000000";
 
 function server(
   over: {
@@ -73,6 +83,7 @@ function server(
 const build = (srv = server()) => {
   const logs: LogEvent[] = [];
   const calls: string[] = [];
+  const seeds: LaunchSeedInput[] = [];
   const deps: MigratorDeps = {
     config: CONFIG,
     connect: (url) => {
@@ -85,6 +96,14 @@ const build = (srv = server()) => {
       return Promise.resolve();
     },
     fileHashes: () => FILES,
+    seedLaunchData: (url, input) => {
+      calls.push(
+        `launch-seed ${url === CONFIG.masterUrl ? "master" : "other"} ${input.environment} ${input.market === undefined ? "-" : `${input.market.topupMinMinor}-${input.market.topupMaxMinor}`}`,
+      );
+      seeds.push(input);
+      return Promise.resolve(launchSeedResult);
+    },
+    now: () => NOW,
     ensureSystemAccounts: () => {
       calls.push("accounts");
       return Promise.resolve({ created: accountsCreated });
@@ -109,7 +128,7 @@ const build = (srv = server()) => {
     },
     log: (e) => logs.push(e),
   };
-  return { deps, logs, calls, srv };
+  return { deps, logs, calls, srv, seeds };
 };
 
 it("checks TLS, creates the roles, runs the migrations and returns counts only", async () => {
@@ -121,10 +140,17 @@ it("checks TLS, creates the roles, runs the migrations and returns counts only",
     rolesUnchanged: 0,
     migrationsApplied: 5,
     systemAccountsCreated: 8,
+    launchSeed: {
+      environment: "production",
+      market: true,
+      fxRate: false,
+      pricingRule: true,
+      flagsAdded: 12,
+    },
     firstAdmin: "skipped: no secret",
     poolAccount: "skipped: not configured",
   });
-  expect(calls).toEqual(["connect master", "migrate /var/task/migrations", "accounts"]);
+  expect(calls).toEqual(["connect master", "migrate /var/task/migrations", PROD_SEED, "accounts"]);
   expect(srv.client.ended).toBe(true);
   // the roles come before the migrations: 0006 then finds them
   expect(srv.statements.findIndex((s) => s.includes("pg_roles"))).toBeGreaterThan(
@@ -296,6 +322,7 @@ it("inserts the first superadmin for a valid sub, lowercase, after the accounts,
   expect(calls).toEqual([
     "connect master",
     "migrate /var/task/migrations",
+    PROD_SEED,
     "accounts",
     `first-admin master ${SUB}`,
   ]);
@@ -408,6 +435,7 @@ it("registers pool-1 (tier new) after the first admin, and logs the decision and
   expect(calls).toEqual([
     "connect master",
     "migrate /var/task/migrations",
+    "launch-seed master staging -",
     "accounts",
     `first-admin master ${SUB}`,
     `pool master ${POOL_ID} pool-1 new staging`,
@@ -559,4 +587,141 @@ it("sqlstateOf reads a five-character SQLSTATE directly or from a cause, nothing
   expect(sqlstateOf(Object.assign(new Error("z"), { code: "postgres://u:p@h/d" }))).toBeUndefined();
   expect(sqlstateOf("text")).toBeUndefined();
   expect(sqlstateOf(undefined)).toBeUndefined();
+});
+
+// WPU-X6: the launch data (market BD, rule, flags, config prices, adjustment limit) right after the migrations,
+// as the table owner, before the ledger accounts, the first admin and the pool account.
+const withStage = (stage: string | undefined) => {
+  const b = build();
+  return { ...b, deps: { ...b.deps, config: { ...CONFIG, stage } } };
+};
+
+it("seeds the launch data right after the migrations and before every later step", async () => {
+  const { deps, calls } = withPool();
+  await runMigrator(deps, { action: "migrate" });
+  const seed = calls.findIndex((c) => c.startsWith("launch-seed"));
+  expect(seed).toBe(calls.indexOf("migrate /var/task/migrations") + 1);
+  expect(seed).toBeLessThan(calls.indexOf("accounts"));
+  expect(seed).toBeLessThan(calls.findIndex((c) => c.startsWith("first-admin")));
+  expect(seed).toBeLessThan(calls.findIndex((c) => c.startsWith("pool ")));
+});
+
+it("maps TC_STAGE: staging only for exactly staging; production, missing and unknown stages are production with the decided limits", async () => {
+  const cases: [string | undefined, string][] = [
+    ["staging", "launch-seed master staging -"],
+    ["production", PROD_SEED],
+    [undefined, PROD_SEED],
+    ["prod", PROD_SEED],
+    ["Staging", PROD_SEED],
+    ["staging ", PROD_SEED],
+  ];
+  for (const [stage, expected] of cases) {
+    const { deps, calls, seeds } = withStage(stage);
+    const out = await runMigrator(deps, { action: "migrate" });
+    expect(calls[2], JSON.stringify(stage)).toBe(expected);
+    expect(out.launchSeed.environment).toBe(
+      expected.includes("staging") ? "staging" : "production",
+    );
+    // the instant comes from the clock of the deps
+    expect(seeds[0]?.at).toBe(NOW);
+  }
+  const prod = withStage("production");
+  await runMigrator(prod.deps, { action: "migrate" });
+  expect(prod.seeds[0]?.market).toEqual({
+    topupMinMinor: 10_000n,
+    topupMaxMinor: 5_000_000n,
+    quickAmounts: [],
+    active: true,
+  });
+});
+
+it("logs one migrator_launch_seed line with the environment, booleans and a count only (R14)", async () => {
+  const { deps, logs } = withStage("staging");
+  const out = await runMigrator(deps, { action: "migrate" });
+  const lines = logs.filter((e) => e.event === "migrator_launch_seed");
+  expect(lines).toEqual([
+    {
+      event: "migrator_launch_seed",
+      environment: "staging",
+      market: true,
+      fxRate: false,
+      pricingRule: true,
+      flagsAdded: 12,
+    },
+  ]);
+  expect(out.launchSeed).toEqual({
+    environment: "staging",
+    market: true,
+    fxRate: false,
+    pricingRule: true,
+    flagsAdded: 12,
+  });
+  // no flag key and no limit value in any log line
+  const text = JSON.stringify(logs, (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+  for (const key of FEATURE_FLAG_KEYS) expect(text).not.toContain(`"${key}"`);
+  expect(text).not.toContain("5000000");
+});
+
+it("a second deploy writes nothing and reports it (R7)", async () => {
+  const saved = launchSeedResult;
+  launchSeedResult = { market: false, fxRate: false, pricingRule: false, flagsAdded: [] };
+  try {
+    const { deps, logs } = withStage("production");
+    const out = await runMigrator(deps, { action: "migrate" });
+    expect(out.launchSeed).toEqual({
+      environment: "production",
+      market: false,
+      fxRate: false,
+      pricingRule: false,
+      flagsAdded: 0,
+    });
+    expect(logs).toContainEqual({
+      event: "migrator_launch_seed",
+      environment: "production",
+      market: false,
+      fxRate: false,
+      pricingRule: false,
+      flagsAdded: 0,
+    });
+  } finally {
+    launchSeedResult = saved;
+  }
+});
+
+it("a failed launch seed fails the deploy with fixed text and no cause, and no later step runs (R16)", async () => {
+  const { deps, calls, logs } = withPool();
+  try {
+    await runMigrator(
+      {
+        ...deps,
+        seedLaunchData: (_url, input) => {
+          calls.push(`launch-seed ${input.environment}`);
+          return Promise.reject(
+            Object.assign(new Error("insert into markets postgres://m:SECRETMASTER@h/d"), {
+              code: "23514",
+            }),
+          );
+        },
+      },
+      { action: "migrate" },
+    );
+    expect.unreachable();
+  } catch (error) {
+    expect((error as Error).message).toBe("migrator: could not seed the launch data");
+    expect((error as Error).cause).toBeUndefined();
+  }
+  expect(logs).toContainEqual({ event: "migrator_failed", step: "launch_seed", sqlstate: "23514" });
+  expect(calls).not.toContain("accounts");
+  expect(calls.some((c) => c.startsWith("first-admin") || c.startsWith("pool "))).toBe(false);
+  expect(logs.some((e) => e.event === "migrator_done")).toBe(false);
+  const text = JSON.stringify(logs);
+  for (const v of ["SECRETMASTER", "insert into markets"]) expect(text).not.toContain(v);
+});
+
+it("does not seed the launch data when the migrations failed", async () => {
+  const { deps, calls } = build();
+  await expect(
+    runMigrator({ ...deps, migrate: () => Promise.reject(new Error("x")) }, { action: "migrate" }),
+  ).rejects.toThrow("migrator: the migrations failed");
+  expect(calls.some((c) => c.startsWith("launch-seed"))).toBe(false);
 });
