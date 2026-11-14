@@ -341,6 +341,25 @@ describe("signInCore with an authenticator (TOTP)", () => {
     expect(codeCounts().some((n) => n > 0)).toBe(true);
   });
 
+  // Review: a refused reservation used to leave the daily rule counted (rules are counted in key order).
+  it("while blocked for the quarter hour, ten more coded attempts leave the daily wrong-code count where it was", async () => {
+    for (let i = 0; i < 5; i++) await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
+    const daily = () =>
+      [...h.counts.entries()]
+        .filter(([k]) => k.includes("auth.signin_code:86400"))
+        .map(([, n]) => n);
+    expect(daily()).toEqual([5]);
+    for (let i = 0; i < 10; i++) {
+      const out = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+      expect(out.state).toMatchObject({ status: "error", code: "rate_limited" });
+    }
+    expect(daily()).toEqual([5]);
+    // Fifteen minutes later the quarter hour is free again and the owner still has 15 of the day.
+    h.advance(16 * 60_000);
+    const ok = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, h.now()) });
+    expect(ok.state).toMatchObject({ status: "done" });
+  });
+
   it("a notice that cannot be queued does not change the answer", async () => {
     h.state.noticeFails = true;
     for (let i = 0; i < 4; i++) await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });

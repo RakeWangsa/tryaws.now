@@ -52,7 +52,7 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   const reservation: { at: Date | null; waitSeconds: number } = { at: null, waitSeconds: 60 };
   const beforeCode = async (): Promise<boolean> => {
     const at = ctx.clock.now();
-    const reserved = await ctx.ports.limit("signin_code", codeWho, guard.key);
+    const reserved = await ctx.ports.limitReserve("signin_code", codeWho, guard.key);
     if (!reserved.allowed) {
       reservation.waitSeconds = reserved.retryAfterSeconds;
       return false;

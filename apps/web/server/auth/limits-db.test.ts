@@ -1,7 +1,7 @@
 import { runTransaction, useTempDatabase } from "@tc/db/testing";
 import type { Tx } from "@tc/db";
 import { describe, expect, it } from "vitest";
-import { enforceAuthLimit, peekAuthLimit, releaseAuthLimit } from "./limits.ts";
+import { enforceAuthLimit, peekAuthLimit, releaseAuthLimit, reserveAuthLimit } from "./limits.ts";
 
 // NEEDS THE DATABASE (pnpm db:up && pnpm db:migrate): the real limiter on rate_limits, as role web_rw.
 const t = useTempDatabase();
@@ -112,6 +112,34 @@ describe("enforceAuthLimit against the database", () => {
     expect(
       await releaseAuthLimit(run, KEY, clock.now(), "signin_code", { ...mine, ip: "nope" }),
     ).toBe(false);
+  });
+
+  // Review: consume counts the rules in key order and does not undo the ones before a refusal. The daily key
+  // (86400) sorts before the quarter hour key (900), so a refused attempt used to burn the daily budget.
+  it("signin_code: a refused reservation counts NOTHING, so retries while blocked do not use the day up", async () => {
+    const mine = who("198.51.100.40", "budget@x.test");
+    const countOf = async (window: number) =>
+      Number(
+        (
+          await t.pool.query<{ n: string }>(
+            "select coalesce(sum(count), 0) as n from rate_limits where scope_key like $1",
+            [`email:%:auth.signin_code:${window}`],
+          )
+        ).rows.find(() => true)?.n ?? 0,
+      );
+    const before = { day: await countOf(86_400), quarter: await countOf(900) };
+    for (let i = 0; i < 5; i++) {
+      expect((await reserveAuthLimit(run, KEY, clock, "signin_code", mine)).allowed).toBe(true);
+    }
+    // The quarter hour is full. Ten more coded attempts are refused and leave both counters alone.
+    for (let i = 0; i < 10; i++) {
+      expect((await reserveAuthLimit(run, KEY, clock, "signin_code", mine)).allowed).toBe(false);
+    }
+    expect(await countOf(900)).toBe(before.quarter + 5);
+    expect(await countOf(86_400)).toBe(before.day + 5);
+    // The plain consuming call is the one that burns it (this is what the reservation replaces).
+    for (let i = 0; i < 3; i++) await enforceAuthLimit(run, KEY, clock, "signin_code", mine);
+    expect(await countOf(86_400)).toBe(before.day + 5 + 3);
   });
 
   it("the key table holds neither the address nor the email", async () => {

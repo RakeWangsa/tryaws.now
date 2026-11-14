@@ -15,7 +15,7 @@ import { openDraftToken } from "./draft-envelope.ts";
 import { mfaGuardedOrders } from "./mfa-gate.ts";
 import type { TotpDeps } from "./totp-actions.ts";
 import { clearTotpDrift } from "./totp-drift.ts";
-import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
+import { DRAFT_RATE_LIMITS, PLACE_RATE_LIMITS } from "./order-actions.ts";
 import type { OrderActionDeps } from "./order-actions.ts";
 import { getOrdersRuntime } from "./orders-runtime.ts";
 import { assertSameOrigin, clientIpOf } from "./request.ts";
@@ -42,9 +42,12 @@ export async function orderActionDeps(): Promise<OrderActionDeps> {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value ?? null;
   return {
     authenticate,
-    rateLimit: (session) =>
+    rateLimit: (session, kind) =>
       withTx((tx) =>
-        customerRepos(tx, session.customerId).rateLimits.consume(DRAFT_RATE_LIMITS, new Date()),
+        customerRepos(tx, session.customerId).rateLimits.consume(
+          kind === "place" ? PLACE_RATE_LIMITS : DRAFT_RATE_LIMITS,
+          new Date(),
+        ),
       ),
     // WPU-X11 round 2: every draft and purchase of every family first asks Cognito whether the authenticator
     // is still on (mfa-gate.ts); the platform copy is cleared when it is not.

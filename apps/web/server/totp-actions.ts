@@ -205,12 +205,19 @@ export async function disableTotpCore(
     const gate = await deps.store(session.customerId, async (repos) => {
       const profile = await repos.profile.get();
       if (profile === null) return "unavailable" as const;
-      if (profile.totpEnabledAt === null) return "not_on" as const;
       const limit = await repos.rateLimits.consume(TOTP_LIMITS, deps.now());
-      return limit.allowed ? ("ok" as const) : ("rate_limited" as const);
+      if (!limit.allowed) return "rate_limited" as const;
+      return profile.totpEnabledAt === null ? ("copy_off" as const) : ("ok" as const);
     });
-    if (gate === "not_on") return fail("validation", { totp: "not_on" });
-    if (gate !== "ok") return fail(gate);
+    if (gate !== "ok" && gate !== "copy_off") return fail(gate);
+    if (gate === "copy_off") {
+      // The copy says off. That is the end of it only if Cognito says off too. After "the copy was cleared,
+      // the Cognito call failed" the customer sees "off" while Cognito is still on: ask it, and finish the
+      // switch-off instead of refusing. A Cognito answer that cannot be had refuses and changes nothing (R16).
+      const state = await port.mfaState(token);
+      if (!state.ok) return portFailure(state.kind);
+      if (!state.value.totp) return fail("validation", { totp: "not_on" });
+    }
 
     // The platform copy first, committed with the cut-off, the audit row and the notice. If this throws,
     // nothing happened anywhere and Cognito was not asked.

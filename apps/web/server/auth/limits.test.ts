@@ -1,7 +1,14 @@
 import { emailSubject, ipSubject } from "@tc/notify";
 import type { LimitDecision, LimitRule } from "@tc/db";
-import { describe, expect, it } from "vitest";
-import { AUTH_LIMITS, buildRules, enforceAuthLimit, peekAuthLimit } from "./limits.ts";
+import { describe, expect, it, vi } from "vitest";
+import {
+  AUTH_LIMITS,
+  buildRules,
+  enforceAuthLimit,
+  peekAuthLimit,
+  releaseAuthLimit,
+  reserveAuthLimit,
+} from "./limits.ts";
 
 const KEY = "k".repeat(40);
 const clock = { now: () => new Date("2026-11-12T10:00:00.000Z") };
@@ -75,6 +82,74 @@ describe("peekAuthLimit (WPU-X11 round 2)", () => {
       allowed: false,
       retryAfterSeconds: 60,
     });
+  });
+});
+
+describe("reserveAuthLimit (all or nothing)", () => {
+  it("rolls the transaction back when any rule refuses, and answers with that rule's retry time", async () => {
+    let committed = false;
+    const refuse = async (): Promise<LimitDecision> => ({
+      allowed: false,
+      action: "auth.signin_code",
+      retryAfterSeconds: 77,
+    });
+    // A runner like withTx: the callback's throw is a rollback, only its return is a commit.
+    const rollingBack = async <T>(fn: (tx: never) => Promise<T>): Promise<T> => {
+      const out = await fn({} as never);
+      committed = true;
+      return out;
+    };
+    const out = await reserveAuthLimit(
+      rollingBack,
+      KEY,
+      clock,
+      "signin_code",
+      who,
+      refuse as never,
+    );
+    expect(out).toEqual({ allowed: false, retryAfterSeconds: 77 });
+    expect(committed).toBe(false);
+  });
+
+  it("commits when every rule counts, refuses when the rules cannot be built or the call fails (R16)", async () => {
+    let committed = false;
+    const ok = async (): Promise<LimitDecision> => ({ allowed: true });
+    const runner = async <T>(fn: (tx: never) => Promise<T>): Promise<T> => {
+      const out = await fn({} as never);
+      committed = true;
+      return out;
+    };
+    expect(await reserveAuthLimit(runner, KEY, clock, "signin_code", who, ok as never)).toEqual({
+      allowed: true,
+    });
+    expect(committed).toBe(true);
+    expect(
+      await reserveAuthLimit(
+        runner,
+        KEY,
+        clock,
+        "signin_code",
+        { ...who, ip: "nope" },
+        ok as never,
+      ),
+    ).toEqual({ allowed: false, retryAfterSeconds: 60 });
+    const failing = async () => {
+      throw new Error("db down");
+    };
+    expect(
+      await reserveAuthLimit(runner, KEY, clock, "signin_code", who, failing as never),
+    ).toEqual({ allowed: false, retryAfterSeconds: 60 });
+  });
+
+  it("the release only takes the wrong-code action (the type, and at run time): nothing else is ever given back", async () => {
+    const released = vi.fn(async () => {});
+    for (const action of ["signin", "signup", "forgot", "reset", "confirm", "resend"]) {
+      // @ts-expect-error: only "signin_code" may be given back
+      expect(await releaseAuthLimit(run, KEY, clock.now(), action, who, released)).toBe(false);
+    }
+    expect(released).not.toHaveBeenCalled();
+    expect(await releaseAuthLimit(run, KEY, clock.now(), "signin_code", who, released)).toBe(true);
+    expect(released).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -422,6 +422,49 @@ describe("disableTotpCore", () => {
     expect((await fakeRefreshPort().refresh(rt!)).kind).toBe("rejected");
   });
 
+  // Review: after "the copy was cleared, the Cognito call failed" the customer sees "off", yet Cognito is
+  // still on. A retry used to be refused as not_on and the leftover could never be cleaned up.
+  it("retry after a failed switch-off: the copy is off but Cognito still says on, so the switch-off goes on to Cognito and GlobalSignOut", async () => {
+    const w = world();
+    user().totpEnabled = true;
+    expect(await disableTotpCore(w.deps)).toEqual({ ok: true, sessionsEnded: true });
+    expect(w.trace).toEqual([
+      "authenticate",
+      "rateLimit:settings.totp",
+      "cognito:mfaState",
+      "profile.setTotpEnabled:null",
+      "profile.revokeSessions",
+      "audit:auth.totp_disabled",
+      "notify:security_totp_changed",
+      "cognito:setPreference:false",
+      "cognito:signOutEverywhere",
+    ]);
+    expect(user().totpEnabled).toBe(false);
+  });
+
+  it("copy off and Cognito off too is still not_on; a Cognito answer that cannot be had refuses and changes nothing (R16)", async () => {
+    const off = world();
+    expect(await disableTotpCore(off.deps)).toEqual({
+      ok: false,
+      error: "validation",
+      fields: { totp: "not_on" },
+    });
+    expect(off.trace).not.toContain("profile.revokeSessions");
+
+    const broken = world();
+    broken.totp.fail.mfaState = "unavailable";
+    expect(await disableTotpCore(broken.deps)).toEqual({ ok: false, error: "unavailable" });
+    expect(broken.trace).not.toContain("profile.revokeSessions");
+    expect(cognito(broken.trace)).toEqual(["cognito:mfaState"]);
+  });
+
+  it("the leftover retry is rate limited like every other attempt, before Cognito is asked", async () => {
+    const w = world({ limited: true });
+    user().totpEnabled = true;
+    expect(await disableTotpCore(w.deps)).toEqual({ ok: false, error: "rate_limited" });
+    expect(cognito(w.trace)).toEqual([]);
+  });
+
   it("needs a fresh sign-in and refuses when the authenticator is not on", async () => {
     expect(await disableTotpCore(world({ enabledAt: NOW, signedInAt: STALE }).deps)).toEqual({
       ok: false,

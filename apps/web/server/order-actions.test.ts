@@ -225,13 +225,57 @@ describe("createOrderDraftCore", () => {
 describe("placeOrderCore", () => {
   const input = { token: "tok.en", idempotencyKey: "0190bbbb-0000-7000-8000-00000000aaaa" };
 
-  it("authenticates, rate limits nowhere itself (the order code does), and returns the order id", async () => {
+  it("authenticates, validates, rate limits per customer, then places, and returns the order id (R9)", async () => {
     const { deps: d, calls } = deps();
     expect(await placeOrderCore(d, input)).toEqual({
       ok: true,
       orderId: "0190bbbb-0000-7000-8000-000000000001",
     });
-    expect(calls).toEqual(["authenticate", "placeOrder"]);
+    expect(calls).toEqual(["authenticate", "rateLimit", "placeOrder"]);
+  });
+
+  // Review: every purchase now makes one Cognito GetUser (mfa-gate), a quota shared by the whole pool, so a
+  // scripted customer could make everyone's purchases fail closed. The purchase has its own per-customer
+  // limit before it reaches the order port.
+  it("asks the limiter for the PURCHASE limit, not the draft one, and refuses before the order port when it is used up", async () => {
+    const asked: string[] = [];
+    const { deps: d, calls } = deps({
+      rateLimit: async (_s, kind) => {
+        asked.push(String(kind));
+        return { allowed: false };
+      },
+    });
+    expect(await placeOrderCore(d, input)).toEqual({ ok: false, error: "rate_limited" });
+    expect(asked).toEqual(["place"]);
+    expect(calls).toEqual(["authenticate"]);
+  });
+
+  it("a limiter that cannot count refuses as unavailable, before the order port (R16)", async () => {
+    const { deps: d, calls } = deps({
+      rateLimit: async () => {
+        throw new Error("db down");
+      },
+    });
+    expect(await placeOrderCore(d, input)).toEqual({ ok: false, error: "unavailable" });
+    expect(calls).toEqual(["authenticate"]);
+  });
+
+  it("a malformed request is refused before it is counted", async () => {
+    const { deps: d, calls } = deps();
+    await placeOrderCore(d, { ...input, idempotencyKey: "short" });
+    expect(calls).toEqual(["authenticate"]);
+  });
+
+  it("the drafts keep their own limit", async () => {
+    const asked: string[] = [];
+    const { deps: d } = deps({
+      rateLimit: async (_s, kind) => {
+        asked.push(String(kind));
+        return { allowed: true };
+      },
+    });
+    await createOrderDraftCore(d, form);
+    expect(asked).toEqual(["undefined"]);
   });
 
   it("refuses a malformed idempotency key as validation before any call", async () => {

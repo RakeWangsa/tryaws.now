@@ -146,16 +146,57 @@ export async function releaseAuthLimit(
   run: Run,
   key: string,
   at: Date,
-  action: AuthAction,
+  action: "signin_code",
   who: Who,
   release: (tx: Tx, rules: readonly LimitRule[], now: Date) => Promise<void> = releaseRateLimits,
 ): Promise<boolean> {
   try {
+    // The type says it; this keeps a cast from giving back another limit's hit.
+    if (action !== "signin_code") return false;
     const rules = buildRules(key, action, who);
     if (rules === null) return false;
     await run((tx) => release(tx, rules, at));
     return true;
   } catch {
     return false;
+  }
+}
+
+class Refused extends Error {
+  constructor(readonly retryAfterSeconds: number) {
+    super("rate limit: refused");
+  }
+}
+
+/**
+ * WPU-X11 round 2. Like enforceAuthLimit, but ALL OR NOTHING: when any rule refuses, the callback throws and
+ * the transaction rolls back, so the rules that were already counted (the rules are counted in key order,
+ * and the daily key sorts before the quarter-hour key) are not left counted. A reservation that is refused
+ * costs nothing: a customer who is blocked for a quarter of an hour and retries cannot use up the day by it,
+ * and a flood of refused attempts cannot inflate the owner's daily counter. Any other error is a refusal
+ * (R16).
+ */
+export async function reserveAuthLimit(
+  run: Run,
+  key: string,
+  clock: Clock,
+  action: AuthAction,
+  who: Who,
+  consume: Consume = consumeRateLimits,
+): Promise<{ allowed: true } | { allowed: false; retryAfterSeconds: number }> {
+  try {
+    const rules = buildRules(key, action, who);
+    if (rules === null) return { allowed: false, retryAfterSeconds: 60 };
+    const now = clock.now();
+    await run(async (tx) => {
+      const decision = await consume(tx, rules, now);
+      if (!decision.allowed) throw new Refused(decision.retryAfterSeconds);
+    });
+    return { allowed: true };
+  } catch (error) {
+    return {
+      allowed: false,
+      retryAfterSeconds: error instanceof Refused ? error.retryAfterSeconds : 60,
+    };
   }
 }

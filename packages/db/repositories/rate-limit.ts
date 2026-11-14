@@ -173,6 +173,9 @@ export async function peekRateLimits(
   return { allowed: true };
 }
 
+// The actions whose hits may be given back (releaseRateLimits): the sign-in's wrong-code reservation only.
+const RELEASABLE_ACTIONS: readonly string[] = ["auth.signin_code"];
+
 // WPU-X11 round 2. Gives back one hit that consumeRateLimits counted, for the rules and the window of `now`:
 // the sign-in reserves an attempt before it calls the provider (so parallel guesses cannot all pass a check
 // first) and releases it when the attempt was not a wrong code. The count never goes below zero, and a rule
@@ -187,6 +190,11 @@ export async function releaseRateLimits(
     throw new TypeError("rate limit: no rules");
   }
   const prepared = rules.map((rule) => {
+    // Hardening: a hit is given back only for the one action that reserves before it knows the outcome.
+    // A release of any other limit would be a way to undo a counter that must stay counted.
+    if (!RELEASABLE_ACTIONS.includes(rule.action)) {
+      throw new TypeError("rate limit: this action's hits are never given back");
+    }
     if (rule.kind !== "ip" && rule.kind !== "phone" && rule.kind !== "email") {
       throw new TypeError("rate limit: only ip, phone and email rules are accepted");
     }

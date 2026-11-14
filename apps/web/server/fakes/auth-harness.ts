@@ -5,7 +5,12 @@ import { limitKey } from "@tc/db";
 import type { LimitDecision, LimitRule } from "@tc/db";
 import { InMemorySmsProvider } from "@tc/notify";
 import type { OtpSent, OtpVerified } from "@tc/notify";
-import { enforceAuthLimit, peekAuthLimit, releaseAuthLimit } from "../auth/limits.ts";
+import {
+  enforceAuthLimit,
+  peekAuthLimit,
+  releaseAuthLimit,
+  reserveAuthLimit,
+} from "../auth/limits.ts";
 import { actionContext } from "../auth/context.ts";
 import type { ActionContext } from "../auth/context.ts";
 import type { AuthPorts } from "../auth/ports.ts";
@@ -166,6 +171,27 @@ export function makeHarness(): Harness {
     return { allowed: true };
   };
 
+  // All or nothing, like consume inside a transaction that rolls back on a refusal.
+  const consumeAll = async (
+    _tx: unknown,
+    given: readonly LimitRule[],
+    now: Date,
+  ): Promise<LimitDecision> => {
+    const prepared = given.map((rule) => ({
+      rule,
+      key: `${limitKey(rule.kind, rule.subject, rule.action, rule.windowSeconds)}@${Math.floor(
+        now.getTime() / (rule.windowSeconds * 1000),
+      )}`,
+    }));
+    for (const { rule, key } of prepared) {
+      if ((counts.get(key) ?? 0) >= rule.limit) {
+        return { allowed: false, action: rule.action, retryAfterSeconds: 123 };
+      }
+    }
+    for (const { key } of prepared) counts.set(key, (counts.get(key) ?? 0) + 1);
+    return { allowed: true };
+  };
+
   // Like peekRateLimits: a refusal when a rule is already at its limit, and nothing counted.
   const peek = async (
     _tx: unknown,
@@ -212,6 +238,19 @@ export function makeHarness(): Harness {
     async limit(action, who, key) {
       events.push("limit");
       return enforceAuthLimit((fn) => fn({} as never), key, clock, action, who, consume as never);
+    },
+    async limitReserve(action, who, key) {
+      events.push("limitReserve");
+      // The in-memory counters have no rollback: this one checks every rule first and counts only when all
+      // of them have room, which is what the rolled-back transaction gives the real one.
+      return reserveAuthLimit(
+        (fn) => fn({} as never),
+        key,
+        clock,
+        action,
+        who,
+        consumeAll as never,
+      );
     },
     async limitPeek(action, who, key) {
       events.push("limitPeek");

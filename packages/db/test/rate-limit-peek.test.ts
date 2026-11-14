@@ -115,6 +115,26 @@ it("releaseRateLimits gives one hit back, never goes below zero, and leaves othe
   expect(await countFor(mine.subject)).toBe(0);
 });
 
+it("releaseRateLimits gives back only the wrong-code reservation: any other action is a TypeError and changes nothing", async () => {
+  const other = rule({ action: "auth.signin", subject: hex("1"), limit: 5 });
+  await asWeb((tx) => consumeRateLimits(tx, [other], NOW));
+  for (const action of ["auth.signin", "otp.send", "auth.signup", "order.place", "wallet.topup"]) {
+    await expect(
+      asWeb((tx) => releaseRateLimits(tx, [rule({ action, subject: hex("1") })], NOW)),
+    ).rejects.toThrow(TypeError);
+  }
+  // One bad rule among good ones refuses the whole call, before any row is touched.
+  const good = rule({ subject: hex("2"), limit: 5 });
+  await asWeb((tx) => consumeRateLimits(tx, [good], NOW));
+  await expect(
+    asWeb((tx) =>
+      releaseRateLimits(tx, [good, rule({ action: "auth.signin", subject: hex("2") })], NOW),
+    ),
+  ).rejects.toThrow(TypeError);
+  expect(await countFor(hex("1"))).toBe(1);
+  expect(await countFor(hex("2"))).toBe(1);
+});
+
 it("releaseRateLimits takes the same rules as consume (R16: bad input throws)", async () => {
   await expect(asWeb((tx) => releaseRateLimits(tx, [], NOW))).rejects.toThrow(TypeError);
   await expect(
