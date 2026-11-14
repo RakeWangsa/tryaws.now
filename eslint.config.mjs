@@ -235,6 +235,7 @@ export default tseslint.config(
       "coverage/**",
       "**/.next/**",
       "**/.open-next/**",
+      "**/sst-env.d.ts",
       "**/.sst/**",
       "**/next-env.d.ts",
       ".superpowers/**",

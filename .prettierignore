@@ -18,3 +18,5 @@ apps/*/public/theme/
 next-env.d.ts
 test-results/
 playwright-report/
+sst-env.d.ts
+.open-next/
