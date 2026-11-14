@@ -26,6 +26,7 @@ export const SAME_IN_BOTH: readonly WordingAllow[] = [
   { key: "Shell.footer.address", reason: "postal address of the company (16.14), in Latin" },
   { key: "Shell.admin.ops", reason: "role abbreviation shown as in the operator tools" },
   { key: "Aws.trademark", reason: "16.13: the trademark line is the same English line" },
+  { key: "Public.home.regionNames.*", reason: AWS_NAME },
   { key: "Servers.region.*", reason: "16.13: AWS Region names with their official English names" },
   {
     key: "Servers.new.namePlaceholder",

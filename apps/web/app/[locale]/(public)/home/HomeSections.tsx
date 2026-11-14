@@ -64,16 +64,16 @@ export function Hero({ t, locale }: { t: Tr; locale: Locale }) {
               <p className="h5 mergecolor mb-1">{t("home.panel.title")}</p>
               <p className="seccolor small mb-3">{t("home.panel.engine")}</p>
               <ul className="tc-hero-list seccolor">
-                <li>
-                  <i className="fas fa-map-marker-alt c-pink" aria-hidden="true" />
+                <li className="tc-hero-item">
+                  <i className="tc-hero-icon fas fa-map-marker-alt c-pink" aria-hidden="true" />
                   <span>{t("home.panel.location")}</span>
                 </li>
-                <li>
-                  <i className="fas fa-wallet c-pink" aria-hidden="true" />
+                <li className="tc-hero-item">
+                  <i className="tc-hero-icon fas fa-wallet c-pink" aria-hidden="true" />
                   <span>{t("home.panel.wallet")}</span>
                 </li>
-                <li>
-                  <i className="fas fa-sliders-h c-pink" aria-hidden="true" />
+                <li className="tc-hero-item">
+                  <i className="tc-hero-icon fas fa-sliders-h c-pink" aria-hidden="true" />
                   <span>{t("home.panel.panel")}</span>
                 </li>
               </ul>
@@ -383,7 +383,9 @@ export function FinalCta({ t, locale }: { t: Tr; locale: Locale }) {
         <div className="row align-items-center">
           <div className="col-lg-8">
             <div className="column-support-txt">
-              <h2 className="column-support-title text-dark mergecolor">{t("home.ctaTitle")}</h2>
+              <h2 className="column-support-title tc-cta-title text-dark mergecolor">
+                {t("home.ctaTitle")}
+              </h2>
               <div className="column-support-subtitle text-dark mergecolor">
                 {t("home.ctaText")}
               </div>
@@ -391,10 +393,10 @@ export function FinalCta({ t, locale }: { t: Tr; locale: Locale }) {
           </div>
           <div className="col-lg-4">
             <div className="btn-floats">
-              <Button variant="primary" href={p("/signup")} className="me-3">
+              <Button variant="primary" href={p("/signup")} className="me-3 tc-cta-btn">
                 {t("home.heroSignup")}
               </Button>
-              <Button variant="secondary" href={p("/pricing")}>
+              <Button variant="secondary" href={p("/pricing")} className="tc-cta-btn">
                 {t("common.seePricing")}
               </Button>
             </div>

@@ -928,13 +928,13 @@ div.tc-modal-open {
   margin: 0;
   padding: 0;
 }
-.tc-hero-list li {
+.tc-hero-item {
   align-items: center;
   display: flex;
   gap: 10px;
   padding: 6px 0;
 }
-.tc-hero-list i {
+.tc-hero-icon {
   flex: none;
   text-align: center;
   width: 20px;
@@ -1011,14 +1011,14 @@ div.tc-modal-open {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   font-size: 0.9375rem;
 }
-.tc-cta-band .column-support-title {
+.tc-cta-band .tc-cta-title {
   font-size: 2rem;
 }
 @media (max-width: 767.98px) {
-  .tc-cta-band .column-support-title {
+  .tc-cta-band .tc-cta-title {
     font-size: 1.5rem;
   }
-  .tc-cta-band .btn-floats .btn {
+  .tc-cta-band .tc-cta-btn {
     margin-bottom: 12px;
   }
 }

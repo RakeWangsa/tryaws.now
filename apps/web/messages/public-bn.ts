@@ -97,7 +97,7 @@ export const publicBn = {
       panel: {
         label: "প্যানেলে আপনার সার্ভার, একটি উদাহরণ চিত্র",
         title: "ক্লাউড সার্ভার",
-        engine: "Amazon Lightsail instance",
+        engine: "Amazon Lightsail instance, সার্ভার হিসেবে",
         location: "লোকেশন: Singapore বা Mumbai",
         wallet: "ওয়ালেট থেকে পরিশোধ, টাকায়",
         panel: "চালু, বন্ধ ও ব্যাকআপ প্যানেল থেকে",
@@ -136,7 +136,7 @@ export const publicBn = {
         disk: { title: "ব্লক স্টোরেজ", text: "সার্ভারের জন্য বাড়তি ডিস্ক।" },
         staticIp: { title: "স্ট্যাটিক আইপি", text: "সার্ভারের জন্য স্থির আইপি ঠিকানা।" },
         backup: { title: "ব্যাকআপ", text: "প্যানেল থেকে ব্যাকআপ নিন ও পুনরুদ্ধার করুন।" },
-        cdn: { title: "সিডিএন", text: "Amazon Lightsail CDN distribution।" },
+        cdn: { title: "সিডিএন", text: "ওয়েবসাইটের জন্য Amazon Lightsail CDN distribution।" },
         dns: { title: "ডিএনএস", text: "Amazon Route 53 দিয়ে ডিএনএস জোন।" },
         domain: { title: "ডোমেইন", text: "ডোমেইন নাম নিবন্ধন ও পরিচালনা, Amazon Route 53 দিয়ে।" },
       },
@@ -175,7 +175,7 @@ export const publicBn = {
       locationsTitle: "দুটি লোকেশন",
       locationsText:
         "শুরুতে দুটি AWS Region। প্ল্যানের ডেটা ট্রান্সফার লোকেশন অনুযায়ী আলাদা হতে পারে।",
-      locationRegion: "AWS Region: {name}",
+      locationRegion: "এই লোকেশনের AWS Region: {name}",
       locationCta: "{location}-এর প্ল্যান দেখুন",
       regionNames: {
         "ap-southeast-1": "Asia Pacific (Singapore)",
