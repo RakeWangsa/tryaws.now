@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cognitoIdentityProvider, secretHash } from "../cognito-identity";
 import type { IdentityProvider, IdpResult } from "../identity";
 import {
+  CLIENTS,
+  CUSTOMER,
   PLANTED,
   POOL,
   SIGN_UP,
@@ -67,7 +69,7 @@ const happy: Record<string, () => Response> = {
 
 async function run(op: string, answer: () => Response | Promise<Response>) {
   const { fetchImpl, calls } = recording(answer);
-  const provider = cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl);
+  const provider = cognitoIdentityProvider(POOL, CLIENTS, fetchImpl);
   const result = await OPS[op]!.call(provider);
   return { result, calls };
 }
@@ -83,7 +85,10 @@ const SIGN_UP_OPS = [
   "forgotPassword",
   "confirmForgotPassword",
 ];
-const clientOf = (op: string) => (SIGN_UP_OPS.includes(op) ? SIGN_UP.clientId : POOL.clientId);
+const clientOf = (op: string) => (SIGN_UP_OPS.includes(op) ? SIGN_UP.clientId : CUSTOMER.clientId);
+const CUSTOMER_HASH = createHmac("sha256", CUSTOMER.clientSecret)
+  .update(EMAIL + CUSTOMER.clientId)
+  .digest("base64");
 // AWS developer guide, "Computing secret hash values": Base64(HMAC_SHA256(secret, username + clientId)).
 const EXPECTED_HASH = createHmac("sha256", SIGN_UP.clientSecret)
   .update(EMAIL + SIGN_UP.clientId)
@@ -113,20 +118,43 @@ describe("the two clients", () => {
     expect(calls[0]!.body["SecretHash"]).toBe(EXPECTED_HASH);
   });
 
+  // Round 4: the token-issuing client has a secret too, so Cognito itself refuses SignUp, Resend and
+  // ForgotPassword through it for anyone who does not hold the secret.
   it.each(Object.keys(OPS).filter((op) => !SIGN_UP_OPS.includes(op)))(
-    "%s stays on the token-issuing client and sends no SecretHash",
+    "%s stays on the token-issuing client, never with the sign-up client's id or secret",
     async (op) => {
       const { calls } = await run(op, happy[op]!);
-      expect(calls[0]!.body["ClientId"]).toBe(POOL.clientId);
-      expect(calls[0]!.body).not.toHaveProperty("SecretHash");
+      expect(calls[0]!.body["ClientId"]).toBe(CUSTOMER.clientId);
       expect(calls[0]!.rawBody).not.toContain(SIGN_UP.clientId);
+      expect(calls[0]!.rawBody).not.toContain(SIGN_UP.clientSecret);
     },
   );
 
-  it.each(Object.keys(OPS))("%s never sends the client secret itself", async (op) => {
+  it("sign-in carries SECRET_HASH of the e-mail and the customer client id in AuthParameters", async () => {
+    const { calls } = await run("signIn", happy["signIn"]!);
+    expect(calls[0]!.body).toEqual({
+      AuthFlow: "USER_PASSWORD_AUTH",
+      ClientId: CUSTOMER.clientId,
+      AuthParameters: { USERNAME: EMAIL, PASSWORD: NEW_PASSWORD, SECRET_HASH: CUSTOMER_HASH },
+    });
+  });
+
+  it("revoking a refresh token carries the customer client secret (RevokeToken takes no hash)", async () => {
+    const { calls } = await run("revokeRefreshToken", happy["revokeRefreshToken"]!);
+    expect(calls[0]!.body).toEqual({
+      ClientId: CUSTOMER.clientId,
+      ClientSecret: CUSTOMER.clientSecret,
+      Token: "a.refresh.token",
+    });
+  });
+
+  it.each(Object.keys(OPS))("%s never sends a client secret in a header", async (op) => {
     const { calls } = await run(op, happy[op]!);
     expect(calls[0]!.rawBody).not.toContain(SIGN_UP.clientSecret);
     expect(JSON.stringify(calls[0]!.headers)).not.toContain(SIGN_UP.clientSecret);
+    expect(JSON.stringify(calls[0]!.headers)).not.toContain(CUSTOMER.clientSecret);
+    // the customer secret itself goes out only as the ClientSecret of RevokeToken
+    expect(calls[0]!.rawBody.includes(CUSTOMER.clientSecret), op).toBe(op === "revokeRefreshToken");
   });
 
   it("only the sign-up client is ever sent user attributes", async () => {
@@ -192,8 +220,8 @@ describe("the wire", () => {
     });
     expect((await run("signIn", happy["signIn"]!)).calls[0]!.body).toEqual({
       AuthFlow: "USER_PASSWORD_AUTH",
-      ClientId: POOL.clientId,
-      AuthParameters: { USERNAME: EMAIL, PASSWORD: NEW_PASSWORD },
+      ClientId: CUSTOMER.clientId,
+      AuthParameters: { USERNAME: EMAIL, PASSWORD: NEW_PASSWORD, SECRET_HASH: CUSTOMER_HASH },
     });
     expect((await run("forgotPassword", emptyOk)).calls[0]!.body).toEqual({
       ClientId: SIGN_UP.clientId,
@@ -208,7 +236,8 @@ describe("the wire", () => {
       Password: NEW_PASSWORD,
     });
     expect((await run("revokeRefreshToken", emptyOk)).calls[0]!.body).toEqual({
-      ClientId: POOL.clientId,
+      ClientId: CUSTOMER.clientId,
+      ClientSecret: CUSTOMER.clientSecret,
       Token: "a.refresh.token",
     });
   });
@@ -317,6 +346,9 @@ const FOLDING: Row[] = [
   ["resendConfirmationCode", "InvalidParameterException", ok()],
   ["resendConfirmationCode", "NotAuthorizedException", ok()],
   ["resendConfirmationCode", "CodeDeliveryFailureException", ok()],
+  // Round 4: a trigger that refuses (the guard of functions/cognito-messages) must not tell a known
+  // address from an unknown one.
+  ["resendConfirmationCode", "UserLambdaValidationException", ok()],
   ["resendConfirmationCode", "LimitExceededException", bad("rate_limited")],
   ["resendConfirmationCode", "TooManyRequestsException", bad("rate_limited")],
   ["resendConfirmationCode", "SomethingElseException", bad("unavailable")],
@@ -333,6 +365,7 @@ const FOLDING: Row[] = [
   ["forgotPassword", "InvalidParameterException", ok()],
   ["forgotPassword", "NotAuthorizedException", ok()],
   ["forgotPassword", "CodeDeliveryFailureException", ok()],
+  ["forgotPassword", "UserLambdaValidationException", ok()],
   ["forgotPassword", "LimitExceededException", bad("rate_limited")],
   ["forgotPassword", "TooManyRequestsException", bad("rate_limited")],
   ["forgotPassword", "SomethingElseException", bad("unavailable")],
@@ -381,6 +414,10 @@ describe("the folding table (one test per row)", () => {
       );
     await same("signIn", "UserNotFoundException", "NotAuthorizedException");
     await same("forgotPassword", "UserNotFoundException", "CodeDeliveryFailureException");
+    // Round 4: the refusal of the trigger (an existing address asked through a client that may not)
+    // looks like an unknown address.
+    await same("forgotPassword", "UserNotFoundException", "UserLambdaValidationException");
+    await same("resendConfirmationCode", "UserNotFoundException", "UserLambdaValidationException");
     await same("resendConfirmationCode", "UserNotFoundException", "NotAuthorizedException");
     await same("confirmSignUp", "UserNotFoundException", "CodeMismatchException");
     await same("confirmForgotPassword", "UserNotFoundException", "CodeMismatchException");
@@ -388,6 +425,63 @@ describe("the folding table (one test per row)", () => {
     expect((await run("forgotPassword", happy["forgotPassword"]!)).result).toEqual(
       (await run("forgotPassword", () => cognitoError("UserNotFoundException"))).result,
     );
+  });
+});
+
+// Round 4 (security review, low): the trigger refusing is folded to "ok" so the page cannot tell known
+// from unknown, but it is also a fact for an alarm: the observer is told, once, with a fixed kind and
+// the operation name, and nothing else (no e-mail, no text of the answer).
+describe("a refusing trigger is observed", () => {
+  const observed = async (op: string, err: string) => {
+    const facts: unknown[] = [];
+    const { fetchImpl } = recording(() => cognitoError(err));
+    const provider = cognitoIdentityProvider(POOL, CLIENTS, fetchImpl, (fact) => facts.push(fact));
+    const result = await OPS[op]!.call(provider);
+    return { result, facts };
+  };
+
+  it.each([
+    ["forgotPassword", "forgotPassword"],
+    ["resendConfirmationCode", "resendConfirmationCode"],
+  ])(
+    "%s: UserLambdaValidationException is ok and reported as trigger_refused",
+    async (op, name) => {
+      for (const err of [
+        "UserLambdaValidationException",
+        "com.amazonaws.cognito.identity.idp.model#UserLambdaValidationException",
+      ]) {
+        const { result, facts } = await observed(op, err);
+        expect(result).toEqual({ ok: true, value: true });
+        expect(facts).toEqual([{ op: name, kind: "trigger_refused" }]);
+      }
+    },
+  );
+
+  it("other answers, and other operations, report nothing", async () => {
+    for (const [op, err] of [
+      ["forgotPassword", "UserNotFoundException"],
+      ["forgotPassword", "LimitExceededException"],
+      ["resendConfirmationCode", "CodeDeliveryFailureException"],
+      ["confirmForgotPassword", "UserLambdaValidationException"],
+      ["signUp", "UserLambdaValidationException"],
+      ["signIn", "UserLambdaValidationException"],
+    ] as const) {
+      expect((await observed(op, err)).facts, `${op} ${err}`).toEqual([]);
+    }
+  });
+
+  it("an observer that throws changes nothing", async () => {
+    const { fetchImpl } = recording(() => cognitoError("UserLambdaValidationException"));
+    const provider = cognitoIdentityProvider(POOL, CLIENTS, fetchImpl, () => {
+      throw new Error(`boom ${PLANTED.email}`);
+    });
+    expect(await provider.forgotPassword(EMAIL)).toEqual({ ok: true, value: true });
+  });
+
+  it("without an observer the folding is the same", async () => {
+    expect(
+      (await run("forgotPassword", () => cognitoError("UserLambdaValidationException"))).result,
+    ).toEqual(ok());
   });
 });
 
@@ -401,11 +495,11 @@ describe("failures of the transport are unavailable", () => {
       expect((await run(op, () => json(200, `{"pad":"${"x".repeat(17_000)}"}`))).result).toEqual(
         unavailable,
       );
-      const throwing = cognitoIdentityProvider(POOL, SIGN_UP, (() => {
+      const throwing = cognitoIdentityProvider(POOL, CLIENTS, (() => {
         throw new Error(`boom ${PLANTED.password}`);
       }) as typeof fetch);
       expect(await OPS[op]!.call(throwing)).toEqual(unavailable);
-      const rejecting = cognitoIdentityProvider(POOL, SIGN_UP, (() =>
+      const rejecting = cognitoIdentityProvider(POOL, CLIENTS, (() =>
         Promise.reject(new Error(`boom ${PLANTED.password}`))) as typeof fetch);
       expect(await OPS[op]!.call(rejecting)).toEqual(unavailable);
     },
@@ -415,7 +509,7 @@ describe("failures of the transport are unavailable", () => {
     vi.useFakeTimers();
     const never = cognitoIdentityProvider(
       POOL,
-      SIGN_UP,
+      CLIENTS,
       (() => new Promise(() => {})) as typeof fetch,
     );
     const pending = OPS["signIn"]!.call(never);
@@ -448,7 +542,7 @@ describe("secrets", () => {
     ];
     for (const answer of answers) {
       const { fetchImpl } = recording(answer);
-      const provider = cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl);
+      const provider = cognitoIdentityProvider(POOL, CLIENTS, fetchImpl);
       collected.push(inspect(provider, { depth: 6 }));
       collected.push(
         await provider.signUp({
@@ -476,6 +570,7 @@ describe("secrets", () => {
       PLANTED.session,
       PLANTED.refreshToken,
       SIGN_UP.clientSecret,
+      CUSTOMER.clientSecret,
     ]) {
       expect(all).not.toContain(secret);
     }
@@ -483,13 +578,14 @@ describe("secrets", () => {
   });
 
   it("the factory keeps no pool, token or client id where inspect can see it", () => {
-    const provider = cognitoIdentityProvider(POOL, SIGN_UP, (() =>
+    const provider = cognitoIdentityProvider(POOL, CLIENTS, (() =>
       Promise.resolve(emptyOk())) as typeof fetch);
     const shown = inspect(provider, { depth: 8, showHidden: true });
     expect(shown).not.toContain(POOL.clientId);
     expect(shown).not.toContain(POOL.userPoolId);
     expect(shown).not.toContain(SIGN_UP.clientId);
     expect(shown).not.toContain(SIGN_UP.clientSecret);
+    expect(shown).not.toContain(CUSTOMER.clientSecret);
   });
 });
 

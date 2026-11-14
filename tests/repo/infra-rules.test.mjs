@@ -308,11 +308,21 @@ describe("Cognito attribute writes", () => {
     );
   });
 
-  it("gives only the sign-up client a secret, no sign-in flow, no OAuth and masked existence errors", () => {
+  // Round 4 (security review, medium): with ForgotPassword called directly at Cognito through the
+  // public client id, an existing address answered UserLambdaValidationException (the trigger refused)
+  // and an unknown one answered 200: an enumeration oracle. Giving CustomerAppClient a secret closes it at
+  // the source: Cognito itself refuses SignUp, Resend and ForgotPassword through that client for anyone
+  // who does not hold the secret, and the triggers are defence in depth. Every customer call is made by
+  // the server (the id is only in the server environment), so nothing is lost.
+  it("gives the two customer clients a secret and the admin client none", () => {
     expect(signUpClient).toContain("args.generateSecret = true");
-    expect(customerApp).toContain("args.generateSecret = false");
+    expect(customerApp).toContain("args.generateSecret = true");
     expect(adminApp).toContain("args.generateSecret = false");
-    expect([...auth.matchAll(/args\.generateSecret = true/g)]).toHaveLength(1);
+    expect([...auth.matchAll(/args\.generateSecret = true/g)]).toHaveLength(2);
+    expect([...auth.matchAll(/args\.generateSecret = false/g)]).toHaveLength(1);
+  });
+
+  it("gives the sign-up client no sign-in flow, no OAuth and masked existence errors", () => {
     // Without a list Cognito allows refresh, SRP and custom auth (CreateUserPoolClient,
     // ExplicitAuthFlows); the sign-up client gets refresh only, so no flow can sign anyone in with it.
     const flows = /args\.explicitAuthFlows = \[([^\]]*)\]/.exec(signUpClient);
@@ -329,26 +339,38 @@ describe("Cognito attribute writes", () => {
     expect(auth).toMatch(/return \{[^}]*\bcustomerSignUpClient\b[^}]*\}/);
   });
 
-  it("hands the sign-up client (id and secret) to the web server function only, as an SST link", () => {
+  it("hands the two customer clients (id and secret) to the web server function only, as SST links", () => {
     const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
     const admin = between(web, 'new sst.aws.Nextjs("Admin"');
     expect(customer).toContain(
-      "link: [ ...WEB_SECRETS.map((name) => secrets.app[name]), secrets.db.web_rw, auth.customerSignUpClient]",
+      "link: [ ...WEB_SECRETS.map((name) => secrets.app[name]), secrets.db.web_rw, auth.customerSignUpClient, auth.customerClient]",
     );
     expect([...web.matchAll(/customerSignUpClient/g)]).toHaveLength(1);
     expect(admin).not.toContain("customerSignUpClient");
-    // never as a plain environment value, never public, never the bare secret output
+    expect(admin).not.toContain("customerClient");
+    // never as a plain environment value, never public, never the bare secret output; the only plain
+    // value is the customer client's ID (an id, read by the proxy and the token verifier)
     expect(web).not.toMatch(/customerSignUpClient\.(id|secret)/);
+    expect(web).not.toMatch(/customerClient\.secret/);
+    expect([...web.matchAll(/customerClient\.id/g)]).toHaveLength(1);
+    expect(customer).toContain("COGNITO_CUSTOMER_CLIENT_ID: auth.customerClient.id");
     expect(web).not.toMatch(/NEXT_PUBLIC_[A-Z_]*COGNITO/);
     for (const [name, text] of Object.entries({ workers, alarms, messaging, storage, secrets })) {
-      expect(text, name).not.toContain("customerSignUpClient");
-      expect(text, name).not.toContain("CustomerSignUpClient");
+      for (const word of [
+        "customerSignUpClient",
+        "CustomerSignUpClient",
+        "customerClient",
+        "CustomerAppClient",
+      ]) {
+        expect(text, `${name} ${word}`).not.toContain(word);
+      }
     }
-    // the reader names the same link as the component
-    expect(source("packages/auth/config.ts")).toContain(
-      'SIGN_UP_CLIENT_LINK = "CustomerSignUpClient"',
-    );
+    // the readers name the same links as the components
+    const config = source("packages/auth/config.ts");
+    expect(config).toContain('SIGN_UP_CLIENT_LINK = "CustomerSignUpClient"');
+    expect(config).toContain('CUSTOMER_CLIENT_LINK = "CustomerAppClient"');
     expect(auth).toContain('customers.addClient("CustomerSignUpClient"');
+    expect(auth).toContain('customers.addClient("CustomerAppClient"');
   });
 
   // WPU-X12 follow-up 1 (security review): the public CustomerAppClient could call SignUp and

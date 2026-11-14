@@ -21,9 +21,15 @@ const nowSec = Math.floor(NOW.getTime() / 1000);
 let issuer: TestIssuer;
 let verifier: AccessTokenVerifier;
 let config: AuthConfig;
+// WPU-X12 round 4: the customer app client has a secret; the refresh port sends it as ClientSecret of
+// GetTokensFromRefreshToken (no username is needed, a SECRET_HASH of REFRESH_TOKEN_AUTH needs the sub,
+// which is unknown when only the refresh cookie is left). A made-up value, not a real client.
+const CLIENT_SECRET = "customer0app0client0secret0abcdef";
+let client: { readonly clientId: string; readonly clientSecret: string };
 
 beforeAll(() => {
   issuer = createTestIssuer(clock);
+  client = { clientId: issuer.pool.clientId, clientSecret: CLIENT_SECRET };
   verifier = createAccessTokenVerifier(issuer.pool, { jwksCache: issuer.jwksCache });
   config = {
     ...authConfigFromEnv({
@@ -268,7 +274,7 @@ describe("refreshSession", () => {
       () => Promise.resolve(new Response("{}", { status: 503 })),
     ];
     for (const f of failures) {
-      const port = cognitoRefreshPort(issuer.pool, f as typeof fetch);
+      const port = cognitoRefreshPort(issuer.pool, client, f as typeof fetch);
       expect(await refreshSession(deps(port), header(issuer.sign()))).toEqual({ action: "none" });
     }
   });
@@ -284,7 +290,8 @@ describe("refreshSession", () => {
       new Response("not json", { status: 400 }),
     ];
     for (const r of answers) {
-      const port = cognitoRefreshPort(issuer.pool, (() => Promise.resolve(r)) as typeof fetch);
+      const port = cognitoRefreshPort(issuer.pool, client, (() =>
+        Promise.resolve(r)) as typeof fetch);
       expect(await port.refresh(OLD_REFRESH)).toEqual({ kind: "unavailable" });
     }
   });
@@ -368,7 +375,7 @@ describe("cognitoRefreshPort", () => {
       return Promise.resolve(cognitoAnswer("a.b.c"));
     }) as unknown as typeof fetch;
     const timeout = vi.spyOn(AbortSignal, "timeout");
-    const result = await cognitoRefreshPort(issuer.pool, fake).refresh(OLD_REFRESH);
+    const result = await cognitoRefreshPort(issuer.pool, client, fake).refresh(OLD_REFRESH);
     expect(result).toEqual({ kind: "refreshed", accessToken: "a.b.c" });
 
     expect(calls).toHaveLength(1);
@@ -378,13 +385,15 @@ describe("cognitoRefreshPort", () => {
     const headers = new Headers(init.headers);
     expect([...headers.keys()].sort()).toEqual(["content-type", "x-amz-target"]);
     expect(headers.get("content-type")).toBe("application/x-amz-json-1.1");
-    expect(headers.get("x-amz-target")).toBe("AWSCognitoIdentityProviderService.InitiateAuth");
+    expect(headers.get("x-amz-target")).toBe(
+      "AWSCognitoIdentityProviderService.GetTokensFromRefreshToken",
+    );
     expect(headers.has("authorization")).toBe(false);
     const body = JSON.parse(init.body as string) as Record<string, unknown>;
-    expect(Object.keys(body).sort()).toEqual(["AuthFlow", "AuthParameters", "ClientId"]);
-    expect(body["AuthFlow"]).toBe("REFRESH_TOKEN_AUTH");
+    expect(Object.keys(body).sort()).toEqual(["ClientId", "ClientSecret", "RefreshToken"]);
     expect(body["ClientId"]).toBe(issuer.pool.clientId);
-    expect(body["AuthParameters"]).toEqual({ REFRESH_TOKEN: OLD_REFRESH });
+    expect(body["ClientSecret"]).toBe(CLIENT_SECRET);
+    expect(body["RefreshToken"]).toBe(OLD_REFRESH);
     expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(timeout).toHaveBeenCalledWith(3000);
   });
@@ -392,17 +401,18 @@ describe("cognitoRefreshPort", () => {
   it("a rotated refresh token in the answer is returned", async () => {
     const fake = (() =>
       Promise.resolve(cognitoAnswer("a.b.c", "n1.n2.n3.n4.n5"))) as unknown as typeof fetch;
-    expect(await cognitoRefreshPort(issuer.pool, fake).refresh(OLD_REFRESH)).toEqual({
+    expect(await cognitoRefreshPort(issuer.pool, client, fake).refresh(OLD_REFRESH)).toEqual({
       kind: "refreshed",
       accessToken: "a.b.c",
       refreshToken: "n1.n2.n3.n4.n5",
     });
   });
 
-  it("a NotAuthorizedException answer is rejected", async () => {
+  it("a NotAuthorizedException or RefreshTokenReuseException answer is rejected", async () => {
     for (const type of [
       "NotAuthorizedException",
       "com.amazonaws.cognito.identity.idp.model#NotAuthorizedException",
+      "RefreshTokenReuseException",
     ]) {
       const fake = (() =>
         Promise.resolve(
@@ -411,9 +421,33 @@ describe("cognitoRefreshPort", () => {
             { status: 400 },
           ),
         )) as unknown as typeof fetch;
-      expect(await cognitoRefreshPort(issuer.pool, fake).refresh(OLD_REFRESH)).toEqual({
+      expect(await cognitoRefreshPort(issuer.pool, client, fake).refresh(OLD_REFRESH)).toEqual({
         kind: "rejected",
       });
+    }
+  });
+
+  it("the client secret is in no result and no error", async () => {
+    const answers = [
+      () => Promise.reject(new TypeError(`failed with ${CLIENT_SECRET}`)),
+      () => Promise.resolve(new Response(`{"message":"${CLIENT_SECRET}"}`, { status: 500 })),
+      () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({ __type: "NotAuthorizedException", message: CLIENT_SECRET }),
+            {
+              status: 400,
+            },
+          ),
+        ),
+    ];
+    for (const answer of answers) {
+      const result = await cognitoRefreshPort(
+        issuer.pool,
+        client,
+        answer as unknown as typeof fetch,
+      ).refresh(OLD_REFRESH);
+      expect(JSON.stringify(result)).not.toContain(CLIENT_SECRET);
     }
   });
 
@@ -423,7 +457,7 @@ describe("cognitoRefreshPort", () => {
     let result: RefreshResult | undefined;
     await expect(
       (async () => {
-        result = await cognitoRefreshPort(issuer.pool, fake).refresh(OLD_REFRESH);
+        result = await cognitoRefreshPort(issuer.pool, client, fake).refresh(OLD_REFRESH);
       })(),
     ).resolves.toBeUndefined();
     expect(result).toEqual({ kind: "unavailable" });
@@ -432,8 +466,10 @@ describe("cognitoRefreshPort", () => {
     const synchronous = (() => {
       throw new TypeError(`sync ${OLD_REFRESH}`);
     }) as unknown as typeof fetch;
-    expect(await cognitoRefreshPort(issuer.pool, synchronous).refresh(OLD_REFRESH)).toEqual({
-      kind: "unavailable",
-    });
+    expect(await cognitoRefreshPort(issuer.pool, client, synchronous).refresh(OLD_REFRESH)).toEqual(
+      {
+        kind: "unavailable",
+      },
+    );
   });
 });

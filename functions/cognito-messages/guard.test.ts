@@ -292,3 +292,136 @@ describe("the handlers read the configuration only when a decision needs it", ()
     );
   });
 });
+
+// Round 4 (security review, low): the client id is cached for the life of the container. When the client
+// is replaced (a new id), a warm container would refuse the new client until it is recycled. An event
+// whose client id differs from the cached one re-reads SSM, at most once per 60 seconds per container
+// (the first read starts the minute, so a cold container does not read twice for one event); if the id
+// still differs, or the re-read does not work, the call is refused.
+describe("a stale cached sign-up client id (re-read, capped at one per 60 s)", () => {
+  const NEW_ID = "9newclient1234567890";
+  const PARAMS_OLD = { [CLIENT_PARAM]: SIGN_UP_ID, [POOL_PARAM]: CUSTOMER_POOL };
+  const PARAMS_NEW = { [CLIENT_PARAM]: NEW_ID, [POOL_PARAM]: CUSTOMER_POOL };
+  const MINUTE = 60_000;
+
+  function setup(answers: Array<Record<string, string> | Error>) {
+    let t = 1_000_000;
+    const read = vi.fn<ReadParameters>(async () => {
+      const next = answers.shift() ?? PARAMS_OLD;
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    const load = guardConfigLoader(ENV, read, () => t);
+    return { read, load, advance: (ms: number) => (t += ms) };
+  }
+
+  it("a different client id re-reads once and the new id is then the cached one", async () => {
+    const { read, load, advance } = setup([PARAMS_OLD, PARAMS_NEW]);
+    expect(await load()).toEqual(CONFIG);
+    advance(MINUTE);
+    expect(await load(NEW_ID)).toEqual({ signUpClientId: NEW_ID, customerPoolId: CUSTOMER_POOL });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect((await load(NEW_ID))?.signUpClientId).toBe(NEW_ID);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("the cached id, no id and the first read cause no extra read", async () => {
+    const { read, load, advance } = setup([PARAMS_OLD]);
+    expect(await load(APP_ID)).toEqual(CONFIG); // the first read is the only read
+    expect(read).toHaveBeenCalledTimes(1);
+    advance(10 * MINUTE);
+    expect(await load(SIGN_UP_ID)).toEqual(CONFIG);
+    expect(await load(undefined)).toEqual(CONFIG);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("a different id within the first minute of the container does not read", async () => {
+    const { read, load, advance } = setup([PARAMS_OLD, PARAMS_NEW]);
+    expect(await load()).toEqual(CONFIG);
+    advance(MINUTE - 1);
+    expect(await load(NEW_ID)).toEqual(CONFIG);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("at most one re-read per 60 seconds, however many other ids are seen", async () => {
+    const { read, load, advance } = setup([PARAMS_OLD, PARAMS_OLD, PARAMS_NEW]);
+    expect(await load()).toEqual(CONFIG);
+    advance(MINUTE);
+    expect(await load(APP_ID)).toEqual(CONFIG); // re-read, still the old id
+    expect(read).toHaveBeenCalledTimes(2);
+    advance(MINUTE - 1);
+    expect(await load(NEW_ID)).toEqual(CONFIG); // capped: the cached answer, no read
+    expect(await load(APP_ID)).toEqual(CONFIG);
+    expect(read).toHaveBeenCalledTimes(2);
+    advance(1);
+    expect((await load(NEW_ID))?.signUpClientId).toBe(NEW_ID); // a minute has passed
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it("a failed re-read keeps the cached answer, counts for the cap and is not an allowance", async () => {
+    const { read, load, advance } = setup([PARAMS_OLD, new Error("AccessDenied"), PARAMS_NEW]);
+    expect(await load()).toEqual(CONFIG);
+    advance(MINUTE);
+    expect(await load(NEW_ID)).toEqual(CONFIG);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(await load(NEW_ID)).toEqual(CONFIG);
+    expect(read).toHaveBeenCalledTimes(2);
+    advance(MINUTE);
+    expect((await load(NEW_ID))?.signUpClientId).toBe(NEW_ID);
+  });
+
+  it("a re-read that is malformed keeps the cached answer", async () => {
+    const { load, advance } = setup([PARAMS_OLD, { ...PARAMS_NEW, [CLIENT_PARAM]: "bad id" }]);
+    expect(await load()).toEqual(CONFIG);
+    advance(MINUTE);
+    expect(await load(NEW_ID)).toEqual(CONFIG);
+  });
+
+  it("preSignUp: the replaced client passes after one re-read; a client that is still different does not", async () => {
+    const { read, load, advance } = setup([PARAMS_OLD, PARAMS_NEW]);
+    await load(); // the container has been warm for a while
+    advance(MINUTE);
+    const { preSignUp } = makeHandlers(load);
+    const ok = preEvent("PreSignUp_SignUp", NEW_ID);
+    await expect(preSignUp(ok)).resolves.toBe(ok);
+    expect(read).toHaveBeenCalledTimes(2);
+    await expect(preSignUp(preEvent("PreSignUp_SignUp", APP_ID))).rejects.toThrow(
+      "cognito-presignup: sign-up is not allowed",
+    );
+  });
+
+  it("handler: sign-up, resend and a customer reset re-read for a different client; an admin reset does not", async () => {
+    for (const source of [
+      "CustomMessage_SignUp",
+      "CustomMessage_ResendCode",
+      "CustomMessage_ForgotPassword",
+    ]) {
+      const { read, load, advance } = setup([PARAMS_OLD, PARAMS_NEW]);
+      await load();
+      advance(MINUTE);
+      const { handler } = makeHandlers(load);
+      const out = await handler(messageEvent(source, NEW_ID));
+      expect(out.response.emailMessage, source).toContain("{####}");
+      expect(read, source).toHaveBeenCalledTimes(2);
+    }
+    const { read, load, advance } = setup([PARAMS_OLD, PARAMS_NEW]);
+    await load();
+    advance(MINUTE);
+    const { handler } = makeHandlers(load);
+    await handler(messageEvent("CustomMessage_ForgotPassword", ADMIN_APP_ID, ADMIN_POOL));
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("handler: an unrelated client is refused after at most one re-read per minute", async () => {
+    const { read, load, advance } = setup([PARAMS_OLD, PARAMS_OLD]);
+    await load();
+    advance(MINUTE);
+    const { handler } = makeHandlers(load);
+    for (let i = 0; i < 5; i++) {
+      await expect(handler(messageEvent("CustomMessage_SignUp", APP_ID))).rejects.toThrow(
+        "cognito-messages: the code is sent only for the sign-up client",
+      );
+    }
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+});

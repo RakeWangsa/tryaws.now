@@ -4,7 +4,9 @@ import {
   FRESH_SIGN_IN_MINUTES,
   REFRESH_COOKIE_MAX_AGE_SECONDS,
   REFRESH_WINDOW_SECONDS,
+  CUSTOMER_CLIENT_LINK,
   SIGN_UP_CLIENT_LINK,
+  customerClientFromLink,
   authConfigFromEnv,
   signUpClientFromLink,
 } from "../config";
@@ -127,5 +129,62 @@ describe("signUpClientFromLink", () => {
     }
     expect(messages.size).toBeGreaterThan(0);
     for (const m of messages) expect(m).toMatch(/^auth config: CustomerSignUpClient /);
+  });
+});
+
+// WPU-X12 round 4: the token-issuing customer client has a secret too (so Cognito itself refuses
+// SignUp, Resend and ForgotPassword through it). Its id stays an environment value (the proxy and the
+// token verifier read it); its secret is the property of the SST link CustomerAppClient, and the link's id
+// must be that same client.
+describe("customerClientFromLink", () => {
+  const ID = GOOD.COGNITO_CUSTOMER_CLIENT_ID;
+  const SECRET = "customer0app0client0secret0abcdef";
+
+  it("names the link of the infra component", () => {
+    expect(CUSTOMER_CLIENT_LINK).toBe("CustomerAppClient");
+  });
+
+  it("reads the secret of the link when its id is the client of the pool", () => {
+    expect(customerClientFromLink({ id: ID, secret: SECRET }, ID)).toEqual({
+      clientId: ID,
+      clientSecret: SECRET,
+    });
+  });
+
+  it.each([
+    ["no link", undefined, ID],
+    ["null", null, ID],
+    ["a string", `${ID}:${SECRET}`, ID],
+    ["no secret", { id: ID }, ID],
+    ["an empty secret", { id: ID, secret: "" }, ID],
+    ["a short secret", { id: ID, secret: "abc" }, ID],
+    ["the placeholder", { id: ID, secret: "not-configured" }, ID],
+    ["no id", { secret: SECRET }, ID],
+    ["a malformed id", { id: "has space 1234567890", secret: SECRET }, ID],
+    ["another client's id", { id: "zyxwvutsrq0987654321", secret: SECRET }, ID],
+    ["an unusable expected id", { id: ID, secret: SECRET }, "has space"],
+  ])("fails closed with %s (R16)", (_label, link, expected) => {
+    expect(() => customerClientFromLink(link, expected)).toThrow(TypeError);
+  });
+
+  it("the error text is fixed and holds no value that was passed in", () => {
+    const messages = new Set<string>();
+    for (const link of [
+      { id: ID, secret: "x y" },
+      { id: "zyxwvutsrq0987654321", secret: SECRET },
+      { id: SECRET, secret: 1 },
+    ]) {
+      try {
+        customerClientFromLink(link, ID);
+      } catch (e) {
+        const message = (e as Error).message;
+        for (const value of [ID, SECRET, "zyxwvutsrq0987654321"]) {
+          expect(message).not.toContain(value);
+        }
+        messages.add(message);
+      }
+    }
+    expect(messages.size).toBeGreaterThan(0);
+    for (const m of messages) expect(m).toMatch(/^auth config: CustomerAppClient /);
   });
 });

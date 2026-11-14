@@ -121,11 +121,15 @@ export function web(inputs: WebInputs) {
     // whose link carries its id and secret (SST CognitoUserPoolClient getSSTLink); the server reads it
     // as Resource.CustomerSignUpClient (packages/auth/config.ts signUpClientFromLink). A link, not an
     // environment value: the secret stays in the encrypted link file and out of the function's
-    // configuration, the build output and every client bundle. No other function links it.
+    // configuration, the build output and every client bundle. No other function links it. Round 4: and
+    // the token-issuing customer client, which has a secret too (Resource.CustomerAppClient,
+    // customerClientFromLink); its ID stays the plain environment value below (the proxy and the token
+    // verifier read it), its secret is only in the link.
     link: [
       ...WEB_SECRETS.map((name) => secrets.app[name]),
       secrets.db.web_rw,
       auth.customerSignUpClient,
+      auth.customerClient,
     ],
     environment: {
       TC_STAGE: config.tcStage,

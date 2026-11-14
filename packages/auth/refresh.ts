@@ -1,4 +1,4 @@
-import type { AuthConfig, PoolConfig } from "./config";
+import type { AuthConfig, ClientCredentials, PoolConfig } from "./config";
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -31,11 +31,21 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-// InitiateAuth with REFRESH_TOKEN_AUTH by plain fetch (open point 12): the unsigned public form of
-// the call, for an app client without a secret. No SigV4, no SDK, no secret (R1, R3). The body of an
-// answer is parsed here and never logged or returned; every failure ends as "unavailable" with no
-// text, because an error message could carry the refresh token (R14, R16).
-export function cognitoRefreshPort(pool: PoolConfig, fetchImpl: typeof fetch = fetch): RefreshPort {
+// GetTokensFromRefreshToken by plain fetch (open point 12): the unsigned public form of the call. No
+// SigV4, no SDK (R1, R3). WPU-X12 round 4: the customer app client has a secret (so Cognito itself
+// refuses SignUp, Resend and ForgotPassword through it). The refresh sends the client secret itself in
+// the body, over TLS to the one Cognito endpoint: the REFRESH_TOKEN_AUTH flow of InitiateAuth would need
+// a SECRET_HASH over the user's sub, which is unknown when only the refresh cookie is left (the access
+// cookie expires first, and the refresh token is opaque). The answer has the same AuthenticationResult.
+// VERIFY on staging (JOURNEY WPU-X12 round 4): the call is accepted without AWS credentials for this
+// client, and with refresh token rotation off it returns no new refresh token. The body of an answer
+// is parsed here and never logged or returned; every failure ends as "unavailable" with no text, because
+// an error message could carry the refresh token or the secret (R14, R16).
+export function cognitoRefreshPort(
+  pool: PoolConfig,
+  client: ClientCredentials,
+  fetchImpl: typeof fetch = fetch,
+): RefreshPort {
   const url = `https://cognito-idp.${pool.region}.amazonaws.com/`;
   return {
     async refresh(refreshToken) {
@@ -44,12 +54,12 @@ export function cognitoRefreshPort(pool: PoolConfig, fetchImpl: typeof fetch = f
           method: "POST",
           headers: {
             "Content-Type": "application/x-amz-json-1.1",
-            "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
+            "X-Amz-Target": "AWSCognitoIdentityProviderService.GetTokensFromRefreshToken",
           },
           body: JSON.stringify({
-            AuthFlow: "REFRESH_TOKEN_AUTH",
-            ClientId: pool.clientId,
-            AuthParameters: { REFRESH_TOKEN: refreshToken },
+            ClientId: client.clientId,
+            ClientSecret: client.clientSecret,
+            RefreshToken: refreshToken,
           }),
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
@@ -59,8 +69,10 @@ export function cognitoRefreshPort(pool: PoolConfig, fetchImpl: typeof fetch = f
         if (!body) return UNAVAILABLE;
         if (res.status === 400) {
           const type = body["__type"];
-          // Cognito writes the type bare or as "<namespace>#NotAuthorizedException".
-          return typeof type === "string" && type.endsWith("NotAuthorizedException")
+          // Cognito writes the type bare or as "<namespace>#NotAuthorizedException". A token that was
+          // used up by rotation (RefreshTokenReuseException) is as good as revoked.
+          return typeof type === "string" &&
+            (type.endsWith("NotAuthorizedException") || type.endsWith("RefreshTokenReuseException"))
             ? REJECTED
             : UNAVAILABLE;
         }

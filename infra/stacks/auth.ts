@@ -138,9 +138,17 @@ export function auth(config: StageConfig) {
     transform: {
       // Transform<cognito.UserPoolClientArgs> (components/aws/cognito-user-pool-client.ts).
       client: (args: aws.cognito.UserPoolClientArgs) => {
-        // No client secret: the Next.js server uses the SRP or password flow of the SDK.
+        // WPU-X12 round 4 (security review, medium): this client HAS a secret. Without one, anyone who
+        // knows its id could call ForgotPassword directly at Cognito and tell an existing address (the
+        // guard trigger refuses: UserLambdaValidationException) from an unknown one (200, because
+        // preventUserExistenceErrors masks it): an enumeration oracle. With a secret Cognito itself
+        // refuses SignUp, Resend and ForgotPassword through this client for anyone who does not hold it,
+        // and the triggers are defence in depth. Every customer call is made by the Next.js server (the
+        // id is only in its environment, nothing is NEXT_PUBLIC), which holds the secret as an SST link
+        // (web.ts) and sends SECRET_HASH (sign-in), ClientSecret (refresh, revoke): packages/auth.
+        // Replacing the client changes its id and ends every session: acceptable before launch.
         // VERIFY: transform.client key of CognitoUserPool.addClient and the auth flows 6.1 needs.
-        args.generateSecret = false;
+        args.generateSecret = true;
         // The platform identifies users by `sub` (customers.cognito_sub), never by e-mail. The app
         // client may write only harmless profile attributes. E-mail and phone changes go through the
         // app's fresh sign-in and new verification (AccountPorts, apps/web/server/settings-actions.ts)

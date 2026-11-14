@@ -63,34 +63,53 @@ export function adminAuthConfigFromEnv(
 // secret, so only the web server, which knows the secret, can call SignUp, ConfirmSignUp and
 // ResendConfirmationCode with it. The token-issuing customer client may write only name, so a stolen
 // customer access token cannot change the e-mail (the login name and recovery channel) at Cognito.
-export interface SignUpClientConfig {
+// Round 4: the token-issuing customer client has a secret too (CustomerAppClient), so Cognito itself
+// refuses SignUp, Resend and ForgotPassword through it for anyone who does not hold the secret.
+export interface ClientCredentials {
   readonly clientId: string;
   readonly clientSecret: string;
 }
+export type SignUpClientConfig = ClientCredentials;
 
-/** The name of the SST link (the Cognito client component) that carries `id` and `secret`. */
+/** The names of the SST links (the Cognito client components) that carry `id` and `secret`. */
 export const SIGN_UP_CLIENT_LINK = "CustomerSignUpClient";
+export const CUSTOMER_CLIENT_LINK = "CustomerAppClient";
 
 // Cognito generates secrets of lowercase letters and digits; a custom one is [\w+]{24,64}
 // (CreateUserPoolClient, ClientSecret). Anything else is a wrong value, never a usable one.
 const CLIENT_SECRET = /^[A-Za-z0-9_+]{24,128}$/;
 
-// The id and the secret from the properties of the linked client component (SST CognitoUserPoolClient
+// The id and the secret from the properties of a linked client component (SST CognitoUserPoolClient
 // getSSTLink: { id, secret }). The link is a parameter: the caller reads it through @tc/db/links, so this
 // file loads no SDK. Missing or malformed is an error with a fixed text, which holds neither value
 // (R3, R14, R16); the caller then has no sign-up and the screens say "not available".
-export function signUpClientFromLink(link: unknown): SignUpClientConfig {
+function credentialsFromLink(link: unknown, label: string): ClientCredentials {
   const props =
     typeof link === "object" && link !== null ? (link as Record<string, unknown>) : undefined;
   const clientId = props?.["id"];
   const clientSecret = props?.["secret"];
   if (typeof clientId !== "string" || !CLIENT_ID.test(clientId)) {
-    throw new TypeError("auth config: CustomerSignUpClient id is missing or malformed");
+    throw new TypeError(`auth config: ${label} id is missing or malformed`);
   }
   if (typeof clientSecret !== "string" || !CLIENT_SECRET.test(clientSecret)) {
-    throw new TypeError("auth config: CustomerSignUpClient secret is missing or malformed");
+    throw new TypeError(`auth config: ${label} secret is missing or malformed`);
   }
   return { clientId, clientSecret };
+}
+
+export function signUpClientFromLink(link: unknown): ClientCredentials {
+  return credentialsFromLink(link, SIGN_UP_CLIENT_LINK);
+}
+
+// The customer client's secret from its link. Its id stays an environment value (the proxy and the
+// token verifier read COGNITO_CUSTOMER_CLIENT_ID), so the link must name that same client: a link of
+// another client would sign people in with the wrong secret and is refused.
+export function customerClientFromLink(link: unknown, expectedClientId: string): ClientCredentials {
+  const found = credentialsFromLink(link, CUSTOMER_CLIENT_LINK);
+  if (found.clientId !== expectedClientId) {
+    throw new TypeError(`auth config: ${CUSTOMER_CLIENT_LINK} id is not the customer client`);
+  }
+  return found;
 }
 
 // The environment is a parameter so the package never reads process.env on its own. Error texts are

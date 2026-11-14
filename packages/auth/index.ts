@@ -32,10 +32,12 @@ export type { AuthRuntimeLike } from "./request";
 export {
   authConfigFromEnv,
   FRESH_SIGN_IN_MINUTES,
+  CUSTOMER_CLIENT_LINK,
   SIGN_UP_CLIENT_LINK,
+  customerClientFromLink,
   signUpClientFromLink,
 } from "./config";
-export type { AuthConfig, PoolConfig, SignUpClientConfig } from "./config";
+export type { AuthConfig, ClientCredentials, PoolConfig, SignUpClientConfig } from "./config";
 export {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -54,6 +56,7 @@ export type { SignInDeps, SignedIn } from "./sign-in";
 export { registerAccount } from "./register";
 export type { AccountRegistered, RegisterDeps } from "./register";
 export { cognitoIdentityProvider } from "./cognito-identity";
+export type { IdpFact } from "./cognito-identity";
 export type {
   IdentityProvider,
   IdpFailure,

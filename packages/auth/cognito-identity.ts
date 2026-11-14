@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import type { PoolConfig, SignUpClientConfig } from "./config";
+import type { ClientCredentials, PoolConfig } from "./config";
 import type {
   IdentityProvider,
   IdpFailure,
@@ -9,14 +9,15 @@ import type {
 } from "./identity";
 
 // The customer pool's public, unsigned operations by plain fetch (open points 1 and 2): no AWS SDK,
-// no credentials, no SigV4, no SRP (R1, R3, R17). Two app clients (WPU-X12):
-// - the token-issuing customer client (no secret, writeAttributes ["name"]) for sign-in and the token
-//   revocation (a refresh token belongs to the client that issued it);
-// - the server-only sign-up client (with a secret, the only client that may write email, name and
-//   locale) for SignUp, ConfirmSignUp, ResendConfirmationCode and (round 3) ForgotPassword and
-//   ConfirmForgotPassword, each with its SecretHash. The secret
-//   is used only inside secretHash and is never sent, logged or returned; Node's own HMAC, so no new
-//   dependency (R17). Every
+// no credentials, no SigV4, no SRP (R1, R3, R17). Two app clients, both with a secret (WPU-X12):
+// - the token-issuing customer client (writeAttributes ["name"]) for sign-in (with a SECRET_HASH) and the
+//   token revocation (a refresh token belongs to the client that issued it; RevokeToken takes the
+//   ClientSecret itself, there is no hash form of it). Round 4: it has a secret, so Cognito itself
+//   refuses SignUp, Resend and ForgotPassword through it for anyone who does not hold the secret;
+// - the server-only sign-up client (the only client that may write email, name and locale) for SignUp,
+//   ConfirmSignUp, ResendConfirmationCode and (round 3) ForgotPassword and ConfirmForgotPassword, each
+//   with its SecretHash. A secret is used inside secretHash, and for RevokeToken only; it is never
+//   logged or returned; Node's own HMAC, so no new dependency (R17). Every
 // answer is parsed here and never logged or returned: a body or an error text can carry a password, a
 // code or a token, so every failure ends as a bare kind and no text of it is kept (R14). Unknown
 // shapes, statuses, timeouts and oversized bodies are "unavailable" (R16).
@@ -65,6 +66,10 @@ const SEND: Fold = new Map<string, IdpFailure | "ok">([
   ["InvalidParameterException", "ok"],
   ["NotAuthorizedException", "ok"],
   ["CodeDeliveryFailureException", "ok"],
+  // Round 4: the trigger of functions/cognito-messages refuses a code for a client that may not ask for
+  // it (an existing address asked through the wrong client). The page must not tell it from an unknown
+  // address; it is a fact for an alarm instead (the observer below).
+  ["UserLambdaValidationException", "ok"],
   ...LIMITS,
 ]);
 const SIGN_UP: Fold = new Map<string, IdpFailure | "ok">([
@@ -101,15 +106,29 @@ export function secretHash(clientSecret: string, username: string, clientId: str
     .digest("base64");
 }
 
+// A fact the adapter reports to its caller without keeping it: the operation and a fixed kind, never an
+// address or a text of the answer (R14).
+export interface IdpFact {
+  readonly op: "forgotPassword" | "resendConfirmationCode";
+  readonly kind: "trigger_refused";
+}
+
+const OBSERVED_OPS: Readonly<Record<string, IdpFact["op"]>> = {
+  ForgotPassword: "forgotPassword",
+  ResendConfirmationCode: "resendConfirmationCode",
+};
+
 export function cognitoIdentityProvider(
   pool: PoolConfig,
-  signUpClient: SignUpClientConfig,
+  clients: { readonly signUp: ClientCredentials; readonly customer: ClientCredentials },
   fetchImpl: typeof fetch = fetch,
+  observe?: (fact: IdpFact) => void,
 ): IdentityProvider {
   const url = `https://cognito-idp.${pool.region}.amazonaws.com/`;
-  const clientId = pool.clientId;
-  const signUpClientId = signUpClient.clientId;
-  const signUpSecret = signUpClient.clientSecret;
+  const clientId = clients.customer.clientId;
+  const customerSecret = clients.customer.clientSecret;
+  const signUpClientId = clients.signUp.clientId;
+  const signUpSecret = clients.signUp.clientSecret;
 
   // The client fields of a sign-up call: the sign-up client and the hash for this username. They
   // follow the default ClientId in the body, so they replace it.
@@ -169,6 +188,21 @@ export function cognitoIdentityProvider(
     const answer = await post(target, body);
     if (answer === null) return unavailable();
     if (answer.status === 200) return success(true as const);
+    // A refusing trigger is folded to "ok" below; the observer hears of it, and nothing it does can
+    // change the answer.
+    const op = OBSERVED_OPS[target];
+    if (
+      op !== undefined &&
+      observe !== undefined &&
+      answer.status === 400 &&
+      typeOf(answer.body) === "UserLambdaValidationException"
+    ) {
+      try {
+        observe({ op, kind: "trigger_refused" });
+      } catch {
+        // an observer never changes the result
+      }
+    }
     return folded(answer, table) ?? unavailable();
   }
 
@@ -213,7 +247,11 @@ export function cognitoIdentityProvider(
     async signIn(i): Promise<IdpResult<SignInOutcome>> {
       const answer = await post("InitiateAuth", {
         AuthFlow: "USER_PASSWORD_AUTH",
-        AuthParameters: { USERNAME: i.email, PASSWORD: i.password },
+        AuthParameters: {
+          USERNAME: i.email,
+          PASSWORD: i.password,
+          SECRET_HASH: secretHash(customerSecret, i.email, clientId),
+        },
       });
       if (answer === null) return unavailable();
       if (answer.status === 200) {
@@ -273,6 +311,8 @@ export function cognitoIdentityProvider(
         CONFIRM_RESET,
       ),
 
-    revokeRefreshToken: (refreshToken) => simple("RevokeToken", { Token: refreshToken }, REVOKE),
+    // RevokeToken has no hash form: the client secret itself, over TLS, to the one Cognito endpoint.
+    revokeRefreshToken: (refreshToken) =>
+      simple("RevokeToken", { ClientSecret: customerSecret, Token: refreshToken }, REVOKE),
   };
 }

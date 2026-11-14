@@ -1,4 +1,4 @@
-import type { PoolConfig, SignUpClientConfig } from "../config";
+import type { ClientCredentials, PoolConfig } from "../config";
 
 // One JSON answer per documented Cognito shape. Nothing here is a real token or a real pool.
 export const POOL: PoolConfig = {
@@ -9,10 +9,19 @@ export const POOL: PoolConfig = {
 
 // WPU-X12: the server-only sign-up client (a second app client with a secret). The values are the
 // example of the Cognito API reference (CreateUserPoolClient, sample response), not a real client.
-export const SIGN_UP: SignUpClientConfig = {
+export const SIGN_UP: ClientCredentials = {
   clientId: "1example23456789",
   clientSecret: "13ka4h7u28d9oo44tqpq9djqsfvhvu8rk4d2ighvpu0k8fj1c2r9",
 };
+
+// WPU-X12 round 4: the token-issuing customer client now has a secret too (a made-up value). Its id is
+// the pool's client id.
+export const CUSTOMER: ClientCredentials = {
+  clientId: POOL.clientId,
+  clientSecret: "customer0app0client0secret0abcdef",
+};
+
+export const CLIENTS = { signUp: SIGN_UP, customer: CUSTOMER } as const;
 
 export const PLANTED = {
   password: "P1anted-Passw0rd!x",
