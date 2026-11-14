@@ -1,4 +1,5 @@
-import type { PoolConfig } from "./config";
+import { createHmac } from "node:crypto";
+import type { PoolConfig, SignUpClientConfig } from "./config";
 import type {
   IdentityProvider,
   IdpFailure,
@@ -8,7 +9,13 @@ import type {
 } from "./identity";
 
 // The customer pool's public, unsigned operations by plain fetch (open points 1 and 2): no AWS SDK,
-// no credentials, no SigV4, no SRP, no secret (R1, R3, R17). The app client has no secret. Every
+// no credentials, no SigV4, no SRP (R1, R3, R17). Two app clients (WPU-X12):
+// - the token-issuing customer client (no secret, writeAttributes ["name"]) for sign-in, the password
+//   reset and the token revocation, none of which writes an attribute;
+// - the server-only sign-up client (with a secret, the only client that may write email, name and
+//   locale) for SignUp, ConfirmSignUp and ResendConfirmationCode, each with its SecretHash. The secret
+//   is used only inside secretHash and is never sent, logged or returned; Node's own HMAC, so no new
+//   dependency (R17). Every
 // answer is parsed here and never logged or returned: a body or an error text can carry a password, a
 // code or a token, so every failure ends as a bare kind and no text of it is kept (R14). Unknown
 // shapes, statuses, timeouts and oversized bodies are "unavailable" (R16).
@@ -85,12 +92,30 @@ function typeOf(body: Record<string, unknown>): string | undefined {
   return typeof type === "string" ? type.slice(type.lastIndexOf("#") + 1) : undefined;
 }
 
+// AWS developer guide, "Computing secret hash values":
+// Base64(HMAC_SHA256(key = client secret, message = username + client id)).
+export function secretHash(clientSecret: string, username: string, clientId: string): string {
+  return createHmac("sha256", clientSecret)
+    .update(username + clientId)
+    .digest("base64");
+}
+
 export function cognitoIdentityProvider(
   pool: PoolConfig,
+  signUpClient: SignUpClientConfig,
   fetchImpl: typeof fetch = fetch,
 ): IdentityProvider {
   const url = `https://cognito-idp.${pool.region}.amazonaws.com/`;
   const clientId = pool.clientId;
+  const signUpClientId = signUpClient.clientId;
+  const signUpSecret = signUpClient.clientSecret;
+
+  // The client fields of a sign-up call: the sign-up client and the hash for this username. They
+  // follow the default ClientId in the body, so they replace it.
+  const viaSignUpClient = (username: string): Record<string, unknown> => ({
+    ClientId: signUpClientId,
+    SecretHash: secretHash(signUpSecret, username, signUpClientId),
+  });
 
   // One POST. Never throws and never rejects; null is "unavailable". The timer is ours as well as the
   // signal's, so a fetch that ignores its signal still ends after TIMEOUT_MS.
@@ -149,6 +174,7 @@ export function cognitoIdentityProvider(
   return {
     async signUp(i): Promise<IdpResult<SignUpOutcome>> {
       const answer = await post("SignUp", {
+        ...viaSignUpClient(i.email),
         Username: i.email,
         Password: i.password,
         // No phone_number: the phone is verified by our own OTP (open point 15).
@@ -174,9 +200,14 @@ export function cognitoIdentityProvider(
     },
 
     confirmSignUp: (i) =>
-      simple("ConfirmSignUp", { Username: i.email, ConfirmationCode: i.code }, CONFIRM),
+      simple(
+        "ConfirmSignUp",
+        { ...viaSignUpClient(i.email), Username: i.email, ConfirmationCode: i.code },
+        CONFIRM,
+      ),
 
-    resendConfirmationCode: (email) => simple("ResendConfirmationCode", { Username: email }, SEND),
+    resendConfirmationCode: (email) =>
+      simple("ResendConfirmationCode", { ...viaSignUpClient(email), Username: email }, SEND),
 
     async signIn(i): Promise<IdpResult<SignInOutcome>> {
       const answer = await post("InitiateAuth", {

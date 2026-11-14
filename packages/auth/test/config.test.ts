@@ -4,7 +4,9 @@ import {
   FRESH_SIGN_IN_MINUTES,
   REFRESH_COOKIE_MAX_AGE_SECONDS,
   REFRESH_WINDOW_SECONDS,
+  SIGN_UP_CLIENT_LINK,
   authConfigFromEnv,
+  signUpClientFromLink,
 } from "../config";
 
 const GOOD = {
@@ -74,5 +76,56 @@ describe("authConfigFromEnv", () => {
     expect(REFRESH_COOKIE_MAX_AGE_SECONDS).toBe(2_592_000);
     expect(FRESH_SIGN_IN_MINUTES).toBe(10);
     expect(CLOCK_SKEW_SECONDS).toBe(60);
+  });
+});
+
+// WPU-X12: the server-only sign-up client reaches the web server function as the SST link of the
+// Cognito client component (properties id and secret), never as an environment variable.
+describe("signUpClientFromLink", () => {
+  const ID = "1example23456789";
+  const SECRET = "13ka4h7u28d9oo44tqpq9djqsfvhvu8rk4d2ighvpu0k8fj1c2r9";
+
+  it("names the link of the infra component", () => {
+    expect(SIGN_UP_CLIENT_LINK).toBe("CustomerSignUpClient");
+  });
+
+  it("reads the id and the secret of the link", () => {
+    expect(signUpClientFromLink({ id: ID, secret: SECRET })).toEqual({
+      clientId: ID,
+      clientSecret: SECRET,
+    });
+  });
+
+  it.each([
+    ["no link", undefined],
+    ["null", null],
+    ["a string", `${ID}:${SECRET}`],
+    ["no secret", { id: ID }],
+    ["an empty secret", { id: ID, secret: "" }],
+    ["a short secret", { id: ID, secret: "abc" }],
+    ["a secret with spaces", { id: ID, secret: `${SECRET.slice(0, 30)} ${SECRET.slice(31)}` }],
+    ["the placeholder", { id: ID, secret: "not-configured" }],
+    ["a non-string secret", { id: ID, secret: 42 }],
+    ["no id", { secret: SECRET }],
+    ["a malformed id", { id: "has space 1234567890", secret: SECRET }],
+  ])("fails closed with %s (R16)", (_label, link) => {
+    expect(() => signUpClientFromLink(link)).toThrow(TypeError);
+  });
+
+  it("the error text is fixed and holds no value that was passed in", () => {
+    const messages = new Set<string>();
+    for (const link of [{ id: ID, secret: "x y" }, { id: SECRET, secret: 1 }, { id: "bad id" }]) {
+      try {
+        signUpClientFromLink(link);
+      } catch (e) {
+        const message = (e as Error).message;
+        expect(message).not.toContain(ID);
+        expect(message).not.toContain(SECRET);
+        expect(message).not.toContain("bad id");
+        messages.add(message);
+      }
+    }
+    expect(messages.size).toBeGreaterThan(0);
+    for (const m of messages) expect(m).toMatch(/^auth config: CustomerSignUpClient /);
   });
 });

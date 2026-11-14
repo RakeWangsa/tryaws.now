@@ -58,6 +58,41 @@ export function adminAuthConfigFromEnv(
   };
 }
 
+// WPU-X12: the server-only sign-up client of the customer pool (infra/stacks/auth.ts
+// CustomerSignUpClient). It is the only client that may write email, name and locale, and it has a
+// secret, so only the web server, which knows the secret, can call SignUp, ConfirmSignUp and
+// ResendConfirmationCode with it. The token-issuing customer client may write only name, so a stolen
+// customer access token cannot change the e-mail (the login name and recovery channel) at Cognito.
+export interface SignUpClientConfig {
+  readonly clientId: string;
+  readonly clientSecret: string;
+}
+
+/** The name of the SST link (the Cognito client component) that carries `id` and `secret`. */
+export const SIGN_UP_CLIENT_LINK = "CustomerSignUpClient";
+
+// Cognito generates secrets of lowercase letters and digits; a custom one is [\w+]{24,64}
+// (CreateUserPoolClient, ClientSecret). Anything else is a wrong value, never a usable one.
+const CLIENT_SECRET = /^[A-Za-z0-9_+]{24,128}$/;
+
+// The id and the secret from the properties of the linked client component (SST CognitoUserPoolClient
+// getSSTLink: { id, secret }). The link is a parameter: the caller reads it through @tc/db/links, so this
+// file loads no SDK. Missing or malformed is an error with a fixed text, which holds neither value
+// (R3, R14, R16); the caller then has no sign-up and the screens say "not available".
+export function signUpClientFromLink(link: unknown): SignUpClientConfig {
+  const props =
+    typeof link === "object" && link !== null ? (link as Record<string, unknown>) : undefined;
+  const clientId = props?.["id"];
+  const clientSecret = props?.["secret"];
+  if (typeof clientId !== "string" || !CLIENT_ID.test(clientId)) {
+    throw new TypeError("auth config: CustomerSignUpClient id is missing or malformed");
+  }
+  if (typeof clientSecret !== "string" || !CLIENT_SECRET.test(clientSecret)) {
+    throw new TypeError("auth config: CustomerSignUpClient secret is missing or malformed");
+  }
+  return { clientId, clientSecret };
+}
+
 // The environment is a parameter so the package never reads process.env on its own. Error texts are
 // fixed: a rejected value may be a mistyped secret and must not reach a log (R14, R16).
 export function authConfigFromEnv(env: Readonly<Record<string, string | undefined>>): AuthConfig {
