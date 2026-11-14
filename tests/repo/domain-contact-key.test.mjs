@@ -203,8 +203,6 @@ describe("WPU-X10 review: the policy of the domain-contact key", () => {
       tight(`{ actions: ["kms:Decrypt"], resources: [storage.domainContactKey.arn], ${cond} }`),
     );
     // the stack output of the web role policies keeps the condition
-    expect(web).toContain(
-      "...(p.conditions === undefined ? {} : { Condition: conditionOf(p.conditions) })",
-    );
+    expect(web).toContain("Condition: $output(p.conditions).apply((list) =>");
   });
 });

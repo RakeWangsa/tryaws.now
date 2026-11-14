@@ -78,18 +78,6 @@ function cdnTransform(
   };
 }
 
-// The IAM form of the `conditions` of a FunctionPermissionArgs: { test: { variable: values } }. NOT TYPE-CHECKED.
-function conditionOf(conditions: unknown) {
-  return $output(conditions).apply((list) =>
-    Object.fromEntries(
-      (list as { test: string; variable: string; values: string[] }[]).map((c) => [
-        c.test,
-        { [c.variable]: c.values },
-      ]),
-    ),
-  );
-}
-
 export function web(inputs: WebInputs) {
   const { config, net, db, secrets, queues, storage, auth, waf, workers } = inputs;
   const stage = config.stage;
@@ -293,7 +281,15 @@ export function web(inputs: WebInputs) {
         Action: p.actions,
         Resource: p.resources,
         // WPU-X10 review: a grant with conditions (the domain-contact key) keeps them in the output.
-        ...(p.conditions === undefined ? {} : { Condition: conditionOf(p.conditions) }),
+        // The IAM form of FunctionPermissionArgs.conditions: { test: { variable: values } }; $output
+        // unwraps every nested Input, so the list is plain values here.
+        ...(p.conditions === undefined
+          ? {}
+          : {
+              Condition: $output(p.conditions).apply((list) =>
+                Object.fromEntries(list.map((c) => [c.test, { [c.variable]: c.values }])),
+              ),
+            }),
       })),
     }),
   );
