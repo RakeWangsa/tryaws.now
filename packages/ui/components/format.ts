@@ -71,14 +71,23 @@ export function formatUsd(text: string, o: { locale: Locale; numerals?: Numerals
   return `$${formatDecimalText(text, { ...o, minFraction: 2 })}`;
 }
 
+// PostgreSQL timestamptz text, as raw SQL returns it: "2026-11-14 12:15:52.469566+00" (a space, up to six
+// fraction digits, an offset of hours only or hours and minutes). Staging 2026-11-14: refused before.
+const PG_TIMESTAMPTZ =
+  /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)([+-]\d{2})(?::?(\d{2}))?$/;
+
 /** Parses a Date or an ISO string that carries Z or an offset; anything else is a defect (R16). */
 export function toDate(value: Date | string): Date {
   let date: Date;
   if (typeof value === "string") {
-    if (!ZONE_SUFFIX.test(value)) {
+    const pg = PG_TIMESTAMPTZ.exec(value);
+    if (pg !== null) {
+      date = new Date(`${pg[1]}T${pg[2]}${pg[3]}:${pg[4] ?? "00"}`);
+    } else if (!ZONE_SUFFIX.test(value)) {
       throw new RangeError(`formatDate: ${JSON.stringify(value)} has no Z or offset`);
+    } else {
+      date = new Date(value);
     }
-    date = new Date(value);
   } else {
     date = value;
   }

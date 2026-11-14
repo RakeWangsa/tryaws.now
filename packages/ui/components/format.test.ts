@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TAKA, formatDate, formatMoney, formatUsd } from "./format";
+import { TAKA, formatDate, formatMoney, formatUsd, toDate } from "./format";
 
 const en = { locale: "en" as const };
 const bn = { locale: "bn" as const };
@@ -76,5 +76,20 @@ describe("formatUsd (WPU-Y4)", () => {
     expect(() => formatUsd("1e3", { locale: "en" })).toThrow(RangeError);
     expect(() => formatUsd("-1", { locale: "en" })).toThrow(RangeError);
     expect(() => formatUsd(5 as never, { locale: "en" })).toThrow(RangeError);
+  });
+});
+
+// Staging 2026-11-14: the admin customers page crashed. Raw SQL returns timestamptz as PostgreSQL text
+// ("2026-11-14 12:15:52.469566+00": a space, microseconds, an hour-only offset), which toDate refused.
+describe("toDate accepts PostgreSQL timestamptz text", () => {
+  it("reads a space separator, microseconds and a +HH offset", () => {
+    expect(toDate("2026-11-14 12:15:52.469566+00").toISOString()).toBe("2026-11-14T12:15:52.469Z");
+    expect(toDate("2026-11-14 18:15:52+06").toISOString()).toBe("2026-11-14T12:15:52.000Z");
+    expect(toDate("2026-11-14 06:45:00-05:30").toISOString()).toBe("2026-11-14T12:15:00.000Z");
+  });
+
+  it("still refuses a moment without a zone (R16)", () => {
+    expect(() => toDate("2026-11-14 12:15:52")).toThrow(RangeError);
+    expect(() => toDate("2026-11-14T12:15:52.469566")).toThrow(RangeError);
   });
 });
