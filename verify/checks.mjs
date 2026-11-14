@@ -4030,6 +4030,13 @@ TASKS["WPU-X9"] = [specSync, baselineSync, lint, typecheck, format, core, db, ad
 // waits for the owner's approval before merge.
 TASKS["WPU-X2"] = [specSync, baselineSync, lint, typecheck, format, web, repo];
 
+// WPU-X12 (staging 2026-11-14, sign-up refused with "unauthorized attribute"): a server-only Cognito
+// sign-up client with a secret is the only client that may write email; the token-issuing customer client
+// keeps writeAttributes ["name"]. auth runs the SecretHash vector, the routing of each call to its client and
+// the fail-closed link reader; web the runtime without or with a malformed link; repo the infra rules (only
+// the sign-up client writes email, has a secret, and is linked to the web server function only).
+TASKS["WPU-X12"] = [specSync, baselineSync, lint, typecheck, format, auth, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

@@ -271,16 +271,84 @@ describe("Cognito attribute writes", () => {
     expect(auth).not.toMatch(/attributesRequireVerificationBeforeUpdate:/);
   });
 
-  it("gives the clients an explicit writeAttributes allowlist without e-mail or phone", () => {
-    expect(auth).toContain('args.writeAttributes = ["name"]');
-    expect(auth).toContain("args.writeAttributes = []");
+  // WPU-X12: three clients. The two token-issuing ones (customer and admin) write no e-mail, phone or
+  // custom attribute: a customer access token must not be able to change the login name and recovery
+  // channel at Cognito (UpdateUserAttributes, VerifyUserAttribute) past the app's fresh sign-in, rate
+  // limit and audit. Only the server-only sign-up client, which has a secret and no sign-in flow, may
+  // write email (with name and locale) for SignUp.
+  const customerApp = between(
+    auth,
+    'customers.addClient("CustomerAppClient"',
+    'customers.addClient("CustomerSignUpClient"',
+  );
+  const signUpClient = between(
+    auth,
+    'customers.addClient("CustomerSignUpClient"',
+    'new sst.aws.CognitoUserPool("AdminPool"',
+  );
+  const adminApp = between(auth, 'admins.addClient("AdminAppClient"', "return {");
+  const writes = (block) => /args\.writeAttributes = (\[[^\]]*\])/.exec(block)?.[1];
+
+  it("gives the clients an explicit writeAttributes allowlist; e-mail only on the sign-up client", () => {
+    expect(writes(customerApp)).toBe('["name"]');
+    expect(writes(adminApp)).toBe("[]");
+    expect(writes(signUpClient)).toBe('["email", "name", "locale"]');
     const lists = [...auth.matchAll(/args\.writeAttributes = (\[[^\]]*\])/g)].map((m) => m[1]);
-    expect(lists).toHaveLength(2);
-    for (const list of lists) expect(list).not.toMatch(/email|phone|custom:/);
+    expect(lists).toHaveLength(3);
+    for (const list of [writes(customerApp), writes(adminApp)]) {
+      expect(list).not.toMatch(/email|phone|custom:/);
+    }
+    expect(lists.filter((list) => /email/.test(list))).toEqual([writes(signUpClient)]);
+    expect(writes(signUpClient)).not.toMatch(/phone|custom:/);
+    // exactly three clients in the stack
+    expect([...auth.matchAll(/\.addClient\("/g)]).toHaveLength(3);
     // the comment records why: users are identified by sub, not by e-mail
     expect(readFileSync(resolve(root, "infra/stacks/auth.ts"), "utf8")).toContain(
       "customers.cognito_sub",
     );
+  });
+
+  it("gives only the sign-up client a secret, no sign-in flow, no OAuth and masked existence errors", () => {
+    expect(signUpClient).toContain("args.generateSecret = true");
+    expect(customerApp).toContain("args.generateSecret = false");
+    expect(adminApp).toContain("args.generateSecret = false");
+    expect([...auth.matchAll(/args\.generateSecret = true/g)]).toHaveLength(1);
+    // Without a list Cognito allows refresh, SRP and custom auth (CreateUserPoolClient,
+    // ExplicitAuthFlows); the sign-up client gets refresh only, so no flow can sign anyone in with it.
+    const flows = /args\.explicitAuthFlows = \[([^\]]*)\]/.exec(signUpClient);
+    expect(flows, "explicitAuthFlows of the sign-up client").not.toBeNull();
+    expect([...(flows?.[1] ?? "").matchAll(/"([A-Z_]+)"/g)].map((m) => m[1])).toEqual([
+      "ALLOW_REFRESH_TOKEN_AUTH",
+    ]);
+    expect(signUpClient).toContain('args.preventUserExistenceErrors = "ENABLED"');
+    expect(signUpClient).toContain("args.allowedOauthFlowsUserPoolClient = false");
+    expect(signUpClient).toContain("args.allowedOauthFlows = []");
+    expect(signUpClient).toContain("args.allowedOauthScopes = []");
+    expect(signUpClient).toContain("args.callbackUrls = []");
+    expect(signUpClient).toContain('args.readAttributes = ["email", "name", "locale"]');
+    expect(auth).toMatch(/return \{[^}]*\bcustomerSignUpClient\b[^}]*\}/);
+  });
+
+  it("hands the sign-up client (id and secret) to the web server function only, as an SST link", () => {
+    const customer = between(web, 'new sst.aws.Nextjs("Web"', 'new sst.aws.Nextjs("Admin"');
+    const admin = between(web, 'new sst.aws.Nextjs("Admin"');
+    expect(customer).toContain(
+      "link: [ ...WEB_SECRETS.map((name) => secrets.app[name]), secrets.db.web_rw, auth.customerSignUpClient]",
+    );
+    expect([...web.matchAll(/customerSignUpClient/g)]).toHaveLength(1);
+    expect(admin).not.toContain("customerSignUpClient");
+    // never as a plain environment value, never public, never the bare secret output
+    expect(web).not.toMatch(/customerSignUpClient\.(id|secret)/);
+    expect(web).not.toMatch(/NEXT_PUBLIC_[A-Z_]*COGNITO/);
+    for (const [name, text] of Object.entries({ workers, alarms, messaging, storage, secrets })) {
+      expect(text, name).not.toContain("customerSignUpClient");
+      expect(text, name).not.toContain("CustomerSignUpClient");
+    }
+    // the reader names the same link as the component
+    expect(source("packages/auth/config.ts")).toContain(
+      'SIGN_UP_CLIENT_LINK = "CustomerSignUpClient"',
+    );
+    expect(auth).toContain('customers.addClient("CustomerSignUpClient"');
   });
 });
 

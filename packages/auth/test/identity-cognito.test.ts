@@ -1,11 +1,13 @@
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cognitoIdentityProvider } from "../cognito-identity";
+import { cognitoIdentityProvider, secretHash } from "../cognito-identity";
 import type { IdentityProvider, IdpResult } from "../identity";
 import {
   PLANTED,
   POOL,
+  SIGN_UP,
   challenge,
   cognitoError,
   emptyOk,
@@ -65,10 +67,69 @@ const happy: Record<string, () => Response> = {
 
 async function run(op: string, answer: () => Response | Promise<Response>) {
   const { fetchImpl, calls } = recording(answer);
-  const provider = cognitoIdentityProvider(POOL, fetchImpl);
+  const provider = cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl);
   const result = await OPS[op]!.call(provider);
   return { result, calls };
 }
+
+// WPU-X12: the three operations that may write attributes or confirm an address go through the
+// server-only sign-up client with a SecretHash; everything else stays on the token-issuing client.
+const SIGN_UP_OPS = ["signUp", "confirmSignUp", "resendConfirmationCode"];
+const clientOf = (op: string) => (SIGN_UP_OPS.includes(op) ? SIGN_UP.clientId : POOL.clientId);
+// AWS developer guide, "Computing secret hash values": Base64(HMAC_SHA256(secret, username + clientId)).
+const EXPECTED_HASH = createHmac("sha256", SIGN_UP.clientSecret)
+  .update(EMAIL + SIGN_UP.clientId)
+  .digest("base64");
+
+describe("the secret hash", () => {
+  it("is the documented vector (openssl dgst -sha256 -hmac, base64)", () => {
+    // echo -n "rahim@example.test1example23456789" | openssl dgst -sha256 -hmac <secret> -binary | base64
+    expect(secretHash(SIGN_UP.clientSecret, EMAIL, SIGN_UP.clientId)).toBe(
+      "YAsnVvfQ7gbfYNyqIQkyG8mH80ncD9d70Z+i7WjGbrE=",
+    );
+    expect(EXPECTED_HASH).toBe("YAsnVvfQ7gbfYNyqIQkyG8mH80ncD9d70Z+i7WjGbrE=");
+  });
+
+  it("changes with the username, the client id and the secret", () => {
+    const base = secretHash(SIGN_UP.clientSecret, EMAIL, SIGN_UP.clientId);
+    expect(secretHash(SIGN_UP.clientSecret, "other@example.test", SIGN_UP.clientId)).not.toBe(base);
+    expect(secretHash(SIGN_UP.clientSecret, EMAIL, POOL.clientId)).not.toBe(base);
+    expect(secretHash(`${SIGN_UP.clientSecret}x`, EMAIL, SIGN_UP.clientId)).not.toBe(base);
+  });
+});
+
+describe("the two clients", () => {
+  it.each(SIGN_UP_OPS)("%s goes through the sign-up client with its SecretHash", async (op) => {
+    const { calls } = await run(op, happy[op]!);
+    expect(calls[0]!.body["ClientId"]).toBe(SIGN_UP.clientId);
+    expect(calls[0]!.body["SecretHash"]).toBe(EXPECTED_HASH);
+  });
+
+  it.each(Object.keys(OPS).filter((op) => !SIGN_UP_OPS.includes(op)))(
+    "%s stays on the token-issuing client and sends no SecretHash",
+    async (op) => {
+      const { calls } = await run(op, happy[op]!);
+      expect(calls[0]!.body["ClientId"]).toBe(POOL.clientId);
+      expect(calls[0]!.body).not.toHaveProperty("SecretHash");
+      expect(calls[0]!.rawBody).not.toContain(SIGN_UP.clientId);
+    },
+  );
+
+  it.each(Object.keys(OPS))("%s never sends the client secret itself", async (op) => {
+    const { calls } = await run(op, happy[op]!);
+    expect(calls[0]!.rawBody).not.toContain(SIGN_UP.clientSecret);
+    expect(JSON.stringify(calls[0]!.headers)).not.toContain(SIGN_UP.clientSecret);
+  });
+
+  it("only the sign-up client is ever sent user attributes", async () => {
+    for (const op of Object.keys(OPS)) {
+      const { calls } = await run(op, happy[op]!);
+      if (calls[0]!.rawBody.includes("UserAttributes")) {
+        expect(calls[0]!.body["ClientId"]).toBe(SIGN_UP.clientId);
+      }
+    }
+  });
+});
 
 describe("the wire", () => {
   it.each(Object.keys(OPS))(
@@ -83,7 +144,7 @@ describe("the wire", () => {
         "Content-Type": "application/x-amz-json-1.1",
         "X-Amz-Target": `AWSCognitoIdentityProviderService.${OPS[op]!.target}`,
       });
-      expect(c.body["ClientId"]).toBe(POOL.clientId);
+      expect(c.body["ClientId"]).toBe(clientOf(op));
       expect(c.hasSignal).toBe(true);
       for (const k of Object.keys(c.headers)) {
         expect(k.toLowerCase()).not.toMatch(
@@ -96,7 +157,8 @@ describe("the wire", () => {
   it("SignUp sends exactly email, name and locale, and the password in the body", async () => {
     const { calls } = await run("signUp", happy["signUp"]!);
     expect(calls[0]!.body).toEqual({
-      ClientId: POOL.clientId,
+      ClientId: SIGN_UP.clientId,
+      SecretHash: EXPECTED_HASH,
       Username: EMAIL,
       Password: NEW_PASSWORD,
       UserAttributes: [
@@ -110,12 +172,14 @@ describe("the wire", () => {
 
   it("the other bodies are exactly the documented ones", async () => {
     expect((await run("confirmSignUp", emptyOk)).calls[0]!.body).toEqual({
-      ClientId: POOL.clientId,
+      ClientId: SIGN_UP.clientId,
+      SecretHash: EXPECTED_HASH,
       Username: EMAIL,
       ConfirmationCode: "123456",
     });
     expect((await run("resendConfirmationCode", emptyOk)).calls[0]!.body).toEqual({
-      ClientId: POOL.clientId,
+      ClientId: SIGN_UP.clientId,
+      SecretHash: EXPECTED_HASH,
       Username: EMAIL,
     });
     expect((await run("signIn", happy["signIn"]!)).calls[0]!.body).toEqual({
@@ -327,11 +391,11 @@ describe("failures of the transport are unavailable", () => {
       expect((await run(op, () => json(200, `{"pad":"${"x".repeat(17_000)}"}`))).result).toEqual(
         unavailable,
       );
-      const throwing = cognitoIdentityProvider(POOL, (() => {
+      const throwing = cognitoIdentityProvider(POOL, SIGN_UP, (() => {
         throw new Error(`boom ${PLANTED.password}`);
       }) as typeof fetch);
       expect(await OPS[op]!.call(throwing)).toEqual(unavailable);
-      const rejecting = cognitoIdentityProvider(POOL, (() =>
+      const rejecting = cognitoIdentityProvider(POOL, SIGN_UP, (() =>
         Promise.reject(new Error(`boom ${PLANTED.password}`))) as typeof fetch);
       expect(await OPS[op]!.call(rejecting)).toEqual(unavailable);
     },
@@ -339,7 +403,11 @@ describe("failures of the transport are unavailable", () => {
 
   it("a fetch that never resolves ends as unavailable after 5 seconds", async () => {
     vi.useFakeTimers();
-    const never = cognitoIdentityProvider(POOL, (() => new Promise(() => {})) as typeof fetch);
+    const never = cognitoIdentityProvider(
+      POOL,
+      SIGN_UP,
+      (() => new Promise(() => {})) as typeof fetch,
+    );
     const pending = OPS["signIn"]!.call(never);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(await pending).toEqual(bad("unavailable"));
@@ -370,7 +438,7 @@ describe("secrets", () => {
     ];
     for (const answer of answers) {
       const { fetchImpl } = recording(answer);
-      const provider = cognitoIdentityProvider(POOL, fetchImpl);
+      const provider = cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl);
       collected.push(inspect(provider, { depth: 6 }));
       collected.push(
         await provider.signUp({
@@ -392,18 +460,26 @@ describe("secrets", () => {
       );
     }
     const all = JSON.stringify(collected);
-    for (const secret of [PLANTED.password, PLANTED.code, PLANTED.session, PLANTED.refreshToken]) {
+    for (const secret of [
+      PLANTED.password,
+      PLANTED.code,
+      PLANTED.session,
+      PLANTED.refreshToken,
+      SIGN_UP.clientSecret,
+    ]) {
       expect(all).not.toContain(secret);
     }
     for (const sink of sinks) expect(sink).not.toHaveBeenCalled();
   });
 
   it("the factory keeps no pool, token or client id where inspect can see it", () => {
-    const provider = cognitoIdentityProvider(POOL, (() =>
+    const provider = cognitoIdentityProvider(POOL, SIGN_UP, (() =>
       Promise.resolve(emptyOk())) as typeof fetch);
     const shown = inspect(provider, { depth: 8, showHidden: true });
     expect(shown).not.toContain(POOL.clientId);
     expect(shown).not.toContain(POOL.userPoolId);
+    expect(shown).not.toContain(SIGN_UP.clientId);
+    expect(shown).not.toContain(SIGN_UP.clientSecret);
   });
 });
 

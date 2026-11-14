@@ -105,12 +105,61 @@ export function auth(config: StageConfig) {
         // app's fresh sign-in and new verification (AccountPorts, apps/web/server/settings-actions.ts)
         // with the server's own credentials, so email, phone_number and every custom attribute are
         // left out. VERIFY: Pulumi aws.cognito.UserPoolClient writeAttributes.
+        // WPU-X12: sign-up goes through CustomerSignUpClient below, so this client needs no email and
+        // no locale. The profile locale lives in the database only (settings-actions.ts updateProfile
+        // writes no Cognito attribute), so nothing writes locale through a customer token.
         args.writeAttributes = ["name"];
         args.explicitAuthFlows = [
           "ALLOW_USER_PASSWORD_AUTH",
           "ALLOW_REFRESH_TOKEN_AUTH",
           "ALLOW_USER_SRP_AUTH",
         ];
+        args.preventUserExistenceErrors = "ENABLED";
+      },
+    },
+  });
+
+  // WPU-X12: the server-only sign-up client. Cognito refused every sign-up through CustomerAppClient
+  // ("A client attempted to write unauthorized attribute", staging 2026-11-14): SignUp writes email,
+  // name and locale. Widening CustomerAppClient instead (the staging-only commit 5c94ac41) would let any
+  // holder of a customer access token call UpdateUserAttributes and VerifyUserAttribute on email
+  // directly at Cognito, past the app's fresh sign-in, rate limit and audit: the e-mail is the login
+  // name and the recovery channel, so a stolen token would become a persistent takeover. This client
+  // has a secret, so only the web server function (the one place the secret is linked, web.ts) can use
+  // it, and no sign-in flow, so it never issues the token that UpdateUserAttributes needs.
+  // packages/auth/cognito-identity.ts sends SignUp, ConfirmSignUp and ResendConfirmationCode through it
+  // with a SecretHash; everything else stays on CustomerAppClient.
+  const customerSignUpClient = customers.addClient("CustomerSignUpClient", {
+    transform: {
+      client: (args: aws.cognito.UserPoolClientArgs) => {
+        args.generateSecret = true;
+        // SignUp writes exactly these three (packages/auth/cognito-identity.ts). No phone (our own OTP),
+        // no custom attribute.
+        args.writeAttributes = ["email", "name", "locale"];
+        // VERIFY (first deploy): that Cognito accepts a read list equal to the write list. The client
+        // issues no token, so the read list only has to cover what it writes.
+        args.readAttributes = ["email", "name", "locale"];
+        // No sign-in: without a list Cognito would allow refresh, SRP and custom auth
+        // (CreateUserPoolClient, ExplicitAuthFlows), and an empty list may read as "no list". Refresh
+        // alone signs no one in, and this client never hands out a refresh token.
+        // VERIFY (first deploy): CreateUserPoolClient accepts ["ALLOW_REFRESH_TOKEN_AUTH"] alone.
+        args.explicitAuthFlows = ["ALLOW_REFRESH_TOKEN_AUTH"];
+        // No OAuth and no managed login: SST's client turns both on with a placeholder callback URL
+        // (components/aws/cognito-user-pool-client.ts); this client is for the user pools API only.
+        args.allowedOauthFlowsUserPoolClient = false;
+        args.allowedOauthFlows = [];
+        args.allowedOauthScopes = [];
+        args.callbackUrls = [];
+        // The shortest validity Cognito allows, should a token ever be issued.
+        args.accessTokenValidity = 5;
+        args.idTokenValidity = 5;
+        args.refreshTokenValidity = 60;
+        args.tokenValidityUnits = {
+          accessToken: "minutes",
+          idToken: "minutes",
+          refreshToken: "minutes",
+        };
+        // ConfirmSignUp and ResendConfirmationCode answer the same for unknown addresses.
         args.preventUserExistenceErrors = "ENABLED";
       },
     },
@@ -161,7 +210,7 @@ export function auth(config: StageConfig) {
     },
   });
 
-  return { customers, customerClient, admins, adminClient, messages };
+  return { customers, customerClient, customerSignUpClient, admins, adminClient, messages };
 }
 
 export type Auth = ReturnType<typeof auth>;

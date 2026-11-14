@@ -29,8 +29,13 @@ export { authenticateCustomer } from "./session";
 export type { SessionOutcome, SessionDeps } from "./session";
 export { authenticateRequest, refreshForProxy, signInDepsFor } from "./request";
 export type { AuthRuntimeLike } from "./request";
-export { authConfigFromEnv, FRESH_SIGN_IN_MINUTES } from "./config";
-export type { AuthConfig, PoolConfig } from "./config";
+export {
+  authConfigFromEnv,
+  FRESH_SIGN_IN_MINUTES,
+  SIGN_UP_CLIENT_LINK,
+  signUpClientFromLink,
+} from "./config";
+export type { AuthConfig, PoolConfig, SignUpClientConfig } from "./config";
 export {
   ACCESS_COOKIE,
   REFRESH_COOKIE,

@@ -58,7 +58,7 @@ async function load() {
   const { envLinks } = await import("@tc/db/links");
   const { linkedSecrets } = await import("./secrets.ts");
   const assembleRuntime = (env: Record<string, string | undefined>) =>
-    runtime.assembleRuntime(env, linkedSecrets(envLinks(env)));
+    runtime.assembleRuntime(env, linkedSecrets(envLinks(env)), envLinks(env));
   return { ...runtime, assembleRuntime };
 }
 
@@ -230,6 +230,11 @@ describe("assembleRuntime: the auth parts", () => {
     COGNITO_CUSTOMER_POOL_ID: "eu-west-1_Abc123XyZ",
     COGNITO_CUSTOMER_CLIENT_ID: "abcdefghij1234567890",
   };
+  // The example client of the Cognito API reference, not a real one (R3).
+  const SIGN_UP_LINK = {
+    SST_RESOURCE_CustomerSignUpClient:
+      '{"id":"1example23456789","secret":"13ka4h7u28d9oo44tqpq9djqsfvhvu8rk4d2ighvpu0k8fj1c2r9"}',
+  };
   const KEYS = {
     SST_RESOURCE_AuthLimitKey:
       '{"type":"sst.sst.Secret","value":"planted-authkey-7777-0123456789abcdef"}',
@@ -253,8 +258,24 @@ describe("assembleRuntime: the auth parts", () => {
     expect((await assembleRuntime({ ...STAGING })).runtime.identity).toBeNull();
     const bad = { COGNITO_CUSTOMER_POOL_ID: "nope", COGNITO_CUSTOMER_CLIENT_ID: "x" };
     expect((await assembleRuntime({ ...STAGING, ...bad })).runtime.identity).toBeNull();
-    const ok = await assembleRuntime({ ...STAGING, ...POOL });
+    const ok = await assembleRuntime({ ...STAGING, ...POOL, ...SIGN_UP_LINK });
     expect(typeof ok.runtime.identity?.signUp).toBe("function");
+  });
+
+  // WPU-X12: the server-only sign-up client is the SST link CustomerSignUpClient ({ id, secret }).
+  // Without it, or with a malformed one, there is no identity provider at all (R16).
+  it("without the sign-up client link, or with a malformed one, identity is null", async () => {
+    const { assembleRuntime } = await load();
+    expect((await assembleRuntime({ ...STAGING, ...POOL })).runtime.identity).toBeNull();
+    for (const raw of [
+      "not json",
+      '{"id":"1example23456789"}',
+      '{"id":"1example23456789","secret":"not-configured"}',
+      '{"id":"bad id","secret":"13ka4h7u28d9oo44tqpq9djqsfvhvu8rk4d2ighvpu0k8fj1c2r9"}',
+    ]) {
+      const env = { ...STAGING, ...POOL, SST_RESOURCE_CustomerSignUpClient: raw };
+      expect((await assembleRuntime(env)).runtime.identity, raw).toBeNull();
+    }
   });
 
   // WPU-Z3: the SMS gateway (Gennet). Planted values, never real ones (R3).

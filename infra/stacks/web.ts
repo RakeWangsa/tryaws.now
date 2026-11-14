@@ -5,8 +5,8 @@
 //   the function URL gets 403 and no request can skip the WAF or the admin allowlist.
 // - R1: the web and admin roles have NO sts:AssumeRole permission. A static test reads this file
 //   and fails if "sts:" appears in a permission list below.
-// - The web function links only its own eleven secrets and the web_rw password. It is never linked to
-//   the Postgres component (the master user).
+// - The web function links only its own eleven secrets, the web_rw password and the Cognito sign-up
+//   client (WPU-X12). It is never linked to the Postgres component (the master user).
 // - HSTS comes from the CloudFront response headers policy (waf.ts), not from application code.
 //
 // NOT TYPE-CHECKED, see network.ts.
@@ -116,8 +116,16 @@ export function web(inputs: WebInputs) {
     vpc,
     domain: config.webDomain,
     // Eleven secrets of apps/web/server/secrets.ts (WPU-Z3: with the two of the SMS gateway) and the
-    // web_rw password. Not the Postgres component.
-    link: [...WEB_SECRETS.map((name) => secrets.app[name]), secrets.db.web_rw],
+    // web_rw password. Not the Postgres component. WPU-X12: and the server-only Cognito sign-up client,
+    // whose link carries its id and secret (SST CognitoUserPoolClient getSSTLink); the server reads it
+    // as Resource.CustomerSignUpClient (packages/auth/config.ts signUpClientFromLink). A link, not an
+    // environment value: the secret stays in the encrypted link file and out of the function's
+    // configuration, the build output and every client bundle. No other function links it.
+    link: [
+      ...WEB_SECRETS.map((name) => secrets.app[name]),
+      secrets.db.web_rw,
+      auth.customerSignUpClient,
+    ],
     environment: {
       TC_STAGE: config.tcStage,
       APP_ORIGIN: `https://${config.webDomain}`,

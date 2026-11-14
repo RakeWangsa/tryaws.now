@@ -1,4 +1,11 @@
-import { authConfigFromEnv, cognitoIdentityProvider, configureAuth } from "@tc/auth";
+import {
+  SIGN_UP_CLIENT_LINK,
+  authConfigFromEnv,
+  cognitoIdentityProvider,
+  configureAuth,
+  signUpClientFromLink,
+} from "@tc/auth";
+import { sstLinks, type LinkSource } from "@tc/db/links";
 import type { AccessTokenVerifier, IdentityProvider } from "@tc/auth";
 import { newUuidV7, withTx } from "@tc/db";
 import {
@@ -141,6 +148,8 @@ function buildDeps(gateway: EpsGateway, limitKey: string, urls: EpsDeps["urls"])
 export async function assembleRuntime(
   env: Env,
   secret: SecretSource = linkedSecrets(),
+  // WPU-X12: the links themselves, for the sign-up client (a linked Cognito client, not a secret).
+  links: LinkSource = sstLinks,
 ): Promise<Assembled> {
   const config = readWebConfig(env);
 
@@ -209,9 +218,17 @@ export async function assembleRuntime(
     identity = fake.createFakeIdentity({ stage: config.stage, fakes: config.fakes });
   } else {
     try {
-      identity = cognitoIdentityProvider(authConfigFromEnv(env).customer);
+      // WPU-X12: sign-up, its confirmation and the resend go through the server-only sign-up client
+      // (a secret, the only client that may write email); its id and secret arrive only as the SST link
+      // of the web server function, never as an environment variable and never in a client bundle.
+      identity = cognitoIdentityProvider(
+        authConfigFromEnv(env).customer,
+        signUpClientFromLink(links(SIGN_UP_CLIENT_LINK)),
+      );
     } catch {
-      identity = null; // pool variables missing or malformed: the screens show "not available"
+      // Pool variables or the sign-up client link missing or malformed: the screens show "not
+      // available" (R16). The error is dropped unread: its text is fixed and holds no value.
+      identity = null;
     }
   }
 
