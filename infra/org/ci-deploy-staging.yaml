@@ -283,27 +283,49 @@ Resources:
                   - cloudfront-keyvaluestore:UpdateKeys
                 Resource:
                   Fn::Sub: "arn:aws:cloudfront::${AWS::AccountId}:key-value-store/*"
-              # SST's Vpc always creates a Cloud Map private DNS namespace (about 0.50 USD a month), and Cloud
-              # Map creates its Route 53 private hosted zone with the caller's rights (AWS Cloud Map developer
-              # guide, identity-based policy examples). Staging deploy of 2026-11-14 stopped at
-              # servicediscovery:CreatePrivateDnsNamespace. Create, read and tag only for Route 53: no
-              # DeleteHostedZone, so this role can never remove the tryaws.now zone or a customer zone.
-              - Sid: CloudMapNamespaceOfTheVpc
+              # SST's Vpc always creates a Cloud Map private DNS namespace (about 0.50 USD a month); the staging deploy
+              # of 2026-11-14 stopped at servicediscovery:CreatePrivateDnsNamespace. Scoped by the sst:stage tag that
+              # SST puts on the create request and the namespace (checked in CloudTrail and with ListTagsForResource
+              # on 2026-11-14). Cloud Map then creates the private hosted zone itself (CloudTrail: the internal
+              # CreateServiceLinkedPrivateHostedZone, invoked by servicediscovery.amazonaws.com); Route 53 zone
+              # creation is allowed only through an AWS service, never as a direct call, and never a delete.
+              - Sid: CloudMapRead
                 Effect: Allow
                 Action:
-                  - servicediscovery:CreatePrivateDnsNamespace
-                  - servicediscovery:DeleteNamespace
                   - servicediscovery:GetNamespace
                   - servicediscovery:GetOperation
                   - servicediscovery:ListNamespaces
                   - servicediscovery:ListOperations
                   - servicediscovery:ListTagsForResource
+                Resource: "*"
+              - Sid: CloudMapCreateForTheStage
+                Effect: Allow
+                Action: servicediscovery:CreatePrivateDnsNamespace
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/sst:stage: staging
+              - Sid: CloudMapChangeOnlyTheStageNamespaces
+                Effect: Allow
+                Action:
+                  - servicediscovery:DeleteNamespace
                   - servicediscovery:TagResource
                   - servicediscovery:UntagResource
                   - servicediscovery:UpdatePrivateDnsNamespace
+                Resource:
+                  Fn::Sub: "arn:aws:servicediscovery:*:${AWS::AccountId}:namespace/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/sst:stage: staging
+              - Sid: PrivateHostedZoneOnlyThroughCloudMap
+                Effect: Allow
+                Action:
                   - route53:CreateHostedZone
-                  - ec2:DescribeRegions
+                  - route53:CreateServiceLinkedPrivateHostedZone
                 Resource: "*"
+                Condition:
+                  Bool:
+                    aws:ViaAWSService: "true"
               - Sid: BudgetOfTheStage
                 Effect: Allow
                 Action:

@@ -347,22 +347,49 @@ describe("deploy roles: no privilege escalation through IAM", () => {
       expect(resourceText(budget)).toContain(`budget/tc-${stage}-*`);
     });
 
-    // 2026-11-14: SST's Vpc creates a Cloud Map namespace, and Cloud Map its private hosted zone with the
-    // caller's rights. Create, read and tag on Route 53, never DeleteHostedZone (the account's zones).
-    it("may manage the Cloud Map namespace of the VPC and never delete a hosted zone", () => {
-      const s = allows.find((x) => x.Sid === "CloudMapNamespaceOfTheVpc");
-      const actions = list(s.Action);
-      expect(actions).toEqual(
-        expect.arrayContaining([
-          "servicediscovery:CreatePrivateDnsNamespace",
-          "servicediscovery:DeleteNamespace",
-          "servicediscovery:GetNamespace",
-          "servicediscovery:GetOperation",
-          "route53:CreateHostedZone",
-        ]),
-      );
-      expect(actions.filter((a) => a.startsWith("route53:"))).toEqual(["route53:CreateHostedZone"]);
-      expect(actions.some((a) => a.includes("*"))).toBe(false);
+    // 2026-11-14: SST's Vpc creates a Cloud Map namespace, and Cloud Map its private hosted zone through the
+    // service. Every changing action is held to the sst:stage tag of this stage; Route 53 zone creation only
+    // through an AWS service; no statement may delete a hosted zone.
+    it("may manage only the Cloud Map namespaces of its own stage and never delete a hosted zone", () => {
+      const read = allows.find((x) => x.Sid === "CloudMapRead");
+      expect(list(read.Action).every((a) => /^servicediscovery:(Get|List)/.test(a))).toBe(true);
+
+      const create = allows.find((x) => x.Sid === "CloudMapCreateForTheStage");
+      expect(list(create.Action)).toEqual(["servicediscovery:CreatePrivateDnsNamespace"]);
+      expect(create.Condition).toEqual({ StringEquals: { "aws:RequestTag/sst:stage": stage } });
+
+      const change = allows.find((x) => x.Sid === "CloudMapChangeOnlyTheStageNamespaces");
+      expect(list(change.Action).sort()).toEqual([
+        "servicediscovery:DeleteNamespace",
+        "servicediscovery:TagResource",
+        "servicediscovery:UntagResource",
+        "servicediscovery:UpdatePrivateDnsNamespace",
+      ]);
+      expect(change.Condition).toEqual({ StringEquals: { "aws:ResourceTag/sst:stage": stage } });
+      expect(resourceText(change)).toContain(":namespace/*");
+
+      const zone = allows.find((x) => x.Sid === "PrivateHostedZoneOnlyThroughCloudMap");
+      expect(list(zone.Action).every((a) => a.startsWith("route53:Create"))).toBe(true);
+      expect(zone.Condition).toEqual({ Bool: { "aws:ViaAWSService": "true" } });
+
+      // servicediscovery and route53:Create* appear in no other allow statement
+      for (const x of allows) {
+        if (
+          [
+            "CloudMapRead",
+            "CloudMapCreateForTheStage",
+            "CloudMapChangeOnlyTheStageNamespaces",
+            "PrivateHostedZoneOnlyThroughCloudMap",
+          ].includes(x.Sid)
+        )
+          continue;
+        expect(
+          list(x.Action).some(
+            (a) => a.startsWith("servicediscovery:") || a.startsWith("route53:Create"),
+          ),
+          x.Sid,
+        ).toBe(false);
+      }
       for (const x of allows)
         expect(list(x.Action), x.Sid).not.toContain("route53:DeleteHostedZone");
     });
