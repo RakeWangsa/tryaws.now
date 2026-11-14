@@ -31,6 +31,8 @@ describe("AdminPricing and AdminCatalog messages", () => {
       "replayed",
       "pending",
       "approved",
+      // WPU-X9: a rate set by one admin alone (owner decision 2026-11-14).
+      "set",
       "invalid",
       "denied",
       "conflict",
@@ -48,6 +50,7 @@ describe("AdminPricing and AdminCatalog messages", () => {
         ![
           "pending",
           "approved",
+          "set",
           "second_admin_required",
           "must_differ_from_actor",
           "not_an_approver",
@@ -56,6 +59,14 @@ describe("AdminPricing and AdminCatalog messages", () => {
     )) {
       expect(Object.keys(pricingEn.AdminCatalog.result)).toContain(code);
     }
+  });
+
+  it("WPU-X9: the FX form says that up to the single-admin percent applies at once and more waits", () => {
+    const en = pricingEn.AdminPricing.fx.bigChange;
+    expect(en).toContain("up to {single}%");
+    expect(en).toContain("apply at once");
+    expect(en).toContain("waits until a different admin approves it");
+    expect(pricingEn.AdminPricing.result.set).toContain("3%");
   });
 
   it("names every product family", () => {

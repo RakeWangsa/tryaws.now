@@ -18,6 +18,7 @@ export const pricingEn: Same<typeof pricingBn> = {
       replayed: "This change was already saved.",
       pending: "The change is waiting. It takes effect when a different admin approves it.",
       approved: "Approved, and the rate is now in force.",
+      set: "The rate is saved and in force from its start. A change of up to 3% needs no second admin.",
       invalid: "The form is not correct. Check the fields.",
       denied: "You may not do this.",
       conflict:
@@ -102,7 +103,7 @@ export const pricingEn: Same<typeof pricingBn> = {
       rateHint: "Decimal text, for example 122.5",
       fromLabel: "Starts (Dhaka time)",
       bigChange:
-        "Every new rate waits until a different admin approves it. A rate that differs by more than {percent}% from the rate in force also needs the confirm box.",
+        "The first rate of a market and a change of up to {single}% from the rate in force apply at once. A larger change waits until a different admin approves it. A rate that differs by more than {percent}% from the rate in force also needs the confirm box.",
       confirmLarge:
         "I checked this rate: it differs by more than {percent}% from the rate in force",
       setBy: "Set by admin #{who} on",
@@ -114,11 +115,11 @@ export const pricingEn: Same<typeof pricingBn> = {
         stale: "Too old",
       },
       warn: {
-        missing: "There is no rate. Purchases and renewals are refused until one is approved.",
+        missing: "There is no rate. Purchases and renewals are refused until one is set.",
         ageing:
           "The rate is older than 6 days. After {max} days purchases are refused, renewals and usage charges wait. Set a new rate.",
         stale:
-          "The rate is older than {max} days. Purchases are refused, renewals and usage charges wait until a new rate is approved.",
+          "The rate is older than {max} days. Purchases are refused, renewals and usage charges wait until a new rate is set.",
       },
       submit: "Save the rate",
       pendingTitle: "Waiting for approval",

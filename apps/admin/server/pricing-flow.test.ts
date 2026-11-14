@@ -303,19 +303,100 @@ describe("saveRule: R9 order and the preview", () => {
   });
 });
 
-describe("setFx (WPU-Y1: every rate is a pending change that a second admin approves)", () => {
+// WPU-X9 (owner decision 2026-11-14, "alone, within ±3%"). Before, every rate was a pending change (WPU-Y1, owner
+// decision 3). Now the engine first tries the change with this admin alone: the first rate of a market and a change of
+// at most 3 percent apply at once; anything else the engine refuses with second_admin_required and the flow asks.
+const SECOND_ADMIN = {
+  ok: false,
+  error: "forbidden",
+  fields: { requestedBy: "second_admin_required" },
+} as const;
+
+function needsSecondAdmin(core: CorePorts) {
+  (core.setFxRate as ReturnType<typeof vi.fn>).mockImplementation(async () => SECOND_ADMIN);
+}
+
+describe("setFx (WPU-X9: alone within 3 percent, else a pending change that a second admin approves)", () => {
   const FX = { market: "BD", rate: "122.5", from: "", reason: "bank rate" };
 
-  it("only asks: the rate never changes at once, not even by a small step, in the order of R9", async () => {
+  it("a change the engine allows alone is set at once, in the order of R9, without a second admin", async () => {
     const { flow, core, fxChanges, order } = setup();
     const answer = await flow.setFx(FX); // 122 -> 122.5 is 0.4 percent
+    expect(answer).toEqual({
+      ok: true,
+      replayed: false,
+      value: { kind: "set", rate: "122.5", effectiveFrom: NOW },
+    });
+    expect(order).toEqual(["authorize", "limit", "run", "fx"]);
+    expect(fxChanges.request).not.toHaveBeenCalled();
+    // the engine is called with no second admin: it decides first rate / within 3 percent itself
+    expect(core.setFxRate).toHaveBeenCalledWith(
+      TX,
+      actorOf("finance"),
+      { market: "BD", rate: "122.5", reason: "bank rate" },
+      expect.anything(),
+    );
+  });
+
+  it("a start ahead is passed to the engine; a start that has passed is now", async () => {
+    const ahead = setup();
+    await ahead.flow.setFx({ ...FX, from: "2026-11-13T09:30" });
+    expect((ahead.core.setFxRate as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]).toEqual({
+      market: "BD",
+      rate: "122.5",
+      effectiveFrom: new Date("2026-11-13T03:30:00.000Z"),
+      reason: "bank rate",
+    });
+    const passed = setup();
+    await passed.flow.setFx({ ...FX, from: "2026-11-11T09:30" });
+    expect(
+      (passed.core.setFxRate as ReturnType<typeof vi.fn>).mock.calls[0]?.[2],
+    ).not.toHaveProperty("effectiveFrom");
+  });
+
+  it("a single-admin set replayed answers replayed (R7)", async () => {
+    const { flow, core } = setup();
+    (core.setFxRate as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      value: { fx: { id: "f1", market: "BD", rate: "122.5", effectiveFrom: NOW }, replayed: true },
+    });
+    expect(await flow.setFx(FX)).toMatchObject({
+      ok: true,
+      replayed: true,
+      value: { kind: "set" },
+    });
+  });
+
+  it("other refusals of the engine are answered and nothing is asked; its start field is the form's 'from'", async () => {
+    const { flow, core, fxChanges } = setup();
+    const fx = core.setFxRate as ReturnType<typeof vi.fn>;
+    fx.mockResolvedValueOnce({
+      ok: false,
+      error: "validation",
+      fields: { effectiveFrom: "too_far_ahead" },
+    });
+    expect(await flow.setFx(FX)).toEqual({ ok: false, code: "invalid", fields: ["from"] });
+    fx.mockResolvedValueOnce({ ok: false, error: "conflict", fields: { effectiveFrom: "taken" } });
+    expect(await flow.setFx(FX)).toEqual({ ok: false, code: "conflict", fields: [] });
+    fx.mockResolvedValueOnce({
+      ok: false,
+      error: "forbidden",
+      fields: { requestedBy: "not_an_approver" },
+    });
+    expect(await flow.setFx(FX)).toEqual({ ok: false, code: "not_an_approver", fields: [] });
+    expect(fxChanges.request).not.toHaveBeenCalled();
+  });
+
+  it("a change the engine refuses alone (over 3 percent) only asks, in the order of R9", async () => {
+    const { flow, core, fxChanges, order } = setup();
+    needsSecondAdmin(core);
+    const answer = await flow.setFx({ ...FX, rate: "126" }); // 122 -> 126 is 3.3 percent
     expect(answer).toMatchObject({ ok: true, replayed: false, value: { kind: "pending" } });
-    expect(core.setFxRate).not.toHaveBeenCalled();
     expect(order).toEqual(["authorize", "limit", "run", "request"]);
     expect(fxChanges.request).toHaveBeenCalledWith(
       {
         market: "BD",
-        rate: "122.5",
+        rate: "126",
         effectiveFrom: null,
         at: NOW,
         expiresAt: new Date(NOW.getTime() + 24 * 3_600_000),
@@ -324,19 +405,25 @@ describe("setFx (WPU-Y1: every rate is a pending change that a second admin appr
     );
   });
 
-  it("the first rate of a market (none in force) is a pending change too", async () => {
+  // Before WPU-X9 the first rate was a pending change too (WPU-Y1). Owner decision 2026-11-14: one admin sets it.
+  it("the first rate of a market (none in force) is set at once when the engine allows it alone", async () => {
     const { flow, core, fxChanges } = setup();
     (core.fxInForce as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    expect(await flow.setFx(FX)).toMatchObject({ ok: true, value: { kind: "pending" } });
-    expect(core.setFxRate).not.toHaveBeenCalled();
-    expect(fxChanges.request).toHaveBeenCalledTimes(1);
+    expect(await flow.setFx(FX)).toMatchObject({ ok: true, value: { kind: "set" } });
+    expect(core.setFxRate).toHaveBeenCalledTimes(1);
+    expect(fxChanges.request).not.toHaveBeenCalled();
   });
 
   it("a forged requestedBy in the request is never read: it reaches neither the engine nor the repository", async () => {
-    const { flow, core, fxChanges } = setup();
-    await flow.setFx({ ...FX, requestedBy: OTHER_ID } as never);
-    expect(JSON.stringify(fxChanges.request.mock.calls)).not.toContain(OTHER_ID);
-    expect(core.setFxRate).not.toHaveBeenCalled();
+    for (const second of [false, true]) {
+      const { flow, core, fxChanges } = setup();
+      if (second) needsSecondAdmin(core);
+      await flow.setFx({ ...FX, requestedBy: OTHER_ID } as never);
+      expect(JSON.stringify(fxChanges.request.mock.calls)).not.toContain(OTHER_ID);
+      expect(JSON.stringify((core.setFxRate as ReturnType<typeof vi.fn>).mock.calls)).not.toContain(
+        OTHER_ID,
+      );
+    }
   });
 
   it("a change of more than 10 percent needs the extra confirm field; without it nothing is written", async () => {
@@ -350,7 +437,8 @@ describe("setFx (WPU-Y1: every rate is a pending change that a second admin appr
 
   it("with the confirm field a large change is asked", async () => {
     for (const confirmLarge of [true, "true", "on", "1"]) {
-      const { flow, fxChanges } = setup();
+      const { flow, core, fxChanges } = setup();
+      needsSecondAdmin(core);
       expect(await flow.setFx({ ...FX, rate: "135", confirmLarge })).toMatchObject({
         ok: true,
         value: { kind: "pending" },
@@ -398,7 +486,8 @@ describe("setFx (WPU-Y1: every rate is a pending change that a second admin appr
   );
 
   it("asking twice for the same change is a replay (R7); a different one while it waits is a conflict", async () => {
-    const { flow, fxChanges } = setup();
+    const { flow, core, fxChanges } = setup();
+    needsSecondAdmin(core);
     fxChanges.request.mockResolvedValueOnce({
       ok: true,
       replayed: true,

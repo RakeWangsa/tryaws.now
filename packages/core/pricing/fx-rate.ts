@@ -124,6 +124,38 @@ export function fxChangeNeedsConfirm(
   return distance * 100n > from * percent;
 }
 
+/**
+ * WPU-X9 (owner decision 2026-11-14, "alone, within ±3%"). A change of at most this many percent from the rate in
+ * force may be set by one admin; a larger one keeps the four-eyes rule of WPU-Y1.
+ */
+export const FX_SINGLE_ADMIN_PERCENT = 3n;
+
+/** How a rate set by one admin is recorded in its audit row (metadata.after.approval). */
+export type FxSingleAdminApproval = "single_admin_first_rate" | "single_admin_within_limit";
+
+/**
+ * WPU-X9. Whether one admin may set `next` alone, and on which ground; null when a second admin is needed. Pure,
+ * exact integer arithmetic on millionths (no float, no rounding): |next − current| × 100 ≤ current × 3.
+ * - `current` null (no rate in force) and `anyRateBefore` exactly false (no row ever, none scheduled): the first rate.
+ * - `current` a rate: within 3 percent, both bounds inclusive.
+ * Fails closed (R16): anything malformed, or no rate in force while a row exists or the history is unknown, is null.
+ */
+export function fxSingleAdminApproval(
+  current: string | null,
+  next: string,
+  anyRateBefore: boolean,
+): FxSingleAdminApproval | null {
+  if (!isFxRateText(next)) return null;
+  if (current === null) {
+    return anyRateBefore === false ? "single_admin_first_rate" : null;
+  }
+  if (!isFxRateText(current)) return null;
+  const from = millionths(current);
+  const to = millionths(next);
+  const distance = to > from ? to - from : from - to;
+  return distance * 100n <= from * FX_SINGLE_ADMIN_PERCENT ? "single_admin_within_limit" : null;
+}
+
 /** True when the rate lies between `min` and `max` (both plain rate text, inclusive). Bounds that cannot be read refuse (false). */
 export function fxRateInSaneRange(rate: string, bounds: { min: string; max: string }): boolean {
   if (!isFxRateText(rate) || !isFxRateText(bounds.min) || !isFxRateText(bounds.max)) return false;

@@ -4018,6 +4018,13 @@ TASKS["WPU-X8"] = [
   repo,
 ];
 
+// WPU-X9 (owner decision 2026-11-14, "alone, within ±3%"): one finance or superadmin admin sets the first USD to BDT
+// rate of a market, and any later rate at most 3 percent from the rate in force, alone; a larger change keeps the
+// four-eyes rule of WPU-Y1. core runs the boundary vectors of fxSingleAdminApproval (pricing, with the Section 8
+// vectors) and setFxRate against PostgreSQL; db the audit ground of the repository; admin the /pricing flow and
+// texts; repo the journal and verify wiring.
+TASKS["WPU-X9"] = [specSync, baselineSync, lint, typecheck, format, core, db, admin, repo];
+
 // WPU-X2 (owner round 5): the domain renewal rules (30 days before expiry, the refund when the registry
 // refuses) in the terms and the refund policy, en and bn, with LEGAL_VERSIONS moved to version 2. The text
 // waits for the owner's approval before merge.

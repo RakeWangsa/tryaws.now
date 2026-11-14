@@ -121,8 +121,9 @@ export interface SetFxRequest {
   readonly reason: unknown;
   // The extra confirm of a change of more than the policy percent (true, "true", "on" or "1").
   readonly confirmLarge?: unknown;
-  // There is deliberately no field for a second admin: an approver is never named by a request. EVERY change
-  // waits until a different admin approves it from their own session (approveFx), WPU-Y1.
+  // There is deliberately no field for a second admin: an approver is never named by a request. A change of more
+  // than 3 percent (WPU-X9; the first rate of a market excepted) waits until a different admin approves it from their
+  // own session (approveFx), WPU-Y1.
 }
 
 export interface ApproveFxRequest {
@@ -135,7 +136,8 @@ export interface ApproveFxRequest {
 const isConfirmed = (v: unknown): boolean => v === true || v === "true" || v === "on" || v === "1";
 
 export interface FxResult {
-  // "set": the rate is stored. "pending": it waits for a different admin.
+  // "set": the rate is stored by this admin alone (WPU-X9). "pending": it waits for a different admin.
+  // "approved": a different admin approved it and the rate is stored.
   readonly kind: "set" | "pending" | "approved";
   readonly rate: string;
   readonly effectiveFrom: Date | null;
@@ -368,8 +370,42 @@ export function makePricingFlow(deps: PricingFlowDeps): PricingFlow {
           // Nothing is written: the screen shows the change and asks again with the confirm field.
           return fail("confirm_required", ["confirmLarge"]);
         }
-        // WPU-Y1 (owner decision 3): every rate, the first one too, is a pending change. Nothing changes now;
-        // a different admin approves it from their own session (approveFx), R10.
+        // WPU-X9 (owner decision 2026-11-14, "alone, within ±3%"): the first rate of a market, and a change of at
+        // most 3 percent from the rate in force, apply at once with this admin alone. The engine decides, under the
+        // write lock of the market, and records the ground in the audit row (R10). A start that has passed is now.
+        const own = effectiveFrom !== null && effectiveFrom.getTime() > at.getTime();
+        const alone = await deps.core.setFxRate(
+          tx,
+          actor,
+          { market, rate: next, ...(own ? { effectiveFrom } : {}), reason: why.text },
+          { now: () => at },
+        );
+        if (alone.ok) {
+          return {
+            ok: true,
+            replayed: alone.value.replayed,
+            value: {
+              kind: "set",
+              rate: alone.value.fx.rate,
+              effectiveFrom: alone.value.fx.effectiveFrom,
+            },
+          };
+        }
+        if (
+          alone.error !== "forbidden" ||
+          alone.fields?.["requestedBy"] !== "second_admin_required"
+        ) {
+          // The form names its start "from"; any other refusal is answered as it is (R16).
+          const answer = refusal(alone);
+          return answer.ok || answer.code !== "invalid"
+            ? answer
+            : fail(
+                "invalid",
+                answer.fields.map((f) => (f === "effectiveFrom" ? "from" : f)),
+              );
+        }
+        // A larger change (WPU-Y1): a pending change. Nothing changes now; a different admin approves it from their
+        // own session (approveFx), R10.
         const asked = await deps.repos(tx, actor).fxChanges.request(
           {
             market,

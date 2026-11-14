@@ -17,7 +17,7 @@ beforeAll(async () => {
   actor = await adminActor(t, "finance");
   second = await adminActor(t, "superadmin");
 });
-// WPU-Y1: every rate is a four-eyes change. `actor` approves here; `second` is the admin who asked.
+// A four-eyes change (WPU-Y1): `actor` approves here; `second` is the admin who asked.
 const set = (input: Partial<SetFxRateInput>, now: Date = T0, as: AdminActor = actor) =>
   asRole(t, "admin_rw", (tx) =>
     setFxRate(
@@ -27,13 +27,30 @@ const set = (input: Partial<SetFxRateInput>, now: Date = T0, as: AdminActor = ac
       { now: () => now },
     ),
   );
+// WPU-X9 (owner decision 2026-11-14, "alone, within ±3%"): the same call without a second admin.
+const alone = (input: Partial<SetFxRateInput>, now: Date = T0, as: AdminActor = actor) =>
+  asRole(t, "admin_rw", (tx) =>
+    setFxRate(
+      tx,
+      as,
+      { market: "BD", rate: "127", reason: "rate change", ...input },
+      { now: () => now },
+    ),
+  );
 const count = async () =>
   (await t.pool.query("select count(*)::int as n from fx_rates")).rows[0].n as number;
 const audits = () => auditRowsOf(t.pool, actor.adminId);
 const inForce = (at: Date) => asRole(t, "web_rw", (tx) => readFxRateInForce(tx, "BD", at));
+const SECOND_ADMIN = {
+  ok: false,
+  error: "forbidden",
+  fields: { requestedBy: "second_admin_required" },
+};
 
-it("the first rate starts now and is audited with actor, reason, IP, target and the admin who asked", async () => {
-  const r = await set({ rate: "127", reason: "launch rate" });
+// Before WPU-X9 the first rate needed a second admin too (WPU-Y1, owner decision 3). Owner decision 2026-11-14:
+// one admin sets the first rate of a market alone; the audit row records the ground and names no second admin.
+it("WPU-X9: the first rate of a market is set by one admin, starts now and is audited with its ground", async () => {
+  const r = await alone({ rate: "127", reason: "launch rate" });
   expect(r).toEqual({
     ok: true,
     value: {
@@ -47,26 +64,87 @@ it("the first rate starts now and is audited with actor, reason, IP, target and 
       },
     },
   });
-  expect(await audits()).toMatchObject([
+  const rows = await audits();
+  expect(rows).toMatchObject([
     {
       actor_type: "admin",
       action: "fx_rate.set",
       target_id: "BD@2026-11-11T06:00:00.000Z",
       ip: "203.0.113.9",
-      metadata: { reason: "launch rate", before: null, after: { approvedBy: second.adminId } },
+      metadata: {
+        reason: "launch rate",
+        before: null,
+        after: { rate: "127", approval: "single_admin_first_rate" },
+      },
     },
   ]);
+  expect((rows[0]?.metadata as { after: object }).after).not.toHaveProperty("approvedBy");
+  // the same call again is a replay (R7): no second row
+  const n = await count();
+  expect(await alone({ rate: "127", reason: "launch rate" })).toMatchObject({
+    ok: true,
+    value: { replayed: true },
+  });
+  expect(await count()).toBe(n);
 });
 
-it("even a tiny change is refused without a second admin, and when the actor is the second admin", async () => {
+it("WPU-X9: one admin alone may change the rate by at most 3 percent; 3.000001 percent needs a second admin", async () => {
   const n = await count();
   const a = (await audits()).length;
-  const bare = { requestedBy: undefined as unknown as string };
-  expect(await set({ rate: "128", ...bare }, day(1))).toEqual({
-    ok: false,
-    error: "forbidden",
-    fields: { requestedBy: "second_admin_required" },
-  }); // +0.79 percent
+  expect(await alone({ rate: "130.810001" }, day(1))).toEqual(SECOND_ADMIN); // +3.0000008 percent of 127
+  expect(await alone({ rate: "123.189999" }, day(1))).toEqual(SECOND_ADMIN); // -3.0000008 percent
+  expect(await alone({ rate: "150" }, day(1))).toEqual(SECOND_ADMIN);
+  expect(await count()).toBe(n);
+  expect((await audits()).length).toBe(a);
+  // exactly +3 percent (127 x 1.03) is in force at once
+  expect(await alone({ rate: "130.81", reason: "bank moved" }, day(1))).toMatchObject({
+    ok: true,
+    value: { replayed: false, fx: { rate: "130.81", effectiveFrom: day(1) } },
+  });
+  expect((await inForce(day(1)))?.rate).toBe("130.81");
+  expect((await audits()).at(-1)?.metadata).toMatchObject({
+    reason: "bank moved",
+    before: { rate: "127" },
+    after: { rate: "130.81", approval: "single_admin_within_limit" },
+  });
+});
+
+it("WPU-X9: an admin who may not approve rates (support, ops) cannot set one alone", async () => {
+  const n = await count();
+  for (const role of ["support", "ops"] as const) {
+    const other = await adminActor(t, role);
+    expect(await alone({ rate: "130.81" }, day(1), other)).toEqual({
+      ok: false,
+      error: "forbidden",
+      fields: { requestedBy: "not_an_approver" },
+    });
+  }
+  expect(await count()).toBe(n);
+});
+
+it("WPU-X9: no rate in force while a rate is stored for later is no first rate: it needs a second admin", async () => {
+  await ensureMarket(t.pool, "LK");
+  const lk = (input: Partial<SetFxRateInput>, now: Date) => alone({ market: "LK", ...input }, now);
+  // the very first row of LK, scheduled for later: a first rate, alone
+  expect(await lk({ rate: "2.5", effectiveFrom: day(3) }, T0)).toMatchObject({ ok: true });
+  // before its start nothing is in force, but a row exists: fail closed to four eyes
+  expect(await lk({ rate: "2.5" }, day(1))).toEqual(SECOND_ADMIN);
+});
+
+it("WPU-X9: a scheduled change alone must be within 3 percent of the rate in force now AND at its start", async () => {
+  await ensureMarket(t.pool, "NP");
+  const np = (input: Partial<SetFxRateInput>, now: Date) => alone({ market: "NP", ...input }, now);
+  expect(await np({ rate: "100" }, T0)).toMatchObject({ ok: true }); // first rate
+  expect(await np({ rate: "103", effectiveFrom: day(2) }, T0)).toMatchObject({ ok: true }); // +3
+  // 100 -> 97 at day 4 is -3 percent of now, but -5.8 percent of the 103 that will be in force then
+  expect(await np({ rate: "97", effectiveFrom: day(4) }, T0)).toEqual(SECOND_ADMIN);
+  expect(await np({ rate: "101", effectiveFrom: day(4) }, T0)).toMatchObject({ ok: true });
+});
+
+// WPU-X9: a change within 3 percent no longer needs a second admin (see above); a named second admin is still checked.
+it("a named second admin is refused when it is the actor", async () => {
+  const n = await count();
+  const a = (await audits()).length;
   expect(await set({ rate: "128", requestedBy: actor.adminId }, day(1))).toEqual({
     ok: false,
     error: "forbidden",
@@ -103,13 +181,25 @@ it("a second admin that does not exist, or is not finance or superadmin, is refu
   expect(await count()).toBe(n);
 });
 
-it("with a second admin the change is saved and the audit row records who asked", async () => {
+it("with a second admin the change is saved and the audit row records who asked (and no single-admin ground)", async () => {
   const r = await set({ rate: "130" }, day(2));
   expect(r).toMatchObject({ ok: true, value: { replayed: false, fx: { rate: "130" } } });
-  expect((await audits()).at(-1)?.metadata).toMatchObject({
+  const metadata = (await audits()).at(-1)?.metadata as { after: object };
+  expect(metadata).toMatchObject({
     reason: "rate change",
-    before: { rate: "127" },
+    before: { rate: "130.81" },
     after: { rate: "130", approvedBy: second.adminId },
+  });
+  expect(metadata.after).not.toHaveProperty("approval");
+});
+
+it("WPU-X9: a change of more than 3 percent is set when a second admin approved it (the four-eyes path is unchanged)", async () => {
+  await ensureMarket(t.pool, "MV");
+  expect(await alone({ market: "MV", rate: "15" }, T0)).toMatchObject({ ok: true }); // first rate
+  expect(await alone({ market: "MV", rate: "16" }, day(1))).toEqual(SECOND_ADMIN); // +6.7 percent
+  expect(await set({ market: "MV", rate: "16" }, day(1))).toMatchObject({
+    ok: true,
+    value: { fx: { rate: "16" } },
   });
 });
 

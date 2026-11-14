@@ -139,6 +139,7 @@ export { adminRepos } from "./repositories/admin/index";
 export type { AdminRepos, AdminActor, AdminRole, AdminScope } from "./repositories/admin/index";
 export type { FeatureFlagSetting } from "./repositories/admin/feature-flags";
 export type {
+  FxRateApproval,
   FxRateInput,
   FxRateMeta,
   FxRateSaved,

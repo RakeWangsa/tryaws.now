@@ -65,7 +65,8 @@ function back(
 function valueKind(value: unknown): string | null {
   if (typeof value === "object" && value !== null && "kind" in value) {
     const kind = (value as { kind: unknown }).kind;
-    return kind === "pending" || kind === "approved" ? kind : null;
+    // "set": a rate set by one admin alone (WPU-X9).
+    return kind === "pending" || kind === "approved" || kind === "set" ? kind : null;
   }
   return null;
 }

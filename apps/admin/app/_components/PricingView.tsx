@@ -11,7 +11,12 @@ import {
   SubmitButton,
   type DataTableColumn,
 } from "@tc/ui";
-import { FEATURE_FLAGS, FX_CONFIRM_PERCENT, FX_RATE_MAX_AGE_DAYS } from "@tc/core";
+import {
+  FEATURE_FLAGS,
+  FX_CONFIRM_PERCENT,
+  FX_RATE_MAX_AGE_DAYS,
+  FX_SINGLE_ADMIN_PERCENT,
+} from "@tc/core";
 import type { PreviewRow } from "@tc/core";
 import type { AdminActor, FxChange, FxRateRow, PricingRuleRow } from "@tc/db";
 import { localePath, type Locale } from "@tc/ui/runtime";
@@ -24,6 +29,7 @@ const RESULT_CODES = [
   "replayed",
   "pending",
   "approved",
+  "set",
   "invalid",
   "denied",
   "conflict",
@@ -43,7 +49,12 @@ export const resultOf = (value: string | null): ResultCode | null =>
 function Banner({ code }: { code: ResultCode | null }) {
   const t = useTranslations("AdminPricing.result");
   if (code === null) return null;
-  const good = code === "ok" || code === "replayed" || code === "pending" || code === "approved";
+  const good =
+    code === "ok" ||
+    code === "replayed" ||
+    code === "pending" ||
+    code === "approved" ||
+    code === "set";
   return (
     <p role={good ? "status" : "alert"} className="form-text seccolor mb-3">
       {t(code)}
@@ -214,7 +225,10 @@ function FxCard({
         </FormBlock>
         <ConfirmLarge id="fx-confirm" />
         <p className="form-text seccolor">
-          {t("bigChange", { percent: String(FX_CONFIRM_PERCENT) })}
+          {t("bigChange", {
+            single: String(FX_SINGLE_ADMIN_PERCENT),
+            percent: String(FX_CONFIRM_PERCENT),
+          })}
         </p>
         <SubmitButton variant="primary" size="sm">
           {t("submit")}

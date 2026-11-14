@@ -17,11 +17,23 @@ export interface FxRateInput {
   at: Date; // the caller's clock reading
   approvedBy?: string; // the second admin of the change, verified by the caller
   /**
+   * WPU-X9 (owner decision 2026-11-14). The ground on which ONE admin set this rate without a second admin, decided
+   * by the caller (core fxSingleAdminApproval). Stored in the audit row (metadata.after.approval), so a single-admin
+   * change is told apart from a four-eyes one. Never together with approvedBy.
+   */
+  approval?: FxRateApproval;
+  /**
    * WPU-Y1. Saving the rate that is already in force, starting now, writes a NEW row (an admin re-confirms the
    * rate, which restarts its 7 days) instead of being a replay. Same-start repeats are still replays.
    */
   reconfirm?: boolean;
 }
+
+/** WPU-X9. The grounds of a rate set by one admin. */
+export const FX_RATE_APPROVALS = ["single_admin_first_rate", "single_admin_within_limit"] as const;
+export type FxRateApproval = (typeof FX_RATE_APPROVALS)[number];
+const isApproval = (v: unknown): v is FxRateApproval =>
+  typeof v === "string" && (FX_RATE_APPROVALS as readonly string[]).includes(v);
 
 export type FxRateSaved = FxRateRow & { laterChangePending: Date | null };
 
@@ -73,7 +85,7 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
 
     async set(input, reason) {
       // Read once into locals, so a getter cannot answer differently on the second read.
-      const { market, rate, effectiveFrom, at, approvedBy, reconfirm } = input;
+      const { market, rate, effectiveFrom, at, approvedBy, approval, reconfirm } = input;
       if (!(await isActiveAdmin(scope))) return refused("forbidden");
       if (
         !isMarketCode(market) ||
@@ -81,7 +93,8 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
         !isInstant(effectiveFrom) ||
         !isInstant(at) ||
         effectiveFrom.getTime() < at.getTime() ||
-        (approvedBy !== undefined && (typeof approvedBy !== "string" || !isUuid(approvedBy)))
+        (approvedBy !== undefined && (typeof approvedBy !== "string" || !isUuid(approvedBy))) ||
+        (approval !== undefined && (!isApproval(approval) || approvedBy !== undefined))
       ) {
         return refused("validation");
       }
@@ -168,7 +181,11 @@ export function fxRatesAdminRepo(scope: AdminScope): FxRatesAdminRepo {
               value,
               replayed: false,
               before,
-              after: { ...stamp(value), ...(approver ? { approvedBy: approver } : {}) },
+              after: {
+                ...stamp(value),
+                ...(approver ? { approvedBy: approver } : {}),
+                ...(approval ? { approval } : {}),
+              },
             };
           },
         );

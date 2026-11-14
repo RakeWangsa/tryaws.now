@@ -464,6 +464,9 @@ const WPU_Y1 = [
   "isFxRateUnavailable",
   "rateIsFresh",
   "runFxRateWatch",
+  // WPU-X9 (owner decision 2026-11-14): one admin within 3 percent.
+  "FX_SINGLE_ADMIN_PERCENT",
+  "fxSingleAdminApproval",
 ];
 
 // WP7-T3 and WP7-T5 add the DNS record rules and metering to @tc/core.

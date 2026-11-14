@@ -158,11 +158,20 @@ it.each([
   ["a market in lower case", { market: "bd" }],
   ["a start before the caller's clock", { effectiveFrom: hours(-1) }],
   ["a second admin that is not an id", { approvedBy: "not-an-id" }],
+  ["an unknown approval ground (WPU-X9)", { approval: "anything" }],
+  [
+    "a single-admin ground together with a second admin (WPU-X9)",
+    { approval: "single_admin_within_limit", approvedBy: "0191a000-0000-7000-8000-0000000000ae" },
+  ],
 ])("%s is refused as validation and nothing is written", async (_, over) => {
   const n = await count();
   const a = (await audits()).length;
   const input = { market: "BD", rate: "140", effectiveFrom: hours(3), at: hours(3), ...over };
-  expect(await as((r) => r.fxRates.set(input, "x"))).toEqual({ ok: false, error: "validation" });
+  // `as never`: some cases hold values the type refuses (an unknown approval ground), to test the runtime check.
+  expect(await as((r) => r.fxRates.set(input as never, "x"))).toEqual({
+    ok: false,
+    error: "validation",
+  });
   expect(await count()).toBe(n);
   expect((await audits()).length).toBe(a);
 });
@@ -268,4 +277,27 @@ it("no role edits or deletes a rate: admin_rw has no grant and the trigger stops
     ).rejects.toMatchObject({ code: "42501" });
     await expect(t.pool.query(sqlText)).rejects.toMatchObject({ code: "23001" });
   }
+});
+
+it("WPU-X9: a rate set by one admin records its ground (approval) in the audit row and names no second admin", async () => {
+  const start = hours(500);
+  const set = await as((r) =>
+    r.fxRates.set(
+      {
+        market: "BD",
+        rate: "134",
+        effectiveFrom: start,
+        at: start,
+        approval: "single_admin_within_limit",
+      },
+      "bank moved a little",
+    ),
+  );
+  expect(set).toMatchObject({ ok: true, replayed: false, value: { rate: "134" } });
+  const metadata = (await audits()).at(-1)?.metadata as { after: Record<string, unknown> };
+  expect(metadata).toMatchObject({
+    reason: "bank moved a little",
+    after: { rate: "134", approval: "single_admin_within_limit" },
+  });
+  expect(metadata.after).not.toHaveProperty("approvedBy");
 });
