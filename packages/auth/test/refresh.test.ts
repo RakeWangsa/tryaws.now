@@ -408,11 +408,15 @@ describe("cognitoRefreshPort", () => {
     });
   });
 
-  it("a NotAuthorizedException or RefreshTokenReuseException answer is rejected", async () => {
+  // A dead refresh cookie (the user was deleted: UserNotFoundException) is cleared, not retried on every
+  // request (round 5, re-review L3).
+  it("a NotAuthorized, RefreshTokenReuse or UserNotFound answer is rejected", async () => {
     for (const type of [
       "NotAuthorizedException",
       "com.amazonaws.cognito.identity.idp.model#NotAuthorizedException",
       "RefreshTokenReuseException",
+      "UserNotFoundException",
+      "com.amazonaws.cognito.identity.idp.model#UserNotFoundException",
     ]) {
       const fake = (() =>
         Promise.resolve(

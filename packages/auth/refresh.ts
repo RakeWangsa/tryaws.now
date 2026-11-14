@@ -70,9 +70,13 @@ export function cognitoRefreshPort(
         if (res.status === 400) {
           const type = body["__type"];
           // Cognito writes the type bare or as "<namespace>#NotAuthorizedException". A token that was
-          // used up by rotation (RefreshTokenReuseException) is as good as revoked.
+          // used up by rotation (RefreshTokenReuseException) is as good as revoked, and so is the token
+          // of a user who no longer exists (UserNotFoundException): the cookies are cleared instead of
+          // the same dead token being tried again on every request.
           return typeof type === "string" &&
-            (type.endsWith("NotAuthorizedException") || type.endsWith("RefreshTokenReuseException"))
+            (type.endsWith("NotAuthorizedException") ||
+              type.endsWith("RefreshTokenReuseException") ||
+              type.endsWith("UserNotFoundException"))
             ? REJECTED
             : UNAVAILABLE;
         }

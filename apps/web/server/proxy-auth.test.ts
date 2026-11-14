@@ -73,6 +73,77 @@ describe("proxyAuthRuntime", () => {
     }
   });
 
+  // Re-review L1: a first read of the link that fails must not leave every session of the container
+  // without a refresh port for the life of the container. A runtime built without a port is kept for at
+  // most a minute, then built again; a runtime with a port is kept. Each build without a port logs a
+  // fixed line, with no value.
+  describe("a runtime without a refresh port", () => {
+    const GOOD_LINK = JSON.stringify({
+      id: POOL.COGNITO_CUSTOMER_CLIENT_ID,
+      secret: "customer0app0client0secret0abcdef",
+    });
+    const MINUTE = 60_000;
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    function logs() {
+      const lines: string[] = [];
+      vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+        lines.push(String(line));
+      });
+      return lines;
+    }
+
+    it("is built again after a minute and then has the port; a good one is kept", async () => {
+      const lines = logs();
+      const { proxyAuthRuntime } = await load();
+      let t = 5_000_000;
+      const link: { raw: string | undefined } = { raw: undefined };
+      const links = () => (link.raw === undefined ? undefined : JSON.parse(link.raw));
+      const first = await proxyAuthRuntime({ ...REAL, ...POOL }, links, () => t);
+      expect(first?.port).toBeUndefined();
+      // within the minute: the same runtime, no new build, no new line
+      t += MINUTE - 1;
+      link.raw = GOOD_LINK;
+      expect(await proxyAuthRuntime({ ...REAL, ...POOL }, links, () => t)).toBe(first);
+      expect(lines).toEqual([JSON.stringify({ event: "auth.refresh", reason: "no_port" })]);
+      // a minute after the build: built again, now with the port
+      t += 1;
+      const second = await proxyAuthRuntime({ ...REAL, ...POOL }, links, () => t);
+      expect(second).not.toBe(first);
+      expect(typeof second?.port?.refresh).toBe("function");
+      // a runtime with a port is kept for good
+      t += 60 * MINUTE;
+      expect(await proxyAuthRuntime({ ...REAL, ...POOL }, links, () => t)).toBe(second);
+      expect(lines).toHaveLength(1);
+    });
+
+    it("keeps trying once a minute while the link stays unreadable, one line per build, no value", async () => {
+      const lines = logs();
+      const { proxyAuthRuntime } = await load();
+      let t = 9_000_000;
+      const links = () => ({ id: "x", secret: "customer0app0client0secret0abcdef" });
+      for (let i = 0; i < 3; i++) {
+        const runtime = await proxyAuthRuntime({ ...REAL, ...POOL }, links, () => t);
+        expect(runtime?.port).toBeUndefined();
+        t += MINUTE;
+      }
+      expect(lines).toEqual(
+        Array(3).fill(JSON.stringify({ event: "auth.refresh", reason: "no_port" })),
+      );
+      expect(lines.join("")).not.toContain("customer0app0client0secret0abcdef");
+    });
+
+    it("a runtime that was not configurable (null) logs nothing and keeps the old caching", async () => {
+      const lines = logs();
+      const { proxyAuthRuntime } = await load();
+      expect(await proxyAuthRuntime({ ...REAL }, undefined, () => 1)).toBeNull();
+      expect(lines).toEqual([]);
+    });
+  });
+
   it("is memoised", async () => {
     const { proxyAuthRuntime } = await load();
     const a = proxyAuthRuntime({ ...REAL, ...POOL });
