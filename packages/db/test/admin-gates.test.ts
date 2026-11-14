@@ -352,7 +352,8 @@ const GATE_CASES: Record<string, GateCase> = {
         "r",
         testPoster,
       ),
-    deny: "superadmin",
+    // WPU-X5 (owner decision 2026-11-14): finance and superadmin create; support is still refused.
+    deny: "support",
   },
   "wallets.approveAdjustment": {
     call: (r) => r.wallets.approveAdjustment({ id: ID() }, "r", testPoster),

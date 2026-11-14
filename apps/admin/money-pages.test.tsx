@@ -248,12 +248,13 @@ describe("/wallets/[customerId]", () => {
     expect(html).toContain(msgs("en").adjust.own);
   });
 
-  it("superadmin approves but cannot create; the form is not shown", async () => {
+  // WPU-X5 (owner decision 2026-11-14): a superadmin creates adjustments too, and still decides others'.
+  it("superadmin sees the create form and the approve form", async () => {
     as("superadmin");
     const html = inProvider(await WalletPage(walletParams("en")), "en");
-    expect(html).not.toContain('value="createAdjustment"');
+    expect(html).toContain('name="kind" value="createAdjustment"');
     expect(html).toContain('value="approveAdjustment"');
-    expect(html).toContain(msgs("en").adjust.readOnly);
+    expect(html).not.toContain(msgs("en").adjust.readOnly);
   });
 
   it("shows when no limit is set and warns when the cache and the ledger differ", async () => {

@@ -442,10 +442,11 @@ it("a poster that refuses leaves no row and no audit row (fail closed)", async (
   expect((await auditRowsOf(t.pool, a.adminId)).length).toBe(before);
 });
 
-it("only finance creates; support, ops and superadmin are refused before any query", async () => {
+// WPU-X5 (owner decision 2026-11-14): a superadmin creates too, so only support and ops are refused here.
+it("only finance and superadmin create; support and ops are refused before any query", async () => {
   const w = await fundedWallet(t.pool, 0n);
   await setAdjustmentLimit(t.pool, "5000");
-  for (const role of ["support", "ops", "superadmin"] as const) {
+  for (const role of ["support", "ops"] as const) {
     const actor = await actorOf(role);
     const input = credit(w.customerId, 100n);
     expect(

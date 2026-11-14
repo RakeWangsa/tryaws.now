@@ -20,7 +20,9 @@ import { CLEAR_MARK_KEY } from "./operations";
 // (R10); the posting is made by the poster the app passes (@tc/core postTransaction, R5), under the
 // wallet lock, with a key derived from the request id (R7).
 const READ_ROLES: readonly AdminRole[] = ["finance", "superadmin"];
-const CREATE_ROLES: readonly AdminRole[] = ["finance"];
+// WPU-X5 (owner decision 2026-11-14): a superadmin creates adjustments too; the limit and the second-admin
+// rule above it are the same, and nobody approves their own.
+const CREATE_ROLES: readonly AdminRole[] = ["finance", "superadmin"];
 const DECIDE_ROLES: readonly AdminRole[] = ["finance", "superadmin"];
 // WPU-M3: ops must be able to correct a wrong or missing credit, so finance and superadmin both may.
 const CREDIT_ROLES: readonly AdminRole[] = ["finance", "superadmin"];

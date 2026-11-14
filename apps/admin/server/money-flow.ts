@@ -71,9 +71,10 @@ export interface MoneyFlowDeps {
 export const MAX_TEXT = MAX_REASON_LENGTH;
 
 // 16.12: finance creates; a second finance or superadmin decides; finance re-verifies and refunds; ops
-// and finance resolve a discrepancy (superadmin owns every area).
+// and finance resolve a discrepancy (superadmin owns every area). WPU-X5 (owner decision 2026-11-14): a
+// superadmin creates adjustments too (the same limit; above it a second admin decides).
 export const KIND_ROLES: Readonly<Record<MoneyActionKind, readonly AdminRole[]>> = {
-  createAdjustment: ["finance"],
+  createAdjustment: ["finance", "superadmin"],
   approveAdjustment: ["finance", "superadmin"],
   rejectAdjustment: ["finance", "superadmin"],
   reverifyPayment: ["finance"],

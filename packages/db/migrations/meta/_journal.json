@@ -190,6 +190,13 @@
       "when": 1794531995847,
       "tag": "0028_disk_max_gb_16000",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794535595847,
+      "tag": "0029_wallet_adjustment_limit_bd",
+      "breakpoints": true
     }
   ]
 }

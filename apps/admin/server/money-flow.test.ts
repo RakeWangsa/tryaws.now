@@ -148,8 +148,9 @@ describe("money actions in the order of R9", () => {
     await r.act(adjust({ kind: "reverifyPayment" }));
     await r.act(adjust({ kind: "recordManualRefund" }));
     await r.act(adjust({ kind: "resolveDiscrepancy" }));
+    // WPU-X5 (owner decision 2026-11-14): a superadmin creates adjustments too.
     expect(r.asked).toEqual([
-      ["finance"],
+      ["finance", "superadmin"],
       ["finance", "superadmin"],
       ["finance", "superadmin"],
       ["finance"],

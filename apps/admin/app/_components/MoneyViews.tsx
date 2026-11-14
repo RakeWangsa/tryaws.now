@@ -385,7 +385,7 @@ export interface WalletViewProps {
   locale: Locale;
   wallet: WalletAdminDetail;
   adminId: string;
-  // finance creates; finance and superadmin decide.
+  // finance and superadmin create (WPU-X5, owner decision 2026-11-14); finance and superadmin decide.
   canCreate: boolean;
   canDecide: boolean;
   // Made at render time: the request id of the form, so a double submit is one request (R7).

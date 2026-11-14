@@ -3994,8 +3994,9 @@ TASKS["WPU-X4"] = [
 // WPU-X5 (owner decision 2026-11-14): migration 0029 and the launch seed give market BD the single-admin
 // adjustment limit of 1,000,000 paisa per wallet per 24 hours, with one system audit row, only where no row
 // exists. db includes PostgreSQL (adjustment-limit-migration); core runs the tests that seed the launch data
-// and set their own limit; repo holds the journal and verify wiring.
-TASKS["WPU-X5"] = [specSync, baselineSync, lint, typecheck, format, core, db, repo];
+// and set their own limit; repo holds the journal and verify wiring. Round 2 (owner decision 2026-11-14): a
+// superadmin creates adjustments too (db repository and the admin app's role table, page and texts).
+TASKS["WPU-X5"] = [specSync, baselineSync, lint, typecheck, format, core, db, admin, repo];
 
 // WPU-X2 (owner round 5): the domain renewal rules (30 days before expiry, the refund when the registry
 // refuses) in the terms and the refund policy, en and bn, with LEGAL_VERSIONS moved to version 2. The text

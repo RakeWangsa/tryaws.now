@@ -41,7 +41,8 @@ export default async function Page({ params, searchParams }: PageProps) {
           locale={locale}
           wallet={wallet.value}
           adminId={loaded.admin.adminId}
-          canCreate={loaded.admin.role === "finance"}
+          // WPU-X5 (owner decision 2026-11-14): a superadmin creates adjustments too.
+          canCreate={loaded.admin.role === "finance" || loaded.admin.role === "superadmin"}
           canDecide={loaded.admin.role === "finance" || loaded.admin.role === "superadmin"}
           requestId={crypto.randomUUID()}
           result={resultCodeOf(raw["result"])}

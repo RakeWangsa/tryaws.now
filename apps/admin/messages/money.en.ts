@@ -64,7 +64,7 @@ export const moneyEn: Same<typeof moneyBn> = {
       evidenceHint: "A slip or ticket number. Optional.",
       submit: "Submit the adjustment",
       splitHint: "Adjustments of one wallet within 24 hours count together against the limit.",
-      readOnly: "You can only look. Finance creates adjustments.",
+      readOnly: "You can only look. Finance or a superadmin creates adjustments.",
       pendingTitle: "Waiting for approval",
       pendingCaption: "Adjustments waiting for a second admin",
       pendingEmpty: "Nothing is waiting.",

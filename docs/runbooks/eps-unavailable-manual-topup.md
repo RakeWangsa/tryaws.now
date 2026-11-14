@@ -9,7 +9,7 @@ Section M: "EPS unavailable (manual top-up by a `finance` admin with a bank or w
 
 ## Who
 
-Finance admin creates the adjustment; a second finance or superadmin approves above the limit (the requester can never approve their own).
+A finance admin or a superadmin creates the adjustment; a second finance or superadmin approves above the limit (the requester can never approve their own).
 
 ### The limit (WPU-X5, owner decision 2026-11-14)
 
@@ -17,7 +17,7 @@ Finance admin creates the adjustment; a second finance or superadmin approves ab
 - Set by migration 0029 (and by the launch seed for a market created after the migrations), each with one `audit_log` row (actor `system`, action `setting.set`, target `setting` / `BD:wallet.adjustment_limit_minor`). Neither ever overwrites an existing value.
 - The `/wallets/[customerId]` page shows the limit in force. A missing or malformed value counts as 0: every adjustment then waits for a second admin (R16).
 - No admin screen writes this setting yet. Until one exists, the limit changes **only by a reviewed migration** (a new forward-only migration, with its own audit row and reason), never by editing the row by hand. Follow-up: a superadmin screen for the limit, audited with actor, reason, IP and target (R10).
-- Only the `finance` role creates adjustments; a `superadmin` can approve or reject but not create. A sole owner-admin needs a `finance` account to use the limit.
+- `finance` and `superadmin` create adjustments (credit and debit; superadmin by owner decision 2026-11-14). Within the limit the adjustment completes with the one admin; above it a second finance or superadmin approves or rejects. Nobody approves or rejects their own. `support` and `ops` cannot create.
 
 ## Safe checks
 

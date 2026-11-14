@@ -125,8 +125,7 @@ describe("migration 0029: the single-admin adjustment limit of market BD", () =>
     });
   });
 
-  // Only finance creates an adjustment (CREATE_ROLES of wallets.ts); a superadmin may only decide one.
-  it("10,000.01 BDT in one request waits; a debit of 10,000 BDT posts at once; a superadmin may not create", async () => {
+  it("10,000.01 BDT in one request waits; a debit of 10,000 BDT posts at once", async () => {
     const a = await actorOf("finance");
     const w = await fundedWallet(t.pool, 2_000_000n);
     const over = credit(w.customerId, 1_000_001n);
@@ -139,16 +138,96 @@ describe("migration 0029: the single-admin adjustment limit of market BD", () =>
         r.wallets.createAdjustment(debit, "double top-up removed", testPoster),
       ),
     ).toMatchObject({ ok: true, value: { status: "approved" } });
-    const bySuper = credit(w.customerId, 1n);
-    expect(
-      await asAdmin(await actorOf("superadmin"), (r) =>
-        r.wallets.createAdjustment(bySuper, "one paisa", testPoster),
-      ),
-    ).toEqual({ ok: false, error: "forbidden" });
     expect(await walletOf(t.pool, w.customerId)).toEqual({
       balance: 1_000_000n,
       entriesSum: 1_000_000n,
     });
+  });
+
+  // WPU-X5 (owner decision 2026-11-14): a superadmin creates adjustments too, with the same limit and the
+  // same second-admin rule; self-approval stays forbidden.
+  it("a superadmin credit within the limit posts alone, with its ledger transaction and audit row", async () => {
+    const boss = await actorOf("superadmin");
+    const w = await fundedWallet(t.pool, 0n);
+    const input = credit(w.customerId, 1_000_000n);
+    expect(
+      await asAdmin(boss, (r) =>
+        r.wallets.createAdjustment(input, "bank deposit slip 9", testPoster),
+      ),
+    ).toMatchObject({ ok: true, replayed: false, value: { status: "approved" } });
+    expect(await walletOf(t.pool, w.customerId)).toEqual({
+      balance: 1_000_000n,
+      entriesSum: 1_000_000n,
+    });
+    const row = (
+      await t.pool.query(
+        "select requested_by, approved_by, ledger_transaction_id from wallet_adjustments where id = $1",
+        [input.requestId],
+      )
+    ).rows[0];
+    expect(row).toMatchObject({ requested_by: boss.adminId, approved_by: null });
+    const tx = (
+      await t.pool.query(
+        "select kind, actor_type, actor_id from ledger_transactions where id = $1",
+        [row.ledger_transaction_id],
+      )
+    ).rows[0];
+    expect(tx).toEqual({ kind: "adjustment", actor_type: "admin", actor_id: boss.adminId });
+    const audit = (
+      await t.pool.query(
+        `select actor_type, target_type, target_id, metadata from audit_log
+          where actor_id = $1 and action = 'wallet.adjustment.create'`,
+        [boss.adminId],
+      )
+    ).rows;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({
+      actor_type: "admin",
+      target_type: "wallet_adjustment",
+      target_id: input.requestId,
+    });
+    expect(audit[0]?.metadata).toMatchObject({ reason: "bank deposit slip 9" });
+  });
+
+  it("a superadmin debit above the limit waits; the superadmin cannot approve it; a second admin can", async () => {
+    const boss = await actorOf("superadmin");
+    const w = await fundedWallet(t.pool, 2_000_000n);
+    const input = credit(w.customerId, 1_000_001n, { direction: "debit", kind: "correction" });
+    expect(
+      await asAdmin(boss, (r) => r.wallets.createAdjustment(input, "double top-up", testPoster)),
+    ).toMatchObject({ ok: true, value: { status: "pending" } });
+    for (const act of [
+      (r: AdminRepos) => r.wallets.approveAdjustment({ id: input.requestId }, "self", testPoster),
+      (r: AdminRepos) => r.wallets.rejectAdjustment({ id: input.requestId }, "self"),
+    ]) {
+      expect(await asAdmin(boss, act)).toEqual({ ok: false, error: "forbidden" });
+    }
+    expect(await walletOf(t.pool, w.customerId)).toEqual({
+      balance: 2_000_000n,
+      entriesSum: 2_000_000n,
+    });
+    expect(
+      await asAdmin(await actorOf("finance"), (r) =>
+        r.wallets.approveAdjustment({ id: input.requestId }, "slip checked", testPoster),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "approved" } });
+    expect(await walletOf(t.pool, w.customerId)).toEqual({
+      balance: 999_999n,
+      entriesSum: 999_999n,
+    });
+  });
+
+  it("support and ops still cannot create", async () => {
+    const w = await fundedWallet(t.pool, 0n);
+    for (const role of ["support", "ops"] as const) {
+      const input = credit(w.customerId, 1n);
+      expect(
+        await asAdmin(await actorOf(role), (r) =>
+          r.wallets.createAdjustment(input, "one paisa", testPoster),
+        ),
+        role,
+      ).toEqual({ ok: false, error: "forbidden" });
+    }
   });
 
   it("a value set later is never overwritten, and no audit row is added", async () => {
