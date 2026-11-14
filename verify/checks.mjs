@@ -3973,6 +3973,24 @@ TASKS["WPU-X1"] = [
   repo,
 ];
 
+// WPU-X4 (go-live): the migrator registers the one pool account from TC_POOL_ACCOUNT_IDS and the new stage
+// variable TC_POOL_EXTERNAL_ID (migrator only), with the idempotent SQL of packages/db/seed-pool.ts; db
+// includes PostgreSQL (seed-pool), repo holds the infra, workflow and runbook wiring (infra-lib included).
+TASKS["WPU-X4"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  glueTest(
+    "migrator",
+    "functions/migrator: config, steps and the pool_account step (inserted, exists, skipped, conflict, R14)",
+    "@tc/fn-migrator",
+  ),
+  db,
+  repo,
+];
+
 // WPU-X2 (owner round 5): the domain renewal rules (30 days before expiry, the refund when the registry
 // refuses) in the terms and the refund policy, en and bn, with LEGAL_VERSIONS moved to version 2. The text
 // waits for the owner's approval before merge.

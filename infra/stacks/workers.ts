@@ -129,6 +129,11 @@ function environmentOf(
   if (spec.dir === "migrator") {
     // copyFiles (functionArgs) puts packages/db/migrations here, next to the bundle.
     env.MIGRATIONS_DIR = "/var/task/migrations";
+    // WPU-X4: the pool account bootstrap (functions/migrator, step pool_account). The id list as the
+    // deploy has it (several ids: the migrator does nothing) and, only when set, the plain ExternalId of
+    // the tc-pool-roles stack (6.3). No other function gets TC_POOL_EXTERNAL_ID.
+    env.TC_POOL_ACCOUNT_IDS = config.poolAccountIds.join(",");
+    if (config.poolExternalId !== null) env.TC_POOL_EXTERNAL_ID = config.poolExternalId;
   }
   if (spec.dir === "payments-sweeper") {
     env.EPS_MODE = config.tcStage === "production" ? "production" : "sandbox";

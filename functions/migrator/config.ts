@@ -35,6 +35,14 @@ export interface MigratorConfig {
   readonly migrationsDir: string;
   /** The raw value of FirstAdminSub; undefined when it is not linked, not a string or empty. */
   readonly firstAdminSub?: string | undefined;
+  /**
+   * WPU-X4: plain environment values of the pool account bootstrap, raw (poolAccountDecision of @tc/db
+   * decides): TC_STAGE, TC_POOL_ACCOUNT_IDS and TC_POOL_EXTERNAL_ID (an ExternalId is not a secret, 6.3).
+   * Undefined when unset or empty; never a failure of the configuration.
+   */
+  readonly stage?: string | undefined;
+  readonly poolAccountIds?: string | undefined;
+  readonly poolExternalId?: string | undefined;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -94,5 +102,8 @@ export function readMigratorConfig(env: Env, links: LinkSource = sstLinks): Migr
     migrationsDir,
     // Optional: a missing or unreadable link is "no secret", never a failure of the migrations.
     firstAdminSub: secretValue(links(FIRST_ADMIN_SUB_SECRET)),
+    stage: text(env.TC_STAGE),
+    poolAccountIds: text(env.TC_POOL_ACCOUNT_IDS),
+    poolExternalId: text(env.TC_POOL_EXTERNAL_ID),
   };
 }

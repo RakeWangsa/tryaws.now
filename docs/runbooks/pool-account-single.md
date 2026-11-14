@@ -8,13 +8,34 @@ The owner has one pool account (roles `TcProvisioner`, `TcReader`, `TcAccessDeta
 
 ## Who
 
-DevOps with the table-owner database URL of the stage. A Claude Code session does not run this and never sees the URL.
+Staging and production with ONE pool account: whoever runs the go-live (owner decision 2026-11-14: a Claude Code session may run it), through the migrator, with no database URL at all. Any other case (several pool accounts, a local database, a fix that the migrator path refuses): DevOps with the table-owner database URL of the stage, through the CLI. A Claude Code session never sees that URL.
+
+## The migrator path (WPU-X4, the way for the one-account stage)
+
+The database is private (R2: Lambda in the VPC through RDS Proxy only) and has no bastion, so the CLI below cannot reach it on staging or production. The migrator function runs inside the VPC as the master user at every deploy, and after the first-admin step it registers the pool account with the same idempotent code as the CLI (`seedPoolAccount` of `packages/db/seed-pool.ts`).
+
+1. Do steps 1 to 6 of the onboarding page and the role stacks of this account (section above). Record the real quotas (step 1 below).
+2. Read the ExternalId of the stack made from `infra/org/pool-roles.yaml`: `aws cloudformation describe-stacks --stack-name <pool roles stack name> --query "Stacks[0].Parameters[?ParameterKey=='ExternalId'].ParameterValue" --output text`. It is a plain value, not a secret (6.3); still, it goes into no ticket, chat or file.
+3. Set the GitHub environment variable (not a secret) of the stage: `gh variable set TC_POOL_EXTERNAL_ID --env staging` (or `--env production`), value on standard input. `TC_POOL_ACCOUNT_IDS` of the same environment must hold exactly this one 12-digit id. `deploy-staging.yml` and `deploy-production.yml` pass the variable to `sst`; `infra/stacks/workers.ts` gives it to the migrator function only.
+4. Redeploy the stage (`deploy-staging.yml`, or the next `v*` tag for production; a production deploy that carries the variable is the confirmation that the CLI asks for with `--confirm-production`).
+5. Read the log line `migrator_pool_account` of the migrator function (CloudWatch). It holds the decision and at most the last 4 digits of the account id (`accountSuffix`), never the ExternalId (R14):
+   - `inserted` (`cellsCreated` 26): the account `pool-1`, tier `new`, status `active`, with the 26 capacity cells at the seed's placeholder limits.
+   - `skipped: exists`: a later deploy; nothing changed, limits and `used` stay (R7). Missing cells are filled in (`cellsCreated` above 0).
+   - `skipped: not configured`: `TC_POOL_EXTERNAL_ID` is empty. Nothing written; the deploy goes on.
+   - `skipped: several pool accounts`: `TC_POOL_ACCOUNT_IDS` holds more than one id. Multi-account onboarding stays manual: use the CLI and the admin app.
+   - `skipped: malformed`: the id is not 12 digits or the ExternalId does not match `^[A-Za-z0-9+=,.@:/_-]{16,1224}$` (the `AllowedPattern` of `pool-roles.yaml`). Nothing written; correct the variable and redeploy.
+   - `refused: conflict`: the deploy FAILS with `migrator: the pool account conflicts with an existing row` (fail closed, R16, like every failing migrator step; the migrations of that deploy are already committed). A row for this account exists with another name, tier or ExternalId, or the alias `pool-1` belongs to another account, and nothing was changed. Correct the variable, or empty it when the account was registered another way (for example by the CLI with another alias), and redeploy.
+6. Continue with step 5 below: set the real limits on `/capacity` (audited, R10).
+
+The variable may stay set: every later deploy logs `skipped: exists`. Empty it before a planned audited change of the account's tier or ExternalId, or the next deploy refuses with `refused: conflict`.
 
 ## Roles when the account also holds DNS
 
 If this one account is also the DNS account ([single-account-lean.md](single-account-lean.md)), deploy `pool-roles.yaml` first and `dns-account.yaml` second with `CreateBillingReader=false` (`TcBillingReader` exists once, owned by the pool stack). `ControlPlaneStage` is `staging` or `production` in both and must match the stage that runs the functions. No account id is written down.
 
 ## Steps
+
+The CLI path (`pnpm seed:pool-account`) is steps 2 to 4; it needs a direct table-owner connection, so it serves a local database and the cases the migrator path leaves out. Steps 1 and 5 to 7 apply to both paths.
 
 1. Record the real Lightsail quotas of the account in the three launch Regions (`ap-southeast-1`, `ap-south-1`, `us-east-1`). A limit above the real quota sells what AWS then refuses (gap P3).
 2. Dry run the arguments on the stage: `pnpm seed:pool-account -- --stage staging --aws-account-id <12 digits> --external-id <plain ExternalId> --name <alias> --limits '{"instance_vcpu": <real>, "static_ip": <real>}'`. The command checks every field before it opens a connection. Production needs `--confirm-production`, and only the owner decides that.

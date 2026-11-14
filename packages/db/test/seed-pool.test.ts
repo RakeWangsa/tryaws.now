@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { QUOTA_CODES } from "../schema/provisioning";
 import {
   DEFAULT_LIMITS,
+  isPoolSeedConflict,
   LAUNCH_REGIONS,
   planPoolSeed,
+  poolAccountDecision,
   seedPoolAccount,
   type SeedPoolInput,
   type SeedQuery,
@@ -194,6 +196,9 @@ describe("seedPoolAccount (database)", () => {
         run((q) => seedPoolAccount(q, input(other))),
         JSON.stringify(other),
       ).rejects.toThrow(/^seed-pool: .*differs/);
+      // WPU-X4: the migrator tells this refusal apart from a database failure
+      const error = await run((q) => seedPoolAccount(q, input(other))).catch((e: unknown) => e);
+      expect(isPoolSeedConflict(error), JSON.stringify(other)).toBe(true);
     }
     expect(await count("pool_accounts")).toBe(1);
   });
@@ -203,7 +208,49 @@ describe("seedPoolAccount (database)", () => {
     await expect(
       run((q) => seedPoolAccount(q, input({ awsAccountId: "222222222222" }))),
     ).rejects.toThrow(/^seed-pool: .*name/);
+    const error = await run((q) =>
+      seedPoolAccount(q, input({ awsAccountId: "222222222222" })),
+    ).catch((e: unknown) => e);
+    expect(isPoolSeedConflict(error)).toBe(true);
     expect(await count("pool_accounts")).toBe(1);
+  });
+
+  it("a database failure is not a conflict", async () => {
+    const error = await run((q) =>
+      seedPoolAccount((sql, params) => {
+        if (/insert into pool_capacity/.test(sql)) throw new Error("boom");
+        return q(sql, params);
+      }, input()),
+    ).catch((e: unknown) => e);
+    expect(isPoolSeedConflict(error)).toBe(false);
+  });
+
+  // WPU-X4: the plan of the migrator step, run against PostgreSQL: inserted, then exists, never a change.
+  it("the migrator plan inserts pool-1 once; a second deploy finds it and changes nothing (R7)", async () => {
+    const plan = poolAccountDecision({
+      stage: "staging",
+      accountIds: ACCOUNT,
+      externalId: "tc-pool-ext-placeholder-0001",
+    });
+    if (plan.kind !== "run") throw new Error("expected a run plan");
+    const first = await run((q) => seedPoolAccount(q, plan.input));
+    expect(first).toMatchObject({ accountCreated: true, cellsCreated: 26 });
+    await t.pool.query(
+      "update pool_capacity set quota_limit = 42, used = 3 where pool_account_id = $1 and quota_code = 'bucket'",
+      [first.accountId],
+    );
+    const again = await run((q) => seedPoolAccount(q, plan.input));
+    expect(again).toMatchObject({ accountCreated: false, cellsCreated: 0, cellsExisting: 26 });
+    const { rows } = await t.pool.query(
+      "select name, tier, status from pool_accounts where aws_account_id = $1",
+      [ACCOUNT],
+    );
+    expect(rows).toEqual([{ name: "pool-1", tier: "new", status: "active" }]);
+    const cell = await t.pool.query(
+      "select quota_limit, used from pool_capacity where pool_account_id = $1 and quota_code = 'bucket'",
+      [first.accountId],
+    );
+    expect(cell.rows).toEqual([{ quota_limit: 42, used: 3 }]);
   });
 
   it("rolls back as a whole when a statement fails midway", async () => {
