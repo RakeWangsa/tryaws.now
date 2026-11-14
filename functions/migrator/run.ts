@@ -91,11 +91,16 @@ export async function changedMigrations(
   return changed;
 }
 
-const COUNT_MIGRATIONS =
-  "select case when to_regclass('drizzle.__drizzle_migrations') is null then 0 " +
-  "else (select count(*) from drizzle.__drizzle_migrations) end::int as n";
+// Two queries on purpose: PostgreSQL resolves every table name when it parses a statement, so a CASE
+// around `from drizzle.__drizzle_migrations` still fails with 42P01 on a fresh database (staging deploy of
+// 2026-11-14; count.test.ts runs it on a real empty database).
+const COUNT_MIGRATIONS = "select count(*)::int as n from drizzle.__drizzle_migrations";
 
-async function migrationCount(client: Queryable): Promise<number> {
+export async function migrationCount(client: Queryable): Promise<number> {
+  const exists = await client.query(
+    "select to_regclass('drizzle.__drizzle_migrations') is not null as present",
+  );
+  if (exists.rows[0]?.present !== true) return 0;
   const { rows } = await client.query(COUNT_MIGRATIONS);
   return Number(rows[0]?.n ?? 0);
 }

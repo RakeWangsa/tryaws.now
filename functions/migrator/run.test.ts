@@ -52,7 +52,8 @@ function server(
         });
       }
       if (sql.includes("to_regclass") && sql.includes("is not null"))
-        return Promise.resolve({ rows: [{ present: over.rows !== undefined }] });
+        // The drizzle table exists once rows are given or a migration counts as applied (real behaviour).
+        return Promise.resolve({ rows: [{ present: over.rows !== undefined || applied > 0 }] });
       if (sql.includes("created_at from drizzle"))
         return Promise.resolve({ rows: over.rows ?? [] });
       if (sql.includes("__drizzle_migrations")) return Promise.resolve({ rows: [{ n: applied }] });
