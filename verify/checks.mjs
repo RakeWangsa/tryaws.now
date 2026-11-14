@@ -4035,7 +4035,23 @@ TASKS["WPU-X2"] = [specSync, baselineSync, lint, typecheck, format, web, repo];
 // keeps writeAttributes ["name"]. auth runs the SecretHash vector, the routing of each call to its client and
 // the fail-closed link reader; web the runtime without or with a malformed link; repo the infra rules (only
 // the sign-up client writes email, has a secret, and is linked to the web server function only).
-TASKS["WPU-X12"] = [specSync, baselineSync, lint, typecheck, format, auth, web, repo];
+// Follow-up (security review): cognito-messages runs the PreSignUp guard and the custom-message refusal of
+// sign-up and resend codes for any other client; repo pins the triggers and OAuth off on all clients.
+TASKS["WPU-X12"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  auth,
+  web,
+  glueTest(
+    "cognito-messages",
+    "functions/cognito-messages: PreSignUp guard and sign-up codes only for the sign-up client",
+    "@tc/fn-cognito-messages",
+  ),
+  repo,
+];
 
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 

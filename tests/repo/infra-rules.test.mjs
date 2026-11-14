@@ -2,7 +2,7 @@
 // infra/stacks (SST is not installed here, so the declarations cannot run). A real deploy output
 // is a manual step (JOURNEY.md). Comments are removed before any check, so a comment cannot
 // satisfy or break a rule.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { OPTIONAL_SMS_SECRETS } from "../../infra/lib/functions.ts";
@@ -284,7 +284,7 @@ describe("Cognito attribute writes", () => {
   const signUpClient = between(
     auth,
     'customers.addClient("CustomerSignUpClient"',
-    'new sst.aws.CognitoUserPool("AdminPool"',
+    'new sst.aws.Function("CognitoMessages"',
   );
   const adminApp = between(auth, 'admins.addClient("AdminAppClient"', "return {");
   const writes = (block) => /args\.writeAttributes = (\[[^\]]*\])/.exec(block)?.[1];
@@ -349,6 +349,93 @@ describe("Cognito attribute writes", () => {
       'SIGN_UP_CLIENT_LINK = "CustomerSignUpClient"',
     );
     expect(auth).toContain('customers.addClient("CustomerSignUpClient"');
+  });
+
+  // WPU-X12 follow-up 1 (security review): the public CustomerAppClient could call SignUp and
+  // ResendConfirmationCode directly at Cognito. A PreSignUp trigger refuses every self sign-up that
+  // does not come through CustomerSignUpClient, and the custom-message trigger sends no sign-up or
+  // resend code for another client (functions/cognito-messages/guard.ts). Both functions get the client
+  // id as SIGN_UP_CLIENT_ID. The pool cannot name them by `fn.arn` (pool -> function -> client id ->
+  // pool is a cycle), so the customer pool names them by their fixed ARN and grants Cognito the invoke
+  // in its own Permission, which depends on both the function and the pool.
+  it("guards the customer pool with a PreSignUp trigger that knows the sign-up client id", () => {
+    const customerPool = between(
+      auth,
+      'new sst.aws.CognitoUserPool("CustomerPool"',
+      "const customerClient",
+    );
+    expect(customerPool).not.toContain("triggers:");
+    expect(customerPool).toContain(
+      "args.lambdaConfig = { customMessage: lambdaArn(MESSAGES_FUNCTION), preSignUp: lambdaArn(PRE_SIGN_UP_FUNCTION)}",
+    );
+    expect(auth).toContain('const MESSAGES_FUNCTION = resourceName(stage, "cognito-messages")');
+    expect(auth).toContain('const PRE_SIGN_UP_FUNCTION = resourceName(stage, "cognito-presignup")');
+    expect(auth).toContain(
+      "const lambdaArn = (fnName: string) => $interpolate`arn:aws:lambda:${config.region}:${account.accountId}:function:${fnName}`",
+    );
+
+    const messagesFn = between(
+      auth,
+      'new sst.aws.Function("CognitoMessages"',
+      'new sst.aws.Function("CognitoPreSignUp"',
+    );
+    const preSignUpFn = between(
+      auth,
+      'new sst.aws.Function("CognitoPreSignUp"',
+      'new aws.lambda.Permission("CustomerPoolMessagesPermission"',
+    );
+    expect(messagesFn).toContain("name: MESSAGES_FUNCTION");
+    expect(preSignUpFn).toContain("name: PRE_SIGN_UP_FUNCTION");
+    expect(preSignUpFn).toContain('handler: "functions/cognito-messages/index.preSignUp"');
+    for (const fn of [messagesFn, preSignUpFn]) {
+      // the id (not the secret), and nothing else: no VPC, no links, no permissions (least privilege)
+      expect(fn).toContain("environment: { SIGN_UP_CLIENT_ID: customerSignUpClient.id }");
+      expect(fn).not.toMatch(/vpc|link|permissions|\.secret/);
+    }
+    expect(preSignUpFn).toContain('args.name = roleName(stage, "cognito-presignup")');
+    expect([...auth.matchAll(/SIGN_UP_CLIENT_ID/g)]).toHaveLength(2);
+    expect(auth).not.toMatch(/customerSignUpClient\.secret/);
+
+    // Cognito may invoke each function, from the customer pool only
+    for (const [permission, fn] of [
+      ["CustomerPoolMessagesPermission", "messages"],
+      ["CustomerPoolPreSignUpPermission", "preSignUp"],
+    ]) {
+      const block = between(auth, `new aws.lambda.Permission("${permission}"`, "});");
+      expect(block).toContain('action: "lambda:InvokeFunction"');
+      expect(block).toContain(`function: ${fn}.name`);
+      expect(block).toContain('principal: "cognito-idp.amazonaws.com"');
+      expect(block).toContain("sourceArn: customers.arn");
+    }
+    // the reader of the variable is the same name
+    expect(source("functions/cognito-messages/guard.ts")).toContain(
+      'SIGN_UP_CLIENT_ENV = "SIGN_UP_CLIENT_ID"',
+    );
+  });
+
+  // WPU-X12 follow-up 2: SST's client turns OAuth on (implicit and code, the
+  // aws.cognito.signin.user.admin scope, https://example.com). No client needs the OAuth server.
+  it("turns OAuth off on all three clients, and no user pool domain exists", () => {
+    for (const [name, block] of Object.entries({ customerApp, signUpClient, adminApp })) {
+      expect(block, name).toContain("args.allowedOauthFlowsUserPoolClient = false");
+      expect(block, name).toContain("args.allowedOauthFlows = []");
+      expect(block, name).toContain("args.allowedOauthScopes = []");
+      expect(block, name).toContain("args.callbackUrls = []");
+      expect(block, name).toContain("args.logoutUrls = []");
+    }
+    expect([...auth.matchAll(/args\.allowedOauthFlowsUserPoolClient = false/g)]).toHaveLength(3);
+    expect(auth).not.toMatch(/allowedOauthFlowsUserPoolClient = true/);
+    for (const file of readdirSync(resolve(root, "infra/stacks")).filter((f) =>
+      f.endsWith(".ts"),
+    )) {
+      const text = source(`infra/stacks/${file}`);
+      expect(text, file).not.toMatch(/UserPoolDomain|\bdomain:\s*\{\s*prefix|addDomain/);
+    }
+    // no `domain` argument on either user pool
+    for (const pool of ["CustomerPool", "AdminPool"]) {
+      const block = between(auth, `new sst.aws.CognitoUserPool("${pool}"`, "transform:");
+      expect(block, pool).not.toMatch(/\bdomain:/);
+    }
   });
 });
 
@@ -542,8 +629,15 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
   });
 
   it("uses one custom-message function for both pools, outside the VPC, with no links", () => {
-    expect([...auth.matchAll(/customMessage: messages\.arn/g)]).toHaveLength(2);
-    const fn = between(auth, 'new sst.aws.Function("CognitoMessages"', "const customers");
+    // WPU-X12: the admin pool through SST's trigger; the customer pool by the function's fixed ARN
+    // (no dependency cycle, see the PreSignUp test below).
+    expect([...auth.matchAll(/customMessage: messages\.arn/g)]).toHaveLength(1);
+    expect(auth).toContain("customMessage: lambdaArn(MESSAGES_FUNCTION)");
+    const fn = between(
+      auth,
+      'new sst.aws.Function("CognitoMessages"',
+      'new sst.aws.Function("CognitoPreSignUp"',
+    );
     expect(fn).toContain("functions/cognito-messages/index.handler");
     expect(fn).not.toMatch(/vpc|link|permissions/);
   });

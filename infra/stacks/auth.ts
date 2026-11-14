@@ -47,33 +47,34 @@ export function auth(config: StageConfig) {
     fromEmailAddress: config.sesFromAddress,
   };
 
-  // The trigger function: one Lambda for both pools.
-  const messages = new sst.aws.Function("CognitoMessages", {
-    handler: "functions/cognito-messages/index.handler",
-    // Staging: a fixed name, so the kept pools still point at the trigger of the next session (above).
-    ...(retainUserPools ? { name: resourceName(stage, "cognito-messages") } : {}),
-    // 3.2 sizes: a short function; the e-mail must stay under 20,000 characters.
-    timeout: "5 seconds",
-    memory: "256 MB",
-    transform: {
-      // Transform<iam.RoleArgs>, as SST passes it (.sst/platform/src/components/aws/function.ts).
-      role: (args: aws.iam.RoleArgs) => {
-        args.name = roleName(stage, "cognito-messages");
-      },
-    },
-  });
+  // The trigger functions have fixed names on every stage. Staging: the kept pools still point at the
+  // triggers of the next session (above). WPU-X12: the customer pool names both triggers by ARN, built
+  // from these names, instead of `fn.arn`: both functions carry the id of CustomerSignUpClient, the
+  // client needs the pool, so `pool -> fn.arn -> client.id -> pool` would be a dependency cycle. The
+  // ARN is a string the pool can know first; the Permissions below depend on the functions and the
+  // pool, so Cognito may invoke a function only once both exist.
+  // VERIFY (first deploy): Cognito accepts a trigger ARN whose function is created after the pool.
+  const MESSAGES_FUNCTION = resourceName(stage, "cognito-messages");
+  const PRE_SIGN_UP_FUNCTION = resourceName(stage, "cognito-presignup");
+  const account = aws.getCallerIdentityOutput({});
+  const lambdaArn = (fnName: string) =>
+    $interpolate`arn:aws:lambda:${config.region}:${account.accountId}:function:${fnName}`;
 
   // Customers: e-mail and password sign-up, e-mail verification, optional TOTP.
   const customers = new sst.aws.CognitoUserPool("CustomerPool", {
     usernames: ["email"],
     mfa: "optional",
     softwareToken: true,
-    triggers: { customMessage: messages.arn },
     transform: {
       // Transform<cognito.UserPoolArgs>, as SST passes it (components/aws/cognito-user-pool.ts).
       userPool: (args: aws.cognito.UserPoolArgs, opts) => {
         keepPool(opts, config.userPoolIds.customers);
         args.name = resourceName(stage, "customers");
+        // WPU-X12: the custom message trigger (as before) and the PreSignUp guard, by fixed ARN (above).
+        args.lambdaConfig = {
+          customMessage: lambdaArn(MESSAGES_FUNCTION),
+          preSignUp: lambdaArn(PRE_SIGN_UP_FUNCTION),
+        };
         args.passwordPolicy = PASSWORD_POLICY;
         args.autoVerifiedAttributes = ["email"];
         // A changed e-mail stays unverified, and the old one stays valid, until the new address
@@ -115,6 +116,13 @@ export function auth(config: StageConfig) {
           "ALLOW_USER_SRP_AUTH",
         ];
         args.preventUserExistenceErrors = "ENABLED";
+        // WPU-X12 follow-up 2: no OAuth server (SST turns on implicit and code, the
+        // aws.cognito.signin.user.admin scope and https://example.com); the app uses the user pools API.
+        args.allowedOauthFlowsUserPoolClient = false;
+        args.allowedOauthFlows = [];
+        args.allowedOauthScopes = [];
+        args.callbackUrls = [];
+        args.logoutUrls = [];
       },
     },
   });
@@ -150,6 +158,7 @@ export function auth(config: StageConfig) {
         args.allowedOauthFlows = [];
         args.allowedOauthScopes = [];
         args.callbackUrls = [];
+        args.logoutUrls = [];
         // The shortest validity Cognito allows, should a token ever be issued.
         args.accessTokenValidity = 5;
         args.idTokenValidity = 5;
@@ -163,6 +172,57 @@ export function auth(config: StageConfig) {
         args.preventUserExistenceErrors = "ENABLED";
       },
     },
+  });
+
+  // The custom message trigger: one Lambda for both pools. WPU-X12: it sends the sign-up and resend
+  // codes only for CustomerSignUpClient (functions/cognito-messages/guard.ts), so it gets that client's
+  // id (an id, not a secret).
+  const messages = new sst.aws.Function("CognitoMessages", {
+    handler: "functions/cognito-messages/index.handler",
+    name: MESSAGES_FUNCTION,
+    // 3.2 sizes: a short function; the e-mail must stay under 20,000 characters.
+    timeout: "5 seconds",
+    memory: "256 MB",
+    environment: { SIGN_UP_CLIENT_ID: customerSignUpClient.id },
+    transform: {
+      // Transform<iam.RoleArgs>, as SST passes it (.sst/platform/src/components/aws/function.ts).
+      role: (args: aws.iam.RoleArgs) => {
+        args.name = roleName(stage, "cognito-messages");
+      },
+    },
+  });
+
+  // WPU-X12 follow-up 1 (security review): CustomerAppClient is public (no secret), so anyone could
+  // call SignUp or ResendConfirmationCode with its id directly at Cognito, past the app's validation,
+  // rate limit, terms acceptance and audit (R9). This trigger refuses every self sign-up that does not
+  // come through CustomerSignUpClient (functions/cognito-messages/guard.ts). Least privilege: no VPC, no
+  // links, no permissions; it reads nothing and calls nothing.
+  const preSignUp = new sst.aws.Function("CognitoPreSignUp", {
+    handler: "functions/cognito-messages/index.preSignUp",
+    name: PRE_SIGN_UP_FUNCTION,
+    timeout: "5 seconds",
+    memory: "256 MB",
+    environment: { SIGN_UP_CLIENT_ID: customerSignUpClient.id },
+    transform: {
+      role: (args: aws.iam.RoleArgs) => {
+        args.name = roleName(stage, "cognito-presignup");
+      },
+    },
+  });
+
+  // Cognito may invoke the two customer pool triggers, from the customer pool only (what SST's
+  // `triggers` would create; the pool names the functions by ARN, so the grants are made here).
+  new aws.lambda.Permission("CustomerPoolMessagesPermission", {
+    action: "lambda:InvokeFunction",
+    function: messages.name,
+    principal: "cognito-idp.amazonaws.com",
+    sourceArn: customers.arn,
+  });
+  new aws.lambda.Permission("CustomerPoolPreSignUpPermission", {
+    action: "lambda:InvokeFunction",
+    function: preSignUp.name,
+    principal: "cognito-idp.amazonaws.com",
+    sourceArn: customers.arn,
   });
 
   // Admins: separate pool, no self sign-up, TOTP required (mfa "on" = mfaConfiguration ON), 8-hour sessions.
@@ -206,6 +266,12 @@ export function auth(config: StageConfig) {
         // Cognito allows only refresh, SRP and custom auth, and the sign-in is refused.
         args.explicitAuthFlows = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"];
         args.preventUserExistenceErrors = "ENABLED";
+        // WPU-X12 follow-up 2: no OAuth server, as on the customer clients.
+        args.allowedOauthFlowsUserPoolClient = false;
+        args.allowedOauthFlows = [];
+        args.allowedOauthScopes = [];
+        args.callbackUrls = [];
+        args.logoutUrls = [];
       },
     },
   });

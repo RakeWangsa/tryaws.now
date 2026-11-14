@@ -1,5 +1,6 @@
 import type { Locale } from "@tc/core";
 import { renderCognitoMessage, type CognitoMessageKind } from "@tc/notify";
+import { fromSignUpClient, type CallerContext } from "./guard";
 
 // The Cognito "custom message" trigger of both pools (3.2, 6, 16.14). Cognito calls it before it sends
 // a code and lets it replace the email subject and body; Cognito then puts the code (and the user
@@ -14,6 +15,7 @@ export interface CustomMessageEvent {
   readonly userPoolId?: string;
   readonly userName?: string;
   readonly triggerSource: string;
+  readonly callerContext?: CallerContext | null;
   readonly request: {
     readonly userAttributes?: Readonly<Record<string, string>>;
     readonly codeParameter: string;
@@ -52,7 +54,18 @@ export function localeOf(event: CustomMessageEvent): Locale {
   return "bn";
 }
 
-export function customMessage(event: CustomMessageEvent): CustomMessageEvent {
+// WPU-X12: the codes of a self sign-up and its resend go out only when the call came through the
+// server-only sign-up client (guard.ts); a throw makes Cognito send nothing.
+const SIGN_UP_SOURCES: ReadonlySet<string> = new Set([
+  "CustomMessage_SignUp",
+  "CustomMessage_ResendCode",
+]);
+
+/** `signUpClientId` is the configured CustomerSignUpClient id, or null when it is not configured. */
+export function customMessage(
+  event: CustomMessageEvent,
+  signUpClientId: string | null,
+): CustomMessageEvent {
   const fail = (): never => {
     throw new Error("cognito-messages: could not render the message");
   };
@@ -66,6 +79,9 @@ export function customMessage(event: CustomMessageEvent): CustomMessageEvent {
     event.response === null
   ) {
     return fail();
+  }
+  if (SIGN_UP_SOURCES.has(event.triggerSource) && !fromSignUpClient(event, signUpClientId)) {
+    throw new Error("cognito-messages: the code is sent only for the sign-up client");
   }
   const kind = Object.hasOwn(KIND_OF, event.triggerSource)
     ? KIND_OF[event.triggerSource]
