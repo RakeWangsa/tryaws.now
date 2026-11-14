@@ -22,7 +22,14 @@ const typecheck = {
   title: "TypeScript in every package",
   command: ["pnpm", "typecheck"],
 };
-const test = { id: "test", title: "Vitest, all projects", command: ["pnpm", "test"] };
+// 30 minutes: the whole suite runs past the default 10 minutes on a 2-vCPU GitHub runner (deploy-staging
+// run 43568655715, 2026-11-14, "FAIL 600s" with no failing test). Only the time limit changes.
+const test = {
+  id: "test",
+  title: "Vitest, all projects",
+  command: ["pnpm", "test"],
+  timeoutMs: 1_800_000,
+};
 
 // The kit and the CI workflow are proven by the repo tests that `test` runs. "CI green" of
 // gate M0 is the result of the pull request itself, not a local check.

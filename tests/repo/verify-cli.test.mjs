@@ -3531,3 +3531,12 @@ it("task WPU-Y6 is proven by the brand, invoice, notify, web, admin, ui, infra a
     ["repo", "pnpm test --filter repo --no-passWithNoTests"],
   ]);
 });
+
+// The full Vitest suite runs longer than the default 10 minutes on a 2-vCPU GitHub runner (deploy-staging
+// run 43568655715, 2026-11-14: "FAIL 600s" with no failing test). Every gate that runs it allows 30 minutes.
+it("gives the full Vitest check of every gate 30 minutes", () => {
+  for (const [gate, checks] of Object.entries(GATES)) {
+    const full = checks.filter((c) => c.id === "test");
+    for (const check of full) expect(check.timeoutMs, gate).toBe(1_800_000);
+  }
+});

@@ -43,7 +43,7 @@ jobs:
     # Fail closed: a dispatch from any other ref does nothing.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60 # the full Vitest check alone may take 30 (verify/checks.mjs)
     env:
       DATABASE_URL: postgres://postgres:ci-throwaway-password@localhost:5432/postgres
       GATE: ${{ inputs.gate }}

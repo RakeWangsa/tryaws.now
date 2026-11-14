@@ -59,7 +59,7 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60 # the full Vitest check alone may take 30 (verify/checks.mjs)
     env:
       DATABASE_URL: postgres://postgres:ci-throwaway-password@localhost:5432/postgres
     services:
