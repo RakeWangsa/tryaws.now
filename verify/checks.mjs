@@ -4094,6 +4094,11 @@ TASKS["WPU-X11"] = [
   repo,
 ];
 
+// WPU-X13 (owner review of staging, 2026-11-14): the redesigned public home page and the location filter of
+// the pricing page. ui runs tc.css (section 11) and its guard tests; web runs the page, message, anchor,
+// GEO-file and CSP tests; repo the journal and verify wiring.
+TASKS["WPU-X13"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

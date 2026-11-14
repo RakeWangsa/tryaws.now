@@ -86,40 +86,110 @@ export const publicEn: Same<typeof publicBn> = {
       perLocation: "{location}: {value}",
     },
     home: {
-      heroTitle: "Cloud Server, built on Amazon Lightsail",
-      plansTitle: "Popular Cloud Server plans",
-      plansLead:
-        "The lowest priced open plans right now. Every price comes straight from the price list.",
-      whyTitle: "Why TryAWS.now",
-      why: {
-        aws: {
-          title: "100% AWS infrastructure",
-          text: "Every server is an Amazon Lightsail resource that runs in the AWS Region you choose.",
-        },
-        bdt: {
-          title: "Wallet in taka, top up first",
-          text: "Add money to your wallet with EPS, then buy from it.",
-        },
-        panel: {
-          title: "One panel, no separate AWS account",
-          text: "Create, start, stop and back up servers from the TryAWS.now panel. You do not need the AWS console.",
-        },
+      heroTitle: "Cloud Server for Bangladesh. Pay in taka, no AWS account needed.",
+      heroLead:
+        "Built on Amazon Lightsail and running in Singapore or Mumbai. Top up your wallet with EPS and buy from it.",
+      heroSignup: "Create account",
+      panel: {
+        label: "Your server in the panel, an example picture",
+        title: "Cloud Server",
+        engine: "Amazon Lightsail instance",
+        location: "Location: Singapore or Mumbai",
+        wallet: "Paid from your wallet, in taka",
+        panel: "Start, stop and back up from the panel",
+      },
+      aboutTitle: "What TryAWS.now is",
+      trustLabel: "The essentials of TryAWS.now",
+      trust: {
+        aws: { title: "100% AWS", text: "Built on Amazon Lightsail" },
+        eps: { title: "Top up with EPS", text: "Wallet and payments in taka" },
+        regions: { title: "Singapore and Mumbai", text: "Two AWS Regions" },
         support: {
-          title: "TryAWS.now bills and supports you",
-          text: "TryAWS.now sells, bills and supports the service. Open a support request when you need help.",
+          title: "Support requests in the panel",
+          text: "TryAWS.now sells, bills and supports",
+        },
+      },
+      stepsTitle: "How it works",
+      stepsLead: "Three steps, all in the panel.",
+      stepLabel: "Step {number}",
+      steps: {
+        topup: { title: "Top up your wallet", text: "Add money with EPS. The wallet is in taka." },
+        plan: {
+          title: "Choose a plan",
+          text: "Pick a Cloud Server plan and a location: Singapore or Mumbai.",
+        },
+        ready: {
+          title: "Get your server",
+          text: "The server is created in the location you chose, and you run it from the panel.",
+        },
+      },
+      productsTitle: "What you can buy",
+      productsLead: "Products open step by step. What is not open yet says so next to its name.",
+      productOpen: "Open",
+      productsOpenLink: "{name}: see details",
+      products: {
+        server: {
+          title: "Cloud Server",
+          text: "An Amazon Lightsail instance in the location you choose.",
+        },
+        disk: { title: "Block Storage", text: "An extra disk for your server." },
+        staticIp: { title: "Static IP", text: "A fixed IP address for your server." },
+        backup: { title: "Backup", text: "Take and restore backups from the panel." },
+        cdn: { title: "CDN", text: "An Amazon Lightsail CDN distribution." },
+        dns: { title: "DNS", text: "DNS zones on Amazon Route 53." },
+        domain: {
+          title: "Domain",
+          text: "Register and manage domain names, with Amazon Route 53.",
+        },
+      },
+      plansTitle: "Plans and prices",
+      plansLead:
+        "Cloud Server plans, straight from the price list. Prices are in US dollars for 30 days and include VAT and fees.",
+      plansAll: "See all plans and locations",
+      compareTitle: "How buying works here",
+      compareLead: "Prepaid, in taka, from one panel.",
+      compareCaption: "How buying works on TryAWS.now",
+      compareFeature: "Topic",
+      compareHere: "On TryAWS.now",
+      compare: {
+        card: {
+          label: "Payment",
+          here: "A taka wallet that you top up with EPS, paid in advance",
+        },
+        usd: {
+          label: "Price and bill",
+          here: "Price shown in US dollars, taken from your wallet in taka, VAT and fees included",
+        },
+        tax: {
+          label: "Tax invoice",
+          here: "A tax invoice in taka (Mushak-6.3) for each purchase and renewal",
+        },
+        console: {
+          label: "Management",
+          here: "The TryAWS.now panel, no separate AWS account needed",
         },
       },
       locationsTitle: "Two locations",
       locationsText:
-        "Two AWS Regions at the start: Singapore (ap-southeast-1) and Mumbai (ap-south-1). The data transfer of a plan can differ by location.",
-      helpTitle: "Need help?",
-      help: {
-        faq: { title: "Questions", text: "Answers on AWS, billing and data" },
-        support: { title: "Support", text: "Get in touch with us" },
-        pricing: { title: "Pricing", text: "All plans and prices together" },
+        "Two AWS Regions at the start. The data transfer of a plan can differ by location.",
+      locationRegion: "AWS Region: {name}",
+      locationCta: "See plans in {location}",
+      regionNames: {
+        "ap-southeast-1": "Asia Pacific (Singapore)",
+        "ap-south-1": "Asia Pacific (Mumbai)",
       },
+      faqTitle: "Frequently asked questions",
+      faqLead: "What most people ask before they buy.",
+      faqAll: "See all questions",
+      ctaTitle: "Ready to start?",
+      ctaText:
+        "Create an account, top up your wallet and buy your first Cloud Server. To buy you need an email, a mobile number and an authenticator app.",
     },
     pricing: {
+      vatNote: "VAT and fees are included in every price.",
+      regionNavLabel: "Filter by location",
+      regionAll: "All locations",
+      regionCurrent: "(selected)",
       heading: "Pricing",
       lead: "Cloud Server, built on Amazon Lightsail. Every price is for 30 days, in US dollars.",
       answer:

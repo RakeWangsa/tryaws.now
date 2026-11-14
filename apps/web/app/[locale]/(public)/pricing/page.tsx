@@ -11,7 +11,11 @@ export function generateMetadata({ params }: LocaleParams): Promise<Metadata> {
 }
 
 /** `/pricing`: every price is the pricing engine's output for a catalog row (WPP-T1, R4). */
-export default async function PricingPage({ params }: LocaleParams) {
+export default async function PricingPage({
+  params,
+  searchParams,
+}: LocaleParams & { searchParams: Promise<{ region?: string | string[] }> }) {
+  const { region } = await searchParams;
   const locale = await localeOf(params);
   const [catalog, nonce, signedIn] = await Promise.all([
     publicCatalog(),
@@ -20,7 +24,13 @@ export default async function PricingPage({ params }: LocaleParams) {
   ]);
   return (
     <PublicFrame signedIn={signedIn} locale={locale} path="/pricing" {...menuOf(catalog)}>
-      <PricingContent locale={locale} catalog={catalog} origin={publicOrigin()} nonce={nonce} />
+      <PricingContent
+        locale={locale}
+        catalog={catalog}
+        origin={publicOrigin()}
+        nonce={nonce}
+        region={typeof region === "string" ? region : undefined}
+      />
     </PublicFrame>
   );
 }

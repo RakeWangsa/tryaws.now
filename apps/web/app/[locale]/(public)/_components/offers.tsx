@@ -131,6 +131,9 @@ export function OfferTable({
               {t("cloudServers.colLocation")}
             </th>
             <th scope="col" className="title mergecolor border-start-0">
+              {t("spec.cpu")}
+            </th>
+            <th scope="col" className="title mergecolor border-start-0">
               {t("pricing.colMemory")}
             </th>
             <th scope="col" className="title mergecolor border-start-0">
@@ -152,11 +155,14 @@ export function OfferTable({
             const v = specValues(t, offer.specs);
             return (
               <tr key={offer.id}>
-                <th scope="row">{planName(t, offer)}</th>
-                <td>{locationName(t, offer.region)}</td>
-                <td>{v.ram}</td>
-                <td>{v.disk}</td>
-                <td>{v.transfer}</td>
+                <th scope="row" className="mergecolor">
+                  {planName(t, offer)}
+                </th>
+                <td className="seccolor">{locationName(t, offer.region)}</td>
+                <td className="seccolor">{v.cpu}</td>
+                <td className="seccolor">{v.ram}</td>
+                <td className="seccolor">{v.disk}</td>
+                <td className="seccolor">{v.transfer}</td>
                 <td>
                   <b className="c-black mergecolor">
                     <UsdText text={offer.priceUsd} numerals={offerNumerals(locale, offer)} />
