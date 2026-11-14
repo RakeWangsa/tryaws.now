@@ -1,6 +1,16 @@
-import { expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { handler } from "./index";
 import { localeOf, type CustomMessageEvent } from "./handler";
+
+// WPU-X12: the sign-up and resend codes go out only for the sign-up client (guard.test.ts); these events
+// come from it, and the stack's variable names it.
+const SIGN_UP_ID = "1example23456789";
+beforeEach(() => {
+  vi.stubEnv("SIGN_UP_CLIENT_ID", SIGN_UP_ID);
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const eventOf = (
   triggerSource: string,
@@ -16,6 +26,7 @@ const eventOf = (
   userPoolId: "pool",
   userName: "rahim.uddin@example.test",
   triggerSource,
+  callerContext: { awsSdkVersion: "x", clientId: SIGN_UP_ID },
   request: {
     userAttributes: over.userAttributes ?? { email: "rahim.uddin@example.test" },
     codeParameter: over.codeParameter ?? "{####}",
