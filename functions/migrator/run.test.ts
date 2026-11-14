@@ -1,7 +1,7 @@
 import type { LogEvent } from "@tc/core";
 import { PoolSeedConflictError } from "@tc/db/seed-pool";
 import { expect, it } from "vitest";
-import { runMigrator, type MigratorDeps, type Queryable } from "./run";
+import { runMigrator, sqlstateOf, type MigratorDeps, type Queryable } from "./run";
 
 const CONFIG = {
   masterUrl: "postgres://master:SECRETMASTER@db.example.test:5432/ticoncloud?sslmode=verify-full",
@@ -545,4 +545,17 @@ it("does not register the pool account when the first admin step failed", async 
     ),
   ).rejects.toThrow("migrator: could not bootstrap the first admin");
   expect(calls.some((c) => c.startsWith("pool "))).toBe(false);
+});
+
+// Staging deploy of 2026-11-14: "the migrations failed" with no hint. The SQLSTATE (never a message) is
+// logged so a failure can be told apart without a database path (R2, R14).
+it("sqlstateOf reads a five-character SQLSTATE directly or from a cause, nothing else", () => {
+  expect(sqlstateOf(Object.assign(new Error("x"), { code: "42501" }))).toBe("42501");
+  expect(
+    sqlstateOf(new Error("wrap", { cause: Object.assign(new Error("y"), { code: "42P07" }) })),
+  ).toBe("42P07");
+  expect(sqlstateOf(Object.assign(new Error("z"), { code: "ECONNREFUSED" }))).toBeUndefined();
+  expect(sqlstateOf(Object.assign(new Error("z"), { code: "postgres://u:p@h/d" }))).toBeUndefined();
+  expect(sqlstateOf("text")).toBeUndefined();
+  expect(sqlstateOf(undefined)).toBeUndefined();
 });

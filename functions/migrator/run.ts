@@ -220,8 +220,12 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     };
     log({ event: "migrator_done", ...report });
     return report;
-  } catch {
+    /* eslint-disable preserve-caught-error -- the cause is dropped on purpose (R14), see below */
+  } catch (error) {
     // The cause is dropped on purpose: a driver message can carry the URL or a statement (R14).
+    // Only the PostgreSQL SQLSTATE is kept (five letters or digits, a class of error, never data), so a
+    // failed deploy can be told apart without a database path (R2; staging deploy of 2026-11-14).
+    const sqlstate = sqlstateOf(error);
     if (refused) {
       log({ event: "migrator_refused", reason: "no_tls" });
       throw new Error("migrator: the connection is not encrypted");
@@ -230,7 +234,7 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       log({ event: "migrator_refused", reason: "migration_changed", count: changed });
       throw new Error("migrator: an applied migration changed");
     }
-    log({ event: "migrator_failed", step });
+    log({ event: "migrator_failed", step, ...(sqlstate === undefined ? {} : { sqlstate }) });
     if (step === "connect") throw new Error("migrator: could not connect");
     if (step === "tls") throw new Error("migrator: could not check the connection");
     if (step === "roles") throw new Error("migrator: could not prepare the roles");
@@ -239,7 +243,22 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     if (step === "first_admin") throw new Error("migrator: could not bootstrap the first admin");
     if (step === "pool_account") throw new Error("migrator: could not register the pool account");
     throw new Error("migrator: the migrations failed");
+    /* eslint-enable preserve-caught-error */
   } finally {
     await client?.end().catch(() => undefined);
   }
+}
+
+// The SQLSTATE of a pg error, directly or as the cause of a wrapping error (drizzle wraps the driver error).
+export function sqlstateOf(error: unknown): string | undefined {
+  for (
+    let e: unknown = error, depth = 0;
+    e !== null && typeof e === "object" && depth < 3;
+    depth++
+  ) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return code;
+    e = (e as { cause?: unknown }).cause;
+  }
+  return undefined;
 }
