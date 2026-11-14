@@ -7,6 +7,7 @@ import {
 } from "../../../../../server/action-deps.ts";
 import { pick } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
+import { clearSessionCookies } from "../../../../../server/auth-wrap.ts";
 import { changePasswordCore } from "../../../../../server/settings-actions.ts";
 import {
   confirmTotpCore,
@@ -38,6 +39,11 @@ export async function changePasswordAction(
 export interface TotpFormState extends FormState {
   readonly secret?: string;
   readonly otpauthUri?: string;
+  /**
+   * Every session of the customer is over, this device's too (the cookies are cleared with this answer):
+   * the form says so and links to the sign-in. Set on a success and on a failure after the cut-off.
+   */
+  readonly sessionsEnded?: boolean;
   /** The QR code of otpauthUri as path data of one SVG path (server/totp-qr.ts), with its size. */
   readonly qr?: { readonly size: number; readonly margin: number; readonly d: string };
 }
@@ -63,14 +69,23 @@ export async function confirmTotpAction(
   if (!result.ok) {
     return { error: result.error, ...(result.fields ? { fields: result.fields } : {}) };
   }
-  return { done: "enabled" };
+  // Every session is over, this one too: the cookies go with this answer, the form links to the sign-in.
+  await clearSessionCookies();
+  return { done: "enabled", sessionsEnded: true };
 }
 
-export async function disableTotpAction(): Promise<FormState> {
+export async function disableTotpAction(): Promise<TotpFormState> {
   if (!(await guardAction())) return { error: "forbidden" };
   const result = await disableTotpCore(await totpActionDeps());
   if (!result.ok) {
-    return { error: result.error, ...(result.fields ? { fields: result.fields } : {}) };
+    // After the cut-off was committed the sessions are over even though Cognito could not be told.
+    if (result.sessionsEnded === true) await clearSessionCookies();
+    return {
+      error: result.error,
+      ...(result.fields ? { fields: result.fields } : {}),
+      ...(result.sessionsEnded === true ? { sessionsEnded: true } : {}),
+    };
   }
-  return { done: "disabled" };
+  await clearSessionCookies();
+  return { done: "disabled", sessionsEnded: true };
 }

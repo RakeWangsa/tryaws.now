@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type {
   CUSTOMER_STATUSES,
   CUSTOMER_TYPES,
@@ -73,6 +73,10 @@ export interface ProfileRepo {
   // WPU-X11. Called by the authenticator actions only after Cognito accepted the code and saved the MFA
   // preference (a time), or switched it off (null); never from a form. Absolute assignment (R7).
   setTotpEnabled(at: Date | null): Promise<Written<CustomerProfile>>;
+  // WPU-X11 round 2. Ends every session of the customer: authenticateCustomer refuses a token issued (or
+  // whose sign-in happened) before this time. Called when the authenticator is switched on or off, with
+  // Cognito's GlobalSignOut as the second half. The cut-off only ever moves forward.
+  revokeSessions(at: Date): Promise<Written<true>>;
 }
 
 // The finer rule is the one of packages/core/validation; @tc/db cannot import @tc/core.
@@ -146,6 +150,20 @@ export function profileRepo(scope: TenantScope): ProfileRepo {
         .from(customers)
         .where(eq(customers.id, scope.customerId));
       return row === undefined ? refused("not_found") : created(toProfile(row));
+    },
+
+    revokeSessions: async (at) => {
+      if (!isTime(at)) return refused("validation");
+      // greatest(): a later cut-off is never lowered by an earlier one. Only this one column is named.
+      const stamp = at.toISOString();
+      const [row] = await scope.tx
+        .update(customers)
+        .set({
+          sessionsValidAfter: sql`greatest(coalesce(${customers.sessionsValidAfter}, ${stamp}::timestamptz), ${stamp}::timestamptz)`,
+        })
+        .where(eq(customers.id, scope.customerId))
+        .returning({ id: customers.id });
+      return row === undefined ? refused("not_found") : created(true as const);
     },
 
     setTotpEnabled: async (at) => {

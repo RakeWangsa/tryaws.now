@@ -137,6 +137,42 @@ export async function consumeRateLimits(
   return { allowed: true };
 }
 
+// WPU-X11 round 2. Reads the counters that consumeRateLimits writes and adds no hit: a refusal when any
+// rule is already at its limit in the current window. The sign-in uses it to count only the
+// authenticator codes that failed after a correct password: it asks first, and counts the failure
+// afterwards. The rules are checked as consume checks them (same kinds, same limits, throws on bad input,
+// R16); web_rw may read exactly these columns.
+export async function peekRateLimits(
+  tx: Tx,
+  rules: readonly LimitRule[],
+  now: Date,
+): Promise<LimitDecision> {
+  if (!Array.isArray(rules) || rules.length === 0) {
+    throw new TypeError("rate limit: no rules");
+  }
+  for (const rule of rules) {
+    if (rule.kind !== "ip" && rule.kind !== "phone" && rule.kind !== "email") {
+      throw new TypeError("rate limit: only ip, phone and email rules are accepted");
+    }
+    if (!Number.isInteger(rule.limit) || rule.limit < 1 || rule.limit > MAX_LIMIT) {
+      throw new TypeError("rate limit: limit must be an integer from 1 to 10000");
+    }
+    const key = limitKey(rule.kind, rule.subject, rule.action, rule.windowSeconds);
+    const found = await tx.execute(
+      sql`select r.count as "count" from rate_limits r where r.scope_key = ${key} and r.window_start = ${windowStartOf(now, rule.windowSeconds).toISOString()}::timestamptz`,
+    );
+    const count = Number((found.rows[0] as { count?: unknown } | undefined)?.count ?? 0);
+    if (count >= rule.limit) {
+      return {
+        allowed: false,
+        action: rule.action,
+        retryAfterSeconds: retryAfterSeconds(now, rule.windowSeconds),
+      };
+    }
+  }
+  return { allowed: true };
+}
+
 // WP5-T4: the scheduler's purge. Deletes the windows that started before `before` and returns how many
 // there were. worker_rw may read window_start and delete, and nothing else on this table. The cutoff
 // comes from the injected Clock; a count only grows inside a window, so a window that started before

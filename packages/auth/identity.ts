@@ -6,6 +6,10 @@ import type { Locale } from "./types";
 
 export type IdpFailure =
   | "invalid_code"
+  // WPU-X11 round 2: the password was right and the authenticator code was not (wrong, reused or expired).
+  // Only the sign-in with a code returns it. The screen answers it exactly like `denied`; the app counts
+  // it against its own limit on wrong codes.
+  | "code_denied"
   | "expired_code"
   | "invalid_password"
   | "denied"
@@ -25,6 +29,12 @@ export type SignInOutcome =
       readonly accessToken: string;
       readonly refreshToken: string;
       readonly expiresInSeconds: number;
+      /**
+       * WPU-X11 round 2: true only when these tokens answer the SOFTWARE_TOKEN_MFA challenge of this very
+       * flow. Absent otherwise: the account has no authenticator at Cognito, or it was switched off outside
+       * this app, which the sign-in then reconciles (auth.totp_drift).
+       */
+      readonly totpVerified?: true;
     }
   // No Session string leaves the adapter (open point 16).
   | { readonly kind: "challenge"; readonly challenge: "totp" | "other" };

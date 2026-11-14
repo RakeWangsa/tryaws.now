@@ -338,6 +338,9 @@ export const DEFS: Readonly<Record<TemplateId, TemplateDef>> = {
   security_totp_changed: security,
   security_email_changed: { ...security, path: fixed("/settings/profile") },
   security_phone_changed: { ...security, path: fixed("/settings/profile") },
+  // WPU-X11 round 2: the sign-in knows the address that typed the right password, not the customer, so
+  // the notice is an email (no bell, no SMS).
+  security_totp_blocked: { ...security, channels: () => ["email"] },
   domain_contact_pending: {
     spec: { domain: f.domain },
     channels: () => ek,

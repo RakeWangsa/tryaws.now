@@ -1,6 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { webMessages } from "../../../../../i18n/messages.ts";
 
 // WPU-X11: the authenticator setup after the server answered the start action. The secret is in the
@@ -15,7 +15,16 @@ vi.mock("react", async (original) => {
   };
 });
 
-const { SECRET_VISIBLE_MS, TotpSetupForms, groupSecret } = await import("./TotpForms.tsx");
+const {
+  RESET,
+  SECRET_VISIBLE_MS,
+  TotpDisableForm,
+  TotpSetupForms,
+  groupSecret,
+  scheduleSecretWipe,
+  withReset,
+} = await import("./TotpForms.tsx");
+const { INITIAL_FORM_STATE } = await import("../../../../../server/action-state.ts");
 
 const SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 const URI = `otpauth://totp/TryAWS.now?secret=${SECRET}&issuer=TryAWS.now&algorithm=SHA1&digits=6&period=30`;
@@ -70,13 +79,109 @@ describe("TotpSetupForms", () => {
       { error: "invalid_code", fields: { code: "wrong" } },
     );
     expect(wrong).toContain('role="alert"');
-    expect(render("en", { done: "started", secret: SECRET }, { done: "enabled" })).toContain(
-      "The authenticator is on.",
+    // WPU-X11 round 2: it also says that every session ended, this one too, and links to the sign-in.
+    const enabled = render(
+      "en",
+      { done: "started", secret: SECRET, otpauthUri: URI },
+      { done: "enabled", sessionsEnded: true },
     );
+    expect(enabled).toContain("The authenticator is on.");
+    expect(enabled).toContain("every session was ended");
+    expect(enabled).toContain('href="/login"');
+    expect(enabled).toContain("Sign in again");
+    // The secret is not on the page any more once the authenticator is on.
+    expect(enabled).not.toContain(groupSecret(SECRET));
+    expect(enabled).not.toContain("otpauth://");
+    expect(
+      render("bn", { done: "started", secret: SECRET }, { done: "enabled", sessionsEnded: true }),
+    ).toContain("আবার সাইন ইন করুন");
   });
 
   it("a fresh sign-in error links to the sign-in", () => {
     const html = render("en", { error: "fresh_sign_in_required" });
     expect(html).toContain('href="/login"');
+  });
+});
+
+afterEach(() => vi.useRealTimers());
+
+// WPU-X11 round 2 (U9): after 60 seconds, and once the authenticator is on, the secret, the link and the QR
+// path are removed from the state of the form, not only from the screen.
+describe("the secret is wiped from the state, not just hidden", () => {
+  const started = {
+    done: "started",
+    secret: SECRET,
+    otpauthUri: URI,
+    qr: { size: 21, margin: 4, d: "M4 4h1v1h-1z" },
+  };
+
+  it("the reset answer holds nothing of the secret", () => {
+    expect(RESET).not.toBe(undefined);
+    expect(INITIAL_FORM_STATE).toEqual({});
+    expect(JSON.stringify(INITIAL_FORM_STATE)).not.toMatch(/secret|otpauth|qr/i);
+  });
+
+  it("withReset answers the empty state for the reset and the action's own answer for a form", async () => {
+    const start = vi.fn(async () => started);
+    const reduce = withReset(start);
+    expect(await reduce(started, RESET as never)).toEqual(INITIAL_FORM_STATE);
+    expect(start).not.toHaveBeenCalled();
+    const form = new FormData();
+    expect(await reduce(INITIAL_FORM_STATE, form)).toEqual(started);
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it("scheduleSecretWipe wipes after 60 seconds and not before; cancelling stops it", () => {
+    vi.useFakeTimers();
+    const wipe = vi.fn();
+    scheduleSecretWipe(wipe);
+    vi.advanceTimersByTime(SECRET_VISIBLE_MS - 1);
+    expect(wipe).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(wipe).toHaveBeenCalledTimes(1);
+
+    const cancelled = vi.fn();
+    const cancel = scheduleSecretWipe(cancelled);
+    cancel();
+    vi.advanceTimersByTime(SECRET_VISIBLE_MS * 2);
+    expect(cancelled).not.toHaveBeenCalled();
+  });
+});
+
+describe("TotpDisableForm", () => {
+  const disable = async (): Promise<never> => {
+    throw new Error("not called in a render");
+  };
+  const renderDisable = (locale: "bn" | "en", state: unknown) => {
+    answers.length = 0;
+    answers.push(state);
+    return renderToStaticMarkup(
+      <NextIntlClientProvider locale={locale} messages={webMessages[locale]} timeZone="Asia/Dhaka">
+        <TotpDisableForm action={disable} signInHref="/login" />
+      </NextIntlClientProvider>,
+    );
+  };
+
+  it("after the switch-off it says every session ended and links to the sign-in", () => {
+    const html = renderDisable("en", { done: "disabled", sessionsEnded: true });
+    expect(html).toContain("The authenticator was switched off.");
+    expect(html).toContain("every session was ended");
+    expect(html).toContain('href="/login"');
+    expect(renderDisable("bn", { done: "disabled", sessionsEnded: true })).toContain(
+      "আবার সাইন ইন করুন",
+    );
+  });
+
+  it("a failure after the cut-off says the sessions ended although the provider could not be told", () => {
+    const html = renderDisable("en", { error: "unavailable", sessionsEnded: true });
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("could not be switched off at the sign-in service");
+    expect(html).toContain('href="/login"');
+  });
+
+  it("before anything it offers the switch-off with its consequence", () => {
+    const html = renderDisable("en", {});
+    expect(html).toContain("Switch off the authenticator");
+    expect(html).toContain("you cannot buy anything new until you switch it on again");
   });
 });

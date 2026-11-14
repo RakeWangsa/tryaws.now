@@ -454,6 +454,7 @@ export type { CapacityInventoryRepo } from "./repositories/capacity-inventory";
 export {
   consumeRateLimits,
   limitKey,
+  peekRateLimits,
   purgeRateLimits,
   windowStartOf,
 } from "./repositories/rate-limit";

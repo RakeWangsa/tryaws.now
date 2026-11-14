@@ -1,6 +1,7 @@
 import { ACCESS_COOKIE, currentCustomer } from "@tc/auth";
 import { renewNow, verifyDraft } from "@tc/core";
 import { customerRepos, newUuidV7, readFeatureFlag, withTx } from "@tc/db";
+import { notify } from "@tc/notify";
 import { cookies, headers } from "next/headers";
 import type { DnsOpsDeps } from "./dns-actions.ts";
 import type { ExtrasDeps } from "./extras-actions.ts";
@@ -11,7 +12,9 @@ import type { SettingsDeps } from "./settings-actions.ts";
 import type { SupportActionDeps } from "./support-actions.ts";
 import type { SupportThreadDeps } from "./support-thread-actions.ts";
 import { openDraftToken } from "./draft-envelope.ts";
+import { mfaGuardedOrders } from "./mfa-gate.ts";
 import type { TotpDeps } from "./totp-actions.ts";
+import { clearTotpDrift } from "./totp-drift.ts";
 import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
 import type { OrderActionDeps } from "./order-actions.ts";
 import { getOrdersRuntime } from "./orders-runtime.ts";
@@ -35,13 +38,38 @@ async function authenticate() {
 
 export async function orderActionDeps(): Promise<OrderActionDeps> {
   const runtime = await getOrdersRuntime();
+  const { totp } = await getRuntime();
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value ?? null;
   return {
     authenticate,
     rateLimit: (session) =>
       withTx((tx) =>
         customerRepos(tx, session.customerId).rateLimits.consume(DRAFT_RATE_LIMITS, new Date()),
       ),
-    orders: runtime === null ? null : runtime.orders,
+    // WPU-X11 round 2: every draft and purchase of every family first asks Cognito whether the authenticator
+    // is still on (mfa-gate.ts); the platform copy is cleared when it is not.
+    orders:
+      runtime === null
+        ? null
+        : mfaGuardedOrders(runtime.orders, {
+            totp,
+            accessToken: () => token,
+            onDrift: (customerId) =>
+              withTx(async (tx) => {
+                const at = new Date();
+                await clearTotpDrift(customerRepos(tx, customerId), {
+                  via: "purchase_check",
+                  at,
+                  notify: (when) =>
+                    notify(tx, {
+                      customerId,
+                      template: "security_totp_changed",
+                      data: { at: when.toISOString() },
+                      dedupeKey: `totp-drift:${customerId}:${when.getTime()}`,
+                    }),
+                });
+              }),
+          }),
     // WPU-Y4: the draft was signed by this server a moment ago, and the date is only shown.
     fxSetAtOf: (token) => {
       if (runtime === null) return null;
@@ -111,7 +139,14 @@ export async function totpActionDeps(): Promise<TotpDeps> {
     store: (customerId, fn) =>
       withTx((tx) => {
         const repos = customerRepos(tx, customerId);
-        return fn({ profile: repos.profile, audit: repos.audit, rateLimits: repos.rateLimits });
+        return fn({
+          profile: repos.profile,
+          audit: repos.audit,
+          rateLimits: repos.rateLimits,
+          // The notice is a row in the same transaction; the notifier sends it after the commit.
+          notify: (template, data, dedupeKey) =>
+            notify(tx, { customerId, template, data, dedupeKey }),
+        });
       }),
     totp,
     accessToken: () => token,

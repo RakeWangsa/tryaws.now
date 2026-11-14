@@ -1,7 +1,7 @@
 import { emailSubject, ipSubject } from "@tc/notify";
 import type { LimitDecision, LimitRule } from "@tc/db";
 import { describe, expect, it } from "vitest";
-import { AUTH_LIMITS, buildRules, enforceAuthLimit } from "./limits.ts";
+import { AUTH_LIMITS, buildRules, enforceAuthLimit, peekAuthLimit } from "./limits.ts";
 
 const KEY = "k".repeat(40);
 const clock = { now: () => new Date("2026-11-12T10:00:00.000Z") };
@@ -39,6 +39,42 @@ describe("AUTH_LIMITS: the table of open point 8", () => {
       ["email", "email", 8, 3600],
       ["ip", "address", 20, 3600],
     ]);
+    // WPU-X11 round 2: failed authenticator codes after a correct password, per address typed, not per
+    // network: an attacker with the password changes address, the account is what is guarded.
+    expect(pick("signin_code")).toEqual([
+      ["email", "email", 5, 900],
+      ["email", "email", 20, 86_400],
+    ]);
+  });
+});
+
+describe("peekAuthLimit (WPU-X11 round 2)", () => {
+  const peeked: LimitRule[][] = [];
+  const peek = async (_tx: unknown, rules: readonly LimitRule[]): Promise<LimitDecision> => {
+    peeked.push([...rules]);
+    return rules.some((r) => r.windowSeconds === 86_400)
+      ? { allowed: false, action: "auth.signin_code", retryAfterSeconds: 321 }
+      : { allowed: true };
+  };
+
+  it("builds the same rules as the consuming call and answers with the retry time of the refusing rule", async () => {
+    const out = await peekAuthLimit(run, KEY, clock, "signin_code", who, peek as never);
+    expect(out).toEqual({ allowed: false, retryAfterSeconds: 321 });
+    expect(peeked.at(-1)).toEqual(buildRules(KEY, "signin_code", who));
+    expect(JSON.stringify(peeked.at(-1))).not.toContain("example.test");
+  });
+
+  it("refuses when the rules cannot be built, or when the read fails (R16)", async () => {
+    expect(
+      await peekAuthLimit(run, KEY, clock, "signin_code", { ...who, ip: "nope" }, peek as never),
+    ).toEqual({ allowed: false, retryAfterSeconds: 60 });
+    const failing = async () => {
+      throw new Error("db down");
+    };
+    expect(await peekAuthLimit(run, KEY, clock, "signin_code", who, failing as never)).toEqual({
+      allowed: false,
+      retryAfterSeconds: 60,
+    });
   });
 });
 

@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
-import type { IdpResult, TotpPort } from "@tc/auth";
+import type { IdpFailure, IdpResult, TotpPort } from "@tc/auth";
 import type { Clock } from "@tc/core";
 import { getFakeState, type FakeUser } from "./outbox.ts";
 
@@ -85,8 +85,12 @@ function userOfToken(accessToken: string): FakeUser | undefined {
 
 const denied = (): IdpResult<never> => ({ ok: false, kind: "denied" });
 
+type Operation = "associate" | "verify" | "setPreference" | "mfaState" | "signOutEverywhere";
+
 export class FakeTotp implements TotpPort {
   readonly calls: string[] = [];
+  /** A test sets one of these to make that call fail with that kind (the state is then left as it was). */
+  readonly fail: Partial<Record<Operation, IdpFailure>> = {};
   private readonly clock: Clock;
 
   constructor(clock: Clock = { now: () => new Date() }) {
@@ -97,8 +101,15 @@ export class FakeTotp implements TotpPort {
     this.clock = clock;
   }
 
+  private failed(operation: Operation): IdpResult<never> | null {
+    const kind = this.fail[operation];
+    return kind === undefined ? null : { ok: false, kind };
+  }
+
   async associate(accessToken: string): Promise<IdpResult<{ secret: string }>> {
     this.calls.push("associate");
+    const failed = this.failed("associate");
+    if (failed !== null) return failed;
     const user = userOfToken(accessToken);
     if (user === undefined) return denied();
     const secret = base32Encode(randomBytes(20));
@@ -108,6 +119,8 @@ export class FakeTotp implements TotpPort {
 
   async verify(accessToken: string, code: string): Promise<IdpResult<true>> {
     this.calls.push("verify");
+    const failed = this.failed("verify");
+    if (failed !== null) return failed;
     const user = userOfToken(accessToken);
     if (user === undefined) return denied();
     const secret = user.totpPending;
@@ -121,10 +134,35 @@ export class FakeTotp implements TotpPort {
 
   async setPreference(accessToken: string, enabled: boolean): Promise<IdpResult<true>> {
     this.calls.push(`setPreference:${String(enabled)}`);
+    const failed = this.failed("setPreference");
+    if (failed !== null) return failed;
     const user = userOfToken(accessToken);
     if (user === undefined) return denied();
     if (enabled && user.totpSecret === undefined) return { ok: false, kind: "invalid_code" };
     user.totpEnabled = enabled;
+    return { ok: true, value: true };
+  }
+
+  /** What the fake provider holds: the authenticator is "on" when the software token is enabled. */
+  async mfaState(accessToken: string): Promise<IdpResult<{ totp: boolean }>> {
+    this.calls.push("mfaState");
+    const failed = this.failed("mfaState");
+    if (failed !== null) return failed;
+    const user = userOfToken(accessToken);
+    if (user === undefined) return denied();
+    return { ok: true, value: { totp: user.totpEnabled === true } };
+  }
+
+  /** GlobalSignOut: every refresh token of this user stops working, the one of this device too. */
+  async signOutEverywhere(accessToken: string): Promise<IdpResult<true>> {
+    this.calls.push("signOutEverywhere");
+    const failed = this.failed("signOutEverywhere");
+    if (failed !== null) return failed;
+    const user = userOfToken(accessToken);
+    if (user === undefined) return denied();
+    const prefix = `fake-rt.${user.sub}.`;
+    const issued = getFakeState().issuedRefresh;
+    for (const token of [...issued]) if (token.startsWith(prefix)) issued.delete(token);
     return { ok: true, value: true };
   }
 }

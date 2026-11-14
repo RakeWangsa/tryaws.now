@@ -5,7 +5,7 @@ import { limitKey } from "@tc/db";
 import type { LimitDecision, LimitRule } from "@tc/db";
 import { InMemorySmsProvider } from "@tc/notify";
 import type { OtpSent, OtpVerified } from "@tc/notify";
-import { enforceAuthLimit } from "../auth/limits.ts";
+import { enforceAuthLimit, peekAuthLimit } from "../auth/limits.ts";
 import { actionContext } from "../auth/context.ts";
 import type { ActionContext } from "../auth/context.ts";
 import type { AuthPorts } from "../auth/ports.ts";
@@ -57,6 +57,12 @@ export interface Harness {
   sms: InMemorySmsProvider;
   customers: Map<string, Customer>;
   audits: { customerId: string; action: string; ip: string | undefined }[];
+  /** WPU-X11 round 2: what the audit step of each sign-in was told about the authenticator. */
+  signIns: { customerId: string; totpVerified: boolean }[];
+  /** WPU-X11 round 2: the "wrong authenticator codes" notices that were queued. */
+  notices: { email: string; ip: string; key: string }[];
+  /** The counters of the in-memory limiter, by key and window. */
+  counts: Map<string, number>;
   registered: unknown[];
   rules: LimitRule[][];
   state: {
@@ -64,6 +70,7 @@ export interface Harness {
     marketOpen: boolean;
     registerFails: boolean;
     auditFails: boolean;
+    noticeFails: boolean;
     idpDown: boolean;
     otpOn: boolean;
   };
@@ -105,6 +112,8 @@ export function makeHarness(): Harness {
   const events: string[] = [];
   const customers = new Map<string, Customer>();
   const audits: Harness["audits"] = [];
+  const signIns: Harness["signIns"] = [];
+  const notices: Harness["notices"] = [];
   const registered: unknown[] = [];
   const rules: LimitRule[][] = [];
   const counts = new Map<string, number>();
@@ -113,6 +122,7 @@ export function makeHarness(): Harness {
     marketOpen: true,
     registerFails: false,
     auditFails: false,
+    noticeFails: false,
     idpDown: false,
     otpOn: true,
   };
@@ -149,6 +159,23 @@ export function makeHarness(): Harness {
     return { allowed: true };
   };
 
+  // Like peekRateLimits: a refusal when a rule is already at its limit, and nothing counted.
+  const peek = async (
+    _tx: unknown,
+    given: readonly LimitRule[],
+    now: Date,
+  ): Promise<LimitDecision> => {
+    for (const rule of given) {
+      const key = `${limitKey(rule.kind, rule.subject, rule.action, rule.windowSeconds)}@${Math.floor(
+        now.getTime() / (rule.windowSeconds * 1000),
+      )}`;
+      if ((counts.get(key) ?? 0) >= rule.limit) {
+        return { allowed: false, action: rule.action, retryAfterSeconds: 123 };
+      }
+    }
+    return { allowed: true };
+  };
+
   const otpChallenges = new Map<string, { code: string; attempts: number; key: string }>();
   let nextCustomer = 1;
   let sendsDone = 0;
@@ -167,6 +194,15 @@ export function makeHarness(): Harness {
     async limit(action, who, key) {
       events.push("limit");
       return enforceAuthLimit((fn) => fn({} as never), key, clock, action, who, consume as never);
+    },
+    async limitPeek(action, who, key) {
+      events.push("limitPeek");
+      return peekAuthLimit((fn) => fn({} as never), key, clock, action, who, peek as never);
+    },
+    async noticeTotpBlocked(input) {
+      events.push("notice");
+      if (state.noticeFails) throw new Error("queue down");
+      notices.push({ email: input.email, ip: input.ip, key: input.key });
     },
     async register(input): Promise<AccountRegistered> {
       events.push("register");
@@ -227,6 +263,7 @@ export function makeHarness(): Harness {
       events.push("audit");
       if (state.auditFails) throw new Error("audit failed");
       audits.push({ customerId: session.customerId, action: "auth.sign_in", ip: meta.ip });
+      signIns.push({ customerId: session.customerId, totpVerified: meta.totpVerified === true });
       const customer = [...customers.values()].find((c) => c.customerId === session.customerId);
       return { phoneVerified: customer?.phoneVerified ?? false };
     },
@@ -318,6 +355,9 @@ export function makeHarness(): Harness {
     sms,
     customers,
     audits,
+    signIns,
+    notices,
+    counts,
     registered,
     rules,
     state,

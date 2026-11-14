@@ -13,6 +13,12 @@ export interface RequestMeta {
   /** The viewer address (CloudFront-Viewer-Address), already checked. */
   ip: string;
   userAgent?: string;
+  /**
+   * WPU-X11 round 2: the tokens of this sign-in answered the authenticator challenge. Absent when the
+   * provider gave tokens without one, which for a customer whose platform copy says "on" means the
+   * authenticator was switched off outside the panel (recordSignIn then clears the copy).
+   */
+  totpVerified?: true;
 }
 
 export interface AuthPorts {
@@ -24,6 +30,14 @@ export interface AuthPorts {
     | { ok: false; reason: "unauthenticated" | "unavailable" }
   >;
   limit(action: AuthAction, who: Who, key: string): Promise<LimitAnswer>;
+  /** WPU-X11 round 2: the same rules as `limit`, read and never counted. */
+  limitPeek(action: AuthAction, who: Who, key: string): Promise<LimitAnswer>;
+  /**
+   * WPU-X11 round 2: queues the email "a correct password, too many wrong authenticator codes" for the
+   * address that typed the password (the sign-in knows the address, not the customer). Never throws: the
+   * answer to the customer does not depend on it. `key` is the limiter key, for the one-per-window dedupe.
+   */
+  noticeTotpBlocked(input: { email: string; ip: string; key: string }): Promise<void>;
   register(input: {
     email: string;
     phone: string;

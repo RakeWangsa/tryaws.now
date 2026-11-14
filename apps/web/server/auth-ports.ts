@@ -8,9 +8,17 @@ import {
 import type { AuthRuntimeLike, CustomerSession, SignedIn } from "@tc/auth";
 import type { Clock } from "@tc/core";
 import { LAUNCH_MARKET, customerRepos, readMarketSettingNumber, withTx } from "@tc/db";
-import { OTP_DAILY_CAP_SETTING, otpSendRules, sendPhoneOtp, verifyPhoneOtp } from "@tc/notify";
+import {
+  OTP_DAILY_CAP_SETTING,
+  emailSubject,
+  notify,
+  otpSendRules,
+  sendPhoneOtp,
+  verifyPhoneOtp,
+} from "@tc/notify";
 import type { SendOtpDeps } from "@tc/notify";
-import { enforceAuthLimit } from "./auth/limits.ts";
+import { enforceAuthLimit, peekAuthLimit } from "./auth/limits.ts";
+import { clearTotpDrift } from "./totp-drift.ts";
 import type { AuthPorts } from "./auth/ports.ts";
 import { proxyAuthRuntime } from "./proxy-auth.ts";
 import type { WebRuntime } from "./runtime.ts";
@@ -51,6 +59,24 @@ export function productionPorts(runtime: WebRuntime, clock: Clock): AuthPorts {
 
     limit: (action, who, key) => enforceAuthLimit(withTx, key, clock, action, who),
 
+    limitPeek: (action, who, key) => peekAuthLimit(withTx, key, clock, action, who),
+
+    async noticeTotpBlocked({ email, ip, key }) {
+      // The sign-in knows the address that typed the right password, not the customer: an email only.
+      // One notice per address and quarter hour (R7: the dedupe key is unique); no more than that.
+      const subject = emailSubject(key, email);
+      if (subject === null) return;
+      const at = clock.now();
+      await withTx((tx) =>
+        notify(tx, {
+          email,
+          template: "security_totp_blocked",
+          data: { at: at.toISOString(), ip },
+          dedupeKey: `totp-blocked:${subject}:${Math.floor(at.getTime() / 900_000)}`,
+        }),
+      );
+    },
+
     register: (input) => {
       const { password, ...customer } = input;
       return registerAccount(
@@ -79,6 +105,23 @@ export function productionPorts(runtime: WebRuntime, clock: Clock): AuthPorts {
         const marked = await repos.profile.markEmailVerified(new Date());
         if (!marked.ok) throw new Error("auth: no customer row");
         const profile = marked.value;
+        // WPU-X11 round 2: the platform says the authenticator is on, but these tokens came without the
+        // challenge. It was switched off outside the panel (own token on the public endpoint, a stolen
+        // token, support). Clear the copy, audit it, tell the customer; a refused write fails the
+        // sign-in (R16). The reverse (challenge answered, copy off) is the safe leftover and is left.
+        if (profile.totpEnabledAt !== null && meta.totpVerified !== true) {
+          await clearTotpDrift(repos, {
+            via: "sign_in",
+            at: new Date(),
+            notify: (at) =>
+              notify(tx, {
+                customerId: session.customerId,
+                template: "security_totp_changed",
+                data: { at: at.toISOString(), ip: meta.ip },
+                dedupeKey: `totp-drift:${session.customerId}:${at.getTime()}`,
+              }),
+          });
+        }
         return { phoneVerified: profile.phoneVerifiedAt !== null };
       });
     },

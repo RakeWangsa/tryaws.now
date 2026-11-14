@@ -197,6 +197,26 @@ describe("authenticateCustomer: sessions_valid_after and status", () => {
     expect(out).toEqual({ ok: false, error: "unauthenticated", reason: "revoked" });
   });
 
+  // WPU-X11 round 2: a refresh gives a new iat but keeps the auth_time of the sign-in. A session that
+  // started before the cut-off must not live on through its refresh token.
+  it("a refreshed token of a session that started before the cut-off is revoked (iat after, auth_time before)", async () => {
+    const { deps } = setup(identity({ sessionsValidAfter: new Date(NOW.getTime() - 60_000) }));
+    const out = await authenticateCustomer(
+      deps,
+      header(issuer.sign({ iat: nowSec, auth_time: nowSec - 3600 })),
+    );
+    expect(out).toEqual({ ok: false, error: "unauthenticated", reason: "revoked" });
+  });
+
+  it("a sign-in after the cut-off (iat and auth_time both at or after it) is accepted", async () => {
+    const { deps } = setup(identity({ sessionsValidAfter: new Date(NOW.getTime() - 60_000) }));
+    const out = await authenticateCustomer(
+      deps,
+      header(issuer.sign({ iat: nowSec, auth_time: nowSec - 30 })),
+    );
+    expect(out.ok).toBe(true);
+  });
+
   it("a null sessions_valid_after means no cut-off", async () => {
     const { deps } = setup(identity({ sessionsValidAfter: null }));
     const out = await authenticateCustomer(deps, header(issuer.sign({ iat: nowSec - 3000 })));

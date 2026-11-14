@@ -121,3 +121,46 @@ it("migration 0030 filled email_verified_at from the earliest sign-in in the aud
   expect((await row(signed)).email_verified_at).toEqual(new Date("2026-11-01T00:00:00Z"));
   expect((await row(never)).email_verified_at).toBeNull();
 });
+// WPU-X11 round 2: switching the authenticator on or off ends every session of the customer. The cut-off
+// is customers.sessions_valid_after (authenticateCustomer refuses a token older than it).
+const sessionsRow = async (id: string) =>
+  (await t.pool.query("select sessions_valid_after from customers where id = $1", [id])).rows[0]
+    .sessions_valid_after as Date | null;
+
+it("revokeSessions sets the cut-off, never moves it back, and touches nothing else", async () => {
+  const id = await newCustomer(t.pool);
+  expect(await sessionsRow(id)).toBeNull();
+  expect(await as(id, (r) => r.profile.revokeSessions(LATER))).toMatchObject({
+    ok: true,
+  });
+  expect(await sessionsRow(id)).toEqual(LATER);
+  // An earlier time never lowers it (a replay or a slow request must not reopen old sessions).
+  await as(id, (r) => r.profile.revokeSessions(AT));
+  expect(await sessionsRow(id)).toEqual(LATER);
+  const even = new Date("2026-11-16T10:00:00.000Z");
+  await as(id, (r) => r.profile.revokeSessions(even));
+  expect(await sessionsRow(id)).toEqual(even);
+  expect((await row(id)).kyc_status).toBe("none");
+});
+
+it("revokeSessions refuses a value that is not a valid Date before any query (R16), and answers not_found for no row", async () => {
+  const id = await newCustomer(t.pool);
+  for (const bad of [new Date(Number.NaN), "2026-11-14", 0, undefined, null]) {
+    expect(await as(id, (r) => r.profile.revokeSessions(bad as unknown as Date))).toEqual({
+      ok: false,
+      error: "validation",
+    });
+  }
+  expect(await sessionsRow(id)).toBeNull();
+  expect(
+    await as("0190bbbb-0000-7000-8000-00000000fffe", (r) => r.profile.revokeSessions(AT)),
+  ).toEqual({ ok: false, error: "not_found" });
+});
+
+it("revokeSessions cross-tenant (R8): customer B's call never changes customer A's cut-off", async () => {
+  const a = await newCustomer(t.pool);
+  const b = await newCustomer(t.pool);
+  await as(b, (r) => r.profile.revokeSessions(AT));
+  expect(await sessionsRow(a)).toBeNull();
+  expect(await sessionsRow(b)).toEqual(AT);
+});

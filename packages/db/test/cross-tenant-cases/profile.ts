@@ -59,6 +59,11 @@ export const profileCases: CaseSet = defineCaseSet<{ customerId: string }>({
       run: (c) =>
         asCustomer(c, (r) => r.profile.markEmailVerified(new Date("2026-11-14T10:00:00.000Z"))),
     },
+    "profile.revokeSessions": {
+      kind: "self-write",
+      run: (c) =>
+        asCustomer(c, (r) => r.profile.revokeSessions(new Date("2026-11-14T10:00:00.000Z"))),
+    },
     "profile.setTotpEnabled": {
       kind: "self-write",
       run: (c) =>

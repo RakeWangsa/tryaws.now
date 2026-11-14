@@ -116,12 +116,17 @@ export const settingsEn: Same<typeof settingsBn> = {
         step2: "2. Enter the 6-digit code the app shows now.",
         code: "Code from the app",
         confirm: "Check the code and switch on",
-        enabled: "The authenticator is on. Signing in now needs the code.",
+        enabled:
+          "The authenticator is on. For your safety every session was ended, this one too. Sign in again with your password and the code from the app.",
+        signInAgain: "Sign in again",
+        endedNote:
+          "For your safety your sessions were ended, but the authenticator could not be switched off at the sign-in service. Sign in again with the code from the app, then try once more.",
         disableTitle: "Switch off the authenticator",
         disableBody:
           "When it is off, signing in no longer needs the code, and you cannot buy anything new until you switch it on again.",
         disable: "Switch off the authenticator",
-        disabled: "The authenticator was switched off.",
+        disabled:
+          "The authenticator was switched off. For your safety every session was ended, this one too. Sign in again with your password.",
       },
     },
     fresh: {

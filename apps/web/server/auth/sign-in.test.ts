@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { NOW, SIGN_UP_FORM, makeHarness } from "../fakes/auth-harness.ts";
+import { LIMIT_KEY, NOW, SIGN_UP_FORM, makeHarness } from "../fakes/auth-harness.ts";
 import type { Customer, Harness } from "../fakes/auth-harness.ts";
 import { getFakeState } from "../fakes/outbox.ts";
 import { totpCodeAt } from "../fakes/totp.ts";
+import { authBn } from "../../messages/auth-bn.ts";
+import { authEn } from "../../messages/auth-en.ts";
 import { signInCore } from "./sign-in.ts";
 
 let h: Harness;
@@ -145,6 +147,89 @@ describe("signInCore with an authenticator (TOTP)", () => {
       fields: { totpCode: "invalid" },
     });
     expect(h.events.filter((e) => e.startsWith("idp."))).toEqual([]);
+  });
+
+  // WPU-X11 round 2 (security review, findings 2b and 4).
+  it("tells the audit step whether the tokens answered the authenticator challenge", async () => {
+    await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+    expect(h.signIns).toEqual([{ customerId: customer.customerId, totpVerified: true }]);
+    // The authenticator switched off outside the app: the same account signs in with no challenge, and the
+    // step that audits the sign-in is told the flow had none (it then clears the platform copy).
+    const user = getFakeState().users.get(FORM.email)!;
+    user.totpEnabled = false;
+    await signInCore(h.ctx(), FORM);
+    expect(h.signIns.at(-1)).toEqual({ customerId: customer.customerId, totpVerified: false });
+  });
+
+  const wrongCode = () => {
+    const right = totpCodeAt(SECRET, NOW);
+    return right === "000000" ? "111111" : "000000";
+  };
+
+  it("counts a wrong code after a correct password; the fifth fills the limit, answers rate_limited and sends the notice once", async () => {
+    for (let i = 1; i <= 4; i++) {
+      const out = await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
+      expect(out.state).toMatchObject({ status: "error", code: "sign_in_failed" });
+      expect(h.notices).toEqual([]);
+    }
+    const fifth = await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
+    expect(fifth.state).toMatchObject({ status: "error", code: "rate_limited" });
+    expect(fifth.effects.setCookies).toEqual([]);
+    expect(h.notices).toEqual([{ email: FORM.email, ip: "198.51.100.7", key: LIMIT_KEY }]);
+  });
+
+  it("then blocks at the door: even the right code is refused before the provider is asked, and no second notice goes out", async () => {
+    for (let i = 0; i < 5; i++) await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
+    h.events.length = 0;
+    const blocked = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+    expect(blocked.state).toMatchObject({ status: "error", code: "rate_limited" });
+    expect(blocked.effects.setCookies).toEqual([]);
+    expect(h.events.filter((e) => e.startsWith("idp."))).toEqual([]);
+    expect(h.notices).toHaveLength(1);
+    // The refusal says nothing about codes: the same words as any rate limit.
+    // ... the screen shows the plain rate-limit text, which names no code and no authenticator.
+    expect(authEn.Auth.error.rate_limited).not.toMatch(/code|authenticator/i);
+    expect(authBn.Auth.error.rate_limited).not.toMatch(/কোড|অথেনটিকেটর/);
+    expect(JSON.stringify(blocked.state)).not.toContain("totpCode");
+  });
+
+  it("a wrong password with a code is not counted and sends no notice; a right code does not count", async () => {
+    for (let i = 0; i < 8; i++) {
+      const out = await signInCore(h.ctx(), {
+        ...FORM,
+        password: "wrong wrong wrong",
+        totpCode: wrongCode(),
+      });
+      // The pair limit of the password step still applies (8 in 15 minutes): the first eight are plain failures.
+      expect(out.state).toMatchObject({ status: "error", code: "sign_in_failed" });
+    }
+    expect(h.notices).toEqual([]);
+    const counted = [...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code"));
+    expect(counted).toEqual([]);
+  });
+
+  it("a successful code sign-in leaves the wrong-code counters where they were", async () => {
+    await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
+    const before = [...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code"));
+    expect(before.length).toBeGreaterThan(0);
+    const ok = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+    expect(ok.state).toMatchObject({ status: "done" });
+    expect([...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code"))).toEqual(before);
+  });
+
+  it("a replay of an accepted code is a wrong code: it counts", async () => {
+    const code = totpCodeAt(SECRET, NOW);
+    await signInCore(h.ctx(), { ...FORM, totpCode: code });
+    await signInCore(h.ctx(), { ...FORM, totpCode: code });
+    const counted = [...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code"));
+    expect(counted.length).toBeGreaterThan(0);
+  });
+
+  it("a notice that cannot be queued does not change the answer", async () => {
+    h.state.noticeFails = true;
+    for (let i = 0; i < 4; i++) await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
+    const fifth = await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
+    expect(fifth.state).toMatchObject({ status: "error", code: "rate_limited" });
   });
 
   it("wrong codes count against the sign-in limit: the ninth try is rate_limited", async () => {

@@ -827,7 +827,7 @@ export const ENDPOINTS: Readonly<Record<string, EndpointEntry>> = {
     proof: [
       proof(
         `${W}totp-actions.test.ts`,
-        "verifies the code, switches TOTP on at Cognito, then stores the time and audits",
+        "verifies the code, switches TOTP on at Cognito, then stores the time, ends the sessions, audits, tells the customer, and signs out everywhere",
       ),
     ],
   },

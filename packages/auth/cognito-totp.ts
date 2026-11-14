@@ -7,6 +7,12 @@ import type { IdpFailure, IdpResult } from "./identity";
 // of an answer is kept or logged: the secret leaves only as the value of a successful associate, and a
 // failure is a bare kind (R14). Unknown shapes, statuses and timeouts are "unavailable" (R16).
 //
+// The calls of this file are AssociateSoftwareToken, VerifySoftwareToken, SetUserMFAPreference, GetUser and
+// GlobalSignOut. Every one takes the access token and NONE takes a ClientId, so none of them needs a
+// SECRET_HASH when CustomerAppClient gets a client secret (WPU-X12 round 4). The one TOTP call that does
+// take a ClientId, RespondToAuthChallenge, is in cognito-identity.ts next to InitiateAuth, behind the same
+// `post` that adds the ClientId. A new Cognito call with a ClientId belongs there, not here.
+//
 // VERIFY on staging (JOURNEY WPU-X11): AssociateSoftwareToken with AccessToken answers SecretCode;
 // VerifySoftwareToken answers Status SUCCESS or EnableSoftwareTokenMFAException for a wrong code;
 // SetUserMFAPreference SoftwareTokenMfaSettings; the customer pool has mfa "optional" and
@@ -19,6 +25,17 @@ export interface TotpPort {
   verify(accessToken: string, code: string): Promise<IdpResult<true>>;
   /** Switches TOTP on (enabled and preferred) or off for the customer. */
   setPreference(accessToken: string, enabled: boolean): Promise<IdpResult<true>>;
+  /**
+   * WPU-X11 round 2: what Cognito itself holds for this customer (GetUser). The authenticator is on only
+   * when UserMFASettingList names SOFTWARE_TOKEN_MFA. A call that cannot be made, a token that Cognito no
+   * longer accepts and an answer of an odd shape are failures, never "on" (R16).
+   */
+  mfaState(accessToken: string): Promise<IdpResult<{ totp: boolean }>>;
+  /**
+   * WPU-X11 round 2: GlobalSignOut. Ends every session of the customer at Cognito, the one of this
+   * access token included: all refresh tokens stop working.
+   */
+  signOutEverywhere(accessToken: string): Promise<IdpResult<true>>;
 }
 
 const TIMEOUT_MS = 5000;
@@ -130,6 +147,28 @@ export function cognitoTotpPort(pool: PoolConfig, fetchImpl: typeof fetch = fetc
         AccessToken: accessToken,
         SoftwareTokenMfaSettings: { Enabled: enabled, PreferredMfa: enabled },
       });
+      if (answer === null) return unavailable();
+      if (answer.status !== 200) return failure(answer, COMMON);
+      return { ok: true, value: true };
+    },
+
+    async mfaState(accessToken) {
+      if (!tokenOk(accessToken)) return { ok: false, kind: "denied" };
+      const answer = await post("GetUser", { AccessToken: accessToken });
+      if (answer === null) return unavailable();
+      if (answer.status !== 200) return failure(answer, COMMON);
+      const list = answer.body["UserMFASettingList"];
+      // Absent: no MFA at all, which is "off". Anything but an array of strings is not understood (R16).
+      if (list === undefined) return { ok: true, value: { totp: false } };
+      if (!Array.isArray(list) || !list.every((item) => typeof item === "string")) {
+        return unavailable();
+      }
+      return { ok: true, value: { totp: list.includes("SOFTWARE_TOKEN_MFA") } };
+    },
+
+    async signOutEverywhere(accessToken) {
+      if (!tokenOk(accessToken)) return { ok: false, kind: "denied" };
+      const answer = await post("GlobalSignOut", { AccessToken: accessToken });
       if (answer === null) return unavailable();
       if (answer.status !== 200) return failure(answer, COMMON);
       return { ok: true, value: true };

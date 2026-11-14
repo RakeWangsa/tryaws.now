@@ -1,7 +1,7 @@
 import { runTransaction, useTempDatabase } from "@tc/db/testing";
 import type { Tx } from "@tc/db";
 import { describe, expect, it } from "vitest";
-import { enforceAuthLimit } from "./limits.ts";
+import { enforceAuthLimit, peekAuthLimit } from "./limits.ts";
 
 // NEEDS THE DATABASE (pnpm db:up && pnpm db:migrate): the real limiter on rate_limits, as role web_rw.
 const t = useTempDatabase();
@@ -50,6 +50,49 @@ describe("enforceAuthLimit against the database", () => {
     expect(
       (await enforceAuthLimit(run, KEY, clock, "signin", who("198.51.100.2", "p@x.test"))).allowed,
     ).toBe(true);
+  });
+
+  // WPU-X11 round 2: only failed codes are counted, so the sign-in asks first (peek) and counts afterwards.
+  it("signin_code: five counted failures fill the 15 minute rule; a peek adds nothing and the sixth is refused", async () => {
+    const mine = who("198.51.100.20", "code@x.test");
+    for (let i = 0; i < 5; i++) {
+      expect((await peekAuthLimit(run, KEY, clock, "signin_code", mine)).allowed).toBe(true);
+      expect((await enforceAuthLimit(run, KEY, clock, "signin_code", mine)).allowed).toBe(true);
+    }
+    for (let i = 0; i < 3; i++) {
+      const out = await peekAuthLimit(run, KEY, clock, "signin_code", mine);
+      expect(out.allowed).toBe(false);
+      if (!out.allowed) expect(out.retryAfterSeconds).toBeLessThanOrEqual(900);
+    }
+    // Another address is the same account: the rule is per address typed, not per network.
+    expect(
+      (await peekAuthLimit(run, KEY, clock, "signin_code", who("203.0.113.5", "code@x.test")))
+        .allowed,
+    ).toBe(false);
+    // Another account is not affected.
+    expect(
+      (await peekAuthLimit(run, KEY, clock, "signin_code", who("198.51.100.20", "other@x.test")))
+        .allowed,
+    ).toBe(true);
+  });
+
+  it("signin_code: the day rule stops the twenty-first failure over several quarter hours", async () => {
+    const mine = who("198.51.100.21", "day@x.test");
+    let now = new Date("2026-11-12T00:00:00.000Z");
+    const at = { now: () => now };
+    for (let quarter = 0; quarter < 4; quarter++) {
+      for (let i = 0; i < 5; i++) {
+        expect((await enforceAuthLimit(run, KEY, at, "signin_code", mine)).allowed).toBe(true);
+      }
+      now = new Date(now.getTime() + 15 * 60_000);
+      // A new quarter hour: the short rule is empty again while the day rule fills up.
+      if (quarter < 3)
+        expect((await peekAuthLimit(run, KEY, at, "signin_code", mine)).allowed).toBe(true);
+    }
+    // 20 failures counted: the day rule is full although the current quarter hour is empty.
+    const out = await peekAuthLimit(run, KEY, at, "signin_code", mine);
+    expect(out.allowed).toBe(false);
+    if (!out.allowed) expect(out.retryAfterSeconds).toBeGreaterThan(900);
   });
 
   it("the key table holds neither the address nor the email", async () => {

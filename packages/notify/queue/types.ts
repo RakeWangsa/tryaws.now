@@ -25,6 +25,8 @@ export const TEMPLATE_IDS = [
   "security_totp_changed",
   "security_email_changed",
   "security_phone_changed",
+  // WPU-X11 round 2: a correct password with too many wrong authenticator codes. Email only.
+  "security_totp_blocked",
   "domain_contact_pending",
   "domain_renewal_reminder",
   // WPU-D4: the reply of support (written by an admin) and the notice of the capacity waitlist.

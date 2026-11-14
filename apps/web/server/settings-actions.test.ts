@@ -54,6 +54,7 @@ function world(over: { signedInAt?: Date; limited?: boolean; noPorts?: boolean }
       setBilling: async () => ({ ok: false, error: "forbidden" }),
       markEmailVerified: async () => ({ ok: false, error: "forbidden" }),
       setTotpEnabled: async () => ({ ok: false, error: "forbidden" }),
+      revokeSessions: async () => ({ ok: false, error: "forbidden" }),
     } satisfies ProfileRepo,
     audit: {
       record: async (input) => {

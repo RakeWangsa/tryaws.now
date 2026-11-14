@@ -2,20 +2,37 @@
 
 import { Field, SubmitButton } from "@tc/ui";
 import { useTranslations } from "next-intl";
-import { useActionState, useEffect, useState } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
-import type { FormState } from "../../../../../server/action-state.ts";
 import { SettingsNotice, useFieldError } from "../SettingsNotice.tsx";
 import type { TotpFormState } from "./actions.ts";
 
 // WPU-X11: the authenticator (TOTP) of /settings/security. Client Components only for the interaction
 // state: the answer of the last action and the 60-second timer of the secret (U9). The secret exists only
-// in the answer of the start action, is shown once, never written to storage, and hidden after 60 s.
+// in the answer of the start action, is shown once, never written to storage, and after 60 s (and once the
+// authenticator is on) it is WIPED from the state of the form: secret, link and QR path are replaced by the
+// empty state, not just hidden from the screen.
 
 type TotpAction = (previous: TotpFormState, form: FormData) => Promise<TotpFormState>;
-type Action = (previous: FormState, form: FormData) => Promise<FormState>;
 
 export const SECRET_VISIBLE_MS = 60_000;
+
+/** The payload that empties the state of the start form. It never reaches the server. */
+export const RESET = Symbol("totp-reset");
+
+/** The start action with a way to empty its state: the reset answers the empty state, a form goes on. */
+export function withReset(
+  action: TotpAction,
+): (previous: TotpFormState, payload: FormData | typeof RESET) => Promise<TotpFormState> {
+  return async (previous, payload) =>
+    payload === RESET ? INITIAL_FORM_STATE : action(previous, payload);
+}
+
+/** Calls `wipe` once after SECRET_VISIBLE_MS; the returned function cancels it. */
+export function scheduleSecretWipe(wipe: () => void): () => void {
+  const timer = setTimeout(wipe, SECRET_VISIBLE_MS);
+  return () => clearTimeout(timer);
+}
 
 /** Groups of four, so the key is easier to type into an app. */
 export function groupSecret(secret: string): string {
@@ -33,27 +50,45 @@ export function TotpSetupForms({
   signInHref: string;
 }) {
   const t = useTranslations("Settings.security.totp");
-  const [started, startAction, starting] = useActionState<TotpFormState, FormData>(
-    start,
+  const [started, startAction, starting] = useActionState<TotpFormState, FormData | typeof RESET>(
+    withReset(start),
     INITIAL_FORM_STATE,
   );
   const [confirmed, confirmAction, confirming] = useActionState<TotpFormState, FormData>(
     confirm,
     INITIAL_FORM_STATE,
   );
-  const [hidden, setHidden] = useState(false);
+  // True after the 60 seconds: the secret is gone from the state and the page says so.
+  const [wiped, setWiped] = useState(false);
   const secret = started.secret;
+  const enabled = confirmed.done === "enabled";
   const error = useFieldError(confirmed);
 
   useEffect(() => {
     if (secret === undefined) return;
-    setHidden(false);
-    const timer = setTimeout(() => setHidden(true), SECRET_VISIBLE_MS);
-    return () => clearTimeout(timer);
-  }, [secret]);
+    setWiped(false);
+    return scheduleSecretWipe(() => {
+      setWiped(true);
+      startTransition(() => startAction(RESET));
+    });
+  }, [secret, startAction]);
 
-  if (confirmed.done === "enabled") {
-    return <SettingsNotice state={confirmed} doneText={t("enabled")} signInHref={signInHref} />;
+  // Once the authenticator is on the secret has no use: it leaves the state at once.
+  useEffect(() => {
+    if (enabled && secret !== undefined) startTransition(() => startAction(RESET));
+  }, [enabled, secret, startAction]);
+
+  if (enabled) {
+    return (
+      <>
+        <SettingsNotice state={confirmed} doneText={t("enabled")} signInHref={signInHref} />
+        <p>
+          <a className="golink" href={signInHref}>
+            {t("signInAgain")}
+          </a>
+        </p>
+      </>
+    );
   }
 
   return (
@@ -66,10 +101,10 @@ export function TotpSetupForms({
           </SubmitButton>
         ) : null}
       </form>
-      {secret !== undefined ? (
+      {secret !== undefined || wiped ? (
         <>
           <p className="mb-2">{t("step1")}</p>
-          {hidden ? (
+          {secret === undefined ? (
             <p className="seccolor" role="status">
               <i className="fas fa-eye-slash me-2" aria-hidden="true" />
               {t("hidden")}
@@ -135,12 +170,47 @@ export function TotpSetupForms({
   );
 }
 
-/** Switching the authenticator off (fresh sign-in); buying is blocked again until it is on. */
-export function TotpDisableForm({ action, signInHref }: { action: Action; signInHref: string }) {
+/**
+ * Switching the authenticator off (fresh sign-in); buying is blocked again until it is on. Every session
+ * ends with it, this one too: the answer says so and links to the sign-in.
+ */
+export function TotpDisableForm({
+  action,
+  signInHref,
+}: {
+  action: TotpAction;
+  signInHref: string;
+}) {
   const t = useTranslations("Settings.security.totp");
-  const [state, formAction, pending] = useActionState(action, INITIAL_FORM_STATE);
+  const [state, formAction, pending] = useActionState<TotpFormState, FormData>(
+    action,
+    INITIAL_FORM_STATE,
+  );
   if (state.done === "disabled") {
-    return <SettingsNotice state={state} doneText={t("disabled")} signInHref={signInHref} />;
+    return (
+      <>
+        <SettingsNotice state={state} doneText={t("disabled")} signInHref={signInHref} />
+        <p>
+          <a className="golink" href={signInHref}>
+            {t("signInAgain")}
+          </a>
+        </p>
+      </>
+    );
+  }
+  if (state.sessionsEnded === true) {
+    // The cut-off was committed, Cognito could not be told: the sessions are over all the same.
+    return (
+      <>
+        <SettingsNotice state={state} doneText={null} signInHref={signInHref} />
+        <p>{t("endedNote")}</p>
+        <p>
+          <a className="golink" href={signInHref}>
+            {t("signInAgain")}
+          </a>
+        </p>
+      </>
+    );
   }
   return (
     <form action={formAction} noValidate>

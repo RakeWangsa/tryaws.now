@@ -17,7 +17,7 @@ export interface TotpProps {
   enabled: boolean | null;
   start: TotpAction;
   confirm: TotpAction;
-  disable: Action;
+  disable: TotpAction;
 }
 
 export function SecurityContent({

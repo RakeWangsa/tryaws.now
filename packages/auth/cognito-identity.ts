@@ -85,11 +85,12 @@ const SIGN_IN: Fold = new Map<string, IdpFailure | "ok">([
   ...LIMITS,
 ]);
 const REVOKE: Fold = new Map<string, IdpFailure | "ok">(LIMITS);
-// WPU-X11: the answer to the authenticator code of a sign-in.
+// WPU-X11: the answer to the authenticator code of a sign-in. The password was right (the first call
+// answered the challenge), so a refusal here is a wrong, reused or expired code: `code_denied`.
 const TOTP_ANSWER: Fold = new Map<string, IdpFailure | "ok">([
-  ["CodeMismatchException", "denied"],
-  ["NotAuthorizedException", "denied"],
-  ["ExpiredCodeException", "denied"],
+  ["CodeMismatchException", "code_denied"],
+  ["NotAuthorizedException", "code_denied"],
+  ["ExpiredCodeException", "code_denied"],
   ["UserNotFoundException", "denied"],
   ...LIMITS,
 ]);
@@ -190,7 +191,7 @@ export function cognitoIdentityProvider(
   }
 
   // The tokens of a sign-in, checked before they are trusted; anything odd is unavailable (R16).
-  function tokensOf(result: Record<string, unknown>): IdpResult<SignInOutcome> {
+  function tokensOf(result: Record<string, unknown>, viaTotp = false): IdpResult<SignInOutcome> {
     const accessToken = result["AccessToken"];
     const refreshToken = result["RefreshToken"];
     const expiresIn = result["ExpiresIn"];
@@ -208,7 +209,13 @@ export function cognitoIdentityProvider(
     ) {
       return unavailable();
     }
-    return success({ kind: "tokens", accessToken, refreshToken, expiresInSeconds: expiresIn });
+    return success({
+      kind: "tokens",
+      accessToken,
+      refreshToken,
+      expiresInSeconds: expiresIn,
+      ...(viaTotp ? { totpVerified: true as const } : {}),
+    });
   }
 
   // WPU-X11: RespondToAuthChallenge with the authenticator code. A wrong, reused or expired code is
@@ -219,7 +226,9 @@ export function cognitoIdentityProvider(
     session: string,
     code: string,
   ): Promise<IdpResult<SignInOutcome>> {
-    if (!TOTP_CODE.test(code)) return fail("denied");
+    if (!TOTP_CODE.test(code)) return fail("code_denied");
+    // When the customer client gets a secret (WPU-X12 round 4), SECRET_HASH joins ChallengeResponses here,
+    // next to InitiateAuth in signIn: both go through this one `post`, which owns the ClientId.
     const answer = await post("RespondToAuthChallenge", {
       ChallengeName: "SOFTWARE_TOKEN_MFA",
       Session: session,
@@ -229,7 +238,7 @@ export function cognitoIdentityProvider(
     if (answer.status === 200) {
       if (answer.body["ChallengeName"] !== undefined) return unavailable();
       const result = asRecord(answer.body["AuthenticationResult"]);
-      return result === undefined ? unavailable() : tokensOf(result);
+      return result === undefined ? unavailable() : tokensOf(result, true);
     }
     const f = folded(answer, TOTP_ANSWER);
     return f !== undefined && !f.ok ? f : unavailable();

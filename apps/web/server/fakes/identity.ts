@@ -28,6 +28,7 @@ const fail = (
     | "expired_code"
     | "invalid_password"
     | "denied"
+    | "code_denied"
     | "not_confirmed"
     | "rate_limited"
     | "unavailable",
@@ -114,11 +115,16 @@ export class InMemoryIdentityProvider implements IdentityProvider {
     const user = state.users.get(i.email);
     if (user === undefined || user.password !== i.password) return fail("denied");
     if (!user.confirmed) return fail("not_confirmed");
+    let viaTotp = false;
     // WPU-X11: as the Cognito adapter does, a customer with an authenticator gets the challenge without
     // a code, and a wrong or reused code is `denied`.
     if (user.totpEnabled === true && user.totpSecret !== undefined) {
       if (i.totpCode === undefined) return ok({ kind: "challenge", challenge: "totp" });
-      if (!acceptTotp(user, user.totpSecret, i.totpCode, this.clock.now())) return fail("denied");
+      // The password was right: a wrong or reused code is code_denied, as in the Cognito adapter.
+      if (!acceptTotp(user, user.totpSecret, i.totpCode, this.clock.now())) {
+        return fail("code_denied");
+      }
+      viaTotp = true;
     }
     user.refreshCount += 1;
     const refreshToken = `fake-rt.${user.sub}.${user.refreshCount}`;
@@ -128,6 +134,7 @@ export class InMemoryIdentityProvider implements IdentityProvider {
       accessToken: `dev.${user.sub}`,
       refreshToken,
       expiresInSeconds: 3600,
+      ...(viaTotp ? { totpVerified: true as const } : {}),
     });
   }
 
