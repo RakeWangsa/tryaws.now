@@ -74,7 +74,7 @@ Each step names the exact command. Run them in order, from the repository folder
 
    4. Second admin: the superadmin invites a second person on `/admins` (role finance or superadmin), because an FX rate needs four eyes (two different admins).
    5. Leave every product flag off. Buying stays off until the owner decides otherwise (R12).
-   6. Budget: confirm each alarm e-mail subscription (Amazon SNS sends a confirmation message), check that the budget e-mail of 40 USD and 50 USD is configured in AWS Budgets, and the next day read the cost in Cost Explorer.
+   6. Budget: confirm each alarm e-mail subscription (Amazon SNS sends a confirmation message) and the next day read the cost in Cost Explorer. While `TC_BUDGET_ALARM` is `off` (an organization SCP denies budgets to this account, 2026-11-14), the stage has no budget of its own: **before buying opens**, the owner creates the budgets in the management account ([single-account-lean.md](single-account-lean.md), "When an organization SCP denies budgets"). Without them production cost is not watched. With the switch `on`, check instead that the stage budget and its e-mails exist in AWS Budgets.
 
 ## Rollback
 

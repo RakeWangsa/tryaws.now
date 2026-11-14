@@ -1,5 +1,5 @@
 // WPU-B8: the monthly cost budget of a lean stage. Called from infra/app.ts only when config.size is
-// "lean". It notifies the alarm topic of alarms.ts, so the same people get the mail.
+// "lean" and config.budgetAlarm is on (TC_BUDGET_ALARM, infra/lib/lean.ts). It notifies the alarm topic of alarms.ts, so the same people get the mail.
 // WPU-Z10 (owner decisions 2026-11-13): staging 50 USD with notifications at 25, 40 and 50 USD;
 // production (lean, around the clock) 100 USD at 50, 80 and 100 USD; a personal stage as staging
 // (infra/lib/lean.ts budgetOf). The budget counts only this app's stage: the account also runs the

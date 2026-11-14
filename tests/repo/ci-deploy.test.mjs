@@ -432,6 +432,8 @@ describe("TC_STAGE_SIZE reaches every sst job (WPU-Z11)", () => {
     for (const file of workflowFiles) {
       for (const [id, job] of sstJobsOf(file)) {
         expect(job.env?.TC_STAGE_SIZE, `${file} ${id}`).toBe("${{ vars.TC_STAGE_SIZE }}");
+        // 2026-11-14: the budget switch travels with the size (infra/lib/lean.ts parseBudgetAlarm).
+        expect(job.env?.TC_BUDGET_ALARM, `${file} ${id}`).toBe("${{ vars.TC_BUDGET_ALARM }}");
       }
     }
   });
