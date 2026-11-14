@@ -11,6 +11,14 @@ Section M: "EPS unavailable (manual top-up by a `finance` admin with a bank or w
 
 Finance admin creates the adjustment; a second finance or superadmin approves above the limit (the requester can never approve their own).
 
+### The limit (WPU-X5, owner decision 2026-11-14)
+
+- Setting `wallet.adjustment_limit_minor`, scope `market`, market BD: **1,000,000 paisa = 10,000 BDT per wallet per 24 hours**. Credits and debits that posted without a second admin in the last 24 hours count together with the new request (no splitting). Up to the limit one finance admin's adjustment posts at once; above it the adjustment waits as `pending` for a second finance or superadmin.
+- Set by migration 0029 (and by the launch seed for a market created after the migrations), each with one `audit_log` row (actor `system`, action `setting.set`, target `setting` / `BD:wallet.adjustment_limit_minor`). Neither ever overwrites an existing value.
+- The `/wallets/[customerId]` page shows the limit in force. A missing or malformed value counts as 0: every adjustment then waits for a second admin (R16).
+- No admin screen writes this setting yet. Until one exists, the limit changes **only by a reviewed migration** (a new forward-only migration, with its own audit row and reason), never by editing the row by hand. Follow-up: a superadmin screen for the limit, audited with actor, reason, IP and target (R10).
+- Only the `finance` role creates adjustments; a `superadmin` can approve or reject but not create. A sole owner-admin needs a `finance` account to use the limit.
+
 ## Safe checks
 
 1. Is it really EPS? Look for `payments_sweep_failed` in the `payments-sweeper` log group and failed payments on `/payments`. Retry later before posting by hand: a pending payment may still verify.

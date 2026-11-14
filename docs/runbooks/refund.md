@@ -8,7 +8,7 @@ A customer asks for money back; support or finance agrees; or a failed order nee
 
 ## Who
 
-Finance admin (`recordManualRefund`). A second admin approves anything that goes through an adjustment above the limit.
+Finance admin (`recordManualRefund`). A second admin approves anything that goes through an adjustment above the limit (BD: 10,000 BDT per wallet per 24 hours, see [eps-unavailable-manual-topup.md](eps-unavailable-manual-topup.md#the-limit-wpu-x5-owner-decision-2026-11-14)).
 
 ## Safe checks
 

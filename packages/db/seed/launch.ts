@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Tx } from "../client";
 import { FEATURE_FLAG_KEYS, type FeatureFlagKey } from "../repositories/config/feature-flags";
 import { requireInstant } from "../repositories/config/args";
@@ -63,6 +63,14 @@ export const LAUNCH_PRICING_STEPS: readonly {
     }),
   ),
 );
+
+// WPU-X5 (owner decision 2026-11-14): what one finance or superadmin may adjust per wallet per 24 hours
+// without a second admin, in paisa as JSON text (the shape limitOf of repositories/admin/wallets.ts reads).
+export const ADJUSTMENT_LIMIT_SEED = Object.freeze({
+  key: "wallet.adjustment_limit_minor",
+  valueMinor: "1000000",
+  reason: "owner decision 2026-11-14: single-admin adjustment limit 10,000 BDT",
+});
 
 // The core of section 1.
 export const STAGING_FLAGS_ON: readonly FeatureFlagKey[] = Object.freeze([
@@ -204,6 +212,24 @@ export async function seedLaunchData(
       createdAt: at,
     })
     .onConflictDoNothing();
+
+  // WPU-X5: the single-admin adjustment limit, 10,000 BDT = 1,000,000 paisa per wallet per 24 hours (owner
+  // decision 2026-11-14), the same row and system audit row as migration 0029 for a market created after the
+  // migrations. Only where missing: a value an admin or a later process set is never overwritten.
+  await tx.execute(
+    sql`with inserted as (
+          insert into settings (id, key, market, scope, scope_id, value, set_by, created_at)
+          values (gen_random_uuid(), ${ADJUSTMENT_LIMIT_SEED.key}, ${code}, 'market', null,
+                  ${JSON.stringify(ADJUSTMENT_LIMIT_SEED.valueMinor)}::jsonb, null, ${at.toISOString()}::timestamptz)
+          on conflict on constraint settings_key_market_scope_scope_id_unique do nothing
+          returning market, key, value
+        )
+        insert into audit_log (id, actor_type, actor_id, action, target_type, target_id, ip, user_agent, metadata)
+        select gen_random_uuid(), 'system', null, 'setting.set', 'setting', i.market || ':' || i.key, null, null,
+               jsonb_build_object('reason', ${ADJUSTMENT_LIMIT_SEED.reason}::text, 'before', null,
+                                  'after', jsonb_build_object('value', i.value), 'source', 'launch seed')
+        from inserted i`,
+  );
 
   // R12: in production every flag is off.
   for (const key of FEATURE_FLAG_KEYS) {
