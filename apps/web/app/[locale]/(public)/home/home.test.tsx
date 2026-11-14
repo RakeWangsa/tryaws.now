@@ -187,12 +187,19 @@ describe("plans (WPU-X13)", () => {
 });
 
 describe("comparison, locations, FAQ (WPU-X13)", () => {
-  it("compares an own AWS account with TryAWS.now in a table with a caption and column headers", () => {
+  it("explains how buying works here in a two column table with a caption, and says nothing about what AWS does", () => {
     const page = render(open, "en");
     const table = /<table class="table compare">[^]*?<\/table>/.exec(page)?.[0] ?? "";
     expect(table).toContain("<caption");
-    expect((table.match(/<th scope="col"/g) ?? []).length).toBe(3);
+    expect((table.match(/<th scope="col"/g) ?? []).length).toBe(2);
     expect((table.match(/<th scope="row"/g) ?? []).length).toBe(4);
+    // WPU-X13 round 2: no claim about AWS billing that the repository cannot show.
+    for (const locale of ["bn", "en"] as const) {
+      const body = text(render(open, locale));
+      expect(body, locale).not.toMatch(
+        /international card|billed after use|No invoice in taka|আন্তর্জাতিক কার্ড|ব্যবহারের পরে বিল|চালানপত্র নেই/,
+      );
+    }
   });
 
   it("has two location cards that link to the pricing page filtered by region", () => {

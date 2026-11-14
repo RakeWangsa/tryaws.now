@@ -25,7 +25,7 @@ function RackDrawing() {
     >
       {[0, 1, 2].map((row) => (
         <g key={row} transform={`translate(0 ${row * 54})`}>
-          <rect className="tc-art-line" x="8" y="8" width="304" height="42" rx="8" />
+          <rect className="tc-art-line tc-art-unit" x="8" y="8" width="304" height="42" rx="8" />
           <line className="tc-art-line" x1="28" y1="29" x2="170" y2="29" />
           <line className="tc-art-line" x1="28" y1="21" x2="110" y2="21" />
           <circle className="tc-art-led" cx="268" cy="29" r="5" />
@@ -276,7 +276,7 @@ export function Plans({ t, locale, catalog }: { t: Tr; locale: Locale; catalog: 
 
 const COMPARE = ["card", "usd", "tax", "console"] as const;
 
-/** Your own AWS account against TryAWS.now: how you buy, pay and manage, not a price claim. */
+/** How buying works here: only statements the repository can show (EPS wallet, USD price with VAT and fees, tax invoice, panel). */
 export function Compare({ t }: { t: Tr }) {
   return (
     <section className="bg-seccolorstyle tc-section">
@@ -294,9 +294,6 @@ export function Compare({ t }: { t: Tr }) {
                   {t("home.compareFeature")}
                 </th>
                 <th scope="col" className="title mergecolor border-start-0 tc-compare-col">
-                  {t("home.compareOwn")}
-                </th>
-                <th scope="col" className="title mergecolor border-start-0 tc-compare-col">
                   {t("home.compareHere")}
                 </th>
               </tr>
@@ -307,8 +304,7 @@ export function Compare({ t }: { t: Tr }) {
                   <th scope="row" className="mergecolor">
                     {t(`home.compare.${key}.label`)}
                   </th>
-                  <td className="seccolor">{t(`home.compare.${key}.own`)}</td>
-                  <td>
+                  <td className="seccolor">
                     <b className="c-black mergecolor">{t(`home.compare.${key}.here`)}</b>
                   </td>
                 </tr>

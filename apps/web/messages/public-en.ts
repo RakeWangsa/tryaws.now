@@ -146,32 +146,26 @@ export const publicEn: Same<typeof publicBn> = {
       plansLead:
         "Cloud Server plans, straight from the price list. Prices are in US dollars for 30 days and include VAT and fees.",
       plansAll: "See all plans and locations",
-      compareTitle: "Your own AWS account or TryAWS.now",
-      compareLead:
-        "The servers are the same kind of AWS resource. The difference is how you buy, pay and manage.",
-      compareCaption: "Your own AWS account compared with TryAWS.now",
+      compareTitle: "How buying works here",
+      compareLead: "Prepaid, in taka, from one panel.",
+      compareCaption: "How buying works on TryAWS.now",
       compareFeature: "Topic",
-      compareOwn: "Your own AWS account",
-      compareHere: "TryAWS.now",
+      compareHere: "On TryAWS.now",
       compare: {
         card: {
           label: "Payment",
-          own: "An international card that can pay in dollars",
           here: "A taka wallet that you top up with EPS, paid in advance",
         },
         usd: {
           label: "Price and bill",
-          own: "In US dollars, billed after use",
           here: "Price shown in US dollars, taken from your wallet in taka, VAT and fees included",
         },
         tax: {
           label: "Tax invoice",
-          own: "No invoice in taka",
           here: "A tax invoice in taka (Mushak-6.3) for each purchase and renewal",
         },
         console: {
           label: "Management",
-          own: "Your own AWS account and the AWS console",
           here: "The TryAWS.now panel, no separate AWS account needed",
         },
       },

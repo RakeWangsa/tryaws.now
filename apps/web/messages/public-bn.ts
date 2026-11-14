@@ -144,31 +144,26 @@ export const publicBn = {
       plansLead:
         "ক্লাউড সার্ভারের প্ল্যান, মূল্য তালিকা থেকে সরাসরি নেওয়া। মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত।",
       plansAll: "সব প্ল্যান ও লোকেশন দেখুন",
-      compareTitle: "নিজের AWS account বনাম TryAWS.now",
-      compareLead: "সার্ভার একই ধরনের AWS resource। পার্থক্য কেনা, পরিশোধ ও পরিচালনার পদ্ধতিতে।",
-      compareCaption: "নিজের AWS account ও TryAWS.now-এর তুলনা",
+      compareTitle: "এখানে কেনা যেভাবে কাজ করে",
+      compareLead: "আগে পরিশোধ, টাকায়, এক প্যানেল থেকে।",
+      compareCaption: "TryAWS.now-এ কেনার পদ্ধতি",
       compareFeature: "বিষয়",
-      compareOwn: "নিজের AWS account",
-      compareHere: "TryAWS.now",
+      compareHere: "TryAWS.now-এ",
       compare: {
         card: {
           label: "পেমেন্ট",
-          own: "ডলারে পরিশোধযোগ্য আন্তর্জাতিক কার্ড",
           here: "EPS দিয়ে টপ আপ করা টাকার ওয়ালেট, আগে পরিশোধ",
         },
         usd: {
           label: "মূল্য ও বিল",
-          own: "মার্কিন ডলারে, ব্যবহারের পরে বিল",
           here: "মার্কিন ডলারে দেখানো মূল্য, টাকায় ওয়ালেট থেকে কাটা, VAT ও ফি অন্তর্ভুক্ত",
         },
         tax: {
           label: "কর চালানপত্র",
-          own: "টাকার চালানপত্র নেই",
           here: "প্রতিটি কেনা ও নবায়নে টাকায় কর চালানপত্র (মূসক-৬.৩)",
         },
         console: {
           label: "পরিচালনা",
-          own: "নিজের AWS account ও AWS console",
           here: "TryAWS.now প্যানেল, আলাদা AWS account লাগে না",
         },
       },

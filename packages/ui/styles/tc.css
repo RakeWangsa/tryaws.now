@@ -904,10 +904,11 @@ div.tc-modal-open {
   }
 }
 .tc-hero-art {
+  color: var(--tc-text);
   display: block;
   height: auto;
-  margin: 0 auto 16px;
-  max-width: 100%;
+  margin: 0 0 20px;
+  width: 100%;
 }
 /* The SVG draws with currentColor and the accent, so one drawing works on both pages. */
 .tc-hero-art .tc-art-line {
@@ -915,7 +916,10 @@ div.tc-modal-open {
   stroke: currentcolor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2;
+  stroke-width: 3;
+}
+.tc-hero-art .tc-art-unit {
+  fill: var(--tc-page);
 }
 .tc-hero-art .tc-art-accent {
   fill: var(--tc-accent, #ee5586);
@@ -997,6 +1001,12 @@ div.tc-modal-open {
 [data-background="light"] .tc-tile-soon {
   border-color: var(--tc-muted-on-light);
 }
+/* The question of a FAQ pair stands out from its answer: larger and bold (the theme sets 14 px). */
+.accordion.faq .tc-faq-q {
+  font-size: 1.125rem !important;
+  font-weight: 700 !important;
+  line-height: 1.4;
+}
 .tc-plan-more {
   margin-top: 32px;
   text-align: center;
@@ -1005,7 +1015,7 @@ div.tc-modal-open {
   margin-bottom: 30px;
 }
 .tc-compare-col {
-  width: 34%;
+  width: 50%;
 }
 .tc-location-code {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;

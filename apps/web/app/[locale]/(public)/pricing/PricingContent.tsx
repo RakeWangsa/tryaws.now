@@ -83,7 +83,7 @@ export function PricingContent({
             : []),
         ]}
       />
-      <div className="top-header item1 overlay">
+      <div className="top-header sec-bg6 bg-colorstyle">
         <div className="container">
           <div className="row">
             <div className="col-lg-12">

@@ -101,11 +101,9 @@ export const PUBLIC_ANCHORS: readonly MockupAnchor[] = [
   {
     state: "pricing.data",
     mockupFile: "template/pricing.html",
-    why: "the banner and the tab section: div.top-header.item1.overlay, section.pricing.special.motpath",
+    why: "the banner and the tab section: div.top-header (the plain dark background of the hero, not the demo photo of item1, U13), section.pricing.special.motpath",
     classes: [
       "top-header",
-      "item1",
-      "overlay",
       "heading",
       "pricing",
       "special",

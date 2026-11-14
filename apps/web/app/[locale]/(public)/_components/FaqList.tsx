@@ -9,7 +9,7 @@ export function FaqList({ items }: { items: readonly { question: string; answer:
     <dl className="accordion faq">
       {items.map((item) => (
         <div className="panel-wrap" key={item.question}>
-          <dt className="panel-title mergecolor">{item.question}</dt>
+          <dt className="panel-title mergecolor tc-faq-q">{item.question}</dt>
           <dd className="wrapper-collapse">
             <p className="info seccolor mb-0">{item.answer}</p>
           </dd>
