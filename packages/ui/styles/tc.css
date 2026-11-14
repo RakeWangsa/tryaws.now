@@ -843,3 +843,182 @@ div.tc-modal-open {
   .tc-auth-tab-current.tc-auth-tab-current.tc-auth-tab-current.tc-auth-tab-current.tc-auth-tab-current.tc-auth-tab-current {
   background-color: var(--tc-accent-pink-aa) !important;
 }
+
+/* ===== 11. Home page (WPU-X13) =====
+   Layout of the new home sections. They are built from the theme's own classes (top-header, pricing
+   special, sec-normal, bg-colorstyle, bg-seccolorstyle, getready, table compare, accordion faq); the
+   rules below only set spacing and the pieces the mockup has no class for: the hero panel, the trust
+   strip, the step and product tiles. Colors come from the theme's helper classes and the tokens of
+   section 2, so the dark and the light page both work. */
+.tc-section {
+  padding: 56px 0;
+}
+@media (min-width: 992px) {
+  .tc-section {
+    padding: 88px 0;
+  }
+}
+.tc-section-head {
+  margin-bottom: 40px;
+  text-align: center;
+}
+/* Below the menu the theme gives a hero 200 px; the home hero has a panel beside the text, so less. */
+.tc-hero {
+  padding-top: 150px;
+  padding-bottom: 64px;
+}
+@media (max-width: 767.98px) {
+  .tc-hero {
+    padding-top: 120px;
+    padding-bottom: 40px;
+  }
+}
+/* The theme sets the heading at 80 px and capitalizes every word; a full sentence needs less. */
+.tc-hero-title {
+  font-size: 3rem;
+  line-height: 1.15;
+  text-transform: none;
+}
+@media (max-width: 767.98px) {
+  .tc-hero-title {
+    font-size: 2rem;
+  }
+}
+.tc-hero-lead {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  margin-bottom: 1.75rem;
+}
+.tc-hero-panel {
+  border: 1px solid var(--tc-muted-on-dark);
+  border-radius: var(--tc-radius-card);
+  padding: 24px;
+}
+[data-background="light"] .tc-hero-panel {
+  border-color: var(--tc-muted-on-light);
+}
+/* The theme floats the language pills at the right edge of its hero; keep the panel clear of them. */
+@media (min-width: 992px) {
+  .tc-hero-panel {
+    margin-right: 72px;
+  }
+}
+.tc-hero-art {
+  display: block;
+  height: auto;
+  margin: 0 auto 16px;
+  max-width: 100%;
+}
+/* The SVG draws with currentColor and the accent, so one drawing works on both pages. */
+.tc-hero-art .tc-art-line {
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+.tc-hero-art .tc-art-accent {
+  fill: var(--tc-accent, #ee5586);
+}
+.tc-hero-art .tc-art-led {
+  fill: var(--tc-yellow);
+}
+.tc-hero-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tc-hero-list li {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+}
+.tc-hero-list i {
+  flex: none;
+  text-align: center;
+  width: 20px;
+}
+.tc-trust {
+  padding: 28px 0;
+}
+.tc-trust-item {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  height: 100%;
+}
+.tc-trust-icon,
+.tc-step-number {
+  align-items: center;
+  background-color: var(--tc-yellow);
+  border-radius: 50%;
+  color: #212122;
+  display: inline-flex;
+  flex: none;
+  font-weight: 700;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+.tc-trust-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+.tc-trust-text {
+  margin: 0;
+}
+.tc-tile {
+  border: 1px solid transparent;
+  border-radius: var(--tc-radius-card);
+  height: 100%;
+  padding: 28px;
+}
+.tc-tile-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 12px 0 8px;
+}
+.tc-tile-text {
+  margin: 0 0 12px;
+}
+.tc-step-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* A product that is not open is told by its label and its dashed border, not by color alone (U11). */
+.tc-tile-soon {
+  border-style: dashed;
+  border-color: var(--tc-muted-on-dark);
+}
+[data-background="light"] .tc-tile-soon {
+  border-color: var(--tc-muted-on-light);
+}
+.tc-plan-more {
+  margin-top: 32px;
+  text-align: center;
+}
+.tc-plan-col {
+  margin-bottom: 30px;
+}
+.tc-compare-col {
+  width: 34%;
+}
+.tc-location-code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.9375rem;
+}
+.tc-cta-band .column-support-title {
+  font-size: 2rem;
+}
+@media (max-width: 767.98px) {
+  .tc-cta-band .column-support-title {
+    font-size: 1.5rem;
+  }
+  .tc-cta-band .btn-floats .btn {
+    margin-bottom: 12px;
+  }
+}

@@ -90,38 +90,103 @@ export const publicBn = {
       perLocation: "{location}: {value}",
     },
     home: {
-      heroTitle: "ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
-      plansTitle: "জনপ্রিয় ক্লাউড সার্ভার প্ল্যান",
+      heroTitle: "বাংলাদেশের জন্য ক্লাউড সার্ভার। টাকায় কিনুন, AWS account লাগবে না।",
+      heroLead:
+        "Amazon Lightsail দিয়ে তৈরি, Singapore বা Mumbai থেকে চলে। EPS দিয়ে ওয়ালেট টপ আপ করুন, সেখান থেকেই কিনুন।",
+      heroSignup: "অ্যাকাউন্ট খুলুন",
+      panel: {
+        label: "প্যানেলে আপনার সার্ভার, একটি উদাহরণ চিত্র",
+        title: "ক্লাউড সার্ভার",
+        engine: "Amazon Lightsail instance",
+        location: "লোকেশন: Singapore বা Mumbai",
+        wallet: "ওয়ালেট থেকে পরিশোধ, টাকায়",
+        panel: "চালু, বন্ধ ও ব্যাকআপ প্যানেল থেকে",
+      },
+      aboutTitle: "TryAWS.now কী",
+      trustLabel: "TryAWS.now-এর মূল কথা",
+      trust: {
+        aws: { title: "১০০% AWS", text: "Amazon Lightsail দিয়ে তৈরি" },
+        eps: { title: "EPS দিয়ে টপ আপ", text: "ওয়ালেট ও পেমেন্ট টাকায়" },
+        regions: { title: "Singapore ও Mumbai", text: "দুটি AWS Region" },
+        support: { title: "প্যানেলে সাপোর্ট অনুরোধ", text: "বিক্রি, বিল ও সাপোর্ট TryAWS.now-এর" },
+      },
+      stepsTitle: "কীভাবে কাজ করে",
+      stepsLead: "তিনটি ধাপ, সব প্যানেল থেকেই।",
+      stepLabel: "ধাপ {number}",
+      steps: {
+        topup: { title: "ওয়ালেট টপ আপ করুন", text: "EPS দিয়ে টাকা যোগ করুন। ওয়ালেট টাকায়।" },
+        plan: {
+          title: "প্ল্যান বেছে নিন",
+          text: "ক্লাউড সার্ভারের প্ল্যান ও লোকেশন বেছে নিন: Singapore বা Mumbai।",
+        },
+        ready: {
+          title: "সার্ভার পান",
+          text: "আপনার বেছে নেওয়া লোকেশনে সার্ভার তৈরি হয়, আর প্যানেল থেকে চালান।",
+        },
+      },
+      productsTitle: "যা কিনতে পারবেন",
+      productsLead: "প্রতিটি পণ্য খোলা হয় ধাপে ধাপে। যা এখনো খোলা নয়, তার নামের পাশে লেখা আছে।",
+      productOpen: "খোলা আছে",
+      productsOpenLink: "{name}: বিস্তারিত দেখুন",
+      products: {
+        server: {
+          title: "ক্লাউড সার্ভার",
+          text: "Amazon Lightsail instance, আপনার বেছে নেওয়া লোকেশনে।",
+        },
+        disk: { title: "ব্লক স্টোরেজ", text: "সার্ভারের জন্য বাড়তি ডিস্ক।" },
+        staticIp: { title: "স্ট্যাটিক আইপি", text: "সার্ভারের জন্য স্থির আইপি ঠিকানা।" },
+        backup: { title: "ব্যাকআপ", text: "প্যানেল থেকে ব্যাকআপ নিন ও পুনরুদ্ধার করুন।" },
+        cdn: { title: "সিডিএন", text: "Amazon Lightsail CDN distribution।" },
+        dns: { title: "ডিএনএস", text: "Amazon Route 53 দিয়ে ডিএনএস জোন।" },
+        domain: { title: "ডোমেইন", text: "ডোমেইন নাম নিবন্ধন ও পরিচালনা, Amazon Route 53 দিয়ে।" },
+      },
+      plansTitle: "প্ল্যান ও মূল্য",
       plansLead:
-        "বর্তমানে খোলা সবচেয়ে কম মূল্যের প্ল্যান। সব মূল্য সরাসরি মূল্য তালিকা থেকে নেওয়া।",
-      whyTitle: "কেন TryAWS.now",
-      why: {
-        aws: {
-          title: "১০০% AWS অবকাঠামো",
-          text: "প্রতিটি সার্ভার একটি Amazon Lightsail resource, যা আপনার বেছে নেওয়া AWS Region-এ চলে।",
+        "ক্লাউড সার্ভারের প্ল্যান, মূল্য তালিকা থেকে সরাসরি নেওয়া। মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত।",
+      plansAll: "সব প্ল্যান ও লোকেশন দেখুন",
+      compareTitle: "নিজের AWS account বনাম TryAWS.now",
+      compareLead: "সার্ভার একই ধরনের AWS resource। পার্থক্য কেনা, পরিশোধ ও পরিচালনার পদ্ধতিতে।",
+      compareCaption: "নিজের AWS account ও TryAWS.now-এর তুলনা",
+      compareFeature: "বিষয়",
+      compareOwn: "নিজের AWS account",
+      compareHere: "TryAWS.now",
+      compare: {
+        card: {
+          label: "পেমেন্ট",
+          own: "ডলারে পরিশোধযোগ্য আন্তর্জাতিক কার্ড",
+          here: "EPS দিয়ে টপ আপ করা টাকার ওয়ালেট, আগে পরিশোধ",
         },
-        bdt: {
-          title: "ওয়ালেট টাকায়, আগে টপ আপ",
-          text: "ওয়ালেটে EPS দিয়ে টাকা যোগ করুন, তারপর সেখান থেকে কিনুন।",
+        usd: {
+          label: "মূল্য ও বিল",
+          own: "মার্কিন ডলারে, ব্যবহারের পরে বিল",
+          here: "মার্কিন ডলারে দেখানো মূল্য, টাকায় ওয়ালেট থেকে কাটা, VAT ও ফি অন্তর্ভুক্ত",
         },
-        panel: {
-          title: "এক প্যানেল, আলাদা AWS account নয়",
-          text: "সার্ভার তৈরি, চালু-বন্ধ ও ব্যাকআপ TryAWS.now প্যানেল থেকেই। AWS console-এর দরকার নেই।",
+        tax: {
+          label: "কর চালানপত্র",
+          own: "টাকার চালানপত্র নেই",
+          here: "প্রতিটি কেনা ও নবায়নে টাকায় কর চালানপত্র (মূসক-৬.৩)",
         },
-        support: {
-          title: "বিল ও সাপোর্ট TryAWS.now-এর",
-          text: "বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়। সাহায্য দরকার হলে সাপোর্ট অনুরোধ খুলুন।",
+        console: {
+          label: "পরিচালনা",
+          own: "নিজের AWS account ও AWS console",
+          here: "TryAWS.now প্যানেল, আলাদা AWS account লাগে না",
         },
       },
       locationsTitle: "দুটি লোকেশন",
       locationsText:
-        "শুরুতে দুটি AWS Region: Singapore (ap-southeast-1) ও Mumbai (ap-south-1)। প্ল্যানের ডেটা ট্রান্সফার লোকেশন অনুযায়ী আলাদা হতে পারে।",
-      helpTitle: "সাহায্য দরকার?",
-      help: {
-        faq: { title: "সাধারণ প্রশ্ন", text: "AWS, বিল ও ডেটা নিয়ে উত্তর" },
-        support: { title: "সাপোর্ট", text: "আমাদের সঙ্গে যোগাযোগ করুন" },
-        pricing: { title: "মূল্য তালিকা", text: "সব প্ল্যান ও মূল্য একসঙ্গে" },
+        "শুরুতে দুটি AWS Region। প্ল্যানের ডেটা ট্রান্সফার লোকেশন অনুযায়ী আলাদা হতে পারে।",
+      locationRegion: "AWS Region: {name}",
+      locationCta: "{location}-এর প্ল্যান দেখুন",
+      regionNames: {
+        "ap-southeast-1": "Asia Pacific (Singapore)",
+        "ap-south-1": "Asia Pacific (Mumbai)",
       },
+      faqTitle: "সাধারণ প্রশ্ন",
+      faqLead: "কেনার আগে যা জানতে চান।",
+      faqAll: "সব প্রশ্ন দেখুন",
+      ctaTitle: "শুরু করতে প্রস্তুত?",
+      ctaText:
+        "অ্যাকাউন্ট খুলুন, ওয়ালেট টপ আপ করুন, তারপর প্রথম ক্লাউড সার্ভার কিনুন। কেনার জন্য ইমেইল, মোবাইল নম্বর ও অথেনটিকেটর অ্যাপ লাগে।",
     },
     pricing: {
       heading: "মূল্য তালিকা",
