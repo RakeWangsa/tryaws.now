@@ -131,6 +131,9 @@ export function OfferTable({
               {t("cloudServers.colLocation")}
             </th>
             <th scope="col" className="title mergecolor border-start-0">
+              {t("spec.cpu")}
+            </th>
+            <th scope="col" className="title mergecolor border-start-0">
               {t("pricing.colMemory")}
             </th>
             <th scope="col" className="title mergecolor border-start-0">
@@ -156,6 +159,7 @@ export function OfferTable({
                   {planName(t, offer)}
                 </th>
                 <td className="seccolor">{locationName(t, offer.region)}</td>
+                <td className="seccolor">{v.cpu}</td>
                 <td className="seccolor">{v.ram}</td>
                 <td className="seccolor">{v.disk}</td>
                 <td className="seccolor">{v.transfer}</td>

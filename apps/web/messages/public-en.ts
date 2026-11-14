@@ -192,6 +192,10 @@ export const publicEn: Same<typeof publicBn> = {
         "Create an account, top up your wallet and buy your first Cloud Server. To buy you need an email, a mobile number and an authenticator app.",
     },
     pricing: {
+      vatNote: "VAT and fees are included in every price.",
+      regionNavLabel: "Filter by location",
+      regionAll: "All locations",
+      regionCurrent: "(selected)",
       heading: "Pricing",
       lead: "Cloud Server, built on Amazon Lightsail. Every price is for 30 days, in US dollars.",
       answer:
