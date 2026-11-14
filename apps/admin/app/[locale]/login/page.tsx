@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { NextIntlClientProvider } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { AuthShell } from "@tc/ui";
 import { isLocale, localeHrefs } from "@tc/ui/runtime";
+import { loginClientMessages } from "./client-messages.ts";
 import { LoginForm } from "./LoginForm.tsx";
 
 type PageProps = { params: Promise<{ locale: string }> };
@@ -19,7 +21,9 @@ export default async function Page({ params }: PageProps) {
   if (!isLocale(locale)) notFound();
   return (
     <AuthShell locale={locale} localeHrefs={localeHrefs("/login")}>
-      <LoginForm locale={locale} />
+      <NextIntlClientProvider locale={locale} messages={loginClientMessages(locale)}>
+        <LoginForm locale={locale} />
+      </NextIntlClientProvider>
     </AuthShell>
   );
 }

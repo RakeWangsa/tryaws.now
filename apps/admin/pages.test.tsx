@@ -341,3 +341,33 @@ describe("admin kit messages", () => {
     }
   });
 });
+
+// Staging 2026-11-14: the root layout gives the browser only the kit messages, so LoginForm showed the raw
+// keys (Admin.login.code). Rendered here with exactly what the page hands the client, nothing more.
+it("LoginForm translates with only the messages the login page gives the client", async () => {
+  const { loginClientMessages } = await import("./app/[locale]/login/client-messages.ts");
+  const { LoginForm } = await import("./app/[locale]/login/LoginForm.tsx");
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(
+      <NextIntlClientProvider
+        locale={locale}
+        messages={loginClientMessages(locale)}
+        timeZone="Asia/Dhaka"
+      >
+        <LoginForm locale={locale} />
+      </NextIntlClientProvider>,
+    );
+    const t = (adminMessages[locale]["Admin"] as { login: Record<string, string> }).login;
+    expect(html, locale).toContain(t.code);
+    expect(html, locale).toContain(t.password);
+    expect(html, locale).not.toContain("Admin.login.");
+  }
+});
+
+it("the login page wraps LoginForm in a client provider with loginClientMessages", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("./app/[locale]/login/page.tsx", import.meta.url), "utf8");
+  expect(page).toMatch(
+    /<NextIntlClientProvider locale=\{locale\} messages=\{loginClientMessages\(locale\)\}>\s*<LoginForm locale=\{locale\} \/>/,
+  );
+});
