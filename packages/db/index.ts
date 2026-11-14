@@ -119,24 +119,6 @@ export type {
   FirstAdminOutcome,
   FirstAdminPlan,
 } from "./repositories/system/first-admin";
-// WPU-X4: the pool account bootstrap of the migrator (the same idempotent SQL as the CLI seed).
-export {
-  accountSuffix,
-  isPoolSeedConflict,
-  MIGRATOR_POOL_NAME,
-  MIGRATOR_POOL_TIER,
-  poolAccountDecision,
-  PoolSeedConflictError,
-  seedPoolAccount,
-} from "./seed-pool";
-export type {
-  PoolAccountDecision,
-  PoolAccountPlan,
-  PoolAccountRaw,
-  SeedPoolInput,
-  SeedPoolResult,
-  SeedQuery,
-} from "./seed-pool";
 export type {
   StatementLine,
   StatementPage,

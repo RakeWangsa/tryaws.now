@@ -6,6 +6,7 @@ import {
   LAUNCH_REGIONS,
   planPoolSeed,
   poolAccountDecision,
+  POOL_BOOTSTRAP_ACTION,
   seedPoolAccount,
   type SeedPoolInput,
   type SeedQuery,
@@ -251,6 +252,89 @@ describe("seedPoolAccount (database)", () => {
       [first.accountId],
     );
     expect(cell.rows).toEqual([{ quota_limit: 42, used: 3 }]);
+  });
+
+  // WPU-X4 review M2: the migrator's write is audited like the first superadmin (actor system, the
+  // reason, before and after), in the same transaction. Never the ExternalId or the full account id.
+  const auditRows = async (accountId: string) =>
+    (
+      await t.pool.query(
+        `select actor_type, actor_id, action, target_type, target_id, ip, user_agent, metadata
+           from audit_log where target_type = 'pool_account' and target_id = $1 order by created_at`,
+        [accountId],
+      )
+    ).rows as Record<string, unknown>[];
+
+  it("with the audit option writes one audit row on the first run and none on a run that changes nothing", async () => {
+    const first = await run((q) => seedPoolAccount(q, input(), { audit: true }));
+    const rows = await auditRows(first.accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actor_type: "system",
+      actor_id: null,
+      action: POOL_BOOTSTRAP_ACTION,
+      target_type: "pool_account",
+      target_id: first.accountId,
+      ip: null,
+      user_agent: null,
+      metadata: {
+        reason: "pool account bootstrap",
+        before: null,
+        after: {
+          name: "tc-pool-one",
+          tier: "new",
+          status: "active",
+          accountSuffix: "1111",
+          accountCreated: true,
+          cellsCreated: 26,
+        },
+      },
+    });
+    const text = JSON.stringify(rows);
+    expect(text).not.toContain("tc-ext-placeholder-1");
+    expect(text).not.toContain(ACCOUNT);
+    await run((q) => seedPoolAccount(q, input(), { audit: true }));
+    expect(await auditRows(first.accountId)).toHaveLength(1);
+  });
+
+  it("with the audit option audits a run that only fills in missing cells", async () => {
+    const first = await run((q) => seedPoolAccount(q, input(), { audit: true }));
+    await t.pool.query(
+      "delete from pool_capacity where pool_account_id = $1 and region = 'us-east-1'",
+      [first.accountId],
+    );
+    await run((q) => seedPoolAccount(q, input(), { audit: true }));
+    const rows = await auditRows(first.accountId);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.metadata).toMatchObject({
+      after: { accountCreated: false, cellsCreated: 8 },
+    });
+  });
+
+  it("without the option (the CLI) writes no audit row, and a refused or failed run writes none", async () => {
+    const first = await run((q) => seedPoolAccount(q, input()));
+    expect(await auditRows(first.accountId)).toHaveLength(0);
+    await run((q) => seedPoolAccount(q, input({ tier: "trusted" }), { audit: true })).catch(
+      () => undefined,
+    );
+    expect(await auditRows(first.accountId)).toHaveLength(0);
+  });
+
+  it("rolls the audit row back with the seed when a later statement fails", async () => {
+    await expect(
+      run((q) =>
+        seedPoolAccount(
+          (sql, params) => {
+            if (/insert into audit_log/.test(sql)) throw new Error("boom");
+            return q(sql, params);
+          },
+          input(),
+          { audit: true },
+        ),
+      ),
+    ).rejects.toThrow();
+    expect(await count("pool_accounts")).toBe(0);
+    expect(await count("pool_capacity")).toBe(0);
   });
 
   it("rolls back as a whole when a statement fails midway", async () => {

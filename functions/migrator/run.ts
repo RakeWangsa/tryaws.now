@@ -1,16 +1,18 @@
 import type { Logger } from "@tc/core";
 import {
-  accountSuffix,
   firstAdminDecision,
-  isPoolSeedConflict,
-  poolAccountDecision,
   subPrefix,
   type FirstAdminDecision,
   type FirstAdminOutcome,
+} from "@tc/db";
+import {
+  accountSuffix,
+  isPoolSeedConflict,
+  poolAccountDecision,
   type PoolAccountDecision,
   type SeedPoolInput,
   type SeedPoolResult,
-} from "@tc/db";
+} from "@tc/db/seed-pool";
 import type { MigratorConfig } from "./config";
 import { ensureRoles, type Queryable } from "./roles";
 
@@ -119,7 +121,6 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
   let client: MasterConnection | undefined;
   let refused = false;
   let changed = 0;
-  let poolConflict = false;
   try {
     client = await deps.connect(config.masterUrl);
 
@@ -169,9 +170,12 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     // WPU-X4: the one pool account and its capacity cells, from TC_POOL_ACCOUNT_IDS (exactly one id) and
     // TC_POOL_EXTERNAL_ID, with the alias pool-1, tier new and the seed's placeholder limits. Unset,
     // several ids or a malformed value write nothing. An existing account is never changed (R7). A row
-    // that conflicts (same id with another name, tier or ExternalId, or pool-1 on another id) fails the
-    // deploy, as every other error of a migrator step does (R16). The log holds the decision and at most
-    // the last 4 digits of the account id, never the ExternalId (R14).
+    // that differs (same id with another name, tier or ExternalId, or pool-1 on another id) is left as
+    // it is and logged `skipped: differs`: a stale, non-secret variable must never block every later
+    // deploy, hotfixes included (review round 1); the CLI stays strict. Any other error fails the
+    // deploy, as every other error of a migrator step does (R16). The seed writes its audit row in the
+    // same transaction (review M2). The log holds the decision and at most the last 4 digits of the
+    // account id, never the ExternalId (R14).
     step = "pool_account";
     const poolPlan = poolAccountDecision({
       stage: config.stage,
@@ -184,27 +188,25 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
       log({ event: "migrator_pool_account", decision: poolAccount });
     } else {
       const suffix = accountSuffix(poolPlan.input.awsAccountId);
-      let seeded: SeedPoolResult;
+      let seeded: SeedPoolResult | undefined;
       try {
         seeded = await deps.seedPoolAccount(config.masterUrl, poolPlan.input);
       } catch (error) {
-        if (isPoolSeedConflict(error)) {
-          poolConflict = true;
-          log({
-            event: "migrator_pool_account",
-            decision: "refused: conflict",
-            accountSuffix: suffix,
-          });
-        }
-        throw error;
+        // The seed rolled its transaction back: nothing was written.
+        if (!isPoolSeedConflict(error)) throw error;
       }
-      poolAccount = seeded.accountCreated ? "inserted" : "skipped: exists";
-      log({
-        event: "migrator_pool_account",
-        decision: poolAccount,
-        accountSuffix: suffix,
-        cellsCreated: seeded.cellsCreated,
-      });
+      if (seeded === undefined) {
+        poolAccount = "skipped: differs";
+        log({ event: "migrator_pool_account", decision: poolAccount, accountSuffix: suffix });
+      } else {
+        poolAccount = seeded.accountCreated ? "inserted" : "skipped: exists";
+        log({
+          event: "migrator_pool_account",
+          decision: poolAccount,
+          accountSuffix: suffix,
+          cellsCreated: seeded.cellsCreated,
+        });
+      }
     }
 
     const report: MigratorReport = {
@@ -227,10 +229,6 @@ export async function runMigrator(deps: MigratorDeps, event: unknown): Promise<M
     if (step === "verify" && changed > 0) {
       log({ event: "migrator_refused", reason: "migration_changed", count: changed });
       throw new Error("migrator: an applied migration changed");
-    }
-    if (poolConflict) {
-      log({ event: "migrator_refused", reason: "pool_account_conflict" });
-      throw new Error("migrator: the pool account conflicts with an existing row");
     }
     log({ event: "migrator_failed", step });
     if (step === "connect") throw new Error("migrator: could not connect");

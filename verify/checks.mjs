@@ -3984,7 +3984,7 @@ TASKS["WPU-X4"] = [
   format,
   glueTest(
     "migrator",
-    "functions/migrator: config, steps and the pool_account step (inserted, exists, skipped, conflict, R14)",
+    "functions/migrator: config, steps and the pool_account step (inserted, exists, skipped, differs, R14)",
     "@tc/fn-migrator",
   ),
   db,

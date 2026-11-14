@@ -15,7 +15,7 @@ Staging and production with ONE pool account: whoever runs the go-live (owner de
 The database is private (R2: Lambda in the VPC through RDS Proxy only) and has no bastion, so the CLI below cannot reach it on staging or production. The migrator function runs inside the VPC as the master user at every deploy, and after the first-admin step it registers the pool account with the same idempotent code as the CLI (`seedPoolAccount` of `packages/db/seed-pool.ts`).
 
 1. Do steps 1 to 6 of the onboarding page and the role stacks of this account (section above). Record the real quotas (step 1 below).
-2. Read the ExternalId of the stack made from `infra/org/pool-roles.yaml`: `aws cloudformation describe-stacks --stack-name <pool roles stack name> --query "Stacks[0].Parameters[?ParameterKey=='ExternalId'].ParameterValue" --output text`. It is a plain value, not a secret (6.3); still, it goes into no ticket, chat or file.
+2. Read the ExternalId of the stack made from `infra/org/pool-roles.yaml`: `aws cloudformation describe-stacks --stack-name <pool roles stack name> --query "Stacks[0].Parameters[?ParameterKey=='ExternalId'].ParameterValue" --output text`. It is a plain value, not a secret (6.3), and like `TC_DNS_EXTERNAL_ID` it shows in the `sst diff` job summary of the deploy workflows (function environment). Keep it out of chat and tickets all the same.
 3. Set the GitHub environment variable (not a secret) of the stage: `gh variable set TC_POOL_EXTERNAL_ID --env staging` (or `--env production`), value on standard input. `TC_POOL_ACCOUNT_IDS` of the same environment must hold exactly this one 12-digit id. `deploy-staging.yml` and `deploy-production.yml` pass the variable to `sst`; `infra/stacks/workers.ts` gives it to the migrator function only.
 4. Redeploy the stage (`deploy-staging.yml`, or the next `v*` tag for production; a production deploy that carries the variable is the confirmation that the CLI asks for with `--confirm-production`).
 5. Read the log line `migrator_pool_account` of the migrator function (CloudWatch). It holds the decision and at most the last 4 digits of the account id (`accountSuffix`), never the ExternalId (R14):
@@ -24,10 +24,14 @@ The database is private (R2: Lambda in the VPC through RDS Proxy only) and has n
    - `skipped: not configured`: `TC_POOL_EXTERNAL_ID` is empty. Nothing written; the deploy goes on.
    - `skipped: several pool accounts`: `TC_POOL_ACCOUNT_IDS` holds more than one id. Multi-account onboarding stays manual: use the CLI and the admin app.
    - `skipped: malformed`: the id is not 12 digits or the ExternalId does not match `^[A-Za-z0-9+=,.@:/_-]{16,1224}$` (the `AllowedPattern` of `pool-roles.yaml`). Nothing written; correct the variable and redeploy.
-   - `refused: conflict`: the deploy FAILS with `migrator: the pool account conflicts with an existing row` (fail closed, R16, like every failing migrator step; the migrations of that deploy are already committed). A row for this account exists with another name, tier or ExternalId, or the alias `pool-1` belongs to another account, and nothing was changed. Correct the variable, or empty it when the account was registered another way (for example by the CLI with another alias), and redeploy.
+   - `skipped: differs`: a row for this account exists with another name, tier or ExternalId, or the alias `pool-1` belongs to another account. Nothing was written and the deploy goes on: a stale, non-secret variable never blocks a later deploy (hotfixes included). Correct the variable, or empty it when the account was registered another way (for example by the CLI with another alias). The CLI stays strict: it refuses the same case with an error.
+   - Any other error of the step (the database) fails the deploy with `migrator: could not register the pool account` and the log line `migrator_failed` with step `pool_account` (R16); the seed's transaction is rolled back.
+
+   When the step wrote something (`inserted`, or `skipped: exists` with `cellsCreated` above 0), it also wrote one `audit_log` row in the same transaction: actor `system`, action `pool_account.bootstrap`, target the `pool_accounts` row, reason "pool account bootstrap" with before and after (alias, tier, status, last 4 digits of the id, counts; never the ExternalId). The CLI writes no audit row; its operator fills in the Log section below.
+
 6. Continue with step 5 below: set the real limits on `/capacity` (audited, R10).
 
-The variable may stay set: every later deploy logs `skipped: exists`. Empty it before a planned audited change of the account's tier or ExternalId, or the next deploy refuses with `refused: conflict`.
+The variable may stay set: every later deploy logs `skipped: exists`. After an audited change of the account's tier or ExternalId every deploy logs `skipped: differs` and changes nothing; empty the variable (or set the new ExternalId) to make the line say `skipped: exists` again.
 
 ## Roles when the account also holds DNS
 

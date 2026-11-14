@@ -233,9 +233,24 @@ export interface SeedPoolResult {
   readonly cellsExisting: number;
 }
 
+/** WPU-X4 review M2: the audit row of a bootstrap by the migrator (the same shape as the first superadmin's). */
+export const POOL_BOOTSTRAP_ACTION = "pool_account.bootstrap";
+export const POOL_BOOTSTRAP_REASON = "pool account bootstrap";
+
+export interface SeedPoolOptions {
+  /**
+   * Write one audit_log row (actor `system`) in the same transaction when the run created the account
+   * or a capacity cell. The migrator sets it; the CLI does not (its operator writes the Log section of
+   * the runbook). The row holds the alias, tier, status, the last 4 digits of the account id and the
+   * counts, never the ExternalId (R14).
+   */
+  readonly audit?: boolean;
+}
+
 export async function seedPoolAccount(
   query: SeedQuery,
   input: SeedPoolInput,
+  options: SeedPoolOptions = {},
 ): Promise<SeedPoolResult> {
   const plan = planPoolSeed(input);
   const { account } = plan;
@@ -286,13 +301,32 @@ export async function seedPoolAccount(
        returning id`,
       [accountId, JSON.stringify(plan.cells)],
     );
+    const cellsCreated = added.rows.length;
+    const cellsExisting = plan.cells.length - cellsCreated;
+    if (options.audit === true && (accountCreated || cellsCreated > 0)) {
+      // The columns and values of insertAudit (repositories/audit-log.ts) for a system actor: no
+      // actor id, no IP, no user agent, the reason with before and after in metadata (R10 shape).
+      // Plain SQL because this file has no import at run time (the CLI loads it directly).
+      const metadata = {
+        reason: POOL_BOOTSTRAP_REASON,
+        before: accountCreated ? null : { cellsExisting },
+        after: {
+          name: account.name,
+          tier: account.tier,
+          status: "active",
+          accountSuffix: accountSuffix(account.awsAccountId),
+          accountCreated,
+          cellsCreated,
+        },
+      };
+      await query(
+        `insert into audit_log (id, actor_type, actor_id, action, target_type, target_id, ip, user_agent, metadata)
+         values (gen_random_uuid(), 'system', null, $1, 'pool_account', $2, null, null, $3::jsonb)`,
+        [POOL_BOOTSTRAP_ACTION, accountId, JSON.stringify(metadata)],
+      );
+    }
     await query("commit");
-    return {
-      accountId,
-      accountCreated,
-      cellsCreated: added.rows.length,
-      cellsExisting: plan.cells.length - added.rows.length,
-    };
+    return { accountId, accountCreated, cellsCreated, cellsExisting };
   } catch (error) {
     await query("rollback");
     throw error;
@@ -320,7 +354,8 @@ export type PoolAccountDecision =
   | "skipped: not configured"
   | "skipped: several pool accounts"
   | "skipped: malformed"
-  | "refused: conflict";
+  // review round 1: a row that differs (PoolSeedConflictError) is left as it is; the deploy goes on.
+  | "skipped: differs";
 
 export type PoolAccountPlan =
   | {

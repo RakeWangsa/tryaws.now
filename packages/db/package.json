@@ -8,6 +8,7 @@
     "./buyer-rules": "./repositories/customer/buyer-rules.ts",
     "./links": "./links.ts",
     "./migrate": "./migrate.ts",
+    "./seed-pool": "./seed-pool.ts",
     "./testing": "./testing/index.ts"
   },
   "scripts": {

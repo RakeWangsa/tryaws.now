@@ -23,6 +23,8 @@ it("@tc/db has its migration scripts, its entry and its testing entry", () => {
     // WPU-Z15: the one reader of linked SST values (sstLinks, envLinks, secretValue), without the driver.
     "./links": "./links.ts",
     "./migrate": "./migrate.ts",
+    // WPU-X4 (review M1): the pool account seed, for the migrator; ESLint keeps it out of the apps.
+    "./seed-pool": "./seed-pool.ts",
     "./testing": "./testing/index.ts",
   });
 });

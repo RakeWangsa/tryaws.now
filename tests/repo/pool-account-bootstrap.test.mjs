@@ -78,6 +78,30 @@ describe("infra/stacks/workers.ts", () => {
   });
 });
 
+describe("the seed-pool module (review M1)", () => {
+  it("is a subpath export of @tc/db, not part of the root that the apps import", () => {
+    const pkg = JSON.parse(read("packages/db/package.json"));
+    expect(pkg.exports["./seed-pool"]).toBe("./seed-pool.ts");
+    expect(code("packages/db/index.ts")).not.toMatch(
+      /seed-pool|seedPoolAccount|poolAccountDecision/,
+    );
+  });
+
+  it("is imported by the migrator through the subpath only, and the CLI still loads the file", () => {
+    for (const path of ["functions/migrator/run.ts", "functions/migrator/index.ts"]) {
+      expect(code(path), path).toMatch(/from "@tc\/db\/seed-pool";/);
+    }
+    expect(read("scripts/seed-pool-account.mjs")).toContain('from "../packages/db/seed-pool.ts";');
+    // seed-pool.ts has no import at run time (the CLI loads it with Node's type stripping)
+    expect(code("packages/db/seed-pool.ts")).not.toMatch(/^import /m);
+  });
+
+  it("the migrator asks for the audit row; the CLI does not", () => {
+    expect(code("functions/migrator/index.ts")).toMatch(/\},\s*input,\s*\{ audit: true \},?\s*\)/);
+    expect(read("scripts/seed-pool-account.mjs")).not.toContain("audit");
+  });
+});
+
 describe("the migrator", () => {
   it("reads the raw values and lets @tc/db decide", () => {
     const config = code("functions/migrator/config.ts");
@@ -127,16 +151,21 @@ describe("the runbooks", () => {
       "TC_POOL_EXTERNAL_ID",
       "migrator_pool_account",
       "skipped: exists",
-      "refused: conflict",
+      "skipped: differs",
+      "pool account bootstrap",
+      "sst diff",
       "pnpm seed:pool-account",
     ]) {
       expect(page, text).toContain(text);
     }
+    expect(page).not.toContain("refused: conflict");
   });
 
   it("go-live.md sets the variable and checks the log line", () => {
     const page = read("docs/runbooks/go-live.md");
     expect(page).toContain("TC_POOL_EXTERNAL_ID");
     expect(page).toContain("migrator_pool_account");
+    expect(page).toContain("skipped: differs");
+    expect(page).not.toContain("refused: conflict");
   });
 });

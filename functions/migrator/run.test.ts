@@ -1,5 +1,5 @@
 import type { LogEvent } from "@tc/core";
-import { PoolSeedConflictError } from "@tc/db";
+import { PoolSeedConflictError } from "@tc/db/seed-pool";
 import { expect, it } from "vitest";
 import { runMigrator, type MigratorDeps, type Queryable } from "./run";
 
@@ -483,29 +483,36 @@ it("passes the production confirmation only on the production stage", async () =
   expect(seen).toEqual([false, true]);
 });
 
-it("a conflicting row is refused: logged as refused: conflict, and the deploy fails with fixed text", async () => {
+// Review round 1: a stale, non-secret variable must never block every later deploy (hotfixes
+// included). A row that differs is left as it is and the deploy goes on; the CLI stays strict.
+it("a row that differs is skipped: logged as skipped: differs, nothing written, the deploy goes on", async () => {
   const { deps, logs } = withPool();
-  await expect(
-    runMigrator(
-      {
-        ...deps,
-        seedPoolAccount: () =>
-          Promise.reject(
-            new PoolSeedConflictError(
-              "the account exists and differs in name, tier or ExternalId; nothing was changed.",
-            ),
+  const out = await runMigrator(
+    {
+      ...deps,
+      seedPoolAccount: () =>
+        Promise.reject(
+          new PoolSeedConflictError(
+            "the account exists and differs in name, tier or ExternalId; nothing was changed.",
           ),
-      },
-      { action: "migrate" },
-    ),
-  ).rejects.toThrow(/^migrator: the pool account conflicts with an existing row$/);
+        ),
+    },
+    { action: "migrate" },
+  );
+  expect(out.poolAccount).toBe("skipped: differs");
   expect(logs).toContainEqual({
     event: "migrator_pool_account",
-    decision: "refused: conflict",
+    decision: "skipped: differs",
     accountSuffix: "3333",
   });
-  expect(logs).toContainEqual({ event: "migrator_refused", reason: "pool_account_conflict" });
-  expect(JSON.stringify(logs)).not.toContain(POOL_EXT);
+  expect(logs.some((e) => e.event === "migrator_refused" || e.event === "migrator_failed")).toBe(
+    false,
+  );
+  expect(logs.some((e) => e.event === "migrator_done")).toBe(true);
+  const text = JSON.stringify(logs);
+  expect(text).not.toContain(POOL_EXT);
+  expect(text).not.toContain(POOL_ID);
+  expect(text).not.toContain("differs in name");
 });
 
 it("a database failure of the pool step fails the deploy with fixed text and no cause", async () => {
