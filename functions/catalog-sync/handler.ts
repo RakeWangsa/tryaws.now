@@ -211,8 +211,9 @@ export function createCatalogSyncHandler(
         return { ok: true, skipped: false, ...done };
       } catch (e) {
         const f = failureFields(e);
-        // The TLD source is not configured yet (open point 3): the half is skipped, the instance
-        // plans are not failed because of it. Any other TLD failure is a failure of the run.
+        // A TLD source that reports not_configured is skipped and does not fail the instance plans
+        // (WPU-X10: the real source reads ListPrices and reports it no more). Any other TLD failure is a
+        // failure of the run.
         const skipped = f.awsReason === "not_configured";
         deps.log({
           event: "catalog_sync_tlds",

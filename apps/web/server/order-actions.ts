@@ -1,3 +1,4 @@
+import { MAX_ENVELOPED_TOKEN } from "./draft-envelope.ts";
 import { CLIENT_KEY, customerUsd, parseInstanceConfig } from "@tc/core";
 import type { ErrorCode, OrderDraft, OrderSession, Orders } from "@tc/core";
 
@@ -182,7 +183,8 @@ export async function placeOrderCore(
   const token = input["token"];
   const idempotencyKey = input["idempotencyKey"];
   const fields: Record<string, string> = {};
-  if (typeof token !== "string" || token.length === 0 || token.length > 4096)
+  // WPU-X10 review: the token is the envelope of the draft (draft-envelope.ts), longer than the signed token.
+  if (typeof token !== "string" || token.length === 0 || token.length > MAX_ENVELOPED_TOKEN)
     fields["token"] = "invalid";
   if (typeof idempotencyKey !== "string" || !CLIENT_KEY.test(idempotencyKey)) {
     fields["idempotencyKey"] = "invalid";

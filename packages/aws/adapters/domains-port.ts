@@ -1,5 +1,5 @@
 import type { RegistrantContact } from "@tc/core";
-import type { TldPrice } from "../catalog";
+import type { TldPrice } from "../tld-prices";
 
 // The part of Amazon Route 53 Domains that the domain adapter needs, as a port (WP7-T4).
 //

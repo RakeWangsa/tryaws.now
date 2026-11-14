@@ -17,6 +17,8 @@ Operations (`ops`); support talks to the customer.
 3. The registrant must confirm the verification email. A domain left unverified is suspended by the registry. Ask the customer to check the address they gave.
 4. The automatic hosted zone created by `RegisterDomain` should be adopted, not duplicated. Reconciliation rows of kind `orphan` or `missing` on `/reconciliation` can point to it.
 5. Quota: 20 domains per account by default; check [capacity-full-and-quota.md](capacity-full-and-quota.md).
+6. Configuration (WPU-X10). Every create, renewal and "registry confirmed not renewed" check fails closed with `not_configured` when the provisioner lacks `TC_DNS_ACCOUNT_ID`, `TC_DNS_EXTERNAL_ID` (the `tc-dns-roles` stack, role `TcDnsProvisioner` trusting this stage) or `TC_DOMAIN_CONTACT_KEY_ARN` (the KMS key `alias/tc-<stage>-domain-contact`, set by the deploy). A draft on `/domains/new` answers "unavailable" when the web app lacks `DOMAIN_CONTACT_KEY_ARN`. The catalog sync logs `"tlds":{"ok":false}` when `ListPrices` with `TcDnsReader` fails; without TLD prices no domain can be priced. Only the web role may encrypt with the contact key and only the provisioner may decrypt; never add another grant to read a contact by hand.
+7. The name search on `/domains` still says "unavailable": the reader's `checkDomain` is not built (JOURNEY, WPU-X10). An order does not need it, because the provisioner checks the name again before `RegisterDomain`.
 
 ## Steps
 

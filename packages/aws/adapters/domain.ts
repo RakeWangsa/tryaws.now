@@ -108,7 +108,10 @@ async function contactOf(
   let opened: unknown;
   try {
     opened = await deps.unsealContact(new Uint8Array(Buffer.from(config.contactSealed, "base64")));
-  } catch {
+  } catch (error) {
+    // WPU-X10 review: a KMS blip (throttling, network: an AwsError marked retryable) is retried by the step
+    // runner instead of failing the create and refunding it; anything else is final. Nothing of the cause leaves.
+    if (error instanceof AwsError && error.retryable) throw fail("upstream_unavailable", true);
     throw fail("internal");
   }
   const parsed = parseRegistrantContact(opened);

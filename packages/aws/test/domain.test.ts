@@ -433,6 +433,38 @@ describe("create", () => {
     expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
   });
 
+  // WPU-X10 review fix 4: a KMS blip (throttling, network) is retried, not refunded; a final refusal is not.
+  it("passes a retryable unseal failure through as retryable, and keeps a final one final", async () => {
+    const { fake } = setup();
+    const config = { name: "example.com", contactSealed: SEALED, years: 1 };
+    const withUnseal = (unsealContact: () => Promise<unknown>) =>
+      createDomainAdapter({
+        domains: () => fake.port,
+        route53: () => createFakeRoute53().port,
+        unsealContact,
+        holdsName: async () => true,
+        zoneHeldByOther: async () => false,
+      });
+    const blip = withUnseal(async () => {
+      throw new AwsError({ code: "internal", retryable: true, operation: "Decrypt" });
+    });
+    const retry = await step(blip, config, "register", MARK).catch((e: unknown) => e);
+    expect(retry).toBeInstanceOf(AwsError);
+    expect(retry).toMatchObject({
+      code: "upstream_unavailable",
+      retryable: true,
+      mayHaveActed: false,
+    });
+    const final = withUnseal(async () => {
+      throw new AwsError({ code: "internal", retryable: false, operation: "Decrypt" });
+    });
+    await expect(step(final, config, "register", MARK)).rejects.toMatchObject({
+      code: "internal",
+      retryable: false,
+    });
+    expect(fake.calls.filter((c) => c.op === "registerDomain")).toHaveLength(0);
+  });
+
   it("knows no other step", async () => {
     const { adapter } = setup();
     await expect(step(adapter, adapter.parseConfig(RAW), "bogus")).rejects.toBeInstanceOf(AwsError);

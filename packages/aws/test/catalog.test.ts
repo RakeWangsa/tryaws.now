@@ -206,18 +206,87 @@ it("a Region outside the three is refused before any call", async () => {
   expect(aws.seen).toHaveLength(0);
 });
 
-it("tldPrices is not configured: TLD prices not proven, dependency not installable offline", async () => {
+// WPU-X10: tldPrices reads ListPrices of Route 53 Domains in the tc-dns account with TcDnsReader, page by page.
+const DNS = { awsAccountId: "123456789012", externalId: "tc-ext-11aa22" };
+
+it("tldPrices follows NextPageMarker with TcDnsReader and keeps the prices as text", async () => {
   const { aws, source } = setup();
-  await expect(source.tldPrices(POOL)).rejects.toMatchObject({
-    name: "AwsError",
-    code: "internal",
-    reason: "not_configured",
+  aws.on(
+    "route53domains",
+    "ListPrices",
+    lightsailOk({
+      Prices: [
+        {
+          Name: "com",
+          RegistrationPrice: { Price: 15, Currency: "USD" },
+          RenewalPrice: { Price: 15, Currency: "USD" },
+          TransferPrice: { Price: 15, Currency: "USD" },
+        },
+      ],
+      NextPageMarker: "page-2",
+    }),
+    lightsailOk({
+      Prices: [{ Name: "xyz", RegistrationPrice: { Price: 13.5, Currency: "USD" } }],
+    }),
+  );
+  expect(await source.tldPrices(DNS)).toEqual([
+    {
+      tld: "com",
+      registrationUsd: "15",
+      renewalUsd: "15",
+      transferUsd: "15",
+      needsExtraParams: false,
+    },
+    {
+      tld: "xyz",
+      registrationUsd: "13.5",
+      renewalUsd: null,
+      transferUsd: null,
+      needsExtraParams: true,
+    },
+  ]);
+  const calls = aws.seen.filter((r) => r.service === "route53domains");
+  expect(calls).toHaveLength(2);
+  expect(calls[0]!.body).not.toContain("page-2");
+  expect(calls[1]!.body).toContain("page-2");
+  expect(calls[0]!.host).toBe("route53domains.us-east-1.amazonaws.com");
+  const sts = aws.seen.find((r) => r.service === "sts")!;
+  expect(sts.body).toContain("TcDnsReader");
+  expect(sts.body).not.toContain("TcDnsProvisioner");
+});
+
+it("tldPrices refuses a malformed page and maps an access denied without AWS text (R14, R16)", async () => {
+  const bad = setup();
+  bad.aws.on("route53domains", "ListPrices", lightsailOk({ Prices: "nope" }));
+  await expect(bad.source.tldPrices(DNS)).rejects.toMatchObject({
+    reason: "catalog_response_invalid",
   });
+  const denied = setup();
+  denied.aws.on(
+    "route53domains",
+    "ListPrices",
+    lightsailError(
+      403,
+      "AccessDeniedException",
+      "User: arn:aws:sts::123456789012:assumed-role/TcDnsReader/x is not authorized",
+    ),
+  );
+  const error = await denied.source.tldPrices(DNS).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(AwsError);
+  expect(error).toMatchObject({ code: "forbidden" });
+  expectNoLeak(error);
+});
+
+it("tldPrices refuses a bad account reference before any call", async () => {
+  const { aws, source } = setup();
+  await expect(
+    source.tldPrices({ awsAccountId: "tc-dns", externalId: "tc-dns" }),
+  ).rejects.toMatchObject({ reason: "account_ref_invalid" });
   expect(aws.seen).toHaveLength(0);
 });
 
-// The TLD price parser is pure and has no SDK type. The Route 53 Domains client that feeds it is
-// not built (the package is not installable offline): VERIFY the real ListPrices shape.
+// The TLD price parser is pure and has no SDK type (tld-prices.ts). VERIFY the real ListPrices shape at the
+// first staging sync (WPU-X10).
 it("parseTldPrices keeps USD prices as text, drops other currencies and bad TLD names", () => {
   const page = {
     Prices: [

@@ -129,7 +129,7 @@ it("the client does not print the secret, and the access object holds only calle
   for (const secret of ["tc-test-assumed-secret-1", "tc-test-assumed-token-1", "tc-ext-7f3a9c"]) {
     expect(printed).not.toContain(secret);
   }
-  expect(Object.keys(access).sort()).toEqual(["caller", "lightsail", "route53"]);
+  expect(Object.keys(access).sort()).toEqual(["caller", "lightsail", "route53", "route53Domains"]);
 });
 
 it("with the real transport, nothing leaves the machine, and the time limits are set", async () => {

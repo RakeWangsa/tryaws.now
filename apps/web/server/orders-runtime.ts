@@ -1,6 +1,7 @@
 import { makeOrders } from "@tc/core";
 import type { Orders } from "@tc/core";
 import { withTx } from "@tc/db";
+import { envelopeOrders } from "./draft-envelope.ts";
 import { assembleOrdersDeps } from "./orders-deps.ts";
 import { getRuntime } from "./runtime.ts";
 
@@ -27,7 +28,8 @@ export async function getOrdersRuntime(): Promise<OrdersRuntime | null> {
   // A missing secret is not cached as null: the next request tries again after a deploy fixed it.
   if (deps === null) return null;
   const runtime: OrdersRuntime = {
-    orders: makeOrders(deps),
+    // WPU-X10 review (U6): the browser gets only an envelope of the signed draft (draft-envelope.ts).
+    orders: envelopeOrders(makeOrders(deps), deps.secrets),
     secrets: deps.secrets,
     now: clock.now,
   };

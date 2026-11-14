@@ -3,15 +3,17 @@ import { decideTld } from "@tc/core";
 import { customerRepos, listTlds, readFeatureFlag, withTx } from "@tc/db";
 import { orderActionDeps } from "./action-deps.ts";
 import type { DomainActionDeps, DomainDraftDeps } from "./domain-actions.ts";
+import { contactSealFromEnv } from "./domain-seal.ts";
 import type { DomainSearchPort } from "./domain-view.ts";
 
 // The real ports of the domain cores. Only the thin "use server" files and the pages import this (the
 // guard of the origin is `guardAction` of action-deps.ts, which runs first).
 //
-// Two ports are NOT built yet and are null: the availability search (the reader function `checkDomain`
-// needs the Route 53 Domains client) and the KMS seal of the registrant contact. With null the search
-// says "unavailable" and a draft is refused (R16); the domain flag is off in production (R12) anyway.
-// JOURNEY: Needs decision (dependency `@aws-sdk/client-route-53-domains`, KMS key for the seal).
+// The availability search is NOT built yet and is null (the reader function `checkDomain` needs the Route 53
+// Domains client of the reader; JOURNEY, WPU-X10 open item): with null the search says "unavailable" (R16). The
+// order does not need it: the provisioner checks the name again before it registers (adapters/domain.ts).
+// WPU-X10: the KMS seal of the registrant contact is built from DOMAIN_CONTACT_KEY_ARN (domain-seal.ts); without
+// it the seal is null and a draft is refused (R16). The domain flag is off in production (R12) anyway.
 export function domainSearchPort(): DomainSearchPort | null {
   return null;
 }
@@ -22,7 +24,7 @@ export async function domainDraftDeps(): Promise<DomainDraftDeps> {
     ...base,
     tlds: () =>
       withTx(async (tx) => (await listTlds(tx)).filter((row) => decideTld(row) !== "unavailable")),
-    seal: null,
+    seal: contactSealFromEnv(process.env),
   };
 }
 

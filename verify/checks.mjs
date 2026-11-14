@@ -4030,6 +4030,23 @@ TASKS["WPU-X9"] = [specSync, baselineSync, lint, typecheck, format, core, db, ad
 // waits for the owner's approval before merge.
 TASKS["WPU-X2"] = [specSync, baselineSync, lint, typecheck, format, web, repo];
 
+// WPU-X10 (gate M5, proof m5-gate-b-staging-cycles): the DNS-zone and domain families reach AWS. AwsAccess gets
+// route53Domains() (tc-dns, ExternalId, the same cache and error mapping as route53()); the provisioner builds the
+// domain ports from TC_DNS_ACCOUNT_ID, TC_DNS_EXTERNAL_ID (TcDnsProvisioner) and TC_DOMAIN_CONTACT_KEY_ARN (KMS
+// Decrypt); the catalog source reads ListPrices with TcDnsReader; the web app seals the registrant contact with KMS
+// Encrypt (DOMAIN_CONTACT_KEY_ARN). provisioner includes PostgreSQL tests; repo pins the key grants.
+TASKS["WPU-X10"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  aws,
+  provisioner,
+  catalogSyncAll,
+  web,
+  repo,
+];
 // WPU-X12 (staging 2026-11-14, sign-up refused with "unauthorized attribute"): a server-only Cognito
 // sign-up client with a secret is the only client that may write email; the token-issuing customer client
 // keeps writeAttributes ["name"]. auth runs the SecretHash vector, the routing of each call to its client and

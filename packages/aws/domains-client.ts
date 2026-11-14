@@ -19,7 +19,7 @@ import type {
   DomainOperationStatus,
   DomainsPort,
 } from "./adapters/domains-port";
-import { parseTldPrices, type TldPrice } from "./catalog";
+import { parseTldPrices, type TldPrice } from "./tld-prices";
 import { AwsError, operationOf, toAwsError } from "./errors";
 import { clientSettings } from "./settings";
 import type { AwsRequestHandler } from "./types";
@@ -65,8 +65,11 @@ function errorName(error: unknown): string | null {
   return isRecord(error) && typeof error["name"] === "string" ? error["name"] : null;
 }
 
-/** The refusals of Route 53 Domains that the general table does not know, by operation. */
-function mapDomainsError(error: unknown, operation: string | null): AwsError {
+/**
+ * The refusals of Route 53 Domains that the general table does not know, by operation. WPU-X10: also the mapper of
+ * the error middleware of `route53Domains()` (access.ts), so the meaning is the same whichever layer maps first.
+ */
+export function mapDomainsError(error: unknown, operation: string | null): AwsError {
   if (error instanceof AwsError) return error;
   const name = errorName(error);
   const plain = (code: "conflict" | "validation" | "not_found", retryable: boolean) =>

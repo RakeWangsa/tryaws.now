@@ -126,5 +126,8 @@ export function fakeAccess(): AwsAccess<"provisioner"> {
     route53: () => {
       throw new Error("no AWS in tests");
     },
+    route53Domains: () => {
+      throw new Error("no AWS in tests");
+    },
   };
 }

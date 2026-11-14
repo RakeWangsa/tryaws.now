@@ -2,6 +2,7 @@ import {
   AwsError,
   createDnsZoneAdapter,
   createRoute53Port,
+  type AccountRef,
   type AwsAccess,
   type ProductAdapter,
   type Route53Port,
@@ -31,6 +32,26 @@ const DNS_ACCOUNT_ID = /^[0-9]{12}$/;
 const DNS_EXTERNAL_ID = /^[\w+=,.@:/-]{2,1224}$/;
 
 /**
+ * WPU-X10: the tc-dns account of the Lambda environment, or null when a value is missing or malformed (the caller
+ * fails closed). Shared by the DNS zone and the domain ports.
+ */
+export function dnsAccountFromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): AccountRef | null {
+  const awsAccountId = env.TC_DNS_ACCOUNT_ID;
+  const externalId = env.TC_DNS_EXTERNAL_ID;
+  if (
+    awsAccountId === undefined ||
+    !DNS_ACCOUNT_ID.test(awsAccountId) ||
+    externalId === undefined ||
+    !DNS_EXTERNAL_ID.test(externalId)
+  ) {
+    return null;
+  }
+  return { awsAccountId, externalId };
+}
+
+/**
  * The port of the Lambda environment. Built per call (a failed build keeps nothing) and without a
  * network call: the client connects, and assumes the role, on its first request.
  */
@@ -40,17 +61,9 @@ export function dnsZonePortsFromEnv(
 ): DnsZonePorts {
   return {
     route53: () => {
-      const awsAccountId = env.TC_DNS_ACCOUNT_ID;
-      const externalId = env.TC_DNS_EXTERNAL_ID;
-      if (
-        awsAccountId === undefined ||
-        !DNS_ACCOUNT_ID.test(awsAccountId) ||
-        externalId === undefined ||
-        !DNS_EXTERNAL_ID.test(externalId)
-      ) {
-        return notConfigured();
-      }
-      return createRoute53Port(access.route53({ awsAccountId, externalId }, "TcDnsProvisioner"));
+      const account = dnsAccountFromEnv(env);
+      if (account === null) return notConfigured();
+      return createRoute53Port(access.route53(account, "TcDnsProvisioner"));
     },
   };
 }

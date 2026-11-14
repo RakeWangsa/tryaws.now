@@ -17,8 +17,11 @@ export type FakeReply =
   | { networkCode: string }
   | { errorName: string };
 
+/** WPU-X10: route53domains is the JSON 1.1 API of Route 53 Domains (one endpoint, us-east-1). */
+export type Service = "sts" | "lightsail" | "route53" | "route53domains";
+
 export interface SeenRequest {
-  service: "sts" | "lightsail" | "route53";
+  service: Service;
   host: string;
   action: string;
   body: string;
@@ -28,7 +31,7 @@ export interface SeenRequest {
 export interface FakeAws {
   handler: AwsRequestHandler;
   seen: SeenRequest[];
-  on(service: "sts" | "lightsail" | "route53", action: string, ...replies: FakeReply[]): void;
+  on(service: Service, action: string, ...replies: FakeReply[]): void;
 }
 
 export const ASSUMED = {
@@ -87,6 +90,7 @@ export function expectNoLeak(value: unknown): void {
 
 const STS_NS = "https://sts.amazonaws.com/doc/2011-06-15/";
 const LIGHTSAIL_TARGET_PREFIX = "Lightsail_20161128.";
+const DOMAINS_TARGET_PREFIX = "Route53Domains_v20140515.";
 
 function xml(value: string): string {
   return value
@@ -145,8 +149,9 @@ export function lightsailError(status: number, type: string, message: string): F
 
 type FakeHandler = Extract<AwsRequestHandler, { handle: unknown }>;
 
-function serviceOf(host: string): "sts" | "lightsail" | "route53" | undefined {
+function serviceOf(host: string): Service | undefined {
   if (host.startsWith("sts.")) return "sts";
+  if (host === "route53domains.us-east-1.amazonaws.com") return "route53domains";
   if (host === "route53.amazonaws.com") return "route53";
   if (host.startsWith("lightsail.") || host.startsWith("lightsail-fips.")) return "lightsail";
   return undefined;
@@ -187,6 +192,11 @@ export function fakeAws(): FakeAws {
         // REST: the "action" of a test script is the method and the path, for example
         // "GET /2013-04-01/hostedzone/Z0TESTZONE1".
         action = `${request.method} ${request.path}`;
+      } else if (service === "route53domains") {
+        const target = header(request.headers, "x-amz-target");
+        action = target.startsWith(DOMAINS_TARGET_PREFIX)
+          ? target.slice(DOMAINS_TARGET_PREFIX.length)
+          : target;
       } else {
         const target = header(request.headers, "x-amz-target");
         action = target.startsWith(LIGHTSAIL_TARGET_PREFIX)

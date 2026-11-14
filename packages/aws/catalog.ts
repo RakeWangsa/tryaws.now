@@ -7,7 +7,11 @@ import {
 import type { RawBlueprint, RawBundle, RawDbBlueprint, RawDistributionBundle } from "@tc/core";
 import type { AwsAccess } from "./access";
 import { AwsError } from "./errors";
+import { createRoute53DomainsPort } from "./domains-client";
 import type { AccountRef, LightsailRegion } from "./roles";
+import { priceText, type TldPrice } from "./tld-prices";
+
+export { NO_EXTRA_PARAMS_TLDS, parseTldPrices, priceText, type TldPrice } from "./tld-prices";
 
 /**
  * The read-only catalog source (WP1-T5). It reads through the roles `TcReader` and `TcDnsReader`
@@ -16,14 +20,6 @@ import type { AccountRef, LightsailRegion } from "./roles";
  *
  * Every fact about the real AWS answer is VERIFY in `tc-pool-dev` (open points 4, 12, 13).
  */
-export interface TldPrice {
-  readonly tld: string;
-  readonly registrationUsd: string | null;
-  readonly renewalUsd: string | null;
-  readonly transferUsd: string | null;
-  readonly needsExtraParams: boolean;
-}
-
 export interface CatalogSource {
   instanceBundles(account: AccountRef, region: LightsailRegion): Promise<readonly RawBundle[]>;
   /** WPU-G3: the images (blueprints) of one Region, inactive ones too. */
@@ -47,22 +43,6 @@ export interface CatalogSource {
 const DEFAULT_MAX_PAGES = 20;
 // Distribution APIs are available in us-east-1 only (API reference, WPU-B5).
 const CDN_REGION: LightsailRegion = "us-east-1";
-// A price that is plain decimal text with at most 4 decimals (numeric(12,4)). A string check:
-// `String(n)` of a float artifact (0.30000000000000004) or of an exponent form fails it.
-const PRICE_TEXT = /^\d+(\.\d{1,4})?$/;
-const TLD_TEXT = /^[a-z0-9-]+(\.[a-z0-9-]+)*$/;
-
-/**
- * The one place a price leaves the float. Finite, not negative, and `String(n)` is plain decimal
- * text of at most 4 decimals; anything else is `null`. No `toFixed`, no rounding: AWS prices have
- * at most two decimals and print exactly.
- */
-export function priceText(n: unknown): string | null {
-  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return null;
-  const text = String(n);
-  return PRICE_TEXT.test(text) ? text : null;
-}
-
 const invalid = () =>
   new AwsError({ code: "internal", retryable: true, reason: "catalog_response_invalid" });
 
@@ -132,55 +112,6 @@ function toRawDbBlueprint(item: unknown): RawDbBlueprint {
     engineVersionDescription: text(item.engineVersionDescription),
     isEngineDefault: item.isEngineDefault === true,
   };
-}
-
-/**
- * WPU-Z19: open point 4 is answered. No field of a `ListPrices` item marks a TLD that needs extra parameters or an
- * eligibility proof: DomainPrice holds only Name and five price objects (API_domains_DomainPrice, read 2026-11-14).
- * So the rule is a reviewed static allowlist. The TLDs here are not in the ExtraParam reference
- * (API_domains_ExtraParam: .au, .com.au, .net.au, .ca, .es, .eu, .fi, .it, .ru, .se, .sg, .uk, .co.uk, .me.uk,
- * .org.uk, and "many TLDs require a VAT_NUMBER") and their pages of "Domains that you can register with Amazon
- * Route 53" (com.html, net.html, org.html) list no registrant restriction. Every other TLD needs review: its order
- * waits for an admin (spec 12, R16). Adding a TLD here is a reviewed change of its own.
- */
-export const NO_EXTRA_PARAMS_TLDS: ReadonlySet<string> = new Set(["com", "net", "org"]);
-
-function needsExtraParams(tld: string): boolean {
-  return !NO_EXTRA_PARAMS_TLDS.has(tld);
-}
-
-function usdPrice(value: unknown): string | null {
-  if (!isRecord(value) || value.Currency !== "USD") return null; // another currency is never converted
-  return priceText(value.Price);
-}
-
-/**
- * Pure: one page of a `ListPrices` answer to TLD prices. VERIFY the field names (`Prices`, `Name`,
- * `RegistrationPrice`, `RenewalPrice`, `TransferPrice`, `{ Price, Currency }`, `NextPageMarker`)
- * against the first real answer. TLD prices not proven: the Route 53 Domains client needs
- * `@aws-sdk/client-route-53-domains`, which could not be installed offline, so `tldPrices` of the
- * source is not configured yet and this parser is only tested against fake pages.
- */
-export function parseTldPrices(page: unknown): {
-  prices: TldPrice[];
-  next: string | undefined;
-} {
-  if (!isRecord(page) || !Array.isArray(page.Prices)) throw invalid();
-  const prices: TldPrice[] = [];
-  for (const item of page.Prices) {
-    if (!isRecord(item) || typeof item.Name !== "string") continue;
-    const tld = item.Name.toLowerCase();
-    if (!TLD_TEXT.test(tld)) continue; // the database check would refuse it: dropped here
-    prices.push({
-      tld,
-      registrationUsd: usdPrice(item.RegistrationPrice),
-      renewalUsd: usdPrice(item.RenewalPrice),
-      transferUsd: usdPrice(item.TransferPrice),
-      needsExtraParams: needsExtraParams(tld),
-    });
-  }
-  const next = typeof page.NextPageMarker === "string" ? page.NextPageMarker : undefined;
-  return { prices, next };
 }
 
 export function createCatalogSource(
@@ -272,8 +203,11 @@ export function createCatalogSource(
         operation: "GetRelationalDatabaseBlueprints",
       });
     },
-    async tldPrices() {
-      throw new AwsError({ code: "internal", retryable: false, reason: "not_configured" });
+    // WPU-X10: ListPrices of Route 53 Domains in the tc-dns account, read-only (TcDnsReader). The pages, the
+    // parse and the page limit are those of `listPrices` (domains-client.ts); the account is checked by
+    // `route53Domains()` before any call is made.
+    async tldPrices(account) {
+      return createRoute53DomainsPort(access.route53Domains(account, "TcDnsReader")).listPrices();
     },
   };
   return Object.freeze(source);

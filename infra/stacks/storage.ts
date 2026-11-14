@@ -13,6 +13,7 @@
 // (SST's own forceDestroy default; production's `retain` keeps its buckets on a removal anyway).
 //
 // NOT TYPE-CHECKED, see network.ts.
+import { domainContactKeyPolicy } from "../lib/kms";
 import { removalRules, resourceName, roleName, type StageConfig } from "../lib/stage";
 
 const BLOCK_ALL = {
@@ -89,6 +90,22 @@ export function storage(config: StageConfig) {
   new aws.kms.Alias("FilesKeyAlias", {
     name: `alias/${resourceName(stage, "files")}`,
     targetKeyId: filesKey.keyId,
+  });
+
+  // WPU-X10: the key of the registrant contact of a domain draft (JOURNEY Needs decision 2 of WP7-T4). The web
+  // role may only kms:Encrypt with it (web.ts, apps/web/server/domain-seal.ts) and the provisioner role may only
+  // kms:Decrypt (workers.ts, packages/aws/contact-unseal.ts). Review fix 1: an explicit key policy
+  // (infra/lib/kms.ts), not the default one, so that no other principal of the account (the CI deploy role with
+  // kms:* on "*" included) can encrypt or decrypt with it; the account keeps the administration of the key only.
+  const domainContactKey = new aws.kms.Key("DomainContactKey", {
+    description: `tc ${stage} domain registrant contact`,
+    enableKeyRotation: true,
+    deletionWindowInDays: 30,
+    policy: JSON.stringify(domainContactKeyPolicy(account, stage)),
+  });
+  new aws.kms.Alias("DomainContactKeyAlias", {
+    name: `alias/${resourceName(stage, "domain-contact")}`,
+    targetKeyId: domainContactKey.keyId,
   });
 
   // The web function role has a fixed name (workers.ts / web.ts set it with transform), so the
@@ -174,7 +191,7 @@ export function storage(config: StageConfig) {
     rules: [{ id: "expire-exports", status: "Enabled", filter: {}, expiration: { days: 30 } }],
   });
 
-  return { kyc, invoices, exports: exportFiles, kycKey, filesKey };
+  return { kyc, invoices, exports: exportFiles, kycKey, filesKey, domainContactKey };
 }
 
 export type Storage = ReturnType<typeof storage>;

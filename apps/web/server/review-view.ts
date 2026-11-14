@@ -1,3 +1,4 @@
+import { MAX_ENVELOPED_TOKEN } from "./draft-envelope.ts";
 import { customerUsd, snapshotToQuote } from "@tc/core";
 import type { verifyDraft } from "@tc/core";
 import { shortfallTopUpTaka } from "./servers-view.ts";
@@ -34,7 +35,8 @@ export type ReviewScreen =
       shortfallTaka: bigint | null;
     };
 
-const MAX_TOKEN = 4096;
+// WPU-X10 review: the URL holds the envelope of the draft (draft-envelope.ts), longer than the signed token.
+const MAX_TOKEN = MAX_ENVELOPED_TOKEN;
 
 export function reviewFromToken(
   verify: (token: string) => Verdict,

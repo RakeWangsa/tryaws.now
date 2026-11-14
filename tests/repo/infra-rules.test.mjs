@@ -447,7 +447,8 @@ describe("WP0-T3: database, proxy and roles", () => {
 
   it("WPU-D4: tells the provisioner the tc-dns account and its ExternalId (plain values), and nothing else of it", () => {
     expect(workers).toMatch(
-      /if \(spec\.dir === "provisioner"\) \{(?:(?!spec\.dir)[\s\S])*?env\.TC_DNS_ACCOUNT_ID = config\.dnsAccountId;\s*env\.TC_DNS_EXTERNAL_ID = config\.dnsExternalId;\s*\}/,
+      // WPU-X10: followed by the key ARN of the domain contact (tests/repo/domain-contact-key.test.mjs).
+      /if \(spec\.dir === "provisioner"\) \{(?:(?!spec\.dir)[\s\S])*?env\.TC_DNS_ACCOUNT_ID = config\.dnsAccountId;\s*env\.TC_DNS_EXTERNAL_ID = config\.dnsExternalId;\s*env\.TC_DOMAIN_CONTACT_KEY_ARN = storage\.domainContactKey\.arn;\s*\}/,
     );
     // the role to assume stays the function table's: the provisioner has the DNS provisioner role
     expect(workers).toContain("assumableRoleArns(role, config)");

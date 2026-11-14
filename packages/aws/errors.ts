@@ -1,5 +1,6 @@
 import type { LightsailClient } from "@aws-sdk/client-lightsail";
 import type { Route53Client } from "@aws-sdk/client-route-53";
+import type { Route53DomainsClient } from "@aws-sdk/client-route-53-domains";
 import type { STSClient } from "@aws-sdk/client-sts";
 import type { ErrorCode } from "@tc/core";
 
@@ -433,9 +434,16 @@ export function toLogFields(error: AwsError): AwsLogFields {
 export function mapErrors(client: LightsailClient, onError?: (error: AwsError) => void): void;
 export function mapErrors(client: Route53Client, onError?: (error: AwsError) => void): void;
 export function mapErrors(client: STSClient): void;
+/** WPU-X10: Route 53 Domains has refusals of its own, so its client passes its own mapper (domains-client.ts). */
 export function mapErrors(
-  client: LightsailClient | Route53Client | STSClient,
+  client: Route53DomainsClient,
+  onError: (error: AwsError) => void,
+  mapper: (error: unknown, operation: string | null) => AwsError,
+): void;
+export function mapErrors(
+  client: LightsailClient | Route53Client | Route53DomainsClient | STSClient,
   onError?: (error: AwsError) => void,
+  mapper: (error: unknown, operation: string | null) => AwsError = toAwsError,
 ): void {
   // The two clients have middleware stacks of different types: one cast, then one `add`.
   (client.middlewareStack as unknown as LightsailClient["middlewareStack"]).add(
@@ -444,7 +452,12 @@ export function mapErrors(
         return await next(args);
       } catch (error) {
         const operation = operationOf(context.commandName);
-        const mapped = toAwsError(error, operation);
+        let mapped: AwsError;
+        try {
+          mapped = mapper(error, operation);
+        } catch {
+          mapped = toAwsError(error, operation);
+        }
         try {
           onError?.(mapped);
         } catch {

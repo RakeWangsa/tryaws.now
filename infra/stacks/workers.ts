@@ -21,6 +21,7 @@ import {
   type FunctionSpec,
 } from "../lib/functions";
 import { workerLogRetention } from "../lib/lean";
+import { DOMAIN_CONTACT_PURPOSE } from "../lib/kms";
 import { assumableRoleArns, roleName, type StageConfig } from "../lib/stage";
 import type { Database } from "./database";
 import type { Messaging } from "./messaging";
@@ -68,6 +69,22 @@ function permissionsOf(spec: FunctionSpec, inputs: WorkerInputs) {
       { actions: ["s3:GetObject"], resources: [$interpolate`${storage.kyc.arn}/kyc/*`] },
       { actions: ["s3:ListBucket"], resources: [storage.kyc.arn] },
     );
+  }
+  if (spec.dir === "provisioner") {
+    // WPU-X10: opens the sealed registrant contact of a domain order (packages/aws/contact-unseal.ts). Decrypt
+    // only, on this key only; the web role seals (kms:Encrypt, web.ts) and no other role has a grant.
+    // Review fix 2: only for the encryption context of the seal (the key policy asks the same, infra/lib/kms.ts).
+    permissions.push({
+      actions: ["kms:Decrypt"],
+      resources: [storage.domainContactKey.arn],
+      conditions: [
+        {
+          test: "StringEquals",
+          variable: "kms:EncryptionContext:tc:purpose",
+          values: [DOMAIN_CONTACT_PURPOSE],
+        },
+      ],
+    });
   }
   if (spec.dir === "invoice-renderer") {
     permissions.push(
@@ -118,6 +135,8 @@ function environmentOf(
     // WPU-D4: the tc-dns account of the Route 53 client; plain values (6.3), the same as catalog-sync.
     env.TC_DNS_ACCOUNT_ID = config.dnsAccountId;
     env.TC_DNS_EXTERNAL_ID = config.dnsExternalId;
+    // WPU-X10: the key ARN of the registrant contact (functions/provisioner/domain.ts domainPortsFromEnv).
+    env.TC_DOMAIN_CONTACT_KEY_ARN = storage.domainContactKey.arn;
   }
   if (spec.dir === "notifier") {
     // Links in a message go only to the panel's own domain (16.14); the sender is the verified identity.
