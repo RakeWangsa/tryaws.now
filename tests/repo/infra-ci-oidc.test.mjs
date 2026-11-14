@@ -347,6 +347,26 @@ describe("deploy roles: no privilege escalation through IAM", () => {
       expect(resourceText(budget)).toContain(`budget/tc-${stage}-*`);
     });
 
+    // 2026-11-14: SST's Vpc creates a Cloud Map namespace, and Cloud Map its private hosted zone with the
+    // caller's rights. Create, read and tag on Route 53, never DeleteHostedZone (the account's zones).
+    it("may manage the Cloud Map namespace of the VPC and never delete a hosted zone", () => {
+      const s = allows.find((x) => x.Sid === "CloudMapNamespaceOfTheVpc");
+      const actions = list(s.Action);
+      expect(actions).toEqual(
+        expect.arrayContaining([
+          "servicediscovery:CreatePrivateDnsNamespace",
+          "servicediscovery:DeleteNamespace",
+          "servicediscovery:GetNamespace",
+          "servicediscovery:GetOperation",
+          "route53:CreateHostedZone",
+        ]),
+      );
+      expect(actions.filter((a) => a.startsWith("route53:"))).toEqual(["route53:CreateHostedZone"]);
+      expect(actions.some((a) => a.includes("*"))).toBe(false);
+      for (const x of allows)
+        expect(list(x.Action), x.Sid).not.toContain("route53:DeleteHostedZone");
+    });
+
     // WPU-Z11: the NAT instance profile is named tc-<stage>-* by infra/app.ts (SST leaves it unnamed).
     it("manages instance profiles of its own stage only", () => {
       const s = allows.find((x) => x.Sid === "InstanceProfilesOfTheStage");
