@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// WPU-X11: a customer who may buy has the three account setup facts; KYC is not read.
+const AT = new Date("2026-11-14T00:00:00Z");
 
 const seen = { customerIds: [] as string[] };
 const state = {
-  profile: { market: "BD", kycStatus: "verified" } as unknown,
+  profile: {
+    market: "BD",
+    kycStatus: "none",
+    emailVerifiedAt: AT,
+    phoneVerifiedAt: AT,
+    totpEnabledAt: AT,
+  } as unknown,
   flags: {} as Record<string, boolean | null>,
   resources: [] as Array<Record<string, unknown>>,
   children: [] as Array<Record<string, unknown>>,
@@ -28,7 +36,9 @@ vi.mock("@tc/db", () => ({
   readCatalogProduct: async (_tx: unknown, id: string) =>
     state.catalog.find((c) => c["id"] === id) ?? null,
 }));
-vi.mock("@tc/core", () => ({
+vi.mock("@tc/core", async () => ({
+  // WPU-X11: the real account setup predicate of the buy gate.
+  missingSetupSteps: (await import("../../../packages/core/account/setup.ts")).missingSetupSteps,
   DB_BACKUP_RETENTION_DAYS: 7,
   // The parameter list of the console view (WPU-G11): these tests do not read it.
   DB_PARAMETER_RULES: { mysql: [], postgres: [] },
@@ -91,7 +101,13 @@ const plan = {
 
 beforeEach(() => {
   seen.customerIds = [];
-  state.profile = { market: "BD", kycStatus: "verified" };
+  state.profile = {
+    market: "BD",
+    kycStatus: "none",
+    emailVerifiedAt: AT,
+    phoneVerifiedAt: AT,
+    totpEnabledAt: AT,
+  };
   state.flags = { database: true };
   state.resources = [];
   state.children = [];
@@ -149,10 +165,17 @@ describe("loadDatabaseConfigurator", () => {
     }
   });
 
-  it("asks for identity verification before it offers a plan", async () => {
-    state.profile = { market: "BD", kycStatus: "pending" };
+  it("WPU-X11: asks for the account setup (not KYC) before it offers a plan", async () => {
+    state.profile = {
+      market: "BD",
+      kycStatus: "verified",
+      emailVerifiedAt: AT,
+      phoneVerifiedAt: AT,
+      totpEnabledAt: null,
+    };
     expect(await loadDatabaseConfigurator(session, () => new Date())).toEqual({
-      state: "kyc_required",
+      state: "account_setup_required",
+      missing: ["totp"],
     });
   });
 

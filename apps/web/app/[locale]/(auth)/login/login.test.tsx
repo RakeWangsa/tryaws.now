@@ -14,6 +14,13 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers(),
 }));
 
+// WPU-X11: the state the form starts in; a test sets the answer of the sign-in action here.
+const answer: { state: unknown } = { state: { status: "idle" } };
+vi.mock("react", async (original) => {
+  const actual = await original<typeof import("react")>();
+  return { ...actual, useActionState: () => [answer.state, () => undefined, false] };
+});
+
 const { LoginContent } = await import("./LoginContent.tsx");
 
 const render = (locale: "bn" | "en", over: Partial<Parameters<typeof LoginContent>[0]> = {}) =>
@@ -58,5 +65,29 @@ describe("the login form (16.9)", () => {
   it("re-checks next before it reaches the form", () => {
     expect(render("en", { next: "//evil.com" })).not.toContain('name="next"');
     expect(render("en", { next: "/wallet" })).toContain('name="next" value="/wallet"');
+  });
+
+  it("WPU-X11: shows no authenticator field until the provider asks for the code", () => {
+    answer.state = { status: "idle" };
+    expect(render("en")).not.toContain('name="totpCode"');
+  });
+
+  it("WPU-X11: after totp_required asks for the code (bn first, then en) and keeps the step flag", () => {
+    answer.state = {
+      status: "error",
+      code: "totp_required",
+      values: { email: "a@example.test", totpStep: "1" },
+      ref: "r1",
+    };
+    const bn = render("bn");
+    expect(bn).toContain('name="totpCode"');
+    expect(bn).toContain("অথেনটিকেটর অ্যাপের কোড");
+    expect(bn).toContain('name="totpStep" value="1"');
+    const en = render("en");
+    expect(en).toContain("Code from your authenticator app");
+    expect(en).toContain('autoComplete="one-time-code"');
+    expect(en).toContain("This account uses an authenticator.");
+    expect(en).toContain('value="a@example.test"');
+    answer.state = { status: "idle" };
   });
 });

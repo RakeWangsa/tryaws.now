@@ -12,6 +12,7 @@ import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { DashboardView } from "../../../../server/extras-view.ts";
+import { SETUP_STEP_PATHS } from "../../../../server/account-setup.ts";
 
 // The content of /dashboard (16.10): wallet balance, active resources per family, renewals in the
 // next 7 days with amounts, alerts (KYC pending, low balance, resources in grace) and the last five
@@ -90,13 +91,15 @@ export function DashboardContent({
     href?: string;
     cta?: string;
   }[] = [];
-  if (view.alerts.kycPending) {
+  // WPU-X11: buying needs e-mail, mobile and authenticator; the alert leads to the first missing step.
+  const firstMissing = view.alerts.setupMissing[0];
+  if (firstMissing !== undefined) {
     alerts.push({
-      key: "kyc",
+      key: "setup",
       tone: "warning",
-      text: t("alerts.kyc"),
-      href: localePath(locale, "/settings/kyc"),
-      cta: t("alerts.kycAction"),
+      text: t("alerts.setup"),
+      href: localePath(locale, SETUP_STEP_PATHS[firstMissing]),
+      cta: t("alerts.setupAction"),
     });
   }
   if (view.alerts.lowBalance) {
@@ -119,8 +122,9 @@ export function DashboardContent({
 
   const guide = view.onboarding;
   const hrefOf: Record<string, string> = {
+    email: localePath(locale, SETUP_STEP_PATHS.email),
     phone: localePath(locale, "/settings/profile"),
-    kyc: localePath(locale, "/settings/kyc"),
+    totp: localePath(locale, SETUP_STEP_PATHS.totp),
     topUp: walletHref,
     sshKey: localePath(locale, "/settings/ssh-keys"),
     server: localePath(locale, "/servers/new"),

@@ -171,7 +171,7 @@ export function dashboard(over: Partial<DashboardView> = {}): DashboardView {
       },
     ],
     alerts: {
-      kycPending: true,
+      setupMissing: ["totp"],
       lowBalance: false,
       inGrace: [{ resourceId: FREE_DISK_ID, name: "spare" }],
     },
@@ -192,8 +192,9 @@ export function dashboard(over: Partial<DashboardView> = {}): DashboardView {
       },
     ],
     onboarding: onboardingSteps({
+      emailVerified: true,
       phoneVerified: true,
-      kycVerified: false,
+      totpEnabled: false,
       toppedUp: true,
       sshKeys: 1,
       servers: 2,
@@ -210,10 +211,11 @@ export const emptyDashboard = dashboard({
   families: [],
   renewals: [],
   operations: [],
-  alerts: { kycPending: false, lowBalance: false, inGrace: [] },
+  alerts: { setupMissing: [], lowBalance: false, inGrace: [] },
   onboarding: onboardingSteps({
+    emailVerified: true,
     phoneVerified: false,
-    kycVerified: false,
+    totpEnabled: false,
     toppedUp: false,
     sshKeys: 0,
     servers: 0,

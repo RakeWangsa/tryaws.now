@@ -9,9 +9,11 @@ import {
   type UsageInput,
 } from "./account-overview";
 
+// A signed-in customer has a verified e-mail (WPU-X11: Cognito signs in confirmed addresses only).
 const NEW_CUSTOMER: OnboardingInput = {
+  emailVerified: true,
   phoneVerified: false,
-  kycVerified: false,
+  totpEnabled: false,
   toppedUp: false,
   sshKeys: 0,
   servers: 0,
@@ -22,8 +24,9 @@ const NEW_CUSTOMER: OnboardingInput = {
 describe("onboardingSteps", () => {
   it("lists the steps of a first launch in the order a customer meets them", () => {
     expect(ONBOARDING_STEP_KEYS).toEqual([
+      "email",
       "phone",
-      "kyc",
+      "totp",
       "topUp",
       "sshKey",
       "server",
@@ -35,6 +38,15 @@ describe("onboardingSteps", () => {
     ]);
   });
 
+  it("WPU-X11: the account setup is e-mail, mobile, authenticator; no KYC step", () => {
+    expect(ONBOARDING_STEP_KEYS).not.toContain("kyc");
+    expect(onboardingSteps({ ...NEW_CUSTOMER, emailVerified: false }).next).toBe("email");
+    expect(onboardingSteps({ ...NEW_CUSTOMER, phoneVerified: true }).next).toBe("totp");
+    expect(onboardingSteps({ ...NEW_CUSTOMER, phoneVerified: true, totpEnabled: true }).next).toBe(
+      "topUp",
+    );
+  });
+
   it("a brand-new customer starts at the phone and the later server steps are locked", () => {
     const view = onboardingSteps(NEW_CUSTOMER);
     expect(view.next).toBe("phone");
@@ -42,7 +54,7 @@ describe("onboardingSteps", () => {
     expect(view.complete).toBe(false);
     const locked = view.steps.filter((s) => s.locked).map((s) => s.key);
     expect(locked).toEqual(["firewall", "snapshot"]);
-    expect(view.steps.every((s) => !s.done)).toBe(true);
+    expect(view.steps.filter((s) => s.done).map((s) => s.key)).toEqual(["email"]);
   });
 
   it("the key step is never locked, because the create form needs a key", () => {
@@ -57,8 +69,9 @@ describe("onboardingSteps", () => {
   it("the firewall and snapshot steps open when a server exists", () => {
     const view = onboardingSteps({
       ...NEW_CUSTOMER,
+      emailVerified: true,
       phoneVerified: true,
-      kycVerified: true,
+      totpEnabled: true,
       toppedUp: true,
       sshKeys: 1,
       servers: 1,
@@ -82,8 +95,9 @@ describe("onboardingSteps", () => {
 
   it("is complete with every step done and then has no next step", () => {
     const view = onboardingSteps({
+      emailVerified: true,
       phoneVerified: true,
-      kycVerified: true,
+      totpEnabled: true,
       toppedUp: true,
       sshKeys: 2,
       servers: 3,

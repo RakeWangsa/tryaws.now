@@ -14,6 +14,7 @@ import type { PlanSpecs } from "./servers-view.ts";
 
 import { databaseConsoleOf } from "./console-view.ts";
 import type { DatabaseConsole } from "./console-view.ts";
+import { accountSetupGate, type AccountSetupRequired } from "./account-setup.ts";
 const FLAG = "database";
 const FAMILY = "database";
 
@@ -82,7 +83,7 @@ export interface DatabasePlanOption {
 
 export type DatabaseConfiguratorScreen =
   | { state: "flag_off" }
-  | { state: "kyc_required" }
+  | AccountSetupRequired
   | { state: "ready"; plans: DatabasePlanOption[]; regions: string[] };
 
 export async function loadDatabaseConfigurator(
@@ -95,7 +96,9 @@ export async function loadDatabaseConfigurator(
     if (profile === null) throw new Error("databases: no customer row");
     // R12, R16: a flag that is off or unreadable shows the flag-off state.
     if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return { state: "flag_off" };
-    if (profile.kycStatus !== "verified") return { state: "kyc_required" };
+    // WPU-X11: e-mail, mobile and authenticator, the same predicate as the purchase gate (not KYC).
+    const setup = accountSetupGate(profile);
+    if (setup !== null) return setup;
 
     const rows = await listCatalogProducts(tx, FAMILY);
     const priced = await priceCatalog(tx, rows, { market: profile.market }, { now });

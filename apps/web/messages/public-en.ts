@@ -198,7 +198,7 @@ export const publicEn: Same<typeof publicBn> = {
       heading: "Frequently asked questions",
       lead: "The questions we hear most about TryAWS.now and Amazon Lightsail.",
       answer:
-        "TryAWS.now sells Cloud Servers, built on Amazon Lightsail, in the AWS Region Singapore or Mumbai. You top up a wallet in taka with EPS and buy from it; prices are in US dollars, include VAT and fees, and are converted to taka at checkout. You complete an identity check once, and you get support through support requests.",
+        "TryAWS.now sells Cloud Servers, built on Amazon Lightsail, in the AWS Region Singapore or Mumbai. You top up a wallet in taka with EPS and buy from it; prices are in US dollars, include VAT and fees, and are converted to taka at checkout. To buy, you verify your email and mobile and use an authenticator app.",
       listTitle: "Questions and answers",
       stillTitle: "Did not find an answer?",
       stillText: "Tell us on the support page.",
@@ -232,8 +232,8 @@ export const publicEn: Same<typeof publicBn> = {
           a: "Two AWS Regions at the start: Singapore and Mumbai. The data transfer of a plan can differ by location, so the price list shows the value for each location.",
         },
         identity: {
-          q: "Do I need an identity check before I buy a server?",
-          a: "Yes. You complete an identity check once before you buy a server. Our staff review it and tell you the result.",
+          q: "What do I need to do before I buy?",
+          a: "Three steps: verify your e-mail, verify your mobile number and switch on an authenticator app. No documents are needed, because everything is paid in advance from your wallet.",
         },
         products: {
           q: "When do databases, storage and other products come?",

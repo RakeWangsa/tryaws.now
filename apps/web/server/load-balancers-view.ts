@@ -11,6 +11,7 @@ import type { ResourceSummary } from "@tc/db";
 
 import { loadBalancerConsoleOf } from "./console-view.ts";
 import type { LoadBalancerConsole } from "./console-view.ts";
+import { accountSetupGate, type AccountSetupRequired } from "./account-setup.ts";
 const FLAG = "load_balancer";
 const FAMILY = "load_balancer";
 const INSTANCE_FAMILIES: readonly string[] = ["linux_instance", "windows_instance"];
@@ -52,7 +53,7 @@ export interface TargetServer {
 
 export type LoadBalancerConfiguratorScreen =
   | { state: "flag_off" }
-  | { state: "kyc_required" }
+  | AccountSetupRequired
   | { state: "ready"; plans: LoadBalancerPlanOption[]; servers: TargetServer[] };
 
 /** The customer's own servers that can be a target: an instance, active (the rule of 10.3). */
@@ -72,7 +73,9 @@ export async function loadLoadBalancerConfigurator(
     if (profile === null) throw new Error("load balancers: no customer row");
     // R12, R16: a flag that is off or unreadable shows the flag-off state.
     if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return { state: "flag_off" };
-    if (profile.kycStatus !== "verified") return { state: "kyc_required" };
+    // WPU-X11: e-mail, mobile and authenticator, the same predicate as the purchase gate (not KYC).
+    const setup = accountSetupGate(profile);
+    if (setup !== null) return setup;
 
     const rows = await listCatalogProducts(tx, FAMILY);
     const priced = await priceCatalog(tx, rows, { market: profile.market }, { now });

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { SIGN_UP_FORM, makeHarness } from "../fakes/auth-harness.ts";
+import { NOW, SIGN_UP_FORM, makeHarness } from "../fakes/auth-harness.ts";
 import type { Customer, Harness } from "../fakes/auth-harness.ts";
+import { getFakeState } from "../fakes/outbox.ts";
+import { totpCodeAt } from "../fakes/totp.ts";
 import { signInCore } from "./sign-in.ts";
 
 let h: Harness;
@@ -66,13 +68,94 @@ describe("signInCore", () => {
     expect(out.effects.setCookies).toEqual([]);
   });
 
-  it("a challenge (TOTP) is refused closed with its own message", async () => {
+  it("another challenge than TOTP (a new password, ...) is refused closed as unavailable", async () => {
     const original = h.idp.signIn;
-    h.idp.signIn = async () => ({ ok: true, value: { kind: "challenge", challenge: "totp" } });
+    h.idp.signIn = async () => ({ ok: true, value: { kind: "challenge", challenge: "other" } });
     const out = await signInCore(h.ctx(), FORM);
     h.idp.signIn = original;
-    expect(out.state).toMatchObject({ status: "error", code: "totp_unsupported" });
+    expect(out.state).toMatchObject({ status: "error", code: "unavailable" });
     expect(out.effects.setCookies).toEqual([]);
+  });
+});
+
+// WPU-X11: a customer who switched the authenticator on signs in with the password and the 6-digit code.
+describe("signInCore with an authenticator (TOTP)", () => {
+  const SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+  beforeEach(() => {
+    const user = getFakeState().users.get(FORM.email)!;
+    user.totpSecret = SECRET;
+    user.totpEnabled = true;
+  });
+
+  it("without a code: no cookie, the form asks for the code and keeps the e-mail, never the password", async () => {
+    const out = await signInCore(h.ctx(), FORM);
+    expect(out.state).toMatchObject({
+      status: "error",
+      code: "totp_required",
+      values: { email: FORM.email, totpStep: "1" },
+    });
+    expect(JSON.stringify(out.state)).not.toContain(FORM.password);
+    expect(out.effects.setCookies).toEqual([]);
+    expect(h.audits).toEqual([]);
+  });
+
+  it("with the right code: the normal session, cookies and audit", async () => {
+    const out = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+    expect(out.effects.setCookies.map((c) => c.name)).toEqual(["__Host-tc_at", "__Host-tc_rt"]);
+    expect(h.audits).toEqual([
+      { customerId: customer.customerId, action: "auth.sign_in", ip: "198.51.100.7" },
+    ]);
+  });
+
+  it("a code typed in Bengali digits is read as the same code", async () => {
+    const code = totpCodeAt(SECRET, NOW).replace(/[0-9]/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]!);
+    const out = await signInCore(h.ctx(), { ...FORM, totpCode: code });
+    expect(out.state).toMatchObject({ status: "done" });
+  });
+
+  it("a wrong code is the generic sign_in_failed, keeps the code step, sets no cookie and does not echo the code", async () => {
+    const right = totpCodeAt(SECRET, NOW);
+    const wrong = right === "000000" ? "111111" : "000000";
+    const out = await signInCore(h.ctx(), { ...FORM, totpCode: wrong, totpStep: "1" });
+    expect(out.state).toMatchObject({
+      status: "error",
+      code: "sign_in_failed",
+      values: { totpStep: "1" },
+    });
+    expect(JSON.stringify(out.state)).not.toContain(wrong);
+    expect(out.effects.setCookies).toEqual([]);
+  });
+
+  it("a code is accepted once: the replay of an accepted code is refused", async () => {
+    const code = totpCodeAt(SECRET, NOW);
+    expect((await signInCore(h.ctx(), { ...FORM, totpCode: code })).state).toMatchObject({
+      status: "done",
+    });
+    const replay = await signInCore(h.ctx(), { ...FORM, totpCode: code });
+    expect(replay.state).toMatchObject({ status: "error", code: "sign_in_failed" });
+    expect(replay.effects.setCookies).toEqual([]);
+  });
+
+  it("a code that is not six digits is a field error before the provider is asked", async () => {
+    h.events.length = 0;
+    const out = await signInCore(h.ctx(), { ...FORM, totpCode: "12ab" });
+    expect(out.state).toMatchObject({
+      status: "error",
+      code: "invalid",
+      fields: { totpCode: "invalid" },
+    });
+    expect(h.events.filter((e) => e.startsWith("idp."))).toEqual([]);
+  });
+
+  it("wrong codes count against the sign-in limit: the ninth try is rate_limited", async () => {
+    const right = totpCodeAt(SECRET, NOW);
+    const wrong = right === "000000" ? "111111" : "000000";
+    for (let i = 0; i < 8; i++) {
+      await signInCore(h.ctx(), { ...FORM, totpCode: wrong });
+    }
+    expect((await signInCore(h.ctx(), { ...FORM, totpCode: right })).state).toMatchObject({
+      code: "rate_limited",
+    });
   });
 
   it("the ninth attempt in fifteen minutes from one address for one email is rate_limited", async () => {

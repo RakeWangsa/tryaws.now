@@ -16,6 +16,7 @@ import {
   withTx,
 } from "@tc/db";
 import type { CustomerOperation, ResourceSummary, Tx } from "@tc/db";
+import { accountSetupGate, type AccountSetupRequired } from "./account-setup.ts";
 
 // What the container service screens show, read through the repositories of the session's customer
 // (R8). A database error is thrown, never answered with an empty list (R16). The resource config is
@@ -137,9 +138,7 @@ export async function loadContainerPlans(
 }
 
 export type ContainerConfiguratorScreen =
-  | { state: "flag_off" }
-  | { state: "kyc_required" }
-  | { state: "ready"; plans: ContainerPlanOption[] };
+  { state: "flag_off" } | AccountSetupRequired | { state: "ready"; plans: ContainerPlanOption[] };
 
 function positive(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
@@ -155,7 +154,9 @@ export async function loadContainerConfigurator(
     if (profile === null) throw new Error("container: no customer row");
     // R12, R16: a flag that is off or unreadable shows the flag-off state.
     if ((await readFeatureFlag(tx, FLAG, profile.market)) !== true) return { state: "flag_off" };
-    if (profile.kycStatus !== "verified") return { state: "kyc_required" };
+    // WPU-X11: e-mail, mobile and authenticator, the same predicate as the purchase gate (not KYC).
+    const setup = accountSetupGate(profile);
+    if (setup !== null) return setup;
 
     const plans = await loadContainerPlans(tx, profile.market, now);
     // No rate or rule in force: nothing is priced and nothing is offered (R16).

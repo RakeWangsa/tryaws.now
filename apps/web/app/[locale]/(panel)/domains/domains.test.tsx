@@ -69,7 +69,7 @@ describe("/domains/new", () => {
   it("covers invalid, flag off and KYC", () => {
     expect(render("domain_new.invalid")).toContain('href="/en/domains"');
     expect(render("domain_new.flag_off")).not.toContain("<form");
-    expect(render("domain_new.kyc_required")).toContain("Verify your identity first");
+    expect(render("domain_new.kyc_required")).toContain("Finish your account setup before you buy");
   });
 });
 

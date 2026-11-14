@@ -297,6 +297,7 @@ export function makeHarness(): Harness {
     kyc: null,
     kycCheck: null,
     account: null,
+    totp: null,
     reader: null,
     access: null,
     renderer: null,

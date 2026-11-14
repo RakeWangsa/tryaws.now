@@ -10,6 +10,7 @@ import type {
 import type { Clock } from "@tc/core";
 import type { Stage } from "../config.ts";
 import { getFakeState } from "./outbox.ts";
+import { acceptTotp } from "./totp.ts";
 
 // Development and test only (open point 3): an in-memory identity provider for the Playwright smoke
 // and the unit tests. It is the only implementation of IdentityProvider in memory. It issues the
@@ -104,11 +105,21 @@ export class InMemoryIdentityProvider implements IdentityProvider {
     return ok(true);
   }
 
-  async signIn(i: { email: string; password: string }): Promise<IdpResult<SignInOutcome>> {
+  async signIn(i: {
+    email: string;
+    password: string;
+    totpCode?: string;
+  }): Promise<IdpResult<SignInOutcome>> {
     const state = getFakeState();
     const user = state.users.get(i.email);
     if (user === undefined || user.password !== i.password) return fail("denied");
     if (!user.confirmed) return fail("not_confirmed");
+    // WPU-X11: as the Cognito adapter does, a customer with an authenticator gets the challenge without
+    // a code, and a wrong or reused code is `denied`.
+    if (user.totpEnabled === true && user.totpSecret !== undefined) {
+      if (i.totpCode === undefined) return ok({ kind: "challenge", challenge: "totp" });
+      if (!acceptTotp(user, user.totpSecret, i.totpCode, this.clock.now())) return fail("denied");
+    }
     user.refreshCount += 1;
     const refreshToken = `fake-rt.${user.sub}.${user.refreshCount}`;
     state.issuedRefresh.add(refreshToken);

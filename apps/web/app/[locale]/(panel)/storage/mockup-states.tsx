@@ -79,7 +79,7 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "storage_new.ready": configure(configurator()),
   "storage_new.empty": configure(configurator({ plans: [] })),
   "storage_new.flag_off": configure({ state: "flag_off" }),
-  "storage_new.kyc_required": configure({ state: "kyc_required" }),
+  "storage_new.kyc_required": configure({ state: "account_setup_required", missing: ["totp"] }),
   "storage_new.loading": fixed(() => <ScreenLoading lines={[4, 6, 2]} />),
   "storage_new.error": fixed(errorNode),
   // /storage/[id]

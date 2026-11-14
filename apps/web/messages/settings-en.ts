@@ -98,9 +98,34 @@ export const settingsEn: Same<typeof settingsBn> = {
         submit: "Change password",
         changed: "Your password was changed.",
       },
+      totp: {
+        title: "Authenticator app (two-step sign-in)",
+        intro:
+          "Use Google Authenticator, Microsoft Authenticator or any similar app. When it is on, signing in needs the 6-digit code from the app as well as your password. It must be on before you buy anything.",
+        statusOn: "On",
+        statusOff: "Off",
+        start: "Switch on the authenticator",
+        step1:
+          "1. Add a new account in the app and scan the QR code. If you cannot scan it, type the secret key below, or open the link if the app is on this phone.",
+        qrLabel: "QR code to scan with your authenticator app",
+        secretLabel: "Secret key",
+        secretNote:
+          "The key is shown only once and is hidden after 60 seconds. Do not share it. We do not store it.",
+        openApp: "Open in the authenticator app",
+        hidden: "The secret key was hidden for your safety. Start again if you need it.",
+        step2: "2. Enter the 6-digit code the app shows now.",
+        code: "Code from the app",
+        confirm: "Check the code and switch on",
+        enabled: "The authenticator is on. Signing in now needs the code.",
+        disableTitle: "Switch off the authenticator",
+        disableBody:
+          "When it is off, signing in no longer needs the code, and you cannot buy anything new until you switch it on again.",
+        disable: "Switch off the authenticator",
+        disabled: "The authenticator was switched off.",
+      },
     },
     fresh: {
-      note: "To change your e-mail, phone or password you must have signed in within the last 10 minutes.",
+      note: "To change your e-mail, phone, password or authenticator you must have signed in within the last 10 minutes.",
       signIn: "Sign in again",
     },
     notOpen: {
@@ -132,6 +157,24 @@ export const settingsEn: Same<typeof settingsBn> = {
       same: "This is your current e-mail.",
       malformed: "Enter the 6-digit code.",
       expired: "This has expired.",
+      already_on: "The authenticator is already on.",
+      not_on: "The authenticator is not on.",
+    },
+  },
+  AccountSetup: {
+    title: "Finish your account setup before you buy",
+    body: "Our service runs on a prepaid wallet, so no documents are needed. Just finish these three steps.",
+    steps: {
+      email: "{n}. Verify your e-mail",
+      phone: "{n}. Verify your mobile number",
+      totp: "{n}. Switch on an authenticator app",
+    },
+    done: "Done",
+    todo: "To do",
+    action: {
+      email: "Check your e-mail",
+      phone: "Verify your mobile number",
+      totp: "Switch on the authenticator",
     },
   },
 };

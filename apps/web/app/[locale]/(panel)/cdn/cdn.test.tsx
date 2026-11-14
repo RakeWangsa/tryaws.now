@@ -62,7 +62,7 @@ describe("/cdn/new", () => {
 
   it("each state that cannot buy says why and what to do next", () => {
     expect(render("cdn_new.flag_off")).toContain("CDN is coming soon");
-    expect(render("cdn_new.kyc_required")).toContain("Verify your identity first");
+    expect(render("cdn_new.kyc_required")).toContain("Finish your account setup before you buy");
     expect(render("cdn_new.empty")).toContain("No plan is for sale right now");
     const noOrigin = render("cdn_new.no_origin");
     expect(noOrigin).toContain("No origin for a CDN yet");

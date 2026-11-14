@@ -1,4 +1,4 @@
-import { parseSignInForm } from "@tc/core";
+import { parseOtpCode, parseSignInForm } from "@tc/core";
 import type { ActionContext } from "./context.ts";
 import { done, failure, gate, localeOf, logAuth, userAgentOf } from "./common.ts";
 import { landingAfterSignIn, landingPath } from "./landing.ts";
@@ -24,6 +24,14 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   const parsed = parseSignInForm(form);
   if (!parsed.ok) return failure(ctx, "invalid", { fields: parsed.fields, form });
   const { email, password } = parsed.value;
+  // WPU-X11: the authenticator code, optional (only a customer with TOTP on is asked for it).
+  const rawCode = form["totpCode"];
+  let totpCode: string | undefined;
+  if (rawCode !== undefined && rawCode !== "") {
+    const code = typeof rawCode === "string" ? parseOtpCode(rawCode) : null;
+    if (code === null) return failure(ctx, "invalid", { fields: { totpCode: "invalid" }, form });
+    totpCode = code;
+  }
 
   // 4. Rate limit: the pair of address and email, the address, and the email.
   const limit = await ctx.ports.limit("signin", { ip: guard.ip, email }, guard.key);
@@ -32,22 +40,34 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   }
 
   // 5. Execute.
-  const answer = await guard.identity.signIn({ email, password });
+  // The code step stays on the form after a failure of a sign-in that carried a code (a flag, never the code).
+  const step = totpCode !== undefined ? { ...form, totpStep: "1" } : form;
+  const answer = await guard.identity.signIn({
+    email,
+    password,
+    ...(totpCode !== undefined ? { totpCode } : {}),
+  });
   if (!answer.ok) {
     logAuth(ctx, "auth.signin", answer.kind);
     switch (answer.kind) {
       case "rate_limited":
-        return failure(ctx, "rate_limited", { form, retryAfterSeconds: 60 });
+        return failure(ctx, "rate_limited", { form: step, retryAfterSeconds: 60 });
       case "unavailable":
-        return failure(ctx, "unavailable", { form });
+        return failure(ctx, "unavailable", { form: step });
       default:
-        return failure(ctx, "sign_in_failed", { form });
+        // A wrong password and a wrong, reused or expired code are one answer (no enumeration).
+        return failure(ctx, "sign_in_failed", { form: step });
     }
   }
   if (answer.value.kind === "challenge") {
-    // TOTP is switched on in WP2-T5, so nobody can have it yet (open point 16): refuse closed.
     logAuth(ctx, "auth.signin", "challenge");
-    return failure(ctx, "totp_unsupported", { form });
+    // WPU-X11: the password was right and the authenticator is on: ask for the code. The provider
+    // answers a code only with the password again (the Cognito Session never leaves the adapter).
+    if (answer.value.challenge === "totp" && totpCode === undefined) {
+      return failure(ctx, "totp_required", { form: { ...form, totpStep: "1" } });
+    }
+    // Another challenge (a new password, MFA setup, ...) has no screen here: refuse closed (R16).
+    return failure(ctx, "unavailable", { form });
   }
 
   const signedIn = await ctx.ports.completeSignIn({

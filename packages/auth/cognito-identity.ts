@@ -85,6 +85,15 @@ const SIGN_IN: Fold = new Map<string, IdpFailure | "ok">([
   ...LIMITS,
 ]);
 const REVOKE: Fold = new Map<string, IdpFailure | "ok">(LIMITS);
+// WPU-X11: the answer to the authenticator code of a sign-in.
+const TOTP_ANSWER: Fold = new Map<string, IdpFailure | "ok">([
+  ["CodeMismatchException", "denied"],
+  ["NotAuthorizedException", "denied"],
+  ["ExpiredCodeException", "denied"],
+  ["UserNotFoundException", "denied"],
+  ...LIMITS,
+]);
+const TOTP_CODE = /^[0-9]{6}$/;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -180,6 +189,52 @@ export function cognitoIdentityProvider(
     return outcome === "ok" ? success(true as const) : fail(outcome);
   }
 
+  // The tokens of a sign-in, checked before they are trusted; anything odd is unavailable (R16).
+  function tokensOf(result: Record<string, unknown>): IdpResult<SignInOutcome> {
+    const accessToken = result["AccessToken"];
+    const refreshToken = result["RefreshToken"];
+    const expiresIn = result["ExpiresIn"];
+    if (
+      typeof accessToken !== "string" ||
+      accessToken.length === 0 ||
+      accessToken.length > MAX_TOKEN_CHARS ||
+      typeof refreshToken !== "string" ||
+      refreshToken.length === 0 ||
+      refreshToken.length > MAX_TOKEN_CHARS ||
+      typeof expiresIn !== "number" ||
+      !Number.isInteger(expiresIn) ||
+      expiresIn < MIN_EXPIRES_IN ||
+      expiresIn > MAX_EXPIRES_IN
+    ) {
+      return unavailable();
+    }
+    return success({ kind: "tokens", accessToken, refreshToken, expiresInSeconds: expiresIn });
+  }
+
+  // WPU-X11: RespondToAuthChallenge with the authenticator code. A wrong, reused or expired code is
+  // `denied`, the same answer as a wrong password. Only plain tokens are a sign-in: another challenge
+  // after the code is unavailable (R16).
+  async function answerTotp(
+    email: string,
+    session: string,
+    code: string,
+  ): Promise<IdpResult<SignInOutcome>> {
+    if (!TOTP_CODE.test(code)) return fail("denied");
+    const answer = await post("RespondToAuthChallenge", {
+      ChallengeName: "SOFTWARE_TOKEN_MFA",
+      Session: session,
+      ChallengeResponses: { USERNAME: email, SOFTWARE_TOKEN_MFA_CODE: code },
+    });
+    if (answer === null) return unavailable();
+    if (answer.status === 200) {
+      if (answer.body["ChallengeName"] !== undefined) return unavailable();
+      const result = asRecord(answer.body["AuthenticationResult"]);
+      return result === undefined ? unavailable() : tokensOf(result);
+    }
+    const f = folded(answer, TOTP_ANSWER);
+    return f !== undefined && !f.ok ? f : unavailable();
+  }
+
   async function simple(
     target: string,
     body: Record<string, unknown>,
@@ -256,33 +311,21 @@ export function cognitoIdentityProvider(
       if (answer === null) return unavailable();
       if (answer.status === 200) {
         const result = asRecord(answer.body["AuthenticationResult"]);
-        if (result !== undefined) {
-          const accessToken = result["AccessToken"];
-          const refreshToken = result["RefreshToken"];
-          const expiresIn = result["ExpiresIn"];
-          if (
-            typeof accessToken !== "string" ||
-            accessToken.length === 0 ||
-            accessToken.length > MAX_TOKEN_CHARS ||
-            typeof refreshToken !== "string" ||
-            refreshToken.length === 0 ||
-            refreshToken.length > MAX_TOKEN_CHARS ||
-            typeof expiresIn !== "number" ||
-            !Number.isInteger(expiresIn) ||
-            expiresIn < MIN_EXPIRES_IN ||
-            expiresIn > MAX_EXPIRES_IN
-          ) {
-            return unavailable();
-          }
-          return success({
-            kind: "tokens",
-            accessToken,
-            refreshToken,
-            expiresInSeconds: expiresIn,
-          });
-        }
+        if (result !== undefined) return tokensOf(result);
         const name = answer.body["ChallengeName"];
         if (typeof name === "string" && name.length > 0) {
+          // WPU-X11: the customer's authenticator. The code answers the challenge of THIS flow, with its
+          // Session, here; the Session is never returned. A code is sent for SOFTWARE_TOKEN_MFA only.
+          const session = answer.body["Session"];
+          if (
+            name === "SOFTWARE_TOKEN_MFA" &&
+            i.totpCode !== undefined &&
+            typeof session === "string" &&
+            session.length > 0 &&
+            session.length <= MAX_ANSWER_CHARS
+          ) {
+            return answerTotp(i.email, session, i.totpCode);
+          }
           return success({
             kind: "challenge",
             challenge: name === "SOFTWARE_TOKEN_MFA" ? "totp" : "other",

@@ -74,8 +74,11 @@ export function productionPorts(runtime: WebRuntime, clock: Clock): AuthPorts {
           ...(meta.userAgent !== undefined ? { userAgent: meta.userAgent } : {}),
         });
         if (!written.ok) throw new Error("auth: the sign-in could not be audited");
-        const profile = await repos.profile.get();
-        if (profile === null) throw new Error("auth: no customer row");
+        // WPU-X11: Cognito signs in confirmed addresses only, so a sign-in proves the e-mail. The first
+        // time is kept; without the row nothing is set and the sign-in is refused (R16).
+        const marked = await repos.profile.markEmailVerified(new Date());
+        if (!marked.ok) throw new Error("auth: no customer row");
+        const profile = marked.value;
         return { phoneVerified: profile.phoneVerifiedAt !== null };
       });
     },

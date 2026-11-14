@@ -3,12 +3,13 @@ import {
   SIGN_UP_CLIENT_LINK,
   authConfigFromEnv,
   cognitoIdentityProvider,
+  cognitoTotpPort,
   configureAuth,
   customerClientFromLink,
   signUpClientFromLink,
 } from "@tc/auth";
 import { sstLinks, type LinkSource } from "@tc/db/links";
-import type { AccessTokenVerifier, IdentityProvider } from "@tc/auth";
+import type { AccessTokenVerifier, IdentityProvider, TotpPort } from "@tc/auth";
 import { newUuidV7, withTx } from "@tc/db";
 import {
   EPS_RETURN_PATHS,
@@ -67,6 +68,13 @@ export interface WebRuntime {
    * have it until the Cognito and SMS adapters are verified on staging.
    */
   account: AccountPorts | null;
+  /**
+   * WPU-X11: the customer's authenticator in the customer pool (AssociateSoftwareToken,
+   * VerifySoftwareToken, SetUserMFAPreference with the customer's own access token). null = the pool
+   * is not configured: the authenticator actions refuse (R16). Local and test with the fake identity
+   * use the in-memory authenticator.
+   */
+  totp: TotpPort | null;
   /**
    * The invoke port of the `reader` function for the Metrics tab (WPU-G4). null = not configured: the
    * tab says "not available" (R16). Local and test with fakes use a dev reader instead.
@@ -215,9 +223,12 @@ export async function assembleRuntime(
   }
 
   let identity: IdentityProvider | null;
+  let totp: TotpPort | null;
   if (process.env.NODE_ENV !== "production" && config.fake.idp) {
     const fake = await import("./fakes/identity.ts");
     identity = fake.createFakeIdentity({ stage: config.stage, fakes: config.fakes });
+    const fakeTotp = await import("./fakes/totp.ts");
+    totp = fakeTotp.getDevTotp();
   } else {
     try {
       // WPU-X12: sign-up, its confirmation, the resend and the password reset go through the
@@ -245,6 +256,13 @@ export async function assembleRuntime(
       // Pool variables or the sign-up client link missing or malformed: the screens show "not
       // available" (R16). The error is dropped unread: its text is fixed and holds no value.
       identity = null;
+    }
+    // WPU-X11: the authenticator calls use the customer's own access token on the existing customer
+    // client (no secret); they need only the pool variables, not the sign-up client.
+    try {
+      totp = cognitoTotpPort(authConfigFromEnv(env).customer);
+    } catch {
+      totp = null;
     }
   }
 
@@ -313,6 +331,7 @@ export async function assembleRuntime(
       kyc,
       kycCheck,
       account,
+      totp,
       reader,
       access,
       renderer,

@@ -1,7 +1,7 @@
-import { currentCustomer } from "@tc/auth";
+import { ACCESS_COOKIE, currentCustomer } from "@tc/auth";
 import { renewNow, verifyDraft } from "@tc/core";
 import { customerRepos, newUuidV7, readFeatureFlag, withTx } from "@tc/db";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { DnsOpsDeps } from "./dns-actions.ts";
 import type { ExtrasDeps } from "./extras-actions.ts";
 import type { KeyActionDeps } from "./key-actions.ts";
@@ -11,6 +11,7 @@ import type { SettingsDeps } from "./settings-actions.ts";
 import type { SupportActionDeps } from "./support-actions.ts";
 import type { SupportThreadDeps } from "./support-thread-actions.ts";
 import { openDraftToken } from "./draft-envelope.ts";
+import type { TotpDeps } from "./totp-actions.ts";
 import { DRAFT_RATE_LIMITS } from "./order-actions.ts";
 import type { OrderActionDeps } from "./order-actions.ts";
 import { getOrdersRuntime } from "./orders-runtime.ts";
@@ -93,6 +94,27 @@ export async function settingsActionDeps(): Promise<SettingsDeps> {
       }),
     ports: account,
     clientIp: () => ip,
+  };
+}
+
+/**
+ * WPU-X11: the ports of the authenticator actions of /settings/security. The access token is the one of
+ * this request's session cookie (the proxy has refreshed it when it was due); it goes only to the Cognito
+ * port and is never logged or returned (R14).
+ */
+export async function totpActionDeps(): Promise<TotpDeps> {
+  const { totp } = await getRuntime();
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value ?? null;
+  return {
+    authenticate,
+    now: () => new Date(),
+    store: (customerId, fn) =>
+      withTx((tx) => {
+        const repos = customerRepos(tx, customerId);
+        return fn({ profile: repos.profile, audit: repos.audit, rateLimits: repos.rateLimits });
+      }),
+    totp,
+    accessToken: () => token,
   };
 }
 

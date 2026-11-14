@@ -15,7 +15,7 @@ export type AuthErrorCode =
   | "sign_in_failed"
   | "suspended"
   | "password_rejected"
-  | "totp_unsupported";
+  | "totp_required";
 
 export const AUTH_ERROR_CODES: readonly AuthErrorCode[] = [
   "invalid",
@@ -27,7 +27,7 @@ export const AUTH_ERROR_CODES: readonly AuthErrorCode[] = [
   "sign_in_failed",
   "suspended",
   "password_rejected",
-  "totp_unsupported",
+  "totp_required",
 ];
 
 export const FIELD_CODES: readonly FieldCode[] = [
@@ -56,7 +56,15 @@ export type FormState =
   | { status: "done"; redirectTo: string };
 
 /** The only form fields an error state may give back to the browser. Never a password or a code. */
-export const ECHOED_FIELDS: readonly string[] = ["fullName", "email", "phone", "locale", "next"];
+export const ECHOED_FIELDS: readonly string[] = [
+  "fullName",
+  "email",
+  "phone",
+  "locale",
+  "next",
+  // WPU-X11: a flag that the sign-in form shows the authenticator code field; never the code itself.
+  "totpStep",
+];
 
 /** What a core may ask the Server Action wrapper to do. The wrapper owns cookies() and redirect(). */
 export interface Effects {

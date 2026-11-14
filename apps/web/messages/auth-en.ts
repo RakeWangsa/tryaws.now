@@ -43,6 +43,7 @@ export const authEn: Same<typeof authBn> = {
       passwordConfirm: "Repeat the password",
       code: "Code sent to your email",
       smsCode: "Code sent by SMS",
+      totpCode: "Code from your authenticator app",
       newPassword: "New password",
       error: {
         required: "Fill in this field.",
@@ -60,6 +61,7 @@ export const authEn: Same<typeof authBn> = {
       password: "At least 12 characters. Do not use a password that is easy to guess.",
       phone: "For example 017XXXXXXXX. A code is sent by SMS.",
       code: "A 6-digit code.",
+      totpCode: "Enter the 6-digit code your authenticator app shows now, and your password again.",
     },
     consent: {
       terms: "I accept the Terms of Service",
@@ -115,8 +117,8 @@ export const authEn: Same<typeof authBn> = {
       bad_origin: "The request did not come from this site. Open the page again and retry.",
       suspended: "This account is suspended. Contact support.",
       password_rejected: "This password is not accepted. Choose another one.",
-      totp_unsupported:
-        "This account has an extra security step that does not work here yet. Contact support.",
+      totp_required:
+        "This account uses an authenticator. Enter your password again and the 6-digit code from the app.",
       ref: "Reference: {ref}",
     },
     state: {

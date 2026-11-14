@@ -60,11 +60,28 @@ describe("createDraft", () => {
     expect(await snapshotRows(t)).toEqual(before);
   };
 
-  it("refuses a customer whose KYC is none as kyc_required", () =>
-    refused({ kycStatus: "none" }, { ok: false, error: "kyc_required" }));
-  it("refuses a customer whose KYC is pending or rejected as kyc_required", async () => {
-    await refused({ kycStatus: "pending" }, { ok: false, error: "kyc_required" });
-    await refused({ kycStatus: "rejected" }, { ok: false, error: "kyc_required" });
+  // WPU-X11 (owner decision 2026-11-14): the buy condition is e-mail + mobile + authenticator, not KYC.
+  // The refusal keeps the contract code kyc_required and names the missing steps in data.missing.
+  it("refuses a customer without an authenticator as kyc_required, naming the step", () =>
+    refused(
+      { setup: { totp: false } },
+      { ok: false, error: "kyc_required", data: { missing: ["totp"] } },
+    ));
+  it("refuses a customer without a verified mobile or e-mail as kyc_required", async () => {
+    await refused(
+      { setup: { phone: false } },
+      { ok: false, error: "kyc_required", data: { missing: ["phone"] } },
+    );
+    await refused(
+      { setup: { email: false, phone: false, totp: false } },
+      { ok: false, error: "kyc_required", data: { missing: ["email", "phone", "totp"] } },
+    );
+  });
+  it("gives a draft to a customer whose KYC is none, pending or rejected when the setup is done", async () => {
+    for (const kycStatus of ["none", "pending", "rejected"]) {
+      const kit = await makeKit(t, { kycStatus });
+      expect((await createDraft(kit.deps, kit.session, kit.input())).ok).toBe(true);
+    }
   });
   it("refuses a suspended customer as forbidden", () =>
     refused({ status: "suspended" }, { ok: false, error: "forbidden" }));
@@ -112,9 +129,9 @@ describe("createDraft", () => {
     ).toMatchObject({ ok: false, error: "validation", fields: { family: "unsupported" } });
   });
 
-  it("decides on the row, not on the session: a session that says verified over a row that says none", async () => {
+  it("decides on the row, not on the session: a session that says KYC verified over a row without an authenticator", async () => {
     const kit = await makeKit(t);
-    await kit.setCustomer(kit.customerId, { kyc_status: "none" });
+    await kit.setCustomer(kit.customerId, { totp_enabled_at: null });
     expect(kit.session.kycStatus).toBe("verified");
     expect(await createDraft(kit.deps, kit.session, kit.input())).toMatchObject({
       ok: false,

@@ -38,7 +38,15 @@ export interface IdentityProvider {
   }): Promise<IdpResult<SignUpOutcome>>;
   confirmSignUp(i: { email: string; code: string }): Promise<IdpResult<true>>;
   resendConfirmationCode(email: string): Promise<IdpResult<true>>;
-  signIn(i: { email: string; password: string }): Promise<IdpResult<SignInOutcome>>;
+  /**
+   * WPU-X11: `totpCode` answers the SOFTWARE_TOKEN_MFA challenge of the same flow inside the adapter, so
+   * the Cognito Session never leaves it (open point 16). Without a code, the challenge is reported.
+   */
+  signIn(i: {
+    email: string;
+    password: string;
+    totpCode?: string;
+  }): Promise<IdpResult<SignInOutcome>>;
   forgotPassword(email: string): Promise<IdpResult<true>>;
   confirmForgotPassword(i: {
     email: string;

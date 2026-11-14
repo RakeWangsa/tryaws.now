@@ -109,11 +109,11 @@ describe("compensateFailedCreate", () => {
     },
   );
 
-  it("gives the refund to a customer whose KYC was revoked after the order", async () => {
+  it("gives the refund to a customer who switched the authenticator off after the order", async () => {
     const kit = await makeKit(t);
     const start = await kit.balance();
     const { resourceId } = await placeOne(kit);
-    await kit.setCustomer(kit.customerId, { kyc_status: "rejected" });
+    await kit.setCustomer(kit.customerId, { totp_enabled_at: null });
     await compensate(kit, resourceId);
     expect(await kit.balance()).toBe(start);
   });

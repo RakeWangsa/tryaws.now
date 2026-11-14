@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type {
   CUSTOMER_STATUSES,
   CUSTOMER_TYPES,
@@ -24,6 +24,9 @@ export interface CustomerProfile {
   market: string;
   locale: (typeof LOCALES)[number];
   status: (typeof CUSTOMER_STATUSES)[number];
+  // WPU-X11: the account setup that replaced KYC as the buy condition. NULL = not done.
+  emailVerifiedAt: Date | null;
+  totpEnabledAt: Date | null;
   createdAt: Date;
 }
 
@@ -64,6 +67,12 @@ export interface ProfileRepo {
   // Absolute assignment of all four fields (null clears one): the same input gives the same state, so a
   // repeated submit is harmless (R7). Validated here as the CHECKs of the table are (defence in depth).
   setBilling(input: BillingProfile): Promise<Written<BillingProfile>>;
+  // WPU-X11. Called by the sign-in after Cognito answered with tokens (it signs in confirmed addresses
+  // only), never from a form. The first time is kept: a later call changes nothing (R7).
+  markEmailVerified(at: Date): Promise<Written<CustomerProfile>>;
+  // WPU-X11. Called by the authenticator actions only after Cognito accepted the code and saved the MFA
+  // preference (a time), or switched it off (null); never from a form. Absolute assignment (R7).
+  setTotpEnabled(at: Date | null): Promise<Written<CustomerProfile>>;
 }
 
 // The finer rule is the one of packages/core/validation; @tc/db cannot import @tc/core.
@@ -110,16 +119,45 @@ const PROFILE_COLUMNS = {
   market: customers.market,
   locale: customers.locale,
   status: customers.status,
+  emailVerifiedAt: customers.emailVerifiedAt,
+  totpEnabledAt: customers.totpEnabledAt,
   createdAt: customers.createdAt,
 };
 
-// The parameter type makes the compiler check that the row holds all twelve fields. The text columns
+// The parameter type makes the compiler check that the row holds all fourteen fields. The text columns
 // hold only the values of their CHECKs, so narrowing them to the unions with the cast is exact.
 const toProfile = (row: Record<keyof CustomerProfile, unknown>): CustomerProfile =>
   row as unknown as CustomerProfile;
 
+const isTime = (value: unknown): value is Date =>
+  value instanceof Date && !Number.isNaN(value.getTime());
+
 export function profileRepo(scope: TenantScope): ProfileRepo {
   return {
+    markEmailVerified: async (at) => {
+      if (!isTime(at)) return refused("validation");
+      // Only a NULL is set; the row is read back either way, so a second call answers the first time.
+      await scope.tx
+        .update(customers)
+        .set({ emailVerifiedAt: at })
+        .where(and(eq(customers.id, scope.customerId), isNull(customers.emailVerifiedAt)));
+      const [row] = await scope.tx
+        .select(PROFILE_COLUMNS)
+        .from(customers)
+        .where(eq(customers.id, scope.customerId));
+      return row === undefined ? refused("not_found") : created(toProfile(row));
+    },
+
+    setTotpEnabled: async (at) => {
+      if (at !== null && !isTime(at)) return refused("validation");
+      const [row] = await scope.tx
+        .update(customers)
+        .set({ totpEnabledAt: at })
+        .where(eq(customers.id, scope.customerId))
+        .returning(PROFILE_COLUMNS);
+      return row === undefined ? refused("not_found") : created(toProfile(row));
+    },
+
     get: async (options) => {
       const query = scope.tx
         .select(PROFILE_COLUMNS)

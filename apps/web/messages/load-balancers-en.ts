@@ -12,11 +12,6 @@ export const loadBalancersEn: Same<typeof loadBalancersBn> = {
       title: "Load Balancers are coming soon",
       body: "This service is not open in your market yet. You will be able to buy it here once it opens.",
     },
-    kycRequired: {
-      title: "Verify your identity first",
-      body: "Identity verification must be complete before you can buy a load balancer. Come back here when it is done.",
-      action: "Write to support",
-    },
     state: {
       creating: "Creating",
       active: "Running",

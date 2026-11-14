@@ -48,6 +48,11 @@ export const customers = pgTable(
     billingAddress: text("billing_address"),
     // 13-digit BIN of a registered business (WPU-D3: no NID, migration 0019 dropped customer_nid).
     customerBin: text("customer_bin"),
+    // WPU-X11 (owner decision 2026-11-14): the account setup that replaced KYC as the buy condition.
+    // Set by the server only: at the first sign-in (Cognito signs in confirmed addresses only), and after
+    // Cognito accepted the authenticator code (VerifySoftwareToken, SetUserMFAPreference). NULL = not done.
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [

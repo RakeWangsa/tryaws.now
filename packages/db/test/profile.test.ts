@@ -53,6 +53,7 @@ it("profile.get gives the session customer's own row with exactly the profile fi
   expect(Object.keys(p!).sort()).toEqual([
     "createdAt",
     "email",
+    "emailVerifiedAt",
     "id",
     "kycStatus",
     "locale",
@@ -62,6 +63,7 @@ it("profile.get gives the session customer's own row with exactly the profile fi
     "phoneVerifiedAt",
     "riskTier",
     "status",
+    "totpEnabledAt",
     "type",
   ]);
 });

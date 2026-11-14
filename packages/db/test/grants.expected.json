@@ -192,7 +192,9 @@
         "type",
         "billing_name",
         "billing_address",
-        "customer_bin"
+        "customer_bin",
+        "email_verified_at",
+        "totp_enabled_at"
       ],
       "selectColumns": null
     },

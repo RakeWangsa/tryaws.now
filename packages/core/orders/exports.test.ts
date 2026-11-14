@@ -676,6 +676,9 @@ const BILLING = [
 // Final review M3: the one UUID check of the id fields (packages/core/validation/uuid.ts).
 const SHARED_UUID = ["UUID_PATTERN", "isUuid"];
 
+// WPU-X11: the account setup that replaced KYC as the buy condition (packages/core/account/setup.ts).
+const X11 = ["ACCOUNT_SETUP_STEPS", "canBuy", "missingSetupSteps"];
+
 describe("the public surface of the order flow", () => {
   it("lists exactly the value exports that were decided", () => {
     expect(Object.keys(orders).sort()).toEqual(ORDERS_VALUES);
@@ -726,6 +729,7 @@ describe("the public surface of the order flow", () => {
           ...Z13,
           ...Y5,
           ...SHARED_UUID,
+          ...X11,
         ]),
       ].sort(),
     );

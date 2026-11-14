@@ -172,7 +172,7 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   }),
   "domain_new.invalid": order({ state: "invalid" }),
   "domain_new.flag_off": order({ state: "flag_off" }),
-  "domain_new.kyc_required": order({ state: "kyc_required" }),
+  "domain_new.kyc_required": order({ state: "account_setup_required", missing: ["totp"] }),
   "domain_new.loading": fixed(() => <ScreenLoading lines={[4, 6, 2]} />),
   "domain_new.error": fixed(errorNode),
   // /domains/[name]

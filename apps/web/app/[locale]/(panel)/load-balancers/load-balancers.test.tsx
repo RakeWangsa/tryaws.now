@@ -75,7 +75,7 @@ describe("/load-balancers/new", () => {
 
   it("each state that cannot buy says why and what to do next", () => {
     expect(render("lb_new.flag_off")).toContain("Load Balancers are coming soon");
-    expect(render("lb_new.kyc_required")).toContain("Verify your identity first");
+    expect(render("lb_new.kyc_required")).toContain("Finish your account setup before you buy");
     expect(render("lb_new.empty")).toContain("No plan is for sale right now");
     const noServers = render("lb_new.no_servers");
     expect(noServers).toContain("No server to use as a target");

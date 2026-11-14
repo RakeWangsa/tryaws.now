@@ -197,6 +197,13 @@
       "when": 1794535595847,
       "tag": "0029_wallet_adjustment_limit_bd",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794539195847,
+      "tag": "0030_account_setup",
+      "breakpoints": true
     }
   ]
 }

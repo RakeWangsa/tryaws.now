@@ -68,7 +68,7 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
   "lb_new.empty": configure(configurator({ plans: [] })),
   "lb_new.no_servers": configure(configurator({ servers: [] })),
   "lb_new.flag_off": configure({ state: "flag_off" }),
-  "lb_new.kyc_required": configure({ state: "kyc_required" }),
+  "lb_new.kyc_required": configure({ state: "account_setup_required", missing: ["totp"] }),
   "lb_new.loading": fixed(() => <ScreenLoading lines={[4, 6, 2]} />),
   "lb_new.error": fixed(errorNode),
   // /load-balancers/[id]

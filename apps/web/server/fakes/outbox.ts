@@ -19,6 +19,13 @@ export interface FakeUser {
   readonly name: string;
   readonly locale: "bn" | "en";
   refreshCount: number;
+  // WPU-X11: the authenticator of the fake identity (fakes/totp.ts). `pending` is the secret of an
+  // enrolment not yet confirmed; `secret` the one in use when `totpEnabled`; `lastStep` the 30-second step
+  // of the last accepted code (a code is accepted once: replay refused).
+  totpPending?: string;
+  totpSecret?: string;
+  totpEnabled?: boolean;
+  totpLastStep?: number;
 }
 
 export interface FakeState {

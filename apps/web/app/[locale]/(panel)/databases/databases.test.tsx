@@ -63,7 +63,9 @@ describe("/databases/new", () => {
 
   it("each state that cannot buy says why and what to do next", () => {
     expect(render("databases_new.flag_off")).toContain("Databases are coming soon");
-    expect(render("databases_new.kyc_required")).toContain("Verify your identity first");
+    expect(render("databases_new.kyc_required")).toContain(
+      "Finish your account setup before you buy",
+    );
     expect(render("databases_new.empty")).toContain("No plan is for sale right now");
   });
 });

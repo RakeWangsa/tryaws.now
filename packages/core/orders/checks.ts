@@ -62,7 +62,9 @@ export async function gateCustomer(
       ? null
       : {
           status: profile.status,
-          kycStatus: profile.kycStatus,
+          emailVerifiedAt: profile.emailVerifiedAt,
+          phoneVerifiedAt: profile.phoneVerifiedAt,
+          totpEnabledAt: profile.totpEnabledAt,
           riskTier: profile.riskTier,
           market: profile.market,
         };
