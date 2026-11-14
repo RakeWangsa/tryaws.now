@@ -93,8 +93,16 @@ sst() {
 }
 
 # 2. The names that already have a value (names only; the values are cut off in the pipe).
-if ! EXISTING="$(sst secret list --stage "$STAGE" 2>/dev/null | cut -d= -f1)"; then
-  die "could not list the secret names of ${STAGE}; refusing"
+# sst 4.17.2 answers a stage without any secret with "No secrets found" and a non-zero exit (seen on the
+# first run of the app name tryaws-now, 2026-11-14): that is an empty list, not a failure. Any other
+# failure refuses (R16). stderr is kept in the pipe so the message can be told apart; cut still drops
+# every value.
+if ! EXISTING="$(sst secret list --stage "$STAGE" 2>&1 | cut -d= -f1)"; then
+  if [[ "$EXISTING" == *"No secrets found"* ]]; then
+    EXISTING=""
+  else
+    die "could not list the secret names of ${STAGE}; refusing"
+  fi
 fi
 
 has_value() {

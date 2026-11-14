@@ -73,6 +73,7 @@ esac`,
     "npx",
     `if [[ "$*" == *"secret list"* ]]; then
   echo "npx $* CI=\${CI:-} TC_PRODUCTION_DEPLOY=\${TC_PRODUCTION_DEPLOY:-}" >> "${log}"
+  if [[ "\${FAKE_LIST:-ok}" == empty ]]; then echo "✕  No secrets found"; exit 1; fi
   [[ "\${FAKE_LIST:-ok}" == ok ]] || exit 1
   printf '%s\\n' \${FAKE_EXISTING:-} | sed 's/$/=a-value-that-must-not-show/'
   exit 0
@@ -238,7 +239,7 @@ describe("scripts/golive/stage-secrets.sh", () => {
     expect(text).toContain('readonly PLACEHOLDER="not-configured"');
     expect(text).toContain("openssl rand -hex 32");
     // only the names of the existing secrets are read
-    expect(text).toContain('sst secret list --stage "$STAGE" 2>/dev/null | cut -d= -f1');
+    expect(text).toContain('sst secret list --stage "$STAGE" 2>&1 | cut -d= -f1');
   });
 
   // WPU-Z11 fix round 1: the production guard variables can reach `sst secret list|set` only.
@@ -279,6 +280,18 @@ describe("scripts/golive/stage-secrets.sh", () => {
     const r = run(STAGE_SECRETS, ["staging"], { env: { FAKE_LIST: "fail" } });
     expect(r.status).toBe(1);
     expect(r.calls).not.toContain("secret set");
+  });
+
+  it('treats sst\'s "No secrets found" of a new stage as an empty list and sets every name', () => {
+    const r = run(STAGE_SECRETS, ["staging"], {
+      env: { FAKE_LIST: "empty" },
+      input: "\n\n\n\n\n\n\n\n",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    const sets = r.calls.split("\n").filter((l) => l.includes("secret set"));
+    expect(sets.some((l) => l.includes("secret set EpsLimitKey"))).toBe(true);
+    expect(sets.some((l) => l.includes("secret set DbPasswordMigrator"))).toBe(true);
+    expect(r.stdout).toContain("done: stage staging");
   });
 
   it("skips what is set, stores not-configured for an empty EPS answer, and prints names only", () => {
