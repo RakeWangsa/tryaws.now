@@ -353,6 +353,17 @@ export function cognitoIdentityProvider(
             // internal one (the sub), not the address; the hash over the address is then refused
             // ("Unable to verify secret hash"). Use the one Cognito named; the address only when it
             // named none. VERIFY on staging (JOURNEY WPU-X11 round 2).
+            // The password is proven now. The caller may still refuse the code (its wrong-code limit); a
+            // refusal, or a hook that throws, sends nothing (R16).
+            if (i.beforeCode !== undefined) {
+              let go: boolean;
+              try {
+                go = (await i.beforeCode()) === true;
+              } catch {
+                go = false;
+              }
+              if (!go) return fail("code_limited");
+            }
             return answerTotp(usernameOfChallenge(answer.body) ?? i.email, session, i.totpCode);
           }
           return success({

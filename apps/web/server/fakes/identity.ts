@@ -29,6 +29,7 @@ const fail = (
     | "invalid_password"
     | "denied"
     | "code_denied"
+    | "code_limited"
     | "not_confirmed"
     | "rate_limited"
     | "unavailable",
@@ -110,6 +111,7 @@ export class InMemoryIdentityProvider implements IdentityProvider {
     email: string;
     password: string;
     totpCode?: string;
+    beforeCode?: () => Promise<boolean>;
   }): Promise<IdpResult<SignInOutcome>> {
     const state = getFakeState();
     const user = state.users.get(i.email);
@@ -120,6 +122,17 @@ export class InMemoryIdentityProvider implements IdentityProvider {
     // a code, and a wrong or reused code is `denied`.
     if (user.totpEnabled === true && user.totpSecret !== undefined) {
       if (i.totpCode === undefined) return ok({ kind: "challenge", challenge: "totp" });
+      // The password is proven: the caller may refuse the code (its wrong-code limit), as in the adapter.
+      if (i.beforeCode !== undefined) {
+        let go: boolean;
+        try {
+          go = (await i.beforeCode()) === true;
+        } catch {
+          go = false;
+        }
+        if (!go) return fail("code_limited");
+      }
+      state.totpAnswerCalls += 1;
       // The password was right: a wrong or reused code is code_denied, as in the Cognito adapter.
       if (!acceptTotp(user, user.totpSecret, i.totpCode, this.clock.now())) {
         return fail("code_denied");

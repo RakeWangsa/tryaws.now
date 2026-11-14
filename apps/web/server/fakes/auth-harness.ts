@@ -77,6 +77,10 @@ export interface Harness {
   runtime: WebRuntime;
   ports: AuthPorts;
   ctx(headers?: Headers): ActionContext;
+  /** Moves the clock of the harness forward. */
+  advance(ms: number): void;
+  /** The time of the harness now. */
+  now(): Date;
   signedUp(email?: string): Promise<Customer>;
 }
 
@@ -108,7 +112,9 @@ function recorded(
 
 export function makeHarness(): Harness {
   resetFakeState();
-  const clock = { now: () => NOW };
+  // A clock a test can move (the windows of the limiters roll with it).
+  let nowMs = NOW.getTime();
+  const clock = { now: () => new Date(nowMs) };
   const events: string[] = [];
   const customers = new Map<string, Customer>();
   const audits: Harness["audits"] = [];
@@ -383,6 +389,10 @@ export function makeHarness(): Harness {
     state,
     runtime,
     ports,
+    advance: (ms: number) => {
+      nowMs += ms;
+    },
+    now: () => new Date(nowMs),
     ctx: (headers = goodHeaders()) => {
       runtime.otp = state.otpOn ? otpDeps : null;
       return actionContext(headers, runtime, clock, ports);

@@ -32,6 +32,8 @@ export interface FakeState {
   readonly users: Map<string, FakeUser>;
   readonly emailCodes: Map<string, EmailCodeEntry>;
   readonly issuedRefresh: Set<string>;
+  /** WPU-X11 round 2: how many times a code was actually sent to the provider's challenge (after the hook). */
+  totpAnswerCalls: number;
   sms: InMemorySmsProvider | null;
 }
 
@@ -45,6 +47,7 @@ export function getFakeState(): FakeState {
     users: new Map(),
     emailCodes: new Map(),
     issuedRefresh: new Set(),
+    totpAnswerCalls: 0,
     sms: null,
   };
   holder[KEY] = made;
@@ -64,5 +67,6 @@ export function resetFakeState(): void {
   state.users.clear();
   state.emailCodes.clear();
   state.issuedRefresh.clear();
+  state.totpAnswerCalls = 0;
   state.sms?.reset();
 }

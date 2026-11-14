@@ -10,6 +10,9 @@ export type IdpFailure =
   // Only the sign-in with a code returns it. The screen answers it exactly like `denied`; the app counts
   // it against its own limit on wrong codes.
   | "code_denied"
+  // WPU-X11 round 2: the password was right, and `beforeCode` refused to let the code be sent (the caller's
+  // wrong-code limit is used up). Only the sign-in with a code returns it; the screen says "wait".
+  | "code_limited"
   | "expired_code"
   | "invalid_password"
   | "denied"
@@ -56,6 +59,14 @@ export interface IdentityProvider {
     email: string;
     password: string;
     totpCode?: string;
+    /**
+     * WPU-X11 round 2. Asked once, AFTER the password step answered the authenticator challenge (so the
+     * password is right) and BEFORE the code is sent. The caller reserves its wrong-code attempt here, so a
+     * caller without the password never touches the account's counter. `false` (or a throw) stops the
+     * sign-in as `code_limited` and no code is sent. Not asked for a wrong password, for tokens without a
+     * challenge, for another challenge, or without a code.
+     */
+    beforeCode?: () => Promise<boolean>;
   }): Promise<IdpResult<SignInOutcome>>;
   forgotPassword(email: string): Promise<IdpResult<true>>;
   confirmForgotPassword(i: {

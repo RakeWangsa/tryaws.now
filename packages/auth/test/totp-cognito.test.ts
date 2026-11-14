@@ -226,6 +226,75 @@ describe("signIn with an authenticator code", () => {
     expect(await run(() => json(500, {}))).toEqual({ ok: false, kind: "unavailable" });
   });
 
+  // WPU-X11 round 2 (review: a reservation made before the password is proven lets anyone fill the owner's
+  // wrong-code counter). The adapter runs the password step, and ONLY when that answered the authenticator
+  // challenge, so the password is right, it asks `beforeCode` for leave to send the code. The Session stays
+  // inside the adapter; a caller without the password never reaches the hook.
+  it("asks beforeCode after the password step proved the password and before the code is sent, once", async () => {
+    const seen: number[] = [];
+    const { fetchImpl, calls } = sequence([() => challenge("SOFTWARE_TOKEN_MFA"), () => tokens()]);
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
+      email: EMAIL,
+      password: "pw-123456789",
+      totpCode: "123456",
+      beforeCode: async () => {
+        seen.push(calls.length);
+        return true;
+      },
+    });
+    expect(result).toMatchObject({ ok: true, value: { kind: "tokens", totpVerified: true } });
+    // Exactly one call (InitiateAuth) had been made when the hook ran; RespondToAuthChallenge came after.
+    expect(seen).toEqual([1]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("a refusal of beforeCode is code_limited and the code is never sent", async () => {
+    const { fetchImpl, calls } = sequence([() => challenge("SOFTWARE_TOKEN_MFA"), () => tokens()]);
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
+      email: EMAIL,
+      password: "pw-123456789",
+      totpCode: "123456",
+      beforeCode: async () => false,
+    });
+    expect(result).toEqual({ ok: false, kind: "code_limited" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("a hook that throws refuses too (R16) and leaks nothing", async () => {
+    const { fetchImpl, calls } = sequence([() => challenge("SOFTWARE_TOKEN_MFA"), () => tokens()]);
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
+      email: EMAIL,
+      password: "pw-123456789",
+      totpCode: "123456",
+      beforeCode: async () => {
+        throw new Error("db down " + PLANTED.session);
+      },
+    });
+    expect(result).toEqual({ ok: false, kind: "code_limited" });
+    expect(JSON.stringify(result)).not.toContain(PLANTED.session);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("beforeCode is NOT asked when the password is wrong, when there is no challenge, for another challenge, or without a code", async () => {
+    const asked = vi.fn(async () => true);
+    const run = async (answers: Array<() => Response>, over: { totpCode?: string } = {}) => {
+      const { fetchImpl } = sequence(answers);
+      return cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
+        email: EMAIL,
+        password: "pw-123456789",
+        beforeCode: asked,
+        ...over,
+      });
+    };
+    await run([() => cognitoError("NotAuthorizedException")], { totpCode: "123456" });
+    await run([() => cognitoError("UserNotFoundException")], { totpCode: "123456" });
+    await run([() => tokens()], { totpCode: "123456" });
+    await run([() => challenge("NEW_PASSWORD_REQUIRED")], { totpCode: "123456" });
+    await run([() => challenge("SOFTWARE_TOKEN_MFA")]);
+    await run([() => json(500, {})], { totpCode: "123456" });
+    expect(asked).not.toHaveBeenCalled();
+  });
+
   it("a code is never sent for another challenge", async () => {
     const { fetchImpl, calls } = sequence([() => challenge("NEW_PASSWORD_REQUIRED")]);
     const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({

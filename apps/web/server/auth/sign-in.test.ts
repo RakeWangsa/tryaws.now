@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { LIMIT_KEY, NOW, SIGN_UP_FORM, makeHarness } from "../fakes/auth-harness.ts";
+import { LIMIT_KEY, NOW, SIGN_UP_FORM, goodHeaders, makeHarness } from "../fakes/auth-harness.ts";
 import type { Customer, Harness } from "../fakes/auth-harness.ts";
 import { getFakeState } from "../fakes/outbox.ts";
 import { totpCodeAt } from "../fakes/totp.ts";
@@ -182,13 +182,16 @@ describe("signInCore with an authenticator (TOTP)", () => {
     expect(h.notices).toEqual([{ email: FORM.email, ip: "198.51.100.7", key: LIMIT_KEY }]);
   });
 
-  it("then blocks at the door: even the right code is refused before the provider is asked, and no second notice goes out", async () => {
+  it("then blocks: even the right code is refused, after the password step and before any code is sent, and no second notice goes out", async () => {
     for (let i = 0; i < 5; i++) await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
+    const answered = getFakeState().totpAnswerCalls;
     h.events.length = 0;
     const blocked = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
     expect(blocked.state).toMatchObject({ status: "error", code: "rate_limited" });
     expect(blocked.effects.setCookies).toEqual([]);
-    expect(h.events.filter((e) => e.startsWith("idp."))).toEqual([]);
+    // The password was checked (that is what the reservation waits for); no code reached the challenge.
+    expect(h.events.filter((e) => e === "idp.signIn")).toHaveLength(1);
+    expect(getFakeState().totpAnswerCalls).toBe(answered);
     expect(h.notices).toHaveLength(1);
     // The refusal says nothing about codes: the same words as any rate limit.
     // ... the screen shows the plain rate-limit text, which names no code and no authenticator.
@@ -253,9 +256,11 @@ describe("signInCore with an authenticator (TOTP)", () => {
     const attempts = await Promise.all(
       Array.from({ length: 12 }, () => signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() })),
     );
-    const reachedProvider = h.events.filter((e) => e === "idp.signIn").length;
-    expect(reachedProvider).toBeLessThanOrEqual(5);
-    // The rest were refused at the door, with the plain rate-limit answer.
+    // The password step is the existing per-address limit (8 in 15 minutes); a CODE reaches the challenge
+    // only for the first five reservations, whatever the interleaving.
+    expect(getFakeState().totpAnswerCalls).toBeLessThanOrEqual(5);
+    expect(getFakeState().totpAnswerCalls).toBeGreaterThan(0);
+    // The rest were refused, with the plain rate-limit answer.
     const limited = attempts.filter(
       (a) => a.state.status === "error" && a.state.code === "rate_limited",
     );
@@ -263,6 +268,57 @@ describe("signInCore with an authenticator (TOTP)", () => {
     expect(attempts.every((a) => a.effects.setCookies.length === 0)).toBe(true);
     // One notice for the window, not one per failure.
     expect(h.notices).toHaveLength(1);
+  });
+
+  // The review: the reservation was made before the password was proven, so an attacker WITHOUT the password
+  // could fill the owner's counters with parallel sign-ins that carry a code. Now the counter is touched
+  // only after the password step answered the authenticator challenge.
+  it("a flood of wrong-PASSWORD sign-ins with a code never touches the owner's wrong-code counters: the owner, in the middle of the flood, signs in, and again afterwards", async () => {
+    const attackerIp = (n: number) => `203.0.113.${n + 1}:4711`;
+    const owner = signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+    const flood = Array.from({ length: 30 }, (_, n) =>
+      signInCore(h.ctx(goodHeaders({ "cloudfront-viewer-address": attackerIp(n) })), {
+        ...FORM,
+        password: "not the password",
+        totpCode: wrongCode(),
+      }),
+    );
+    // The owner's request is started last of all, so it meets the whole flood in flight. With the
+    // reservation made before the password was proven, the first five attackers would have filled the
+    // counter and the owner would have been refused.
+    const late = signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+    const [floodAnswers, ownerFirst, ownerLate] = await Promise.all([
+      Promise.all(flood),
+      owner,
+      late,
+    ]);
+    expect(floodAnswers.every((o) => o.state.status === "error")).toBe(true);
+    expect(floodAnswers.every((o) => o.effects.setCookies.length === 0)).toBe(true);
+    // Exactly one of the owner's two parallel sign-ins can use the code (a code is accepted once); neither
+    // was refused by the wrong-code limit.
+    const states = [ownerFirst, ownerLate].map((o) => o.state);
+    expect(states.filter((x) => x.status === "done")).toHaveLength(1);
+    expect(states.some((x) => x.status === "error" && x.code === "rate_limited")).toBe(false);
+    // No attacker reached the code step: only the owner's code was ever sent, no counter moved, no notice.
+    expect(getFakeState().totpAnswerCalls).toBeLessThanOrEqual(2);
+    expect(codeCounts().filter((n) => n > 0).length).toBeLessThanOrEqual(2);
+    expect(h.notices).toEqual([]);
+    // Later, after the windows of the password limits, the owner signs in with a fresh code.
+    h.advance(61 * 60_000);
+    const again = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, h.now()) });
+    expect(again.state).toMatchObject({ status: "done" });
+  });
+
+  it("a flood from one address with the wrong password and a code is stopped by the password limits and counts no code", async () => {
+    const flood = await Promise.all(
+      Array.from({ length: 50 }, () =>
+        signInCore(h.ctx(), { ...FORM, password: "not the password", totpCode: wrongCode() }),
+      ),
+    );
+    expect(
+      flood.filter((o) => o.state.status === "error" && o.state.code === "rate_limited").length,
+    ).toBe(42);
+    expect(codeCounts().every((n) => n === 0)).toBe(true);
   });
 
   it("parallel attempts with the RIGHT code and wrong ones: the right one is never counted against the others", async () => {

@@ -39,38 +39,40 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
     return failure(ctx, "rate_limited", { form, retryAfterSeconds: limit.retryAfterSeconds });
   }
 
-  // WPU-X11 round 2: with a code, the attempt is RESERVED before the provider is asked: one atomic count
-  // against the wrong-code limit (5 in 15 minutes, 20 a day, per address typed). A check followed by a
-  // count would let N parallel guesses all pass the check before any is counted; a reservation cannot be
-  // passed more than `limit` times. When the limit is used up the provider is not asked. The refusal says
-  // nothing about codes, so it is no oracle for the password. The hit is given back below unless the
-  // attempt turns out to be a wrong code after a correct password.
+  // WPU-X11 round 2: the wrong-code limit (5 in 15 minutes, 20 a day, per address typed) guards the
+  // account, so it is only touched by a request that has already proved the PASSWORD. The provider runs the
+  // password step and, only when that answered the authenticator challenge, asks `beforeCode`; there the
+  // attempt is RESERVED with one atomic count (a check followed by a count would let N parallel guesses all
+  // pass the check first). Someone without the password never gets to the hook, so a flood of sign-ins with
+  // a wrong password and a code cannot fill the owner's counters. The password guesses themselves stay under
+  // the limits above (per address and pair, and the ceiling per address typed). The hit is given back below
+  // unless the attempt turns out to be a wrong code.
   const step = totpCode !== undefined ? { ...form, totpStep: "1" } : form;
   const codeWho = { ip: guard.ip, email };
-  let reservedAt: Date | null = null;
-  if (totpCode !== undefined) {
-    reservedAt = ctx.clock.now();
+  const reservation: { at: Date | null; waitSeconds: number } = { at: null, waitSeconds: 60 };
+  const beforeCode = async (): Promise<boolean> => {
+    const at = ctx.clock.now();
     const reserved = await ctx.ports.limit("signin_code", codeWho, guard.key);
     if (!reserved.allowed) {
-      return failure(ctx, "rate_limited", {
-        form: step,
-        retryAfterSeconds: reserved.retryAfterSeconds,
-      });
+      reservation.waitSeconds = reserved.retryAfterSeconds;
+      return false;
     }
-  }
+    reservation.at = at;
+    return true;
+  };
 
   // 5. Execute.
   // The code step stays on the form after a failure of a sign-in that carried a code (a flag, never the code).
   const answer = await guard.identity.signIn({
     email,
     password,
-    ...(totpCode !== undefined ? { totpCode } : {}),
+    ...(totpCode !== undefined ? { totpCode, beforeCode } : {}),
   });
   // Only a wrong code after a correct password keeps its reservation; every other outcome gives it back
   // (a right code, a wrong password, the provider unavailable or limiting, another challenge). If the
   // release cannot be made the hit stays counted: the safe direction.
-  if (reservedAt !== null && !(!answer.ok && answer.kind === "code_denied")) {
-    const given = await ctx.ports.limitRelease("signin_code", codeWho, guard.key, reservedAt);
+  if (reservation.at !== null && !(!answer.ok && answer.kind === "code_denied")) {
+    const given = await ctx.ports.limitRelease("signin_code", codeWho, guard.key, reservation.at);
     if (!given) logAuth(ctx, "auth.signin", "code_limit_release_failed");
   }
   if (!answer.ok) {
@@ -80,6 +82,12 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
         return failure(ctx, "rate_limited", { form: step, retryAfterSeconds: 60 });
       case "unavailable":
         return failure(ctx, "unavailable", { form: step });
+      case "code_limited":
+        // The password was right and the wrong-code limit is used up: the screen says to wait, nothing more.
+        return failure(ctx, "rate_limited", {
+          form: step,
+          retryAfterSeconds: reservation.waitSeconds,
+        });
       case "code_denied": {
         // The password was right and the code was not: its reservation stays counted. When that filled
         // the limit the customer is told by email and the screen says to wait; until then the screen
