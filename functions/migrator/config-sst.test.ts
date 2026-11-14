@@ -10,7 +10,7 @@ let sealed: SealedSstLinks;
 beforeAll(() => {
   const links: Record<string, unknown> = {
     App: { name: "ticoncloud", stage: "staging" },
-    Postgres: {
+    Database: {
       host: "db.example.test",
       port: 5432,
       username: "tcadmin",

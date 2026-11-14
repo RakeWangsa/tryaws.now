@@ -66,7 +66,9 @@ export function readMigratorConfig(env: Env, links: LinkSource = sstLinks): Migr
   const sslmode = env.DB_SSLMODE ?? "verify-full";
   if (sslmode !== "require" && sslmode !== "verify-full") return fail();
 
-  const master = linked(links, "Postgres");
+  // SST links a component under its own name: sst.aws.Postgres("Database") in infra/stacks/database.ts
+  // (staging deploy 2026-11-14 refused while this read "Postgres"; config.test.ts pins the two together).
+  const master = linked(links, "Database");
   const host = text(master?.host);
   const username = text(master?.username);
   const password = text(master?.password);

@@ -17,7 +17,7 @@ import {
 const MASTER_PASSWORD = "m@ster:pw/#1";
 const env = (over: Record<string, string | undefined> = {}) => {
   const base: Record<string, string | undefined> = {
-    SST_RESOURCE_Postgres: JSON.stringify({
+    SST_RESOURCE_Database: JSON.stringify({
       host: "db.example.test",
       port: 5432,
       username: "tcadmin",
@@ -73,7 +73,7 @@ it("fails closed with one fixed message that holds no value", () => {
     JSON.stringify({ host: "h", port: 5432, username: "", password: "p", database: "d" }),
   ];
   const cases: Record<string, string | undefined>[] = wrongShapes.map((v) => ({
-    SST_RESOURCE_Postgres: v,
+    SST_RESOURCE_Database: v,
   }));
   for (const name of Object.values(INFRA_NAMES)) {
     cases.push({ [`SST_RESOURCE_${name}`]: undefined });
@@ -94,7 +94,7 @@ it("fails closed with one fixed message that holds no value", () => {
 
 it("does not read DATABASE_URL (a deploy never takes the master user from a variable)", () => {
   expect(() =>
-    read(env({ SST_RESOURCE_Postgres: undefined, DATABASE_URL: "postgres://a:b@h/d" })),
+    read(env({ SST_RESOURCE_Database: undefined, DATABASE_URL: "postgres://a:b@h/d" })),
   ).toThrow(MIGRATOR_ERROR);
 });
 
@@ -146,4 +146,19 @@ it("reads TC_STAGE, TC_POOL_ACCOUNT_IDS and TC_POOL_EXTERNAL_ID raw, and undefin
   expect(read(env({ TC_POOL_EXTERNAL_ID: "" })).poolExternalId).toBeUndefined();
   // a malformed value is not a config failure either: the migrations must still run
   expect(() => read(env({ TC_POOL_EXTERNAL_ID: "bad id" }))).not.toThrow();
+});
+
+// Staging deploy of 2026-11-14: SST links a component under its own name. The migrator read "Postgres"
+// while the component is sst.aws.Postgres("Database"), found nothing and refused every deploy.
+it("reads the master link under the name of the Postgres component in infra/stacks/database.ts", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve } = await import("node:path");
+  const stack = readFileSync(
+    resolve(import.meta.dirname, "../../infra/stacks/database.ts"),
+    "utf8",
+  );
+  const component = /new sst\.aws\.Postgres\("([A-Za-z0-9]+)"/.exec(stack)?.[1];
+  const config = readFileSync(resolve(import.meta.dirname, "config.ts"), "utf8");
+  expect(component).toBe("Database");
+  expect(config).toContain(`linked(links, "${component}")`);
 });
