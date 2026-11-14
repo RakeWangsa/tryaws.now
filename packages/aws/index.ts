@@ -135,6 +135,14 @@ export type {
   DomainOperationStatus,
   DomainsPort,
 } from "./adapters/domains-port";
+// WPU-X10: the KMS unseal of the registrant contact (provisioner only; the key is in the control-plane account).
+export {
+  DOMAIN_CONTACT_CONTEXT,
+  createContactUnseal,
+  createKmsClient,
+  isKmsKeyArn,
+  type KmsDecryptSender,
+} from "./contact-unseal";
 export {
   createRoute53DomainsClient,
   createRoute53DomainsPort,

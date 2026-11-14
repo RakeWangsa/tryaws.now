@@ -18,7 +18,7 @@ import { cdnAdapter } from "./cdn";
 import { containerServiceAdapter } from "./container";
 import { databaseAdapter } from "./database";
 import { dnsZoneAdapter, dnsZoneHooks, dnsZonePortsFromEnv } from "./dns-zone";
-import { domainAdapter, domainHooks, domainRenewalRecheck } from "./domain";
+import { domainAdapter, domainHooks, domainPortsFromEnv, domainRenewalRecheck } from "./domain";
 import { linuxInstanceAdapter } from "./linux";
 import { loadBalancerAdapter } from "./load-balancer";
 import { composeHooks } from "./hooks";
@@ -127,6 +127,8 @@ function buildDeps(): StepDeps {
   const clock = { now: () => new Date() };
   const access = createAwsAccess({ caller: "provisioner" });
   const log = (e: LogEvent) => console.log(JSON.stringify(e));
+  // WPU-X10: one set of domain ports for the adapter and the registry check of confirm_unrenewed.
+  const domainPorts = domainPortsFromEnv(process.env, access);
   return {
     runTx: withTx,
     clock,
@@ -151,8 +153,10 @@ function buildDeps(): StepDeps {
       containerServiceAdapter(),
       // WP7-T2: behind the flag cdn (R12), which the order flow checks.
       cdnAdapter(),
-      // WP7-T4: behind the flag domain (R12); its ports are not built yet (JOURNEY), so it fails closed.
-      domainAdapter(),
+      // WP7-T4: behind the flag domain (R12). WPU-X10: Route 53 Domains and Route 53 of tc-dns (TcDnsProvisioner)
+      // and the KMS unseal of the contact; it fails closed without TC_DNS_ACCOUNT_ID, TC_DNS_EXTERNAL_ID and
+      // TC_DOMAIN_CONTACT_KEY_ARN.
+      domainAdapter(domainPorts),
       // WPU-G6, WPU-D4: behind the flag dns_zone (R12); Route 53 of tc-dns, and it fails closed without
       // TC_DNS_ACCOUNT_ID and TC_DNS_EXTERNAL_ID.
       dnsZoneAdapter(dnsZonePortsFromEnv(process.env, access)),
@@ -170,8 +174,8 @@ function buildDeps(): StepDeps {
       domainHooks(),
       renewalHooks({ log, notice: noticeWriter }),
     ),
-    // WPU-X3 (b): the registry check of confirm_unrenewed (fails closed until the domain ports are wired).
-    renewalRecheck: domainRenewalRecheck(),
+    // WPU-X3 (b): the registry check of confirm_unrenewed (WPU-X10: on the domain ports; fails closed without them).
+    renewalRecheck: domainRenewalRecheck(domainPorts),
     access,
     env: config.env,
     log,

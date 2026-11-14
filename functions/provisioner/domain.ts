@@ -1,8 +1,15 @@
 import {
   AwsError,
+  createContactUnseal,
   createDomainAdapter,
+  createKmsClient,
+  createRoute53DomainsPort,
+  isKmsKeyArn,
+  createRoute53Port,
   recheckRenewal,
+  type AwsAccess,
   type DomainsPort,
+  type KmsDecryptSender,
   type ProductAdapter,
   type Route53Port,
 } from "@tc/aws";
@@ -15,15 +22,17 @@ import {
   withTx,
   type Tx,
 } from "@tc/db";
+import { dnsAccountFromEnv } from "./dns-zone";
 import type { OperationHooks, RenewalRecheckFn } from "./types";
 
-// WP7-T4: the production dependencies of the domain adapter. WPU-B2 added the Route 53 Domains client
-// (`createRoute53DomainsPort` of @tc/aws), but its credentials (STS AssumeRole into tc-dns, role
-// TcDnsProvisioner) and the KMS unseal are NOT wired here yet (JOURNEY "Needs decision"): until they are,
-// every port refuses with a fixed local error, a create fails closed and its order is reversed, and a renewal
-// (`renew_domain`, WPU-Z13) fails closed and its charge is reversed (renewal-hooks.ts). The domain flag is off in
-// production (R12), so no order reaches this. The two database reads are real: they decide who holds a name and a
-// zone.
+// WP7-T4: the production dependencies of the domain adapter. WPU-X10 wires them (JOURNEY Needs decision 1 and 2 of
+// WP7-T4, resolved by WPU-X10): Route 53 Domains and Route 53 of the tc-dns account through STS AssumeRole with the
+// ExternalId and the role TcDnsProvisioner (R3; the provisioner's only DNS role, which also holds the reads it
+// needs, infra/org/dns-account.yaml), and the KMS unseal of the registrant contact with the domain-contact key of
+// the stage (TC_DOMAIN_CONTACT_KEY_ARN). Without a valid environment every port refuses with a fixed local error, a
+// create fails closed and its order is reversed, and a renewal (`renew_domain`, WPU-Z13) fails closed and its charge
+// is reversed (renewal-hooks.ts). The domain flag is off in production (R12). The two database reads are real: they
+// decide who holds a name and a zone.
 export interface DomainPorts {
   readonly domains: () => DomainsPort;
   readonly route53: () => Route53Port;
@@ -40,6 +49,31 @@ const UNCONFIGURED: DomainPorts = {
   unsealContact: async () => notConfigured(),
 };
 
+/**
+ * WPU-X10: the ports of the Lambda environment. Each is built on use and without a network call (the clients
+ * assume the role on their first request); a missing or malformed value refuses that call only (R16). `kms` builds
+ * the KMS client of the function's own Region (AWS_REGION); tests pass a fake.
+ */
+export function domainPortsFromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+  access: AwsAccess<"provisioner">,
+  kms: () => KmsDecryptSender = () => createKmsClient(env.AWS_REGION ?? ""),
+): DomainPorts {
+  const account = () => dnsAccountFromEnv(env) ?? notConfigured();
+  let unseal: ((sealed: Uint8Array) => Promise<unknown>) | undefined;
+  return {
+    domains: () => createRoute53DomainsPort(access.route53Domains(account(), "TcDnsProvisioner")),
+    route53: () => createRoute53Port(access.route53(account(), "TcDnsProvisioner")),
+    unsealContact: async (sealed) => {
+      const keyArn = env.TC_DOMAIN_CONTACT_KEY_ARN;
+      // The key is checked before the client is built: a missing key builds no client and makes no call.
+      if (!isKmsKeyArn(keyArn)) return notConfigured();
+      unseal ??= createContactUnseal(kms(), keyArn);
+      return unseal(sealed);
+    },
+  };
+}
+
 export function domainAdapter(ports: DomainPorts = UNCONFIGURED): ProductAdapter<unknown> {
   return createDomainAdapter({
     ...ports,
@@ -53,8 +87,8 @@ export function domainAdapter(ports: DomainPorts = UNCONFIGURED): ProductAdapter
 
 /**
  * WPU-X3 (b): the fresh registry check of the admin's "registry confirmed not renewed", on the same ports as the domain
- * adapter. Until the ports are wired (JOURNEY "Needs decision") every call throws the fixed local error, and the
- * confirm operation records `registry_unreachable`: never a refund (R16).
+ * adapter. Without configured ports every call throws the fixed local error, and the confirm operation records
+ * `registry_unreachable`: never a refund (R16).
  */
 export function domainRenewalRecheck(ports: DomainPorts = UNCONFIGURED): RenewalRecheckFn {
   return (input) => recheckRenewal(ports.domains(), input);

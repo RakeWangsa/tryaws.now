@@ -91,6 +91,20 @@ export function storage(config: StageConfig) {
     targetKeyId: filesKey.keyId,
   });
 
+  // WPU-X10: the key of the registrant contact of a domain draft (JOURNEY Needs decision 2 of WP7-T4). The web
+  // role may only kms:Encrypt with it (web.ts, apps/web/server/domain-seal.ts) and the provisioner role may only
+  // kms:Decrypt (workers.ts, packages/aws/contact-unseal.ts). No other role gets a grant; the default key policy
+  // leaves the grants to IAM, as for the two keys above.
+  const domainContactKey = new aws.kms.Key("DomainContactKey", {
+    description: `tc ${stage} domain registrant contact`,
+    enableKeyRotation: true,
+    deletionWindowInDays: 30,
+  });
+  new aws.kms.Alias("DomainContactKeyAlias", {
+    name: `alias/${resourceName(stage, "domain-contact")}`,
+    targetKeyId: domainContactKey.keyId,
+  });
+
   // The web function role has a fixed name (workers.ts / web.ts set it with transform), so the
   // policy can name it without creating a dependency on the function.
   // VERIFY: effect "deny", principals and conditions shapes of sst.aws.Bucket `policy` (the docs list
@@ -174,7 +188,7 @@ export function storage(config: StageConfig) {
     rules: [{ id: "expire-exports", status: "Enabled", filter: {}, expiration: { days: 30 } }],
   });
 
-  return { kyc, invoices, exports: exportFiles, kycKey, filesKey };
+  return { kyc, invoices, exports: exportFiles, kycKey, filesKey, domainContactKey };
 }
 
 export type Storage = ReturnType<typeof storage>;

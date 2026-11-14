@@ -1,7 +1,9 @@
 import { LightsailClient } from "@aws-sdk/client-lightsail";
 import { Route53Client } from "@aws-sdk/client-route-53";
+import { Route53DomainsClient } from "@aws-sdk/client-route-53-domains";
 import type { Clock } from "@tc/core";
 import { createCredentialCache, createStsClient } from "./credentials";
+import { DOMAINS_REGION, mapDomainsError } from "./domains-client";
 import { AwsError, mapErrors } from "./errors";
 import {
   CALLER_ROLES,
@@ -40,6 +42,11 @@ export interface AwsAccess<C extends Caller> {
   ): LightsailClient;
   /** The tc-dns account (WPU-D4): Route 53, with TcDnsProvisioner or TcDnsReader. */
   route53(account: AccountRef, role: Extract<RoleOf<C>, DnsRole>): Route53Client;
+  /**
+   * WPU-X10: Route 53 Domains of the tc-dns account (us-east-1), with TcDnsProvisioner or TcDnsReader: the same
+   * credential cache, ExternalId, retry settings and session invalidation as `route53`.
+   */
+  route53Domains(account: AccountRef, role: Extract<RoleOf<C>, DnsRole>): Route53DomainsClient;
 }
 
 function roleNotAllowed(): AwsError {
@@ -136,5 +143,42 @@ export function createAwsAccessInternal<C extends Caller>(
     return client;
   }
 
-  return Object.freeze({ caller, lightsail, route53 });
+  const domainsClients = new Map<string, Route53DomainsClient>();
+
+  function route53Domains(
+    account: AccountRef,
+    role: Extract<RoleOf<C>, DnsRole>,
+  ): Route53DomainsClient {
+    assertRoleAllowed(caller, role);
+    if (!(DNS_ROLES as readonly string[]).includes(role)) throw roleNotAllowed();
+    const checked = checkedAccountRef(account);
+
+    const key = JSON.stringify([checked.awsAccountId, checked.externalId, role]);
+    const existing = domainsClients.get(key);
+    if (existing) return existing;
+
+    // No `logger` (R14). Route 53 Domains has one endpoint, us-east-1 (DOMAINS_REGION = ROUTE53_REGION).
+    const client = new Route53DomainsClient({
+      region: DOMAINS_REGION,
+      credentials: Object.assign(() => cache.get(checked, role), { memoized: true }),
+      ...clientSettings(role),
+      ...(requestHandler ? { requestHandler } : {}),
+    });
+    mapErrors(
+      client,
+      (error) => {
+        if (
+          (error.code === "unauthenticated" || error.code === "forbidden") &&
+          error.operation !== "AssumeRole"
+        ) {
+          cache.invalidate(checked, role);
+        }
+      },
+      mapDomainsError,
+    );
+    domainsClients.set(key, client);
+    return client;
+  }
+
+  return Object.freeze({ caller, lightsail, route53, route53Domains });
 }

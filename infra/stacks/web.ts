@@ -140,6 +140,8 @@ export function web(inputs: WebInputs) {
       // (apps/web/server/kyc-check-invoke.ts); the role may invoke its "web" alias only. The web role
       // itself keeps no read of the kyc bucket (storage.ts denies it).
       KYC_CHECK_FUNCTION_NAME: functionOf("kyc-check").name,
+      // WPU-X10: the key that seals the registrant contact of a domain draft (apps/web/server/domain-seal.ts).
+      DOMAIN_CONTACT_KEY_ARN: storage.domainContactKey.arn,
       // Final review M5: no KYC_BUCKET or EXPORTS_BUCKET: no code of apps/, packages/ or functions/ reads them.
       // The grants below stay for the code that will use the buckets; that code adds its variable with it.
     },
@@ -172,6 +174,8 @@ export function web(inputs: WebInputs) {
         resources: [$interpolate`${storage.exports.arn}/*`],
       },
       { actions: ["kms:Decrypt"], resources: [storage.filesKey.arn] },
+      // WPU-X10: seal only (kms:Encrypt) with the domain-contact key; the provisioner alone may Decrypt (R1).
+      { actions: ["kms:Encrypt"], resources: [storage.domainContactKey.arn] },
       { actions: ["cognito-idp:AdminUserGlobalSignOut"], resources: [auth.customers.arn] },
     ]),
     transform: {

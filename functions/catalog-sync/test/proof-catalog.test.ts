@@ -1,8 +1,8 @@
 // Proof of WP1-T5 (the instance half): the catalog-sync function with a FAKE AWS client (fixtures of the SHAPE
 // of a GetBundles answer, through the real read-only adapter) and the REAL local PostgreSQL, as worker_rw for
 // the sync and web_rw for the read. Nothing here calls AWS, and nothing claims what the real answer looks
-// like: that is manual VERIFY in tc-pool-dev. The TLD half is NOT proven here (the Route 53 Domains client is
-// not installed), only that it is skipped with a log and never fails the instance plans.
+// like: that is manual VERIFY in tc-pool-dev. WPU-X10: the TLD half runs through the real catalog source too
+// (ListPrices with TcDnsReader, pages of the documented shape); the real answer is the staging VERIFY.
 import {
   AwsError,
   type AwsAccess,
@@ -105,10 +105,25 @@ interface Request {
 function fakeAccess(
   answers: Partial<Record<LightsailRegion, Answer>>,
   blueprints: Partial<Record<LightsailRegion, unknown[]>> = {},
+  tldPages: unknown[] | Error = [],
 ) {
   const requests: Request[] = [];
   const access = {
     caller: "catalog-sync",
+    // WPU-X10: ListPrices of Route 53 Domains, page by page (Marker = the page index).
+    route53Domains(account: AccountRef, role: RoleName) {
+      requests.push({ region: "us-east-1", role, account });
+      return {
+        send: async (command: { input: { Marker?: string } }) => {
+          if (tldPages instanceof Error) throw tldPages;
+          const index = command.input.Marker === undefined ? 0 : parseInt(command.input.Marker, 10);
+          return {
+            Prices: tldPages[index] ?? [],
+            ...(index + 1 < tldPages.length ? { NextPageMarker: String(index + 1) } : {}),
+          };
+        },
+      };
+    },
     lightsail(account: AccountRef, region: LightsailRegion, role: RoleName) {
       requests.push({ region, role, account });
       return {
@@ -139,9 +154,10 @@ function makeSync(
     at?: string;
     role?: DatabaseRole;
     blueprints?: Partial<Record<LightsailRegion, unknown[]>>;
+    tldPages?: unknown[] | Error;
   } = {},
 ) {
-  const { access, requests } = fakeAccess(answers, over.blueprints);
+  const { access, requests } = fakeAccess(answers, over.blueprints, over.tldPages);
   const logs: LogEvent[] = [];
   const config: CatalogSyncConfig = {
     poolAccountId: POOL_ACCOUNT_ID,
@@ -469,19 +485,55 @@ describe("catalog-sync proof (fake AWS, real database)", () => {
     );
   });
 
-  it("11. the TLD half is skipped with a log and never fails the instance plans (TLD prices NOT proven)", async () => {
-    const { run, logs } = makeSync(
+  it("11. the TLD half reads ListPrices with TcDnsReader in tc-dns and writes the TLD prices (WPU-X10)", async () => {
+    const { run, logs, requests } = makeSync(
       { [SG]: FULL_ANSWER },
-      { config: { dnsAccountId: "444455556666", dnsExternalId: "dns-ext-1", syncTlds: true } },
+      {
+        config: { dnsAccountId: "444455556666", dnsExternalId: "dns-ext-1", syncTlds: true },
+        tldPages: [
+          [
+            {
+              Name: "com",
+              RegistrationPrice: { Price: 15, Currency: "USD" },
+              RenewalPrice: { Price: 15, Currency: "USD" },
+              TransferPrice: { Price: 15, Currency: "USD" },
+            },
+          ],
+          [{ Name: "xyz", RegistrationPrice: { Price: 13.5, Currency: "USD" } }],
+        ],
+      },
     );
     const report = await run();
     expect(report.regions[0]).toMatchObject({ ok: true });
-    expect(report.tlds).toEqual({ ok: false, skipped: true, inserted: 0, updated: 0 });
-    expect(logs.find((l) => l.event === "catalog_sync_tlds")).toMatchObject({
-      ok: false,
-      skipped: true,
-      reason: "not_configured",
-    });
+    expect(report.tlds).toMatchObject({ ok: true, skipped: false, inserted: 2 });
+    expect(logs.find((l) => l.event === "catalog_sync_tlds")).toMatchObject({ ok: true });
+    expect(requests.filter((r) => r.region === "us-east-1")).toEqual([
+      {
+        region: "us-east-1",
+        role: "TcDnsReader",
+        account: { awsAccountId: "444455556666", externalId: "dns-ext-1" },
+      },
+    ]);
+    expect(await scalar("select count(*) c from catalog_products")).toBe(STORED_COUNT);
+    expect(await scalar("select count(*) c from tlds")).toBe(2);
+  });
+
+  it("11b. a refused ListPrices is a failed TLD half with a fixed log, and the instance plans are kept", async () => {
+    const { run, logs } = makeSync(
+      { [SG]: FULL_ANSWER },
+      {
+        config: { dnsAccountId: "444455556666", dnsExternalId: "dns-ext-1", syncTlds: true },
+        tldPages: new AwsError({
+          code: "forbidden",
+          retryable: true,
+          awsErrorName: "AccessDenied",
+        }),
+      },
+    );
+    await expect(run()).rejects.toThrow(FIXED);
+    const line = logs.find((l) => l.event === "catalog_sync_tlds");
+    expect(line).toMatchObject({ ok: false, skipped: false });
+    expect(JSON.stringify(logs)).not.toMatch(/444455556666|dns-ext-1/);
     expect(await scalar("select count(*) c from catalog_products")).toBe(STORED_COUNT);
     expect(await scalar("select count(*) c from tlds")).toBe(0);
   });
