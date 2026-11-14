@@ -60,6 +60,8 @@ function world(
     /** The 1-based numbers of the store calls that throw. */
     storeThrowsOn?: number[];
     noticeThrows?: boolean;
+    /** The limiter lets this many calls through in all, counting at the moment of the call (atomic). */
+    allowOnly?: number;
   } = {},
 ) {
   // One list for the repository calls and the Cognito calls, in the order they happen.
@@ -68,6 +70,7 @@ function world(
   const notices: { template: string; data: unknown; dedupeKey: string }[] = [];
   let cutoff: Date | null = null;
   let storeCalls = 0;
+  let limiterCalls = 0;
   const totp = new FakeTotp({ now: () => NOW });
   // The deps see the fake through a wrapper that writes each call into the trace.
   const traced: TotpPort = {
@@ -108,7 +111,9 @@ function world(
   const rateLimits: RateLimitsRepo = {
     consume: async (limits) => {
       trace.push(`rateLimit:${limits.map((l) => l.action).join(",")}`);
-      return over.limited === true
+      limiterCalls += 1;
+      return over.limited === true ||
+        (over.allowOnly !== undefined && limiterCalls > over.allowOnly)
         ? { allowed: false, action: "x", retryAfterSeconds: 9 }
         : { allowed: true };
     },
@@ -290,6 +295,26 @@ describe("confirmTotpCore", () => {
       error: "rate_limited",
     });
     expect(cognito(w.trace)).toEqual([]);
+  });
+});
+
+// The review of the sign-in found check-then-count races. The authenticator actions count BEFORE they ask
+// Cognito (consume first, no refund), so parallel wrong codes cannot get past the limit either.
+describe("confirmTotpCore: parallel wrong codes", () => {
+  it("twenty-five parallel guesses: no more than the limit of the actions reach Cognito", async () => {
+    // start uses one limiter call, then ten are left for the guesses.
+    const w = world({ allowOnly: 11 });
+    const started = await startTotpCore(w.deps);
+    if (!started.ok) throw new Error("start failed");
+    const wrong = totpCodeAt(started.secret, NOW) === "000000" ? "111111" : "000000";
+    const answers = await Promise.all(
+      Array.from({ length: 25 }, () => confirmTotpCore(w.deps, { code: wrong })),
+    );
+    expect(w.totp.calls.filter((c) => c === "verify").length).toBeLessThanOrEqual(10);
+    expect(
+      answers.filter((a) => !a.ok && a.error === "rate_limited").length,
+    ).toBeGreaterThanOrEqual(15);
+    expect(w.profile().totpEnabledAt).toBeNull();
   });
 });
 

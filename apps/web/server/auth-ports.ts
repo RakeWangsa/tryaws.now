@@ -17,7 +17,7 @@ import {
   verifyPhoneOtp,
 } from "@tc/notify";
 import type { SendOtpDeps } from "@tc/notify";
-import { enforceAuthLimit, peekAuthLimit } from "./auth/limits.ts";
+import { enforceAuthLimit, peekAuthLimit, releaseAuthLimit } from "./auth/limits.ts";
 import { clearTotpDrift } from "./totp-drift.ts";
 import type { AuthPorts } from "./auth/ports.ts";
 import { proxyAuthRuntime } from "./proxy-auth.ts";
@@ -60,6 +60,8 @@ export function productionPorts(runtime: WebRuntime, clock: Clock): AuthPorts {
     limit: (action, who, key) => enforceAuthLimit(withTx, key, clock, action, who),
 
     limitPeek: (action, who, key) => peekAuthLimit(withTx, key, clock, action, who),
+
+    limitRelease: (action, who, key, at) => releaseAuthLimit(withTx, key, at, action, who),
 
     async noticeTotpBlocked({ email, ip, key }) {
       // The sign-in knows the address that typed the right password, not the customer: an email only.

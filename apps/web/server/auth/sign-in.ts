@@ -39,16 +39,22 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
     return failure(ctx, "rate_limited", { form, retryAfterSeconds: limit.retryAfterSeconds });
   }
 
-  // WPU-X11 round 2: with a code, first ask whether this address has already used up its wrong codes
-  // (5 in 15 minutes, 20 a day, counted only after a correct password). The provider is not asked then.
-  // The refusal says nothing about codes, so it is no oracle for the password.
+  // WPU-X11 round 2: with a code, the attempt is RESERVED before the provider is asked: one atomic count
+  // against the wrong-code limit (5 in 15 minutes, 20 a day, per address typed). A check followed by a
+  // count would let N parallel guesses all pass the check before any is counted; a reservation cannot be
+  // passed more than `limit` times. When the limit is used up the provider is not asked. The refusal says
+  // nothing about codes, so it is no oracle for the password. The hit is given back below unless the
+  // attempt turns out to be a wrong code after a correct password.
   const step = totpCode !== undefined ? { ...form, totpStep: "1" } : form;
+  const codeWho = { ip: guard.ip, email };
+  let reservedAt: Date | null = null;
   if (totpCode !== undefined) {
-    const used = await ctx.ports.limitPeek("signin_code", { ip: guard.ip, email }, guard.key);
-    if (!used.allowed) {
+    reservedAt = ctx.clock.now();
+    const reserved = await ctx.ports.limit("signin_code", codeWho, guard.key);
+    if (!reserved.allowed) {
       return failure(ctx, "rate_limited", {
         form: step,
-        retryAfterSeconds: used.retryAfterSeconds,
+        retryAfterSeconds: reserved.retryAfterSeconds,
       });
     }
   }
@@ -60,6 +66,13 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
     password,
     ...(totpCode !== undefined ? { totpCode } : {}),
   });
+  // Only a wrong code after a correct password keeps its reservation; every other outcome gives it back
+  // (a right code, a wrong password, the provider unavailable or limiting, another challenge). If the
+  // release cannot be made the hit stays counted: the safe direction.
+  if (reservedAt !== null && !(!answer.ok && answer.kind === "code_denied")) {
+    const given = await ctx.ports.limitRelease("signin_code", codeWho, guard.key, reservedAt);
+    if (!given) logAuth(ctx, "auth.signin", "code_limit_release_failed");
+  }
   if (!answer.ok) {
     logAuth(ctx, "auth.signin", answer.kind);
     switch (answer.kind) {
@@ -68,9 +81,10 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
       case "unavailable":
         return failure(ctx, "unavailable", { form: step });
       case "code_denied": {
-        // The password was right and the code was not. Count it against the wrong-code limit; the fifth
-        // fills it and the customer is told by email. The screen stays the generic answer until then.
-        const blocked = await countWrongCode(ctx, guard, email);
+        // The password was right and the code was not: its reservation stays counted. When that filled
+        // the limit the customer is told by email and the screen says to wait; until then the screen
+        // stays the generic answer.
+        const blocked = await noticeIfBlocked(ctx, guard, email);
         if (blocked !== null) {
           return failure(ctx, "rate_limited", { form: step, retryAfterSeconds: blocked });
         }
@@ -127,25 +141,24 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   });
 }
 /**
- * WPU-X11 round 2. One authenticator code failed after a correct password: count it. When that fills the
- * limit (5 in 15 minutes or 20 a day), queue the email to the address that typed the password and return
- * the seconds to wait; otherwise null. The count and the notice never change what the screen says beyond
- * that wait, and a notice that cannot be queued is dropped (the sign-in is refused either way).
+ * WPU-X11 round 2. One authenticator code failed after a correct password, and its reservation stays
+ * counted. When that filled the limit (5 in 15 minutes or 20 a day), queue the email to the address that
+ * typed the password and return the seconds to wait; otherwise null. The notice never changes what the
+ * screen says beyond that wait, and a notice that cannot be queued is dropped (the sign-in is refused
+ * either way). The email has a dedupe key per address and quarter hour, so parallel failures send one.
  */
-async function countWrongCode(
+async function noticeIfBlocked(
   ctx: ActionContext,
   guard: { ip: string; key: string },
   email: string,
 ): Promise<number | null> {
-  const who = { ip: guard.ip, email };
-  await ctx.ports.limit("signin_code", who, guard.key);
-  const now = await ctx.ports.limitPeek("signin_code", who, guard.key);
-  if (now.allowed) return null;
+  const full = await ctx.ports.limitPeek("signin_code", { ip: guard.ip, email }, guard.key);
+  if (full.allowed) return null;
   logAuth(ctx, "auth.signin", "code_limit");
   try {
     await ctx.ports.noticeTotpBlocked({ email, ip: guard.ip, key: guard.key });
   } catch {
     logAuth(ctx, "auth.signin", "notice_failed");
   }
-  return now.retryAfterSeconds;
+  return full.retryAfterSeconds;
 }

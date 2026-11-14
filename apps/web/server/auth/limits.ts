@@ -1,4 +1,4 @@
-import { consumeRateLimits, peekRateLimits } from "@tc/db";
+import { consumeRateLimits, peekRateLimits, releaseRateLimits } from "@tc/db";
 import type { LimitDecision, LimitRule, Tx } from "@tc/db";
 import { emailSubject, ipSubject } from "@tc/notify";
 import type { Clock } from "@tc/core";
@@ -133,5 +133,29 @@ export async function peekAuthLimit(
       : { allowed: false, retryAfterSeconds: decision.retryAfterSeconds };
   } catch {
     return { allowed: false, retryAfterSeconds: 60 };
+  }
+}
+
+/**
+ * WPU-X11 round 2. Gives back one hit that enforceAuthLimit counted for the same rules, in the window of
+ * `at` (the time of the reservation). The sign-in reserves its attempt BEFORE it calls the provider, so that
+ * parallel guesses cannot all pass a check first, and releases it unless the attempt was a wrong code.
+ * Returns false when it could not (the hit then stays counted: the safe direction, R16).
+ */
+export async function releaseAuthLimit(
+  run: Run,
+  key: string,
+  at: Date,
+  action: AuthAction,
+  who: Who,
+  release: (tx: Tx, rules: readonly LimitRule[], now: Date) => Promise<void> = releaseRateLimits,
+): Promise<boolean> {
+  try {
+    const rules = buildRules(key, action, who);
+    if (rules === null) return false;
+    await run((tx) => release(tx, rules, at));
+    return true;
+  } catch {
+    return false;
   }
 }

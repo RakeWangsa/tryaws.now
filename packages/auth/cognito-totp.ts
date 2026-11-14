@@ -9,9 +9,12 @@ import type { IdpFailure, IdpResult } from "./identity";
 //
 // The calls of this file are AssociateSoftwareToken, VerifySoftwareToken, SetUserMFAPreference, GetUser and
 // GlobalSignOut. Every one takes the access token and NONE takes a ClientId, so none of them needs a
-// SECRET_HASH when CustomerAppClient gets a client secret (WPU-X12 round 4). The one TOTP call that does
-// take a ClientId, RespondToAuthChallenge, is in cognito-identity.ts next to InitiateAuth, behind the same
-// `post` that adds the ClientId. A new Cognito call with a ClientId belongs there, not here.
+// SECRET_HASH although CustomerAppClient has a client secret (WPU-X12 round 4); the API reference pages of
+// GetUser and GlobalSignOut (read 2026-11-14) list AccessToken as their only required parameter, and the
+// access token must carry the scope aws.cognito.signin.user.admin. The one TOTP call that does take a
+// ClientId, RespondToAuthChallenge, is in cognito-identity.ts next to InitiateAuth, behind the same `post`
+// that adds the ClientId, and carries its SECRET_HASH there. A new Cognito call with a ClientId belongs
+// there, not here.
 //
 // VERIFY on staging (JOURNEY WPU-X11): AssociateSoftwareToken with AccessToken answers SecretCode;
 // VerifySoftwareToken answers Status SUCCESS or EnableSoftwareTokenMFAException for a wrong code;

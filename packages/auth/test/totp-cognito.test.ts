@@ -1,8 +1,18 @@
+import { createHmac } from "node:crypto";
 import { inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cognitoIdentityProvider } from "../cognito-identity";
 import { cognitoTotpPort } from "../cognito-totp";
-import { PLANTED, POOL, SIGN_UP, challenge, cognitoError, json, tokens } from "./identity-fixtures";
+import {
+  CLIENTS,
+  CUSTOMER,
+  PLANTED,
+  POOL,
+  challenge,
+  cognitoError,
+  json,
+  tokens,
+} from "./identity-fixtures";
 import type { RecordedCall } from "./identity-fixtures";
 
 // WPU-X11: the customer's authenticator (TOTP). Sign-in answers the SOFTWARE_TOKEN_MFA challenge inside
@@ -12,6 +22,17 @@ import type { RecordedCall } from "./identity-fixtures";
 afterEach(() => vi.restoreAllMocks());
 
 const EMAIL = "rahim@example.test";
+// Independent of the adapter: AWS guide, "Computing secret hash values".
+const hashOf = (username: string): string =>
+  createHmac("sha256", CUSTOMER.clientSecret)
+    .update(username + CUSTOMER.clientId)
+    .digest("base64");
+const challengeFor = (username: string): Response =>
+  json(200, {
+    ChallengeName: "SOFTWARE_TOKEN_MFA",
+    Session: PLANTED.session,
+    ChallengeParameters: { USER_ID_FOR_SRP: username },
+  });
 const SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 
 function sequence(answers: Array<() => Response>) {
@@ -37,7 +58,7 @@ function sequence(answers: Array<() => Response>) {
 describe("signIn with an authenticator code", () => {
   it("answers SOFTWARE_TOKEN_MFA with the code and the session of the same flow, and returns the tokens", async () => {
     const { fetchImpl, calls } = sequence([() => challenge("SOFTWARE_TOKEN_MFA"), () => tokens()]);
-    const provider = cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl);
+    const provider = cognitoIdentityProvider(POOL, CLIENTS, fetchImpl);
     const result = await provider.signIn({
       email: EMAIL,
       password: "pw-123456789",
@@ -58,17 +79,76 @@ describe("signIn with an authenticator code", () => {
       "AWSCognitoIdentityProviderService.InitiateAuth",
       "AWSCognitoIdentityProviderService.RespondToAuthChallenge",
     ]);
+    // WPU-X12 round 4: the customer client has a secret, so the answer carries SECRET_HASH, computed here
+    // independently of the adapter (AWS guide, "Computing secret hash values": base64 of HMAC-SHA256 with
+    // the client secret as key over username + client id). The challenge gave no USER_ID_FOR_SRP, so the
+    // username is the address typed at sign-in.
     expect(calls[1]!.body).toEqual({
-      ClientId: POOL.clientId,
+      ClientId: CUSTOMER.clientId,
       ChallengeName: "SOFTWARE_TOKEN_MFA",
       Session: PLANTED.session,
-      ChallengeResponses: { USERNAME: EMAIL, SOFTWARE_TOKEN_MFA_CODE: "123456" },
+      ChallengeResponses: {
+        USERNAME: EMAIL,
+        SOFTWARE_TOKEN_MFA_CODE: "123456",
+        SECRET_HASH: hashOf(EMAIL),
+      },
     });
+  });
+
+  it("answers with the username Cognito named in the challenge (USER_ID_FOR_SRP): the same USERNAME and the hash over it, not over the address", async () => {
+    const INTERNAL = "9b8f0e0e-1111-4222-8333-444455556666";
+    const { fetchImpl, calls } = sequence([() => challengeFor(INTERNAL), () => tokens()]);
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
+      email: EMAIL,
+      password: "pw-123456789",
+      totpCode: "123456",
+    });
+    expect(result).toMatchObject({ ok: true, value: { kind: "tokens", totpVerified: true } });
+    const answer = calls[1]!.body["ChallengeResponses"] as Record<string, string>;
+    expect(answer["USERNAME"]).toBe(INTERNAL);
+    expect(answer["SECRET_HASH"]).toBe(hashOf(INTERNAL));
+    expect(answer["SECRET_HASH"]).not.toBe(hashOf(EMAIL));
+    // The first call (InitiateAuth) still uses the address and its own hash.
+    expect((calls[0]!.body["AuthParameters"] as Record<string, string>)["SECRET_HASH"]).toBe(
+      hashOf(EMAIL),
+    );
+  });
+
+  it("ignores a USER_ID_FOR_SRP that is not a plain username (too long, odd characters, not text) and falls back to the address", async () => {
+    for (const odd of ["x".repeat(300), "has space", 'quote"', 42, "", "a@b\nc"]) {
+      const { fetchImpl, calls } = sequence([
+        () =>
+          json(200, {
+            ChallengeName: "SOFTWARE_TOKEN_MFA",
+            Session: PLANTED.session,
+            ChallengeParameters: { USER_ID_FOR_SRP: odd },
+          }),
+        () => tokens(),
+      ]);
+      await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
+        email: EMAIL,
+        password: "pw-123456789",
+        totpCode: "123456",
+      });
+      const answer = calls[1]!.body["ChallengeResponses"] as Record<string, string>;
+      expect(answer["USERNAME"], String(odd)).toBe(EMAIL);
+      expect(answer["SECRET_HASH"]).toBe(hashOf(EMAIL));
+    }
+  });
+
+  it("the secret of the client is in no request body and in no answer", async () => {
+    const { fetchImpl, calls } = sequence([() => challenge("SOFTWARE_TOKEN_MFA"), () => tokens()]);
+    await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
+      email: EMAIL,
+      password: "pw-123456789",
+      totpCode: "123456",
+    });
+    for (const call of calls) expect(call.rawBody).not.toContain(CUSTOMER.clientSecret);
   });
 
   it("without a code the challenge is reported and no second call is made", async () => {
     const { fetchImpl, calls } = sequence([() => challenge("SOFTWARE_TOKEN_MFA")]);
-    const result = await cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl).signIn({
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
       email: EMAIL,
       password: "pw-123456789",
     });
@@ -83,7 +163,7 @@ describe("signIn with an authenticator code", () => {
         () => challenge("SOFTWARE_TOKEN_MFA"),
         () => cognitoError(type),
       ]);
-      const result = await cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl).signIn({
+      const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
         email: EMAIL,
         password: "pw-123456789",
         totpCode: "000000",
@@ -94,7 +174,7 @@ describe("signIn with an authenticator code", () => {
 
   it("a wrong password stays denied, and no code is sent", async () => {
     const { fetchImpl, calls } = sequence([() => cognitoError("NotAuthorizedException")]);
-    const result = await cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl).signIn({
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
       email: EMAIL,
       password: "wrong-wrong-wrong",
       totpCode: "123456",
@@ -105,7 +185,7 @@ describe("signIn with an authenticator code", () => {
 
   it("tokens straight from the password step carry no totpVerified (the account has no authenticator, or it was switched off outside the app)", async () => {
     const { fetchImpl } = sequence([() => tokens()]);
-    const result = await cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl).signIn({
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
       email: EMAIL,
       password: "pw-123456789",
       totpCode: "123456",
@@ -116,7 +196,7 @@ describe("signIn with an authenticator code", () => {
 
   it("a code that is not six digits after a right password is code_denied and sends no second call", async () => {
     const { fetchImpl, calls } = sequence([() => challenge("SOFTWARE_TOKEN_MFA")]);
-    const result = await cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl).signIn({
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
       email: EMAIL,
       password: "pw-123456789",
       totpCode: "12ab",
@@ -128,7 +208,7 @@ describe("signIn with an authenticator code", () => {
   it("a limit is rate_limited; another challenge after the code, or no tokens, is unavailable (R16)", async () => {
     const run = async (second: () => Response) => {
       const { fetchImpl } = sequence([() => challenge("SOFTWARE_TOKEN_MFA"), second]);
-      return cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl).signIn({
+      return cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
         email: EMAIL,
         password: "pw-123456789",
         totpCode: "123456",
@@ -148,7 +228,7 @@ describe("signIn with an authenticator code", () => {
 
   it("a code is never sent for another challenge", async () => {
     const { fetchImpl, calls } = sequence([() => challenge("NEW_PASSWORD_REQUIRED")]);
-    const result = await cognitoIdentityProvider(POOL, SIGN_UP, fetchImpl).signIn({
+    const result = await cognitoIdentityProvider(POOL, CLIENTS, fetchImpl).signIn({
       email: EMAIL,
       password: "pw-123456789",
       totpCode: "123456",

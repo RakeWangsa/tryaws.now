@@ -161,6 +161,10 @@ describe("signInCore with an authenticator (TOTP)", () => {
     expect(h.signIns.at(-1)).toEqual({ customerId: customer.customerId, totpVerified: false });
   });
 
+  // The counters of the wrong-code rules (5 in 15 minutes, 20 a day), one number per rule and window.
+  const codeCounts = () =>
+    [...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code")).map(([, n]) => n);
+
   const wrongCode = () => {
     const right = totpCodeAt(SECRET, NOW);
     return right === "000000" ? "111111" : "000000";
@@ -204,25 +208,81 @@ describe("signInCore with an authenticator (TOTP)", () => {
       expect(out.state).toMatchObject({ status: "error", code: "sign_in_failed" });
     }
     expect(h.notices).toEqual([]);
-    const counted = [...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code"));
-    expect(counted).toEqual([]);
+    // The attempt is reserved before the provider is asked and given back when it was not a wrong code.
+    expect(codeCounts().every((n) => n === 0)).toBe(true);
   });
 
   it("a successful code sign-in leaves the wrong-code counters where they were", async () => {
     await signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() });
-    const before = [...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code"));
-    expect(before.length).toBeGreaterThan(0);
+    const before = codeCounts();
+    expect(before.some((n) => n > 0)).toBe(true);
     const ok = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
     expect(ok.state).toMatchObject({ status: "done" });
-    expect([...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code"))).toEqual(before);
+    expect(codeCounts()).toEqual(before);
+  });
+
+  it("every outcome but a wrong code gives the reservation back: the provider unavailable, its own rate limit, another challenge, a suspended customer", async () => {
+    const reserved = async (arrange: () => void, restore: () => void) => {
+      arrange();
+      await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+      restore();
+    };
+    const original = h.idp.signIn;
+    await reserved(
+      () => (h.state.idpDown = true),
+      () => (h.state.idpDown = false),
+    );
+    for (const answer of [
+      { ok: false, kind: "rate_limited" },
+      { ok: false, kind: "unavailable" },
+      { ok: true, value: { kind: "challenge", challenge: "other" } },
+    ] as const) {
+      await reserved(
+        () => (h.idp.signIn = async () => answer as never),
+        () => (h.idp.signIn = original),
+      );
+    }
+    customer.suspended = true;
+    await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+    expect(codeCounts().every((n) => n === 0)).toBe(true);
+  });
+
+  // The review: peek-then-count lets N parallel guesses all pass the check before any is counted. The attempt
+  // is reserved up front (one atomic count), so no more than the limit ever reaches the provider.
+  it("parallel wrong codes: no more than the limit reach the provider, whatever the interleaving", async () => {
+    const attempts = await Promise.all(
+      Array.from({ length: 12 }, () => signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() })),
+    );
+    const reachedProvider = h.events.filter((e) => e === "idp.signIn").length;
+    expect(reachedProvider).toBeLessThanOrEqual(5);
+    // The rest were refused at the door, with the plain rate-limit answer.
+    const limited = attempts.filter(
+      (a) => a.state.status === "error" && a.state.code === "rate_limited",
+    );
+    expect(limited.length).toBeGreaterThanOrEqual(12 - 5);
+    expect(attempts.every((a) => a.effects.setCookies.length === 0)).toBe(true);
+    // One notice for the window, not one per failure.
+    expect(h.notices).toHaveLength(1);
+  });
+
+  it("parallel attempts with the RIGHT code and wrong ones: the right one is never counted against the others", async () => {
+    const right = totpCodeAt(SECRET, NOW);
+    const out = await Promise.all([
+      signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() }),
+      signInCore(h.ctx(), { ...FORM, totpCode: right }),
+      signInCore(h.ctx(), { ...FORM, totpCode: wrongCode() }),
+    ]);
+    expect(out.filter((o) => o.state.status === "done")).toHaveLength(1);
+    // Two wrong codes stay counted, the right one was given back.
+    expect(codeCounts().reduce((a, b) => Math.max(a, b), 0)).toBe(2);
   });
 
   it("a replay of an accepted code is a wrong code: it counts", async () => {
     const code = totpCodeAt(SECRET, NOW);
     await signInCore(h.ctx(), { ...FORM, totpCode: code });
+    expect(codeCounts().every((n) => n === 0)).toBe(true);
     await signInCore(h.ctx(), { ...FORM, totpCode: code });
-    const counted = [...h.counts.entries()].filter(([k]) => k.includes("auth.signin_code"));
-    expect(counted.length).toBeGreaterThan(0);
+    expect(codeCounts().some((n) => n > 0)).toBe(true);
   });
 
   it("a notice that cannot be queued does not change the answer", async () => {

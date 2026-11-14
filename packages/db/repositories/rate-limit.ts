@@ -173,6 +173,40 @@ export async function peekRateLimits(
   return { allowed: true };
 }
 
+// WPU-X11 round 2. Gives back one hit that consumeRateLimits counted, for the rules and the window of `now`:
+// the sign-in reserves an attempt before it calls the provider (so parallel guesses cannot all pass a check
+// first) and releases it when the attempt was not a wrong code. The count never goes below zero, and a rule
+// whose window has no row changes nothing. Same rules and the same refusals of bad input as consume (R16);
+// web_rw may update `count`, which is all this does.
+export async function releaseRateLimits(
+  tx: Tx,
+  rules: readonly LimitRule[],
+  now: Date,
+): Promise<void> {
+  if (!Array.isArray(rules) || rules.length === 0) {
+    throw new TypeError("rate limit: no rules");
+  }
+  const prepared = rules.map((rule) => {
+    if (rule.kind !== "ip" && rule.kind !== "phone" && rule.kind !== "email") {
+      throw new TypeError("rate limit: only ip, phone and email rules are accepted");
+    }
+    if (!Number.isInteger(rule.limit) || rule.limit < 1 || rule.limit > MAX_LIMIT) {
+      throw new TypeError("rate limit: limit must be an integer from 1 to 10000");
+    }
+    return {
+      key: limitKey(rule.kind, rule.subject, rule.action, rule.windowSeconds),
+      windowStart: windowStartOf(now, rule.windowSeconds),
+    };
+  });
+  // The same ascending key order as consume, so two callers never lock the same rows the other way round.
+  prepared.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  for (const { key, windowStart } of prepared) {
+    await tx.execute(
+      sql`update rate_limits set count = count - 1 where scope_key = ${key} and window_start = ${windowStart.toISOString()}::timestamptz and count > 0`,
+    );
+  }
+}
+
 // WP5-T4: the scheduler's purge. Deletes the windows that started before `before` and returns how many
 // there were. worker_rw may read window_start and delete, and nothing else on this table. The cutoff
 // comes from the injected Clock; a count only grows inside a window, so a window that started before

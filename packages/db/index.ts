@@ -456,6 +456,7 @@ export {
   limitKey,
   peekRateLimits,
   purgeRateLimits,
+  releaseRateLimits,
   windowStartOf,
 } from "./repositories/rate-limit";
 export type { LimitDecision, LimitRule, LimitSubjectKind } from "./repositories/rate-limit";

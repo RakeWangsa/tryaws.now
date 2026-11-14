@@ -5,7 +5,7 @@ import { limitKey } from "@tc/db";
 import type { LimitDecision, LimitRule } from "@tc/db";
 import { InMemorySmsProvider } from "@tc/notify";
 import type { OtpSent, OtpVerified } from "@tc/notify";
-import { enforceAuthLimit, peekAuthLimit } from "../auth/limits.ts";
+import { enforceAuthLimit, peekAuthLimit, releaseAuthLimit } from "../auth/limits.ts";
 import { actionContext } from "../auth/context.ts";
 import type { ActionContext } from "../auth/context.ts";
 import type { AuthPorts } from "../auth/ports.ts";
@@ -114,6 +114,7 @@ export function makeHarness(): Harness {
   const audits: Harness["audits"] = [];
   const signIns: Harness["signIns"] = [];
   const notices: Harness["notices"] = [];
+  const noticedKeys = new Set<string>();
   const registered: unknown[] = [];
   const rules: LimitRule[][] = [];
   const counts = new Map<string, number>();
@@ -176,6 +177,17 @@ export function makeHarness(): Harness {
     return { allowed: true };
   };
 
+  // Like releaseRateLimits: one hit back for each rule in the window of `at`, never below zero.
+  const release = async (_tx: unknown, given: readonly LimitRule[], at: Date): Promise<void> => {
+    for (const rule of given) {
+      const key = `${limitKey(rule.kind, rule.subject, rule.action, rule.windowSeconds)}@${Math.floor(
+        at.getTime() / (rule.windowSeconds * 1000),
+      )}`;
+      const seen = counts.get(key) ?? 0;
+      if (seen > 0) counts.set(key, seen - 1);
+    }
+  };
+
   const otpChallenges = new Map<string, { code: string; attempts: number; key: string }>();
   let nextCustomer = 1;
   let sendsDone = 0;
@@ -199,9 +211,17 @@ export function makeHarness(): Harness {
       events.push("limitPeek");
       return peekAuthLimit((fn) => fn({} as never), key, clock, action, who, peek as never);
     },
+    async limitRelease(action, who, key, at) {
+      events.push("limitRelease");
+      return releaseAuthLimit((fn) => fn({} as never), key, at, action, who, release as never);
+    },
     async noticeTotpBlocked(input) {
       events.push("notice");
       if (state.noticeFails) throw new Error("queue down");
+      // The queue drops a second row with the same dedupe key (one per address and quarter hour).
+      const dedupe = `${input.email}:${Math.floor(clock.now().getTime() / 900_000)}`;
+      if (noticedKeys.has(dedupe)) return;
+      noticedKeys.add(dedupe);
       notices.push({ email: input.email, ip: input.ip, key: input.key });
     },
     async register(input): Promise<AccountRegistered> {

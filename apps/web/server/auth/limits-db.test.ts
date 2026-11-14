@@ -1,7 +1,7 @@
 import { runTransaction, useTempDatabase } from "@tc/db/testing";
 import type { Tx } from "@tc/db";
 import { describe, expect, it } from "vitest";
-import { enforceAuthLimit, peekAuthLimit } from "./limits.ts";
+import { enforceAuthLimit, peekAuthLimit, releaseAuthLimit } from "./limits.ts";
 
 // NEEDS THE DATABASE (pnpm db:up && pnpm db:migrate): the real limiter on rate_limits, as role web_rw.
 const t = useTempDatabase();
@@ -93,6 +93,25 @@ describe("enforceAuthLimit against the database", () => {
     const out = await peekAuthLimit(run, KEY, at, "signin_code", mine);
     expect(out.allowed).toBe(false);
     if (!out.allowed) expect(out.retryAfterSeconds).toBeGreaterThan(900);
+  });
+
+  // The review of the sign-in: the attempt is reserved with one atomic count before the provider is asked.
+  it("signin_code: twelve parallel reservations, five get through; giving one back lets one more in", async () => {
+    const mine = who("198.51.100.30", "race@x.test");
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () => enforceAuthLimit(run, KEY, clock, "signin_code", mine)),
+    );
+    expect(results.filter((r) => r.allowed)).toHaveLength(5);
+    expect((await peekAuthLimit(run, KEY, clock, "signin_code", mine)).allowed).toBe(false);
+
+    expect(await releaseAuthLimit(run, KEY, clock.now(), "signin_code", mine)).toBe(true);
+    expect((await peekAuthLimit(run, KEY, clock, "signin_code", mine)).allowed).toBe(true);
+    expect((await enforceAuthLimit(run, KEY, clock, "signin_code", mine)).allowed).toBe(true);
+    expect((await enforceAuthLimit(run, KEY, clock, "signin_code", mine)).allowed).toBe(false);
+    // A release that cannot be made says so and changes nothing.
+    expect(
+      await releaseAuthLimit(run, KEY, clock.now(), "signin_code", { ...mine, ip: "nope" }),
+    ).toBe(false);
   });
 
   it("the key table holds neither the address nor the email", async () => {
