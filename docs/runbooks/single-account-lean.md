@@ -72,6 +72,10 @@ Customer Lightsail resources run in the same account, so they appear on the same
 - Fewer WAF managed groups. Common rules and the rate rules stay; known-bad-input and reputation groups of `full` are absent.
 - A shared account: blast radius as in the ruling above.
 
+## When an organization SCP denies budgets
+
+On 2026-11-14 the staging deploy failed at `MonthlyBudget`: a service control policy of the AWS Organization (not one of `infra/org/scps.yaml`) denies `budgets:ModifyBudget` to this member account. The management account is never touched from this repository. So the GitHub variable `TC_BUDGET_ALARM` is `off` in the environments `staging` and `production`, and the stage budget is left out (`infra/lib/lean.ts` parseBudgetAlarm; unset or `on` keeps it). The budget alert then lives in the management account: AWS Billing and Cost Management, Budgets, a monthly cost budget filtered to this linked account (limit 100 USD, alerts at 50, 80 and 100 USD actual) to the alarm e-mail address. When the SCP allows budgets again, set the variable to `on` (or delete it) and redeploy.
+
 ## At a budget alarm
 
 On staging, the first step at ANY staging alarm (25, 40 or 50 USD) is to check that staging is not left running, and to remove it if no test needs it: `npx sst remove --stage staging` or the CI workflow "remove-staging" ([staging-on-demand.md](staging-on-demand.md)). The alarm mail names the command in the budget name.

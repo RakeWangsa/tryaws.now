@@ -8,6 +8,7 @@ import {
   STAGE_SIZES,
   budgetOf,
   logRetentionOf,
+  parseBudgetAlarm,
   parseStageSize,
   sizing,
 } from "../../infra/lib/lean.ts";
@@ -218,7 +219,7 @@ describe("WPU-B8: the stacks read config.size", () => {
   it("infra/app.ts calls budget only for lean, after the alarm topic exists", () => {
     expect(sstConfig).toContain('await import("./stacks/budget")');
     expect(sstConfig).toMatch(
-      /const alarm = alarms\([^)]*\);[\s\S]*if \(config\.size === "lean"\) \{ budget\(config, alarm\.topic\); \}/,
+      /const alarm = alarms\([^)]*\);[\s\S]*if \(config\.size === "lean" && config\.budgetAlarm\) \{ budget\(config, alarm\.topic\); \}/,
     );
   });
 
@@ -259,6 +260,49 @@ describe("WPU-B8: the new files hold no account id and no secret", () => {
       expect(text, file).not.toMatch(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);
       expect(text, file).not.toMatch(/(secret|token|password)\s*[:=]\s*["'][^"']{8,}["']/i);
       expect(text, file).not.toMatch(/arn:aws:[a-z0-9-]*:[a-z0-9-]*:[0-9]{12}/);
+    }
+  });
+});
+
+// 2026-11-14: an SCP of the organization denies budgets:ModifyBudget to the member account (deploy-staging
+// run 43571996920). TC_BUDGET_ALARM=off leaves the stage budget out; the alert lives in the management account.
+describe("TC_BUDGET_ALARM: the budget alarm switch (fail closed)", () => {
+  it("is on when unset, empty or on, off only for off", () => {
+    expect(parseBudgetAlarm(undefined)).toBe(true);
+    expect(parseBudgetAlarm("")).toBe(true);
+    expect(parseBudgetAlarm("on")).toBe(true);
+    expect(parseBudgetAlarm("off")).toBe(false);
+  });
+
+  it("refuses anything else", () => {
+    for (const bad of ["OFF", "false", "0", " off", "no"]) {
+      expect(() => parseBudgetAlarm(bad), bad).toThrow(InfraConfigError);
+    }
+  });
+
+  it("readStageConfig reads it", () => {
+    expect(readStageConfig("staging", env).budgetAlarm).toBe(true);
+    expect(readStageConfig("staging", { ...env, TC_BUDGET_ALARM: "off" }).budgetAlarm).toBe(false);
+    expect(() => readStageConfig("staging", { ...env, TC_BUDGET_ALARM: "nope" })).toThrow(
+      /TC_BUDGET_ALARM/,
+    );
+  });
+
+  it("app.ts creates the budget only on a lean stage with the switch on", () => {
+    expect(source("infra/app.ts")).toContain('if (config.size === "lean" && config.budgetAlarm) {');
+  });
+
+  it("every workflow that runs sst with TC_STAGE_SIZE also passes TC_BUDGET_ALARM", () => {
+    for (const file of [
+      ".github/workflows/deploy-staging.yml",
+      ".github/workflows/deploy-production.yml",
+      ".github/workflows/remove-staging.yml",
+    ]) {
+      const text = raw(file);
+      const sizes = text.match(/TC_STAGE_SIZE: \$\{\{ vars\.TC_STAGE_SIZE \}\}/g) ?? [];
+      const switches = text.match(/TC_BUDGET_ALARM: \$\{\{ vars\.TC_BUDGET_ALARM \}\}/g) ?? [];
+      expect(sizes.length, file).toBeGreaterThan(0);
+      expect(switches.length, file).toBe(sizes.length);
     }
   });
 });

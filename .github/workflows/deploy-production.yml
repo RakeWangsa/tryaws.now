@@ -124,6 +124,7 @@ jobs:
       TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
       TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
       TC_STAGE_SIZE: ${{ vars.TC_STAGE_SIZE }}
+      TC_BUDGET_ALARM: ${{ vars.TC_BUDGET_ALARM }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -179,6 +180,7 @@ jobs:
       TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
       TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
       TC_STAGE_SIZE: ${{ vars.TC_STAGE_SIZE }}
+      TC_BUDGET_ALARM: ${{ vars.TC_BUDGET_ALARM }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

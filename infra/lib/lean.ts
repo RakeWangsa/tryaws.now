@@ -26,6 +26,19 @@ export function parseStageSize(raw: string | undefined): StageSize {
   throw new InfraConfigError(`${STAGE_SIZE_VARIABLE} must be one of ${STAGE_SIZES.join(", ")}`);
 }
 
+// The monthly budget alarm of a lean stage (WPU-B8) can be switched off. Reason (2026-11-14): a service
+// control policy of the AWS Organization denies budgets:ModifyBudget to this member account (deploy-staging
+// run 43571996920), and the management account is never touched from here. The budget alert then lives in
+// the management account (docs/runbooks/single-account-lean.md). Fail closed (R16): unset or empty is
+// "on"; only "on" and "off" are accepted.
+export const BUDGET_ALARM_VARIABLE = "TC_BUDGET_ALARM";
+
+export function parseBudgetAlarm(raw: string | undefined): boolean {
+  if (raw === undefined || raw === "" || raw === "on") return true;
+  if (raw === "off") return false;
+  throw new InfraConfigError(`${BUDGET_ALARM_VARIABLE} must be on or off`);
+}
+
 export interface ManagedGroup {
   readonly name: string;
   readonly priority: number;

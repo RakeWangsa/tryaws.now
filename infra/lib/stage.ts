@@ -5,7 +5,13 @@
 // No account id, domain, address or secret value is written in this repository. Everything that is
 // specific to an account comes from environment variables of the deploy shell or of CI (names below).
 
-import { parseStageSize, STAGE_SIZE_VARIABLE, type StageSize } from "./lean";
+import {
+  BUDGET_ALARM_VARIABLE,
+  parseBudgetAlarm,
+  parseStageSize,
+  STAGE_SIZE_VARIABLE,
+  type StageSize,
+} from "./lean";
 
 export type StageKind = "production" | "staging" | "personal";
 export type TcStage = "staging" | "production";
@@ -132,6 +138,8 @@ export interface StageConfig {
   readonly vpcCidr: string | null;
   // WPU-B8: "lean" (one account, about 50 USD a month) or "full" (default). Read from TC_STAGE_SIZE.
   readonly size: StageSize;
+  // The monthly budget alarm of a lean stage; TC_BUDGET_ALARM=off turns it off (infra/lib/lean.ts).
+  readonly budgetAlarm: boolean;
   // WPU-Z10: the Cognito user pools that a removal of staging kept (removalRules) and that this deploy
   // adopts again (Pulumi `import`, infra/stacks/auth.ts). Null: the deploy creates the pool. Staging only.
   readonly userPoolIds: UserPoolIds;
@@ -321,6 +329,7 @@ export function readStageConfig(stage: string, env: Env): StageConfig {
     probeSources: probeRaw === undefined ? [] : parseProbeSourcesConfig(probeRaw),
     vpcCidr: vpcRaw === undefined ? null : parseVpcCidrConfig(vpcRaw),
     size: parseStageSize(env[STAGE_SIZE_VARIABLE]),
+    budgetAlarm: parseBudgetAlarm(env[BUDGET_ALARM_VARIABLE]),
     userPoolIds: readUserPoolIds(kind, env),
   };
 }

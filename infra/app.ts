@@ -106,8 +106,9 @@ export async function runApp(env: Env) {
     workers: fns,
   });
   const alarm = alarms(config, queues, fns, apps);
-  // WPU-B8: the monthly budget alarm exists only on a lean stage; it needs the alarm topic.
-  if (config.size === "lean") {
+  // WPU-B8: the monthly budget alarm exists only on a lean stage; it needs the alarm topic. TC_BUDGET_ALARM=off
+  // leaves it out where an SCP of the organization denies budgets (infra/lib/lean.ts parseBudgetAlarm).
+  if (config.size === "lean" && config.budgetAlarm) {
     budget(config, alarm.topic);
   }
 

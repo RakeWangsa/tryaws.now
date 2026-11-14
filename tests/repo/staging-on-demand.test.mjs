@@ -494,9 +494,11 @@ describe("requirements 5, 9 and 10: budget.ts", () => {
     );
   });
 
-  it("app.ts still builds the budget on every lean stage, production included", () => {
+  // TC_BUDGET_ALARM=off (2026-11-14, an organization SCP denies budgets) is the only way to leave it out;
+  // unset, it is on (infra/lib/lean.ts parseBudgetAlarm).
+  it("app.ts still builds the budget on every lean stage, production included, unless switched off", () => {
     expect(code("infra/app.ts")).toContain(
-      'if (config.size === "lean") { budget(config, alarm.topic); }',
+      'if (config.size === "lean" && config.budgetAlarm) { budget(config, alarm.topic); }',
     );
   });
 });

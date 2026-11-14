@@ -58,6 +58,7 @@ jobs:
       TC_PROBE_SOURCES: ${{ vars.TC_PROBE_SOURCES }}
       TC_VPC_CIDR: ${{ vars.TC_VPC_CIDR }}
       TC_STAGE_SIZE: ${{ vars.TC_STAGE_SIZE }}
+      TC_BUDGET_ALARM: ${{ vars.TC_BUDGET_ALARM }}
       TC_COGNITO_CUSTOMER_POOL_ID: ${{ vars.TC_COGNITO_CUSTOMER_POOL_ID }}
       TC_COGNITO_ADMIN_POOL_ID: ${{ vars.TC_COGNITO_ADMIN_POOL_ID }}
     steps:
