@@ -1,5 +1,6 @@
 import type { Locale } from "@tc/core";
 import { renderCognitoMessage, type CognitoMessageKind } from "@tc/notify";
+import type { GuardConfig } from "./config";
 import { fromSignUpClient, type CallerContext } from "./guard";
 
 // The Cognito "custom message" trigger of both pools (3.2, 6, 16.14). Cognito calls it before it sends
@@ -55,16 +56,34 @@ export function localeOf(event: CustomMessageEvent): Locale {
 }
 
 // WPU-X12: the codes of a self sign-up and its resend go out only when the call came through the
-// server-only sign-up client (guard.ts); a throw makes Cognito send nothing.
+// server-only sign-up client (guard.ts), on either pool (the admin pool has no self sign-up). Round 3:
+// a password-reset code of the CUSTOMER pool likewise; the admin pool shares this function and its
+// reset keeps working through the admin client. A throw makes Cognito send nothing.
 const SIGN_UP_SOURCES: ReadonlySet<string> = new Set([
   "CustomMessage_SignUp",
   "CustomMessage_ResendCode",
 ]);
+const RESET_SOURCE = "CustomMessage_ForgotPassword";
 
-/** `signUpClientId` is the configured CustomerSignUpClient id, or null when it is not configured. */
+/** The sources whose decision needs the configuration (index.ts loads it only for these). */
+export const GUARDED_SOURCES: ReadonlySet<string> = new Set([...SIGN_UP_SOURCES, RESET_SOURCE]);
+
+// True when the code may go out. Without a configuration a reset is refused on every pool: the pool
+// cannot be told apart then, and a missing configuration must not open the customer pool (R16).
+function allowedFor(event: CustomMessageEvent, config: GuardConfig | null): boolean {
+  const fromServer = fromSignUpClient(event, config?.signUpClientId ?? null);
+  if (SIGN_UP_SOURCES.has(event.triggerSource)) return fromServer;
+  if (event.triggerSource === RESET_SOURCE) {
+    if (config === null) return false;
+    return event.userPoolId === config.customerPoolId ? fromServer : true;
+  }
+  return true;
+}
+
+/** `config` is the configuration of config.ts, or null when it could not be read. */
 export function customMessage(
   event: CustomMessageEvent,
-  signUpClientId: string | null,
+  config: GuardConfig | null,
 ): CustomMessageEvent {
   const fail = (): never => {
     throw new Error("cognito-messages: could not render the message");
@@ -80,7 +99,7 @@ export function customMessage(
   ) {
     return fail();
   }
-  if (SIGN_UP_SOURCES.has(event.triggerSource) && !fromSignUpClient(event, signUpClientId)) {
+  if (!allowedFor(event, config)) {
     throw new Error("cognito-messages: the code is sent only for the sign-up client");
   }
   const kind = Object.hasOwn(KIND_OF, event.triggerSource)

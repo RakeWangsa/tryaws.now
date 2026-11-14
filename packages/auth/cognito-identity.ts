@@ -10,10 +10,11 @@ import type {
 
 // The customer pool's public, unsigned operations by plain fetch (open points 1 and 2): no AWS SDK,
 // no credentials, no SigV4, no SRP (R1, R3, R17). Two app clients (WPU-X12):
-// - the token-issuing customer client (no secret, writeAttributes ["name"]) for sign-in, the password
-//   reset and the token revocation, none of which writes an attribute;
+// - the token-issuing customer client (no secret, writeAttributes ["name"]) for sign-in and the token
+//   revocation (a refresh token belongs to the client that issued it);
 // - the server-only sign-up client (with a secret, the only client that may write email, name and
-//   locale) for SignUp, ConfirmSignUp and ResendConfirmationCode, each with its SecretHash. The secret
+//   locale) for SignUp, ConfirmSignUp, ResendConfirmationCode and (round 3) ForgotPassword and
+//   ConfirmForgotPassword, each with its SecretHash. The secret
 //   is used only inside secretHash and is never sent, logged or returned; Node's own HMAC, so no new
 //   dependency (R17). Every
 // answer is parsed here and never logged or returned: a body or an error text can carry a password, a
@@ -255,12 +256,20 @@ export function cognitoIdentityProvider(
       return f !== undefined && !f.ok ? f : unavailable();
     },
 
-    forgotPassword: (email) => simple("ForgotPassword", { Username: email }, SEND),
+    // WPU-X12 round 3: the reset goes through the sign-up client too, so the custom-message trigger can
+    // refuse a customer reset code asked for through the public client (functions/cognito-messages).
+    forgotPassword: (email) =>
+      simple("ForgotPassword", { ...viaSignUpClient(email), Username: email }, SEND),
 
     confirmForgotPassword: (i) =>
       simple(
         "ConfirmForgotPassword",
-        { Username: i.email, ConfirmationCode: i.code, Password: i.newPassword },
+        {
+          ...viaSignUpClient(i.email),
+          Username: i.email,
+          ConfirmationCode: i.code,
+          Password: i.newPassword,
+        },
         CONFIRM_RESET,
       ),
 

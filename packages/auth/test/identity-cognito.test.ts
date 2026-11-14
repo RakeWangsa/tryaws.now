@@ -74,7 +74,15 @@ async function run(op: string, answer: () => Response | Promise<Response>) {
 
 // WPU-X12: the three operations that may write attributes or confirm an address go through the
 // server-only sign-up client with a SecretHash; everything else stays on the token-issuing client.
-const SIGN_UP_OPS = ["signUp", "confirmSignUp", "resendConfirmationCode"];
+// Round 3 (security review finding 3): the password reset too, so the public client cannot have a reset
+// code sent (the custom-message trigger refuses a customer reset from any other client).
+const SIGN_UP_OPS = [
+  "signUp",
+  "confirmSignUp",
+  "resendConfirmationCode",
+  "forgotPassword",
+  "confirmForgotPassword",
+];
 const clientOf = (op: string) => (SIGN_UP_OPS.includes(op) ? SIGN_UP.clientId : POOL.clientId);
 // AWS developer guide, "Computing secret hash values": Base64(HMAC_SHA256(secret, username + clientId)).
 const EXPECTED_HASH = createHmac("sha256", SIGN_UP.clientSecret)
@@ -188,11 +196,13 @@ describe("the wire", () => {
       AuthParameters: { USERNAME: EMAIL, PASSWORD: NEW_PASSWORD },
     });
     expect((await run("forgotPassword", emptyOk)).calls[0]!.body).toEqual({
-      ClientId: POOL.clientId,
+      ClientId: SIGN_UP.clientId,
+      SecretHash: EXPECTED_HASH,
       Username: EMAIL,
     });
     expect((await run("confirmForgotPassword", emptyOk)).calls[0]!.body).toEqual({
-      ClientId: POOL.clientId,
+      ClientId: SIGN_UP.clientId,
+      SecretHash: EXPECTED_HASH,
       Username: EMAIL,
       ConfirmationCode: "123456",
       Password: NEW_PASSWORD,

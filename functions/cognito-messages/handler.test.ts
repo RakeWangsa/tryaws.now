@@ -1,16 +1,14 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { handler } from "./index";
+import { expect, it } from "vitest";
+import * as entry from "./index";
 import { localeOf, type CustomMessageEvent } from "./handler";
 
-// WPU-X12: the sign-up and resend codes go out only for the sign-up client (guard.test.ts); these events
-// come from it, and the stack's variable names it.
+// WPU-X12: the sign-up, resend and customer reset codes go out only for the sign-up client
+// (guard.test.ts); these events come from it, on the customer pool of the configuration below.
 const SIGN_UP_ID = "1example23456789";
-beforeEach(() => {
-  vi.stubEnv("SIGN_UP_CLIENT_ID", SIGN_UP_ID);
-});
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
+const { handler } = entry.makeHandlers(async () => ({
+  signUpClientId: SIGN_UP_ID,
+  customerPoolId: "ap-southeast-1_Cust0mer1",
+}));
 
 const eventOf = (
   triggerSource: string,
@@ -23,7 +21,7 @@ const eventOf = (
 ): CustomMessageEvent => ({
   version: "1",
   region: "ap-southeast-1",
-  userPoolId: "pool",
+  userPoolId: "ap-southeast-1_Cust0mer1",
   userName: "rahim.uddin@example.test",
   triggerSource,
   callerContext: { awsSdkVersion: "x", clientId: SIGN_UP_ID },
@@ -36,8 +34,9 @@ const eventOf = (
   response: { smsMessage: "", emailMessage: "", emailSubject: "" },
 });
 
-it("exports the handler that the stack wires", () => {
-  expect(typeof handler).toBe("function");
+it("exports the two handlers that the stack wires", () => {
+  expect(typeof entry.handler).toBe("function");
+  expect(typeof entry.preSignUp).toBe("function");
 });
 
 it("sign-up, resend, verify and update attribute send the verification message", async () => {

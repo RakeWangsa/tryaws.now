@@ -459,10 +459,11 @@ describe("requirements 3 and 4: what the stacks do with the removal rules", () =
     expect(auth).toContain("if (poolId !== null) opts.import = poolId;");
     expect(auth).toContain("keepPool(opts, config.userPoolIds.customers)");
     expect(auth).toContain("keepPool(opts, config.userPoolIds.admins)");
-    // WPU-X12: the trigger functions have fixed names on every stage now (the customer pool names them
-    // by ARN to avoid a dependency cycle), which keeps the staging property this test pins.
-    expect(auth).toContain('const MESSAGES_FUNCTION = resourceName(stage, "cognito-messages")');
-    expect(auth).toContain("name: MESSAGES_FUNCTION");
+    // WPU-X12 round 3: both trigger functions (messages and pre sign-up) are named on staging only, by
+    // one builder: the kept pools store their ARNs.
+    expect(auth).toContain("...(retainUserPools ? { name: resourceName(stage, part) } : {})");
+    expect(auth).toContain('triggerArgs("cognito-messages", "handler", "cognito-messages")');
+    expect(auth).toContain('triggerArgs("cognito-messages", "preSignUp", "cognito-presignup")');
     // Requirement 11 (verify review B1 auth.ts:53): the plural Pulumi field, in both pools.
     expect(
       auth.match(

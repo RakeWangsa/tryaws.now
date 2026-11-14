@@ -284,7 +284,7 @@ describe("Cognito attribute writes", () => {
   const signUpClient = between(
     auth,
     'customers.addClient("CustomerSignUpClient"',
-    'new sst.aws.Function("CognitoMessages"',
+    'new aws.ssm.Parameter("CognitoSignUpClientIdParameter"',
   );
   const adminApp = between(auth, 'admins.addClient("AdminAppClient"', "return {");
   const writes = (block) => /args\.writeAttributes = (\[[^\]]*\])/.exec(block)?.[1];
@@ -353,64 +353,79 @@ describe("Cognito attribute writes", () => {
 
   // WPU-X12 follow-up 1 (security review): the public CustomerAppClient could call SignUp and
   // ResendConfirmationCode directly at Cognito. A PreSignUp trigger refuses every self sign-up that
-  // does not come through CustomerSignUpClient, and the custom-message trigger sends no sign-up or
-  // resend code for another client (functions/cognito-messages/guard.ts). Both functions get the client
-  // id as SIGN_UP_CLIENT_ID. The pool cannot name them by `fn.arn` (pool -> function -> client id ->
-  // pool is a cycle), so the customer pool names them by their fixed ARN and grants Cognito the invoke
-  // in its own Permission, which depends on both the function and the pool.
-  it("guards the customer pool with a PreSignUp trigger that knows the sign-up client id", () => {
+  // does not come through CustomerSignUpClient, and the custom-message trigger sends no sign-up, resend
+  // or (round 3) customer reset code for another client (functions/cognito-messages). Round 3: the ids
+  // reach both functions through two SSM String parameters (no dependency cycle), so the pool uses SST's
+  // own triggers again (ordered creation, SST's invoke grants scoped to the pool).
+  it("guards the customer pool with ordered SST triggers that read the ids from SSM", () => {
     const customerPool = between(
       auth,
       'new sst.aws.CognitoUserPool("CustomerPool"',
       "const customerClient",
     );
-    expect(customerPool).not.toContain("triggers:");
     expect(customerPool).toContain(
-      "args.lambdaConfig = { customMessage: lambdaArn(MESSAGES_FUNCTION), preSignUp: lambdaArn(PRE_SIGN_UP_FUNCTION)}",
+      "triggers: { customMessage: messages.arn, preSignUp: preSignUp.arn }",
     );
-    expect(auth).toContain('const MESSAGES_FUNCTION = resourceName(stage, "cognito-messages")');
-    expect(auth).toContain('const PRE_SIGN_UP_FUNCTION = resourceName(stage, "cognito-presignup")');
+    expect(customerPool).not.toContain("lambdaConfig");
+    expect(auth).not.toMatch(/lambda\.Permission|lambdaArn|:function:/);
+
+    // the functions come before the pool, the parameters after the client and the pool
+    const at = (marker) => auth.indexOf(marker);
+    expect(at('new sst.aws.Function( "CognitoMessages"')).toBeGreaterThan(0);
+    expect(at('new sst.aws.Function( "CognitoPreSignUp"')).toBeGreaterThan(0);
+    expect(at('new sst.aws.Function( "CognitoPreSignUp"')).toBeLessThan(
+      at('new sst.aws.CognitoUserPool("CustomerPool"'),
+    );
+    expect(at('new aws.ssm.Parameter("CognitoSignUpClientIdParameter"')).toBeGreaterThan(
+      at('customers.addClient("CustomerSignUpClient"'),
+    );
+
     expect(auth).toContain(
-      "const lambdaArn = (fnName: string) => $interpolate`arn:aws:lambda:${config.region}:${account.accountId}:function:${fnName}`",
+      "const SIGN_UP_CLIENT_PARAMETER = `/sst/${$app.name}/${stage}/cognito/signup-client-id`",
     );
-
-    const messagesFn = between(
-      auth,
-      'new sst.aws.Function("CognitoMessages"',
-      'new sst.aws.Function("CognitoPreSignUp"',
+    expect(auth).toContain(
+      "const CUSTOMER_POOL_PARAMETER = `/sst/${$app.name}/${stage}/cognito/customer-pool-id`",
     );
-    const preSignUpFn = between(
-      auth,
-      'new sst.aws.Function("CognitoPreSignUp"',
-      'new aws.lambda.Permission("CustomerPoolMessagesPermission"',
-    );
-    expect(messagesFn).toContain("name: MESSAGES_FUNCTION");
-    expect(preSignUpFn).toContain("name: PRE_SIGN_UP_FUNCTION");
-    expect(preSignUpFn).toContain('handler: "functions/cognito-messages/index.preSignUp"');
-    for (const fn of [messagesFn, preSignUpFn]) {
-      // the id (not the secret), and nothing else: no VPC, no links, no permissions (least privilege)
-      expect(fn).toContain("environment: { SIGN_UP_CLIENT_ID: customerSignUpClient.id }");
-      expect(fn).not.toMatch(/vpc|link|permissions|\.secret/);
-    }
-    expect(preSignUpFn).toContain('args.name = roleName(stage, "cognito-presignup")');
-    expect([...auth.matchAll(/SIGN_UP_CLIENT_ID/g)]).toHaveLength(2);
-    expect(auth).not.toMatch(/customerSignUpClient\.secret/);
-
-    // Cognito may invoke each function, from the customer pool only
-    for (const [permission, fn] of [
-      ["CustomerPoolMessagesPermission", "messages"],
-      ["CustomerPoolPreSignUpPermission", "preSignUp"],
+    for (const [resource, name, value] of [
+      ["CognitoSignUpClientIdParameter", "SIGN_UP_CLIENT_PARAMETER", "customerSignUpClient.id"],
+      ["CognitoCustomerPoolIdParameter", "CUSTOMER_POOL_PARAMETER", "customers.id"],
     ]) {
-      const block = between(auth, `new aws.lambda.Permission("${permission}"`, "});");
-      expect(block).toContain('action: "lambda:InvokeFunction"');
-      expect(block).toContain(`function: ${fn}.name`);
-      expect(block).toContain('principal: "cognito-idp.amazonaws.com"');
-      expect(block).toContain("sourceArn: customers.arn");
+      const block = between(auth, `new aws.ssm.Parameter("${resource}"`, "});");
+      expect(block).toBe(
+        `new aws.ssm.Parameter("${resource}", { name: ${name}, type: "String", value: ${value}`,
+      );
     }
-    // the reader of the variable is the same name
-    expect(source("functions/cognito-messages/guard.ts")).toContain(
-      'SIGN_UP_CLIENT_ENV = "SIGN_UP_CLIENT_ID"',
+    expect(auth).not.toMatch(/SecureString|customerSignUpClient\.secret/);
+
+    // both functions: the parameter NAMES (fixed strings) and read access to exactly those two ARNs
+    const args = between(auth, "const triggerArgs", "const messages");
+    expect(args).toContain("environment: { SIGN_UP_CLIENT_PARAMETER, CUSTOMER_POOL_PARAMETER}");
+    expect(args).toContain(
+      'permissions: [ { actions: ["ssm:GetParameters"], resources: [parameterArn(SIGN_UP_CLIENT_PARAMETER), parameterArn(CUSTOMER_POOL_PARAMETER)]}]',
     );
+    expect(args).not.toMatch(/vpc|link:|customerSignUpClient|customers\./);
+    expect(auth).toContain(
+      "const parameterArn = (name: string) => $interpolate`arn:aws:ssm:${config.region}:${account.accountId}:parameter${name}`",
+    );
+    expect(auth).toContain('triggerArgs("cognito-messages", "handler", "cognito-messages")');
+    expect(auth).toContain('triggerArgs("cognito-messages", "preSignUp", "cognito-presignup")');
+    expect(args).toContain("args.name = roleName(stage, part)");
+    expect(auth).not.toContain("SIGN_UP_CLIENT_ID");
+
+    // the readers name the same variables
+    const fnConfig = source("functions/cognito-messages/config.ts");
+    expect(fnConfig).toContain('SIGN_UP_CLIENT_PARAMETER_ENV = "SIGN_UP_CLIENT_PARAMETER"');
+    expect(fnConfig).toContain('CUSTOMER_POOL_PARAMETER_ENV = "CUSTOMER_POOL_PARAMETER"');
+  });
+
+  it("puts the parameters under the /sst/<app>/<stage>/ prefix the deploy roles guard per stage", () => {
+    for (const [file, other] of [
+      ["infra/org/ci-deploy-staging.yaml", "production"],
+      ["infra/org/ci-deploy-production.yaml", "staging"],
+    ]) {
+      const text = readFileSync(resolve(root, file), "utf8");
+      expect(text, file).toContain(`parameter/sst/tryaws-now/${other}/*`);
+    }
   });
 
   // WPU-X12 follow-up 2: SST's client turns OAuth on (implicit and code, the
@@ -630,17 +645,14 @@ describe("WP0-T4: identity, queue, buckets, alarms", () => {
   });
 
   it("uses one custom-message function for both pools, outside the VPC, with no links", () => {
-    // WPU-X12: the admin pool through SST's trigger; the customer pool by the function's fixed ARN
-    // (no dependency cycle, see the PreSignUp test below).
-    expect([...auth.matchAll(/customMessage: messages\.arn/g)]).toHaveLength(1);
-    expect(auth).toContain("customMessage: lambdaArn(MESSAGES_FUNCTION)");
-    const fn = between(
-      auth,
-      'new sst.aws.Function("CognitoMessages"',
-      'new sst.aws.Function("CognitoPreSignUp"',
-    );
-    expect(fn).toContain("functions/cognito-messages/index.handler");
-    expect(fn).not.toMatch(/vpc|link|permissions/);
+    // WPU-X12 round 3: both pools through SST's trigger again. The function's only permission is the
+    // SSM read of its two parameters (pinned in the PreSignUp test above).
+    expect([...auth.matchAll(/customMessage: messages\.arn/g)]).toHaveLength(2);
+    const fn = between(auth, 'new sst.aws.Function( "CognitoMessages"', "const preSignUp");
+    expect(fn).toContain('triggerArgs("cognito-messages", "handler", "cognito-messages")');
+    const args = between(auth, "const triggerArgs", "const messages");
+    expect(args).toContain("handler: `functions/${dir}/index.${handler}`");
+    expect(args).not.toMatch(/vpc|link:/);
   });
 
   it("builds a FIFO provisioning queue with a FIFO dead-letter queue, from the numbers of @tc/core", () => {
