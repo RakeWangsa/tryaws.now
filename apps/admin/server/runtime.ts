@@ -22,6 +22,7 @@ import {
 import { notifyWaitlist, postTransaction, reverseTransaction } from "@tc/core";
 import { notify, waitlistNoticeToInput } from "@tc/notify";
 import type { OperationQueue } from "@tc/core";
+import type { AuthReason } from "@tc/auth";
 import type { Tx } from "@tc/db";
 import { unavailableAdminDirectory, type AdminDirectory } from "./admin-directory.ts";
 import type { AdminsFlowDeps } from "./admins-flow.ts";
@@ -58,11 +59,19 @@ function adminConfig(): AdminAuthConfig {
   return config;
 }
 
+// Staging 2026-11-14: a refused admin session left no trace, so a failing sign-in could not be told
+// apart. One structured line with the fixed reason code only: never the token, the sub, the address or
+// the e-mail (R14).
+export function logAuthDenied(reason: AuthReason): void {
+  console.warn(JSON.stringify({ level: "warn", event: "admin.auth_denied", app: "admin", reason }));
+}
+
 function sessionDepsOnce(): AdminSessionDeps {
   sessionDeps ??= {
     verifier: createAccessTokenVerifier(adminConfig().admin),
     lookup: (sub) => withTx((tx) => lookupAdminBySub(tx, sub)),
     allowlist: adminConfig().allowlist,
+    onDenied: logAuthDenied,
   };
   return sessionDeps;
 }
