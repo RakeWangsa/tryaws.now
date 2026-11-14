@@ -93,7 +93,7 @@ export function auth(config: StageConfig) {
       },
     },
   });
-  const customerClient = customers.addClient("Web", {
+  const customerClient = customers.addClient("CustomerAppClient", {
     transform: {
       // Transform<cognito.UserPoolClientArgs> (components/aws/cognito-user-pool-client.ts).
       client: (args: aws.cognito.UserPoolClientArgs) => {
@@ -140,7 +140,7 @@ export function auth(config: StageConfig) {
       },
     },
   });
-  const adminClient = admins.addClient("Admin", {
+  const adminClient = admins.addClient("AdminAppClient", {
     transform: {
       client: (args: aws.cognito.UserPoolClientArgs) => {
         args.generateSecret = false;
