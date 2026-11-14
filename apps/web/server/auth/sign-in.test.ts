@@ -299,14 +299,36 @@ describe("signInCore with an authenticator (TOTP)", () => {
     const states = [ownerFirst, ownerLate].map((o) => o.state);
     expect(states.filter((x) => x.status === "done")).toHaveLength(1);
     expect(states.some((x) => x.status === "error" && x.code === "rate_limited")).toBe(false);
-    // No attacker reached the code step: only the owner's code was ever sent, no counter moved, no notice.
-    expect(getFakeState().totpAnswerCalls).toBeLessThanOrEqual(2);
-    expect(codeCounts().filter((n) => n > 0).length).toBeLessThanOrEqual(2);
+    // No attacker reached the code step: only the owner's two parallel requests sent a code (the same code
+    // twice: the first is accepted, the replay is a wrong code and stays counted, once). So the counters
+    // hold exactly that one hit in each of the two rules (15 minutes, a day), and nothing else.
+    expect(getFakeState().totpAnswerCalls).toBe(2);
+    expect(codeCounts().sort()).toEqual([0, 0].map(() => 1));
     expect(h.notices).toEqual([]);
     // Later, after the windows of the password limits, the owner signs in with a fresh code.
     h.advance(61 * 60_000);
     const again = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, h.now()) });
     expect(again.state).toMatchObject({ status: "done" });
+  });
+
+  // Review (LOW): the release must name the window of the reservation, so the reservation hands back the
+  // very time its count used and the sign-in gives that time to the release.
+  it("the release uses the time of the reservation that was counted, not a clock read of its own", async () => {
+    const counted = new Date(NOW.getTime() + 7 * 60_000);
+    const released: Date[] = [];
+    const reserve = h.ports.limitReserve.bind(h.ports);
+    const release = h.ports.limitRelease.bind(h.ports);
+    h.ports.limitReserve = async (action, who, key) => {
+      const answer = await reserve(action, who, key);
+      return answer.allowed ? { allowed: true, at: counted } : answer;
+    };
+    h.ports.limitRelease = async (action, who, key, at) => {
+      released.push(at);
+      return release(action, who, key, at);
+    };
+    const ok = await signInCore(h.ctx(), { ...FORM, totpCode: totpCodeAt(SECRET, NOW) });
+    expect(ok.state).toMatchObject({ status: "done" });
+    expect(released).toEqual([counted]);
   });
 
   it("a flood from one address with the wrong password and a code is stopped by the password limits and counts no code", async () => {

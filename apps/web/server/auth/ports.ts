@@ -8,6 +8,9 @@ import type { AuthAction, Who } from "./limits.ts";
 // The production implementation is server/auth-ports.ts.
 
 export type LimitAnswer = { allowed: true } | { allowed: false; retryAfterSeconds: number };
+/** A reservation also says the time its count used, for the matching release (WPU-X11). */
+export type ReserveAnswer =
+  { allowed: true; at: Date } | { allowed: false; retryAfterSeconds: number };
 
 export interface RequestMeta {
   /** The viewer address (CloudFront-Viewer-Address), already checked. */
@@ -34,7 +37,7 @@ export interface AuthPorts {
    * WPU-X11 round 2: like `limit` but all or nothing: a refused reservation counts nothing (the transaction
    * rolls back), so being blocked and retrying never uses up the longer window.
    */
-  limitReserve(action: AuthAction, who: Who, key: string): Promise<LimitAnswer>;
+  limitReserve(action: AuthAction, who: Who, key: string): Promise<ReserveAnswer>;
   /** WPU-X11 round 2: the same rules as `limit`, read and never counted. */
   limitPeek(action: AuthAction, who: Who, key: string): Promise<LimitAnswer>;
   /**

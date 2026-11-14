@@ -51,13 +51,13 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   const codeWho = { ip: guard.ip, email };
   const reservation: { at: Date | null; waitSeconds: number } = { at: null, waitSeconds: 60 };
   const beforeCode = async (): Promise<boolean> => {
-    const at = ctx.clock.now();
     const reserved = await ctx.ports.limitReserve("signin_code", codeWho, guard.key);
     if (!reserved.allowed) {
       reservation.waitSeconds = reserved.retryAfterSeconds;
       return false;
     }
-    reservation.at = at;
+    // The time the reservation was counted at (one clock read, in the limiter), for the matching release.
+    reservation.at = reserved.at;
     return true;
   };
 
