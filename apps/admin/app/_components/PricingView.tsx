@@ -16,6 +16,7 @@ import {
   FX_CONFIRM_PERCENT,
   FX_RATE_MAX_AGE_DAYS,
   FX_SINGLE_ADMIN_PERCENT,
+  FX_SINGLE_ADMIN_WINDOW_HOURS,
 } from "@tc/core";
 import type { PreviewRow } from "@tc/core";
 import type { AdminActor, FxChange, FxRateRow, PricingRuleRow } from "@tc/db";
@@ -227,6 +228,7 @@ function FxCard({
         <p className="form-text seccolor">
           {t("bigChange", {
             single: String(FX_SINGLE_ADMIN_PERCENT),
+            hours: String(FX_SINGLE_ADMIN_WINDOW_HOURS),
             percent: String(FX_CONFIRM_PERCENT),
           })}
         </p>

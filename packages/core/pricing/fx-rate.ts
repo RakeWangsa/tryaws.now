@@ -156,6 +156,31 @@ export function fxSingleAdminApproval(
   return distance * 100n <= from * FX_SINGLE_ADMIN_PERCENT ? "single_admin_within_limit" : null;
 }
 
+/**
+ * WPU-X9 fix round 1 (owner decision 2026-11-14, "Yes: 3% per 24 hours"). A change alone is compared with every rate
+ * in force during this many hours before it, so small steps cannot add up past FX_SINGLE_ADMIN_PERCENT.
+ */
+export const FX_SINGLE_ADMIN_WINDOW_HOURS = 24;
+
+/**
+ * WPU-X9. True when `next` is within FX_SINGLE_ADMIN_PERCENT of EVERY rate of `windowRates` (the rates in force during
+ * the window, the caller reads them). Pure, integer millionths. Fails closed (R16): an empty or unreadable window, or
+ * any malformed rate, is false (a second admin is needed).
+ */
+export function fxWithinSingleAdminWindow(
+  windowRates: readonly (string | null)[],
+  next: string,
+): boolean {
+  if (!Array.isArray(windowRates) || windowRates.length === 0 || !isFxRateText(next)) return false;
+  const to = millionths(next);
+  return windowRates.every((rate) => {
+    if (!isFxRateText(rate)) return false;
+    const from = millionths(rate);
+    const distance = to > from ? to - from : from - to;
+    return distance * 100n <= from * FX_SINGLE_ADMIN_PERCENT;
+  });
+}
+
 /** True when the rate lies between `min` and `max` (both plain rate text, inclusive). Bounds that cannot be read refuse (false). */
 export function fxRateInSaneRange(rate: string, bounds: { min: string; max: string }): boolean {
   if (!isFxRateText(rate) || !isFxRateText(bounds.min) || !isFxRateText(bounds.max)) return false;

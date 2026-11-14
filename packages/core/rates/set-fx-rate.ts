@@ -10,7 +10,9 @@ import {
 } from "@tc/db";
 import {
   FX_RATE_MAX_AGE_DAYS,
+  FX_SINGLE_ADMIN_WINDOW_HOURS,
   fxSingleAdminApproval,
+  fxWithinSingleAdminWindow,
   isFxRateText,
   type FxSingleAdminApproval,
 } from "../pricing/index";
@@ -43,9 +45,10 @@ const APPROVER_ROLES: readonly string[] = ["finance", "superadmin"];
 /**
  * WPU-X9. The ground on which one admin may set `rate` for `market` starting at `start`, or null. Holds the write
  * lock of the market first (the same lock the repository takes; advisory locks nest in one transaction), so two
- * single-admin changes in a row are each compared with the rate the other one left. A change is compared with the
- * rate in force now AND with the rate in force at its own start (a change scheduled in between), both within 3
- * percent. The first rate of a market is one with no row at all, scheduled ones included.
+ * single-admin changes in a row are each compared with the rate the other one left. The first rate of a market is one
+ * with no row at all, scheduled ones included. Any later change alone (round 1, owner decision 2026-11-14 "3% per 24
+ * hours"): no row may be scheduled after it (after now, or after its start), and it must be within 3 percent of every
+ * rate in force during the 24 hours before now and, for a scheduled change, before its start.
  */
 async function singleAdminGround(
   tx: Tx,
@@ -56,13 +59,44 @@ async function singleAdminGround(
 ): Promise<FxSingleAdminApproval | null> {
   await lockFxRateWrites(tx, market);
   const now = await readFxRateInForce(tx, market, at);
-  const anyRateBefore = (await readFxRates(tx, market, 1)).length > 0;
-  const ground = fxSingleAdminApproval(now?.rate ?? null, rate, anyRateBefore);
-  if (ground === null || start.getTime() === at.getTime()) return ground;
-  const then = await readFxRateInForce(tx, market, start);
-  if (then === null || then.id === now?.id) return ground;
-  return fxSingleAdminApproval(then.rate, rate, true) === null ? null : ground;
+  const newest = await readFxRates(tx, market, 1);
+  const ground = fxSingleAdminApproval(now?.rate ?? null, rate, newest.length > 0);
+  if (ground !== "single_admin_within_limit") return ground;
+  // The compared times: now, and the start of a scheduled change.
+  const compared = start.getTime() > at.getTime() ? [at, start] : [at];
+  const last = compared[compared.length - 1] as Date;
+  // Round 1 (security review): no change alone before a rate that is already scheduled after it.
+  const latest = newest[0];
+  if (latest === undefined || latest.effectiveFrom.getTime() > last.getTime()) return null;
+  // Round 1 (owner decision 2026-11-14, "3% per 24 hours"): within 3 percent of every rate in force during the
+  // 24 hours before each compared time, so chained small steps cannot add up.
+  for (const time of compared) {
+    if (!fxWithinSingleAdminWindow(await ratesInWindow(tx, market, time), rate)) return null;
+  }
+  return ground;
 }
+
+/**
+ * The rates in force during the FX_SINGLE_ADMIN_WINDOW_HOURS before `time`: the one in force at the window's start and
+ * every row that started inside the window (up to `time`). A history longer than the read limit gives an unreadable
+ * entry (null), which fxWithinSingleAdminWindow refuses (R16).
+ */
+async function ratesInWindow(tx: Tx, market: string, time: Date): Promise<(string | null)[]> {
+  const from = time.getTime() - FX_SINGLE_ADMIN_WINDOW_HOURS * HOUR_MS;
+  const rows = await readFxRates(tx, market, WINDOW_READ_LIMIT, time);
+  const rates: (string | null)[] = [];
+  for (const row of rows) {
+    rates.push(row.rate);
+    if (row.effectiveFrom.getTime() <= from) return rates; // the rate in force at the window's start
+  }
+  // Every row read started inside the window: complete only when the read was not cut at its limit.
+  if (rows.length >= WINDOW_READ_LIMIT) rates.push(null);
+  return rates;
+}
+
+const HOUR_MS = 3_600_000;
+// The most rows readFxRates returns (HISTORY_LIMIT_MAX of @tc/db).
+const WINDOW_READ_LIMIT = 200;
 
 const forbidden = (token: string): Result<never> => ({
   ok: false,

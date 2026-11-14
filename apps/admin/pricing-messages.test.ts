@@ -63,10 +63,11 @@ describe("AdminPricing and AdminCatalog messages", () => {
 
   it("WPU-X9: the FX form says that up to the single-admin percent applies at once and more waits", () => {
     const en = pricingEn.AdminPricing.fx.bigChange;
-    expect(en).toContain("up to {single}%");
+    expect(en).toContain("up to {single}% within {hours} hours");
     expect(en).toContain("apply at once");
     expect(en).toContain("waits until a different admin approves it");
-    expect(pricingEn.AdminPricing.result.set).toContain("3%");
+    expect(en).toContain("scheduled");
+    expect(pricingEn.AdminPricing.result.set).toContain("3% within 24 hours");
   });
 
   it("names every product family", () => {

@@ -7,6 +7,8 @@ export {
   FX_RATE_MAX_AGE_DAYS,
   FX_SECOND_ADMIN_PERCENT,
   FX_SINGLE_ADMIN_PERCENT,
+  FX_SINGLE_ADMIN_WINDOW_HOURS,
+  fxWithinSingleAdminWindow,
   fxChangeNeedsConfirm,
   fxChangeNeedsSecondAdmin,
   fxSingleAdminApproval,

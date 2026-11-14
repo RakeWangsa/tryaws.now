@@ -141,6 +141,48 @@ it("WPU-X9: a scheduled change alone must be within 3 percent of the rate in for
   expect(await np({ rate: "101", effectiveFrom: day(4) }, T0)).toMatchObject({ ok: true });
 });
 
+// WPU-X9 fix round 1 (owner decision 2026-11-14, "Yes: 3% per 24 hours"; money and security review findings).
+const HOUR = 3_600_000;
+const at = (ms: number) => new Date(T0.getTime() + ms);
+
+it("WPU-X9 round 1: chained steps cannot add up: the second -3 percent step within 24 hours needs a second admin", async () => {
+  await ensureMarket(t.pool, "AF");
+  const af = (rate: string, now: Date) => alone({ market: "AF", rate }, now);
+  expect(await af("122", T0)).toMatchObject({ ok: true }); // first rate
+  expect(await af("118.34", at(HOUR))).toMatchObject({ ok: true }); // -3 percent
+  // -3 percent of 118.34, but -5.9 percent of the 122 in force 1 hour ago
+  expect(await af("114.79", at(2 * HOUR))).toEqual(SECOND_ADMIN);
+  // 24 hours and 1 second after the 118.34 step, 122 has left the window: the step passes alone
+  expect(await af("114.79", at(HOUR + 24 * HOUR + 1000))).toMatchObject({
+    ok: true,
+    value: { replayed: false, fx: { rate: "114.79" } },
+  });
+});
+
+it("WPU-X9 round 1: exactly 3 percent from the oldest rate of the window passes alone; past it does not", async () => {
+  await ensureMarket(t.pool, "MM");
+  const mm = (rate: string, now: Date) => alone({ market: "MM", rate }, now);
+  expect(await mm("100", T0)).toMatchObject({ ok: true });
+  expect(await mm("102", at(HOUR))).toMatchObject({ ok: true });
+  expect(await mm("103.000001", at(2 * HOUR))).toEqual(SECOND_ADMIN);
+  expect(await mm("103", at(2 * HOUR))).toMatchObject({ ok: true }); // +3 percent of 100, +0.98 of 102
+});
+
+it("WPU-X9 round 1: no single-admin change before a rate that is already scheduled later", async () => {
+  await ensureMarket(t.pool, "BT");
+  const bt = (input: Partial<SetFxRateInput>, now: Date) => alone({ market: "BT", ...input }, now);
+  expect(await bt({ rate: "100" }, T0)).toMatchObject({ ok: true });
+  expect(await bt({ rate: "101", effectiveFrom: day(2) }, T0)).toMatchObject({ ok: true });
+  const n = await count();
+  // an immediate change while 101 waits for day 2
+  expect(await bt({ rate: "100.5" }, at(HOUR))).toEqual(SECOND_ADMIN);
+  // a scheduled change that would start before the row of day 2
+  expect(await bt({ rate: "100.5", effectiveFrom: day(1) }, at(HOUR))).toEqual(SECOND_ADMIN);
+  expect(await count()).toBe(n);
+  // the four-eyes path still may
+  expect(await set({ market: "BT", rate: "100.5" }, at(HOUR))).toMatchObject({ ok: true });
+});
+
 // WPU-X9: a change within 3 percent no longer needs a second admin (see above); a named second admin is still checked.
 it("a named second admin is refused when it is the actor", async () => {
   const n = await count();

@@ -3,8 +3,10 @@ import { PricingInputError } from "./errors";
 import {
   FX_SECOND_ADMIN_PERCENT,
   FX_SINGLE_ADMIN_PERCENT,
+  FX_SINGLE_ADMIN_WINDOW_HOURS,
   fxChangeNeedsSecondAdmin,
   fxSingleAdminApproval,
+  fxWithinSingleAdminWindow,
   isFxRateText,
 } from "./fx-rate";
 
@@ -97,6 +99,35 @@ it("fxSingleAdminApproval: the first rate of a market (none in force and none ev
 
 it("fxSingleAdminApproval: no rate in force but one stored before (or scheduled) needs a second admin", () => {
   expect(fxSingleAdminApproval(null, "122", true)).toBeNull();
+});
+
+// WPU-X9 fix round 1 (owner decision 2026-11-14, "Yes: 3% per 24 hours"; money and security review): a change alone
+// must be within 3 percent of EVERY rate in force during the 24 hours before it, so small steps cannot add up.
+it("WPU-X9: the single-admin window is 24 hours", () => {
+  expect(FX_SINGLE_ADMIN_WINDOW_HOURS).toBe(24);
+});
+
+it.each([
+  ["one rate, exactly -3 percent", ["122"], "118.34", true],
+  ["the chained step 122 -> 118.34 -> 114.79", ["122", "118.34"], "114.79", false],
+  ["exactly -3 percent of the oldest rate of the window", ["122", "119"], "118.34", true],
+  ["exactly +3 percent of the oldest and within of the newer", ["100", "102"], "103", true],
+  ["a millionth past +3 percent of the oldest", ["100", "102"], "103.000001", false],
+  ["within the oldest but past the newest", ["100", "106"], "102.8", false],
+  ["the same rate again (a re-confirm)", ["122", "122"], "122", true],
+])("fxWithinSingleAdminWindow: %s", (_, rates, next, ok) => {
+  expect(fxWithinSingleAdminWindow(rates, next)).toBe(ok);
+});
+
+it.each([
+  ["no rate at all (unknown history)", [], "122"],
+  ["an unreadable rate in the window", ["122", null], "122"],
+  ["a malformed rate in the window", ["122", "1e2"], "122"],
+  ["a number in the window", [122], "122"],
+  ["a malformed new rate", ["122"], "122.1234567"],
+  ["a window that is not a list", null, "122"],
+])("fxWithinSingleAdminWindow fails closed to a second admin (R16): %s", (_, rates, next) => {
+  expect(fxWithinSingleAdminWindow(rates as never, next as never)).toBe(false);
 });
 
 it.each([

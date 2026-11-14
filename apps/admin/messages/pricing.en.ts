@@ -18,7 +18,7 @@ export const pricingEn: Same<typeof pricingBn> = {
       replayed: "This change was already saved.",
       pending: "The change is waiting. It takes effect when a different admin approves it.",
       approved: "Approved, and the rate is now in force.",
-      set: "The rate is saved and in force from its start. A change of up to 3% needs no second admin.",
+      set: "The rate is saved and in force from its start. A change of up to 3% within 24 hours needs no second admin.",
       invalid: "The form is not correct. Check the fields.",
       denied: "You may not do this.",
       conflict:
@@ -103,7 +103,7 @@ export const pricingEn: Same<typeof pricingBn> = {
       rateHint: "Decimal text, for example 122.5",
       fromLabel: "Starts (Dhaka time)",
       bigChange:
-        "The first rate of a market and a change of up to {single}% from the rate in force apply at once. A larger change waits until a different admin approves it. A rate that differs by more than {percent}% from the rate in force also needs the confirm box.",
+        "The first rate of a market and changes of up to {single}% within {hours} hours (from every rate in force in that time) apply at once. A larger change, or a change before a rate that is already scheduled, waits until a different admin approves it. A rate that differs by more than {percent}% from the rate in force also needs the confirm box.",
       confirmLarge:
         "I checked this rate: it differs by more than {percent}% from the rate in force",
       setBy: "Set by admin #{who} on",
