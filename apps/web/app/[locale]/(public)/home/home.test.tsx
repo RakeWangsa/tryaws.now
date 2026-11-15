@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { Locale } from "@tc/ui/runtime";
 import { publicBn } from "../../../../messages/public-bn.ts";
 import { publicEn } from "../../../../messages/public-en.ts";
@@ -6,18 +6,16 @@ import type { PublicCatalog } from "../../../../server/public/catalog.ts";
 import { HomeContent } from "../HomeContent.tsx";
 import { html } from "../public-states.tsx";
 import { NONCE, ORIGIN, UNAVAILABLE, openCatalog } from "../public.fixtures.ts";
-import { HOME_FAQ_KEYS, HOME_PLAN_LIMIT, homePlans, homeProducts } from "./home-data.ts";
+import { HOME_SERVICES, homeChooser, homeServices } from "./home-data.ts";
 
-// WPU-X13: the redesigned home page. The claims of the page are the claims of the repository: the
-// tests pin the structure (what is where), that the page never promises a product whose flag is off,
-// that no number or superlative was invented, and that the prices stay the engine's output.
-
-vi.mock("../products/[family]/actions.ts", () => ({
-  notifyMeAction: async () => ({ status: "idle" }),
-}));
+// WPU-X18: the simple home page. It is a heading, the list of services and a read-only preview of the
+// create-instance choice. The tests pin the order of the services, that no service is promised whose
+// flag is off (R12, R16), that the choice is made by links with a query and no script, that the prices
+// are the engine's output in taka only (WPU-X16), and that the button goes to login or to the panel.
 
 const ALL_FLAGS = [
   "linux_instance",
+  "windows_instance",
   "database",
   "disk",
   "static_ip",
@@ -25,10 +23,20 @@ const ALL_FLAGS = [
   "cdn",
   "dns_zone",
   "domain",
+  "bucket",
+  "load_balancer",
+  "container_service",
 ];
 
-const render = (catalog: PublicCatalog, locale: Locale): string =>
-  html(<HomeContent locale={locale} catalog={catalog} origin={ORIGIN} nonce={NONCE} />, locale);
+const render = (
+  catalog: PublicCatalog,
+  locale: Locale,
+  extra: { region?: string; platform?: string; signedIn?: boolean } = {},
+): string =>
+  html(
+    <HomeContent locale={locale} catalog={catalog} origin={ORIGIN} nonce={NONCE} {...extra} />,
+    locale,
+  );
 const text = (page: string): string =>
   page
     .replace(/<script[^]*?<\/script>/g, " ")
@@ -38,78 +46,217 @@ const text = (page: string): string =>
 let open: PublicCatalog;
 let everything: PublicCatalog;
 let none: PublicCatalog;
+let withWindows: PublicCatalog;
 beforeAll(async () => {
   open = await openCatalog();
   everything = await openCatalog(ALL_FLAGS);
   none = await openCatalog([]);
+  withWindows = await openCatalog(["linux_instance", "windows_instance"]);
 });
 
-describe("structure (WPU-X13)", () => {
-  it("has the sections in the order hero, trust, steps, products, plans, comparison, locations, FAQ, call to action", () => {
+describe("the services list (WPU-X18)", () => {
+  it("lists the seven services in the order of the owner's request, in both languages", () => {
+    expect(HOME_SERVICES.map((s) => s.key)).toEqual([
+      "instances",
+      "containers",
+      "databases",
+      "networking",
+      "storage",
+      "domains",
+      "snapshots",
+    ]);
+    expect(Object.values(publicEn.Public.home.services)).toEqual([
+      "Instances (Cloud Servers)",
+      "Containers",
+      "Databases",
+      "Networking",
+      "Storage",
+      "Domains & DNS",
+      "Snapshots",
+    ]);
     for (const locale of ["bn", "en"] as const) {
       const page = render(open, locale);
-      const marks = [
-        'tc-hero"',
-        "tc-trust",
-        'class="tc-step-number"',
-        "tc-tile-soon",
-        'id="plans"',
-        "table compare",
-        "tc-location-code",
-        "accordion faq",
-        "tc-cta-band",
-      ].map((mark) => page.indexOf(mark));
-      expect(
-        marks.every((i) => i >= 0),
-        `${locale}: every section is there ${marks}`,
-      ).toBe(true);
-      expect(
-        [...marks].sort((a, b) => a - b),
-        locale,
-      ).toEqual(marks);
+      const tree = (locale === "bn" ? publicBn : publicEn).Public.home.services;
+      const marks = Object.values(tree).map((name) => page.indexOf(name.replace("&", "&amp;")));
+      expect(marks.every((i) => i >= 0)).toBe(true);
+      expect([...marks].sort((a, b) => a - b)).toEqual(marks);
     }
   });
 
-  it("shows one headline, one lead and two buttons in the hero, and no second paragraph of the same text", () => {
-    const hero = /<section class="top-header[^]*?<\/section>/.exec(render(open, "en"))?.[0] ?? "";
-    expect((hero.match(/<h1[\s>]/g) ?? []).length).toBe(1);
-    expect((hero.match(/<p\b/g) ?? []).length).toBeGreaterThanOrEqual(1);
-    expect((hero.match(/class="btn /g) ?? []).length).toBe(2);
-    // Bug 1 of the owner's review: the same paragraph twice. Each long text is on the page once.
-    for (const locale of ["bn", "en"] as const) {
-      const body = text(render(open, locale));
-      const tree = locale === "bn" ? publicBn.Public : publicEn.Public;
-      for (const sentence of [tree.entity.statement, tree.home.heroLead]) {
-        expect(
-          body.split(sentence.slice(0, 40)).length - 1,
-          `${locale}: ${sentence.slice(0, 40)}`,
-        ).toBe(1);
-      }
-    }
-  });
-
-  it("writes the Bengali headline first and a headline that promises something (no AWS account, taka)", () => {
-    expect(publicBn.Public.home.heroTitle).toMatch(/টাকায়/);
-    expect(publicEn.Public.home.heroTitle).toMatch(/taka/);
-  });
-
-  it("draws the panel picture as an inline SVG that screen readers skip, no image file (U13)", () => {
+  it("calls a service open only when its flag is on, and says coming soon next to the rest (R12)", () => {
+    const states = homeServices(open);
+    expect(states.filter((s) => s.open).map((s) => s.key)).toEqual(["instances", "databases"]);
     const page = render(open, "en");
-    expect(page).toMatch(/<svg[^>]*aria-hidden="true"/);
-    expect(page).not.toMatch(/<img\b/);
+    expect((page.match(/badge bg-success/g) ?? []).length).toBe(2);
+    expect((page.match(/Coming soon/g) ?? []).length).toBe(5);
+    expect(homeServices(everything).every((s) => s.open)).toBe(true);
+    expect(homeServices(none).some((s) => s.open)).toBe(false);
+    expect((render(none, "en").match(/badge bg-success/g) ?? []).length).toBe(0);
+  });
+
+  it("links an open service to its public page and nothing else", () => {
+    const page = render(open, "en");
+    expect(page).toContain('href="/en/products/cloud-servers"');
+    expect(page).toContain('href="/en/products/databases"');
+    expect(page).not.toContain('href="/en/products/containers"');
+    const states = homeServices(everything);
+    expect(states.find((s) => s.key === "snapshots")?.path).toBeNull();
+    expect(states.find((s) => s.key === "networking")?.path).toBe("/products/load-balancers");
+    expect(states.find((s) => s.key === "domains")?.path).toBe("/products/dns");
+  });
+
+  it("a state is told by an icon and a word, not by color alone (U11)", () => {
+    const page = render(open, "en");
+    expect(page).toMatch(/badge bg-success"><i class="fas fa-check"[^>]*><\/i> Open</);
+    expect(page).toMatch(/badge bg-secondary"><i class="fas fa-clock"[^>]*><\/i> Coming soon</);
+  });
+
+  it("shows no list and no price when the catalog cannot be read (R16)", () => {
+    expect(homeServices(UNAVAILABLE)).toEqual([]);
+    const page = render(UNAVAILABLE, "en");
+    expect(page).not.toContain("badge bg-success");
+    expect(page).toContain("Prices cannot be shown now");
+    expect(text(page)).not.toMatch(/[৳$]/);
   });
 });
 
-describe("claims (WPU-X13)", () => {
-  it("has no invented number, rating, uptime, discount or superlative", () => {
+describe("the instance chooser (WPU-X18)", () => {
+  it("starts at the first platform and the first location that have plans, cheapest first", () => {
+    const c = homeChooser(open, {});
+    expect(c.state).toBe("ok");
+    if (c.state !== "ok") return;
+    expect(c.platform).toBe("linux");
+    expect(c.platforms).toEqual(["linux"]);
+    expect(c.regions).toEqual(["ap-southeast-1", "ap-south-1"]);
+    expect(c.region).toBe("ap-southeast-1");
+    expect(c.offers.map((o) => o.specs.ramGb)).toEqual(["1", "4", "8"]);
+    expect(c.offers.every((o) => o.region === "ap-southeast-1")).toBe(true);
+  });
+
+  it("follows ?region= and falls back to the first location for an unknown value", () => {
+    const mumbai = homeChooser(open, { region: "ap-south-1" });
+    expect(mumbai.state === "ok" && mumbai.offers.map((o) => o.region)).toEqual(["ap-south-1"]);
+    for (const bad of ["us-east-1", "", "ap-south-1,ap-southeast-1", "<script>"]) {
+      const c = homeChooser(open, { region: bad });
+      expect(c.state === "ok" && c.region).toBe("ap-southeast-1");
+    }
+  });
+
+  it("offers Windows only when the catalog has Windows plans, and follows ?platform=", () => {
+    const win = homeChooser(withWindows, { platform: "windows" });
+    expect(win.state === "ok" && win.platforms).toEqual(["linux", "windows"]);
+    expect(win.state === "ok" && win.platform).toBe("windows");
+    expect(win.state === "ok" && win.offers.every((o) => o.family === "windows_instance")).toBe(
+      true,
+    );
+    const noWin = homeChooser(open, { platform: "windows" });
+    expect(noWin.state === "ok" && noWin.platform).toBe("linux");
+    expect(render(open, "en")).not.toContain("Microsoft Windows");
+    expect(render(withWindows, "en")).toContain("Microsoft Windows");
+  });
+
+  it("shows the database family nowhere in the instance chooser", () => {
+    const c = homeChooser(everything, {});
+    expect(c.state === "ok" && c.offers.some((o) => o.family === "database")).toBe(false);
+  });
+
+  it("is closed when no instance family is open and unavailable when the catalog is", () => {
+    expect(homeChooser(none, {}).state).toBe("closed");
+    expect(homeChooser(UNAVAILABLE, {}).state).toBe("unavailable");
+    expect(render(none, "en")).toContain("No plan is open yet");
+  });
+
+  it("makes each choice a plain link with a query, no script and no form (U2, U7)", () => {
+    const page = render(withWindows, "en", { region: "ap-south-1", platform: "linux" });
+    expect(page).toContain('href="/en?region=ap-southeast-1&amp;platform=linux#chooser"');
+    expect(page).toContain('href="/en?region=ap-south-1&amp;platform=linux#chooser"');
+    expect(page).toContain('href="/en?region=ap-south-1&amp;platform=windows#chooser"');
+    expect(page).not.toMatch(/<form\b|<select\b|onclick|<input/i);
+    expect(page.replace(/<script type="application\/ld\+json"[^]*?<\/script>/g, "")).not.toContain(
+      "<script",
+    );
+    expect(page).not.toMatch(/style="/);
+  });
+
+  it("writes the AWS Region with its name and code and marks the current choice by a word (16.13, U11)", () => {
+    const page = render(open, "en");
+    expect(page).toContain("AWS Region: Asia Pacific (Singapore)");
+    expect(page).toContain("ap-southeast-1");
+    expect(page).toMatch(/Singapore<span class="visually-hidden"> \(selected\)<\/span>/);
+    const bn = render(open, "bn", { region: "ap-south-1" });
+    expect(bn).toContain("AWS Region: Asia Pacific (Mumbai)");
+  });
+
+  it("shows the plans as cards with taka prices of the catalog and no dollar (WPU-X16)", () => {
+    const page = render(open, "en");
+    expect((page.match(/class="top-content/g) ?? []).length).toBe(3);
+    expect((page.match(/class="price seccolor"><span>৳[\d,]+<\/span>/g) ?? []).length).toBe(3);
+    expect(text(page)).not.toMatch(/\$|USD|dollar/i);
+    expect(text(render(open, "bn"))).not.toMatch(/\$|USD|ডলার/i);
+  });
+});
+
+describe("the create button (WPU-X18, R1, U12)", () => {
+  const login = "/en/login?next=%2Fservers%2Fnew";
+
+  it("goes to login with a next target of the allow-list when the visitor is not signed in", () => {
+    const page = render(open, "en");
+    expect((page.match(/Create instance/g) ?? []).length).toBe(3);
+    expect(page.split(`href="${login}"`).length - 1).toBe(3);
+    expect(page).toContain('href="/en/login"');
+    expect(page).toContain('href="/en/signup"');
+  });
+
+  it("goes to the create screen of the panel when the visitor is signed in", () => {
+    const page = render(open, "en", { signedIn: true });
+    expect(page).not.toContain(login);
+    expect(page.split('href="/en/servers/new"').length - 1).toBe(3);
+    expect(page).toContain('href="/en/dashboard"');
+    expect(page).not.toContain('href="/en/signup"');
+  });
+
+  it("creates nothing here: no form, no customer data, and it says where creating happens", () => {
+    const page = render(open, "en");
+    expect(page).not.toMatch(/<form\b|<input/i);
+    expect(text(page)).toContain("Nothing is created on this page");
+  });
+});
+
+describe("heading, claims and wording (WPU-X18)", () => {
+  it("has one h1, the statement once, and the two buttons of a visitor", () => {
+    for (const locale of ["bn", "en"] as const) {
+      const page = render(open, locale);
+      const tree = locale === "bn" ? publicBn.Public : publicEn.Public;
+      expect((page.match(/<h1[\s>]/g) ?? []).length).toBe(1);
+      expect(page).toContain(tree.home.heroTitle);
+      expect(text(page).split(tree.entity.statement.slice(0, 40)).length - 1).toBe(1);
+    }
+  });
+
+  it("is a short page: the marketing sections of WPU-X13 are gone", () => {
+    const page = render(everything, "en");
+    for (const gone of [
+      "tc-hero-panel",
+      "tc-step-number",
+      "table compare",
+      'tc-location-code">ap-south-1</p>',
+      "accordion faq",
+      "getready",
+      "<svg",
+      "<img",
+    ]) {
+      expect(page, gone).not.toContain(gone);
+    }
+  });
+
+  it("has no invented number, rating, uptime or superlative, and no AWS logo wording", () => {
     for (const locale of ["bn", "en"] as const) {
       const body = text(render(everything, locale));
-      // The only percentage on the page is the 100% AWS statement.
       for (const m of body.match(/[\d০-৯][\d০-৯.]*\s?%/g) ?? []) {
         expect(m.replace(/\s/g, ""), locale).toMatch(/^(100%|১০০%)$/);
       }
       expect(body, locale).not.toMatch(
-        /uptime|SLA|cheapest|best|testimonial|bKash|Nagad|minutes|customers|সবচেয়ে সস্তা|আপটাইম/i,
+        /uptime|SLA|cheapest|best|testimonial|bKash|Nagad|customers|সবচেয়ে সস্তা|আপটাইম/i,
       );
       expect(body, locale).not.toMatch(/AWS Lightsail|Powered by AWS/i);
     }
@@ -123,112 +270,8 @@ describe("claims (WPU-X13)", () => {
     expect(body.split(long).length - 1).toBe(1);
   });
 
-  it("states the buy conditions of the no-KYC decision: email, mobile and an authenticator app, no documents", () => {
-    const body = text(render(open, "en"));
-    expect(body).toContain("an email, a mobile number and an authenticator app");
-    expect(body).toContain("No documents are needed");
-    expect(body).not.toMatch(/KYC|identity document|passport|national ID/i);
-  });
-});
-
-describe("the product grid and the feature flags (R12, R16)", () => {
-  it("never calls a product open whose flag is off, and says coming soon next to it", () => {
-    const states = homeProducts(open);
-    expect(states.find((p) => p.key === "server")?.open).toBe(true);
-    for (const key of ["disk", "staticIp", "backup", "cdn", "dns", "domain"]) {
-      expect(states.find((p) => p.key === key)?.open, key).toBe(false);
-    }
-    const page = render(open, "en");
-    expect((page.match(/Coming soon/g) ?? []).length).toBe(6);
-    expect((page.match(/badge bg-success/g) ?? []).length).toBe(1);
-  });
-
-  it("shows every product open when every flag is on, and none open when none is", () => {
-    expect(homeProducts(everything).every((p) => p.open)).toBe(true);
-    expect((render(everything, "en").match(/Coming soon/g) ?? []).length).toBe(0);
-    expect(homeProducts(none).some((p) => p.open)).toBe(false);
-    expect((render(none, "en").match(/badge bg-success/g) ?? []).length).toBe(0);
-  });
-
-  it("a state is told by an icon and a word, not by color alone (U11)", () => {
-    const page = render(open, "en");
-    expect(page).toMatch(/badge bg-success"><i class="fas fa-check"[^>]*><\/i> Open</);
-    expect(page).toMatch(/badge bg-secondary"><i class="fas fa-clock"[^>]*><\/i> Coming soon</);
-  });
-
-  it("shows no grid and no plan when the catalog cannot be read", () => {
-    expect(homeProducts(UNAVAILABLE)).toEqual([]);
-    const page = render(UNAVAILABLE, "en");
-    expect(page).not.toContain("tc-tile-soon");
-    expect(page).toContain("Prices cannot be shown now");
-    expect(page).not.toMatch(/\$\s?\d/);
-  });
-});
-
-describe("plans (WPU-X13)", () => {
-  it("picks one plan for each memory size at its cheapest location, cheapest first, at most four", () => {
-    const plans = homePlans(open);
-    expect(plans.map((o) => o.specs.ramGb)).toEqual(["1", "4", "8"]);
-    expect(plans.length).toBeLessThanOrEqual(HOME_PLAN_LIMIT);
-    // The 1 GB plan exists in Singapore at 5.00 and in Mumbai at 4.00: the cheaper location is shown.
-    expect(plans[0]?.region).toBe("ap-south-1");
-    for (let i = 1; i < plans.length; i++) {
-      expect(plans[i]!.priceMinor >= plans[i - 1]!.priceMinor).toBe(true);
-    }
-    expect(homePlans(UNAVAILABLE)).toEqual([]);
-  });
-
-  it("renders those plans as cards, with one Recommended badge, a taka price on each and no dollar (WPU-X16)", () => {
-    const page = render(open, "en");
-    expect((page.match(/class="top-content/g) ?? []).length).toBe(3);
-    expect((page.match(/plans badge feat/g) ?? []).length).toBe(1);
-    expect((page.match(/class="price seccolor"><span>৳[\d,]+<\/span>/g) ?? []).length).toBe(3);
-    expect(text(page)).not.toMatch(/\$|USD|dollar/i);
-  });
-});
-
-describe("comparison, locations, FAQ (WPU-X13)", () => {
-  it("explains how buying works here in a two column table with a caption, and says nothing about what AWS does", () => {
-    const page = render(open, "en");
-    const table = /<table class="table compare">[^]*?<\/table>/.exec(page)?.[0] ?? "";
-    expect(table).toContain("<caption");
-    expect((table.match(/<th scope="col"/g) ?? []).length).toBe(2);
-    expect((table.match(/<th scope="row"/g) ?? []).length).toBe(4);
-    // WPU-X13 round 2: no claim about AWS billing that the repository cannot show.
-    for (const locale of ["bn", "en"] as const) {
-      const body = text(render(open, locale));
-      expect(body, locale).not.toMatch(
-        /international card|billed after use|No invoice in taka|আন্তর্জাতিক কার্ড|ব্যবহারের পরে বিল|চালানপত্র নেই/,
-      );
-    }
-  });
-
-  it("has two location cards that link to the pricing page filtered by region", () => {
-    const page = render(open, "en");
-    expect(page).toContain("ap-southeast-1");
-    expect(page).toContain("ap-south-1");
-    expect(page).toContain('href="/en/pricing?region=ap-southeast-1"');
-    expect(page).toContain('href="/en/pricing?region=ap-south-1"');
-  });
-
-  it("has the eight questions of /help in the same words, visible without a script", () => {
-    expect(HOME_FAQ_KEYS.length).toBe(8);
-    for (const locale of ["bn", "en"] as const) {
-      const page = render(open, locale);
-      const tree = (locale === "bn" ? publicBn : publicEn).Public.help.items as Record<
-        string,
-        { q: string; a: string }
-      >;
-      for (const key of HOME_FAQ_KEYS) {
-        expect(page, `${locale} ${key}`).toContain(tree[key]!.q);
-      }
-      expect((page.match(/class="panel-wrap"/g) ?? []).length).toBe(8);
-    }
-  });
-
-  it("ends with a call to action that goes to sign-up and to the prices", () => {
-    const band = /<section class="getready[^]*?<\/section>/.exec(render(open, "en"))?.[0] ?? "";
-    expect(band).toContain('href="/en/signup"');
-    expect(band).toContain('href="/en/pricing"');
+  it("shows no AWS account id, ARN or internal name", () => {
+    const body = text(render(everything, "en"));
+    expect(body).not.toMatch(/arn:aws|\b\d{12}\b|\btc-[a-z]+-[a-z0-9]+/);
   });
 });
