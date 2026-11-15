@@ -11,9 +11,9 @@ export const SITE_NAME = "TryAWS.now";
 /**
  * WPU-Z16: the date the public texts were last changed (ISO date, Asia/Dhaka). Shown at the foot of
  * every public page, written as `dateModified` of each WebPage and into facts.json. A text change of
- * the public pages moves it; geo-files.test.ts then asks for the GEO files to be written again.
+ * the public pages moves it (this constant is the ONE place to bump, WPU-X27); geo-files.test.ts then asks for the GEO files to be written again.
  */
-export const CONTENT_UPDATED = "2026-11-14";
+export const CONTENT_UPDATED = "2026-11-15";
 
 /** WPU-Z16: the picture of a shared link: the wordmark on the theme's dark ground, 1200 x 630. */
 export const OG_IMAGE = Object.freeze({ path: "/brand/og.png", width: 1200, height: 630 });

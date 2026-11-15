@@ -265,9 +265,50 @@ describe("dated pages (Ansvisor freshness)", () => {
       }
     }
     expect(all["home.data"]!("en")).toContain("Last updated: <time");
-    expect(all["home.data"]!("en")).toContain("November 14, 2026");
+    // WPU-X27: the date shown is the one source constant CONTENT_UPDATED, formatted, never a literal.
+    const shown = new Intl.DateTimeFormat("en", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "Asia/Dhaka",
+    }).format(new Date(`${CONTENT_UPDATED}T12:00:00+06:00`));
+    expect(all["home.data"]!("en")).toContain(shown);
     expect(all["home.data"]!("bn")).toContain("সর্বশেষ হালনাগাদ: <time");
     expect(all["home.data"]!("bn")).toContain("২০২৬");
+  });
+});
+
+describe("one source for the last updated date (WPU-X27)", () => {
+  it("CONTENT_UPDATED is the only place that writes the date; no message or component holds a literal", async () => {
+    const { readFileSync, readdirSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const root = join(__dirname, "..", "..", "..");
+    const files = [
+      "messages/public-en.ts",
+      "messages/public-bn.ts",
+      "app/[locale]/(public)/_components/PublicFrame.tsx",
+      "server/public/geo.ts",
+    ];
+    for (const f of files) {
+      const text = readFileSync(join(root, f), "utf8");
+      const code = text
+        .split("\n")
+        .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+        .join("\n");
+      expect(code, f).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
+      expect(code, f).not.toMatch(
+        /(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, 20\d\d/,
+      );
+    }
+    const dir = join(root, "server/public");
+    const defs = readdirSync(dir)
+      .filter((n) => n.endsWith(".ts") && !n.endsWith(".test.ts"))
+      .filter((n) => /export const CONTENT_UPDATED\b/.test(readFileSync(join(dir, n), "utf8")));
+    expect(defs).toEqual(["seo.ts"]);
+  });
+
+  it("the date is the day the public pages last changed", () => {
+    expect(CONTENT_UPDATED).toBe("2026-11-15");
   });
 });
 
