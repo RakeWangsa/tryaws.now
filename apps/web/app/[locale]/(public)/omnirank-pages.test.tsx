@@ -170,12 +170,12 @@ describe("FAQ (OmniRank gate faq, FAQPage JSON-LD)", () => {
       }
     }
     expect(MESSAGES.en.help.items.vatInvoice.a).toContain("Mushak-6.3");
-    // The tax answer uses the words of the draft terms (prices 6.1): VAT is one of the taxes included.
+    // WPU-X26 (owner, 2026-11-15): "VAT is VAT": no country and no rate in the tax answer.
     expect(MESSAGES.en.help.items.vatInvoice.a).toContain(
-      "includes the taxes and fees that apply, among them the Bangladesh VAT of 5%",
+      "includes VAT and the other taxes and fees that apply",
     );
     expect(MESSAGES.bn.help.items.vatInvoice.a).toContain(
-      "প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT",
+      "VAT এবং প্রযোজ্য অন্যান্য কর ও ফি অন্তর্ভুক্ত",
     );
     expect(MESSAGES.en.help.items.vatInvoice.a).not.toContain("Prices include VAT of 5%");
     expect(MESSAGES.bn.help.items.vatInvoice.a).toContain("মূসক-৬.৩");

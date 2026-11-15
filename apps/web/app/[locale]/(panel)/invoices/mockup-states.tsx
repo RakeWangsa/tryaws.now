@@ -76,7 +76,7 @@ export const DETAIL: InvoiceDetailScreen = {
       {
         kind: "step",
         code: "bd_vat",
-        label: { bn: "বাংলাদেশ ভ্যাট", en: "Bangladesh VAT" },
+        label: { bn: "ভ্যাট", en: "VAT" },
         amountMinor: 9000n,
       },
     ],

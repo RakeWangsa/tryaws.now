@@ -24,8 +24,11 @@ export const INVOICE_AWS_LABEL: Text2 = Object.freeze({
 
 // The names of the pricing steps on the invoice: the labels of the launch rule (packages/db/seed).
 export const INVOICE_STEP_LABELS: Readonly<Record<string, Text2>> = Object.freeze({
-  korea_vat: Object.freeze({ bn: "কোরিয়ার VAT", en: "Korea VAT" }),
-  bd_vat: Object.freeze({ bn: "বাংলাদেশের VAT", en: "Bangladesh VAT" }),
+  // WPU-X26 (owner decision 2026-11-15: "VAT is VAT, no need to mention Korea or BD"): both VAT steps read
+  // just "VAT" on a document the customer gets. The step codes (korea_vat, bd_vat) and the amounts are
+  // unchanged; the rows stay apart by what they carry (see render.ts). Old invoices keep their stored labels.
+  korea_vat: Object.freeze({ bn: "ভ্যাট", en: "VAT" }),
+  bd_vat: Object.freeze({ bn: "ভ্যাট", en: "VAT" }),
   processing_fee: Object.freeze({ bn: "প্রসেসিং ফি", en: "Processing fee" }),
   markup: Object.freeze({ bn: "সার্ভিস চার্জ", en: "Service charge" }),
 });

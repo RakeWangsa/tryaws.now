@@ -4197,6 +4197,11 @@ TASKS["WPU-X24"] = [
 // runs the helper, the review and Billing views and the message parity; repo the journal and verify wiring.
 TASKS["WPU-X25"] = [specSync, baselineSync, lint, typecheck, format, core, web, repo];
 
+// WPU-X26 (owner decision 2026-11-15, "VAT is VAT"): every tax label a customer reads is just VAT; the invoice
+// labels (core), the review, Billing and public texts, the legal version and the guard test (web) change; amounts and
+// the rule do not (core pricing and ledger tests re-run).
+TASKS["WPU-X26"] = [specSync, baselineSync, lint, typecheck, format, core, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

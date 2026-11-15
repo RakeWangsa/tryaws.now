@@ -27,14 +27,14 @@ const lines = [
   {
     kind: "step",
     code: "korea_vat",
-    label: label("Korea VAT", "কোরিয়ার VAT"),
+    label: label("VAT", "ভ্যাট"),
     amountMinor: "55880",
     rate: "0.10",
   },
   {
     kind: "step",
     code: "bd_vat",
-    label: label("Bangladesh VAT", "বাংলাদেশের VAT"),
+    label: label("VAT", "ভ্যাট"),
     amountMinor: "27940",
     rate: "0.05",
   },

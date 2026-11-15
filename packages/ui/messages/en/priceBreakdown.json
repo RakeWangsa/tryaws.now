@@ -1,7 +1,7 @@
 {
   "kit": {
     "priceBreakdown": {
-      "base": "AWS service price",
+      "base": "Service price (Amazon Web Services)",
       "total": "Total"
     }
   }

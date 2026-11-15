@@ -35,14 +35,14 @@ const vector44: InvoiceDocument = {
     {
       kind: "step",
       code: "korea_vat",
-      label: label("Korea VAT", "কোরিয়ার VAT"),
+      label: label("VAT", "ভ্যাট"),
       amountMinor: "55880",
       rate: "0.10",
     },
     {
       kind: "step",
       code: "bd_vat",
-      label: label("Bangladesh VAT", "বাংলাদেশের VAT"),
+      label: label("VAT", "ভ্যাট"),
       amountMinor: "27940",
       rate: "0.05",
     },
@@ -77,9 +77,9 @@ describe("the VAT line of the Mushak 6.3 (WPU-I5)", () => {
     // (the footer's total excl. taxes is the sum of the rows, which is that number, and is not a value)
     expect(cellsOf(html).map((r) => r[6])).not.toContain("6,258.56");
   });
-  it("Korea VAT and the processing fee are rows of their own with their own totals", () => {
+  it("the pass-through VAT (step korea_vat, labelled VAT) and the processing fee are rows of their own with their own totals", () => {
     const rows = cellsOf(renderInvoiceHtml(vector44, "en"));
-    expect(rows.map((r) => r[1])).toEqual(["AWS service", "Korea VAT", "Processing fee"]);
+    expect(rows.map((r) => r[1])).toEqual(["AWS service", "VAT", "Processing fee"]);
     expect(rows.map((r) => r[9])).toEqual(["5,867.40", "558.80", "111.76"]);
     // no VAT is charged on those rows
     expect(rows[1]?.[8]).toBe("0.00");
@@ -121,14 +121,14 @@ describe("the VAT line of the Mushak 6.3 (WPU-I5)", () => {
           {
             kind: "step",
             code: "korea_vat",
-            label: label("Korea VAT", "কোরিয়ার VAT"),
+            label: label("VAT", "ভ্যাট"),
             amountMinor: "1000",
             rate: "0.10",
           },
           {
             kind: "step",
             code: "bd_vat",
-            label: label("Bangladesh VAT", "বাংলাদেশের VAT"),
+            label: label("VAT", "ভ্যাট"),
             amountMinor: "550",
             rate: "0.05",
           },

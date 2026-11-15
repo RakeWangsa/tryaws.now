@@ -202,8 +202,8 @@ describe("legal drafts (WPU-Z7)", () => {
       expect(tree.Public.legal.version, locale).not.toMatch(/draft|খসড়া/i);
       expect(tree.Public.meta.legal.descriptionOf, locale).not.toMatch(/draft|খসড়া|অনুমোদন/i);
     }
-    expect(publicEn.Public.legal.version).toBe("Version 4, 15 November 2026");
-    expect(publicBn.Public.legal.version).toBe("সংস্করণ ৪, ১৫ নভেম্বর ২০২৬");
+    expect(publicEn.Public.legal.version).toBe("Version 5, 15 November 2026");
+    expect(publicBn.Public.legal.version).toBe("সংস্করণ ৫, ১৫ নভেম্বর ২০২৬");
   });
 
   it("says where the data is kept in the words of the FAQ (16.8), and names the abuse category of the form", () => {
