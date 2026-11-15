@@ -75,18 +75,79 @@ const pathContains = (contains: string) => ({
   },
 });
 
+// WPU-X20: the order review page opens with `?d=<draft envelope>`. The envelope of a domain order holds
+// the KMS-sealed registrant contact and is about 2.6 KB; the Common rule set rule
+// SizeRestrictions_QUERYSTRING blocks a query string over 2,048 bytes, so CloudFront answered 403 (Gate B).
+// The draft is a signed (HMAC), expiring, tenant-bound token sealed with AES-GCM (draft-envelope.ts, R8), and
+// CloudFront takes URLs up to about 8 KB, so a longer query string on this one path opens no new surface.
+// The least risky change: ONLY that one rule runs in Count on this path (a longer maximum is capped by a
+// repo test of the largest envelope); every other rule of the Common group and every other path stay as they
+// were. A WAF rule group cannot be tuned per path, so the group runs twice in the customer ACL: once for every
+// path except this one (unchanged), once for this path only with the one rule overridden.
+// VERIFY (first deploy): the web ACL accepts the same managed group in two rules and the review page answers 200.
+// The same draft travels in `next` of the top-up page when the wallet is short (topup-link.ts), so that one
+// path is covered too; its `next` is held to the U12 allow-list.
+export const LONG_QUERY_PATHS = ["/orders/review", "/wallet/topup"] as const;
+const SIZE_RESTRICTIONS_QUERYSTRING = "SizeRestrictions_QUERYSTRING";
+const COMMON_GROUP = "AWSManagedRulesCommonRuleSet";
+// The path ends with /orders/review (the locale prefix in front, /en or /bn), with or without a final slash.
+const pathEndsWith = (suffix: string) => ({
+  byteMatchStatement: {
+    searchString: suffix,
+    fieldToMatch: { uriPath: {} },
+    positionalConstraint: "ENDS_WITH",
+    textTransformations: decodeThenLowercase,
+  },
+});
+const isReviewPath = {
+  orStatement: {
+    statements: LONG_QUERY_PATHS.flatMap((path) => [pathEndsWith(path), pathEndsWith(`${path}/`)]),
+  },
+};
+
 type VisibilityName = string;
 function visibility(name: VisibilityName) {
   return { cloudwatchMetricsEnabled: true, sampledRequestsEnabled: true, metricName: name };
 }
 
-function managedGroup(name: string, priority: number) {
+function managedGroup(name: string, priority: number, scopeDown?: Statement) {
   return {
     name,
     priority,
     overrideAction: { none: {} },
-    statement: { managedRuleGroupStatement: { name, vendorName: "AWS" } },
+    statement: {
+      managedRuleGroupStatement: {
+        name,
+        vendorName: "AWS",
+        ...(scopeDown === undefined ? {} : { scopeDownStatement: scopeDown }),
+      },
+    },
     visibilityConfig: visibility(name),
+  };
+}
+
+// Customer ACL only (the admin ACL keeps managedGroup as it was): the Common group does not run on the
+// review path, and a second copy of the Common group runs there with SizeRestrictions_QUERYSTRING in Count.
+function customerManagedGroup(name: string, priority: number) {
+  return name === COMMON_GROUP
+    ? managedGroup(name, priority, { notStatement: { statements: [isReviewPath] } })
+    : managedGroup(name, priority);
+}
+function reviewPathCommonGroup(priority: number) {
+  const metric = "common-review-path";
+  return {
+    name: metric,
+    priority,
+    overrideAction: { none: {} },
+    statement: {
+      managedRuleGroupStatement: {
+        name: COMMON_GROUP,
+        vendorName: "AWS",
+        scopeDownStatement: isReviewPath,
+        ruleActionOverrides: [{ name: SIZE_RESTRICTIONS_QUERYSTRING, actionToUse: { count: {} } }],
+      },
+    },
+    visibilityConfig: visibility(metric),
   };
 }
 
@@ -151,7 +212,8 @@ export function waf(config: StageConfig) {
       scope: "CLOUDFRONT",
       defaultAction: { allow: {} },
       rules: [
-        ...managed.map((group) => managedGroup(group.name, group.priority)),
+        ...managed.map((group) => customerManagedGroup(group.name, group.priority)),
+        reviewPathCommonGroup(15),
         ...rateRules(40),
       ],
       visibilityConfig: visibility(resourceName(stage, "web-acl")),

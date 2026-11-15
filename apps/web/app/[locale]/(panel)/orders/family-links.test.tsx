@@ -139,6 +139,48 @@ describe("/orders/review goes back to the form the draft came from", () => {
   });
 });
 
+// WPU-X20 (Gate B): the review of a DNS zone said "Server", "Cloud Server" and a Region.
+describe("/orders/review names its own product", () => {
+  const ready = (family: string) =>
+    ({
+      state: "ready" as const,
+      token: "t",
+      name: "example.test",
+      region: "us-east-1",
+      productId: "0190aaaa-0000-7000-8000-0000000000b1",
+      family,
+      expiresAt: new Date("2026-11-12T09:00:00Z"),
+      baseMinor: 10000n,
+      steps: [],
+      totalMinor: 10000n,
+      balanceMinor: 500000n,
+      balanceAfterMinor: 490000n,
+      shortfallTaka: null,
+    }) as never;
+  const view = (family: string, locale: "en" | "bn") =>
+    html(
+      <ReviewContent locale={locale} review={ready(family)} idempotencyKey="k" action={noop} />,
+      locale,
+    );
+
+  it.each(["dns_zone", "domain", "cdn"])("%s: no server wording and no Region", (family) => {
+    for (const locale of ["en", "bn"] as const) {
+      const out = view(family, locale);
+      expect(out).not.toContain("Cloud Server");
+      expect(out).not.toContain("ক্লাউড সার্ভার");
+      expect(out).not.toContain("us-east-1");
+      expect(out).not.toContain("N. Virginia");
+    }
+    expect(view(family, "en")).toContain("Worldwide");
+  });
+  it("a DNS zone is named with Amazon Route 53; a server keeps its own lines", () => {
+    expect(view("dns_zone", "en")).toContain("DNS zone, on Amazon Route 53");
+    const server = view("linux_instance", "en");
+    expect(server).toContain("Cloud Server");
+    expect(server).toContain("us-east-1");
+  });
+});
+
 // WPU-B3: a failed order whose reversal is posted says so with the amount; before that it only promises.
 describe("/orders/[id] failed: the refund line", () => {
   const failed = (refunded: boolean) => ({

@@ -90,6 +90,27 @@ describe("sealDraftToken and openDraftToken", () => {
   });
 });
 
+// WPU-X20: the WAF rule SizeRestrictions_QUERYSTRING (2,048 bytes) is overridden to Count on the review and top-up
+// paths only (infra/stacks/waf.ts); CloudFront itself refuses a URL over about 8 KB. The cap must exist and the
+// largest possible envelope must stay far under it.
+describe("the longest review URL", () => {
+  const CLOUDFRONT_URL_LIMIT = 8000;
+  it("the cap exists: an envelope over MAX_ENVELOPED_TOKEN is refused", () => {
+    expect(MAX_ENVELOPED_TOKEN).toBeLessThanOrEqual(5600);
+    expect(openDraftToken([SECRET], `e1.${"A".repeat(MAX_ENVELOPED_TOKEN + 1)}`)).toBeNull();
+  });
+  it("the review URL and the top-up URL of the largest draft stay under 8,000 bytes", () => {
+    const sealed = sealDraftToken([SECRET], "x".repeat(4096));
+    const review = `/en/orders/review?d=${encodeURIComponent(sealed)}`;
+    const topup = `/en/wallet/topup?amount=99999999&next=${encodeURIComponent(`/orders/review?d=${sealed}`)}`;
+    expect(Buffer.byteLength(review)).toBeLessThan(CLOUDFRONT_URL_LIMIT);
+    expect(Buffer.byteLength(topup)).toBeLessThan(CLOUDFRONT_URL_LIMIT);
+    // and the cap itself, at its largest, still fits with the longest path and parameters
+    const capped = `/bn/wallet/topup?amount=99999999&next=${encodeURIComponent(`/orders/review?d=${"A".repeat(MAX_ENVELOPED_TOKEN)}`)}`;
+    expect(Buffer.byteLength(capped)).toBeLessThan(CLOUDFRONT_URL_LIMIT);
+  });
+});
+
 describe("envelopeOrders", () => {
   function fakeOrders() {
     const placed: string[] = [];

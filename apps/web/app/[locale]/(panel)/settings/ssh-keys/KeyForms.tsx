@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { startTransition, useActionState, useState } from "react";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
+import { FreshSignInLink } from "../../_family/FreshSignInLink.tsx";
 
 // The two forms of /settings/ssh-keys (U8: field errors from the server's own check, a button that is
 // inert while its action runs). Only public keys are posted; a private key is refused by the server and
@@ -20,6 +21,7 @@ function Notice({ state, doneKey }: { state: FormState; doneKey: string }) {
       <div className="alert alert-danger text-start" role="alert">
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {tf.has(`error.${state.error}`) ? tf(`error.${state.error}`) : tf("error.unavailable")}
+        <FreshSignInLink error={state.error} />
       </div>
     );
   }

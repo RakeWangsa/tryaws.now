@@ -99,7 +99,7 @@ describe("TotpSetupForms", () => {
 
   it("a fresh sign-in error links to the sign-in", () => {
     const html = render("en", { error: "fresh_sign_in_required" });
-    expect(html).toContain('href="/login"');
+    expect(html).toContain('href="/login?reauth=1"');
   });
 });
 

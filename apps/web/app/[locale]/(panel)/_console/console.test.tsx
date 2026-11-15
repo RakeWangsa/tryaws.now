@@ -9,7 +9,10 @@ import {
 } from "./ConsoleForms.tsx";
 import { html } from "../_family/render-html.tsx";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: () => {} }),
+  usePathname: () => "/en/databases/x",
+}));
 
 const ID = "0190aaaa-0000-7000-8000-0000000000e1";
 const REQ = "0190aaaa-0000-7000-8000-0000000000f1";

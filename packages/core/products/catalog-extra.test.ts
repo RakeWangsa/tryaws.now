@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mapDbBlueprint, mapDistributionBundle } from "./catalog-extra";
+import { mapContainerPower, mapDbBlueprint, mapDistributionBundle } from "./catalog-extra";
+import { containerPlanFrom } from "./container";
 
 const bundle = (over: Record<string, unknown> = {}) => ({
   bundleId: "small_1_0",
@@ -79,5 +80,48 @@ describe("mapDbBlueprint", () => {
     expect(
       mapDbBlueprint(blueprint({ isEngineDefault: "true" }), "ap-southeast-1")?.specs.isDefault,
     ).toBe(false);
+  });
+});
+
+describe("mapContainerPower (WPU-X20)", () => {
+  const power = (over: Record<string, unknown> = {}) => ({
+    powerId: "nano-1",
+    name: "nano",
+    priceUsd: "7",
+    cpuCount: 0.25,
+    ramSizeInGb: 0.5,
+    isActive: true,
+    ...over,
+  });
+  it("maps a power to an active row of scale 1 that containerPlanFrom reads back", () => {
+    const row = mapContainerPower(power(), "ap-southeast-1");
+    expect(row).toEqual({
+      family: "container_service",
+      awsId: "nano",
+      platform: "container",
+      region: "ap-southeast-1",
+      specs: { name: "nano", scale: 1, vcpus: 0.25, ramGb: 0.5 },
+      awsPriceUsd: "7",
+      billingUnit: "month",
+      featureFlag: "container_service",
+      active: true,
+    });
+    expect(containerPlanFrom(row?.awsId, row?.specs)).toEqual({ power: "nano", scale: 1 });
+  });
+  it("stores an inactive or free power inactive", () => {
+    expect(mapContainerPower(power({ isActive: false }), "us-east-1")?.active).toBe(false);
+    expect(mapContainerPower(power({ priceUsd: "0" }), "us-east-1")?.active).toBe(false);
+  });
+  it("refuses an unknown power, a bad price, a bad size and a bad Region (R16)", () => {
+    expect(mapContainerPower(power({ name: "huge", powerId: "huge-1" }), "us-east-1")).toBeNull();
+    expect(mapContainerPower(power({ name: "", powerId: "small-1" }), "us-east-1")?.awsId).toBe(
+      "small",
+    );
+    expect(mapContainerPower(power({ priceUsd: "7.00001" }), "us-east-1")).toBeNull();
+    expect(mapContainerPower(power({ priceUsd: "" }), "us-east-1")).toBeNull();
+    expect(mapContainerPower(power({ cpuCount: Number.NaN }), "us-east-1")).toBeNull();
+    expect(mapContainerPower(power({ ramSizeInGb: 0 }), "us-east-1")).toBeNull();
+    expect(mapContainerPower(power(), "nowhere")).toBeNull();
+    expect(mapContainerPower(null, "us-east-1")).toBeNull();
   });
 });

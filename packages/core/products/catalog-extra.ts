@@ -134,3 +134,77 @@ export function mapDbBlueprint(raw: unknown, region: string): DbBlueprintRow | n
     active: true,
   };
 }
+
+// WPU-X20. The container service plans: GetContainerServicePowers. Gate B found no plan on staging because no
+// code wrote the family `container_service` (the sync covered servers, images, CDN and database engines only).
+
+export const CONTAINER_FAMILY = "container_service";
+/** The powers a container service can have (Lightsail), in the order of size. A power AWS adds later is refused until named here. */
+const CONTAINER_POWER_IDS = ["nano", "micro", "small", "medium", "large", "xlarge"] as const;
+
+/** One `GetContainerServicePowers` item (`name` "nano", `powerId` "nano-1"); `priceUsd` is decimal text or "" (the float never leaves the adapter). */
+export interface RawContainerPower {
+  readonly powerId: string;
+  readonly name: string;
+  readonly priceUsd: string;
+  readonly cpuCount: number;
+  readonly ramSizeInGb: number;
+  readonly isActive: boolean;
+}
+
+/**
+ * One row per power and Region (the unique key is family + aws_id + region), sold at scale 1 (one node):
+ * `containerPlanFrom` reads the power from `aws_id` and the scale from `specs.scale`. The price is that of
+ * one node; the customer cannot buy another scale at order time (JOURNEY WPU-G8, point B7).
+ */
+export interface ContainerPowerRow {
+  readonly family: typeof CONTAINER_FAMILY;
+  readonly awsId: string;
+  readonly platform: "container";
+  readonly region: string;
+  readonly specs: {
+    readonly name: string;
+    readonly scale: 1;
+    readonly vcpus: number;
+    readonly ramGb: number;
+  };
+  readonly awsPriceUsd: string;
+  readonly billingUnit: "month";
+  readonly featureFlag: "container_service";
+  readonly active: boolean;
+}
+
+function positiveFinite(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * One container power of a Region to its catalog row, or null when the id, the Region, the price or the
+ * size cannot be trusted (R16). Active only when AWS marks it active and the price is above zero.
+ */
+export function mapContainerPower(raw: unknown, region: string): ContainerPowerRow | null {
+  if (typeof region !== "string" || !REGION.test(region)) return null;
+  if (typeof raw !== "object" || raw === null) return null;
+  const p = raw as Partial<RawContainerPower>;
+  // The power of CreateContainerService is the NAME ("nano"); powerId is a longer id ("nano-1") (API reference,
+  // ContainerServicePower). The name decides; the id's own prefix is the fallback when the name is missing.
+  const nameKey = typeof p.name === "string" ? p.name.trim().toLowerCase() : "";
+  const idKey = typeof p.powerId === "string" ? (p.powerId.split("-")[0] ?? "").toLowerCase() : "";
+  const key = nameKey !== "" ? nameKey : idKey;
+  if (!(CONTAINER_POWER_IDS as readonly string[]).includes(key)) return null;
+  if (typeof p.priceUsd !== "string" || !PRICE_TEXT.test(p.priceUsd)) return null;
+  const vcpus = positiveFinite(p.cpuCount);
+  const ramGb = positiveFinite(p.ramSizeInGb);
+  if (vcpus === null || ramGb === null) return null;
+  return {
+    family: CONTAINER_FAMILY,
+    awsId: key,
+    platform: "container",
+    region,
+    specs: { name: cleanText(p.name) ?? key, scale: 1, vcpus, ramGb },
+    awsPriceUsd: p.priceUsd,
+    billingUnit: "month",
+    featureFlag: "container_service",
+    active: p.isActive === true && isPositiveDecimal(p.priceUsd),
+  };
+}

@@ -4117,6 +4117,25 @@ TASKS["WPU-X18"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, 
 // /en), the public pages, SEO, sitemap and GEO-file tests; repo the journal and verify wiring.
 TASKS["WPU-X19"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X20 (Gate B staging cycles, 2026-11-15): the WAF counts SizeRestrictions_QUERYSTRING on the review and
+// top-up paths only (repo: infra tests; web: the longest envelope URL), the catalog sync writes the container
+// plans (core mapper, aws source, catalog-sync handler), the review page names its own product, the DNS zone page
+// refreshes itself, and "sign in again" opens the login page (reauth=1, next on the U12 list). The CDN origin
+// question is recorded in JOURNEY (needs decision), not built.
+TASKS["WPU-X20"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  aws,
+  catalogSyncAll,
+  ui,
+  web,
+  repo,
+];
+
 // WPU-X21 (owner supplied the official EPS "Pay with" badges): the dark two-row badge in the public footer,
 // on the home page and on the wallet top-up page, self-hosted from apps/web/public/brand with explicit size,
 // lazy loading and a tc.css class. ui runs tc.css; web runs the badge, home, public pages and top-up tests and

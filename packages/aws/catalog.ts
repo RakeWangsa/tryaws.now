@@ -1,10 +1,17 @@
 import {
   GetBlueprintsCommand,
   GetBundlesCommand,
+  GetContainerServicePowersCommand,
   GetDistributionBundlesCommand,
   GetRelationalDatabaseBlueprintsCommand,
 } from "@aws-sdk/client-lightsail";
-import type { RawBlueprint, RawBundle, RawDbBlueprint, RawDistributionBundle } from "@tc/core";
+import type {
+  RawBlueprint,
+  RawBundle,
+  RawContainerPower,
+  RawDbBlueprint,
+  RawDistributionBundle,
+} from "@tc/core";
 import type { AwsAccess } from "./access";
 import { AwsError } from "./errors";
 import { createRoute53DomainsPort } from "./domains-client";
@@ -33,6 +40,11 @@ export interface CatalogSource {
    * and the answer has no page token (API reference, GetDistributionBundles).
    */
   distributionBundles(account: AccountRef): Promise<readonly RawDistributionBundle[]>;
+  /** WPU-X20: the container service powers of one Region (GetContainerServicePowers). */
+  containerPowers(
+    account: AccountRef,
+    region: LightsailRegion,
+  ): Promise<readonly RawContainerPower[]>;
   /** WPU-B5: engine and version of the managed databases of one Region. */
   databaseBlueprints(
     account: AccountRef,
@@ -98,6 +110,18 @@ function toRawDistributionBundle(item: unknown): RawDistributionBundle {
     name: typeof item.name === "string" ? item.name : "",
     priceUsd: priceText(item.price) ?? "",
     transferPerMonthInGb: num(item.transferPerMonthInGb),
+    isActive: item.isActive === true,
+  };
+}
+
+function toRawContainerPower(item: unknown): RawContainerPower {
+  if (!isRecord(item)) throw invalid();
+  return {
+    powerId: typeof item.powerId === "string" ? item.powerId : "",
+    name: typeof item.name === "string" ? item.name : "",
+    priceUsd: priceText(item.price) ?? "",
+    cpuCount: num(item.cpuCount),
+    ramSizeInGb: num(item.ramSizeInGb),
     isActive: item.isActive === true,
   };
 }
@@ -180,6 +204,12 @@ export function createCatalogSource(
       const response: unknown = await client.send(new GetDistributionBundlesCommand({}));
       if (!isRecord(response) || !Array.isArray(response.bundles)) throw invalid();
       return response.bundles.map(toRawDistributionBundle);
+    },
+    async containerPowers(account, region) {
+      const client = access.lightsail(account, region, "TcReader");
+      const response: unknown = await client.send(new GetContainerServicePowersCommand({}));
+      if (!isRecord(response) || !Array.isArray(response.powers)) throw invalid();
+      return response.powers.map(toRawContainerPower);
     },
     async databaseBlueprints(account, region) {
       const client = access.lightsail(account, region, "TcReader");
