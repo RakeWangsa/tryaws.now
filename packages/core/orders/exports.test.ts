@@ -278,6 +278,7 @@ const PRODUCTS = [
   "CDN_FAMILY",
   "CDN_SYNC_REGION",
   "CONTAINER_FAMILY",
+  "REPEATED_REFUSAL_ATTEMPTS",
   "DB_BLUEPRINT_FAMILY",
   "mapContainerPower",
   "mapDbBlueprint",

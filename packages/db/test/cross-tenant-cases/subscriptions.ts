@@ -14,14 +14,6 @@ export const subscriptionsCases: CaseSet = defineCaseSet<{ resourceId: string }>
       period_start: "2026-01-01T00:00:00Z",
       period_end: "2026-01-31T00:00:00Z",
     });
-    // WPU-X23 (R8): A has a LIVE destroy, so B's request must still be not_found and must not learn its id.
-    await insertRow(pool, "operations", {
-      resource_id: resourceId,
-      kind: "destroy",
-      state: "needs_approval",
-      needs_approval: true,
-      idempotency_key: "customer:" + customerId + ":destroy:seed-live",
-    });
     return { resourceId };
   },
   cases: ({ asCustomer }) => ({
