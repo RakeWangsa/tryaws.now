@@ -1,7 +1,26 @@
 name: ci
 
+# Free plan (private repository): 2,000 Linux minutes a month, so a run must stay small (owner decision 2026-11-15).
+# - A new push to a pull request cancels the run still going for the older push.
+# - A change that only touches notes, drafts, runbooks or screenshots runs nothing.
+# - A pull request tests what its changes reach (vitest --changed against the base); the whole suite runs in
+#   deploy-production.yml before every production deploy, and here by hand (Run workflow) or on the main branch.
+# - The old last step `pnpm verify --quick` repeated lint, typecheck and the whole test suite on a clean checkout
+#   (it narrows only on uncommitted changes), so it is gone; the same checks run once above it.
+# - The secret scan reads the commits of the pull request, not the whole history.
 on:
   pull_request:
+    paths-ignore:
+      - "JOURNEY.md"
+      - "docs/legal-drafts/**"
+      - "docs/runbooks/**"
+      - "docs/screens/**"
+      - ".superpowers/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -9,7 +28,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     env:
       DATABASE_URL: postgres://postgres:ci-throwaway-password@localhost:5432/postgres
     services:
@@ -38,16 +57,25 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
-      - run: pnpm test
+      - name: Tests of what the pull request changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: pnpm exec vitest run --changed "$BASE_SHA"
+      - name: Whole test suite (by hand)
+        if: github.event_name != 'pull_request'
+        run: pnpm test
       - name: Secret scan (gitleaks)
-        run: >-
-          docker run --rm
-          -v "$GITHUB_WORKSPACE:/repo"
-          -e GIT_CONFIG_COUNT=1
-          -e GIT_CONFIG_KEY_0=safe.directory
-          -e GIT_CONFIG_VALUE_0=/repo
-          ghcr.io/gitleaks/gitleaks:v8.30.1
-          git /repo --config /repo/.gitleaks.toml --redact --verbose
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$BASE_SHA" ]; then RANGE="--log-opts=${BASE_SHA}..HEAD"; else RANGE=""; fi
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            -e GIT_CONFIG_COUNT=1 \
+            -e GIT_CONFIG_KEY_0=safe.directory \
+            -e GIT_CONFIG_VALUE_0=/repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --config /repo/.gitleaks.toml --redact --verbose $RANGE
       - run: pnpm audit --audit-level high
-      - run: pnpm verify --quick
       - run: pnpm spec:check
