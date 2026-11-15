@@ -20,6 +20,9 @@ export interface RawBundle {
   readonly power: number | null;
 }
 
+/** The plan types of the Lightsail console (WPU-X24). A bundle of another shape has none (null). */
+export type PlanType = "general_purpose" | "memory_optimized" | "compute_optimized";
+
 export interface CatalogSpecs {
   vcpus: number;
   /** A size, not money. Text such as "0.5", so that a JSON number never needs rounding. */
@@ -31,6 +34,8 @@ export interface CatalogSpecs {
   name: string;
   instanceType: string | null;
   power: number | null;
+  /** WPU-X24: from the bundle id (`planTypeOf`); null when the id has no known shape. */
+  planType: PlanType | null;
 }
 
 export type InstanceFamily = "linux_instance" | "windows_instance";
@@ -64,6 +69,26 @@ const PLATFORMS: Readonly<
   LINUX_UNIX: { family: "linux_instance", platform: "linux" },
   WINDOWS: { family: "windows_instance", platform: "windows" },
 };
+
+// WPU-X24. Live GetBundles of ap-southeast-1 (124 bundles, 2026-11-15) marks the plan type in the bundle id:
+// general purpose has no prefix (`medium_3_0`, `2xlarge_3_0`, `nano_ipv6_3_0`), memory optimized has `m_`
+// (`m_large_1_0`), compute optimized has `c_` (`c_large_1_0`). Both prefixed shapes are checked in full.
+const SIZE = "(?:nano|micro|small|medium|large|xlarge|\\d+xlarge)";
+const GENERAL_ID = new RegExp(`^${SIZE}_(?:ipv6_)?\\d+_\\d+$`);
+const MEMORY_ID = new RegExp(`^m_${SIZE}_(?:ipv6_)?\\d+_\\d+$`);
+const COMPUTE_ID = new RegExp(`^c_${SIZE}_(?:ipv6_)?\\d+_\\d+$`);
+
+/**
+ * The plan type of a bundle, from its id alone. Strict: an id that is none of the three known shapes
+ * gives null, never a guess (R16); a null type is not shown in a type row.
+ */
+export function planTypeOf(bundleId: string): PlanType | null {
+  if (typeof bundleId !== "string") return null;
+  if (MEMORY_ID.test(bundleId)) return "memory_optimized";
+  if (COMPUTE_ID.test(bundleId)) return "compute_optimized";
+  if (GENERAL_ID.test(bundleId)) return "general_purpose";
+  return null;
+}
 
 const isPriceText = (v: unknown): v is string => typeof v === "string" && PRICE_TEXT.test(v);
 const isCount = (v: unknown): v is number =>
@@ -117,6 +142,7 @@ export function mapInstanceBundle(raw: RawBundle, region: string): MapResult {
     name: typeof raw.name === "string" ? raw.name : "",
     instanceType: typeof raw.instanceType === "string" ? raw.instanceType : null,
     power: isCount(raw.power) ? raw.power : null,
+    planType: planTypeOf(raw.bundleId),
   };
   const rows = known.map((p): CatalogRowInput => {
     const target = PLATFORMS[p]!;

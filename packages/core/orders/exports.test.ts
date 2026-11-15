@@ -379,6 +379,7 @@ const PRODUCTS = [
   "mapInstanceBundle",
   "planIsSafe",
   "planScopeSync",
+  "planTypeOf",
   "priceCatalog",
   "priceRows",
 ];
