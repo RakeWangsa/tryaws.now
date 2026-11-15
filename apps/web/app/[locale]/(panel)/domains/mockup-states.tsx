@@ -183,6 +183,8 @@ export const STATE_RENDERERS: Readonly<Record<string, Renderer>> = {
     reachability: "done",
     autoRenew: true,
   }),
+  // WPU-X23: a registration that is still going; the page refreshes itself until it is final.
+  "domain_detail.pending": detailOf({ ...DETAIL, state: "pending" }),
   "domain_detail.not_found": detailOf(null),
   "domain_detail.loading": fixed(() => <ScreenLoading lines={[2, 6]} />),
   "domain_detail.error": fixed(errorNode),

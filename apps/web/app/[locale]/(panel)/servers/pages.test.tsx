@@ -41,6 +41,10 @@ vi.mock("next-intl/server", async () => {
       }),
   };
 });
+// WPU-X23: AutoRefresh renders nothing; the mock makes its `active` visible in the markup.
+vi.mock("../orders/[id]/AutoRefresh.tsx", () => ({
+  AutoRefresh: ({ active }: { active: boolean }) => <i data-auto-refresh={active ? "on" : "off"} />,
+}));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND");
@@ -321,6 +325,12 @@ describe("/servers/[id] management (WPU-G2)", () => {
     state.manage = manage({ state: "creating" });
     const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
     expect(en).not.toContain("Reboot");
+    // WPU-X23: and the page asks the server again by itself until the server is ready.
+    expect(en).toContain('data-auto-refresh="on"');
+  });
+  it("a ready server does not refresh by itself", async () => {
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain('data-auto-refresh="off"');
   });
   it("the Connect tab shows the real login user, the key file of the customer's key and a correct command", async () => {
     const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });

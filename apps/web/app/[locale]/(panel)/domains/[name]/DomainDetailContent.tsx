@@ -4,6 +4,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { FormState } from "../../../../../server/action-state.ts";
 import type { DomainDetailView } from "../../../../../server/domain-view.ts";
+import { AutoRefresh } from "../../orders/[id]/AutoRefresh.tsx";
 import { DomainState } from "../DomainsContent.tsx";
 import { NameServersForm, ResendVerificationForm } from "./DomainOpsForms.tsx";
 import { RenewalForm } from "./RenewalForm.tsx";
@@ -53,8 +54,12 @@ export function DomainDetailContent({
   const registered = domain.state === "registered" || domain.state === "awaiting_verification";
   const date = (value: Date): string => formatDate(value, { locale, numerals });
 
+  // WPU-X23: while the registration is still going (queued or running) or waits for staff, the page asks the
+  // server again by itself; it stops when the state is final. A page with no data of its own, no inline script.
+  const refresh = domain.state === "pending" || domain.state === "review";
   return (
     <>
+      <AutoRefresh active={refresh} everyMs={domain.state === "review" ? 30_000 : 10_000} />
       <div className="row g-3 mb-4">
         <div className="col-12 col-md-4">
           <StatTile value={t(`state.${domain.state}` as never)} description={t("detail.state")} />
