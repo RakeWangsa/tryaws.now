@@ -897,7 +897,8 @@ div.tc-modal-open {
   flex-wrap: wrap;
   gap: 8px 14px;
 }
-.tc-svc-name {
+/* Two classes: the theme's .golink (weight 700) has the same weight of selector and comes later. */
+.tc-svc-list .tc-svc-name {
   font-weight: 400;
 }
 .tc-svc-item {
