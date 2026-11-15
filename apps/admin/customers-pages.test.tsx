@@ -159,7 +159,7 @@ describe("/customers", () => {
     expect(html).toContain("r***@example.test");
     expect(html).toContain("+8801*******78");
     expect(html).toContain(msgs(locale).table.name);
-    expect(html).toContain(`href="${locale === "en" ? "/en" : ""}/customers/${CUSTOMER_ID}"`);
+    expect(html).toContain(`href="/en/customers/${CUSTOMER_ID}"`);
     expect(html).not.toMatch(/@example\.test"?>[^<]*[a-z]{2,}@/);
     expect(html).not.toContain("<script");
   });

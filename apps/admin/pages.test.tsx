@@ -133,10 +133,10 @@ describe("admin today page", () => {
     expect(html).not.toContain('href="/en/admins"');
   });
 
-  it("links the locale switch to / and /en", async () => {
+  it("has no language switch (WPU-X19: the console is English only)", async () => {
     const element = await Page({ params: Promise.resolve({ locale: "bn" }) });
     const html = inProvider(element, "bn");
-    expect(html).toContain('href="/en"');
+    expect(html).not.toContain("tc-locale-switch");
   });
 
   it("shows the neutral page, and no shell and no navigation, when the guard refuses", async () => {

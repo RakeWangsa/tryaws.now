@@ -46,7 +46,7 @@ describe("GALLERY_SHELLS", () => {
 });
 
 describe.each(["bn", "en"] as const)("ShellDemo (%s)", (locale) => {
-  const prefix = locale === "en" ? "/en" : "";
+  const prefix = "/en"; // WPU-X19: every path but the home page is English
   const user = (galleryMessages[locale]["Gallery"] as unknown as { demo: { user: string } }).demo
     .user;
 

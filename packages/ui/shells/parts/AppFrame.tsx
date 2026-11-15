@@ -8,7 +8,8 @@ import { NavDrawer } from "./NavDrawer.tsx";
 
 export interface AppFrameProps {
   locale: Locale;
-  localeHrefs: Record<Locale, string>;
+  /** WPU-X19: the language switch is shown only when the hrefs are given (the home page). */
+  localeHrefs?: Record<Locale, string> | undefined;
   homeHref: string;
   /** The accessible name of the navigation. */
   navLabel: string;
@@ -60,10 +61,12 @@ export function AppFrame({
                   {brandExtra}
                 </div>
                 <div className="col d-flex flex-wrap align-items-center justify-content-end gap-2 gap-md-3">
-                  <LocaleSwitch
-                    current={locale}
-                    items={LOCALES.map((item) => ({ locale: item, href: localeHrefs[item] }))}
-                  />
+                  {localeHrefs === undefined ? null : (
+                    <LocaleSwitch
+                      current={locale}
+                      items={LOCALES.map((item) => ({ locale: item, href: localeHrefs[item] }))}
+                    />
+                  )}
                   {topExtras}
                   {account}
                 </div>

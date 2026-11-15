@@ -2,7 +2,6 @@ import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { AppShell } from "@tc/ui";
 import type { AppNavId } from "@tc/ui";
-import { localeHrefs } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import type { PanelData } from "../../../server/panel.ts";
 import { SignOutForm } from "./sign-out.tsx";
@@ -14,13 +13,12 @@ import { SignOutForm } from "./sign-out.tsx";
  */
 export function PanelFrame({
   locale,
-  path,
   currentId,
   panel,
   children,
 }: {
   locale: Locale;
-  /** The page's own path without locale, for the language switch. */
+  /** The page's own path without locale. WPU-X19: the panel has no language switch, so it is not used now. */
   path: string;
   currentId: AppNavId;
   panel: PanelData;
@@ -30,7 +28,6 @@ export function PanelFrame({
   return (
     <AppShell
       locale={locale}
-      localeHrefs={localeHrefs(path)}
       currentId={currentId}
       user={{ displayName: panel.displayName === "" ? t("app.account") : panel.displayName }}
       balanceMinor={panel.balanceMinor}

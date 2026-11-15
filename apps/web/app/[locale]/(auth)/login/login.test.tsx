@@ -45,7 +45,7 @@ describe("the login form (16.9)", () => {
     expect(en).toContain('href="/en/signup"');
     expect(en).toContain('name="locale" value="en"');
     const bn = render("bn");
-    expect(bn).toContain('href="/forgot-password"');
+    expect(bn).toContain('href="/en/forgot-password"');
     expect(bn).toContain('name="locale" value="bn"');
   });
 

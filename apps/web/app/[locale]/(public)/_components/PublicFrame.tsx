@@ -39,7 +39,7 @@ export function PublicFrame({
   return (
     <PublicShell
       locale={locale}
-      localeHrefs={localeHrefs(path)}
+      {...(path === "/" ? { localeHrefs: localeHrefs(path) } : {})}
       signedIn={signedIn}
       openFamilies={openFamilies}
       domainsOpen={domainsOpen}

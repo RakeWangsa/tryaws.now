@@ -21,21 +21,21 @@ import {
 const ORIGIN = "https://cloud.example.test";
 
 describe("pageMetadata", () => {
-  it("gives a canonical URL, hreflang for bn and en and an x-default (16.8)", () => {
-    const bn = pageMetadata({
+  // WPU-X19 (owner, 2026-11-15): only the home page has a bn/en pair.
+  it("the home page gives hreflang for bn and en and an x-default (16.8)", () => {
+    const home = pageMetadata({
       origin: ORIGIN,
       locale: "bn",
-      path: "/pricing",
+      path: "/",
       title: "t",
       description: "d",
     });
-    expect(bn.alternates?.canonical).toBe(`${ORIGIN}/pricing`);
-    expect(bn.alternates?.languages).toEqual({
-      bn: `${ORIGIN}/pricing`,
-      en: `${ORIGIN}/en/pricing`,
-      "x-default": `${ORIGIN}/pricing`,
+    expect(home.alternates?.canonical).toBe(`${ORIGIN}/`);
+    expect(home.alternates?.languages).toEqual({
+      bn: `${ORIGIN}/`,
+      en: `${ORIGIN}/en`,
+      "x-default": `${ORIGIN}/`,
     });
-    expect(bn.robots).toEqual({ index: true, follow: true });
     const en = pageMetadata({
       origin: ORIGIN,
       locale: "en",
@@ -45,6 +45,25 @@ describe("pageMetadata", () => {
     });
     expect(en.alternates?.canonical).toBe(`${ORIGIN}/en`);
     expect(en.alternates?.languages).toMatchObject({ bn: `${ORIGIN}/`, en: `${ORIGIN}/en` });
+  });
+
+  it("every other page declares only its English URL: an English canonical and no hreflang", () => {
+    for (const locale of ["en", "bn"] as const) {
+      const meta = pageMetadata({
+        origin: ORIGIN,
+        locale,
+        path: "/pricing",
+        title: "t",
+        description: "d",
+      });
+      expect(meta.alternates?.canonical, locale).toBe(`${ORIGIN}/en/pricing`);
+      expect(meta.alternates?.languages, locale).toBeUndefined();
+      expect(meta.openGraph).toMatchObject({
+        url: `${ORIGIN}/en/pricing`,
+        locale: "en_US",
+      });
+      expect((meta.openGraph as { alternateLocale?: unknown }).alternateLocale).toBeUndefined();
+    }
   });
 
   it("can ask not to be indexed", () => {

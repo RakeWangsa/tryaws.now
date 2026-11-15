@@ -256,7 +256,7 @@ describe("/wallet/topup: errors and states", () => {
       expect(html).not.toContain("<form");
       expect(html).not.toContain('name="amount"');
       expect(html).toContain(locale === "bn" ? "টপ আপ এখনো চালু হয়নি" : "Top-up is not open yet");
-      expect(html).toContain(locale === "bn" ? 'href="/wallet"' : 'href="/en/wallet"');
+      expect(html).toContain(locale === "bn" ? 'href="/en/wallet"' : 'href="/en/wallet"');
     }
   });
 

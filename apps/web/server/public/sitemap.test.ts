@@ -15,18 +15,36 @@ const catalog = (on: string[]): PublicCatalog => ({
 });
 
 describe("sitemap.xml", () => {
-  it("lists the public pages in both locales, each with hreflang alternates and an x-default", () => {
+  it("lists the home page in both locales with hreflang alternates and an x-default", () => {
     const entries = sitemapEntries(ORIGIN, catalog([]));
-    const pricingBn = entries.find((e) => e.url === `${ORIGIN}/pricing`);
-    const pricingEn = entries.find((e) => e.url === `${ORIGIN}/en/pricing`);
-    expect(pricingBn?.alternates.languages).toEqual({
-      bn: `${ORIGIN}/pricing`,
-      en: `${ORIGIN}/en/pricing`,
-      "x-default": `${ORIGIN}/pricing`,
+    const homeBn = entries.find((e) => e.url === `${ORIGIN}/`);
+    const homeEn = entries.find((e) => e.url === `${ORIGIN}/en`);
+    expect(homeBn?.alternates?.languages).toEqual({
+      bn: `${ORIGIN}/`,
+      en: `${ORIGIN}/en`,
+      "x-default": `${ORIGIN}/`,
     });
-    expect(pricingEn?.alternates).toEqual(pricingBn?.alternates);
-    expect(entries.find((e) => e.url === `${ORIGIN}/`)).toBeDefined();
-    expect(entries.find((e) => e.url === `${ORIGIN}/en`)).toBeDefined();
+    expect(homeEn?.alternates).toEqual(homeBn?.alternates);
+  });
+
+  it("lists every other page once, by its English URL and without alternates (WPU-X19)", () => {
+    const entries = sitemapEntries(ORIGIN, catalog(["database"]));
+    for (const path of sitemapPaths(catalog(["database"])).filter((p) => p !== "/")) {
+      expect(
+        entries.filter((e) => e.url === `${ORIGIN}/en${path}`),
+        path,
+      ).toHaveLength(1);
+      expect(
+        entries.find((e) => e.url === `${ORIGIN}${path}`),
+        path,
+      ).toBeUndefined();
+    }
+    const pricing = entries.find((e) => e.url === `${ORIGIN}/en/pricing`);
+    expect(pricing?.alternates).toBeUndefined();
+    expect(entries.filter((e) => e.alternates !== undefined).map((e) => e.url)).toEqual([
+      `${ORIGIN}/`,
+      `${ORIGIN}/en`,
+    ]);
   });
 
   it("holds public pages only, no duplicate and every legal document", () => {

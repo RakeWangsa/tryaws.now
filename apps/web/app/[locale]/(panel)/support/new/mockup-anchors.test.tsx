@@ -72,7 +72,7 @@ describe("/support/new, the earlier requests", () => {
     // bn is the default locale and has no prefix (localePath)
     for (const [locale, prefix] of [
       ["en", "/en"],
-      ["bn", ""],
+      ["bn", "/en"], // WPU-X19: panel pages are English only
     ] as const) {
       const out = (STATE_RENDERERS["support.list"] as (l: "bn" | "en") => string)(locale);
       expect(out).toContain(

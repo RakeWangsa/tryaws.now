@@ -2,7 +2,6 @@ import { hasLocale } from "next-intl";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { PublicShell } from "@tc/ui";
-import { localeHrefs } from "@tc/ui/runtime";
 import { routing } from "../../i18n/routing.ts";
 import { maintenanceOn } from "../../server/public/maintenance.ts";
 import { MaintenanceContent } from "./(public)/MaintenanceContent.tsx";
@@ -24,7 +23,6 @@ export default async function LocaleLayout({
     return (
       <PublicShell
         locale={locale}
-        localeHrefs={localeHrefs("/")}
         signedIn={false}
         openFamilies={[]}
         domainsOpen={false}

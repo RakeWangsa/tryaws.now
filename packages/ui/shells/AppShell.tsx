@@ -10,7 +10,8 @@ import type { AppNavId, ProductFamily } from "./types.ts";
 
 export interface AppShellProps {
   locale: Locale;
-  localeHrefs: Record<Locale, string>;
+  /** WPU-X19: the language switch is shown only when the hrefs are given (the home page). */
+  localeHrefs?: Record<Locale, string> | undefined;
   currentId: AppNavId;
   user: { displayName: string };
   balanceMinor: bigint;

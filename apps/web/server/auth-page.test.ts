@@ -58,12 +58,12 @@ describe("loadAuthPage", () => {
   it("sends a signed-in customer on a guest page to the panel, with next checked", async () => {
     state.session = { customerId: "c1", locale: "bn" };
     await expect(loadAuthPage("bn", "/wallet?x=1", { guest: true })).rejects.toThrow(
-      "REDIRECT:/wallet?x=1",
+      "REDIRECT:/en/wallet?x=1",
     );
     await expect(loadAuthPage("en", "//evil.com", { guest: true })).rejects.toThrow(
       "REDIRECT:/en/wallet",
     );
-    await expect(loadAuthPage("bn", 42, { guest: true })).rejects.toThrow("REDIRECT:/wallet");
+    await expect(loadAuthPage("bn", 42, { guest: true })).rejects.toThrow("REDIRECT:/en/wallet");
   });
 
   it("leaves a signed-in customer on /verify (guest: false) and returns the session", async () => {

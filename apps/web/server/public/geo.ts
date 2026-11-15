@@ -66,11 +66,16 @@ interface GeoPage {
   answer: string | null;
 }
 
-/** The public pages of the files, in the order of the site's menu. */
+/**
+ * The public pages of the files, in the order of the site's menu. WPU-X19 (owner, 2026-11-15): only
+ * the home page is Bengali, so the bn list is the home page alone; every other page is English.
+ */
 export function geoPages(locale: Locale): GeoPage[] {
   const p = PUBLIC[locale];
+  const home: GeoPage = { path: "/", ...p.meta.home, answer: p.entity.statement };
+  if (locale === "bn") return [home];
   const pages: GeoPage[] = [
-    { path: "/", ...p.meta.home, answer: p.entity.statement },
+    home,
     { path: "/pricing", ...p.meta.pricing, answer: p.pricing.answer },
     { path: "/products/cloud-servers", ...p.meta.cloudServers, answer: p.cloudServers.answer },
     { path: "/help", ...p.meta.help, answer: p.help.answer },
@@ -152,7 +157,7 @@ export function llmsTxt(): string {
     "",
     ...pageList("en"),
     "",
-    `## পাতা, বাংলা (${geoPages("bn").length})`,
+    `## হোম পাতা, বাংলা (${geoPages("bn").length})`,
     "",
     ...pageList("bn"),
     "",
@@ -170,10 +175,13 @@ function fullCorpus(locale: Locale): string[] {
     if (page.answer !== null) lines.push("", page.answer);
     lines.push("");
   }
-  lines.push(`### ${p.help.heading}`, "");
-  for (const key of GEO_FAQ_KEYS) {
-    const item = p.help.items[key];
-    lines.push(`Q: ${item.q}`, `A: ${item.a}`, "");
+  // WPU-X19: the help page, and so the FAQ, is English only.
+  if (locale === "en") {
+    lines.push(`### ${p.help.heading}`, "");
+    for (const key of GEO_FAQ_KEYS) {
+      const item = p.help.items[key];
+      lines.push(`Q: ${item.q}`, `A: ${item.a}`, "");
+    }
   }
   lines.push(SHELL[locale].Aws.long, "", p.common.priceNote, "", SHELL[locale].Aws.trademark, "");
   return lines;
@@ -233,12 +241,13 @@ export function factsJson(): string {
       payment: "EPS",
       support: both((l) => PUBLIC[l].support.lead),
     },
-    faq: both((l) =>
-      GEO_FAQ_KEYS.map((key) => ({
-        q: PUBLIC[l].help.items[key].q,
-        a: PUBLIC[l].help.items[key].a,
+    // WPU-X19: the help page is English only, so is its FAQ.
+    faq: {
+      en: GEO_FAQ_KEYS.map((key) => ({
+        q: PUBLIC.en.help.items[key].q,
+        a: PUBLIC.en.help.items[key].a,
       })),
-    ),
+    },
     pages: both((l) =>
       geoPages(l).map((page) => ({ title: page.title, url: urlOf(l, page.path) })),
     ),

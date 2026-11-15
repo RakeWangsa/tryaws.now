@@ -117,14 +117,14 @@ describe("loadPanel", () => {
   it("a runtime that cannot be built refuses like a missing session (R16)", async () => {
     state.runtimeFails = true;
     const outcome = await loadPanel("/wallet");
-    expect(outcome).toMatchObject({ ok: false, redirectTo: "/login?next=%2Fwallet" });
+    expect(outcome).toMatchObject({ ok: false, redirectTo: "/en/login?next=%2Fwallet" });
   });
 
   it("without a session redirects to the login with the path as next (bn and en)", async () => {
     state.session = null;
     expect(await loadPanel("/wallet")).toEqual({
       ok: false,
-      redirectTo: "/login?next=%2Fwallet",
+      redirectTo: "/en/login?next=%2Fwallet",
       locale: "bn",
     });
     state.locale = "en";
@@ -173,12 +173,14 @@ describe("loadPanel", () => {
 describe("requirePanel and loginRedirect", () => {
   it("redirects through next/navigation when there is no session", async () => {
     state.session = null;
-    await expect(requirePanel("/wallet")).rejects.toThrow("REDIRECT:/login?next=%2Fwallet");
+    await expect(requirePanel("/wallet")).rejects.toThrow("REDIRECT:/en/login?next=%2Fwallet");
   });
 
   it("drops a next that is not on the allow-list (U12)", () => {
-    expect(loginRedirect("bn", "/wallet/topup?x=1")).toBe("/login?next=%2Fwallet%2Ftopup%3Fx%3D1");
-    expect(loginRedirect("bn", "//evil.com")).toBe("/login");
+    expect(loginRedirect("bn", "/wallet/topup?x=1")).toBe(
+      "/en/login?next=%2Fwallet%2Ftopup%3Fx%3D1",
+    );
+    expect(loginRedirect("bn", "//evil.com")).toBe("/en/login");
     expect(loginRedirect("en", "/admin")).toBe("/en/login");
   });
 });

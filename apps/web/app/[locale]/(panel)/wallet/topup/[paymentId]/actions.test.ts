@@ -151,14 +151,14 @@ describe("recheckPaymentAction", () => {
 
 describe("checkAgainAction (the button without JavaScript)", () => {
   it("checks once and goes back to the status page in the language of the request", async () => {
-    await expect(checkAgainAction(MINE)).rejects.toThrow(`REDIRECT:/wallet/topup/${MINE}`);
+    await expect(checkAgainAction(MINE)).rejects.toThrow(`REDIRECT:/en/wallet/topup/${MINE}`);
     expect(state.verifyCalls).toEqual([MINE]);
     state.locale = "en";
     await expect(checkAgainAction(MINE)).rejects.toThrow(`REDIRECT:/en/wallet/topup/${MINE}`);
   });
 
   it("a malformed id goes to the top-up page and checks nothing", async () => {
-    await expect(checkAgainAction("../x")).rejects.toThrow("REDIRECT:/wallet/topup");
+    await expect(checkAgainAction("../x")).rejects.toThrow("REDIRECT:/en/wallet/topup");
     expect(state.verifyCalls).toEqual([]);
   });
 });

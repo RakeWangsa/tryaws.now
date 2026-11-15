@@ -293,7 +293,7 @@ describe("/operations", () => {
   it("links to the switch of the unpaid-usage rule, also when the queues cannot be loaded", async () => {
     for (const locale of LOCALES) {
       const html = inProvider(await OperationsPage(listParams(locale)), locale);
-      const href = locale === "bn" ? "/operations/unpaid-rule" : "/en/operations/unpaid-rule";
+      const href = "/en/operations/unpaid-rule"; // WPU-X19: links go to /en
       const form = [...html.matchAll(/<form[^>]*>/g)]
         .map((m) => m[0])
         .find((tag) => tag.includes(`action="${href}"`));

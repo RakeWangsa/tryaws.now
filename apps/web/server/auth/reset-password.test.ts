@@ -64,7 +64,7 @@ describe("resetPasswordCore", () => {
 
   it("success clears the pending cookie and the old password no longer signs in", async () => {
     const out = await resetPasswordCore(h.ctx(), form());
-    expect(out.state).toEqual({ status: "done", redirectTo: "/login?reset=1" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/login?reset=1" });
     expect(out.effects.pending).toBe("clear");
     const old = await signInCore(h.ctx(), { email: EMAIL, password: OLD, locale: "bn" });
     expect(old.state).toMatchObject({ status: "error", code: "sign_in_failed" });
@@ -79,7 +79,7 @@ describe("signOutCore", () => {
     h.state.session = sessionOf(customer);
     h.events.length = 0;
     const out = await signOutCore(h.ctx(), "fake-rt.x.1");
-    expect(out.state).toEqual({ status: "done", redirectTo: "/login" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/login" });
     expect(out.effects.clearCookies.map((c) => [c.name, c.maxAge])).toEqual([
       ["__Host-tc_at", 0],
       ["__Host-tc_rt", 0],
@@ -95,6 +95,6 @@ describe("signOutCore", () => {
     h.state.session = null;
     const out = await signOutCore(h.ctx(), undefined);
     expect(out.effects.clearCookies).toHaveLength(2);
-    expect(out.state).toEqual({ status: "done", redirectTo: "/login" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/login" });
   });
 });

@@ -264,10 +264,10 @@ describe("/operations/unpaid-rule", () => {
     expect(odd).not.toContain("&lt;script&gt;");
   });
 
-  it("the language switch stays on the page (finance and support cannot open /operations)", async () => {
+  it("has no language switch (WPU-X19), also on a page of its own inside a section", async () => {
     as("finance");
     const html = await render("en");
-    expect(html).toContain('href="/operations/unpaid-rule"');
+    expect(html).not.toContain("tc-locale-switch");
   });
 
   it("no market is an empty screen", async () => {

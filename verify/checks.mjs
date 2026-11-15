@@ -4111,6 +4111,12 @@ TASKS["WPU-X16"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, 
 // tests; repo the journal and verify wiring.
 TASKS["WPU-X18"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X19 (owner decision 2026-11-15): only the home page is bilingual (`/` bn, `/en` en, with the language
+// switch); every other page, the sign-in pages and the whole panel are English only. ui runs the locale
+// paths and the shells (the switch is shown only when given hrefs); web runs the proxy redirect (308 to
+// /en), the public pages, SEO, sitemap and GEO-file tests; repo the journal and verify wiring.
+TASKS["WPU-X19"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

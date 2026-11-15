@@ -1,10 +1,15 @@
 import createMiddleware from "next-intl/middleware";
-import { NextRequest } from "next/server";
-import type { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { refreshForProxy } from "@tc/auth/proxy";
 import type { RefreshOutcome } from "@tc/auth/proxy";
 import { gatewayFormOrigins } from "@tc/eps/redirect";
-import { CSP_REPORT_ONLY_HEADER, CSP_REPORT_PATH, buildCsp, createNonce } from "@tc/ui/runtime";
+import {
+  CSP_REPORT_ONLY_HEADER,
+  CSP_REPORT_PATH,
+  buildCsp,
+  createNonce,
+  englishOnlyTarget,
+} from "@tc/ui/runtime";
 import { routing } from "./i18n/routing.ts";
 import { proxyAuthRuntime } from "./server/proxy-auth.ts";
 import { indexableStage, robotsTagFor } from "./server/public/indexing.ts";
@@ -46,7 +51,19 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 
-  const response = handleI18n(new NextRequest(request, { headers: requestHeaders }));
+  // WPU-X19 (owner, 2026-11-15): only the home page is Bengali. A request that would be served in bn
+  // on any other page goes, with 308, to the same path under /en; only the pathname changes, so the
+  // origin is the request's own and the query is kept (U12). The matcher below leaves out the API,
+  // the payment return, robots, sitemap and every file.
+  const english = englishOnlyTarget(request.nextUrl.pathname);
+  let response: NextResponse;
+  if (english === null) {
+    response = handleI18n(new NextRequest(request, { headers: requestHeaders }));
+  } else {
+    const target = request.nextUrl.clone();
+    target.pathname = english;
+    response = NextResponse.redirect(target, 308);
+  }
 
   if (refreshed.action !== "none") {
     // The strings come from @tc/auth (its names, its attributes); nothing is built here.

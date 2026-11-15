@@ -49,7 +49,7 @@ describe("the done state", () => {
         />
       </NextIntlClientProvider>,
     );
-    const prefix = l === "en" ? "/en" : "";
+    const prefix = "/en"; // WPU-X19: panel pages are English only
     expect(out).toContain(`href="${prefix}/support/requests/0190aaaa-0000-7000-8000-000000000001"`);
   });
 });

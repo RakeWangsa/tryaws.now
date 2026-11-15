@@ -38,7 +38,7 @@ export interface PageMeta {
   index?: boolean;
 }
 
-/** Title, description, canonical URL, `hreflang` for bn and en, robots and Open Graph. */
+/** Title, description, canonical URL, `hreflang` (home page only, WPU-X19), robots and Open Graph. */
 export function pageMetadata(meta: PageMeta): Metadata {
   const index = meta.index !== false;
   const robots = index ? { index: true, follow: true } : { index: false, follow: false };
@@ -53,23 +53,29 @@ export function pageMetadata(meta: PageMeta): Metadata {
     };
   }
   const url = (locale: Locale): string => origin + localePath(locale, meta.path);
+  // WPU-X19 (owner, 2026-11-15): only the home page is bilingual. Every other page is English only:
+  // an English canonical, no hreflang pair, English Open Graph.
+  const home = meta.path === "/";
+  const shown: Locale = home ? meta.locale : "en";
   return {
     metadataBase: new URL(origin),
     title: meta.title,
     description: meta.description,
-    alternates: {
-      canonical: url(meta.locale),
-      languages: { bn: url("bn"), en: url("en"), "x-default": url("bn") },
-    },
+    alternates: home
+      ? {
+          canonical: url(meta.locale),
+          languages: { bn: url("bn"), en: url("en"), "x-default": url("bn") },
+        }
+      : { canonical: url("en") },
     robots,
     openGraph: {
       type: "website",
       siteName: SITE_NAME,
       title: meta.title,
       description: meta.description,
-      url: url(meta.locale),
-      locale: meta.locale === "bn" ? "bn_BD" : "en_US",
-      alternateLocale: meta.locale === "bn" ? ["en_US"] : ["bn_BD"],
+      url: url(shown),
+      locale: shown === "bn" ? "bn_BD" : "en_US",
+      ...(home ? { alternateLocale: shown === "bn" ? ["en_US"] : ["bn_BD"] } : {}),
       // The picture shows the wordmark only, so its text is the brand in both languages.
       images: [
         {
@@ -192,7 +198,8 @@ export function webPageLd(input: {
     url,
     name: input.name,
     description: input.description,
-    inLanguage: input.locale,
+    // WPU-X19: only the home page is served in bn; every other page is English.
+    inLanguage: input.path === "/" ? input.locale : "en",
     isPartOf: { "@id": websiteId(input.origin) },
     about: { "@id": organizationId(input.origin) },
     dateModified: CONTENT_UPDATED,

@@ -88,7 +88,7 @@ describe("topUpHref", () => {
   it("pre-fills the amount and names the review page as next (U12, 16.11 step 4)", () => {
     const href = topUpHref("bn", 190n, "abc.def");
     expect(href).toBe(
-      `/wallet/topup?amount=190&next=${encodeURIComponent("/orders/review?d=abc.def")}`,
+      `/en/wallet/topup?amount=190&next=${encodeURIComponent("/orders/review?d=abc.def")}`,
     );
     expect(topUpHref("en", 190n, "abc.def").startsWith("/en/wallet/topup?")).toBe(true);
   });

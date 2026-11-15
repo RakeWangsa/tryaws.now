@@ -79,7 +79,7 @@ describe("GET /dev/sign-in", () => {
   it("sets the session cookies through the auth package and goes to the wallet (303, no-store)", async () => {
     const response = await signIn.GET(get("/dev/sign-in?sub=dev-smoke-abc"), ctx());
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("/wallet");
+    expect(response.headers.get("location")).toBe("/en/wallet");
     expect(response.headers.get("cache-control")).toBe("no-store");
     const cookies = response.headers.getSetCookie();
     expect(cookies).toHaveLength(1);

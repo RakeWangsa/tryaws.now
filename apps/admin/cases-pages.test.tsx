@@ -222,7 +222,7 @@ describe("/support", () => {
       expect(html).toContain("r***@example.test");
       expect(html).toContain("Charged twice");
       expect(html).toContain(msgs(locale).support.table.subject);
-      expect(html).toContain(`href="${locale === "en" ? "/en" : ""}/support/${REQUEST_ID}"`);
+      expect(html).toContain(`href="/en/support/${REQUEST_ID}"`);
       expect(html).not.toContain("<script");
       expect(state.asked).toEqual([[locale, "support"]]);
       expect(seen["supportList"]).toEqual([{ status: "open" }]);
@@ -422,7 +422,7 @@ describe("/abuse", () => {
     async (locale) => {
       as("ops");
       const html = inProvider(await AbuseList(list(locale)), locale);
-      expect(html).toContain(`href="${locale === "en" ? "/en" : ""}/abuse/${CASE_ID}"`);
+      expect(html).toContain(`href="/en/abuse/${CASE_ID}"`);
       expect(html).toContain('name="kind" value="openAbuseCase"');
       expect(html).toMatch(/name="id" value="[0-9a-f-]{36}"/);
       expect(html).toContain(msgs(locale).abuse.table.source);

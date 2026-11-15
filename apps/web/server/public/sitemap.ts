@@ -5,11 +5,12 @@ import { DISALLOWED_PREFIXES, FAMILY_PAGES, LEGAL_DOCS, PUBLIC_PATHS } from "./i
 
 // sitemap.xml and robots.txt of the public site (16.8). Both are built from the one list of public
 // paths of indexing.ts. A product family appears only while its flag is on (R12): a coming soon
-// page is not offered to search engines. Every entry names its other language (`hreflang`).
+// page is not offered to search engines. Only the home page names its other language (`hreflang`, WPU-X19).
 
 export interface SitemapEntry {
   url: string;
-  alternates: { languages: Record<Locale | "x-default", string> };
+  /** Only the home page names its other language (WPU-X19). */
+  alternates?: { languages: Record<Locale | "x-default", string> };
 }
 
 /** The paths (without a locale) that belong in the sitemap for this catalog. */
@@ -32,13 +33,17 @@ export function sitemapPaths(catalog: PublicCatalog): string[] {
 export function sitemapEntries(origin: string | null, catalog: PublicCatalog): SitemapEntry[] {
   if (origin === null) return [];
   const url = (locale: Locale, path: string): string => origin + localePath(locale, path);
+  // WPU-X19 (owner, 2026-11-15): the home page is listed in both languages with its hreflang pair;
+  // every other page is English only and is listed once, by its English URL.
   return sitemapPaths(catalog).flatMap((path) =>
-    (["bn", "en"] as const).map((locale): SitemapEntry => ({
-      url: url(locale, path),
-      alternates: {
-        languages: { bn: url("bn", path), en: url("en", path), "x-default": url("bn", path) },
-      },
-    })),
+    path === "/"
+      ? (["bn", "en"] as const).map((locale): SitemapEntry => ({
+          url: url(locale, path),
+          alternates: {
+            languages: { bn: url("bn", path), en: url("en", path), "x-default": url("bn", path) },
+          },
+        }))
+      : [{ url: url("en", path) } satisfies SitemapEntry],
   );
 }
 

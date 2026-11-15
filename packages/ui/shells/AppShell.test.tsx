@@ -97,11 +97,9 @@ describe.each(LOCALES)("AppShell (%s)", (locale) => {
   it("default hrefs are localized", () => {
     const { container } = render(shell(locale));
     const href = container.querySelector("#sidebar a[href$='/servers']")?.getAttribute("href");
-    expect(href).toBe(locale === "en" ? "/en/servers" : "/servers");
+    expect(href).toBe("/en/servers"); // WPU-X19
     const settings = container.querySelector("#sidebar a[href$='/settings/profile']");
-    expect(settings?.getAttribute("href")).toBe(
-      locale === "en" ? "/en/settings/profile" : "/settings/profile",
-    );
+    expect(settings?.getAttribute("href")).toBe("/en/settings/profile");
   });
 
   it("navHref overrides the href of every entry", () => {
@@ -121,7 +119,7 @@ describe.each(LOCALES)("AppShell (%s)", (locale) => {
     expect(chip.querySelector("span.mergecolor")?.textContent).toBe(
       alone.container.querySelector("span.mergecolor")?.textContent,
     );
-    const prefix = locale === "en" ? "/en" : "";
+    const prefix = "/en"; // WPU-X19
     expect(chip.querySelector("a")?.getAttribute("href")).toBe(`${prefix}/wallet`);
     const bell = bar.querySelector("a[href$='/notifications']") as Element;
     expect(bell.getAttribute("href")).toBe(`${prefix}/notifications`);

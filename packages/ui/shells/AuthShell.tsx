@@ -7,7 +7,8 @@ import { Logo } from "./parts/Logo.tsx";
 
 export interface AuthShellProps {
   locale: Locale;
-  localeHrefs: Record<Locale, string>;
+  /** WPU-X19: the language switch is shown only when the hrefs are given (the home page). */
+  localeHrefs?: Record<Locale, string> | undefined;
   children: ReactNode;
 }
 
@@ -25,15 +26,17 @@ export function AuthShell({ locale, localeHrefs, children }: AuthShellProps): Re
           <a href={home} aria-label={t("homeLabel")}>
             <Logo />
           </a>
-          <div className="tc-auth-lang">
-            <LocaleSwitch
-              current={locale}
-              items={[
-                { locale: "bn", href: localeHrefs.bn },
-                { locale: "en", href: localeHrefs.en },
-              ]}
-            />
-          </div>
+          {localeHrefs === undefined ? null : (
+            <div className="tc-auth-lang">
+              <LocaleSwitch
+                current={locale}
+                items={[
+                  { locale: "bn", href: localeHrefs.bn },
+                  { locale: "en", href: localeHrefs.en },
+                ]}
+              />
+            </div>
+          )}
           <main id="main">
             <div className="sec-main sec-bg1 tabs bg-seccolorstyle noshadow">{children}</div>
           </main>

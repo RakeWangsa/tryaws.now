@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, ErrorPage, PublicShell } from "@tc/ui";
-import { localeHrefs, localePath } from "@tc/ui/runtime";
+import { localePath } from "@tc/ui/runtime";
 import { useLocale, useTranslations } from "next-intl";
 
 /** The error state of the public pages (U11): a platform message, a reference, a retry; never the error text. */
@@ -17,7 +17,6 @@ export default function PublicError({
   return (
     <PublicShell
       locale={locale}
-      localeHrefs={localeHrefs("/")}
       signedIn={false}
       openFamilies={[]}
       domainsOpen={false}

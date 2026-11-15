@@ -115,9 +115,9 @@ describe("/verify with a session: the phone step", () => {
   it("a verified phone redirects to the landing (next kept when allowed)", async () => {
     state.session = { customerId: A };
     state.steps[A] = { kind: "verified" };
-    await expect(render("bn")).rejects.toThrow("REDIRECT:/wallet");
+    await expect(render("bn")).rejects.toThrow("REDIRECT:/en/wallet");
     await expect(render("en", { next: "/wallet?x=1" })).rejects.toThrow("REDIRECT:/en/wallet?x=1");
-    await expect(render("bn", { next: "//evil.com" })).rejects.toThrow("REDIRECT:/wallet");
+    await expect(render("bn", { next: "//evil.com" })).rejects.toThrow("REDIRECT:/en/wallet");
   });
 
   it("shows the number prefilled and editable, and a send form carrying the server-made key", async () => {

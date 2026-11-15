@@ -107,7 +107,7 @@ describe("/wallet: what it shows", () => {
     state.loaded = screen({ lines: [], payments: [], newest: null });
     const bn = await render("bn");
     expect(bn).toContain("এখনো কোনো লেনদেন নেই");
-    expect(bn).toContain('href="/wallet/topup"');
+    expect(bn).toContain('href="/en/wallet/topup"');
     const en = await render("en");
     expect(en).toContain("No transactions yet");
     expect(en).toContain('href="/en/wallet/topup"');
@@ -137,7 +137,7 @@ describe("/wallet: what it shows", () => {
 
   it("links to the status page of each payment, in the language of the page", async () => {
     expect(await render("bn")).toContain(
-      'href="/wallet/topup/0190aaaa-0000-7000-8000-000000000001"',
+      'href="/en/wallet/topup/0190aaaa-0000-7000-8000-000000000001"',
     );
     expect(await render("en")).toContain(
       'href="/en/wallet/topup/0190aaaa-0000-7000-8000-000000000001"',

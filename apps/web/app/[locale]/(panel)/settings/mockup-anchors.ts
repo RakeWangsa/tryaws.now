@@ -25,12 +25,6 @@ export const SETTINGS_ANCHORS: readonly MockupAnchor[] = [
   },
   {
     state: "settings.profile.open",
-    mockupFile: "template/configurator.html",
-    why: "OptionGroup (language) = the radio filter block",
-    classes: ["cd-filter-block", "radio-group", "radios-filter", "radio-label", "seccolor"],
-  },
-  {
-    state: "settings.profile.open",
     mockupFile: "template/contact.html",
     why: "Field = label and input inside a position-relative block",
     classes: ["position-relative", "mb-3", "seccolor"],

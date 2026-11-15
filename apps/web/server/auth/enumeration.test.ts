@@ -40,7 +40,7 @@ describe("one answer for a known and an unknown address", () => {
       effects: { ...o.effects, pending: o.effects.pending === null ? null : "set" },
     });
     expect(strip(existing)).toEqual(strip(fresh));
-    expect((fresh.state as { redirectTo: string }).redirectTo).toBe("/verify");
+    expect((fresh.state as { redirectTo: string }).redirectTo).toBe("/en/verify");
   });
 
   it("sign-up: the one documented extra call is a resend for an existing address", async () => {
@@ -56,7 +56,7 @@ describe("one answer for a known and an unknown address", () => {
   it("forgot password: a known and an unknown address", async () => {
     const known = await requestResetCore(h.ctx(), { email: KNOWN, locale: "bn" });
     const unknown = await requestResetCore(h.ctx(), { email: UNKNOWN, locale: "bn" });
-    expect((known.state as { redirectTo: string }).redirectTo).toBe("/reset-password");
+    expect((known.state as { redirectTo: string }).redirectTo).toBe("/en/reset-password");
     expect(unknown.state).toEqual({ ...known.state, ref: (unknown.state as { ref: string }).ref });
     expect(unknown.effects.pending).not.toBeNull();
     // Only the known address got a code.
@@ -140,8 +140,8 @@ describe("one answer for a known and an unknown address", () => {
   it("resend: a known and an unknown address", async () => {
     const known = await resendEmailCodeCore(h.ctx(), { email: KNOWN, locale: "bn" });
     const unknown = await resendEmailCodeCore(h.ctx(), { email: UNKNOWN, locale: "bn" });
-    expect((known.state as { redirectTo: string }).redirectTo).toBe("/verify");
-    expect((unknown.state as { redirectTo: string }).redirectTo).toBe("/verify");
+    expect((known.state as { redirectTo: string }).redirectTo).toBe("/en/verify");
+    expect((unknown.state as { redirectTo: string }).redirectTo).toBe("/en/verify");
     expect(unknown.effects.pending).not.toBeNull();
   });
 });
