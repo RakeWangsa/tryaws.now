@@ -100,7 +100,7 @@ describe("answer blocks (AEO, OmniRank gate answer-block)", () => {
       "Amazon Lightsail",
       "Singapore",
       "Mumbai",
-      "US dollars",
+      "BDT",
       "taka",
       "EPS",
     ]) {
@@ -113,7 +113,7 @@ describe("answer blocks (AEO, OmniRank gate answer-block)", () => {
       "Amazon Lightsail",
       "Singapore",
       "Mumbai",
-      "ডলার",
+      "BDT",
       "টাকা",
       "EPS",
     ]) {

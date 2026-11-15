@@ -1,5 +1,5 @@
 import { customerUsd, quote, usdToBdtMinor } from "@tc/core";
-import { formatUsd } from "@tc/ui";
+import { formatMoney } from "@tc/ui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Locale } from "@tc/ui/runtime";
 import { webMessages } from "../../../i18n/messages.ts";
@@ -130,28 +130,30 @@ describe("every public page, in bn and en (U1, U4, U6, U11, 16.8)", () => {
 });
 
 describe("prices equal the pricing engine's output (WPP-T1, R4)", () => {
-  const usdOf = (aws: string) =>
-    customerUsd(quote({ awsPriceUsd: aws, fxRate: FIXTURE_FX, rule: FIXTURE_RULE }));
+  const totalOf = (aws: string) =>
+    quote({ awsPriceUsd: aws, fxRate: FIXTURE_FX, rule: FIXTURE_RULE }).totalMinor;
+  const takaOf = (aws: string, locale: "bn" | "en") =>
+    formatMoney(totalOf(aws), { locale, mode: "wholeUp" });
 
-  it("pricing, cloud servers and home show only US dollar amounts of engine totals, and no taka (WPU-Y4)", () => {
+  it("pricing, cloud servers and home show only taka amounts of engine totals, and no dollar (WPU-X16)", () => {
     for (const locale of LOCALES) {
       const rows = [...(FIXTURE_ROWS["linux_instance"] ?? []), ...(FIXTURE_ROWS["database"] ?? [])];
-      const allowed = new Set(rows.map((r) => formatUsd(usdOf(r.awsPriceUsd).text, { locale })));
+      const allowed = new Set(rows.map((r) => takaOf(r.awsPriceUsd, locale)));
       for (const id of ["pricing.data", "cloud.data", "home.data"]) {
         const page = all[id]!(locale);
         const text = page.replace(/<[^>]*>/g, " ");
-        expect(text, `${id} ${locale} has no taka sign`).not.toContain("৳");
-        expect(text, `${id} ${locale} has no BDT`).not.toMatch(/\bBDT\b/);
-        const shown = page.match(/\$[0-9০-৯,.]+/g) ?? [];
+        expect(text, `${id} ${locale} has no dollar`).not.toMatch(/\$|USD|US dollar|ডলার/i);
+        const shown = page.match(/৳[0-9০-৯,]+/g) ?? [];
         expect(shown.length, `${id} ${locale} shows prices`).toBeGreaterThan(0);
         for (const amount of shown) expect(allowed, `${id} ${locale} ${amount}`).toContain(amount);
       }
     }
   });
 
-  it("the BDT charged for each shown dollar price is the engine total (USD and BDT cannot disagree)", () => {
+  it("the taka shown for each plan is the amount the checkout debits (the engine total, never converted)", () => {
     for (const row of FIXTURE_ROWS["linux_instance"] ?? []) {
       const q = quote({ awsPriceUsd: row.awsPriceUsd, fxRate: FIXTURE_FX, rule: FIXTURE_RULE });
+      expect(q.totalMinor).toBe(totalOf(row.awsPriceUsd));
       expect(usdToBdtMinor(customerUsd(q).micro, FIXTURE_FX)).toBe(q.totalMinor);
     }
   });
@@ -160,9 +162,9 @@ describe("prices equal the pricing engine's output (WPP-T1, R4)", () => {
     for (const locale of LOCALES) {
       const page = all["pricing.data"]!(locale);
       for (const row of FIXTURE_ROWS["linux_instance"] ?? []) {
-        expect(page, row.id).toContain(formatUsd(usdOf(row.awsPriceUsd).text, { locale }));
+        expect(page, row.id).toContain(takaOf(row.awsPriceUsd, locale));
       }
-      const windowsText = formatUsd(usdOf("9.0000").text, { locale });
+      const windowsText = takaOf("9.0000", locale);
       expect(page).not.toContain(`${windowsText}<`);
     }
   });
@@ -184,7 +186,8 @@ describe("prices equal the pricing engine's output (WPP-T1, R4)", () => {
     for (const id of ["home.unavailable", "pricing.unavailable", "cloud.unavailable"]) {
       for (const locale of LOCALES) {
         const page = all[id]!(locale);
-        expect(page, id).not.toContain("৳");
+        // Fail closed (R16): no price of any currency, neither taka nor dollar.
+        expect(page.replace(/<[^>]*>/g, " "), id).not.toMatch(/৳|\$|USD|ডলার/);
         expect(page, id).toContain(
           escape(
             locale === "bn"
@@ -196,17 +199,13 @@ describe("prices equal the pricing engine's output (WPP-T1, R4)", () => {
     }
   });
 
-  it("says prices are in US dollars, taka at checkout at the day's rate, and Amazon Lightsail (draft wording, 16.13)", () => {
+  it("says prices are in taka (BDT), for 30 days, paid from the taka wallet, and Amazon Lightsail (WPU-X16)", () => {
     for (const locale of LOCALES) {
       const note =
         locale === "bn" ? publicBn.Public.common.priceNote : publicEn.Public.common.priceNote;
       expect(note).toContain(SHORT[locale]);
-      expect(note).toMatch(locale === "bn" ? /মার্কিন ডলারে \(USD\)/ : /US dollars \(USD\)/);
-      expect(note).toMatch(
-        locale === "bn"
-          ? /চেকআউটে সেদিনের বিনিময় হারে/
-          : /at checkout with the exchange rate of the day/,
-      );
+      expect(note).toMatch(locale === "bn" ? /মূল্য টাকায় \(BDT\)/ : /Prices are in taka \(BDT\)/);
+      expect(note).not.toMatch(/USD|dollar|ডলার|exchange rate|বিনিময় হার/i);
       for (const id of ["pricing.data", "cloud.data", "home.data"]) {
         expect(all[id]!(locale), `${id} ${locale}`).toContain(escape(note));
       }
@@ -224,16 +223,17 @@ describe("prices equal the pricing engine's output (WPP-T1, R4)", () => {
     expect(all["pricing.data"]!("en")).toContain("table-responsive-lg");
   });
 
-  it("the JSON-LD offers are in USD with the same dollar price as the page", () => {
+  it("the JSON-LD offers are in BDT with the same whole-taka price as the page", () => {
     const blocks = jsonLd(all["pricing.data"]!("en"));
     const product = blocks.find((b) => b["@type"] === "Product") as {
       offers: { priceCurrency: string; price: string }[];
     };
     const prices = (FIXTURE_ROWS["linux_instance"] ?? [])
       .concat(FIXTURE_ROWS["database"] ?? [])
-      .map((r) => usdOf(r.awsPriceUsd).text);
+      .map((r) => takaOf(r.awsPriceUsd, "en").replace(/[^0-9]/g, ""));
     expect(product.offers.map((o) => o.price).sort()).toEqual([...prices].sort());
-    expect(new Set(product.offers.map((o) => o.priceCurrency))).toEqual(new Set(["USD"]));
+    expect(new Set(product.offers.map((o) => o.priceCurrency))).toEqual(new Set(["BDT"]));
+    expect(JSON.stringify(blocks)).not.toMatch(/USD|dollar/i);
   });
 });
 

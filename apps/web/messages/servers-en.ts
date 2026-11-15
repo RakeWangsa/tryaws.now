@@ -307,15 +307,11 @@ export const serversEn: Same<typeof serversBn> = {
       // on its own page (a Linux server: Billing tab; a disk: the Storage tab of its server).
       autoRenew:
         "Auto-renew is on: the next period is paid from your wallet when this one ends. You can turn it off at any time on the page of this service in the panel.",
-      // WPU-Z2: the panel shows BDT only (owner decision of 2026-11-13); today's rate stays.
-      fx: {
-        caption: "Exchange rate and amount in taka",
-        rate: "Exchange rate",
-        rateValue: "1 USD = ৳{rate}, set on {date}",
-        rateValueNoDate: "1 USD = ৳{rate}",
+      // WPU-X16 (owner decision of 2026-11-15): taka only; no dollar price and no exchange rate for customers.
+      debit: {
+        caption: "Amount in taka",
         bdt: "Amount debited from your wallet (taka)",
-        // WPU-Y4 wording (approved by the owner on 2026-11-13).
-        note: "The price is in US dollars. The amount in taka is the dollar price at the exchange rate shown, and it is exactly what is taken from your wallet. If the rate changes before you confirm, you will see the new amount and confirm again.",
+        note: "The price is in taka (BDT), for 30 days, with VAT and fees included. Exactly this amount is taken from your wallet. If the price changes before you confirm, you will see the new amount and confirm again.",
       },
       lines: "Price details",
       awsPrice: "AWS service price",
@@ -339,7 +335,7 @@ export const serversEn: Same<typeof serversBn> = {
       back: "Back to the configuration",
       priceChanged: {
         title: "The price changed",
-        body: "The rate or the rules changed after the price you saw. Check the new price and confirm again.",
+        body: "The price or the rules changed after the price you saw. Check the new price and confirm again.",
         old: "Earlier price",
         new: "New price",
       },

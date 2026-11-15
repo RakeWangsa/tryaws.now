@@ -4099,6 +4099,12 @@ TASKS["WPU-X11"] = [
 // GEO-file and CSP tests; repo the journal and verify wiring.
 TASKS["WPU-X13"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X16 (owner decision 2026-11-15, "no one should see the dollar price only BDT will be everywhere for
+// customer"): the public pages, the plan picker, the order review, the messages and the structured data show
+// taka only. ui runs PlanCard and PlanPicker; web runs the public pages, the messages guard (no dollar in any
+// customer message or GEO file), the review and the structured data; repo the journal and verify wiring.
+TASKS["WPU-X16"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

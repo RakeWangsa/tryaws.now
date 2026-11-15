@@ -274,9 +274,9 @@ export function Plans({ t, locale, catalog }: { t: Tr; locale: Locale; catalog: 
   );
 }
 
-const COMPARE = ["card", "usd", "tax", "console"] as const;
+const COMPARE = ["card", "bdt", "tax", "console"] as const;
 
-/** How buying works here: only statements the repository can show (EPS wallet, USD price with VAT and fees, tax invoice, panel). */
+/** How buying works here: only statements the repository can show (EPS wallet, taka price with VAT and fees, tax invoice, panel). */
 export function Compare({ t }: { t: Tr }) {
   return (
     <section className="bg-seccolorstyle tc-section">

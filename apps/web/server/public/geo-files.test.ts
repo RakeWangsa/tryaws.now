@@ -163,7 +163,7 @@ describe("facts.json", () => {
         { code: "ap-southeast-1", name: "Singapore" },
         { code: "ap-south-1", name: "Mumbai" },
       ],
-      priceCurrency: "USD",
+      priceCurrency: "BDT",
       paymentCurrency: "BDT",
     });
   });

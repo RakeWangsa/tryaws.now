@@ -72,22 +72,17 @@ describe("PlaceForm (placeOrder)", () => {
   // WPU-Z2 (owner decision of 2026-11-13): the panel shows BDT only. The draft still carries a USD text
   // ("5.75"); the review does not print it. Today's rate and the day it was set stay (the owner's
   // transparency rule).
-  it("WPU-Z2: shows today's rate with the day it was set and the BDT debited, and no USD amount", () => {
+  it("WPU-X16: shows the BDT debited with the owner's note, and no dollar amount, no rate, no rate day", () => {
     const en = place("en");
-    expect(en).not.toContain("Price in US dollars");
     expect(en).not.toMatch(USD_AMOUNT);
-    expect(en).toContain("1 USD = ৳120, set on");
-    expect(en).toContain("Nov 10, 2026");
+    expect(en).not.toMatch(/USD|dollar|exchange rate/i);
     expect(en).toContain("Amount debited from your wallet (taka)");
     expect(en).toContain("৳690.00");
-    expect(en).toContain("exactly what is taken from your wallet");
+    expect(en).toContain("Exactly this amount is taken from your wallet");
     const bn = place("bn");
-    expect(bn).not.toContain("মার্কিন ডলারে মূল্য");
     expect(bn).not.toMatch(USD_AMOUNT);
-    expect(bn).toContain("১ USD = ৳১২০");
+    expect(bn).not.toMatch(/USD|ডলার|বিনিময় হার/);
     expect(bn).toContain("৳৬৯০.০০");
-    // a draft signed before the rate was carried has no date, and says no date
-    expect(place("en", { ...readyReview, fxSetAt: null })).toContain("1 USD = ৳120<");
   });
 
   it("WPU-Z2: before the customer confirms, says auto-renew is on, after the total and before the terms, in bn and en", () => {
@@ -106,9 +101,6 @@ describe("PlaceForm (placeOrder)", () => {
         token: "fresh.token",
         totalMinor: "75000",
         expiresAt: "2026-11-12T01:30:00.000Z",
-        usdText: "5.00",
-        fxRate: "150",
-        fxSetAt: "2026-11-12T04:00:00.000Z",
       },
     } satisfies FormState;
     expect(place("en")).toContain(AUTO_RENEW_EN);
@@ -130,33 +122,26 @@ describe("PlaceForm (placeOrder)", () => {
         token: "fresh.token",
         totalMinor: "75000",
         expiresAt: "2026-11-12T01:30:00.000Z",
-        usdText: "5.00",
-        fxRate: "150",
-        fxSetAt: "2026-11-12T04:00:00.000Z",
       },
     } satisfies FormState;
     expect(place("en", readyReview, false)).not.toContain("Auto-renew is on");
     expect(place("bn", readyReview, false)).not.toContain("স্বয়ংক্রিয় নবায়ন চালু আছে");
   });
 
-  it("WPU-Y4, WPU-Z2: after a rate change the new rate and the new BDT replace the old and ask to confirm again, without a USD amount", () => {
+  it("WPU-X16: after a price change the new BDT replaces the old and asks to confirm again, with no dollar and no rate", () => {
     hold.state = {
       error: "price_changed",
       draft: {
         token: "fresh.token",
         totalMinor: "75000",
         expiresAt: "2026-11-12T01:30:00.000Z",
-        usdText: "5.00",
-        fxRate: "150",
-        fxSetAt: "2026-11-12T04:00:00.000Z",
       },
     } satisfies FormState;
     const en = place("en");
-    expect(en).toContain("1 USD = ৳150, set on");
-    expect(en).toContain("Nov 12, 2026");
     expect(en).not.toMatch(USD_AMOUNT);
+    expect(en).not.toMatch(/USD|dollar|exchange rate/i);
     expect(place("bn")).not.toMatch(USD_AMOUNT);
-    expect(en).not.toContain("1 USD = ৳120");
+    expect(place("bn")).not.toMatch(/USD|ডলার|বিনিময় হার/);
     expect(en).toContain("The price changed");
     expect(en).toContain("৳750.00");
     expect(en).toContain('name="token" value="fresh.token"');
@@ -169,9 +154,6 @@ describe("PlaceForm (placeOrder)", () => {
         token: "fresh.token",
         totalMinor: "75000",
         expiresAt: "2026-11-12T01:30:00.000Z",
-        usdText: "5.00",
-        fxRate: "150",
-        fxSetAt: "2026-11-12T04:00:00.000Z",
       },
     } satisfies FormState;
     const bn = place("bn");
@@ -193,9 +175,6 @@ describe("PlaceForm (placeOrder)", () => {
         token: "fresh.token",
         totalMinor: "160000",
         expiresAt: "2026-11-12T01:30:00.000Z",
-        usdText: "10.00",
-        fxRate: "160",
-        fxSetAt: null,
       },
     } satisfies FormState;
     const en = place("en");

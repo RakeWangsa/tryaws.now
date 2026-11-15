@@ -1,38 +1,52 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { webMessages } from "../i18n/messages.ts";
 import { serversBn } from "./servers-bn.ts";
 import { serversEn } from "./servers-en.ts";
 import { flatLeaves } from "./wording-check.ts";
 
-// WPU-Z2 (owner decision of 2026-11-13): the signed-in panel shows BDT only, so no message of the app names
-// a price in US dollars. Out of the scan: the public pages (namespace Public), which show the USD price by
-// the same decision, and the dev-only component gallery (Gallery). The checkout keeps the rate line
-// "1 USD = ৳{rate}" ("today's dollar rate", the owner's transparency rule): it names the currency, not a price.
-const NOT_PANEL = ["Public.", "Gallery."];
-const DOLLARS = /dollar|ডলার/i;
-// The note under the rate (WPU-Y4 wording, approved by the owner on 2026-11-13) says how the taka amount is
-// made from the dollar price. It prints no amount and is not a price label; changing it needs the owner.
-const APPROVED_RATE_NOTE = "Orders.review.fx.note";
+// WPU-X16 (owner decision of 2026-11-15, replacing WPU-Z2 and WPU-Y4): "no one should see the dollar price,
+// only BDT will be everywhere for customers". No customer message of the app (public pages, panel, shell,
+// kit) names a dollar, the exchange rate or the currency code USD, in Bengali or in English. Out of the scan:
+// the dev-only component gallery (Gallery) and two legal sentences (LEGAL_PENDING), whose wording the owner approves separately (docs/legal-drafts/2026-11-15-bdt-only.md). Admin is staff-only
+// and has its own messages.
+const NOT_CUSTOMER = ["Gallery."];
+// The two legal sentences that still name the dollar until the owner approves the new wording. Exactly these
+// keys; any other legal key that names a dollar fails the guard. Remove them when legal-*.ts is changed.
+const LEGAL_PENDING = [
+  "Public.legal.docs.terms.sections.prices.p1",
+  "Public.legal.docs.terms.sections.invoices.p1",
+];
+const DOLLARS = /USD|US dollar|dollar|ডলার/i;
 
-describe("the panel shows BDT only (WPU-Z2)", () => {
+function web(path: string): string {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+describe("customers see taka only (WPU-X16)", () => {
   for (const locale of ["bn", "en"] as const) {
-    it(`${locale}: no message outside the public pages names a price in US dollars`, () => {
+    it(`${locale}: no customer message names a dollar, USD or an exchange rate`, () => {
       const leaves = flatLeaves(webMessages[locale]);
       expect(leaves.size).toBeGreaterThan(1500);
-      expect(leaves.has(APPROVED_RATE_NOTE)).toBe(true);
       const found = [...leaves]
-        .filter(([key]) => key !== APPROVED_RATE_NOTE && !NOT_PANEL.some((p) => key.startsWith(p)))
+        .filter(([key]) => !NOT_CUSTOMER.some((p) => key.startsWith(p)))
+        .filter(([key]) => !LEGAL_PENDING.includes(key))
         .filter(([, text]) => DOLLARS.test(text))
         .map(([key, text]) => `${key}: ${text}`);
       expect(found).toEqual([]);
     });
   }
 
-  it("the review has no line of the price in US dollars and keeps today's rate", () => {
+  it("the review has no exchange-rate block and no line of the price in US dollars", () => {
     for (const tree of [serversBn, serversEn]) {
-      const fx: Record<string, string> = tree.Orders.review.fx;
-      expect(Object.keys(fx)).not.toContain("usd");
-      expect(fx["rateValue"]).toContain("USD = ৳{rate}");
+      const review: Record<string, unknown> = tree.Orders.review;
+      expect(Object.keys(review)).not.toContain("fx");
+    }
+  });
+
+  it("the generated GEO files (facts.json, llms.txt, llms-full.txt) name no dollar", () => {
+    for (const file of ["public/facts.json", "public/llms.txt", "public/llms-full.txt"]) {
+      expect(web(file), file).not.toMatch(DOLLARS);
     }
   });
 

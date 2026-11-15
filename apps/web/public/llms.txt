@@ -1,8 +1,8 @@
 # TryAWS.now
 
-> TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in US dollars and include VAT and fees; you pay in taka from a wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.
+> TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in taka (BDT) and include VAT and fees; you pay from a taka wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.
 
-> TryAWS.now বাংলাদেশের মানুষ ও প্রতিষ্ঠানের জন্য একটি প্রিপেইড ক্লাউড প্যানেল। এখানে Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার কেনা যায়, যা Singapore বা Mumbai AWS Region থেকে চলে। মূল্য মার্কিন ডলারে দেখানো হয় এবং তাতে VAT ও ফি অন্তর্ভুক্ত; পরিশোধ হয় টাকায়, ওয়ালেট থেকে, যা EPS দিয়ে টপ আপ করা যায়। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।
+> TryAWS.now বাংলাদেশের মানুষ ও প্রতিষ্ঠানের জন্য একটি প্রিপেইড ক্লাউড প্যানেল। এখানে Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার কেনা যায়, যা Singapore বা Mumbai AWS Region থেকে চলে। মূল্য টাকায় (BDT) এবং তাতে VAT ও ফি অন্তর্ভুক্ত; পরিশোধ হয় টাকার ওয়ালেট থেকে, যা EPS দিয়ে টপ আপ করা যায়। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।
 
 Canonical site: https://tryaws.now
 Published by TryAWS.now
@@ -12,7 +12,7 @@ Last updated: 2026-11-14
 
 - What: Every server, database and storage resource you buy here is an Amazon Lightsail resource running in an AWS Region (Singapore or Mumbai). TryAWS.now sells, bills and supports the service. You manage everything from this panel and do not need an AWS account.
 - Locations: Singapore (ap-southeast-1), Mumbai (ap-south-1)
-- Prices: Prices are in US dollars (USD), for 30 days, and include VAT and fees. The amount in taka is worked out at checkout with the exchange rate of the day, and you see it before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail.
+- Prices: Prices are in taka (BDT), for 30 days, and include VAT and fees. You pay from your taka wallet, and you see the amount before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail.
 - Support: TryAWS.now gives support through support requests only, and our support team answers every request in writing. With an account, open a request in the panel and follow the answers there. Without an account, use the form on the support page and we answer by email. There is no support phone line and no support email address.
 - Company: TryAWS.now, Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230
 - Identifiers: BIN: 008073062-0507, Trade License: TRAD/DNCC/098737/2020
@@ -21,9 +21,9 @@ Last updated: 2026-11-14
 
 ## Pages, English (9)
 
-- [TryAWS.now: Cloud Server, built on Amazon Lightsail](https://tryaws.now/en): Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in US dollars, wallet in taka, top up with EPS.
-- [Pricing: Cloud Server, built on Amazon Lightsail](https://tryaws.now/en/pricing): Cloud Server plans with prices in US dollars for 30 days. Prices include VAT and fees. Built on Amazon Lightsail.
-- [Cloud Server, built on Amazon Lightsail](https://tryaws.now/en/products/cloud-servers): Cloud servers that run in the AWS Region Singapore or Mumbai. Plans, specifications and prices in US dollars. Built on Amazon Lightsail.
+- [TryAWS.now: Cloud Server, built on Amazon Lightsail](https://tryaws.now/en): Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in taka, paid from a taka wallet, top up with EPS.
+- [Pricing: Cloud Server, built on Amazon Lightsail](https://tryaws.now/en/pricing): Cloud Server plans with prices in taka (BDT) for 30 days. Prices include VAT and fees. Built on Amazon Lightsail.
+- [Cloud Server, built on Amazon Lightsail](https://tryaws.now/en/products/cloud-servers): Cloud servers that run in the AWS Region Singapore or Mumbai. Plans, specifications and prices in taka. Built on Amazon Lightsail.
 - [Help and frequently asked questions](https://tryaws.now/en/help): Answers about TryAWS.now and Amazon Lightsail: AWS, billing, support and where your data is.
 - [Support and contact](https://tryaws.now/en/support): How to get support from TryAWS.now: support requests in the panel, or the form on the support page without an account.
 - [Terms of service](https://tryaws.now/en/legal/terms): Terms of service of TryAWS.now, the prepaid cloud panel for Bangladesh.
@@ -33,9 +33,9 @@ Last updated: 2026-11-14
 
 ## পাতা, বাংলা (9)
 
-- [TryAWS.now: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি](https://tryaws.now/): বাংলাদেশের জন্য প্রিপেইড ক্লাউড প্যানেল। ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি। মূল্য মার্কিন ডলারে, ওয়ালেট টাকায়, EPS দিয়ে টপ আপ।
-- [মূল্য তালিকা: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি](https://tryaws.now/pricing): ক্লাউড সার্ভারের সব প্ল্যানের মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য। মূল্যে VAT ও ফি অন্তর্ভুক্ত। Amazon Lightsail দিয়ে তৈরি।
-- [ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি](https://tryaws.now/products/cloud-servers): Singapore বা Mumbai AWS Region-এ চলা ক্লাউড সার্ভার। প্ল্যান, স্পেসিফিকেশন ও মূল্য মার্কিন ডলারে। Amazon Lightsail দিয়ে তৈরি।
+- [TryAWS.now: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি](https://tryaws.now/): বাংলাদেশের জন্য প্রিপেইড ক্লাউড প্যানেল। ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি। মূল্য টাকায়, টাকার ওয়ালেট থেকে পরিশোধ, EPS দিয়ে টপ আপ।
+- [মূল্য তালিকা: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি](https://tryaws.now/pricing): ক্লাউড সার্ভারের সব প্ল্যানের মূল্য টাকায় (BDT), ৩০ দিনের জন্য। মূল্যে VAT ও ফি অন্তর্ভুক্ত। Amazon Lightsail দিয়ে তৈরি।
+- [ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি](https://tryaws.now/products/cloud-servers): Singapore বা Mumbai AWS Region-এ চলা ক্লাউড সার্ভার। প্ল্যান, স্পেসিফিকেশন ও মূল্য টাকায়। Amazon Lightsail দিয়ে তৈরি।
 - [সাহায্য ও সাধারণ প্রশ্ন](https://tryaws.now/help): TryAWS.now ও Amazon Lightsail নিয়ে সাধারণ প্রশ্নের উত্তর: AWS, বিল, সাপোর্ট, ডেটা কোথায় থাকে।
 - [সাপোর্ট ও যোগাযোগ](https://tryaws.now/support): TryAWS.now-এর সাপোর্ট পাওয়ার উপায়: প্যানেলে সাপোর্ট অনুরোধ, আর অ্যাকাউন্ট না থাকলে সাপোর্ট পাতার ফর্ম।
 - [সেবার শর্তাবলি](https://tryaws.now/legal/terms): সেবার শর্তাবলি: বাংলাদেশের প্রিপেইড ক্লাউড প্যানেল TryAWS.now-এর নথি।

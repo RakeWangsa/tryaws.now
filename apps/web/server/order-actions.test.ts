@@ -309,14 +309,11 @@ describe("placeOrderCore", () => {
         token: "new.tok",
         totalMinor: "120000",
         expiresAt: "2026-11-12T00:30:00.000Z",
-        usdText: "10.00",
-        fxRate: "120.0000",
-        fxSetAt: null,
       },
     });
   });
 
-  it("WPU-Y4: the re-confirm draft carries the new USD price, the rate and the day the rate was set", async () => {
+  it("WPU-X16: the re-confirm draft carries the new BDT total only: no dollar price, no rate, no rate day", async () => {
     const changed: OrderDraft = {
       ...DRAFT,
       token: "new.tok",
@@ -327,27 +324,11 @@ describe("placeOrderCore", () => {
         createOrderDraft: async () => ({ ok: true, value: DRAFT }),
         placeOrder: async () => ({ ok: false, error: "price_changed", data: changed }),
       },
-      fxSetAtOf: (token) => (token === "new.tok" ? "2026-11-12T04:00:00.000Z" : null),
     });
-    expect(await placeOrderCore(d, input)).toMatchObject({
-      error: "price_changed",
-      draft: { usdText: "10.00", fxRate: "125", fxSetAt: "2026-11-12T04:00:00.000Z" },
-    });
-  });
-
-  it("WPU-Y4: a changed draft whose rate cannot be inverted is unavailable, never shown (fail closed)", async () => {
-    const changed: OrderDraft = {
-      ...DRAFT,
-      token: "new.tok",
-      quote: { ...DRAFT.quote, fxRate: "0" },
-    };
-    const { deps: d } = deps({
-      orders: {
-        createOrderDraft: async () => ({ ok: true, value: DRAFT }),
-        placeOrder: async () => ({ ok: false, error: "price_changed", data: changed }),
-      },
-    });
-    expect(await placeOrderCore(d, input)).toEqual({ ok: false, error: "unavailable" });
+    const result = await placeOrderCore(d, input);
+    expect(result).toMatchObject({ error: "price_changed", draft: { totalMinor: "125000" } });
+    if (result.ok || result.error !== "price_changed") throw new Error("expected price_changed");
+    expect(Object.keys(result.draft).sort()).toEqual(["expiresAt", "token", "totalMinor"]);
   });
 
   it("keeps a price_changed with data of an unknown shape as unavailable (fail closed)", async () => {

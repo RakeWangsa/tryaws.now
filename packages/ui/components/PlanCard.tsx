@@ -1,7 +1,6 @@
 import { useTranslations } from "next-intl";
 import { Button } from "./Button";
 import { MoneyText } from "./MoneyText";
-import { UsdText } from "./UsdText";
 import type { LinkComponent, Numerals } from "./types";
 
 export interface PlanSpec {
@@ -13,10 +12,8 @@ export interface PlanSpec {
 
 export interface PlanCardProps {
   name: string;
-  /** Paisa. A number throws TypeError (R4). Give this or `priceUsd`. */
-  priceMinor?: bigint;
-  /** WPU-Y4: the public price in US dollars as plain decimal text of the pricing engine ("5.85"). */
-  priceUsd?: string;
+  /** Paisa. A number throws TypeError (R4). Customers see taka only (WPU-X16). */
+  priceMinor: bigint;
   specs: [PlanSpec, PlanSpec, PlanSpec, PlanSpec];
   cta: { label: string; href: string; as?: LinkComponent };
   recommended?: boolean;
@@ -28,18 +25,14 @@ export interface PlanCardProps {
 export function PlanCard({
   name,
   priceMinor,
-  priceUsd,
   specs,
   cta,
   recommended = false,
   numerals,
 }: PlanCardProps) {
   const t = useTranslations("kit.plan");
-  if (priceUsd === undefined && typeof priceMinor !== "bigint") {
+  if (typeof priceMinor !== "bigint") {
     throw new TypeError("PlanCard: priceMinor must be a bigint of paisa, never a number");
-  }
-  if (priceUsd !== undefined && priceMinor !== undefined) {
-    throw new TypeError("PlanCard: give priceMinor or priceUsd, not both");
   }
   return (
     <div className="wrapper">
@@ -47,11 +40,7 @@ export function PlanCard({
       <div className="top-content bg-seccolorstyle topradius">
         <div className="title">{name}</div>
         <div className="price seccolor">
-          {priceUsd !== undefined ? (
-            <UsdText text={priceUsd} numerals={numerals} />
-          ) : (
-            <MoneyText minor={priceMinor as bigint} mode="wholeUp" numerals={numerals} />
-          )}{" "}
+          <MoneyText minor={priceMinor} mode="wholeUp" numerals={numerals} />{" "}
           <span className="period">{t("perPeriod")}</span>
         </div>
         <Button variant="primary" href={cta.href} as={cta.as}>

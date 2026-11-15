@@ -245,12 +245,12 @@ export function faqLd(items: readonly { question: string; answer: string }[]): L
 export interface ProductOffer {
   /** The name of the plan at its location. */
   name: string;
-  /** US dollars, the decimal text of the pricing engine (WPU-Y4). */
-  priceUsd: string;
+  /** Paisa, the engine's total: the structured data names the price in taka (BDT), WPU-X16. */
+  priceMinor: bigint;
   url: string;
 }
 
-/** A product with one offer in USD for each plan; the price is the text the page shows (WPU-Y4). */
+/** A product with one offer in BDT for each plan; the price is the whole-taka amount the plan cards show (WPU-X16). */
 export function productLd(input: {
   name: string;
   description: string;
@@ -268,8 +268,8 @@ export function productLd(input: {
       "@type": "Offer",
       name: offer.name,
       url: offer.url,
-      priceCurrency: "USD",
-      price: offer.priceUsd,
+      priceCurrency: "BDT",
+      price: wholeTakaUp(offer.priceMinor),
       availability: "https://schema.org/InStock",
     })),
   };

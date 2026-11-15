@@ -12,9 +12,6 @@ export interface FormState {
     token: string;
     totalMinor: string;
     expiresAt: string;
-    usdText: string;
-    fxRate: string;
-    fxSetAt: string | null;
   };
 }
 

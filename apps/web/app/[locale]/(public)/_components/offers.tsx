@@ -1,4 +1,4 @@
-import { Button, PlanCard, UsdText } from "@tc/ui";
+import { Button, MoneyText, PlanCard } from "@tc/ui";
 import type { PlanSpec } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
@@ -6,8 +6,8 @@ import type { PublicOffer } from "../../../../server/public/catalog.ts";
 type PlanSpecs = PublicOffer["specs"];
 
 // The pieces that show offers of the live catalog. Nothing here computes money: the price of an
-// offer is the engine's total written in US dollars (customerUsd), formatted by UsdText. Public pages show
-// no taka (WPU-Y4); the taka amount is worked out at checkout.
+// offer is the engine's total in paisa (the amount the checkout debits), formatted as taka. Customers see
+// taka only, never dollars (WPU-X16, owner decision of 2026-11-15).
 
 /** What `useTranslations("Public")` gives, as far as these pieces use it. */
 export interface Tr {
@@ -97,7 +97,7 @@ export function OfferCard({
   return (
     <PlanCard
       name={offerName(t, offer)}
-      priceUsd={offer.priceUsd}
+      priceMinor={offer.priceMinor}
       specs={cardSpecs(t, offer.specs)}
       cta={{ label: label ?? t("common.orderNow"), href: href ?? orderHref(locale) }}
       recommended={recommended === true}
@@ -165,7 +165,11 @@ export function OfferTable({
                 <td className="seccolor">{v.transfer}</td>
                 <td>
                   <b className="c-black mergecolor">
-                    <UsdText text={offer.priceUsd} numerals={offerNumerals(locale, offer)} />
+                    <MoneyText
+                      minor={offer.priceMinor}
+                      mode="wholeUp"
+                      numerals={offerNumerals(locale, offer)}
+                    />
                   </b>
                 </td>
                 <td>
