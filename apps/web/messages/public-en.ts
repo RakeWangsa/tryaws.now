@@ -381,7 +381,7 @@ export const publicEn: Same<typeof publicBn> = {
       sidebarLabel: "List of legal documents",
       // WPU-Y6: the texts are approved by the owner (2026-11-14); no draft notice. The version line and
       // LEGAL_VERSIONS (server/auth/legal.ts) move together.
-      version: "Version 3, 15 November 2026",
+      version: "Version 4, 15 November 2026",
       docs: legalDocsEn,
     },
     system: {

@@ -38,9 +38,9 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       prices: {
         title: "6. Prices and checkout",
-        p1: "Our price list is in US dollars (USD), for 30 days. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%. Your invoice shows each tax and fee on its own line.",
-        p2: "When you buy, we convert the price to taka with the exchange rate of the day that {brand} sets. Before you confirm, the checkout shows the amount in taka and the rate used, with the date the rate was set. Your wallet is charged exactly the amount shown.",
-        p3: "If the price or the rate changes before you confirm, the checkout shows the new amount and asks you again. A later change of a price or a rate never changes an order you have placed or a period you have paid for.",
+        p1: "Our price list is in Bangladeshi taka (BDT), for 30 days. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%. Your invoice shows each tax and fee on its own line.",
+        p2: "Before you confirm, the checkout shows the price in taka. Your wallet is charged exactly the amount shown.",
+        p3: "If the price changes before you confirm, the checkout shows the new amount and asks you again. A later change of a price never changes an order you have placed or a period you have paid for.",
         p4: "In the panel every amount is in taka.",
       },
       orders: {
@@ -51,8 +51,8 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       renewal: {
         title: "8. Periods and renewal",
         p1: "A resource is paid for 30 days at a time, in advance. Auto-renew is on for every new purchase; you can switch it off for each resource in the panel.",
-        p2: "At the end of a period, if auto-renew is on and your wallet holds enough, we renew the resource for another 30 days and issue an invoice. A renewal is charged at the price and the exchange rate of the renewal day.",
-        p3: "We remind you by email 7, 3 and 1 day before a period ends, with the renewal amount at the rate of that day and your wallet balance, and by SMS 1 day before.",
+        p2: "At the end of a period, if auto-renew is on and your wallet holds enough, we renew the resource for another 30 days and issue an invoice. A renewal is charged at the price of the renewal day.",
+        p3: "We remind you by email 7, 3 and 1 day before a period ends, with the renewal amount at the price of that day and your wallet balance, and by SMS 1 day before.",
         p4: "If auto-renew is off, renew the resource in the panel before the period ends.",
         p5: "A domain is renewed 30 days before its expiry date, not on the expiry date. We charge your wallet the renewal price of the domain’s TLD in taka at the rate of that day, and ask the registry to renew the domain. If your wallet does not hold enough, we try again until the renewal succeeds or the domain expires.",
       },
@@ -78,7 +78,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       invoices: {
         title: "12. Invoices",
-        p1: "For each purchase and renewal you get a tax invoice (Mushak-6.3) in taka, issued by {company}. Invoices show no amounts in US dollars.",
+        p1: "For each purchase and renewal you get a tax invoice (Mushak-6.3) in taka, issued by {company}. Every amount on an invoice is in taka.",
         p2: "When we cancel a purchase or a renewal and return the whole amount to your wallet, you get a credit note in taka for its invoice. You find your invoices, receipts and credit notes in the panel, and we email each invoice.",
       },
       support: {

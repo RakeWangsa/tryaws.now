@@ -380,7 +380,7 @@ export const publicBn = {
       sidebarLabel: "আইনি নথির তালিকা",
       // WPU-Y6: the texts are approved by the owner (2026-11-14); no draft notice. The version line and
       // LEGAL_VERSIONS (server/auth/legal.ts) move together.
-      version: "সংস্করণ ৩, ১৫ নভেম্বর ২০২৬",
+      version: "সংস্করণ ৪, ১৫ নভেম্বর ২০২৬",
       docs: legalDocsBn,
     },
     system: {

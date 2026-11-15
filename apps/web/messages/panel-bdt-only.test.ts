@@ -8,17 +8,9 @@ import { flatLeaves } from "./wording-check.ts";
 // WPU-X16 (owner decision of 2026-11-15, replacing WPU-Z2 and WPU-Y4): "no one should see the dollar price,
 // only BDT will be everywhere for customers". No customer message of the app (public pages, panel, shell,
 // kit) names a dollar, the exchange rate or the currency code USD, in Bengali or in English. Out of the scan:
-// the dev-only component gallery (Gallery) and two legal sentences (LEGAL_PENDING), whose wording the owner approves separately (docs/legal-drafts/2026-11-15-bdt-only.md). Admin is staff-only
+// the dev-only component gallery (Gallery). The legal text is covered too since the owner approved the taka-only wording (WPU-X17, docs/legal-drafts/2026-11-15-bdt-only.md). Admin is staff-only
 // and has its own messages.
 const NOT_CUSTOMER = ["Gallery."];
-// The legal sentences that still name the dollar or the exchange rate until the owner approves the new wording. Exactly these
-// keys; any other legal key that names a dollar fails the guard. Remove them when legal-*.ts is changed.
-const LEGAL_PENDING = [
-  "Public.legal.docs.terms.sections.prices.p1",
-  "Public.legal.docs.terms.sections.invoices.p1",
-  "Public.legal.docs.terms.sections.prices.p2",
-  "Public.legal.docs.terms.sections.renewal.p2",
-];
 const DOLLARS = /USD|US dollar|dollar|ডলার|exchange rate|বিনিময়/i;
 
 function web(path: string): string {
@@ -32,7 +24,6 @@ describe("customers see taka only (WPU-X16)", () => {
       expect(leaves.size).toBeGreaterThan(1500);
       const found = [...leaves]
         .filter(([key]) => !NOT_CUSTOMER.some((p) => key.startsWith(p)))
-        .filter(([key]) => !LEGAL_PENDING.includes(key))
         .filter(([, text]) => DOLLARS.test(text))
         .map(([key, text]) => `${key}: ${text}`);
       expect(found).toEqual([]);
