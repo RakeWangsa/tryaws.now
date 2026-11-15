@@ -277,7 +277,9 @@ const PRODUCTS = [
   // WPU-B5: CDN bundles and database engines of the catalog, a disk from a snapshot
   "CDN_FAMILY",
   "CDN_SYNC_REGION",
+  "CONTAINER_FAMILY",
   "DB_BLUEPRINT_FAMILY",
+  "mapContainerPower",
   "mapDbBlueprint",
   "mapDistributionBundle",
   "checkDiskSnapshotRestore",
