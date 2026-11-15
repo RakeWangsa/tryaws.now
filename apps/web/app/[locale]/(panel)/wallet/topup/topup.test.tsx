@@ -289,6 +289,25 @@ describe("/wallet/topup: errors and states", () => {
   });
 });
 
+describe("/wallet/topup: the EPS badge (WPU-X21)", () => {
+  it("shows the dark badge with its alt text and the caption, in bn and en", async () => {
+    const en = await render("en");
+    expect(en).toMatch(/<img[^>]*src="\/brand\/eps-pay-dark\.png"[^>]*>/);
+    expect(en).toContain('width="1120"');
+    expect(en).toContain('height="196"');
+    expect(en).toContain('loading="lazy"');
+    expect(en).toContain(
+      "Pay with EPS: Visa, Mastercard, American Express, DBBL Nexus, UnionPay and Bangladeshi mobile wallets and banks. Verified by EPS.",
+    );
+    expect(en).toContain(
+      "Payments are processed by EPS in taka; TryAWS.now never sees your card or wallet details.",
+    );
+    const bn = await render("bn");
+    expect(bn).toContain("EPS দিয়ে পেমেন্ট করুন: ভিসা");
+    expect(bn).toContain("কখনও দেখে না");
+  });
+});
+
 describe("/wallet/topup: the page", () => {
   it("has no inline style and no script of ours (React's own form-replay script for a plain-function action is the one allowed)", async () => {
     for (const locale of ["bn", "en"] as const) {

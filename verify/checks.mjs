@@ -4136,6 +4136,12 @@ TASKS["WPU-X20"] = [
   repo,
 ];
 
+// WPU-X21 (owner supplied the official EPS "Pay with" badges): the dark two-row badge in the public footer,
+// on the home page and on the wallet top-up page, self-hosted from apps/web/public/brand with explicit size,
+// lazy loading and a tc.css class. ui runs tc.css; web runs the badge, home, public pages and top-up tests and
+// the messages parity; repo the journal and verify wiring.
+TASKS["WPU-X21"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

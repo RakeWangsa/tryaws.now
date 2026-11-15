@@ -2,6 +2,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { PublicCatalog } from "../../../server/public/catalog.ts";
 import { breadcrumbLd } from "../../../server/public/seo.ts";
+import { EpsBadge } from "../_components/EpsBadge.tsx";
 import { AnswerBlock } from "./_components/AnswerBlock.tsx";
 import { JsonLds } from "./_components/JsonLd.tsx";
 import { useSiteLd } from "./_components/site-ld.ts";
@@ -72,6 +73,12 @@ export function HomeContent({
               />
             </div>
           </div>
+        </div>
+      </section>
+      {/* WPU-X21: the official "Pay with EPS" badge, below the chooser and above the trust text. */}
+      <section className="bg-colorstyle pb-4">
+        <div className="container">
+          <EpsBadge alt={t("epsBadge.alt")} className="tc-eps-badge-center" />
         </div>
       </section>
       {/* WPU-Z16: the answer block is the entity statement (who, what, where, how billed). Round 2 of
