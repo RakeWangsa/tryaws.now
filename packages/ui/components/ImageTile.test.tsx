@@ -45,7 +45,13 @@ describe("ImageTile icon size (WPU-X27)", () => {
   };
   it("the logo img carries the constrained class, no style attribute", () => {
     const { container } = renderKit(
-      <ImageTile type="radio" name="os" value="lamp" label="LAMP 8.5.12" imageSrc="/theme/assets/apps/lamp.svg" />,
+      <ImageTile
+        type="radio"
+        name="os"
+        value="lamp"
+        label="LAMP 8.5.12"
+        imageSrc="/theme/assets/apps/lamp.svg"
+      />,
     );
     const img = container.querySelector("img") as HTMLElement;
     expect(img.classList.contains("tc-image-tile-logo")).toBe(true);
