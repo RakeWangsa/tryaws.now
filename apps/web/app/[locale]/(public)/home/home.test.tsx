@@ -451,7 +451,10 @@ describe("platform and image steps (WPU-X22)", () => {
     expect(text(page)).toContain("Node.js");
     expect(text(page)).toContain("App image");
     expect(page).not.toContain("Debian");
-    expect(page).not.toMatch(/<img|\/theme\/assets\/apps/);
+    // The one image of the page is the official EPS payment badge (WPU-X21); no image of an app image card.
+    expect(page.replace(/<img[^>]*eps-pay-dark\.png[^>]*>/g, "")).not.toMatch(
+      /<img|\/theme\/assets\/apps/,
+    );
     expect(page).not.toMatch(/<form|<button|<script[^>]*src/);
     // the chosen image is marked by text, not by colour alone
     expect(text(page)).toMatch(/WordPress 6\.8 App image.*Selected/);
