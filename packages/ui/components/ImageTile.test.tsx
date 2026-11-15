@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -36,6 +36,32 @@ describe("ImageTile without a logo", () => {
   });
 });
 
+describe("ImageTile icon size (WPU-X27)", () => {
+  const css = readFileSync(resolve(repoRoot, "packages/ui/styles/tc.css"), "utf8");
+  const rule = (cls: string) => {
+    const m = css.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`));
+    expect(m, `${cls} is defined in tc.css`).not.toBeNull();
+    return m![1]!;
+  };
+  it("the logo img carries the constrained class, no style attribute", () => {
+    const { container } = renderKit(
+      <ImageTile type="radio" name="os" value="lamp" label="LAMP 8.5.12" imageSrc="/theme/assets/apps/lamp.svg" />,
+    );
+    const img = container.querySelector("img") as HTMLElement;
+    expect(img.classList.contains("tc-image-tile-logo")).toBe(true);
+    expect(img.getAttribute("style")).toBeNull();
+    expect(unknownClasses(container)).toEqual([]);
+  });
+  it("tc.css caps the logo and the generic icon to a square of at most 3rem that never grows or shrinks", () => {
+    const logo = rule("tc-image-tile-logo");
+    expect(logo).toMatch(/max-width:\s*3rem/);
+    expect(logo).toMatch(/max-height:\s*3rem/);
+    expect(logo).toMatch(/flex:\s*0 0 auto/);
+    expect(logo).toMatch(/object-fit:\s*contain/);
+    expect(rule("tc-image-tile-generic")).toMatch(/flex:\s*0 0 auto/);
+  });
+});
+
 describe("ImageTile", () => {
   it("has the markup of the mockup (header.html, div.os)", () => {
     const { container } = renderKit(
@@ -60,6 +86,7 @@ describe("ImageTile", () => {
     expect(input?.getAttribute("value")).toBe("ubuntu");
     expect(img?.tagName).toBe("IMG");
     expect(img?.getAttribute("src")).toBe(src);
+    expect(img?.getAttribute("class")).toBe("tc-image-tile-logo");
     expect(img?.getAttribute("alt")).toBe("");
     expect(img?.getAttribute("width")).toBe("45");
     expect(img?.getAttribute("height")).toBe("45");

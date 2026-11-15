@@ -507,7 +507,16 @@ div.tc-modal-open {
   padding: 0.75rem 1rem;
   border: 2px solid transparent;
 }
+/* WPU-X27: the logo is a small square whatever the theme or the file says (an svg without a size
+   filled the whole tile). It never grows and never shrinks; the name wraps beside it at 360 px. */
+.tc-image-tile-logo {
+  flex: 0 0 auto;
+  max-width: 3rem;
+  max-height: 3rem;
+  object-fit: contain;
+}
 .tc-image-tile-generic {
+  flex: 0 0 auto;
   width: 45px;
   text-align: center;
   font-size: 1.75rem;
