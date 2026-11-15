@@ -38,7 +38,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       },
       prices: {
         title: "6. Prices and checkout",
-        p1: "Our price list is in Bangladeshi taka (BDT), for 30 days. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%. Your invoice shows each tax and fee on its own line.",
+        p1: "Our price list is in Bangladeshi taka (BDT), for 30 days. Every price includes VAT and the other taxes and fees that apply. Your invoice shows the VAT and the fees.",
         p2: "Before you confirm, the checkout shows the price in taka. Your wallet is charged exactly the amount shown.",
         p3: "If the price changes before you confirm, the checkout shows the new amount and asks you again. A later change of a price never changes an order you have placed or a period you have paid for.",
         p4: "In the panel every amount is in taka.",

@@ -285,7 +285,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         vatInvoice: {
           q: "Do I get a VAT invoice?",
-          a: "Yes. For each purchase and renewal TryAWS.now gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.",
+          a: "Yes. For each purchase and renewal TryAWS.now gives you a tax invoice (Mushak-6.3) in taka. Every price includes VAT and the other taxes and fees that apply, and the invoice shows the VAT and the fees. A VAT-registered business can have its BIN printed on the invoice.",
         },
         refunds: {
           q: "Can I get a refund?",
@@ -343,7 +343,7 @@ export const publicEn: Same<typeof publicBn> = {
       sidebarLabel: "List of legal documents",
       // WPU-Y6: the texts are approved by the owner (2026-11-14); no draft notice. The version line and
       // LEGAL_VERSIONS (server/auth/legal.ts) move together.
-      version: "Version 4, 15 November 2026",
+      version: "Version 5, 15 November 2026",
       docs: legalDocsEn,
     },
     system: {

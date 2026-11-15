@@ -342,9 +342,9 @@ export const serversEn: Same<typeof serversBn> = {
           "The price is in taka (BDT), for 1 year, with VAT and fees included. Exactly this amount is taken from your wallet. If the price changes before you confirm, you will see the new amount and confirm again.",
       },
       lines: "Price details",
-      awsPrice: "AWS service price",
+      awsPrice: "Service price (Amazon Web Services)",
       step: {
-        bd_vat: "Bangladesh VAT",
+        bd_vat: "VAT",
         processing_fee: "Processing fee",
         markup: "Service charge",
       },

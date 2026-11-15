@@ -93,7 +93,8 @@ describe("/invoices/[id]", () => {
     expect(en).toContain("Invoice TC-2026-000012");
     expect(en).toContain("Rahim");
     expect(en).toContain("AWS service price");
-    expect(en).toContain("Bangladesh VAT");
+    expect(en).toContain("VAT");
+    expect(en).not.toContain("Bangladesh");
     expect(en).toContain("600.00");
     expect(en).toContain("90.00");
     expect(en).toContain("690.00");

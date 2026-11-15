@@ -112,7 +112,7 @@ Q: Are prices in taka?
 A: Prices are shown in Bangladeshi taka (BDT), and so are your wallet, top-ups and invoices. The amount you see at checkout is exactly the amount taken from your wallet.
 
 Q: Do I get a VAT invoice?
-A: Yes. For each purchase and renewal TryAWS.now gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice.
+A: Yes. For each purchase and renewal TryAWS.now gives you a tax invoice (Mushak-6.3) in taka. Every price includes VAT and the other taxes and fees that apply, and the invoice shows the VAT and the fees. A VAT-registered business can have its BIN printed on the invoice.
 
 Q: Can I get a refund?
 A: If a resource cannot be created after you paid, the full amount goes back to your wallet automatically. When we cancel a purchase or a renewal, the whole amount goes back to your wallet and you get a credit note in taka. For anything else, open a billing support request; the refund policy has the details.

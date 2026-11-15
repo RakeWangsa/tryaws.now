@@ -30,7 +30,7 @@ describe("PriceBreakdown", () => {
       { locale: "en" },
     );
     expect(rowsOf(container)).toEqual([
-      ["AWS service price", "৳884.50"],
+      ["Service price (Amazon Web Services)", "৳884.50"],
       ["Service charge", "৳200.00"],
       ["VAT", "৳150.00"],
       ["Total", "৳1,234.50"],
@@ -42,7 +42,7 @@ describe("PriceBreakdown", () => {
       <PriceBreakdown baseMinor={88450n} steps={steps} totalMinor={123450n} />,
       { locale: "bn" },
     );
-    expect(rowsOf(container)[0]?.[0]).toBe("AWS সার্ভিস মূল্য");
+    expect(rowsOf(container)[0]?.[0]).toBe("সার্ভিস মূল্য (Amazon Web Services)");
     expect(rowsOf(container)[3]?.[0]).toBe("মোট");
   });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { quote } from "../pricing/quote";
 import { toSnapshot } from "../pricing/snapshot";
 import type { PricingRule } from "../pricing/types";
-import { invoiceIdFor, invoiceLinesOf, queueIdFor } from "./charge";
+import { INVOICE_STEP_LABELS, invoiceIdFor, invoiceLinesOf, queueIdFor } from "./charge";
 import { renderInvoiceHtml, type InvoiceDocument } from "./index";
 
 // WPU-I2: the lines of a charge come from the snapshot that priced it; the VAT rate travels with its
@@ -111,5 +111,42 @@ describe("the ids of an invoice and of its queue entry", () => {
     );
     expect(queueIdFor(tx)).not.toBe(invoiceIdFor(tx));
     expect(invoiceIdFor(tx.replace("a1", "a2"))).not.toBe(invoiceIdFor(tx));
+  });
+  it("WPU-X26: both VAT steps are called just VAT, in both languages, and no country is named", () => {
+    const lines = invoiceLinesOf(snapshot);
+    const vat = lines.filter((l) => l.code === "korea_vat" || l.code === "bd_vat");
+    expect(vat.map((l) => l.code)).toEqual(["korea_vat", "bd_vat"]);
+    for (const l of vat) expect(l.label).toEqual({ bn: "ভ্যাট", en: "VAT" });
+    expect(JSON.stringify(INVOICE_STEP_LABELS)).not.toMatch(/Korea|Bangladesh|কোরিয়া|বাংলাদেশ/);
+    // the amounts do not depend on the label
+    expect(vat.map((l) => l.amountMinor)).toEqual(["6350", "3175"]);
+  });
+
+  it("WPU-X26: the tax invoice with both rows labelled VAT still adds up and still checks the printed VAT", () => {
+    const doc: InvoiceDocument = {
+      seller,
+      kind: "invoice",
+      number: "TC-2026-000001",
+      issuedAt: new Date("2026-11-11T05:00:00Z"),
+      company: { name: "x", address: [] },
+      customer: { name: "Rahim" },
+      lines: invoiceLinesOf(snapshot),
+      totalMinor: 74295n,
+    };
+    for (const locale of ["en", "bn"] as const) {
+      const html = renderInvoiceHtml(doc, locale);
+      // the form heading names the Government of Bangladesh; only the tax labels are the subject here
+      expect(html).not.toMatch(/Korea|Bangladesh VAT|কোরিয়া|বাংলাদেশের VAT|বাংলাদেশ ভ্যাট/);
+      expect(html).toContain(locale === "en" ? "<td>VAT</td>" : "<td>ভ্যাট</td>");
+    }
+    const html = renderInvoiceHtml(doc, "en");
+    expect(html).toContain('<td class="num">5%</td>');
+    // a VAT amount that is not rate x value is still refused (R16)
+    const wrong = {
+      ...doc,
+      lines: doc.lines.map((l) => (l.code === "bd_vat" ? { ...l, amountMinor: "3176" } : l)),
+      totalMinor: 74296n,
+    };
+    expect(() => renderInvoiceHtml(wrong, "en")).toThrow(/vat_mismatch/);
   });
 });

@@ -113,7 +113,7 @@
       },
       {
         "q": "Do I get a VAT invoice?",
-        "a": "Yes. For each purchase and renewal TryAWS.now gives you a tax invoice (Mushak-6.3) in taka. Every price includes the taxes and fees that apply, among them the Bangladesh VAT of 5%, and the invoice shows each tax and fee on its own line. A VAT-registered business can have its BIN printed on the invoice."
+        "a": "Yes. For each purchase and renewal TryAWS.now gives you a tax invoice (Mushak-6.3) in taka. Every price includes VAT and the other taxes and fees that apply, and the invoice shows the VAT and the fees. A VAT-registered business can have its BIN printed on the invoice."
       },
       {
         "q": "Can I get a refund?",

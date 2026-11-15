@@ -286,7 +286,7 @@ export const publicBn = {
         // WPU-Z16: what people ask AI assistants about this offer; facts of the terms and refund drafts.
         vatInvoice: {
           q: "আমি কি VAT সহ কর চালানপত্র পাব?",
-          a: "হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TryAWS.now আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে প্রযোজ্য সব কর ও ফি অন্তর্ভুক্ত, যার মধ্যে আছে বাংলাদেশের ৫% VAT, আর ইনভয়েসে প্রতিটি কর ও ফি আলাদা লাইনে দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।",
+          a: "হ্যাঁ। প্রতিটি কেনা ও নবায়নের জন্য TryAWS.now আপনাকে টাকায় কর চালানপত্র (মূসক-৬.৩) দেয়। প্রতিটি মূল্যে VAT এবং প্রযোজ্য অন্যান্য কর ও ফি অন্তর্ভুক্ত, আর ইনভয়েসে VAT ও ফি দেখানো হয়। VAT-নিবন্ধিত প্রতিষ্ঠান তার BIN ইনভয়েসে দিতে পারে।",
         },
         refunds: {
           q: "টাকা ফেরত পাওয়া যায় কি?",
@@ -344,7 +344,7 @@ export const publicBn = {
       sidebarLabel: "আইনি নথির তালিকা",
       // WPU-Y6: the texts are approved by the owner (2026-11-14); no draft notice. The version line and
       // LEGAL_VERSIONS (server/auth/legal.ts) move together.
-      version: "সংস্করণ ৪, ১৫ নভেম্বর ২০২৬",
+      version: "সংস্করণ ৫, ১৫ নভেম্বর ২০২৬",
       docs: legalDocsBn,
     },
     system: {
