@@ -1,26 +1,21 @@
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { AuthShell, Button, EmptyState } from "@tc/ui";
-import { localeHrefs, localePath } from "@tc/ui/runtime";
+import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { AuthCard } from "./AuthCard.tsx";
 
-/** The frame of one sign-in screen: the card of login.html with the language switch of its own path. */
+/** The frame of one sign-in screen: the card of login.html (English only, WPU-X19). */
 export function AuthPageFrame({
   locale,
-  path,
   children,
 }: {
   locale: Locale;
-  /** The screen's own path without locale, for the language switch. */
+  /** The screen's own path. WPU-X19: no language switch on the sign-in screens, so it is not used now. */
   path: string;
   children: ReactNode;
 }) {
-  return (
-    <AuthShell locale={locale} localeHrefs={localeHrefs(path)}>
-      {children}
-    </AuthShell>
-  );
+  return <AuthShell locale={locale}>{children}</AuthShell>;
 }
 
 /**

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_LOCALE,
   LOCALES,
+  englishOnlyTarget,
   isLocale,
   localeHrefs,
   localePath,
@@ -26,7 +27,10 @@ describe("isLocale", () => {
 
 describe("localePath", () => {
   it.each([
-    ["bn", "/x", "/x"],
+    // WPU-X19: only the home page is Bengali; every other path of bn is the English page.
+    ["bn", "/x", "/en/x"],
+    ["bn", "/pricing", "/en/pricing"],
+    ["bn", "/login", "/en/login"],
     ["en", "/x", "/en/x"],
     ["en", "/", "/en"],
     ["bn", "/", "/"],
@@ -46,7 +50,7 @@ describe("localePath", () => {
 
 describe("localeHrefs", () => {
   it("gives one href per locale", () => {
-    expect(localeHrefs("/dev/ui")).toEqual({ bn: "/dev/ui", en: "/en/dev/ui" });
+    expect(localeHrefs("/dev/ui")).toEqual({ bn: "/en/dev/ui", en: "/en/dev/ui" });
     expect(localeHrefs("/")).toEqual({ bn: "/", en: "/en" });
   });
 
@@ -65,5 +69,24 @@ describe("splitLocale", () => {
     ["/x", "bn", "/x"],
   ] as const)("splitLocale(%s) is %s and %s", (pathname, locale, path) => {
     expect(splitLocale(pathname)).toEqual({ locale, path });
+  });
+});
+
+describe("englishOnlyTarget (WPU-X19)", () => {
+  it.each([
+    ["/", null],
+    ["/bn", null],
+    ["/bn/", null],
+    ["/en", null],
+    ["/en/pricing", null],
+    ["/pricing", "/en/pricing"],
+    ["/login", "/en/login"],
+    ["/dashboard", "/en/dashboard"],
+    ["/bn/pricing", "/en/pricing"],
+    ["/bn/servers/new", "/en/servers/new"],
+    ["/english", "/en/english"],
+    ["/bnx", "/en/bnx"],
+  ] as const)("englishOnlyTarget(%s) is %s", (pathname, expected) => {
+    expect(englishOnlyTarget(pathname)).toBe(expected);
   });
 });

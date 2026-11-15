@@ -322,7 +322,7 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
         escape(leaf(locale, "Shell.footer.address")),
       );
       // Signed-in customers open and follow requests in the panel; the panel asks for a sign-in first.
-      const prefix = locale === "bn" ? "" : "/en";
+      const prefix = "/en"; // WPU-X19: /support is English only
       expect(main).toContain(`href="${prefix}/support/new"`);
       expect(main).toContain(`href="${prefix}/support/requests"`);
       for (const key of ["lead", "customerText", "visitorText", "newCta", "requestsCta"] as const) {
@@ -395,9 +395,35 @@ describe("/support and /legal (WPP-T2, WPU-Z7)", () => {
     }
   });
 
-  it("the English home page links the language switch to the same page", () => {
-    expect(all["help.data"]!("en")).toContain('href="/help"');
-    expect(all["help.data"]!("bn")).toContain('href="/en/help"');
+  // WPU-X19 (owner, 2026-11-15): only the home page is bilingual, with its language switch.
+  it("the language switch is on the home page only", () => {
+    for (const locale of LOCALES) {
+      const home = all["home.data"]!(locale);
+      expect(home, locale).toContain('hrefLang="bn"');
+      expect(home, locale).toContain('hrefLang="en"');
+      expect(home, locale).toContain('href="/en"');
+    }
+    for (const id of ["help.data", "pricing.data", "cloud.data", "support.data", "legal.terms"]) {
+      for (const locale of LOCALES) {
+        const page = all[id]!(locale);
+        expect(page, `${id} ${locale}`).not.toContain("hrefLang=");
+        expect(page, `${id} ${locale}`).not.toContain("tc-locale-switch");
+      }
+    }
+  });
+
+  it("the Bengali home page is Bengali and every link that leaves it goes to the English page", () => {
+    const home = all["home.data"]!("bn");
+    expect(home).toContain(escape(publicBn.Public.entity.statement));
+    const anchors = [...home.matchAll(/<a\s[^>]*?href="([^"]*)"/g)].map((m) => m[1] as string);
+    const own = anchors.filter((href) => href.startsWith("/"));
+    expect(own.length).toBeGreaterThan(10);
+    for (const href of own) {
+      const path = href.split(/[?#]/)[0] as string; // the region links of the home page stay on it
+      expect(path === "/" || path === "/en" || path.startsWith("/en/"), href).toBe(true);
+    }
+    expect(own).toContain("/en/pricing");
+    expect(own).toContain("/en/login");
   });
 });
 

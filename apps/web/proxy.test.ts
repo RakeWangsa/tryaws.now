@@ -96,10 +96,56 @@ describe("proxy: locale routing (16.7)", () => {
     expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/");
   });
 
-  it("redirects /bn/x to /x", async () => {
-    const response = await run("/bn/x");
-    expect(response.status).toBe(307);
-    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/x");
+  // WPU-X19 (owner, 2026-11-15): only the home page is Bengali. Any other page that would be served in
+  // bn goes to the same path under /en with a 308, the query kept.
+  it("redirects /bn/x and the unprefixed /x to /en/x with 308 and the query kept", async () => {
+    for (const path of ["/bn/pricing?a=1&b=2", "/pricing?a=1&b=2"]) {
+      const response = await run(path);
+      expect(response.status, path).toBe(308);
+      const target = new URL(response.headers.get("location") ?? "");
+      expect(target.origin, path).toBe("http://localhost:3000");
+      expect(target.pathname, path).toBe("/en/pricing");
+      expect(target.search, path).toBe("?a=1&b=2");
+    }
+  });
+
+  it("sends /login?next=/servers/new to the English login and keeps next", async () => {
+    const response = await run("/login?next=/servers/new");
+    expect(response.status).toBe(308);
+    const target = new URL(response.headers.get("location") ?? "");
+    expect(target.pathname).toBe("/en/login");
+    expect(target.searchParams.get("next")).toBe("/servers/new");
+  });
+
+  it("sends the panel routes to /en and not to bn, also with a bn Accept-Language or cookie", async () => {
+    for (const path of ["/dashboard", "/wallet", "/servers/new", "/settings/profile"]) {
+      const response = await run(path, {
+        "accept-language": "bn-BD,bn;q=0.9",
+        cookie: "NEXT_LOCALE=bn",
+      });
+      expect(response.status, path).toBe(308);
+      expect(new URL(response.headers.get("location") ?? "").pathname, path).toBe(`/en${path}`);
+    }
+  });
+
+  it("never builds the target from anything but the same-origin path", async () => {
+    const response = await run("//evil.example/x?u=https://evil.example");
+    const target = new URL(response.headers.get("location") ?? "http://x.invalid");
+    expect(target.origin).toBe("http://localhost:3000");
+  });
+
+  it("the home page stays: / and /en are served, /bn goes to /", async () => {
+    for (const path of ["/", "/en"]) {
+      const response = await run(path, { "accept-language": "bn" });
+      expect(response.status, path).toBeLessThan(300);
+      expect(response.headers.has("location"), path).toBe(false);
+    }
+  });
+
+  it("the redirect carries the CSP and the security headers", async () => {
+    const response = await run("/pricing");
+    expect(response.headers.get("content-security-policy-report-only")).toContain("nonce-");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
 
   it("sets no locale cookie", async () => {
@@ -125,6 +171,13 @@ describe("proxy: matcher", () => {
       "/theme/tc.css",
       "/brand/logo.svg",
       "/favicon.ico",
+      // WPU-X19: never redirected to /en, so the files of the crawlers stay where they are.
+      "/robots.txt",
+      "/sitemap.xml",
+      "/llms.txt",
+      "/llms-full.txt",
+      "/facts.json",
+      "/api/anything",
     ]) {
       expect(matches(path), path).toBe(false);
     }
@@ -164,7 +217,7 @@ describe("proxy: matcher", () => {
 describe("proxy: form-action", () => {
   it("lets forms post to the gateway origin and nowhere else (CSP form-action)", async () => {
     const csp =
-      (await run("/wallet/topup")).headers.get("content-security-policy-report-only") ?? "";
+      (await run("/en/wallet/topup")).headers.get("content-security-policy-report-only") ?? "";
     expect(csp).toContain("form-action 'self' https://pg.eps.com.bd;");
     expect(csp).not.toContain("pg.eps.test");
   });
@@ -208,7 +261,7 @@ describe("proxy: session refresh (open point 20)", () => {
 
   it("an access token about to expire gets the refreshed cookies on the request and on the response", async () => {
     state.runtime = runtimeWith({ kind: "refreshed", accessToken: "new.access.token" });
-    const response = await run("/wallet", { cookie: cookieHeader(expiring) });
+    const response = await run("/en/wallet", { cookie: cookieHeader(expiring) });
     const forwarded = response.headers.get("x-middleware-request-cookie") ?? "";
     expect(forwarded).toContain(`${ACCESS_COOKIE}=new.access.token`);
     expect(forwarded).toContain("theme=dark");
@@ -226,20 +279,20 @@ describe("proxy: session refresh (open point 20)", () => {
   it("a fresh token (none) leaves the request cookies as they were and sets nothing", async () => {
     state.runtime = runtimeWith({ kind: "refreshed", accessToken: "never-used" });
     const original = cookieHeader(fresh);
-    const response = await run("/wallet", { cookie: original });
+    const response = await run("/en/wallet", { cookie: original });
     expect(response.headers.get("x-middleware-request-cookie")).toBe(original);
     expect(response.headers.getSetCookie()).toEqual([]);
   });
 
   it("a request without cookies is untouched", async () => {
     state.runtime = runtimeWith({ kind: "refreshed", accessToken: "never-used" });
-    const response = await run("/wallet");
+    const response = await run("/en/wallet");
     expect(response.headers.getSetCookie()).toEqual([]);
   });
 
   it("a refresh token that Cognito rejects clears both cookies and removes them from the request", async () => {
     state.runtime = runtimeWith({ kind: "rejected" });
-    const response = await run("/wallet", { cookie: cookieHeader(expiring) });
+    const response = await run("/en/wallet", { cookie: cookieHeader(expiring) });
     const setCookies = response.headers.getSetCookie();
     expect(setCookies).toHaveLength(2);
     expect(setCookies.join("\n")).toMatch(/Max-Age=0/);
@@ -263,14 +316,14 @@ describe("proxy: session refresh (open point 20)", () => {
   it("a runtime that cannot be built (null) refreshes nothing", async () => {
     state.runtime = null;
     const original = cookieHeader(expiring);
-    const response = await run("/wallet", { cookie: original });
+    const response = await run("/en/wallet", { cookie: original });
     expect(response.headers.get("x-middleware-request-cookie")).toBe(original);
     expect(response.headers.getSetCookie()).toEqual([]);
   });
 
   it("the CSP and the security headers are still set after a refresh", async () => {
     state.runtime = runtimeWith({ kind: "refreshed", accessToken: "new.access.token" });
-    const response = await run("/wallet", { cookie: cookieHeader(expiring) });
+    const response = await run("/en/wallet", { cookie: cookieHeader(expiring) });
     expect(response.headers.get("content-security-policy-report-only")).toContain("default-src");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
   });

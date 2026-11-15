@@ -68,7 +68,7 @@ describe("handleReturnRequest: what it asks of the package", () => {
     });
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(
-      "https://cloud.example.com/wallet?topup=credited",
+      "https://cloud.example.com/en/wallet?topup=credited",
     );
   });
 
@@ -91,7 +91,9 @@ describe("handleReturnRequest: what it asks of the package", () => {
     expect(state.handleReturn.mock.calls[0]?.[0].query).toEqual({
       MerchantTransactionId: [ID, other],
     });
-    expect(response.headers.get("location")).toBe("https://cloud.example.com/wallet?topup=unknown");
+    expect(response.headers.get("location")).toBe(
+      "https://cloud.example.com/en/wallet?topup=unknown",
+    );
   });
 
   it("a key named __proto__ is data, not a prototype", async () => {
@@ -122,12 +124,14 @@ describe("handleReturnRequest: what it asks of the package", () => {
     state.handleReturn.mockRejectedValue(new Error("boom"));
     const response = await handleReturnRequest(get("/pay/eps/success"), "success");
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("https://cloud.example.com/wallet?topup=pending");
+    expect(response.headers.get("location")).toBe(
+      "https://cloud.example.com/en/wallet?topup=pending",
+    );
   });
 });
 
 describe("handleReturnRequest: where it sends the customer", () => {
-  it("an English session goes to /en/wallet, a session of Bengali or none to /wallet", async () => {
+  it("an English session goes to /en/wallet, a session of Bengali or none too (WPU-X19: English only)", async () => {
     credited();
     state.session = { ok: true, value: { locale: "en", customerId: "c1" } };
     const en = await handleReturnRequest(
@@ -140,13 +144,13 @@ describe("handleReturnRequest: where it sends the customer", () => {
       get(`/pay/eps/success?MerchantTransactionId=${ID}`),
       "success",
     );
-    expect(bn.headers.get("location")).toBe("https://cloud.example.com/wallet?topup=credited");
+    expect(bn.headers.get("location")).toBe("https://cloud.example.com/en/wallet?topup=credited");
     state.session = { ok: false, error: "unauthenticated" };
     const none = await handleReturnRequest(
       get(`/pay/eps/success?MerchantTransactionId=${ID}`),
       "success",
     );
-    expect(none.headers.get("location")).toBe("https://cloud.example.com/wallet?topup=credited");
+    expect(none.headers.get("location")).toBe("https://cloud.example.com/en/wallet?topup=credited");
   });
 
   it("a hostile query never changes the Location", async () => {
@@ -158,7 +162,7 @@ describe("handleReturnRequest: where it sends the customer", () => {
       "success",
     );
     expect(response.headers.get("location")).toBe(
-      "https://cloud.example.com/wallet?topup=credited",
+      "https://cloud.example.com/en/wallet?topup=credited",
     );
   });
 
@@ -189,7 +193,7 @@ describe("handleReturnRequest: where it sends the customer", () => {
         "success",
       );
       expect(response.headers.get("location"), String(redirectTo)).toBe(
-        "https://cloud.example.com/wallet?topup=unknown",
+        "https://cloud.example.com/en/wallet?topup=unknown",
       );
     }
   });
@@ -202,7 +206,7 @@ describe("handleReturnRequest: where it sends the customer", () => {
         "success",
       );
       expect(response.headers.get("location")).toBe(
-        `https://cloud.example.com/wallet?topup=${name}`,
+        `https://cloud.example.com/en/wallet?topup=${name}`,
       );
     }
   });
@@ -216,7 +220,9 @@ describe("handleReturnRequest: fail closed (R16)", () => {
       "success",
     );
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("https://cloud.example.com/wallet?topup=unknown");
+    expect(response.headers.get("location")).toBe(
+      "https://cloud.example.com/en/wallet?topup=unknown",
+    );
     expect(state.handleReturn).not.toHaveBeenCalled();
   });
 
@@ -225,7 +231,9 @@ describe("handleReturnRequest: fail closed (R16)", () => {
       get(`/pay/eps/success?MerchantTransactionId=${ID}`, { "x-forwarded-for": "198.51.100.1" }),
       "success",
     );
-    expect(response.headers.get("location")).toBe("https://cloud.example.com/wallet?topup=pending");
+    expect(response.headers.get("location")).toBe(
+      "https://cloud.example.com/en/wallet?topup=pending",
+    );
     expect(state.handleReturn).not.toHaveBeenCalled();
   });
 
@@ -237,7 +245,7 @@ describe("handleReturnRequest: fail closed (R16)", () => {
       "success",
     );
     expect(state.handleReturn.mock.calls[0]?.[0].clientIp).toBe("127.0.0.1");
-    expect(response.headers.get("location")).toBe("http://localhost:3000/wallet?topup=credited");
+    expect(response.headers.get("location")).toBe("http://localhost:3000/en/wallet?topup=credited");
   });
 
   it("a runtime that cannot be built answers 503 with no Location", async () => {

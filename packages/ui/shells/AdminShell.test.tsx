@@ -45,9 +45,11 @@ describe.each(LOCALES)("AdminShell (%s)", (locale) => {
     expect(links.map((a) => a.textContent?.trim())).toEqual(
       ADMIN_NAV.map((entry) => admin(locale).nav[entry.id]),
     );
-    const prefix = locale === "en" ? "/en" : "";
+    const prefix = "/en"; // WPU-X19
     expect(links.map((a) => a.getAttribute("href"))).toEqual(
-      ADMIN_NAV.map((entry) => (entry.href === "/" ? prefix || "/" : `${prefix}${entry.href}`)),
+      ADMIN_NAV.map((entry) =>
+        entry.href === "/" ? (locale === "en" ? "/en" : "/") : `${prefix}${entry.href}`,
+      ),
     );
     expect(container.querySelector("#sidebar a[aria-current='page']")?.textContent?.trim()).toBe(
       admin(locale).nav.today,

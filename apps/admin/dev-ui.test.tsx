@@ -63,7 +63,7 @@ describe("admin /dev/ui", () => {
       const markup = html(await GalleryPage(galleryProps(locale)), locale);
       expect(markup, locale).toContain('data-gallery="Card"');
       expect(markup, locale).toContain('data-gallery-group="aws"');
-      expect(markup, locale).toContain(`href="${locale === "en" ? "/en" : ""}/dev/ui/admin"`);
+      expect(markup, locale).toContain(`href="/en/dev/ui/admin"`);
       expect(markup, locale).not.toContain("/dev/ui/app");
     }
   });

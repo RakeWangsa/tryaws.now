@@ -207,7 +207,7 @@ describe("/servers", () => {
     expect(bn).toContain("web-1");
     expect(bn).toContain("Asia Pacific (Mumbai) · ap-south-1");
     expect(bn).toContain("চালু");
-    expect(bn).toContain(`href="/servers/${SERVER_ID}"`);
+    expect(bn).toContain(`href="/en/servers/${SERVER_ID}"`);
     const en = await renderPage(ServersPage as never, "en");
     expect(en).toContain("Running");
     expect(en).toContain('href="/en/servers/new"');
@@ -262,7 +262,7 @@ describe("/servers/new", () => {
     expect(en).not.toMatch(/identity|KYC|document number|upload/i);
     const bn = await renderPage(NewServerPage as never, "bn");
     expect(bn).toContain("কেনার আগে অ্যাকাউন্ট সেটআপ শেষ করুন");
-    expect(bn).toContain('href="/verify"');
+    expect(bn).toContain('href="/en/verify"');
     state.configurator = configurator({ plans: [], regions: [] });
     expect(await renderPage(NewServerPage as never, "bn")).toContain(
       "এখন কোনো প্ল্যান বিক্রির জন্য নেই",

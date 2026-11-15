@@ -36,7 +36,7 @@ interface ShellText {
 describe.each(LOCALES)("PublicShell (%s)", (locale) => {
   const t = shellMessages[locale]["Shell"] as unknown as ShellText;
   const aws = shellMessages[locale]["Aws"] as unknown as Record<string, string>;
-  const prefix = locale === "en" ? "/en" : "";
+  const prefix = "/en"; // WPU-X19: every page but the home page is English
 
   it("has a skip link to #main and a main landmark", () => {
     const { container } = shell(locale);
@@ -80,8 +80,8 @@ describe.each(LOCALES)("PublicShell (%s)", (locale) => {
       (a) => a.getAttribute("href") as string,
     );
     for (const href of own.filter((h) => h.startsWith("/"))) {
-      if (locale === "en") expect(href === "/en" || href.startsWith("/en/")).toBe(true);
-      else expect(href.startsWith("/en")).toBe(false);
+      // WPU-X19: the home page is the only unprefixed link, and only the home page may be Bengali.
+      expect(href === "/" || href === "/en" || href.startsWith("/en/")).toBe(true);
     }
   });
 

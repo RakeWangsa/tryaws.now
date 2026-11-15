@@ -30,12 +30,12 @@ describe("the dashboard guide", () => {
         "/settings/ssh-keys",
         "/servers/new",
       ]) {
-        expect(out).toContain(`href="${locale === "bn" ? "" : "/en"}${href}"`);
+        expect(out).toContain(`href="/en${href}"`);
       }
       // Firewall and snapshot are locked: a lock icon and no link.
       expect(out).toContain("fa-lock");
       expect(out).not.toContain("?tab=networking");
-      expect(out).not.toContain('href="/snapshots"');
+      expect(out).not.toContain('href="/en/snapshots"');
     }
   });
 

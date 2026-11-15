@@ -20,7 +20,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("signUpCore", () => {
   it("registers once with the three acceptances at the legal versions and the viewer address", async () => {
     const out = await signUpCore(h.ctx(), { ...SIGN_UP_FORM });
-    expect(out.state).toEqual({ status: "done", redirectTo: "/verify" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/verify" });
     expect(h.registered).toHaveLength(1);
     const input = h.registered[0] as {
       email: string;
@@ -119,7 +119,7 @@ describe("signUpCore", () => {
       signedInAt: new Date(),
     };
     const out = await signUpCore(h.ctx(), { ...SIGN_UP_FORM });
-    expect(out.state).toEqual({ status: "done", redirectTo: "/wallet" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/wallet" });
     expect(h.registered).toHaveLength(0);
   });
 });

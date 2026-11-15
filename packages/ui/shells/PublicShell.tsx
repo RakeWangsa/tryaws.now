@@ -10,7 +10,8 @@ import type { ProductFamily } from "./types.ts";
 
 export interface PublicShellProps {
   locale: Locale;
-  localeHrefs: Record<Locale, string>;
+  /** WPU-X19: the language switch is shown only when the hrefs are given (the home page). */
+  localeHrefs?: Record<Locale, string> | undefined;
   signedIn: boolean;
   openFamilies: readonly ProductFamily[];
   domainsOpen: boolean;
@@ -63,15 +64,18 @@ export function PublicShell({
   const hasTopLine = announcement !== null || phoneHref !== null;
   const accountHref = signedIn ? p("/dashboard") : p("/login");
   const accountLabel = signedIn ? t("public.console") : t("public.login");
-  const switcher = (
-    <LocaleSwitch
-      current={locale}
-      items={[
-        { locale: "bn", href: localeHrefs.bn },
-        { locale: "en", href: localeHrefs.en },
-      ]}
-    />
-  );
+  const switcher =
+    localeHrefs === undefined ? null : (
+      <div className="menu-item">
+        <LocaleSwitch
+          current={locale}
+          items={[
+            { locale: "bn", href: localeHrefs.bn },
+            { locale: "en", href: localeHrefs.en },
+          ]}
+        />
+      </div>
+    );
   const accountButton = (
     <a className="btn btn-default-yellow-fill question" href={accountHref}>
       <span>{accountLabel}</span> <i className="fas fa-lock ps-1" aria-hidden="true"></i>
@@ -149,7 +153,7 @@ export function PublicShell({
                         <div className="menu-item">
                           <a href={p("/help")}>{t("public.help")}</a>
                         </div>
-                        <div className="menu-item">{switcher}</div>
+                        {switcher}
                         <div className="menu-item">{accountButton}</div>
                       </div>
                     </div>
@@ -190,7 +194,7 @@ export function PublicShell({
                 {t("public.help")}
               </a>
             </div>
-            <div className="menu-item">{switcher}</div>
+            {switcher}
             <div className="menu-item">{accountButton}</div>
           </MobileMenu>
         </header>

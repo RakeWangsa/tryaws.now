@@ -318,7 +318,7 @@ describe("/payments", () => {
       expect(html).toContain(msgs(locale).payments.status.review);
       expect(html).toContain(msgs(locale).discrepancies.reasons.amount_mismatch);
       expect(html).toContain('name="kind" value="resolveDiscrepancy"');
-      expect(html).toContain(`href="${locale === "en" ? "/en" : ""}/payments/${PAYMENT_ID}"`);
+      expect(html).toContain(`href="/en/payments/${PAYMENT_ID}"`);
       expect(html).toContain(msgs(locale).payments.reviewNote);
     },
   );

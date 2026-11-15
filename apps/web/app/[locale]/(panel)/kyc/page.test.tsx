@@ -24,7 +24,7 @@ const { default: KycPage } = await import("./page.tsx");
 describe("/kyc after WPU-X11", () => {
   it("checks the session first, then redirects to the dashboard in the locale; no form is rendered", async () => {
     await expect(KycPage({ params: Promise.resolve({ locale: "bn" }) })).rejects.toThrow(
-      "REDIRECT:/dashboard",
+      "REDIRECT:/en/dashboard",
     );
     await expect(KycPage({ params: Promise.resolve({ locale: "en" }) })).rejects.toThrow(
       "REDIRECT:/en/dashboard",

@@ -193,7 +193,7 @@ describe("runStartTopUp: authenticate, authorize (R9, R16)", () => {
       },
     });
     expect(await redirectTarget(start(none.deps, { amount: "1500" }))).toBe(
-      "/login?next=%2Fwallet%2Ftopup",
+      "/en/login?next=%2Fwallet%2Ftopup",
     );
     const down = make({
       auth: async () => {
@@ -232,7 +232,9 @@ describe("runStartTopUp: results of the payment service", () => {
 
   it("conflict with ref (same key again) goes to that payment's status page", async () => {
     const { deps } = fails({ ok: false, error: "conflict", ref: PAYMENT });
-    expect(await redirectTarget(start(deps, { amount: "1500" }))).toBe(`/wallet/topup/${PAYMENT}`);
+    expect(await redirectTarget(start(deps, { amount: "1500" }))).toBe(
+      `/en/wallet/topup/${PAYMENT}`,
+    );
   });
 
   it("conflict without ref (same key, other amount) returns 'conflict' and a fresh key", async () => {
@@ -312,7 +314,7 @@ describe("runStartTopUp: the redirect allow-list (R16)", () => {
   it("in fake mode the dev checkout path is allowed, in the language's prefix; other paths are not", async () => {
     const ok = withUrl("/dev/eps/checkout?data=abc-123", true);
     expect(await redirectTarget(start(ok.deps, { amount: "1500" }))).toBe(
-      "/dev/eps/checkout?data=abc-123",
+      "/en/dev/eps/checkout?data=abc-123",
     );
     const bad = withUrl("/dev/eps/checkout/../../admin", true);
     expect(await start(bad.deps, { amount: "1500" })).toMatchObject({ code: "unavailable" });

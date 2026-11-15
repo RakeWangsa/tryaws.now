@@ -108,7 +108,7 @@ describe("startTopUpAction", () => {
     for (const typed of ["1,500", "১৫০০"]) {
       state.startCalls = [];
       await expect(startTopUpAction(idle, form({ amount: typed }))).rejects.toThrow(
-        "REDIRECT:/dev/eps/checkout?data=abc123",
+        "REDIRECT:/en/dev/eps/checkout?data=abc123",
       );
       expect(state.startCalls).toHaveLength(1);
       expect(state.startCalls[0]?.[1]).toEqual({ amountMinor: 150000n, idempotencyKey: KEY });
@@ -125,7 +125,7 @@ describe("startTopUpAction", () => {
   it("the same form again: the service answers conflict with the payment, and the customer goes to its page", async () => {
     state.startImpl = async () => ({ ok: false, error: "conflict", ref: PAYMENT });
     await expect(startTopUpAction(idle, form({ amount: "1500" }))).rejects.toThrow(
-      `REDIRECT:/wallet/topup/${PAYMENT}`,
+      `REDIRECT:/en/wallet/topup/${PAYMENT}`,
     );
   });
 
@@ -159,7 +159,7 @@ describe("startTopUpAction", () => {
   it("no session goes to the login with the top-up as 'next'; an identity outage is 'unavailable'", async () => {
     state.session = null;
     await expect(startTopUpAction(idle, form({ amount: "1500" }))).rejects.toThrow(
-      "REDIRECT:/login?next=%2Fwallet%2Ftopup",
+      "REDIRECT:/en/login?next=%2Fwallet%2Ftopup",
     );
     state.session = { customerId: A };
     state.authDown = true;

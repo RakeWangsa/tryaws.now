@@ -29,22 +29,22 @@ const HOSTILE: unknown[] = [
 describe("landing", () => {
   it("every hostile value gives the default landing in both locales", () => {
     for (const bad of HOSTILE) {
-      expect(landingPath("bn", bad), String(bad).slice(0, 30)).toBe(DEFAULT_LANDING);
+      expect(landingPath("bn", bad), String(bad).slice(0, 30)).toBe(`/en${DEFAULT_LANDING}`);
       expect(landingPath("en", bad), String(bad).slice(0, 30)).toBe(`/en${DEFAULT_LANDING}`);
-      expect(landingAfterSignIn("bn", bad, true)).toBe(DEFAULT_LANDING);
+      expect(landingAfterSignIn("bn", bad, true)).toBe(`/en${DEFAULT_LANDING}`);
     }
   });
 
   it("an allowed path is kept, with its query, and localised", () => {
-    expect(landingPath("bn", "/wallet?x=1")).toBe("/wallet?x=1");
+    expect(landingPath("bn", "/wallet?x=1")).toBe("/en/wallet?x=1");
     expect(landingPath("en", "/wallet?x=1")).toBe("/en/wallet?x=1");
     expect(landingPath("en", "/servers/abc")).toBe("/en/servers/abc");
   });
 
   it("an unverified phone goes to /verify first, with a safe next kept and a hostile next dropped", () => {
-    expect(landingAfterSignIn("bn", "/wallet", false)).toBe("/verify?next=%2Fwallet");
+    expect(landingAfterSignIn("bn", "/wallet", false)).toBe("/en/verify?next=%2Fwallet");
     expect(landingAfterSignIn("en", "/wallet", false)).toBe("/en/verify?next=%2Fwallet");
-    for (const bad of HOSTILE) expect(landingAfterSignIn("bn", bad, false)).toBe("/verify");
+    for (const bad of HOSTILE) expect(landingAfterSignIn("bn", bad, false)).toBe("/en/verify");
   });
 });
 
@@ -62,7 +62,7 @@ describe("the actions", () => {
       });
       expect(out.state, String(bad).slice(0, 30)).toEqual({
         status: "done",
-        redirectTo: DEFAULT_LANDING,
+        redirectTo: `/en${DEFAULT_LANDING}`,
       });
     }
   });
@@ -93,7 +93,7 @@ describe("the actions", () => {
       const out = await verifyPhoneCodeCore(h.ctx(), { code: "111111", next: bad, locale: "bn" });
       expect(out.state, String(bad).slice(0, 30)).toEqual({
         status: "done",
-        redirectTo: DEFAULT_LANDING,
+        redirectTo: `/en${DEFAULT_LANDING}`,
       });
     }
   });
@@ -114,6 +114,6 @@ describe("the actions", () => {
       next: "//evil.com",
       locale: "bn",
     });
-    expect(out.state).toEqual({ status: "done", redirectTo: "/login?verified=1" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/login?verified=1" });
   });
 });

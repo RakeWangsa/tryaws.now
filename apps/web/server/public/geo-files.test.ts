@@ -83,14 +83,19 @@ describe("llms.txt", () => {
       expect(file).not.toMatch(/TiCON System/i);
   });
 
-  it("links every public page in both locales, and never the panel or a product family behind a flag", () => {
-    for (const locale of ["bn", "en"] as const) {
-      for (const page of geoPages(locale)) {
-        const url =
-          GEO_SITE_URL +
-          (locale === "en" ? (page.path === "/" ? "/en" : `/en${page.path}`) : page.path);
-        expect(text, url).toContain(`](${url}): `);
-      }
+  // WPU-X19 (owner, 2026-11-15): only the home page is Bengali; every other page is English only.
+  it("links every English page and the Bengali home page, and no other Bengali URL", () => {
+    for (const page of geoPages("en")) {
+      const url = GEO_SITE_URL + (page.path === "/" ? "/en" : `/en${page.path}`);
+      expect(text, url).toContain(`](${url}): `);
+    }
+    expect(geoPages("bn").map((page) => page.path)).toEqual(["/"]);
+    expect(text).toContain(`](${GEO_SITE_URL}/): `);
+    // Every page URL of the file is the home page or under /en.
+    const urls = [...text.matchAll(/\]\((https?:\/\/[^)]+)\)/g)].map((m) => m[1] as string);
+    for (const url of urls) {
+      const path = url.slice(GEO_SITE_URL.length);
+      expect(path === "/" || path === "/en" || path.startsWith("/en/"), url).toBe(true);
     }
     for (const hidden of ["/dashboard", "/login", "/wallet", "/products/databases", "/api/"]) {
       expect(text, hidden).not.toContain(hidden);
@@ -109,23 +114,26 @@ describe("llms.txt", () => {
 
 describe("llms-full.txt", () => {
   const text = llmsFullTxt();
-  it("holds every answer block and every question and answer of the FAQ, in bn and en", () => {
-    for (const tree of [publicEn, publicBn]) {
-      const p = tree.Public;
-      for (const answer of [
-        p.entity.statement,
-        p.pricing.answer,
-        p.cloudServers.answer,
-        p.help.answer,
-        p.support.lead,
-      ]) {
-        expect(text).toContain(answer);
-      }
-      for (const key of GEO_FAQ_KEYS) {
-        expect(text).toContain(`Q: ${p.help.items[key].q}`);
-        expect(text).toContain(`A: ${p.help.items[key].a}`);
-      }
+  it("holds every English answer block and FAQ item, and the Bengali home answer only", () => {
+    const p = publicEn.Public;
+    for (const answer of [
+      p.entity.statement,
+      p.pricing.answer,
+      p.cloudServers.answer,
+      p.help.answer,
+      p.support.lead,
+    ]) {
+      expect(text).toContain(answer);
     }
+    for (const key of GEO_FAQ_KEYS) {
+      expect(text).toContain(`Q: ${p.help.items[key].q}`);
+      expect(text).toContain(`A: ${p.help.items[key].a}`);
+    }
+    // WPU-X19: the Bengali part is the home page; its other texts are not served any more.
+    const bn = publicBn.Public;
+    expect(text).toContain(bn.entity.statement);
+    for (const key of GEO_FAQ_KEYS) expect(text).not.toContain(`Q: ${bn.help.items[key].q}`);
+    expect(text).not.toContain(bn.pricing.answer);
     expect(text).toContain(shellBn.Aws.long);
     expect(text).toContain(shellEn.Aws.trademark);
     expect(text).toContain("## How to cite us");

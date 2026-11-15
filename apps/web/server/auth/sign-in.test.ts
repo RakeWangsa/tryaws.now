@@ -30,14 +30,14 @@ describe("signInCore", () => {
 
   it("an unverified phone lands on /verify with a safe next kept", async () => {
     const out = await signInCore(h.ctx(), { ...FORM, next: "/wallet" });
-    expect(out.state).toEqual({ status: "done", redirectTo: "/verify?next=%2Fwallet" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/verify?next=%2Fwallet" });
   });
 
   it("a verified phone lands on next or the default landing", async () => {
     customer.phoneVerified = true;
     expect((await signInCore(h.ctx(), FORM)).state).toEqual({
       status: "done",
-      redirectTo: "/wallet",
+      redirectTo: "/en/wallet",
     });
     expect((await signInCore(h.ctx(), { ...FORM, locale: "en" })).state).toEqual({
       status: "done",
@@ -430,7 +430,7 @@ describe("signInCore with an authenticator (TOTP)", () => {
     };
     h.events.length = 0;
     const out = await signInCore(h.ctx(), FORM);
-    expect(out.state).toEqual({ status: "done", redirectTo: "/wallet" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/wallet" });
     expect(h.events.filter((e) => e.startsWith("idp."))).toEqual([]);
   });
 });

@@ -32,10 +32,27 @@ function assertSafePath(path: string): void {
   }
 }
 
+// WPU-X19 (owner decision 2026-11-15): only the home page is bilingual. Every other page is English,
+// so a Bengali link to any path but "/" is the English path. To bring Bengali back on the other
+// pages, return `path` for `bn` here and drop the redirect of apps/web/proxy.ts (see JOURNEY.md).
 export function localePath(locale: Locale, path: string): string {
   assertSafePath(path);
-  if (locale === "bn") return path;
+  if (locale === "bn" && path === "/") return "/";
   return path === "/" ? "/en" : `/en${path}`;
+}
+
+/**
+ * WPU-X19: where a request for `pathname` must go so that no page but the home page is served in
+ * bn, or null when it is served as it is. The home page (`/`, and `/bn`, which next-intl sends to
+ * `/`) and every `/en...` path stay. Any other path, unprefixed or under `/bn`, goes to the same
+ * path under `/en`. Only the request's own same-origin path is used; the caller keeps the query by
+ * changing only the pathname of the request URL (U12).
+ */
+export function englishOnlyTarget(pathname: string): string | null {
+  if (pathname === "/en" || pathname.startsWith("/en/")) return null;
+  const bare = pathname === "/bn" || pathname.startsWith("/bn/") ? pathname.slice(3) : pathname;
+  if (bare === "" || bare === "/") return null;
+  return `/en${bare}`;
 }
 
 export function localeHrefs(path: string): Record<Locale, string> {

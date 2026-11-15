@@ -9,7 +9,8 @@ import type { AdminNavId, AdminRole } from "./types.ts";
 
 export interface AdminShellProps {
   locale: Locale;
-  localeHrefs: Record<Locale, string>;
+  /** WPU-X19: the language switch is shown only when the hrefs are given (the home page). */
+  localeHrefs?: Record<Locale, string> | undefined;
   currentId: AdminNavId;
   admin: { displayName: string; role: AdminRole };
   /** `null` shows every entry; a list shows the listed ids. */

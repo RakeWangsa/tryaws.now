@@ -227,7 +227,8 @@ describe("structured data (OmniRank gates schema, schema-required, speakable)", 
         });
         const webPage = blocks.find((b) => b["@type"] === "WebPage")!;
         expect(webPage).toMatchObject({
-          inLanguage: locale,
+          // WPU-X19: only the home page is served in bn; every other page is English.
+          inLanguage: id === "home.data" ? locale : "en",
           dateModified: CONTENT_UPDATED,
           isPartOf: { "@id": `${ORIGIN}/#website` },
           about: { "@id": `${ORIGIN}/#organization` },

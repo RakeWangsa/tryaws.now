@@ -16,7 +16,10 @@ describe("/settings/profile", () => {
     expect(html).toContain("+88017••••5678");
     expect(html).not.toMatch(/\+8801[0-9]{9}/);
     expect(html).toContain('name="name"');
-    expect(html).toContain('value="bn"');
+    // WPU-X19: no language choice is shown (the panel is English only); the stored value is kept.
+    expect(html).toContain('<input type="hidden" name="locale" value="bn"/>');
+    expect(html).not.toContain('type="radio"');
+    expect(html).not.toContain("বাংলা");
     expect(html).toContain('name="email"');
     expect(html).toContain('name="phone"');
   });

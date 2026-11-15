@@ -23,7 +23,7 @@ describe("sendPhoneCodeCore", () => {
   it("without a session it sends the customer to sign in and sends nothing", async () => {
     h.state.session = null;
     const out = await send("k-1");
-    expect(out.state).toEqual({ status: "done", redirectTo: "/login" });
+    expect(out.state).toEqual({ status: "done", redirectTo: "/en/login" });
     expect(h.sms.sent).toHaveLength(0);
   });
 
@@ -55,7 +55,7 @@ describe("sendPhoneCodeCore", () => {
         ...(key === undefined ? {} : { idempotencyKey: key }),
         locale: "bn",
       });
-      expect(out.state).toEqual({ status: "done", redirectTo: "/verify" });
+      expect(out.state).toEqual({ status: "done", redirectTo: "/en/verify" });
     }
     expect(h.sms.sent).toHaveLength(0);
   });
@@ -109,7 +109,7 @@ describe("verifyPhoneCodeCore (cross-tenant)", () => {
     // B can still verify with their own code in the first attempt: A's try did not touch it.
     h.state.session = sessionOf(b);
     const right = await verifyPhoneCodeCore(h.ctx(), { code: "111111", locale: "bn" });
-    expect(right.state).toEqual({ status: "done", redirectTo: "/wallet" });
+    expect(right.state).toEqual({ status: "done", redirectTo: "/en/wallet" });
   });
 
   it("a customer with no challenge gets code_wrong, never a hint about others", async () => {

@@ -160,7 +160,15 @@ describe("/login: next, banners and signed-in customers", () => {
     }
     const ok = await render(PAGES[0], "bn", { next: "/wallet" });
     expect(ok).toContain('name="next" value="/wallet"');
-    expect(ok).toContain('href="/signup?next=%2Fwallet"');
+    expect(ok).toContain('href="/en/signup?next=%2Fwallet"');
+  });
+
+  it("has no language switch, in bn or en (WPU-X19: only the home page is bilingual)", async () => {
+    for (const locale of ["bn", "en"] as const) {
+      const html = await render(PAGES[0], locale, {});
+      expect(html, locale).not.toContain("hrefLang=");
+      expect(html, locale).not.toContain("tc-auth-lang");
+    }
   });
 
   it("?verified=1 and ?reset=1 show a success alert; any other value shows none", async () => {
@@ -184,13 +192,13 @@ describe("/login: next, banners and signed-in customers", () => {
   it("a signed-in customer is sent to the panel from every guest page, and /verify stays open", async () => {
     state.session = { customerId: "11111111-1111-4111-8111-111111111111" };
     for (const page of [PAGES[0], PAGES[1], PAGES[3], PAGES[4]]) {
-      await expect(render(page, "bn"), page.name).rejects.toThrow("REDIRECT:/wallet");
+      await expect(render(page, "bn"), page.name).rejects.toThrow("REDIRECT:/en/wallet");
     }
     await expect(render(PAGES[0], "en", { next: "/wallet?x=1" })).rejects.toThrow(
       "REDIRECT:/en/wallet?x=1",
     );
     await expect(render(PAGES[0], "bn", { next: "//evil.com" })).rejects.toThrow(
-      "REDIRECT:/wallet",
+      "REDIRECT:/en/wallet",
     );
     state.phoneStep = { kind: "unavailable" };
     await expect(render(PAGES[2], "bn")).resolves.toContain("fullrock-content");

@@ -1,6 +1,6 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import { Button, EmptyState, PublicShell } from "@tc/ui";
-import { DEFAULT_LOCALE, isLocale, localeHrefs, localePath } from "@tc/ui/runtime";
+import { DEFAULT_LOCALE, isLocale, localePath } from "@tc/ui/runtime";
 
 /** The global not-found page, in the locale of the request. */
 export default async function NotFound() {
@@ -10,7 +10,6 @@ export default async function NotFound() {
   return (
     <PublicShell
       locale={locale}
-      localeHrefs={localeHrefs("/")}
       signedIn={false}
       openFamilies={[]}
       domainsOpen={false}

@@ -45,9 +45,9 @@ describe("AuthTabs", () => {
     const out = html(<AuthTabs active="login" locale="bn" />, "bn");
     expect(out.match(/<li class="btn btn-secondary tc-auth-tab/g)).toHaveLength(2);
     expect(out).toContain(
-      '<li class="btn btn-secondary tc-auth-tab active tc-auth-tab-current mb-2"><a href="/login" aria-current="page">',
+      '<li class="btn btn-secondary tc-auth-tab active tc-auth-tab-current mb-2"><a href="/en/login" aria-current="page">',
     );
-    expect(out).toContain('<li class="btn btn-secondary tc-auth-tab mb-2"><a href="/signup">');
+    expect(out).toContain('<li class="btn btn-secondary tc-auth-tab mb-2"><a href="/en/signup">');
   });
 
   it("uses /en/... in English and puts aria-current on the signup tab", () => {
@@ -58,7 +58,7 @@ describe("AuthTabs", () => {
 
   it("keeps next only when it passes the allow-list", () => {
     const good = html(<AuthTabs active="login" locale="bn" next="/wallet?x=1" />, "bn");
-    expect(good).toContain('href="/login?next=%2Fwallet%3Fx%3D1"');
+    expect(good).toContain('href="/en/login?next=%2Fwallet%3Fx%3D1"');
     for (const bad of ["//evil.com", "https://evil.com", "/walletx", undefined, 5]) {
       const out = html(<AuthTabs active="login" locale="bn" next={bad} />, "bn");
       expect(out, String(bad)).not.toContain("next=");

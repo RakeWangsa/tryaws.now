@@ -113,7 +113,7 @@ describe("the status page: one test for each state", () => {
     const bn = await render("bn");
     expect(bn).toContain("টপ আপ সম্পন্ন হয়েছে");
     expect(bn).toContain("৳১,৫০০.০০ যোগ হয়েছে। আপনার নতুন ব্যালেন্স ৳১,৫০০.০০।");
-    expect(bn).toContain('href="/servers/new"');
+    expect(bn).toContain('href="/en/servers/new"');
   });
 
   it("credited never shows a balance that is not the live wallet balance", async () => {

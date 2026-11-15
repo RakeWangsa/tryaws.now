@@ -1,6 +1,6 @@
 "use client";
 
-import { Field, OptionGroup, SubmitButton } from "@tc/ui";
+import { Field, SubmitButton } from "@tc/ui";
 import { useTranslations } from "next-intl";
 import { startTransition, useActionState, useRef } from "react";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
@@ -44,17 +44,10 @@ export function DetailsForm({
         autoComplete="name"
         {...(error("name") !== undefined ? { error: error("name") as string } : {})}
       />
-      <OptionGroup
-        kind="radio"
-        name="locale"
-        legend={t("locale")}
-        defaultValue={locale}
-        required
-        options={[
-          { value: "bn", label: t("localeBn") },
-          { value: "en", label: t("localeEn") },
-        ]}
-      />
+      {/* WPU-X19 (owner, 2026-11-15): the panel is English only, so the language choice is hidden.
+          The stored value travels unchanged. To bring the choice back, render the OptionGroup of
+          the messages `locale`, `localeBn` and `localeEn` here (see JOURNEY.md). */}
+      <input type="hidden" name="locale" value={locale} />
       <SubmitButton variant="primary" pending={pending}>
         {t("save")}
       </SubmitButton>

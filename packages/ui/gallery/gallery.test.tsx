@@ -238,14 +238,14 @@ describe("KitGallery", () => {
     );
     expect(hrefs).toContain("/en/dev/ui");
     expect(hrefs).toEqual(
-      expect.arrayContaining(["/dev/ui/public", "/dev/ui/auth", "/dev/ui/app"]),
+      expect.arrayContaining(["/en/dev/ui/public", "/en/dev/ui/auth", "/en/dev/ui/app"]),
     );
-    expect(hrefs).not.toContain("/dev/ui/admin");
+    expect(hrefs).not.toContain("/en/dev/ui/admin");
     const admin = dom("en", "admin");
     const adminHrefs = [...admin.querySelectorAll("[data-gallery-nav] a")].map((a) =>
       a.getAttribute("href"),
     );
-    expect(adminHrefs).toContain("/dev/ui");
+    expect(adminHrefs).toContain("/en/dev/ui");
     expect(adminHrefs).toContain("/en/dev/ui/admin");
     expect(adminHrefs).not.toContain("/en/dev/ui/app");
   });

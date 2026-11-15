@@ -50,7 +50,7 @@ describe("loadPageAdmin", () => {
   });
 
   it("sends a visitor without a session to the sign-in of the same locale", async () => {
-    await expect(loadPageAdmin("bn", "today")).rejects.toThrow("NEXT_REDIRECT:/login");
+    await expect(loadPageAdmin("bn", "today")).rejects.toThrow("NEXT_REDIRECT:/en/login");
     await expect(loadPageAdmin("en", "today")).rejects.toThrow("NEXT_REDIRECT:/en/login");
   });
 
