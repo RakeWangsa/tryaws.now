@@ -149,10 +149,24 @@ export function bootstrapScript(options: BootstrapOptions = {}): string {
   }
   return `#!/bin/bash
 set -euo pipefail
+# WPU-X28: the 0.5 GB plan runs out of memory in the package index (the kernel kills dnf, seen on a real
+# nano instance), so a small instance gets a temporary swap file for the install. It is removed again; a
+# failure here stops the script before any marker is written (R16).
+TC_SWAP=/var/tmp/tc-bootstrap.swap
+if [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 2000000 ]; then
+  fallocate -l 1G "$TC_SWAP"
+  chmod 0600 "$TC_SWAP"
+  mkswap "$TC_SWAP" >/dev/null
+  swapon "$TC_SWAP"
+fi
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -y && apt-get install -y nftables conntrack
 else
   dnf install -y nftables conntrack-tools
+fi
+if [ -f "$TC_SWAP" ]; then
+  swapoff "$TC_SWAP"
+  rm -f "$TC_SWAP"
 fi
 command -v nft >/dev/null 2>&1 || exit 1
 command -v conntrack >/dev/null 2>&1 || exit 1
