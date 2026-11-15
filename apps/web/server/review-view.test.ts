@@ -40,6 +40,27 @@ describe("reviewFromToken", () => {
     expect(r.balanceAfterMinor).toBe(31000n);
   });
 
+  it("WPU-X25: a Korea VAT step is folded into the first line, the total is unchanged (742.95 BDT Nano)", () => {
+    const nano: Claims = {
+      ...claims,
+      snap: {
+        ...claims.snap,
+        baseMinor: "63500",
+        steps: [
+          { code: "korea_vat", amountMinor: "6350" },
+          { code: "bd_vat", amountMinor: "3175" },
+          { code: "processing_fee", amountMinor: "1270" },
+        ],
+        totalMinor: "74295",
+      },
+    };
+    const r = reviewFromToken(() => ({ ok: true, claims: nano }), "tok", CUSTOMER, 100000n);
+    if (r.state !== "ready") throw new Error("expected ready");
+    expect(r.baseMinor).toBe(69850n);
+    expect(r.steps.map((s) => s.code)).toEqual(["bd_vat", "processing_fee"]);
+    expect(r.totalMinor).toBe(74295n);
+  });
+
   it("WPU-X16: carries the BDT total only: no dollar price, no exchange rate (the draft is serialized to the browser)", () => {
     const withRate: Claims = {
       ...claims,

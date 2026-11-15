@@ -23,6 +23,7 @@ import type { RenderContext, TemplateId } from "@tc/notify";
 import { autoRenewViewOf } from "./auto-renew-view.ts";
 import type { AutoRenewView } from "./auto-renew-view.ts";
 import { resourceFacts } from "./extras-actions.ts";
+import { customerPriceLines } from "./customer-price-lines.ts";
 import { renewalWaitOf } from "./renewal-wait.ts";
 import type { RenewalWait } from "./renewal-wait.ts";
 import { planSpecsOf, serverConfigOf } from "./servers-view.ts";
@@ -69,6 +70,20 @@ export function parsePriceLines(snapshot: unknown): PriceLines | null {
   // A breakdown that does not add up is not shown (R16).
   if (sum !== BigInt(total)) return null;
   return { baseMinor: BigInt(base), steps: out, totalMinor: BigInt(total) };
+}
+
+/**
+ * WPU-X25: the lines of the Billing tab. No Korea VAT line (owner decision 2026-11-15): its amount is in the
+ * first line, the total is the stored total. Null when the snapshot cannot be shown (R16).
+ */
+export function customerLinesOf(snapshot: unknown): PriceLines | null {
+  const lines = parsePriceLines(snapshot);
+  if (lines === null) return null;
+  try {
+    return customerPriceLines(lines.baseMinor, lines.steps, lines.totalMinor);
+  } catch {
+    return null;
+  }
 }
 
 /** What the add-disk form needs: the anchor row of the server's Region and the size limits. */
@@ -326,7 +341,7 @@ export async function loadServerExtras(
           periodStart: subscription?.periodStart ?? null,
           periodEnd: subscription?.periodEnd ?? null,
           autoRenew: subscription?.autoRenew ?? false,
-          lines: subscription === null ? null : parsePriceLines(subscription.priceSnapshot),
+          lines: subscription === null ? null : customerLinesOf(subscription.priceSnapshot),
           invoices: invoices.items.map(toInvoice),
           renewalWait: renewalWaitOf(
             subscription?.status ?? null,

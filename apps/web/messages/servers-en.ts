@@ -344,7 +344,6 @@ export const serversEn: Same<typeof serversBn> = {
       lines: "Price details",
       awsPrice: "AWS service price",
       step: {
-        korea_vat: "Korea VAT",
         bd_vat: "Bangladesh VAT",
         processing_fee: "Processing fee",
         markup: "Service charge",
