@@ -77,7 +77,7 @@
       },
       {
         "q": "আমার ডেটা কোথায় থাকে?",
-        "a": "সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট আপনার বেছে নেওয়া AWS Region-এ থাকে। CDN-এর কপি বিশ্বজুড়ে AWS-এর edge লোকেশনে থাকে। DNS বৈশ্বিক সেবা। আপনার অ্যাকাউন্ট ও পরিচয়পত্রের নথি AWS Singapore-এ রাখা হয়।"
+        "a": "সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট আপনার বেছে নেওয়া AWS Region-এ থাকে। CDN-এর কপি বিশ্বজুড়ে AWS-এর edge লোকেশনে থাকে। DNS বৈশ্বিক সেবা। আপনার অ্যাকাউন্ট, এবং আগে জমা দেওয়া পরিচয়পত্রের নথি থাকলে সেগুলো, AWS Singapore-এ রাখা হয়।"
       },
       {
         "q": "কীভাবে টাকা দেব?",
@@ -135,7 +135,7 @@
       },
       {
         "q": "Where is my data?",
-        "a": "Servers, databases, disks and buckets are in the AWS Region you choose. CDN copies are at AWS edge locations worldwide. DNS is a global service. Your account and identity documents are kept in AWS Singapore."
+        "a": "Servers, databases, disks and buckets are in the AWS Region you choose. CDN copies are at AWS edge locations worldwide. DNS is a global service. Your account, and any identity documents you sent before, are kept in AWS Singapore."
       },
       {
         "q": "How do I pay?",
