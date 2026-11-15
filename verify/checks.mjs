@@ -4207,6 +4207,7 @@ TASKS["WPU-X26"] = [specSync, baselineSync, lint, typecheck, format, core, web, 
 // refresh token at the provider, best effort (web auth core; the adapter port already existed).
 TASKS["WPU-X27"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 TASKS["WPU-X28"] = [specSync, baselineSync, lint, typecheck, format, aws, repo];
+TASKS["WPU-X29"] = [specSync, baselineSync, lint, typecheck, format, aws, repo];
 
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 

@@ -108,6 +108,15 @@ it.each([
     "InvalidInputException",
   ],
   [
+    // WPU-X29: GetDistributions of a name that does not exist answers InvalidInputException
+    "Lightsail lookup of a missing resource (InvalidInputException, 'Requested resource not found')",
+    sdk("InvalidInputException", 400, "Requested resource not found: {tc-cdn-0123456789abcdef}"),
+    "not_found",
+    true,
+    false,
+    "InvalidInputException",
+  ],
+  [
     "Lightsail access denied",
     sdk("AccessDeniedException", 403),
     "forbidden",
