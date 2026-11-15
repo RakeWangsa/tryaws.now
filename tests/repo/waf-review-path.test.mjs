@@ -34,6 +34,8 @@ describe("WAF: long query string on the review path only", () => {
     expect(waf).toMatch(/pathEndsWith\(path\), pathEndsWith\(`\$\{path\}\/`\)/);
   });
   it("the admin ACL keeps the plain managed groups", () => {
-    expect(waf).toMatch(/outsideAllowlist,\s*\.\.\.managed\.map\(\(group\) => managedGroup\(group\.name, group\.priority\)\)/);
+    expect(waf).toMatch(
+      /outsideAllowlist,\s*\.\.\.managed\.map\(\(group\) => managedGroup\(group\.name, group\.priority\)\)/,
+    );
   });
 });

@@ -177,7 +177,7 @@ describe("/orders/review names its own product", () => {
     expect(view("dns_zone", "en")).toContain("DNS zone, on Amazon Route 53");
     const server = view("linux_instance", "en");
     expect(server).toContain("Cloud Server");
-    expect(server).toContain("Singapore");
+    expect(server).toContain("us-east-1");
   });
 });
 

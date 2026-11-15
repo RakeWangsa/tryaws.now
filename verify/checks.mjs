@@ -4117,6 +4117,25 @@ TASKS["WPU-X18"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, 
 // /en), the public pages, SEO, sitemap and GEO-file tests; repo the journal and verify wiring.
 TASKS["WPU-X19"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X20 (Gate B staging cycles, 2026-11-15): the WAF counts SizeRestrictions_QUERYSTRING on the review and
+// top-up paths only (repo: infra tests; web: the longest envelope URL), the catalog sync writes the container
+// plans (core mapper, aws source, catalog-sync handler), the review page names its own product, the DNS zone page
+// refreshes itself, and "sign in again" opens the login page (reauth=1, next on the U12 list). The CDN origin
+// question is recorded in JOURNEY (needs decision), not built.
+TASKS["WPU-X20"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  aws,
+  catalogSyncAll,
+  ui,
+  web,
+  repo,
+];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".
