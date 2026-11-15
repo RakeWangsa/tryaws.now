@@ -25,9 +25,9 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
         p2: "You confirm your email address and your mobile number with the codes we send you. Keep your password secret; we never send your password by email.",
       },
       identity: {
-        title: "4. Identity check",
-        p1: "Before your first purchase you complete an identity check once. You give your identity details and upload an identity document.",
-        p2: "Our staff review the check and tell you the result by email. If the check is rejected, the email gives the reason.",
+        title: "4. Account setup before you buy",
+        p1: "Before you buy anything you complete three steps: you verify your email address, you verify your mobile number, and you switch on an authenticator app that gives a 6-digit code when you sign in. No identity document is needed.",
+        p2: "If you switch the authenticator off, you cannot buy anything new until you switch it on again; your running resources and their renewals continue as before.",
       },
       wallet: {
         title: "5. Wallet and payments",
@@ -141,7 +141,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       collect: {
         title: "2. What we collect",
         p1: "Account: your full name, email address, Bangladesh mobile number, password and account type, and the company name of a business.",
-        p2: "Identity check: the identity details you give and the identity document you upload.",
+        p2: "Sign-in security: whether your authenticator app is switched on and since when. We do not keep the secret key of the authenticator; it is held by our sign-in service, Amazon Cognito. If you sent an identity check before, we also keep those details and that document.",
         p3: "Payments and billing: your top-ups and their payment references, your orders, wallet entries, invoices, receipts and credit notes, and the billing details you choose to give for your invoices (the name and address on the invoice, and the BIN of a VAT-registered business). You enter your payment details on the payment page of EPS, not on {brand}.",
         p4: "Your resources: their settings, their state, the actions you start and the usage we measure for billing, such as data transfer.",
         p5: "Support and notices: what you write in support requests and in the support form, and the email address you leave to hear when a product opens.",
@@ -150,7 +150,7 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       why: {
         title: "3. Why we use it",
         p1: "To create and run your account and your resources, and to take payments into your wallet and charges from it.",
-        p2: "To complete the identity check before your first purchase.",
+        p2: "To check your email, your mobile number and your authenticator before you buy, and to protect your wallet and your account.",
         p3: "To issue tax invoices (Mushak-6.3) and credit notes.",
         p4: "To send the emails and SMS of the service: codes, receipts, invoices, reminders, notices about your resources and security alerts.",
         p5: "To answer your support requests and to protect the service against abuse.",
@@ -158,12 +158,12 @@ export const legalDocsEn: Same<typeof legalDocsBn> = {
       storage: {
         title: "4. Where your data is kept",
         // The answer of the FAQ (16.8), word for word: public-messages.test.ts compares the two.
-        p1: "Servers, databases, disks and buckets are in the AWS Region you choose. CDN copies are at AWS edge locations worldwide. DNS is a global service. Your account and identity documents are kept in AWS Singapore.",
+        p1: "Servers, databases, disks and buckets are in the AWS Region you choose. CDN copies are at AWS edge locations worldwide. DNS is a global service. Your account, and any identity documents you sent before, are kept in AWS Singapore.",
       },
       share: {
         title: "5. Who receives your data",
         p1: "AWS runs the infrastructure on which {brand} and your resources run. EPS processes your payments. Our email and SMS providers deliver the messages we send you.",
-        p2: "Our staff see your data in their work: support, the identity check, finance and operations.",
+        p2: "Our staff see your data in their work: support, finance and operations.",
       },
       security: {
         title: "6. How we protect it",

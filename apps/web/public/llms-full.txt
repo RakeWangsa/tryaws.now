@@ -85,7 +85,7 @@ Q: Who bills me and who supports me?
 A: TryAWS.now. We sell and bill the service, and we support you through support requests in the panel. There is no support phone line.
 
 Q: Where is my data?
-A: Servers, databases, disks and buckets are in the AWS Region you choose. CDN copies are at AWS edge locations worldwide. DNS is a global service. Your account and identity documents are kept in AWS Singapore.
+A: Servers, databases, disks and buckets are in the AWS Region you choose. CDN copies are at AWS edge locations worldwide. DNS is a global service. Your account, and any identity documents you sent before, are kept in AWS Singapore.
 
 Q: How do I pay?
 A: Top up your wallet with EPS first, then buy servers from the wallet. The wallet and all payments are in taka; the taka amount of an order is shown at checkout.
@@ -201,7 +201,7 @@ Q: বিল ও সাপোর্ট কে দেয়?
 A: TryAWS.now। আমরা বিক্রি করি ও বিল করি, আর প্যানেলের সাপোর্ট অনুরোধের মাধ্যমে সাপোর্ট দিই। সাপোর্টের কোনো ফোন লাইন নেই।
 
 Q: আমার ডেটা কোথায় থাকে?
-A: সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট আপনার বেছে নেওয়া AWS Region-এ থাকে। CDN-এর কপি বিশ্বজুড়ে AWS-এর edge লোকেশনে থাকে। DNS বৈশ্বিক সেবা। আপনার অ্যাকাউন্ট ও পরিচয়পত্রের নথি AWS Singapore-এ রাখা হয়।
+A: সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট আপনার বেছে নেওয়া AWS Region-এ থাকে। CDN-এর কপি বিশ্বজুড়ে AWS-এর edge লোকেশনে থাকে। DNS বৈশ্বিক সেবা। আপনার অ্যাকাউন্ট, এবং আগে জমা দেওয়া পরিচয়পত্রের নথি থাকলে সেগুলো, AWS Singapore-এ রাখা হয়।
 
 Q: কীভাবে টাকা দেব?
 A: প্রথমে EPS দিয়ে ওয়ালেটে টপ আপ করুন। তারপর ওয়ালেট থেকে সার্ভার কিনুন। ওয়ালেট ও সব পেমেন্ট টাকায়; অর্ডারের টাকার পরিমাণ চেকআউটে দেখানো হয়।

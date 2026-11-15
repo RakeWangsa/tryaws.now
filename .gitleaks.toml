@@ -7,3 +7,23 @@ useDefault = true
 [[allowlists]]
 description = "The design mockup is a static prototype and is never edited here."
 paths = ['''design/mockup/''']
+
+# WPU-X14 (2026-11-15, owner: "ok do whatever needed"): the scan reads the whole history and had not run on main
+# since 2026-11-13. What it found was checked by hand: dummy passwords and keys in test files, settings and
+# idempotency "key" names, and one comment that quotes the OpenSSH header. No real secret. Only these two rules,
+# only these paths; every other rule and every other file stays scanned.
+[[allowlists]]
+description = "Dummy values in tests, fixtures, plans and the wallet mockup states; settings key names."
+targetRules = ['''generic-api-key''']
+paths = [
+  '''\.test\.(ts|tsx|mjs)$''',
+  '''/test/''',
+  '''docs/superpowers/plans/''',
+  '''wallet/mockup-states\.tsx$''',
+  '''packages/db/operations/approval\.ts$''',
+]
+
+[[allowlists]]
+description = "A comment in ssh-keygen.ts that names the OpenSSH key header; the file holds no key."
+targetRules = ['''private-key''']
+paths = ['''servers/new/ssh-keygen\.ts$''']
