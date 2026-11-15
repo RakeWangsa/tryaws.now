@@ -161,7 +161,9 @@ function refusedAtFirstStep(
     step === null &&
     facts.code === "validation" &&
     facts.mayHaveActed === false &&
-    failures >= REPEATED_REFUSAL_ATTEMPTS &&
+    // Exactly the second failure: then the first and this one are the only two, both this refusal. From the third on
+    // the first failure is not on record (a time-out before two refusals may have made the resource): five tries rule.
+    failures === REPEATED_REFUSAL_ATTEMPTS &&
     // Money review: the failure before this one must be the SAME refusal (last_error holds its code and AWS error
     // name). An earlier failure that may have reached AWS (a time-out, a 5xx, an expired lease, an unknown error)
     // leaves another text or none, so a create that may exist is never refunded because a later attempt was refused.

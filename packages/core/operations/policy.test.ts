@@ -526,6 +526,13 @@ describe("WPU-X23 a create that AWS keeps refusing at its first step", () => {
       lastError: "validation:InvalidInputException",
     });
   });
+  // Security review: the previous failure alone is not enough. Only when the FIRST and the SECOND failure are both this
+  // refusal do we know nothing was made. From the third failure on, the first one is not on record (a time-out, then
+  // two refusals, would otherwise refund a create that may exist), so the usual five-attempt rule applies.
+  it("a third failure never takes the early refund, even after the same refusal", () => {
+    expect(run({ attempts: 2, lastError: SAME }).to).toBe("waiting");
+    expect(run({ attempts: 3, lastError: SAME }).to).toBe("waiting");
+  });
   it("not at a later step, not when AWS may have acted, not when the step is unknown, not for another kind or code", () => {
     expect(run({ attempts: 1, step: "wait_running", lastError: SAME }).to).toBe("waiting");
     expect(run({ attempts: 1, step: undefined, lastError: SAME }).to).toBe("waiting");
