@@ -11,7 +11,15 @@ type Form = Readonly<Record<string, unknown>>;
  * missing or revoked are one `sign_in_failed`. A token is never trusted on the provider's word: the
  * cookies come only from completeSignIn, which checks the token against the customer row first.
  */
-export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcome> {
+export async function signInCore(
+  ctx: ActionContext,
+  form: Form,
+  /**
+   * WPU-X27 (L3): the refresh token of the session being replaced (the cookie of the request), read by the
+   * wrapper. Used only for a reauth; revoked at the provider after the new session is complete.
+   */
+  previousRefreshToken?: string,
+): Promise<Outcome> {
   // 1. Authenticate: public by design; a signed-in customer goes on to the panel.
   // WPU-X23: `reauth=1` is the sign-in again of a signed-in customer (a fresh sign-in is needed, 6.1). It runs the
   // whole flow below (password, then the authenticator code when it is on) and issues new tokens, so the new
@@ -164,6 +172,23 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   } catch {
     logAuth(ctx, "auth.signin", "audit_failed");
     return failure(ctx, "unavailable", { form });
+  }
+
+  // WPU-X27 (L3): the replaced session's refresh token stops working now, not at its expiry. Best effort: the
+  // new session is already complete and audited, so a revoke that fails (or throws) only leaves a fixed log text
+  // (R14: never the token) and never changes the answer. A new token equal to the old one is never revoked.
+  if (
+    reauth &&
+    previousRefreshToken !== undefined &&
+    previousRefreshToken !== "" &&
+    previousRefreshToken !== answer.value.refreshToken
+  ) {
+    try {
+      const revoked = await guard.identity.revokeRefreshToken(previousRefreshToken);
+      if (!revoked.ok) logAuth(ctx, "auth.signin", "old_token_revoke_failed");
+    } catch {
+      logAuth(ctx, "auth.signin", "old_token_revoke_failed");
+    }
   }
 
   logAuth(ctx, "auth.signin", "ok");

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LIMIT_KEY, NOW, SIGN_UP_FORM, goodHeaders, makeHarness } from "../fakes/auth-harness.ts";
 import type { Customer, Harness } from "../fakes/auth-harness.ts";
 import { getFakeState } from "../fakes/outbox.ts";
@@ -492,6 +492,95 @@ describe("signInCore with reauth=1 (step-up sign-in)", () => {
     ]);
     expect(JSON.stringify(h.audits)).not.toContain("other@example.com");
     expect(JSON.stringify(h.audits)).not.toContain(other.customerId);
+  });
+
+  // WPU-X27 (L3 of the WPU-X23 review): the refresh token of the replaced session is revoked at the provider.
+  describe("the replaced refresh token", () => {
+    const OLD = "fake-rt.old-token.1";
+    const withRevoke = (revoke: (t: string) => Promise<unknown>, pinNew?: string) => {
+      const base = h.ctx();
+      const realSignIn = base.runtime.identity!.signIn.bind(base.runtime.identity);
+      const calls: string[] = [];
+      const ctx = {
+        ...base,
+        runtime: {
+          ...base.runtime,
+          identity: {
+            ...base.runtime.identity!,
+            signIn: async (...a: Parameters<typeof realSignIn>) => {
+              const r = await realSignIn(...a);
+              if (pinNew !== undefined && r.ok && r.value.kind === "tokens") {
+                return { ...r, value: { ...r.value, refreshToken: pinNew } };
+              }
+              return r;
+            },
+            revokeRefreshToken: async (t: string) => {
+              calls.push(t);
+              return revoke(t);
+            },
+          },
+        },
+      } as unknown as ReturnType<typeof h.ctx>;
+      return { ctx, calls };
+    };
+
+    it("is revoked once, after the new cookies are ready", async () => {
+      signedIn();
+      const { ctx, calls } = withRevoke(async () => ({ ok: true, value: true }));
+      const out = await signInCore(ctx, REAUTH, OLD);
+      expect(out.state.status).toBe("done");
+      expect(calls).toEqual([OLD]);
+    });
+
+    it("is not revoked when the new token equals the old one, is empty, or is absent", async () => {
+      signedIn();
+      const a = withRevoke(async () => ({ ok: true, value: true }));
+      const first = await signInCore(a.ctx, REAUTH, undefined);
+      expect(first.state.status).toBe("done");
+      const b = withRevoke(async () => ({ ok: true, value: true }), OLD);
+      await signInCore(b.ctx, REAUTH, OLD);
+      const c = withRevoke(async () => ({ ok: true, value: true }));
+      await signInCore(c.ctx, REAUTH, "");
+      expect([a.calls, b.calls, c.calls]).toEqual([[], [], []]);
+    });
+
+    it("is not revoked without reauth, when the customer differs, or when the sign-in fails", async () => {
+      signedIn();
+      const plain = withRevoke(async () => ({ ok: true, value: true }));
+      await signInCore(plain.ctx, { ...FORM, next: "/containers" }, OLD);
+      await h.signedUp("other@example.com");
+      const other = withRevoke(async () => ({ ok: true, value: true }));
+      await signInCore(other.ctx, { ...REAUTH, email: "other@example.com" }, OLD);
+      const wrong = withRevoke(async () => ({ ok: true, value: true }));
+      await signInCore(wrong.ctx, { ...REAUTH, password: "Wrong-password-1!" }, OLD);
+      expect([plain.calls, other.calls, wrong.calls]).toEqual([[], [], []]);
+    });
+
+    it("a failed or throwing revoke never fails the sign-in and logs a fixed text without the token", async () => {
+      signedIn();
+      const lines: string[] = [];
+      const spy = vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+        lines.push(String(line));
+      });
+      try {
+        for (const revoke of [
+          async () => ({ ok: false, kind: "unavailable" }),
+          async () => {
+            throw new Error(`boom ${OLD}`);
+          },
+        ]) {
+          const { ctx, calls } = withRevoke(revoke);
+          const out = await signInCore(ctx, REAUTH, OLD);
+          expect(out.state.status).toBe("done");
+          expect(out.effects.setCookies).toHaveLength(2);
+          expect(calls).toEqual([OLD]);
+        }
+      } finally {
+        spy.mockRestore();
+      }
+      expect(lines.filter((l) => l.includes("old_token_revoke_failed"))).toHaveLength(2);
+      expect(lines.join("\n")).not.toContain(OLD);
+    });
   });
 
   it("without reauth=1 a signed-in customer is still sent on", async () => {
