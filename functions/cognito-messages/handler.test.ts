@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { setNotifyEnglishOnly } from "@tc/notify";
 import * as entry from "./index";
 import { localeOf, type CustomMessageEvent } from "./handler";
 
@@ -94,10 +95,31 @@ it("picks the locale: client metadata, then the user attribute, then bn", () => 
   ).toBe("en");
 });
 
-it("renders Bengali by default", async () => {
-  const out = await handler(eventOf("CustomMessage_SignUp"));
-  expect(out.response.emailMessage).toContain('lang="bn"');
-  expect(out.response.emailSubject).toMatch(/[ঀ-৿]/);
+// WPU-X22: every Cognito mail is English, also for a user whose stored or requested language is bn.
+it("renders English for a bn user, a bn request and the default (WPU-X22)", async () => {
+  const events = [
+    eventOf("CustomMessage_SignUp"),
+    eventOf("CustomMessage_SignUp", { userAttributes: { locale: "bn" } }),
+    eventOf("CustomMessage_SignUp", { clientMetadata: { locale: "bn" } }),
+  ];
+  for (const event of events) {
+    const out = await handler(event);
+    expect(out.response.emailMessage).toContain('lang="en"');
+    expect(out.response.emailMessage).not.toContain('lang="bn"');
+    expect(out.response.emailSubject).not.toMatch(/[ঀ-৿]/);
+    expect(out.response.emailMessage).not.toMatch(/[ঀ-৿]/);
+  }
+});
+
+it("the Bengali texts are kept: with the rule off a bn request renders Bengali", async () => {
+  setNotifyEnglishOnly(false);
+  try {
+    const out = await handler(eventOf("CustomMessage_SignUp"));
+    expect(out.response.emailMessage).toContain('lang="bn"');
+    expect(out.response.emailSubject).toMatch(/[ঀ-৿]/);
+  } finally {
+    setNotifyEnglishOnly(true);
+  }
 });
 
 it("never puts a user attribute or the user name into the message", async () => {

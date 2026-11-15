@@ -5,6 +5,7 @@ import { NotifyError, TEMPLATE_IDS, type Channel, type TemplateId } from "../que
 import { parseData, type Parsed } from "./data";
 import { DEFS, type Helpers } from "./defs";
 import { layoutEmail, panelUrl } from "./layout";
+import { notifyLocale } from "./locale";
 import { BN, EN, SHARED } from "./messages";
 
 export interface RenderContext {
@@ -54,7 +55,8 @@ function fillFrom(text: string, vars: Readonly<Record<string, string>>): string 
   return fill(text, used);
 }
 
-function build(id: TemplateId, data: Readonly<Record<string, Parsed>>, ctx: RenderContext) {
+function build(id: TemplateId, data: Readonly<Record<string, Parsed>>, given: RenderContext) {
+  const ctx: RenderContext = { ...given, locale: notifyLocale(given.locale) };
   if (!isTemplateId(id)) throw new NotifyError("unknown_template");
   const def = DEFS[id];
   const text = (ctx.locale === "bn" ? BN : EN)[id];
@@ -87,7 +89,7 @@ export function renderEmail(
   const label = shared.cta[cta];
   if (label === undefined) throw new TypeError("render: the button has no label");
   const { html, text: plain } = layoutEmail({
-    locale: ctx.locale,
+    locale: notifyLocale(ctx.locale),
     subject,
     headline: fillFrom(text.headline, vars),
     // A paragraph that is empty for this data (for example the reply text of a mail that only links to
