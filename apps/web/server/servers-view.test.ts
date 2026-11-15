@@ -19,6 +19,17 @@ describe("planSpecsOf", () => {
   });
 });
 
+describe("planSpecsOf planType (WPU-X24)", () => {
+  it("keeps one of the three known plan types and drops anything else", () => {
+    for (const type of ["general_purpose", "memory_optimized", "compute_optimized"]) {
+      expect(planSpecsOf({ vcpus: 2, planType: type }).planType).toBe(type);
+    }
+    for (const bad of [null, "", "gpu", "<b>", 3, "General_Purpose"]) {
+      expect(planSpecsOf({ vcpus: 2, planType: bad })).toEqual({ vcpus: 2 });
+    }
+  });
+});
+
 describe("serverConfigOf", () => {
   it("reads the display name, key and a valid IPv4 address", () => {
     expect(

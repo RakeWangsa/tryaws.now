@@ -1,5 +1,5 @@
 import { priceCatalog } from "@tc/core";
-import type { CatalogRowForPricing, Clock, PricedCatalogRow, Result } from "@tc/core";
+import type { CatalogRowForPricing, Clock, PlanType, PricedCatalogRow, Result } from "@tc/core";
 import { listCatalogProducts, readFeatureFlags, readMarketBasics, withTx } from "@tc/db";
 import type { Tx } from "@tc/db";
 import type { ProductFamily } from "@tc/ui";
@@ -40,6 +40,8 @@ export interface PublicOffer {
    */
   readonly priceMinor: bigint;
   readonly specs: PlanSpecs;
+  /** WPU-X24: general, memory or compute optimized; null when the sync has not stored a type. */
+  readonly planType?: PlanType | null;
   /** The digits of the market setting (WPU-B6); Bengali pages use them, English pages use Latin. */
   readonly numerals?: "beng" | "latn";
 }
@@ -93,6 +95,7 @@ export function offersOf(rows: readonly PricedCatalogRow[]): PublicOffer[] {
       region: row.region,
       priceMinor: row.priceBdt.totalMinor,
       specs: planSpecsOf(row.specs),
+      planType: planSpecsOf(row.specs).planType ?? null,
     }))
     .sort((a, b) =>
       a.priceMinor !== b.priceMinor

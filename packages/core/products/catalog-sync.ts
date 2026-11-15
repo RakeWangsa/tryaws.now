@@ -72,11 +72,13 @@ const PLATFORMS: Readonly<
 
 // WPU-X24. Live GetBundles of ap-southeast-1 (124 bundles, 2026-11-15) marks the plan type in the bundle id:
 // general purpose has no prefix (`medium_3_0`, `2xlarge_3_0`, `nano_ipv6_3_0`), memory optimized has `m_`
-// (`m_large_1_0`), compute optimized has `c_` (`c_large_1_0`). Both prefixed shapes are checked in full.
+// (`m_large_1_0`), compute optimized has `c_` (`c_large_1_0`). Windows bundles carry the same prefixes with a
+// `win_` marker after the size (`medium_win_3_0`, `m_large_win_1_0`, `c_large_win_ipv6_1_0`), in the same
+// answer. Every shape is checked in full.
 const SIZE = "(?:nano|micro|small|medium|large|xlarge|\\d+xlarge)";
-const GENERAL_ID = new RegExp(`^${SIZE}_(?:ipv6_)?\\d+_\\d+$`);
-const MEMORY_ID = new RegExp(`^m_${SIZE}_(?:ipv6_)?\\d+_\\d+$`);
-const COMPUTE_ID = new RegExp(`^c_${SIZE}_(?:ipv6_)?\\d+_\\d+$`);
+const GENERAL_ID = new RegExp(`^${SIZE}_(?:win_)?(?:ipv6_)?\\d+_\\d+$`);
+const MEMORY_ID = new RegExp(`^m_${SIZE}_(?:win_)?(?:ipv6_)?\\d+_\\d+$`);
+const COMPUTE_ID = new RegExp(`^c_${SIZE}_(?:win_)?(?:ipv6_)?\\d+_\\d+$`);
 
 /**
  * The plan type of a bundle, from its id alone. Strict: an id that is none of the three known shapes

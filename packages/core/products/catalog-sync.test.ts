@@ -286,6 +286,11 @@ const LIVE: readonly { id: string; cpu: number; ram: number; usd: string; type: 
   { id: "m_large_ipv6_1_0", cpu: 2, ram: 16, usd: "80", type: "memory_optimized" },
   { id: "c_large_1_0", cpu: 2, ram: 4, usd: "42", type: "compute_optimized" },
   { id: "c_18xlarge_1_0", cpu: 72, ram: 144, usd: "1000", type: "compute_optimized" },
+  { id: "medium_win_3_0", cpu: 2, ram: 4, usd: "46", type: "general_purpose" },
+  { id: "nano_win_ipv6_3_0", cpu: 2, ram: 0.5, usd: "14", type: "general_purpose" },
+  { id: "m_large_win_1_0", cpu: 2, ram: 16, usd: "100", type: "memory_optimized" },
+  { id: "c_large_win_1_0", cpu: 2, ram: 4, usd: "60", type: "compute_optimized" },
+  { id: "c_18xlarge_win_ipv6_1_0", cpu: 72, ram: 144, usd: "1500", type: "compute_optimized" },
   { id: "c_large_ipv6_1_0", cpu: 2, ram: 4, usd: "42", type: "compute_optimized" },
 ];
 
@@ -311,6 +316,9 @@ describe("planTypeOf (WPU-X24)", () => {
       "0xlarge_3_0x",
       "weird_large_3_0",
       "m_large",
+      "large_wim_3_0",
+      "win_large_3_0",
+      "large_win_win_3_0",
     ]) {
       expect(planTypeOf(id), id).toBeNull();
     }
@@ -320,7 +328,14 @@ describe("planTypeOf (WPU-X24)", () => {
 
   it("is stored in the specs of every mapped row, null when the id has no known shape", () => {
     for (const live of LIVE) {
-      const [row] = rowsOf(bundle({ bundleId: live.id, cpuCount: live.cpu, ramSizeInGb: live.ram, priceUsd: live.usd }));
+      const [row] = rowsOf(
+        bundle({
+          bundleId: live.id,
+          cpuCount: live.cpu,
+          ramSizeInGb: live.ram,
+          priceUsd: live.usd,
+        }),
+      );
       expect(row!.specs.planType, live.id).toBe(live.type);
     }
     const [odd] = rowsOf(bundle({ bundleId: "gp_large_1_0" }));
