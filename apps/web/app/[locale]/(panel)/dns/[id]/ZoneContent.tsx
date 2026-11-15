@@ -6,6 +6,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { DnsZoneState } from "@tc/core";
 import type { RecordView, ZoneScreen, ZoneView } from "../../../../../server/dns-view.ts";
+import { AutoRefresh } from "../../orders/[id]/AutoRefresh.tsx";
 import { DestroyPanel, type FamilyAction } from "../../_family/FamilyForms.tsx";
 import {
   DeleteRecordForm,
@@ -158,6 +159,12 @@ export function ZoneContent({
       </Card>
 
       <Banner zone={zone} />
+      {/* WPU-X20: a record change or a new zone is applied a few minutes later; the page asks the server for itself
+          again every ten seconds meanwhile (the same component as the order page; no inline script, U4). */}
+      <AutoRefresh
+        active={zone.lastChange === "working" || zone.busy || zone.state === "creating"}
+        everyMs={10000}
+      />
 
       {zone.records === null ? (
         <EmptyState title={t("detail.stale.title")} description={t("detail.stale.body")} />
