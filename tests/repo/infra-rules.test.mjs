@@ -238,7 +238,7 @@ describe("WAF rate rules and Server Actions", () => {
   });
 
   it("decodes before lowercasing in every uriPath match", () => {
-    expect([...waf.matchAll(/uriPath: \{\}/g)]).toHaveLength(1);
+    expect([...waf.matchAll(/uriPath: \{\}/g)]).toHaveLength(2);
     expect(waf).toContain(
       'const decodeThenLowercase = [ { priority: 0, type: "URL_DECODE" }, { priority: 1, type: "LOWERCASE" }];',
     );
