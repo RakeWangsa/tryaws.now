@@ -11,13 +11,15 @@ import { flatLeaves } from "./wording-check.ts";
 // the dev-only component gallery (Gallery) and two legal sentences (LEGAL_PENDING), whose wording the owner approves separately (docs/legal-drafts/2026-11-15-bdt-only.md). Admin is staff-only
 // and has its own messages.
 const NOT_CUSTOMER = ["Gallery."];
-// The two legal sentences that still name the dollar until the owner approves the new wording. Exactly these
+// The legal sentences that still name the dollar or the exchange rate until the owner approves the new wording. Exactly these
 // keys; any other legal key that names a dollar fails the guard. Remove them when legal-*.ts is changed.
 const LEGAL_PENDING = [
   "Public.legal.docs.terms.sections.prices.p1",
   "Public.legal.docs.terms.sections.invoices.p1",
+  "Public.legal.docs.terms.sections.prices.p2",
+  "Public.legal.docs.terms.sections.renewal.p2",
 ];
-const DOLLARS = /USD|US dollar|dollar|ডলার/i;
+const DOLLARS = /USD|US dollar|dollar|ডলার|exchange rate|বিনিময়/i;
 
 function web(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
