@@ -324,6 +324,8 @@ export const serversEn: Same<typeof serversBn> = {
       plan: "Plan",
       term: "Term",
       termValue: "30 days",
+      // WPU-X23: a domain is bought for one year, not for the 30 days of a Lightsail subscription.
+      termValueDomain: "1 year",
       renewal:
         "At the end of the term the renewal is paid from your wallet. You can turn automatic renewal off; the server is then suspended.",
       // WPU-Z2, WPU-Z14: shown for a family that a purchase opens with auto-renew on (owner decision of
@@ -336,6 +338,8 @@ export const serversEn: Same<typeof serversBn> = {
         caption: "Amount in taka",
         bdt: "Amount debited from your wallet (taka)",
         note: "The price is in taka (BDT), for 30 days, with VAT and fees included. Exactly this amount is taken from your wallet. If the price changes before you confirm, you will see the new amount and confirm again.",
+        noteDomain:
+          "The price is in taka (BDT), for 1 year, with VAT and fees included. Exactly this amount is taken from your wallet. If the price changes before you confirm, you will see the new amount and confirm again.",
       },
       lines: "Price details",
       awsPrice: "AWS service price",

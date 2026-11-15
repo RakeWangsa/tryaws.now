@@ -320,6 +320,8 @@ export const serversBn = {
       plan: "প্ল্যান",
       term: "মেয়াদ",
       termValue: "৩০ দিন",
+      // WPU-X23: a domain is bought for one year, not for the 30 days of a Lightsail subscription.
+      termValueDomain: "১ বছর",
       renewal:
         "মেয়াদ শেষে নবায়ন ওয়ালেট থেকে হয়। স্বয়ংক্রিয় নবায়ন বন্ধ করা যায়, বন্ধ করলে সার্ভার স্থগিত হয়।",
       // WPU-Z2, WPU-Z14: shown for a family that a purchase opens with auto-renew on (owner decision of
@@ -332,6 +334,8 @@ export const serversBn = {
         caption: "টাকার পরিমাণ",
         bdt: "ওয়ালেট থেকে কাটা হবে (টাকায়)",
         note: "মূল্য টাকায় (BDT), ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত। ঠিক এই পরিমাণই আপনার ওয়ালেট থেকে কাটা হবে। নিশ্চিত করার আগে মূল্য বদলালে নতুন পরিমাণ দেখানো হবে, আবার নিশ্চিত করতে হবে।",
+        noteDomain:
+          "মূল্য টাকায় (BDT), ১ বছরের জন্য, VAT ও ফি অন্তর্ভুক্ত। ঠিক এই পরিমাণই আপনার ওয়ালেট থেকে কাটা হবে। নিশ্চিত করার আগে মূল্য বদলালে নতুন পরিমাণ দেখানো হবে, আবার নিশ্চিত করতে হবে।",
       },
       lines: "মূল্যের বিবরণ",
       awsPrice: "AWS সার্ভিস মূল্য",

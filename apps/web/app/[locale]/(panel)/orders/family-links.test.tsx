@@ -173,6 +173,15 @@ describe("/orders/review names its own product", () => {
     }
     expect(view(family, "en")).toContain("Worldwide");
   });
+  // WPU-X23: the review said "30 days" for a domain that is bought for a year.
+  it("the term of a domain is one year; every other family keeps its 30 days", () => {
+    expect(view("domain", "en")).toContain("1 year");
+    expect(view("domain", "en")).not.toContain("30 days");
+    expect(view("domain", "bn")).toContain("১ বছর");
+    for (const family of ["linux_instance", "dns_zone", "cdn"]) {
+      expect(view(family, "en")).toContain("30 days");
+    }
+  });
   it("a DNS zone is named with Amazon Route 53; a server keeps its own lines", () => {
     expect(view("dns_zone", "en")).toContain("DNS zone, on Amazon Route 53");
     const server = view("linux_instance", "en");
