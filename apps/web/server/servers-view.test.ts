@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   keyOptionOf,
+  orderIsSlow,
   orderProgress,
   planSpecsOf,
   serverConfigOf,
@@ -59,6 +60,21 @@ describe("orderProgress", () => {
     expect(orderProgress("succeeded")).toBe("ready");
     expect(orderProgress("failed")).toBe("failed");
     expect(orderProgress("something_new")).toBe("delayed");
+  });
+});
+
+describe("orderIsSlow (WPU-X23)", () => {
+  const created = new Date("2026-11-15T13:00:00Z");
+  const at = (minutes: number) => new Date(created.getTime() + minutes * 60_000);
+  it("says so for a create still running after 10 minutes, and only then", () => {
+    expect(orderIsSlow("creating", created, at(9))).toBe(false);
+    expect(orderIsSlow("creating", created, at(10))).toBe(false);
+    expect(orderIsSlow("creating", created, at(11))).toBe(true);
+    expect(orderIsSlow("paid", created, at(30))).toBe(true);
+    for (const done of ["ready", "failed", "delayed"] as const) {
+      expect(orderIsSlow(done, created, at(30))).toBe(false);
+    }
+    expect(orderIsSlow("creating", new Date(Number.NaN), at(30))).toBe(false);
   });
 });
 

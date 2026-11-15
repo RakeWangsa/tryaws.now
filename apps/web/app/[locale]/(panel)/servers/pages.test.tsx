@@ -583,6 +583,22 @@ describe("/orders/[id]", () => {
     );
   });
 
+  // WPU-X23: what the customer reads when a create is slow, and when it failed and the money is back.
+  it("says so when the create takes longer than usual, and when it failed with its refund", async () => {
+    state.order = order({ progress: "creating", slow: true });
+    const slow = await renderPage(OrderPage as never, "en", { id: "o1" });
+    expect(slow).toContain("taking longer than usual");
+    expect(slow).not.toMatch(/InvalidInput|AWS error|Exception/);
+    state.order = order({ progress: "creating" });
+    expect(await renderPage(OrderPage as never, "en", { id: "o1" })).not.toContain(
+      "taking longer than usual",
+    );
+    state.order = order({ progress: "failed", refunded: true });
+    const failed = await renderPage(OrderPage as never, "en", { id: "o1" });
+    expect(failed).toContain("We could not create your server. Your payment has been returned");
+    expect(failed).not.toMatch(/InvalidInput|Exception/);
+  });
+
   it("answers a missing or foreign order with one not-found state", async () => {
     state.order = null;
     expect(await renderPage(OrderPage as never, "en", { id: "o1" })).toContain("Order not found");

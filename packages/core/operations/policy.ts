@@ -6,6 +6,11 @@ import type { LocalFailure } from "./types";
 export const MAX_ATTEMPTS = 5;
 export const RETRY_DELAYS_SECONDS = Object.freeze([60, 120, 240, 480] as const);
 export const LEASE_SECONDS = 120;
+/**
+ * WPU-X23. A create refused by AWS at its first step (code `validation`, AwsError.mayHaveActed false) fails after this
+ * many failures: one retry. See `refusedAtFirstStep`.
+ */
+export const REPEATED_REFUSAL_ATTEMPTS = 2;
 export const STALE_QUEUED_SECONDS = 120;
 
 // The runner builds this from an AwsError; packages/core does not import @tc/aws.
@@ -134,6 +139,28 @@ function endsFailed(
   );
 }
 
+/**
+ * WPU-X23. Lightsail reports many problems as InvalidInputException, so the table keeps that name retryable. But a
+ * `create` still at its FIRST step (step null: nothing was recorded as done) whose call AWS rejected
+ * (`mayHaveActed === false`, not a time-out or a 5xx) has made nothing, and it sends the same input every time; five
+ * tries and an admin only keep the customer's money held for about 15 minutes and then for days. Such a create fails
+ * after one retry and its hook returns the money (10.1). An unknown step or an unknown `mayHaveActed` never counts (R16).
+ */
+function refusedAtFirstStep(
+  kind: string,
+  step: string | null | undefined,
+  failures: number,
+  facts: FailureFacts,
+): boolean {
+  return (
+    kind === "create" &&
+    step === null &&
+    facts.code === "validation" &&
+    facts.mayHaveActed === false &&
+    failures >= REPEATED_REFUSAL_ATTEMPTS
+  );
+}
+
 // No AWS text ever reaches last_error (R14): a code, and a plain error name when there is one. WPU-Y2 fix round 1:
 // without an AWS error name, the registry verdict of a renewal (`registry_failed`, `registry_unrenewed`).
 export function lastErrorText(facts: FailureFacts): string {
@@ -230,6 +257,9 @@ export function decideFailure(input: {
       attempts: failures,
       lastError,
     };
+  }
+  if (refusedAtFirstStep(kind, step, failures, facts)) {
+    return { to: "failed", attempts: failures, lastError };
   }
   if (failures >= MAX_ATTEMPTS) return { to: "needs_attention", attempts: failures, lastError };
   const delay: number | undefined = RETRY_DELAYS_SECONDS[attempts];
