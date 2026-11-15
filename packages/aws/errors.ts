@@ -230,6 +230,8 @@ const isNetworkCode = names(
 const QUOTA_MESSAGE =
   /maximum number of|quota|limit exceeded|exceeded (the|your) limit|reached the limit/i;
 const IN_USE_MESSAGE = /already in use|already exists/i;
+// WPU-X29: Lightsail answers a lookup of a missing resource (GetDistributions) with this 400 text.
+const MISSING_MESSAGE = /^requested resource not found/i;
 
 // The first matching row wins: the order of this array is the order of the table.
 const ROWS: readonly Row[] = [
@@ -245,6 +247,13 @@ const ROWS: readonly Row[] = [
     match: (f) =>
       f.name === "InvalidInputException" && f.message !== null && IN_USE_MESSAGE.test(f.message),
     code: "conflict",
+    retryable: true,
+    poolFull: false,
+  },
+  {
+    match: (f) =>
+      f.name === "InvalidInputException" && f.message !== null && MISSING_MESSAGE.test(f.message),
+    code: "not_found",
     retryable: true,
     poolFull: false,
   },
