@@ -897,6 +897,9 @@ div.tc-modal-open {
   flex-wrap: wrap;
   gap: 8px 14px;
 }
+.tc-svc-name {
+  font-weight: 400;
+}
 .tc-svc-item {
   align-items: center;
   display: flex;
@@ -934,10 +937,10 @@ div.tc-modal-open {
 }
 .tc-mini-btn {
   display: block;
-  padding-left: 8px;
-  padding-right: 8px;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  padding: 10px 16px;
   text-align: center;
-  white-space: nowrap;
 }
 .tc-mini-line {
   font-size: 0.75rem;
