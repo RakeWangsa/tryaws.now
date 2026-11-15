@@ -80,8 +80,9 @@ export function auth(config: StageConfig) {
     ],
     transform: {
       // Transform<iam.RoleArgs>, as SST passes it (.sst/platform/src/components/aws/function.ts).
-      role: (args: aws.iam.RoleArgs) => {
+      role: (args: aws.iam.RoleArgs): undefined => {
         args.name = roleName(stage, part);
+        return undefined;
       },
     },
   });
