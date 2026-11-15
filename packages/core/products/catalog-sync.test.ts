@@ -4,6 +4,7 @@ import {
   mapInstanceBundle,
   planIsSafe,
   planScopeSync,
+  planTypeOf,
   type RawBundle,
 } from "./catalog-sync";
 
@@ -267,5 +268,77 @@ describe("planIsSafe", () => {
       existing: [{ family: "linux_instance", awsId: "old", active: true }],
     });
     expect(planIsSafe(plan, 1)).toBe(true);
+  });
+});
+
+// WPU-X24: the plan type is read from the bundle id prefix, proved on the live GetBundles answer of
+// ap-southeast-1 (124 bundles, 2026-11-15). Anything that is not one of the three known shapes is null.
+const LIVE: readonly { id: string; cpu: number; ram: number; usd: string; type: string }[] = [
+  { id: "nano_3_0", cpu: 2, ram: 0.5, usd: "5", type: "general_purpose" },
+  { id: "micro_3_0", cpu: 2, ram: 1, usd: "7", type: "general_purpose" },
+  { id: "medium_3_0", cpu: 2, ram: 4, usd: "24", type: "general_purpose" },
+  { id: "xlarge_3_0", cpu: 4, ram: 16, usd: "84", type: "general_purpose" },
+  { id: "2xlarge_3_0", cpu: 8, ram: 32, usd: "164", type: "general_purpose" },
+  { id: "16xlarge_3_0", cpu: 64, ram: 256, usd: "1000", type: "general_purpose" },
+  { id: "nano_ipv6_3_0", cpu: 2, ram: 0.5, usd: "5", type: "general_purpose" },
+  { id: "m_large_1_0", cpu: 2, ram: 16, usd: "80", type: "memory_optimized" },
+  { id: "m_16xlarge_1_0", cpu: 64, ram: 512, usd: "1000", type: "memory_optimized" },
+  { id: "m_large_ipv6_1_0", cpu: 2, ram: 16, usd: "80", type: "memory_optimized" },
+  { id: "c_large_1_0", cpu: 2, ram: 4, usd: "42", type: "compute_optimized" },
+  { id: "c_18xlarge_1_0", cpu: 72, ram: 144, usd: "1000", type: "compute_optimized" },
+  { id: "medium_win_3_0", cpu: 2, ram: 4, usd: "46", type: "general_purpose" },
+  { id: "nano_win_ipv6_3_0", cpu: 2, ram: 0.5, usd: "14", type: "general_purpose" },
+  { id: "m_large_win_1_0", cpu: 2, ram: 16, usd: "100", type: "memory_optimized" },
+  { id: "c_large_win_1_0", cpu: 2, ram: 4, usd: "60", type: "compute_optimized" },
+  { id: "c_18xlarge_win_ipv6_1_0", cpu: 72, ram: 144, usd: "1500", type: "compute_optimized" },
+  { id: "c_large_ipv6_1_0", cpu: 2, ram: 4, usd: "42", type: "compute_optimized" },
+];
+
+describe("planTypeOf (WPU-X24)", () => {
+  it.each(LIVE)("$id is $type", ({ id, type }) => {
+    expect(planTypeOf(id)).toBe(type);
+  });
+
+  it("returns null for any other shape (fail closed, no guess)", () => {
+    for (const id of [
+      "",
+      "gp_large_1_0",
+      "x_large_1_0",
+      "m_",
+      "m_nano_1_0x",
+      "c_",
+      "M_large_1_0",
+      "large",
+      "large_3",
+      "large_3_0 ",
+      "Large_3_0",
+      "xlarge_ipv6",
+      "0xlarge_3_0x",
+      "weird_large_3_0",
+      "m_large",
+      "large_wim_3_0",
+      "win_large_3_0",
+      "large_win_win_3_0",
+    ]) {
+      expect(planTypeOf(id), id).toBeNull();
+    }
+    expect(planTypeOf(undefined as unknown as string)).toBeNull();
+    expect(planTypeOf(7 as unknown as string)).toBeNull();
+  });
+
+  it("is stored in the specs of every mapped row, null when the id has no known shape", () => {
+    for (const live of LIVE) {
+      const [row] = rowsOf(
+        bundle({
+          bundleId: live.id,
+          cpuCount: live.cpu,
+          ramSizeInGb: live.ram,
+          priceUsd: live.usd,
+        }),
+      );
+      expect(row!.specs.planType, live.id).toBe(live.type);
+    }
+    const [odd] = rowsOf(bundle({ bundleId: "gp_large_1_0" }));
+    expect(odd!.specs.planType).toBeNull();
   });
 });

@@ -127,6 +127,17 @@ export const publicEn: Same<typeof publicBn> = {
       imageSelected: "Selected",
       imageNote:
         "You pick the image again when you create the instance in the panel, after you log in.",
+      typeTitle: "Select a plan type",
+      types: {
+        general_purpose: "General purpose",
+        memory_optimized: "Memory-optimized",
+        compute_optimized: "Compute-optimized",
+      },
+      typeDescriptions: {
+        general_purpose: "Balanced CPU and memory for most workloads.",
+        memory_optimized: "More memory for each vCPU, for in-memory workloads and databases.",
+        compute_optimized: "More vCPU power for each GB, for batch and CPU-bound work.",
+      },
       planTitle: "Choose your instance plan",
       createInstance: "Create instance",
       cardTitle: "{ram} GB · {cpu} vCPU",

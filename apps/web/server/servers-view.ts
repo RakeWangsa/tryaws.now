@@ -13,6 +13,7 @@ import {
   optionOf,
   priceCatalog,
   type BlueprintKind,
+  type PlanType,
 } from "@tc/core";
 import type { SshKey } from "@tc/db";
 import {
@@ -42,7 +43,15 @@ export interface PlanSpecs {
   ramGb?: string;
   diskGb?: number;
   transferGb?: number;
+  /** WPU-X24: the plan type the catalog sync stored; absent when none (or not yet synced). */
+  planType?: PlanType;
 }
+
+const PLAN_TYPES: readonly PlanType[] = [
+  "general_purpose",
+  "memory_optimized",
+  "compute_optimized",
+];
 
 const isCount = (v: unknown): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
@@ -58,6 +67,8 @@ export function planSpecsOf(specs: unknown): PlanSpecs {
   }
   if (isCount(raw["diskGb"])) out.diskGb = raw["diskGb"];
   if (isCount(raw["transferGb"])) out.transferGb = raw["transferGb"];
+  const type = PLAN_TYPES.find((known) => known === raw["planType"]);
+  if (type !== undefined) out.planType = type;
   return out;
 }
 
