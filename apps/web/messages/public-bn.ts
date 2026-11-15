@@ -282,7 +282,7 @@ export const publicBn = {
         },
         dataLocation: {
           q: "আমার ডেটা কোথায় থাকে?",
-          a: "সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট আপনার বেছে নেওয়া AWS Region-এ থাকে। CDN-এর কপি বিশ্বজুড়ে AWS-এর edge লোকেশনে থাকে। DNS বৈশ্বিক সেবা। আপনার অ্যাকাউন্ট ও পরিচয়পত্রের নথি AWS Singapore-এ রাখা হয়।",
+          a: "সার্ভার, ডেটাবেস, ডিস্ক ও বাকেট আপনার বেছে নেওয়া AWS Region-এ থাকে। CDN-এর কপি বিশ্বজুড়ে AWS-এর edge লোকেশনে থাকে। DNS বৈশ্বিক সেবা। আপনার অ্যাকাউন্ট, এবং আগে জমা দেওয়া পরিচয়পত্রের নথি থাকলে সেগুলো, AWS Singapore-এ রাখা হয়।",
         },
         payment: {
           q: "কীভাবে টাকা দেব?",
@@ -377,7 +377,7 @@ export const publicBn = {
       sidebarLabel: "আইনি নথির তালিকা",
       // WPU-Y6: the texts are approved by the owner (2026-11-14); no draft notice. The version line and
       // LEGAL_VERSIONS (server/auth/legal.ts) move together.
-      version: "সংস্করণ ২, ১৪ নভেম্বর ২০২৬",
+      version: "সংস্করণ ৩, ১৫ নভেম্বর ২০২৬",
       docs: legalDocsBn,
     },
     system: {
