@@ -296,6 +296,29 @@ export const serversEn: Same<typeof serversBn> = {
       caption: "Order lines",
       item: "Server",
       itemValue: "{name} · Cloud Server",
+      // WPU-X20: every family other than a server had the line "Server / Cloud Server" and a Region. The line
+      // names the product (16.13); a global service (DNS zone, domain, CDN) has no Region.
+      itemOther: "Service",
+      itemValueOther: "{name} · {product}",
+      product: {
+        disk: "Block Storage",
+        bucket: "Object Storage",
+        database: "Managed Database",
+        loadBalancer: "Load Balancer",
+        containerService: "Container Service",
+        cdn: "CDN, on Amazon Lightsail CDN",
+        dnsZone: "DNS zone, on Amazon Route 53",
+        domain: "Domain, on Amazon Route 53",
+        staticIp: "Static IP",
+        backup: "Backup",
+      },
+      locationGlobal: {
+        cdn: "Worldwide (a global service of Amazon Lightsail CDN)",
+        dnsZone: "Worldwide (a global service of Amazon Route 53)",
+        domain: "Worldwide (a global service of Amazon Route 53)",
+      },
+      renewalOther:
+        "At the end of the term the renewal is paid from your wallet. You can turn automatic renewal off on the page of this service.",
       location: "Location",
       plan: "Plan",
       term: "Term",
