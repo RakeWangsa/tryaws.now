@@ -76,7 +76,7 @@ export function CloudServersContent({
                   url: o + localePath(locale, "/products/cloud-servers"),
                   offers: offers.map((offer) => ({
                     name: offerName(t, offer),
-                    priceUsd: offer.priceUsd,
+                    priceMinor: offer.priceMinor,
                     url: o + orderHref(locale),
                   })),
                 }),
@@ -152,7 +152,7 @@ export function CloudServersContent({
                 plans={offers.map((offer) => ({
                   id: offer.id,
                   name: offerName(t, offer),
-                  priceUsd: offer.priceUsd,
+                  priceMinor: offer.priceMinor,
                   lines: [
                     specValues(t, offer.specs).cpu,
                     specValues(t, offer.specs).ram,

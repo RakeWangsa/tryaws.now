@@ -178,11 +178,12 @@ describe("plans (WPU-X13)", () => {
     expect(homePlans(UNAVAILABLE)).toEqual([]);
   });
 
-  it("renders those plans as cards, with one Recommended badge, and no taka amount", () => {
+  it("renders those plans as cards, with one Recommended badge, a taka price on each and no dollar (WPU-X16)", () => {
     const page = render(open, "en");
     expect((page.match(/class="top-content/g) ?? []).length).toBe(3);
     expect((page.match(/plans badge feat/g) ?? []).length).toBe(1);
-    expect(page).not.toMatch(/৳|BDT\s?\d|Tk\.?\s?\d/);
+    expect((page.match(/class="price seccolor"><span>৳[\d,]+<\/span>/g) ?? []).length).toBe(3);
+    expect(text(page)).not.toMatch(/\$|USD|dollar/i);
   });
 });
 

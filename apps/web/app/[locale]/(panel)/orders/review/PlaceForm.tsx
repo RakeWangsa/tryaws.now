@@ -6,8 +6,6 @@ import {
   PriceBreakdown,
   SubmitButton,
   SummarySidebar,
-  formatDate,
-  formatDecimalText,
   formatMoney,
 } from "@tc/ui";
 import type { Locale } from "@tc/ui/runtime";
@@ -56,12 +54,8 @@ export function PlaceForm({
   const changed = state.draft;
   const token = changed?.token ?? review.token;
   const totalMinor = changed !== undefined ? BigInt(changed.totalMinor) : review.totalMinor;
-  // WPU-Y4: what the customer sees is exactly what is charged: the rate and its day, and the BDT amount, all
-  // from the signed draft (or from the new one after a change). Nothing is computed here. WPU-Z2: the panel
-  // shows BDT only (owner decision of 2026-11-13), so the USD text of the draft is not printed; the rate line
-  // stays, because the owner's transparency rule is "today's dollar rate".
-  const fxRate = changed?.fxRate ?? review.fxRate;
-  const fxSetAt = changed !== undefined ? changed.fxSetAt : review.fxSetAt;
+  // What the customer sees is exactly what is charged: the BDT amount of the signed draft (or of the new one
+  // after a change). Nothing is computed here. WPU-X16: no dollar price and no exchange rate is printed.
   const shortfallMinor = totalMinor > review.balanceMinor ? totalMinor - review.balanceMinor : null;
   const shortfallTaka = shortfallMinor === null ? null : (shortfallMinor + 99n) / 100n;
   const errorKey =
@@ -130,26 +124,11 @@ export function PlaceForm({
 
           <div className="table-responsive-lg mb-4">
             <table className="table compare">
-              <caption className="visually-hidden">{t("fx.caption")}</caption>
+              <caption className="visually-hidden">{t("debit.caption")}</caption>
               <tbody>
                 <tr className="seccolor">
                   <th scope="row" className="title border-start-0">
-                    {t("fx.rate")}
-                  </th>
-                  <td>
-                    {fxSetAt === null
-                      ? t("fx.rateValueNoDate", {
-                          rate: formatDecimalText(fxRate, { locale }),
-                        })
-                      : t("fx.rateValue", {
-                          rate: formatDecimalText(fxRate, { locale }),
-                          date: formatDate(fxSetAt, { locale }),
-                        })}
-                  </td>
-                </tr>
-                <tr className="seccolor">
-                  <th scope="row" className="title border-start-0">
-                    {t("fx.bdt")}
+                    {t("debit.bdt")}
                   </th>
                   <td>
                     <b>
@@ -159,7 +138,7 @@ export function PlaceForm({
                 </tr>
               </tbody>
             </table>
-            <p className="small seccolor mt-2">{t("fx.note")}</p>
+            <p className="small seccolor mt-2">{t("debit.note")}</p>
           </div>
 
           {changed === undefined ? (

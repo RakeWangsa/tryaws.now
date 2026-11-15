@@ -305,15 +305,11 @@ export const serversBn = {
       // on its own page (a Linux server: Billing tab; a disk: the Storage tab of its server).
       autoRenew:
         "স্বয়ংক্রিয় নবায়ন চালু আছে: এই মেয়াদ শেষ হলে পরবর্তী মেয়াদ আপনার ওয়ালেট থেকে পরিশোধ হবে। প্যানেলে এই সেবার পাতায় যেকোনো সময় এটি বন্ধ করতে পারবেন।",
-      // WPU-Z2: the panel shows BDT only (owner decision of 2026-11-13); today's rate stays.
-      fx: {
-        caption: "বিনিময় হার ও টাকার পরিমাণ",
-        rate: "বিনিময় হার",
-        rateValue: "১ USD = ৳{rate}, {date} তারিখে নির্ধারিত",
-        rateValueNoDate: "১ USD = ৳{rate}",
+      // WPU-X16 (owner decision of 2026-11-15): taka only; no dollar price and no exchange rate for customers.
+      debit: {
+        caption: "টাকার পরিমাণ",
         bdt: "ওয়ালেট থেকে কাটা হবে (টাকায়)",
-        // WPU-Y4 wording (approved by the owner on 2026-11-13).
-        note: "মূল্য মার্কিন ডলারে। টাকার পরিমাণ হলো দেখানো বিনিময় হারে ডলার মূল্যের সমান, এবং ঠিক এই পরিমাণই আপনার ওয়ালেট থেকে কাটা হবে। নিশ্চিত করার আগে হার বদলালে নতুন পরিমাণ দেখানো হবে, আবার নিশ্চিত করতে হবে।",
+        note: "মূল্য টাকায় (BDT), ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত। ঠিক এই পরিমাণই আপনার ওয়ালেট থেকে কাটা হবে। নিশ্চিত করার আগে মূল্য বদলালে নতুন পরিমাণ দেখানো হবে, আবার নিশ্চিত করতে হবে।",
       },
       lines: "মূল্যের বিবরণ",
       awsPrice: "AWS সার্ভিস মূল্য",
@@ -337,7 +333,7 @@ export const serversBn = {
       back: "কনফিগারেশনে ফিরুন",
       priceChanged: {
         title: "দাম বদলেছে",
-        body: "আপনার দেখা দামের পর রেট বা নিয়ম বদলেছে। নতুন দাম দেখে আবার নিশ্চিত করুন।",
+        body: "আপনার দেখা দামের পর দাম বা নিয়ম বদলেছে। নতুন দাম দেখে আবার নিশ্চিত করুন।",
         old: "আগের দাম",
         new: "নতুন দাম",
       },

@@ -27,8 +27,8 @@
     "country": "BD"
   },
   "description": {
-    "bn": "TryAWS.now বাংলাদেশের মানুষ ও প্রতিষ্ঠানের জন্য একটি প্রিপেইড ক্লাউড প্যানেল। এখানে Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার কেনা যায়, যা Singapore বা Mumbai AWS Region থেকে চলে। মূল্য মার্কিন ডলারে দেখানো হয় এবং তাতে VAT ও ফি অন্তর্ভুক্ত; পরিশোধ হয় টাকায়, ওয়ালেট থেকে, যা EPS দিয়ে টপ আপ করা যায়। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।",
-    "en": "TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in US dollars and include VAT and fees; you pay in taka from a wallet that you top up with EPS. TryAWS.now sells, bills and supports the service."
+    "bn": "TryAWS.now বাংলাদেশের মানুষ ও প্রতিষ্ঠানের জন্য একটি প্রিপেইড ক্লাউড প্যানেল। এখানে Amazon Lightsail দিয়ে তৈরি ক্লাউড সার্ভার কেনা যায়, যা Singapore বা Mumbai AWS Region থেকে চলে। মূল্য টাকায় (BDT) এবং তাতে VAT ও ফি অন্তর্ভুক্ত; পরিশোধ হয় টাকার ওয়ালেট থেকে, যা EPS দিয়ে টপ আপ করা যায়। বিক্রি, বিল ও সাপোর্ট TryAWS.now দেয়।",
+    "en": "TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in taka (BDT) and include VAT and fees; you pay from a taka wallet that you top up with EPS. TryAWS.now sells, bills and supports the service."
   },
   "service": {
     "product": {
@@ -50,10 +50,10 @@
       }
     ],
     "prices": {
-      "bn": "মূল্য মার্কিন ডলারে (USD), ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত। টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয় এবং নিশ্চিত করার আগেই দেখানো হয়। ১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
-      "en": "Prices are in US dollars (USD), for 30 days, and include VAT and fees. The amount in taka is worked out at checkout with the exchange rate of the day, and you see it before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail."
+      "bn": "মূল্য টাকায় (BDT), ৩০ দিনের জন্য, VAT ও ফি অন্তর্ভুক্ত। পরিশোধ হয় আপনার টাকার ওয়ালেট থেকে, আর পরিমাণটি নিশ্চিত করার আগেই দেখানো হয়। ১০০% AWS অবকাঠামো। Amazon Lightsail দিয়ে তৈরি।",
+      "en": "Prices are in taka (BDT), for 30 days, and include VAT and fees. You pay from your taka wallet, and you see the amount before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail."
     },
-    "priceCurrency": "USD",
+    "priceCurrency": "BDT",
     "paymentCurrency": "BDT",
     "payment": "EPS",
     "support": {
@@ -85,7 +85,7 @@
       },
       {
         "q": "মূল্যে কী কী অন্তর্ভুক্ত?",
-        "a": "প্রদর্শিত মূল্য মার্কিন ডলারে, ৩০ দিনের জন্য এবং তাতে VAT ও ফি অন্তর্ভুক্ত। চেকআউটে সেদিনের বিনিময় হার ও টাকার পরিমাণ নিশ্চিত করার আগেই দেখানো হয়, এবং ঠিক সেই পরিমাণই কাটা হয়।"
+        "a": "প্রদর্শিত মূল্য টাকায় (BDT), ৩০ দিনের জন্য এবং তাতে VAT ও ফি অন্তর্ভুক্ত। চেকআউটে পরিমাণ নিশ্চিত করার আগেই দেখানো হয়, এবং ঠিক সেই পরিমাণই কাটা হয়।"
       },
       {
         "q": "কোন কোন লোকেশন আছে?",
@@ -109,7 +109,7 @@
       },
       {
         "q": "মূল্য কি টাকায়?",
-        "a": "মূল্য মার্কিন ডলারে দেখানো হয়। ওয়ালেট, টপ আপ ও ইনভয়েস বাংলাদেশি টাকায় (BDT); অর্ডারের টাকার পরিমাণ চেকআউটে সেদিনের বিনিময় হারে হিসাব করা হয়।"
+        "a": "মূল্য বাংলাদেশি টাকায় (BDT) দেখানো হয়, ওয়ালেট, টপ আপ ও ইনভয়েসও টাকায়। চেকআউটে যে পরিমাণ দেখেন, ঠিক সেই পরিমাণই ওয়ালেট থেকে কাটা হয়।"
       },
       {
         "q": "আমি কি VAT সহ কর চালানপত্র পাব?",
@@ -143,7 +143,7 @@
       },
       {
         "q": "What does the price include?",
-        "a": "A displayed price is in US dollars, for 30 days, and includes VAT and fees. At checkout you see the exchange rate of the day and the amount in taka before you confirm, and you are charged exactly that amount."
+        "a": "A displayed price is in taka (BDT), for 30 days, and includes VAT and fees. At checkout you see the amount before you confirm, and you are charged exactly that amount."
       },
       {
         "q": "Which locations are there?",
@@ -167,7 +167,7 @@
       },
       {
         "q": "Are prices in taka?",
-        "a": "Prices are shown in US dollars. Your wallet, top-ups and invoices are in Bangladeshi taka (BDT); the taka amount of an order is worked out at checkout with the exchange rate of the day."
+        "a": "Prices are shown in Bangladeshi taka (BDT), and so are your wallet, top-ups and invoices. The amount you see at checkout is exactly the amount taken from your wallet."
       },
       {
         "q": "Do I get a VAT invoice?",

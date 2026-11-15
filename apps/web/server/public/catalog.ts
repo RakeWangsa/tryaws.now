@@ -1,4 +1,4 @@
-import { customerUsd, priceCatalog } from "@tc/core";
+import { priceCatalog } from "@tc/core";
 import type { CatalogRowForPricing, Clock, PricedCatalogRow, Result } from "@tc/core";
 import { listCatalogProducts, readFeatureFlags, readMarketBasics, withTx } from "@tc/db";
 import type { Tx } from "@tc/db";
@@ -34,13 +34,11 @@ export interface PublicOffer {
   readonly id: string;
   readonly family: string;
   readonly region: string;
-  /** Paisa, the engine's `totalMinor`. Only for sorting: public pages show `priceUsd`, never BDT (WPU-Y4). */
-  readonly priceMinor: bigint;
   /**
-   * The same total in US dollars, as the decimal text of `customerUsd` (markup, VAT and fees included, the
-   * amount the checkout converts back to exactly `priceMinor` at the rate of that day).
+   * Paisa, the engine's `totalMinor` (markup, VAT and fees included): exactly the amount the checkout debits
+   * at today's rate. Public pages show it as taka, and only as taka (WPU-X16, owner decision of 2026-11-15).
    */
-  readonly priceUsd: string;
+  readonly priceMinor: bigint;
   readonly specs: PlanSpecs;
   /** The digits of the market setting (WPU-B6); Bengali pages use them, English pages use Latin. */
   readonly numerals?: "beng" | "latn";
@@ -94,7 +92,6 @@ export function offersOf(rows: readonly PricedCatalogRow[]): PublicOffer[] {
       family: row.family,
       region: row.region,
       priceMinor: row.priceBdt.totalMinor,
-      priceUsd: customerUsd(row.priceBdt).text,
       specs: planSpecsOf(row.specs),
     }))
     .sort((a, b) =>

@@ -1,5 +1,5 @@
 import { ACCESS_COOKIE, currentCustomer } from "@tc/auth";
-import { renewNow, verifyDraft } from "@tc/core";
+import { renewNow } from "@tc/core";
 import { customerRepos, newUuidV7, readFeatureFlag, withTx } from "@tc/db";
 import { notify } from "@tc/notify";
 import { cookies, headers } from "next/headers";
@@ -11,7 +11,6 @@ import type { ServerOpsDeps } from "./server-actions.ts";
 import type { SettingsDeps } from "./settings-actions.ts";
 import type { SupportActionDeps } from "./support-actions.ts";
 import type { SupportThreadDeps } from "./support-thread-actions.ts";
-import { openDraftToken } from "./draft-envelope.ts";
 import { mfaGuardedOrders } from "./mfa-gate.ts";
 import { consumeAllOrNothing } from "./place-limit.ts";
 import type { TotpDeps } from "./totp-actions.ts";
@@ -75,14 +74,6 @@ export async function orderActionDeps(): Promise<OrderActionDeps> {
                 });
               }),
           }),
-    // WPU-Y4: the draft was signed by this server a moment ago, and the date is only shown.
-    fxSetAtOf: (token) => {
-      if (runtime === null) return null;
-      const opened = openDraftToken(runtime.secrets, token);
-      if (opened === null) return null;
-      const verdict = verifyDraft(runtime.secrets, opened, runtime.now());
-      return verdict.ok ? (verdict.claims.fx?.at ?? null) : null;
-    },
   };
 }
 

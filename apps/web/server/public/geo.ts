@@ -228,7 +228,7 @@ export function factsJson(): string {
       statement: both((l) => SHELL[l].Aws.long),
       regions: regions("en"),
       prices: both((l) => PUBLIC[l].common.priceNote),
-      priceCurrency: "USD",
+      priceCurrency: "BDT",
       paymentCurrency: "BDT",
       payment: "EPS",
       support: both((l) => PUBLIC[l].support.lead),

@@ -22,17 +22,17 @@ describe("PlanCard", () => {
     expect(price.querySelector("span.period")?.textContent).toBe("/ 30 days");
   });
 
-  it("WPU-Y4: shows a dollar price instead of taka, with the mockup markup unchanged", () => {
+  it("WPU-X16: shows taka only, with the mockup markup unchanged, and refuses a number", () => {
     const { container } = renderKit(
-      <PlanCard name="Nano" priceUsd="5.85" specs={specs} cta={cta} />,
+      <PlanCard name="Nano" priceMinor={58500n} specs={specs} cta={cta} />,
       { locale: "en" },
     );
     const price = container.querySelector(".price.seccolor") as HTMLElement;
-    expect(price.textContent).toBe("$5.85 / 30 days");
-    expect(container.textContent).not.toContain("৳");
+    expect(price.textContent).toBe("৳585 / 30 days");
+    expect(container.textContent).not.toMatch(/\$|USD|dollar/i);
     expect(unknownClasses(container)).toEqual([]);
     expect(() =>
-      renderKit(<PlanCard name="N" priceUsd="5.85" priceMinor={1n} specs={specs} cta={cta} />),
+      renderKit(<PlanCard name="N" priceMinor={1 as unknown as bigint} specs={specs} cta={cta} />),
     ).toThrow(TypeError);
   });
 

@@ -9,24 +9,24 @@ export const publicEn: Same<typeof publicBn> = {
     crumb: { home: "Home" },
     entity: {
       statement:
-        "TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in US dollars and include VAT and fees; you pay in taka from a wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.",
+        "TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in taka (BDT) and include VAT and fees; you pay from a taka wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.",
     },
     updated: { label: "Last updated: <time>{date}</time>" },
     meta: {
       home: {
         title: "TryAWS.now: Cloud Server, built on Amazon Lightsail",
         description:
-          "Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in US dollars, wallet in taka, top up with EPS.",
+          "Prepaid cloud panel for Bangladesh. Cloud Server, built on Amazon Lightsail. Prices in taka, paid from a taka wallet, top up with EPS.",
       },
       pricing: {
         title: "Pricing: Cloud Server, built on Amazon Lightsail",
         description:
-          "Cloud Server plans with prices in US dollars for 30 days. Prices include VAT and fees. Built on Amazon Lightsail.",
+          "Cloud Server plans with prices in taka (BDT) for 30 days. Prices include VAT and fees. Built on Amazon Lightsail.",
       },
       cloudServers: {
         title: "Cloud Server, built on Amazon Lightsail",
         description:
-          "Cloud servers that run in the AWS Region Singapore or Mumbai. Plans, specifications and prices in US dollars. Built on Amazon Lightsail.",
+          "Cloud servers that run in the AWS Region Singapore or Mumbai. Plans, specifications and prices in taka. Built on Amazon Lightsail.",
       },
       help: {
         title: "Help and frequently asked questions",
@@ -54,9 +54,9 @@ export const publicEn: Same<typeof publicBn> = {
       seePricing: "See pricing",
       seePlans: "See plans",
       login: "Go to the panel",
-      // WPU-Y4 wording (approved by the owner on 2026-11-13): USD, taka at checkout, Amazon Lightsail.
+      // WPU-X16 (owner decision of 2026-11-15): prices in taka (BDT) only, taka wallet, Amazon Lightsail.
       priceNote:
-        "Prices are in US dollars (USD), for 30 days, and include VAT and fees. The amount in taka is worked out at checkout with the exchange rate of the day, and you see it before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail.",
+        "Prices are in taka (BDT), for 30 days, and include VAT and fees. You pay from your taka wallet, and you see the amount before you confirm. 100% AWS infrastructure. Built on Amazon Lightsail.",
       unavailableTitle: "Prices cannot be shown now",
       unavailableText: "The price list cannot be read at the moment. Try again in a little while.",
       noPlansTitle: "No plan is open yet",
@@ -144,7 +144,7 @@ export const publicEn: Same<typeof publicBn> = {
       },
       plansTitle: "Plans and prices",
       plansLead:
-        "Cloud Server plans, straight from the price list. Prices are in US dollars for 30 days and include VAT and fees.",
+        "Cloud Server plans, straight from the price list. Prices are in taka (BDT) for 30 days and include VAT and fees.",
       plansAll: "See all plans and locations",
       compareTitle: "How buying works here",
       compareLead: "Prepaid, in taka, from one panel.",
@@ -156,9 +156,9 @@ export const publicEn: Same<typeof publicBn> = {
           label: "Payment",
           here: "A taka wallet that you top up with EPS, paid in advance",
         },
-        usd: {
+        bdt: {
           label: "Price and bill",
-          here: "Price shown in US dollars, taken from your wallet in taka, VAT and fees included",
+          here: "Price shown in taka (BDT), taken from your taka wallet, VAT and fees included",
         },
         tax: {
           label: "Tax invoice",
@@ -191,9 +191,9 @@ export const publicEn: Same<typeof publicBn> = {
       regionAll: "All locations",
       regionCurrent: "(selected)",
       heading: "Pricing",
-      lead: "Cloud Server, built on Amazon Lightsail. Every price is for 30 days, in US dollars.",
+      lead: "Cloud Server, built on Amazon Lightsail. Every price is for 30 days, in taka (BDT).",
       answer:
-        "Every Cloud Server price on TryAWS.now is in US dollars for 30 days and already includes VAT and fees. At checkout you see the exchange rate of the day and the exact amount in taka before you confirm, and exactly that amount is taken from your wallet, which you top up with EPS.",
+        "Every Cloud Server price on TryAWS.now is in taka (BDT) for 30 days and already includes VAT and fees. At checkout you see the exact amount before you confirm, and exactly that amount is taken from your taka wallet, which you top up with EPS.",
       tabsLabel: "Product type",
       tabCloudServers: "Cloud Server",
       tableTitle: "Compare plans",
@@ -211,7 +211,7 @@ export const publicEn: Same<typeof publicBn> = {
       heading: "Cloud Server, built on Amazon Lightsail",
       lead: "Every Cloud Server is an Amazon Lightsail instance that runs in the AWS Region Singapore or Mumbai.",
       answer:
-        "A Cloud Server on TryAWS.now is an Amazon Lightsail instance that runs in the AWS Region Singapore or Mumbai. You pick a plan and a location, see the price in US dollars for 30 days with VAT and fees included, pay in taka from your wallet, and manage the server from the TryAWS.now panel.",
+        "A Cloud Server on TryAWS.now is an Amazon Lightsail instance that runs in the AWS Region Singapore or Mumbai. You pick a plan and a location, see the price in taka for 30 days with VAT and fees included, pay from your taka wallet, and manage the server from the TryAWS.now panel.",
       plansTitle: "Plans",
       featuresTitle: "What you get",
       features: {
@@ -268,7 +268,7 @@ export const publicEn: Same<typeof publicBn> = {
       heading: "Frequently asked questions",
       lead: "The questions we hear most about TryAWS.now and Amazon Lightsail.",
       answer:
-        "TryAWS.now sells Cloud Servers, built on Amazon Lightsail, in the AWS Region Singapore or Mumbai. You top up a wallet in taka with EPS and buy from it; prices are in US dollars, include VAT and fees, and are converted to taka at checkout. To buy, you verify your email and mobile and use an authenticator app.",
+        "TryAWS.now sells Cloud Servers, built on Amazon Lightsail, in the AWS Region Singapore or Mumbai. You top up a wallet in taka with EPS and buy from it; prices are in taka (BDT), include VAT and fees, and are taken from the wallet at checkout. To buy, you verify your email and mobile and use an authenticator app.",
       listTitle: "Questions and answers",
       stillTitle: "Did not find an answer?",
       stillText: "Tell us on the support page.",
@@ -295,7 +295,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         priceIncludes: {
           q: "What does the price include?",
-          a: "A displayed price is in US dollars, for 30 days, and includes VAT and fees. At checkout you see the exchange rate of the day and the amount in taka before you confirm, and you are charged exactly that amount.",
+          a: "A displayed price is in taka (BDT), for 30 days, and includes VAT and fees. At checkout you see the amount before you confirm, and you are charged exactly that amount.",
         },
         locations: {
           q: "Which locations are there?",
@@ -319,7 +319,7 @@ export const publicEn: Same<typeof publicBn> = {
         },
         bdt: {
           q: "Are prices in taka?",
-          a: "Prices are shown in US dollars. Your wallet, top-ups and invoices are in Bangladeshi taka (BDT); the taka amount of an order is worked out at checkout with the exchange rate of the day.",
+          a: "Prices are shown in Bangladeshi taka (BDT), and so are your wallet, top-ups and invoices. The amount you see at checkout is exactly the amount taken from your wallet.",
         },
         vatInvoice: {
           q: "Do I get a VAT invoice?",
