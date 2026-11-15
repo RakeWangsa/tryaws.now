@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
+import { FreshSignInLink } from "../../_family/FreshSignInLink.tsx";
 
 // The forms of the DNS record editor (WPU-G4, U8): field errors come from the server's own check (the
 // codes of packages/core/dns), a button is inert while its action runs, and every form carries the
@@ -38,6 +39,7 @@ function Notice({ state, onDone }: { state: FormState; onDone?: () => void }) {
       <div className="alert alert-danger text-start" role="alert">
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {t.has(`error.${state.error}`) ? t(`error.${state.error}`) : t("error.unavailable")}
+        <FreshSignInLink error={state.error} />
       </div>
     );
   }

@@ -88,6 +88,11 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
 // rewrite would break (the route handlers of app/pay/eps put the customer into the right locale).
 // `/dev/idp/` and `/dev/sms/` are the two dev outbox routes of the fakes (they answer 404 outside
 // the fake switches); they have no locale either.
+//
+// WPU-X23: the one panel route whose path holds a dot is /domains/<name> (a domain name is the segment). The dot
+// rule above skipped it, so the proxy never ran there: no locale header (next-intl then fell back to Bengali for the
+// whole page) and no redirect from /domains/x.click to /en. The dot rule now leaves out `(en|bn)/domains/...`.
 export const config = {
-  matcher: "/((?!api|trpc|_next|_vercel|pay/|dev/(?:idp|sms)/|.*\\..*).*)",
+  matcher:
+    "/((?!api|trpc|_next|_vercel|pay/|dev/(?:idp|sms)/|(?!(?:(?:en|bn)/)?domains/).*\\..*).*)",
 };

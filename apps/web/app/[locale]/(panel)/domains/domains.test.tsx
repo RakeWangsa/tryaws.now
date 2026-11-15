@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { STATE_RENDERERS } from "./mockup-states.tsx";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
+// WPU-X23: AutoRefresh renders nothing; the mock makes its `active` visible in the markup.
+vi.mock("../orders/[id]/AutoRefresh.tsx", () => ({
+  AutoRefresh: ({ active }: { active: boolean }) => <i data-auto-refresh={active ? "on" : "off"} />,
+}));
 
 const render = (id: string, locale: "bn" | "en" = "en"): string =>
   (STATE_RENDERERS[id] as (l: "bn" | "en") => string)(locale);
@@ -105,5 +109,13 @@ describe("/domains/[name]", () => {
   });
   it("answers like a missing one when the domain is not found (R8)", () => {
     expect(render("domain_detail.not_found")).toContain("Domain not found");
+  });
+});
+
+describe("/domains/[name] refresh (WPU-X23)", () => {
+  it("refreshes by itself while the registration is going, and stops when the state is final", () => {
+    expect(render("domain_detail.pending")).toContain('data-auto-refresh="on"');
+    expect(render("domain_detail.verified")).toContain('data-auto-refresh="off"');
+    expect(render("domain_detail.not_found")).not.toContain("data-auto-refresh");
   });
 });

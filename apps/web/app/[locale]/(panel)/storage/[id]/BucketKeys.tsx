@@ -3,6 +3,7 @@
 import { Button, CopyField, Field, SecretReveal } from "@tc/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { FreshSignInLink } from "../../_family/FreshSignInLink.tsx";
 
 // The key part of the Keys tab (16.10, U9). Client Component: it holds the secret key in memory for
 // the 60 seconds of the window and drops it when SecretReveal says the window ended. The secret is not
@@ -71,6 +72,7 @@ export function BucketKeys({
         <div className="alert alert-danger text-start" role="alert">
           <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
           {te.has(error) ? te(error) : te("unavailable")}
+          <FreshSignInLink error={error ?? undefined} />
         </div>
       ) : null}
       {secret !== null ? (

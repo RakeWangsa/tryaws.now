@@ -14,6 +14,9 @@ import { useTempDatabase } from "./temp-db";
 
 const t = useTempDatabase();
 let resourceId = "";
+let customerId = "";
+// WPU-X23: one live destroy per resource, so every destroy of a test gets a resource of its own.
+const freshResource = () => newResource(t.pool, customerId);
 // the end date of R13 is the settings row r13_approval_until (value: a JSON string); undefined removes the row
 const putUntil = async (value: unknown) => {
   await ensureMarket(t.pool, "BD");
@@ -25,7 +28,8 @@ const putUntil = async (value: unknown) => {
   );
 };
 beforeAll(async () => {
-  resourceId = await newResource(t.pool, await newCustomer(t.pool));
+  customerId = await newCustomer(t.pool);
+  resourceId = await newResource(t.pool, customerId);
   await putUntil(APPROVAL_UNTIL);
 });
 const NOW = new Date("2026-11-11T10:00:00Z");
@@ -81,8 +85,9 @@ describe("insertOperation", () => {
 
   it("[Review Focus 2] a destructive kind before the cutoff is stored as needs_approval with the flag, whatever the caller asks", async () => {
     for (const needsApproval of [undefined, false, true]) {
+      const rid = await freshResource();
       const r = await as("web_rw")((tx) =>
-        insertOperation(tx, input({ kind: "destroy", needsApproval }), NOW),
+        insertOperation(tx, input({ resourceId: rid, kind: "destroy", needsApproval }), NOW),
       );
       expect(r.state).toBe("needs_approval");
       expect(await stored(r.operationId)).toMatchObject({
@@ -94,8 +99,9 @@ describe("insertOperation", () => {
   });
 
   it("after the cutoff a destructive kind is queued without the flag, and a caller can flag any kind", async () => {
+    const lateResource = await freshResource();
     const late = await as("worker_rw")((tx) =>
-      insertOperation(tx, input({ kind: "destroy" }), CUTOFF),
+      insertOperation(tx, input({ resourceId: lateResource, kind: "destroy" }), CUTOFF),
     );
     expect(await stored(late.operationId)).toMatchObject({
       state: "queued",
@@ -112,8 +118,10 @@ describe("insertOperation", () => {
 
   it("the end date is read from the setting: moved earlier, moved later, missing and invalid (R13, R16)", async () => {
     const at = new Date("2026-11-20T00:00:00Z");
-    const stateAfter = async (i = input({ kind: "destroy" })) =>
-      (await as("worker_rw")((tx) => insertOperation(tx, i, at))).state;
+    const stateAfter = async () => {
+      const i = input({ resourceId: await freshResource(), kind: "destroy" });
+      return (await as("worker_rw")((tx) => insertOperation(tx, i, at))).state;
+    };
     try {
       await putUntil("2026-11-15T00:00:00.000Z");
       expect(await stateAfter()).toBe("queued");

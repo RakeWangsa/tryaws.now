@@ -156,6 +156,12 @@ export const DOMAIN_ANCHORS: readonly MockupAnchor[] = [
     classes: ["bg-seccolorstyle", "badge"],
   },
   {
+    state: "domain_detail.pending",
+    mockupFile: "template/cart.html",
+    why: "a registration still going keeps the cards and the state badge",
+    classes: ["bg-seccolorstyle", "badge"],
+  },
+  {
     state: "domain_detail.not_found",
     mockupFile: "template/404.html",
     why: CENTRED + ", back to the list",

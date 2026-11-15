@@ -129,7 +129,7 @@ export function PlaceForm({
                   <th scope="row" className="title border-start-0">
                     {t("term")}
                   </th>
-                  <td>{t("termValue")}</td>
+                  <td>{noun === "domain" ? t("termValueDomain") : t("termValue")}</td>
                 </tr>
               </tbody>
             </table>
@@ -151,7 +151,9 @@ export function PlaceForm({
                 </tr>
               </tbody>
             </table>
-            <p className="small seccolor mt-2">{t("debit.note")}</p>
+            <p className="small seccolor mt-2">
+              {noun === "domain" ? t("debit.noteDomain") : t("debit.note")}
+            </p>
           </div>
 
           {changed === undefined ? (

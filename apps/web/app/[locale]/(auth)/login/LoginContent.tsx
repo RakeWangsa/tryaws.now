@@ -12,12 +12,15 @@ export function LoginContent({
   next,
   banner,
   available,
+  reauth = false,
 }: {
   locale: Locale;
   /** The raw `next` of the query; it is checked here again before it reaches the form (U12). */
   next: unknown;
   banner: "verified" | "reset" | null;
   available: boolean;
+  /** WPU-X23: `?reauth=1` for a signed-in customer; the form posts it. */
+  reauth?: boolean;
 }) {
   const t = useTranslations("Auth");
   if (!available) return <AuthUnavailableCard locale={locale} title={t("meta.login")} />;
@@ -33,7 +36,7 @@ export function LoginContent({
             {t(banner === "verified" ? "login.verified" : "login.reset")}
           </AuthAlert>
         ) : null}
-        <LoginForm locale={locale} next={safeNext(next) ?? ""} />
+        <LoginForm locale={locale} next={safeNext(next) ?? ""} reauth={reauth} />
       </AuthBody>
     </AuthCard>
   );

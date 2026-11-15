@@ -336,6 +336,10 @@ export function makeHarness(): Harness {
       events.push("audit");
       audits.push({ customerId: session.customerId, action: "auth.sign_out", ip: meta.ip });
     },
+    async recordReauthRefused(session, meta) {
+      events.push("audit");
+      audits.push({ customerId: session.customerId, action: "auth.reauth_refused", ip: meta.ip });
+    },
     async sendOtp(session, input): Promise<Result<OtpSent>> {
       events.push("otp.send");
       const existing = otpChallenges.get(session.customerId);

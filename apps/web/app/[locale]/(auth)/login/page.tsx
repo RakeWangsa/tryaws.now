@@ -35,7 +35,13 @@ export default async function LoginPage({ params, searchParams }: Props) {
   const banner = isFlag(query["verified"]) ? "verified" : isFlag(query["reset"]) ? "reset" : null;
   return (
     <AuthPageFrame locale={locale} path="/login">
-      <LoginContent locale={locale} next={next} banner={banner} available={page.available} />
+      <LoginContent
+        locale={locale}
+        next={next}
+        banner={banner}
+        available={page.available}
+        reauth={reauth}
+      />
     </AuthPageFrame>
   );
 }

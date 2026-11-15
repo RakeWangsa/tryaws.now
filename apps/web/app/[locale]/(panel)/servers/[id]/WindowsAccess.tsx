@@ -3,6 +3,7 @@
 import { Button, CopyField, SecretReveal } from "@tc/ui";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { FreshSignInLink } from "../../_family/FreshSignInLink.tsx";
 
 // The Windows part of the Access tab (16.10, U9). Client Component: it holds the password in memory
 // for the 60 seconds of the window and drops it when SecretReveal says the window ended. The password
@@ -61,6 +62,7 @@ export function WindowsAccess({
         <div className="alert alert-danger text-start" role="alert">
           <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
           {t.has(`error.${error}`) ? t(`error.${error}`) : t("error.unavailable")}
+          <FreshSignInLink error={error} />
         </div>
       ) : null}
       {secret !== null ? (

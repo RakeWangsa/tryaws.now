@@ -17,6 +17,7 @@ import type { ServerManage as ManageData } from "../../../../../server/server-ma
 import type { ServerDetail } from "../../../../../server/servers-view.ts";
 import { ServerState, useRegionLabel, useSpecLine } from "../ServerParts.tsx";
 import type { HistoryScreen } from "../../../../../server/resource-history.ts";
+import { AutoRefresh } from "../../orders/[id]/AutoRefresh.tsx";
 import { useExtraTabs } from "./ExtrasTabs.tsx";
 import type { ExtrasBundle } from "./ExtrasTabs.tsx";
 import {
@@ -272,8 +273,11 @@ export function ServerDetailContent({
     </>
   );
 
+  // WPU-X23: while the server is being created or an action is in flight the page asks the server again by itself.
+  const refresh = server.state === "creating" || manage?.data.busy === true;
   return (
     <>
+      <AutoRefresh active={refresh} />
       <p className="mb-3">
         <a href={listHref}>
           <i className="fas fa-arrow-left me-1" aria-hidden="true" />

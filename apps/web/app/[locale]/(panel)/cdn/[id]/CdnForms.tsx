@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { startTransition, useActionState, useEffect, useState } from "react";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
+import { FreshSignInLink } from "../../_family/FreshSignInLink.tsx";
 
 // The forms of the CDN detail page (U8: a button inert while its action runs). Every form carries
 // the request id that the page made (R7). The destroy button opens the dialog of U10; the server
@@ -26,6 +27,7 @@ export function CdnNotice({ state }: { state: FormState }) {
       <div className="alert alert-danger text-start" role="alert">
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {t.has(`error.${state.error}`) ? t(`error.${state.error}`) : t("error.unavailable")}
+        <FreshSignInLink error={state.error} />
       </div>
     );
   }

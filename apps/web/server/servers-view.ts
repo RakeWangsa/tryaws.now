@@ -127,6 +127,19 @@ export function orderProgress(operationState: string | null): OrderProgress {
   }
 }
 
+/** WPU-X23: minutes after which a create that is still running gets the "taking longer than usual" line. */
+export const SLOW_ORDER_MINUTES = 10;
+
+/**
+ * WPU-X23. Whether a paid order is still being created after SLOW_ORDER_MINUTES, so the page can say so (the retries
+ * of 10.1 run behind the word "creating"). A date that cannot be read says nothing (no false alarm).
+ */
+export function orderIsSlow(progress: OrderProgress, createdAt: Date, now: Date): boolean {
+  if (progress !== "paid" && progress !== "creating") return false;
+  const age = now.getTime() - createdAt.getTime();
+  return Number.isFinite(age) && age > SLOW_ORDER_MINUTES * 60_000;
+}
+
 /** 16.11 step 4: the shortfall rounded up to whole taka (integers only, R4); null when covered. */
 export function shortfallTopUpTaka(totalMinor: bigint, balanceMinor: bigint): bigint | null {
   if (balanceMinor >= totalMinor) return null;
@@ -367,6 +380,8 @@ export interface OrderScreen {
   family?: string;
   /** WPU-B3: the automatic reversal of a failed create is posted (the order is `reversed`). */
   refunded?: boolean;
+  /** WPU-X23: still being created after SLOW_ORDER_MINUTES. */
+  slow?: boolean;
 }
 
 export async function loadOrder(session: CustomerSession, id: string): Promise<OrderScreen | null> {
@@ -390,11 +405,13 @@ export async function loadOrder(session: CustomerSession, id: string): Promise<O
     const resource = resourceId === null ? null : await repos.resources.get(resourceId);
     const operations = resource === null ? [] : await repos.operations.listForResource(resource.id);
     const create = operations.filter((op) => op.kind === "create").at(-1) ?? null;
+    const progress = orderProgress(create?.state ?? null);
     return {
       id: order.id,
       totalMinor: order.totalMinor,
       createdAt: order.createdAt,
-      progress: orderProgress(create?.state ?? null),
+      progress,
+      slow: orderIsSlow(progress, order.createdAt, new Date()),
       resourceId: resource?.id ?? null,
       serverName: resource === null ? "" : serverConfigOf(resource.config).displayName,
       refunded: order.status === "reversed",

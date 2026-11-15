@@ -6,6 +6,7 @@ import {
   rejectionAllowed,
   LEASE_SECONDS,
   MAX_ATTEMPTS,
+  REPEATED_REFUSAL_ATTEMPTS,
   RETRY_DELAYS_SECONDS,
   decideFailure,
   decideRefusal,
@@ -469,5 +470,84 @@ describe("rejectionAllowed: the admin refund of a renewal the registry may hold"
   it("every other kind, and a renewal that sent nothing (step null), keep the plain rejection", () => {
     expect(rejectionAllowed(target({ kind: "create", lastError: null }), at(0))).toBe(true);
     expect(rejectionAllowed(target({ step: null, lastError: null }), at(0))).toBe(true);
+  });
+});
+
+// WPU-X23. Lightsail answers InvalidInputException (row "validation", retryable) for many things; a create whose FIRST
+// step is refused again and again by AWS (the call was rejected, mayHaveActed false) cannot have made anything, and
+// the same input is sent every time: after one retry it ends failed with its refund, not after five tries and an
+// admin. Everything else keeps the five-attempt rule of 10.1.
+describe("WPU-X23 a create that AWS keeps refusing at its first step", () => {
+  const refused = {
+    code: "validation",
+    retryable: true,
+    poolFull: false,
+    awsErrorName: "InvalidInputException",
+    mayHaveActed: false,
+  } as const satisfies FailureFacts;
+  const SAME = "validation:InvalidInputException";
+  const run = (over: Record<string, unknown>) =>
+    decideFailure({
+      kind: "create",
+      step: null,
+      attempts: 0,
+      now: NOW,
+      facts: refused,
+      ...over,
+    } as Parameters<typeof decideFailure>[0]);
+
+  it("the constant is two failures: one retry", () => {
+    expect(REPEATED_REFUSAL_ATTEMPTS).toBe(2);
+  });
+  it("the first refusal waits for one retry", () => {
+    expect(run({ attempts: 0 })).toEqual({
+      to: "waiting",
+      attempts: 1,
+      nextRunAt: after(60),
+      lastError: "validation:InvalidInputException",
+    });
+  });
+  // Money review: only the SAME refusal twice in a row proves nothing was made. An earlier failure that may have
+  // reached AWS (a lost answer, a time-out, a 5xx, a lease that expired) can have made the instance; the second
+  // attempt's "name already in use" refusal then must never refund.
+  it.each([
+    ["an earlier time-out", "upstream_unavailable:ServiceException"],
+    ["an earlier lease that expired", "lease_expired"],
+    ["no earlier error recorded", null],
+    ["an earlier error that is not known", undefined],
+    ["another earlier refusal", "validation:ValidationException"],
+  ])("%s followed by a refusal stays waiting", (_name, lastError) => {
+    expect(run({ attempts: 1, lastError }).to).toBe("waiting");
+  });
+  it("the second refusal in a row ends failed (the hook refunds the order)", () => {
+    expect(run({ attempts: 1, lastError: "validation:InvalidInputException" })).toEqual({
+      to: "failed",
+      attempts: 2,
+      lastError: "validation:InvalidInputException",
+    });
+  });
+  // Security review: the previous failure alone is not enough. Only when the FIRST and the SECOND failure are both this
+  // refusal do we know nothing was made. From the third failure on, the first one is not on record (a time-out, then
+  // two refusals, would otherwise refund a create that may exist), so the usual five-attempt rule applies.
+  it("a third failure never takes the early refund, even after the same refusal", () => {
+    expect(run({ attempts: 2, lastError: SAME }).to).toBe("waiting");
+    expect(run({ attempts: 3, lastError: SAME }).to).toBe("waiting");
+  });
+  it("not at a later step, not when AWS may have acted, not when the step is unknown, not for another kind or code", () => {
+    expect(run({ attempts: 1, step: "wait_running", lastError: SAME }).to).toBe("waiting");
+    expect(run({ attempts: 1, step: undefined, lastError: SAME }).to).toBe("waiting");
+    expect(
+      run({ attempts: 1, lastError: SAME, facts: { ...refused, mayHaveActed: true } }).to,
+    ).toBe("waiting");
+    expect(
+      run({ attempts: 1, lastError: SAME, facts: { ...refused, mayHaveActed: undefined } }).to,
+    ).toBe("waiting");
+    expect(run({ attempts: 1, kind: "reboot", lastError: SAME }).to).toBe("waiting");
+    expect(run({ attempts: 1, lastError: SAME, facts: { ...refused, code: "conflict" } }).to).toBe(
+      "waiting",
+    );
+  });
+  it("a plain non-retryable validation error still fails a create at once", () => {
+    expect(run({ attempts: 0, facts: { ...refused, retryable: false } }).to).toBe("failed");
   });
 });

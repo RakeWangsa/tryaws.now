@@ -146,6 +146,18 @@ export function productionPorts(runtime: WebRuntime, clock: Clock): AuthPorts {
       });
     },
 
+    async recordReauthRefused(session, meta) {
+      await withTx(async (tx) => {
+        const written = await customerRepos(tx, session.customerId).audit.record({
+          action: "auth.reauth_refused",
+          metadata: { reason: "reauth_other_customer" },
+          ...(meta.ip !== undefined ? { ip: meta.ip } : {}),
+          ...(meta.userAgent !== undefined ? { userAgent: meta.userAgent } : {}),
+        });
+        if (!written.ok) throw new Error("auth: the refused sign-in again could not be audited");
+      });
+    },
+
     async sendOtp(session, input) {
       const otp = runtime.otp;
       if (otp === null) return { ok: false, error: "upstream_unavailable" };

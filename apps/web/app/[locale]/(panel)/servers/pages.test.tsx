@@ -41,6 +41,10 @@ vi.mock("next-intl/server", async () => {
       }),
   };
 });
+// WPU-X23: AutoRefresh renders nothing; the mock makes its `active` visible in the markup.
+vi.mock("../orders/[id]/AutoRefresh.tsx", () => ({
+  AutoRefresh: ({ active }: { active: boolean }) => <i data-auto-refresh={active ? "on" : "off"} />,
+}));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND");
@@ -321,6 +325,12 @@ describe("/servers/[id] management (WPU-G2)", () => {
     state.manage = manage({ state: "creating" });
     const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
     expect(en).not.toContain("Reboot");
+    // WPU-X23: and the page asks the server again by itself until the server is ready.
+    expect(en).toContain('data-auto-refresh="on"');
+  });
+  it("a ready server does not refresh by itself", async () => {
+    const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
+    expect(en).toContain('data-auto-refresh="off"');
   });
   it("the Connect tab shows the real login user, the key file of the customer's key and a correct command", async () => {
     const en = await renderPage(ServerDetailPage as never, "en", { id: SERVER_ID });
@@ -581,6 +591,22 @@ describe("/orders/[id]", () => {
     expect(await renderPage(OrderPage as never, "en", { id: "o1" })).toContain(
       `href="/en/servers/${SERVER_ID}"`,
     );
+  });
+
+  // WPU-X23: what the customer reads when a create is slow, and when it failed and the money is back.
+  it("says so when the create takes longer than usual, and when it failed with its refund", async () => {
+    state.order = order({ progress: "creating", slow: true });
+    const slow = await renderPage(OrderPage as never, "en", { id: "o1" });
+    expect(slow).toContain("taking longer than usual");
+    expect(slow).not.toMatch(/InvalidInput|AWS error|Exception/);
+    state.order = order({ progress: "creating" });
+    expect(await renderPage(OrderPage as never, "en", { id: "o1" })).not.toContain(
+      "taking longer than usual",
+    );
+    state.order = order({ progress: "failed", refunded: true });
+    const failed = await renderPage(OrderPage as never, "en", { id: "o1" });
+    expect(failed).toContain("We could not create your server. Your payment has been returned");
+    expect(failed).not.toMatch(/InvalidInput|Exception/);
   });
 
   it("answers a missing or foreign order with one not-found state", async () => {

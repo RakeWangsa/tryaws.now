@@ -8,12 +8,21 @@ import { AuthForm } from "../_components/AuthForm.tsx";
 import { signInAction } from "./actions.ts";
 
 /** The sign-in form of login.html: email, password, the yellow button and the forgot link. No "remember me" (16.9). */
-export function LoginForm({ locale, next }: { locale: Locale; next: string }) {
+export function LoginForm({
+  locale,
+  next,
+  reauth = false,
+}: {
+  locale: Locale;
+  next: string;
+  /** WPU-X23: the sign-in again of a signed-in customer; posted so the action runs the full flow. */
+  reauth?: boolean;
+}) {
   const t = useTranslations("Auth");
   return (
     <AuthForm
       action={signInAction}
-      hidden={{ locale, ...(next !== "" ? { next } : {}) }}
+      hidden={{ locale, ...(next !== "" ? { next } : {}), ...(reauth ? { reauth: "1" } : {}) }}
       submitLabel={t("login.submit")}
       submitIcon="fas fa-lock"
       failureExtra={

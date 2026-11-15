@@ -4,10 +4,13 @@ import { fileURLToPath } from "node:url";
 import { messageKeys, forbiddenWording } from "@tc/ui";
 import { knownClasses } from "@tc/ui/class-inventory";
 import type { Locale } from "@tc/ui/runtime";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { windowsAccessBn } from "../../../../../messages/windows-access-bn.ts";
 import { windowsAccessEn } from "../../../../../messages/windows-access-en.ts";
 import { html } from "../mockup-states.tsx";
+
+// WPU-X23: the detail page mounts AutoRefresh (a client component that reads the router).
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 import { detail } from "../servers.fixtures.ts";
 import { ServerDetailContent } from "./ServerDetailContent.tsx";
 import { WindowsAccess } from "./WindowsAccess.tsx";

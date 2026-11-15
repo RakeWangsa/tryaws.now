@@ -4167,6 +4167,13 @@ TASKS["WPU-X20"] = [
 // the messages parity; repo the journal and verify wiring.
 TASKS["WPU-X21"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X23 (second Gate B run, 2026-11-15): one live destroy per resource whatever the key (db unit test), the
+// step-up sign-in that runs the whole flow for the same customer (web auth tests), the "Sign in again" link on every
+// fresh-sign-in notice, a create that AWS refuses at its first step failing after one retry with its refund (core
+// policy tests), the proxy on /domains/<name> (web proxy test), the pages that refresh themselves, and the review
+// term of a domain. Database tests are left to CI.
+TASKS["WPU-X23"] = [specSync, baselineSync, lint, typecheck, format, core, provisioner, web, repo];
+
 // WPU-X24 (owner decision 2026-11-15, on the live GetBundles of ap-southeast-1): the plan type is read from the
 // bundle id prefix (none general purpose, m_ memory optimized, c_ compute optimized; win_ marks Windows). core runs
 // planTypeOf and the pinned export list; aws and catalog-sync the sync that stores it; web the plan-type row on

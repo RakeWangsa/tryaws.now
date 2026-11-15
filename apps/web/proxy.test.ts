@@ -183,8 +183,57 @@ describe("proxy: matcher", () => {
     }
   });
 
+  // WPU-X23: /en/domains/gatebtwo7k3.click rendered in Bengali because the dot kept the proxy off the path.
+  it("matches the domain pages, whose last segment is a domain name with dots, and still no file", async () => {
+    for (const path of [
+      "/en/domains/gatebtwo7k3.click",
+      "/en/domains/my-name.co.uk",
+      "/domains/gatebtwo7k3.click",
+      "/bn/domains/x.click",
+    ]) {
+      expect(matches(path), path).toBe(true);
+    }
+    for (const path of [
+      "/en/domains.json",
+      "/en/servers/x.click",
+      "/en/dns/a.b",
+      "/x/domains/a.b",
+    ]) {
+      expect(matches(path), path).toBe(false);
+    }
+  });
+
+  // WPU-X23: no panel route may fall outside the proxy, whatever its dynamic segment holds (a dot included),
+  // because outside it the request has no locale and the page falls back to Bengali.
+  it("matches every panel page with the kind of value its dynamic segment holds", async () => {
+    const { readdirSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const root = join(import.meta.dirname, "app", "[locale]", "(panel)");
+    const routes: string[] = [];
+    const walk = (dir: string, route: string): void => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+          // An id is a UUID (no dot); a domain name is the one segment that holds dots.
+          const value = route.endsWith("/domains") ? "sample.name.example" : "0191a000-0000";
+          const segment = entry.startsWith("[") ? value : entry;
+          walk(full, entry.startsWith("_") ? route : `${route}/${segment}`);
+        } else if (entry === "page.tsx") {
+          routes.push(route);
+        }
+      }
+    };
+    walk(root, "");
+    expect(routes.length).toBeGreaterThan(20);
+    for (const route of routes) {
+      expect(matches(`/en${route}`), route).toBe(true);
+    }
+  });
+
   it("is the next-intl matcher, without the return routes of the payment gateway", async () => {
-    expect(config.matcher).toBe("/((?!api|trpc|_next|_vercel|pay/|dev/(?:idp|sms)/|.*\\..*).*)");
+    expect(config.matcher).toBe(
+      "/((?!api|trpc|_next|_vercel|pay/|dev/(?:idp|sms)/|(?!(?:(?:en|bn)/)?domains/).*\\..*).*)",
+    );
   });
 
   it("does not match /pay/eps/*: the gateway returns there, no locale, no rewrite", async () => {

@@ -434,3 +434,77 @@ describe("signInCore with an authenticator (TOTP)", () => {
     expect(h.events.filter((e) => e.startsWith("idp."))).toEqual([]);
   });
 });
+
+// WPU-X23: the sign-in again of a signed-in customer (reauth=1) runs the whole flow and issues new tokens.
+describe("signInCore with reauth=1 (step-up sign-in)", () => {
+  const SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+  const signedIn = () => {
+    h.state.session = {
+      customerId: customer.customerId,
+      kycStatus: "none",
+      riskTier: "new",
+      locale: "en",
+      signedInAt: new Date(NOW.getTime() - 3_600_000),
+    };
+  };
+  const REAUTH = { ...FORM, reauth: "1", next: "/containers" };
+
+  it("runs the password step and sets new cookies for the same customer", async () => {
+    signedIn();
+    h.events.length = 0;
+    const out = await signInCore(h.ctx(), REAUTH);
+    expect(h.events.some((e) => e.startsWith("idp."))).toBe(true);
+    expect(out.effects.setCookies.map((c) => c.name)).toEqual(["__Host-tc_at", "__Host-tc_rt"]);
+    expect(out.state.status).toBe("done");
+  });
+
+  it("asks for the authenticator code when it is on, and sets no cookie before the code", async () => {
+    const user = getFakeState().users.get(FORM.email)!;
+    user.totpSecret = SECRET;
+    user.totpEnabled = true;
+    signedIn();
+    const first = await signInCore(h.ctx(), REAUTH);
+    expect(first.state).toMatchObject({ status: "error", code: "totp_required" });
+    expect(first.effects.setCookies).toEqual([]);
+    const second = await signInCore(h.ctx(), {
+      ...REAUTH,
+      totpCode: totpCodeAt(SECRET, NOW),
+      totpStep: "1",
+    });
+    expect(second.state.status).toBe("done");
+    expect(second.effects.setCookies).toHaveLength(2);
+  });
+
+  it("refuses another customer's credentials: no cookie, the old session is untouched", async () => {
+    const other = await h.signedUp("other@example.com");
+    expect(other.customerId).not.toBe(customer.customerId);
+    signedIn();
+    const out = await signInCore(h.ctx(), {
+      ...REAUTH,
+      email: "other@example.com",
+    });
+    expect(out.state).toMatchObject({ status: "error", code: "sign_in_failed" });
+    expect(out.effects.setCookies).toEqual([]);
+    // R9: one audit row, for the customer who is signed in, and nothing of the other account in it.
+    const refused = h.audits.filter((a) => a.action === "auth.reauth_refused");
+    expect(refused).toEqual([
+      { customerId: customer.customerId, action: "auth.reauth_refused", ip: "198.51.100.7" },
+    ]);
+    expect(JSON.stringify(h.audits)).not.toContain("other@example.com");
+    expect(JSON.stringify(h.audits)).not.toContain(other.customerId);
+  });
+
+  it("without reauth=1 a signed-in customer is still sent on", async () => {
+    signedIn();
+    h.events.length = 0;
+    const out = await signInCore(h.ctx(), { ...FORM, next: "/containers" });
+    expect(out.state.status).toBe("done");
+    expect(h.events.filter((e) => e.startsWith("idp."))).toEqual([]);
+  });
+
+  it("a hostile next stays off the U12 list after a reauth", async () => {
+    signedIn();
+    const out = await signInCore(h.ctx(), { ...REAUTH, next: "//evil.example" });
+    expect(JSON.stringify(out.state)).not.toContain("evil");
+  });
+});

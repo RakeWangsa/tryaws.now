@@ -52,11 +52,14 @@ export function OrderStatusContent({
     label: t(`step.${id}`, words),
     state: states[index] ?? "pending",
   }));
-  const refreshing = order.progress === "paid" || order.progress === "creating";
+  // WPU-X23: a delayed order is refreshed too (slowly), so it moves to ready or to failed with its refund by itself.
+  const refreshing =
+    order.progress === "paid" || order.progress === "creating" || order.progress === "delayed";
+  const refreshMs = order.progress === "delayed" ? 20_000 : 5000;
 
   return (
     <>
-      <AutoRefresh active={refreshing} />
+      <AutoRefresh active={refreshing} everyMs={refreshMs} />
       <Card className="mb-4">
         <StatusTimeline label={t("label")} steps={steps} />
       </Card>
@@ -92,6 +95,7 @@ export function OrderStatusContent({
         <div className="alert alert-info text-start" role="status">
           <i className="fas fa-hourglass-half me-2" aria-hidden="true" />
           {t("creating", words)}
+          {order.slow === true ? <p className="mt-2 mb-0">{t("slow", words)}</p> : null}
         </div>
       ) : null}
       {order.progress === "delayed" ? (
@@ -103,7 +107,7 @@ export function OrderStatusContent({
       {order.progress === "failed" ? (
         <div className="alert alert-danger text-start" role="alert">
           <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
-          {t("failed", words)}
+          {order.refunded === true ? t("failedRefunded", words) : t("failed", words)}
           {order.refunded === true ? (
             // WPU-B3: the reversal is posted: say so with the amount, not only that it will come.
             <p className="mt-2 mb-0">
