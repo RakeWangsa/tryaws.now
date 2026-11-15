@@ -59,6 +59,9 @@ describe("buildCatalogSyncDeps", () => {
       async distributionBundles() {
         return [];
       },
+      async containerPowers() {
+        return [];
+      },
       async databaseBlueprints() {
         return [];
       },
@@ -127,6 +130,7 @@ describe("buildCatalogSyncDeps", () => {
           instanceBlueprints: async () => [],
           distributionBundles: async () => [],
           databaseBlueprints: async () => [],
+          containerPowers: async () => [],
           tldPrices: async () => [],
         },
         syncImages: false,
@@ -160,6 +164,7 @@ describe("buildCatalogSyncDeps", () => {
         instanceBlueprints: async () => [],
         distributionBundles: async () => [],
         databaseBlueprints: async () => [],
+        containerPowers: async () => [],
         tldPrices: async (a) => {
           seen = a;
           return [];
