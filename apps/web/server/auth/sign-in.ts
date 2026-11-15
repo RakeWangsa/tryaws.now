@@ -13,8 +13,13 @@ type Form = Readonly<Record<string, unknown>>;
  */
 export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcome> {
   // 1. Authenticate: public by design; a signed-in customer goes on to the panel.
+  // WPU-X23: `reauth=1` is the sign-in again of a signed-in customer (a fresh sign-in is needed, 6.1). It runs the
+  // whole flow below (password, then the authenticator code when it is on) and issues new tokens, so the new
+  // session carries a new sign-in time. Without the flag a signed-in customer is sent on as before. The flag
+  // grants nothing: the new session must belong to the SAME customer (checked after the tokens are verified).
   const current = await ctx.ports.currentSession();
-  if (current !== null) return done(landingPath(localeOf(form), form["next"]));
+  const reauth = current !== null && form["reauth"] === "1";
+  if (current !== null && !reauth) return done(landingPath(localeOf(form), form["next"]));
 
   // 2. Authorize.
   const guard = gate(ctx);
@@ -126,6 +131,13 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
       return failure(ctx, "unavailable", { form });
     }
     return failure(ctx, "sign_in_failed", { form });
+  }
+
+  // WPU-X23: a sign-in again for another customer is refused, and nothing is stored (R16). The one
+  // sign_in_failed answer says nothing about who the other account is.
+  if (current !== null && reauth && signedIn.session.customerId !== current.customerId) {
+    logAuth(ctx, "auth.signin", "reauth_other_customer");
+    return failure(ctx, "sign_in_failed", { form: step });
   }
 
   // 6. Audit: a row for the customer. If it cannot be written, no cookie is set (R16).

@@ -198,12 +198,12 @@ export async function insertOperation(
   };
 }
 
-export interface LiveDestroy {
+export type LiveDestroy = {
   readonly operationId: string;
   readonly state: OperationState;
   readonly enqueueSeq: number;
   readonly needsApproval: boolean;
-}
+};
 
 /**
  * WPU-X23. The destroy of a resource that has not ended (queued, running, waiting, needs_approval or

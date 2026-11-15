@@ -228,6 +228,7 @@ function RestoreFromSnapshot({
             : te.has(`error.${error}`)
               ? te(`error.${error}`)
               : te("error.unavailable")}
+          <FreshSignInLink error={error} />
         </div>
       )}
       <Hidden values={{ region: database.region }} />
@@ -298,6 +299,7 @@ function RestoreToTime({
         <div className="alert alert-danger text-start" role="alert">
           <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
           {te.has(`error.${error}`) ? te(`error.${error}`) : te("error.unavailable")}
+          <FreshSignInLink error={error} />
         </div>
       )}
       <Hidden values={{ region: database.region, restoreSourceId: database.id }} />

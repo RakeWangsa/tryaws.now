@@ -215,6 +215,14 @@ describe("/login?reauth=1 (fresh sign-in)", () => {
     expect(hostile).not.toContain("evil.com");
     expect(hostile).not.toContain('name="next"');
   });
+  // WPU-X23: the form posts reauth=1, so the sign-in action runs the full flow (password, code).
+  it("the form carries reauth=1 as a hidden field, and only on a reauth page", async () => {
+    state.session = { customerId: "11111111-1111-4111-8111-111111111111" };
+    const html = await render(PAGES[0], "en", { reauth: "1" });
+    expect(html).toContain('name="reauth" value="1"');
+    state.session = null;
+    expect(await render(PAGES[0], "en")).not.toContain('name="reauth"');
+  });
   it("any other value of reauth still sends a signed-in customer to the panel; the other guest pages ignore it", async () => {
     state.session = { customerId: "11111111-1111-4111-8111-111111111111" };
     for (const bad of ["2", "true", "", "0"]) {

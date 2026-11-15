@@ -9,6 +9,7 @@ import type { FormState } from "../../../../../server/action-state.ts";
 import type { DiskOffer } from "../../../../../server/extras-view.ts";
 import type { PlanOption } from "../../../../../server/servers-view.ts";
 import { useSpecLine } from "../ServerParts.tsx";
+import { FreshSignInLink } from "../../_family/FreshSignInLink.tsx";
 
 // The forms of the server tabs Backups, Storage, Billing and Destroy (U8: field errors from the
 // server's own check, a button inert while its action runs). Every form carries the request id that
@@ -30,6 +31,7 @@ export function ActionNotice({ state }: { state: FormState }) {
       <div className="alert alert-danger text-start" role="alert">
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {t.has(`error.${state.error}`) ? t(`error.${state.error}`) : t("error.unavailable")}
+        <FreshSignInLink error={state.error} />
       </div>
     );
   }
@@ -131,6 +133,7 @@ export function RestoreForm({
             : te.has(`error.${error}`)
               ? te(`error.${error}`)
               : te("error.unavailable")}
+          <FreshSignInLink error={error} />
         </div>
       )}
       <input type="hidden" name="region" value={region} />
@@ -379,6 +382,7 @@ export function AddDiskForm({
             : te.has(`error.${error}`)
               ? te(`error.${error}`)
               : te("error.unavailable")}
+          <FreshSignInLink error={error} />
         </div>
       )}
       <input type="hidden" name="serverId" value={serverId} />

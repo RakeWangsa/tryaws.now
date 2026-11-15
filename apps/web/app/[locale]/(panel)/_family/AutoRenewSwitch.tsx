@@ -7,6 +7,7 @@ import { useActionState, useEffect } from "react";
 import { INITIAL_FORM_STATE } from "../../../../server/action-state.ts";
 import type { FormState } from "../../../../server/action-state.ts";
 import type { AutoRenewView } from "../../../../server/auto-renew-view.ts";
+import { FreshSignInLink } from "./FreshSignInLink.tsx";
 
 // WPU-Z14: the auto-renew switch of a detail page (and, `compact`, of one row of a table). The form says the
 // state it asks for (on or off), so a repeat of the same click sets the same value (R7). The server checks
@@ -26,6 +27,7 @@ function Notice({ state }: { state: FormState }) {
       <div className="alert alert-danger text-start" role="alert">
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {t.has(`error.${state.error}`) ? t(`error.${state.error}`) : t("error.unavailable")}
+        <FreshSignInLink error={state.error} />
       </div>
     );
   }
