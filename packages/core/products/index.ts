@@ -185,6 +185,8 @@ export {
   mapInstanceBundle,
   planIsSafe,
   planScopeSync,
+  planTypeOf,
+  type PlanType,
   type CatalogRowInput,
   type CatalogSpecs,
   type InstanceFamily,

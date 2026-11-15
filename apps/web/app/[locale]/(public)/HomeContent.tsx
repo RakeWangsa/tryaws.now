@@ -26,6 +26,7 @@ export function HomeContent({
   region,
   platform,
   blueprint,
+  type,
   signedIn = false,
 }: {
   locale: Locale;
@@ -40,6 +41,8 @@ export function HomeContent({
   platform?: string | undefined;
   /** The `blueprint` of the query: an image id of the chosen platform; anything else falls back to the first. */
   blueprint?: string | undefined;
+  /** WPU-X24: the `type` of the query (a plan type); anything else falls back to the first type that has plans. */
+  type?: string | undefined;
   /** A valid customer session exists: the create button then goes to the panel (a boolean only). */
   signedIn?: boolean;
 }) {
@@ -78,6 +81,7 @@ export function HomeContent({
                 region={region}
                 platform={platform}
                 blueprint={blueprint}
+                type={type}
                 signedIn={signedIn}
               />
             </div>

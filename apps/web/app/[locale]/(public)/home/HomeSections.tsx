@@ -1,12 +1,14 @@
 import { Button, EmptyState, MoneyText } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
+import type { PlanType } from "@tc/core";
 import type { PublicCatalog, PublicOffer } from "../../../../server/public/catalog.ts";
 import type { PublicImages } from "../../../../server/public/images.ts";
 import { locationName, offerNumerals, orderHref } from "../_components/offers.tsx";
 import type { Tr } from "../_components/offers.tsx";
 import { homeChooser, homeServices } from "./home-data.ts";
 import type { HomePlatform } from "./home-data.ts";
+import { writeLog } from "../../../../server/log.ts";
 
 // WPU-X18: the home page is a simple page that feels like the Lightsail console: a heading, the list of
 // services and a read-only preview of the create-instance choice (location, platform, plan). Server
@@ -169,6 +171,7 @@ export function Chooser({
   region,
   platform,
   blueprint,
+  type,
   signedIn,
 }: {
   t: Tr;
@@ -179,14 +182,29 @@ export function Chooser({
   region: string | undefined;
   platform: string | undefined;
   blueprint?: string | undefined;
+  /** WPU-X24: the plan type of the query. */
+  type?: string | undefined;
   signedIn: boolean;
 }) {
-  const chooser = homeChooser(catalog, images, { region, platform, blueprint });
+  const chooser = homeChooser(catalog, images, { region, platform, blueprint, type });
   const home = localePath(locale, "/");
   // A choice is a link (no script). Changing the location or the platform drops the image choice, which
   // belongs to one location and one platform.
-  const link = (r: string, pl: HomePlatform, bp?: string): string =>
-    `${home}?region=${r}&platform=${pl}${bp === undefined ? "" : `&blueprint=${encodeURIComponent(bp)}`}#chooser`;
+  // The plan type is kept across the other choices when it is not the default one (it falls back where it
+  // does not exist); the type row itself always names its type.
+  const keep =
+    chooser.state === "ok" && chooser.planType !== chooser.types[0] ? chooser.planType : null;
+  const link = (r: string, pl: HomePlatform, bp?: string, ty: PlanType | null = keep): string =>
+    `${home}?region=${r}&platform=${pl}${bp === undefined ? "" : `&blueprint=${encodeURIComponent(bp)}`}${ty === null ? "" : `&type=${ty}`}#chooser`;
+  // WPU-X24: plans hidden for want of a type are counted in one fixed log line, never listed (R14).
+  if (chooser.state === "ok" && chooser.hiddenUntyped > 0) {
+    writeLog({
+      event: "public_home_untyped_plans",
+      severity: "warn",
+      reason: "no_plan_type",
+      count: chooser.hiddenUntyped,
+    });
+  }
   const create = signedIn ? localePath(locale, "/servers/new") : orderHref(locale);
   return (
     <div id="chooser">
@@ -272,6 +290,31 @@ export function Chooser({
               </div>
               <p className="seccolor small mt-2 mb-0">{t("home.imageNote")}</p>
             </section>
+          )}
+          {chooser.types.length === 0 ? null : (
+            <nav aria-label={t("home.typeTitle")} className="mb-3">
+              <h3 className="h6 mergecolor">{t("home.typeTitle")}</h3>
+              {chooser.types.map((key) => (
+                <Button
+                  key={key}
+                  variant={key === chooser.planType ? "primary" : "secondary"}
+                  size="sm"
+                  href={link(chooser.region, chooser.platform, chooser.blueprint?.id, key)}
+                  className="me-2 mb-1"
+                  icon={key === chooser.planType ? "fas fa-check" : undefined}
+                >
+                  {t(`home.types.${key}`)}
+                  {key === chooser.planType ? (
+                    <span className="visually-hidden"> {t("pricing.regionCurrent")}</span>
+                  ) : null}
+                </Button>
+              ))}
+              {chooser.planType === null ? null : (
+                <p className="seccolor small mb-0">
+                  {t(`home.typeDescriptions.${chooser.planType}`)}
+                </p>
+              )}
+            </nav>
           )}
           <section aria-label={t("home.planTitle")}>
             <h3 className="h6 mergecolor">{t("home.planTitle")}</h3>

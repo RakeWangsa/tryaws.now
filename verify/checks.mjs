@@ -4167,6 +4167,24 @@ TASKS["WPU-X20"] = [
 // the messages parity; repo the journal and verify wiring.
 TASKS["WPU-X21"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X24 (owner decision 2026-11-15, on the live GetBundles of ap-southeast-1): the plan type is read from the
+// bundle id prefix (none general purpose, m_ memory optimized, c_ compute optimized; win_ marks Windows). core runs
+// planTypeOf and the pinned export list; aws and catalog-sync the sync that stores it; web the plan-type row on
+// the home chooser; repo the journal and verify wiring.
+TASKS["WPU-X24"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  core,
+  aws,
+  catalogSyncAll,
+  ui,
+  web,
+  repo,
+];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

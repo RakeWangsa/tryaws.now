@@ -130,6 +130,17 @@ export const publicBn = {
       imageSelect: "বেছে নিন",
       imageSelected: "বেছে নেওয়া",
       imageNote: "ইনস্ট্যান্স তৈরির সময় লগইনের পরে প্যানেলে ইমেজ আবার বেছে নেবেন।",
+      typeTitle: "প্ল্যানের ধরন বেছে নিন",
+      types: {
+        general_purpose: "জেনারেল পারপাস",
+        memory_optimized: "মেমোরি-অপটিমাইজড",
+        compute_optimized: "কম্পিউট-অপটিমাইজড",
+      },
+      typeDescriptions: {
+        general_purpose: "বেশিরভাগ কাজের জন্য সিপিইউ ও মেমোরির ভারসাম্য।",
+        memory_optimized: "প্রতি vCPU-তে বেশি মেমোরি, ইন-মেমোরি কাজ ও ডেটাবেসের জন্য।",
+        compute_optimized: "প্রতি GB-তে বেশি vCPU ক্ষমতা, ব্যাচ ও সিপিইউ-নির্ভর কাজের জন্য।",
+      },
       planTitle: "ইনস্ট্যান্সের প্ল্যান বেছে নিন",
       createInstance: "ইনস্ট্যান্স তৈরি করুন",
       cardTitle: "{ram} GB · {cpu} vCPU",

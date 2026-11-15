@@ -1,3 +1,4 @@
+import type { PlanType } from "@tc/core";
 import type { PublicCatalog, PublicOffer } from "../../../../server/public/catalog.ts";
 import type { PublicImage, PublicImages } from "../../../../server/public/images.ts";
 
@@ -100,6 +101,16 @@ export const HOME_PLATFORMS = [
 ] as const;
 export type HomePlatform = (typeof HOME_PLATFORMS)[number]["key"];
 
+/**
+ * WPU-X24: the plan types of the console, in the order of its row. The key is the `type` of the query and
+ * the key of the messages (`Public.home.types`).
+ */
+export const HOME_PLAN_TYPES: readonly PlanType[] = Object.freeze([
+  "general_purpose",
+  "memory_optimized",
+  "compute_optimized",
+]);
+
 export type HomeChooser =
   | { readonly state: "unavailable" }
   /** The catalog is readable but no instance family is open (R12). */
@@ -116,7 +127,13 @@ export type HomeChooser =
       readonly blueprints: readonly PublicImage[];
       /** The chosen image (the query's, else the first); null when there are none. */
       readonly blueprint: PublicImage | null;
-      /** At most HOME_CARD_LIMIT plans of the chosen platform at the chosen location, cheapest first. */
+      /** The plan types that have at least one plan here, in the order of the console. */
+      readonly types: readonly PlanType[];
+      /** The chosen type (the query's, else the first that has plans); null when no type has plans. */
+      readonly planType: PlanType | null;
+      /** Plans of the platform that have no type and are hidden because other plans have one (R16). */
+      readonly hiddenUntyped: number;
+      /** At most HOME_CARD_LIMIT plans of the chosen type, platform and location, cheapest first. */
       readonly offers: readonly PublicOffer[];
       /** How many plans there are in all; the rest is on /pricing. */
       readonly total: number;
@@ -134,6 +151,7 @@ export function homeChooser(
     readonly region?: string | undefined;
     readonly platform?: string | undefined;
     readonly blueprint?: string | undefined;
+    readonly type?: string | undefined;
   },
 ): HomeChooser {
   if (catalog.state !== "ok") return { state: "unavailable" };
@@ -164,7 +182,21 @@ export function homeChooser(
   const regions = regionsWith.filter((code) => availableAt(code).some((p) => p.key === chosen.key));
   const region = regions.find((code) => code === query.region) ?? regions[0];
   if (region === undefined) return { state: "closed" };
-  const atRegion = offersOf(chosen.family).filter((offer) => offer.region === region);
+  // WPU-X24. A plan without a type counts as general purpose only while no plan of the whole instance
+  // catalog has a type (the sync has not been rerun); after that it is hidden, never guessed (R16).
+  const anyTyped = ["linux_instance", "windows_instance"].some((family) =>
+    offersOf(family).some((offer) => (offer.planType ?? null) !== null),
+  );
+  const typeOf = (offer: PublicOffer): PlanType | null =>
+    offer.planType ?? (anyTyped ? null : "general_purpose");
+  const ofPlatform = offersOf(chosen.family).filter((offer) => offer.region === region);
+  const types = HOME_PLAN_TYPES.filter((type) =>
+    ofPlatform.some((offer) => typeOf(offer) === type),
+  );
+  const planType = types.find((type) => type === query.type) ?? types[0] ?? null;
+  const atRegion =
+    planType === null ? [] : ofPlatform.filter((offer) => typeOf(offer) === planType);
+  const hiddenUntyped = offersOf(chosen.family).filter((offer) => typeOf(offer) === null).length;
   const blueprints = chosen.kind === null ? [] : imagesAt(region, chosen.kind);
   return {
     state: "ok",
@@ -174,6 +206,9 @@ export function homeChooser(
     region,
     blueprints,
     blueprint: blueprints.find((b) => b.id === query.blueprint) ?? blueprints[0] ?? null,
+    types,
+    planType,
+    hiddenUntyped,
     offers: atRegion.slice(0, HOME_CARD_LIMIT),
     total: atRegion.length,
   };

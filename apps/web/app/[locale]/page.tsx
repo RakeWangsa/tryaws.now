@@ -24,9 +24,10 @@ export default async function HomePage({
     region?: string | string[];
     platform?: string | string[];
     blueprint?: string | string[];
+    type?: string | string[];
   }>;
 }) {
-  const { region, platform, blueprint } = (await searchParams) ?? {};
+  const { region, platform, blueprint, type } = (await searchParams) ?? {};
   const locale = await localeOf(params);
   const [catalog, images, nonce, signedIn] = await Promise.all([
     publicCatalog(),
@@ -45,6 +46,7 @@ export default async function HomePage({
         region={typeof region === "string" ? region : undefined}
         platform={typeof platform === "string" ? platform : undefined}
         blueprint={typeof blueprint === "string" ? blueprint : undefined}
+        type={typeof type === "string" ? type : undefined}
         signedIn={signedIn}
       />
     </PublicFrame>
