@@ -197,11 +197,15 @@ export { checkDiskSnapshotRestore, type DiskSnapshotRestoreCheck } from "./disk-
 export {
   CDN_FAMILY,
   CDN_SYNC_REGION,
+  CONTAINER_FAMILY,
   DB_BLUEPRINT_FAMILY,
+  mapContainerPower,
   mapDbBlueprint,
   mapDistributionBundle,
   type CdnBundleRow,
+  type ContainerPowerRow,
   type DbBlueprintRow,
+  type RawContainerPower,
   type RawDbBlueprint,
   type RawDistributionBundle,
 } from "./catalog-extra";

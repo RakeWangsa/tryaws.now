@@ -886,6 +886,17 @@ div.tc-modal-open {
 .tc-trust {
   padding: 24px 0;
 }
+/* WPU-X21: the official "Pay with EPS" badge: full width at 360 px, at most 560 px on a desktop. */
+.tc-eps-badge {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+}
+.tc-eps-badge-center {
+  margin-left: auto;
+  margin-right: auto;
+}
 /* The services list: a tidy column (name left, state right, one line each) beside the chooser, a
    wrapping row of chips at phone width. */
 .tc-console-nav {

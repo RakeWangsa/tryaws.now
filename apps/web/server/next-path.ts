@@ -39,6 +39,19 @@ function hasControlOrBackslash(text: string): boolean {
 }
 
 /**
+ * WPU-X20: the sign-in link of "please sign in again" (a fresh sign-in is needed, 6.1). `pathname` is the current
+ * path with its locale prefix; the locale is dropped and the rest must pass the U12 allow-list, else `next` is
+ * left out. `reauth=1` lets the login page open for a customer who is signed in (see auth-page.ts); it chooses
+ * nothing else: the recent-sign-in rule is checked on the new session as before.
+ */
+export function reauthHref(locale: string, pathname: string): string {
+  const stripped = pathname.replace(/^\/(bn|en)(?=\/|$)/, "");
+  const next = safeNext(stripped === "" ? "/" : stripped);
+  const base = `/${locale}/login?reauth=1`;
+  return next === null ? base : `${base}&next=${encodeURIComponent(next)}`;
+}
+
+/**
  * A relative path of the panel, normalised, or null. Refused: anything that is not text, is long,
  * holds a control character or a backslash, does not start with one "/", changes host when parsed,
  * or whose normalised path is not under a prefix of the list (so "/wallet/../admin" and "/walletx"

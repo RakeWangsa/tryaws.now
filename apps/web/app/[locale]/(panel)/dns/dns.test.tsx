@@ -7,6 +7,10 @@ import { pickEditing } from "../../../../server/dns-view.ts";
 import { DNS_ANCHORS } from "./mockup-anchors.ts";
 import { STATE_RENDERERS, zone } from "./mockup-states.tsx";
 
+// WPU-X20: AutoRefresh renders nothing; the mock makes its `active` visible in the markup.
+vi.mock("../orders/[id]/AutoRefresh.tsx", () => ({
+  AutoRefresh: ({ active }: { active: boolean }) => <i data-auto-refresh={active ? "on" : "off"} />,
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, replace: () => {} }) }));
 
 // WPU-G4: /dns and /dns/[id] follow the shared mockup (U1) and show their states (U11).
@@ -144,6 +148,11 @@ describe("/dns/[id]", () => {
     expect(out).toContain("change is on its way");
     expect(out).not.toContain('name="values"');
     expect(out).not.toContain("Delete the A record");
+  });
+  it("asks the server for the page again while a change or the creation is on its way (WPU-X20)", () => {
+    expect(render("zone.working")).toContain('data-auto-refresh="on"');
+    expect(render("zone.creating")).toContain('data-auto-refresh="on"');
+    expect(render("zone.ready")).toContain('data-auto-refresh="off"');
   });
   it("says that the last change failed, without the text of any error (U6)", () => {
     const out = render("zone.failed");

@@ -247,7 +247,8 @@ describe("heading, claims and wording (WPU-X18)", () => {
   });
 
   it("is a short page: the marketing sections of WPU-X13 are gone", () => {
-    const page = render(everything, "en");
+    // WPU-X21: the one image of the page is the official EPS badge; it is taken out before the check.
+    const page = render(everything, "en").replace(/<img[^>]*eps-pay-dark\.png[^>]*>/g, "");
     for (const gone of [
       "tc-hero-panel",
       "tc-step-number",

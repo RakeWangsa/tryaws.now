@@ -10,8 +10,10 @@ import {
   BLUEPRINT_FAMILY,
   CDN_FAMILY,
   CDN_SYNC_REGION,
+  CONTAINER_FAMILY,
   DB_BLUEPRINT_FAMILY,
   mapBlueprint,
+  mapContainerPower,
   mapDbBlueprint,
   mapDistributionBundle,
   planIsSafe,
@@ -19,6 +21,7 @@ import {
   type BlueprintRow,
   type CatalogRowInput,
   type CdnBundleRow,
+  type ContainerPowerRow,
   type DbBlueprintRow,
   type Clock,
   type Logger,
@@ -46,7 +49,7 @@ export interface ImageScopeWrite {
 /** WPU-B5: the rows of one CDN or database scope, written like the images (never deleted). */
 export interface ExtraScopeWrite {
   readonly region: string;
-  readonly rows: readonly (CdnBundleRow | DbBlueprintRow)[];
+  readonly rows: readonly (CdnBundleRow | DbBlueprintRow | ContainerPowerRow)[];
   readonly deactivate: readonly { family: string; awsId: string; region: string }[];
   readonly at: Date;
 }
@@ -90,6 +93,8 @@ export interface CatalogSyncDeps {
   /** WPU-B5: also sync the CDN bundles (us-east-1 only) and the database engines and versions. */
   readonly syncCdn?: boolean;
   readonly syncDbBlueprints?: boolean;
+  /** WPU-X20: also sync the container service powers (GetContainerServicePowers) of each Region. */
+  readonly syncContainers?: boolean;
   /** Time after which no new scope starts (open point 10). Default 240000. */
   readonly budgetMs?: number;
 }
@@ -127,6 +132,8 @@ export interface CatalogSyncReport {
   readonly cdn?: ExtraEntry;
   /** WPU-B5: present only when the database blueprints are synced; one entry per Region. */
   readonly dbBlueprints?: readonly ExtraEntry[];
+  /** WPU-X20: present only when the container powers are synced; one entry per Region. */
+  readonly containers?: readonly ExtraEntry[];
 }
 
 interface ExtraEntry {
@@ -310,7 +317,10 @@ export function createCatalogSyncHandler(
       event: string,
       region: string,
       family: string,
-      read: () => Promise<{ seen: number; rows: (CdnBundleRow | DbBlueprintRow)[] }>,
+      read: () => Promise<{
+        seen: number;
+        rows: (CdnBundleRow | DbBlueprintRow | ContainerPowerRow)[];
+      }>,
     ): Promise<ExtraEntry> => {
       try {
         if (overBudget()) throw new ScopeRefused("budget");
@@ -363,13 +373,30 @@ export function createCatalogSyncHandler(
       );
     }
 
+    const containers: ExtraEntry[] = [];
+    for (const region of deps.syncContainers ? deps.regions : []) {
+      containers.push(
+        await extra("catalog_sync_containers", region, CONTAINER_FAMILY, async () => {
+          const raw = await deps.source.containerPowers(account, region);
+          const rows: ContainerPowerRow[] = [];
+          for (const item of raw) {
+            const row = mapContainerPower(item, region);
+            if (row !== null && !rows.some((r) => r.awsId === row.awsId)) rows.push(row);
+          }
+          return { seen: raw.length, rows };
+        }),
+      );
+    }
+
     const tlds: CatalogSyncReport["tlds"] = deps.syncTlds ? await syncTldStep() : null;
 
     const failedScopes = regions.filter((r) => !r.ok).length;
     const tldFailed = tlds !== null && !tlds.ok && !tlds.skipped;
     const imagesFailed = images.filter((r) => !r.ok).length;
     const extraFailed =
-      (cdn !== undefined && !cdn.ok ? 1 : 0) + dbBlueprints.filter((r) => !r.ok).length;
+      (cdn !== undefined && !cdn.ok ? 1 : 0) +
+      dbBlueprints.filter((r) => !r.ok).length +
+      containers.filter((r) => !r.ok).length;
     const ok = failedScopes === 0 && imagesFailed === 0 && extraFailed === 0 && !tldFailed;
     deps.log({
       event: "catalog_sync",
@@ -394,6 +421,7 @@ export function createCatalogSyncHandler(
       tlds,
       ...(cdn === undefined ? {} : { cdn }),
       ...(deps.syncDbBlueprints ? { dbBlueprints } : {}),
+      ...(deps.syncContainers ? { containers } : {}),
     };
   };
 }

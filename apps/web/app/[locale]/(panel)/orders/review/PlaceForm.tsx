@@ -11,6 +11,7 @@ import {
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import { useActionState, useId, useState } from "react";
+import { orderNoun } from "../../../../../server/family-screens.ts";
 import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
 import { topUpHref } from "../../../../../server/topup-link.ts";
@@ -49,6 +50,10 @@ export function PlaceForm({
   const base = useId();
   const [state, formAction] = useActionState(action, INITIAL_FORM_STATE);
   const [accepted, setAccepted] = useState(false);
+  // WPU-X20: a server keeps its lines; every other family names its own product, and a global service has no Region.
+  const noun = orderNoun(review.family);
+  const isServer = noun === "server";
+  const globalNoun = noun === "cdn" || noun === "dnsZone" || noun === "domain" ? noun : null;
 
   // price_changed: the old and the new total are shown and the new token is the one that is posted.
   const changed = state.draft;
@@ -102,15 +107,23 @@ export function PlaceForm({
               <tbody>
                 <tr className="seccolor">
                   <th scope="row" className="title border-start-0">
-                    {t("item")}
+                    {isServer ? t("item") : t("itemOther")}
                   </th>
-                  <td>{t("itemValue", { name: review.name })}</td>
+                  <td>
+                    {isServer
+                      ? t("itemValue", { name: review.name })
+                      : t("itemValueOther", { name: review.name, product: t(`product.${noun}`) })}
+                  </td>
                 </tr>
                 <tr className="seccolor">
                   <th scope="row" className="title border-start-0">
                     {t("location")}
                   </th>
-                  <td>{regionLabel(review.region)}</td>
+                  <td>
+                    {globalNoun !== null
+                      ? t(`locationGlobal.${globalNoun}`)
+                      : regionLabel(review.region)}
+                  </td>
                 </tr>
                 <tr className="seccolor">
                   <th scope="row" className="title border-start-0">
@@ -160,7 +173,7 @@ export function PlaceForm({
               opens with auto-renew on: the line points to the switch on the page of the service, which
               every such family has. */}
           {autoRenew ? <p className="seccolor">{t("autoRenew")}</p> : null}
-          <p className="seccolor">{t("renewal")}</p>
+          <p className="seccolor">{isServer ? t("renewal") : t("renewalOther")}</p>
 
           {shortfallTaka !== null ? (
             <div className="alert alert-warning text-start" role="status">

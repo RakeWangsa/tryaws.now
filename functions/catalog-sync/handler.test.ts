@@ -3,6 +3,7 @@ import type {
   LogEvent,
   RawBlueprint,
   RawBundle,
+  RawContainerPower,
   RawDbBlueprint,
   RawDistributionBundle,
 } from "@tc/core";
@@ -127,7 +128,8 @@ function harness(
   const extras: {
     cdn: RawDistributionBundle[] | Error;
     db: Partial<Record<LightsailRegion, RawDbBlueprint[] | Error>>;
-  } = { cdn: [], db: {} };
+    containers: Partial<Record<LightsailRegion, RawContainerPower[] | Error>>;
+  } = { cdn: [], db: {}, containers: {} };
   let tldCalls = 0;
   const logs: LogEvent[] = [];
   const { store, rows } = fakeStore();
@@ -146,6 +148,11 @@ function harness(
     async distributionBundles() {
       if (extras.cdn instanceof Error) throw extras.cdn;
       return extras.cdn;
+    },
+    async containerPowers(_account, region) {
+      const answer = extras.containers[region];
+      if (answer instanceof Error) throw answer;
+      return answer ?? [];
     },
     async databaseBlueprints(_account, region) {
       const answer = extras.db[region];
@@ -556,6 +563,45 @@ describe("catalog-sync handler", () => {
       h.extras.cdn = [];
       await expect(h.run()).rejects.toThrow(FIXED);
       expect(h.rows.get("us-east-1|cdn|small_1_0")?.active).toBe(true);
+    });
+
+    // WPU-X20: the container powers of each Region (Gate B: no plan was for sale because nothing wrote them).
+    const power = (name: string, over: Partial<RawContainerPower> = {}): RawContainerPower => ({
+      powerId: `${name}-1`,
+      name,
+      priceUsd: "7",
+      cpuCount: 0.25,
+      ramSizeInGb: 0.5,
+      isActive: true,
+      ...over,
+    });
+
+    it("writes the container powers of each Region as scale-1 rows and skips a power it cannot trust", async () => {
+      const h = harness({ [A]: ONE, [B]: ONE }, { syncContainers: true });
+      h.extras.containers[A] = [power("nano"), power("micro", { priceUsd: "10" }), power("odd")];
+      h.extras.containers[B] = [power("nano")];
+      const report = await h.run();
+      expect(report.containers?.map((r) => [r.region, r.mapped, r.ok])).toEqual([
+        [A, 2, true],
+        [B, 1, true],
+      ]);
+      expect(h.rows.get(`${A}|container_service|nano`)).toEqual({ active: true, priceUsd: "7" });
+      expect(h.rows.has(`${A}|container_service|odd`)).toBe(false);
+      const again = await h.run();
+      expect(again.containers?.[0]).toMatchObject({ inserted: 0, deactivated: 0 });
+    });
+
+    it("off by default; an empty answer fails the run and keeps the rows (R16)", async () => {
+      const off = harness({ [A]: ONE, [B]: ONE });
+      off.extras.containers[A] = new Error("must not be called");
+      expect(await off.run()).not.toHaveProperty("containers");
+      const h = harness({ [A]: ONE, [B]: ONE }, { syncContainers: true });
+      h.extras.containers[A] = [power("nano")];
+      h.extras.containers[B] = [power("nano")];
+      await h.run();
+      h.extras.containers[A] = [];
+      await expect(h.run()).rejects.toThrow(FIXED);
+      expect(h.rows.get(`${A}|container_service|nano`)?.active).toBe(true);
     });
 
     it("a failing scope logs a fixed reason, does not stop the other Region and leaks nothing", async () => {

@@ -59,6 +59,7 @@ export function buildCatalogSyncDeps(env: CatalogSyncEnv): {
     syncImages: env.syncImages ?? true,
     syncCdn: env.syncExtras ?? true,
     syncDbBlueprints: env.syncExtras ?? true,
+    syncContainers: env.syncExtras ?? true,
   });
   return { handler };
 }

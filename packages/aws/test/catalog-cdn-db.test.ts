@@ -191,3 +191,67 @@ it("databaseBlueprints: a token that never ends fails the scope instead of loopi
     reason: "catalog_pages_exceeded",
   });
 });
+
+// WPU-X20. GetContainerServicePowers answers { powers: [{ powerId, name, price, cpuCount, ramSizeInGb, isActive }] }
+// (API reference, ContainerServicePower): name "nano", powerId "nano-1", price a number of USD per month.
+it("containerPowers: reads GetContainerServicePowers in the asked Region, price as decimal text", async () => {
+  const { aws, source } = setup();
+  aws.on(
+    "lightsail",
+    "GetContainerServicePowers",
+    lightsailOk({
+      powers: [
+        {
+          powerId: "nano-1",
+          name: "nano",
+          price: 7,
+          cpuCount: 0.25,
+          ramSizeInGb: 0.5,
+          isActive: true,
+        },
+        {
+          powerId: "micro-1",
+          name: "micro",
+          price: 10,
+          cpuCount: 0.25,
+          ramSizeInGb: 1,
+          isActive: false,
+        },
+      ],
+    }),
+  );
+  const out = await source.containerPowers(POOL, "ap-southeast-1");
+  expect(out).toEqual([
+    {
+      powerId: "nano-1",
+      name: "nano",
+      priceUsd: "7",
+      cpuCount: 0.25,
+      ramSizeInGb: 0.5,
+      isActive: true,
+    },
+    {
+      powerId: "micro-1",
+      name: "micro",
+      priceUsd: "10",
+      cpuCount: 0.25,
+      ramSizeInGb: 1,
+      isActive: false,
+    },
+  ]);
+});
+
+it("containerPowers: an answer without the powers list fails closed, an AWS error is an AwsError", async () => {
+  const first = setup();
+  first.aws.on("lightsail", "GetContainerServicePowers", lightsailOk({}));
+  await expect(first.source.containerPowers(POOL, "us-east-1")).rejects.toMatchObject({
+    reason: "catalog_response_invalid",
+  });
+  const second = setup();
+  second.aws.on(
+    "lightsail",
+    "GetContainerServicePowers",
+    lightsailError(500, "ServiceException", "raw aws text 210987654321"),
+  );
+  await expect(second.source.containerPowers(POOL, "us-east-1")).rejects.toBeInstanceOf(AwsError);
+});

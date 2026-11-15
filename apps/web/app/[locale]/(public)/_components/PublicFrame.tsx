@@ -5,6 +5,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { useFormatter, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { CONTENT_UPDATED } from "../../../../server/public/seo.ts";
+import { EpsBadge } from "../../_components/EpsBadge.tsx";
 
 /**
  * The frame of every public page: the public shell (menu, locale switch, footer with the AWS short
@@ -45,6 +46,7 @@ export function PublicFrame({
       domainsOpen={domainsOpen}
       announcement={null}
       supportPhone={null}
+      paymentBanner={<EpsBadge alt={t("epsBadge.alt")} />}
     >
       {children}
       {/* WPU-Z16: a dated "last updated" line on every public page (the date of facts.json). */}

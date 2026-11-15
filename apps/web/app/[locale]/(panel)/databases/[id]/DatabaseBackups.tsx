@@ -17,6 +17,7 @@ import { INITIAL_FORM_STATE } from "../../../../../server/action-state.ts";
 import type { FormState } from "../../../../../server/action-state.ts";
 import type { DatabaseDetail } from "../../../../../server/databases-view.ts";
 import { useSpecLine } from "../../servers/ServerParts.tsx";
+import { FreshSignInLink } from "../../_family/FreshSignInLink.tsx";
 
 // The Backups tab of /databases/[id] (WPU-G9): the snapshots with their price, a new snapshot, a new
 // database from a snapshot and a new database from a point in time. Every price here was computed on the
@@ -37,6 +38,7 @@ function Notice({ state }: { state: FormState }) {
       <div className="alert alert-danger text-start" role="alert">
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {t.has(`error.${state.error}`) ? t(`error.${state.error}`) : t("error.unavailable")}
+        <FreshSignInLink error={state.error} />
       </div>
     );
   }

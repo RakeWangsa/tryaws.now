@@ -16,6 +16,10 @@ export const publicBn = {
     },
     // WPU-Z16: the dated line at the foot of every public page (the same date is in facts.json).
     updated: { label: "সর্বশেষ হালনাগাদ: <time>{date}</time>" },
+    // WPU-X21: the alt text of the official "Pay with EPS" badge (footer, home page, top-up page).
+    epsBadge: {
+      alt: "EPS দিয়ে পেমেন্ট করুন: ভিসা, মাস্টারকার্ড, আমেরিকান এক্সপ্রেস, ডিবিবিএল নেক্সাস, ইউনিয়নপে এবং বাংলাদেশের মোবাইল ওয়ালেট ও ব্যাংক। EPS দ্বারা যাচাইকৃত।",
+    },
     meta: {
       home: {
         title: "TryAWS.now: ক্লাউড সার্ভার, Amazon Lightsail দিয়ে তৈরি",
