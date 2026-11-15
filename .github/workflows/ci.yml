@@ -7,7 +7,7 @@ name: ci
 #   deploy-production.yml before every production deploy, and here by hand (Run workflow) or on the main branch.
 # - The old last step `pnpm verify --quick` repeated lint, typecheck and the whole test suite on a clean checkout
 #   (it narrows only on uncommitted changes), so it is gone; the same checks run once above it.
-# - The secret scan reads the commits of the pull request, not the whole history.
+# - The secret scan lives in secret-scan.yml: it has no paths filter, so it also reads a notes-only change.
 on:
   pull_request:
     paths-ignore:
@@ -65,17 +65,5 @@ jobs:
       - name: Whole test suite (by hand)
         if: github.event_name != 'pull_request'
         run: pnpm test
-      - name: Secret scan (gitleaks)
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [ -n "$BASE_SHA" ]; then RANGE="--log-opts=${BASE_SHA}..HEAD"; else RANGE=""; fi
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/repo" \
-            -e GIT_CONFIG_COUNT=1 \
-            -e GIT_CONFIG_KEY_0=safe.directory \
-            -e GIT_CONFIG_VALUE_0=/repo \
-            ghcr.io/gitleaks/gitleaks:v8.30.1 \
-            git /repo --config /repo/.gitleaks.toml --redact --verbose $RANGE
       - run: pnpm audit --audit-level high
       - run: pnpm spec:check
