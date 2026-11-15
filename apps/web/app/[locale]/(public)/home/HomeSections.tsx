@@ -2,6 +2,7 @@ import { Button, EmptyState, MoneyText } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import type { PublicCatalog, PublicOffer } from "../../../../server/public/catalog.ts";
+import type { PublicImages } from "../../../../server/public/images.ts";
 import { locationName, offerNumerals, orderHref } from "../_components/offers.tsx";
 import type { Tr } from "../_components/offers.tsx";
 import { homeChooser, homeServices } from "./home-data.ts";
@@ -164,21 +165,28 @@ export function Chooser({
   t,
   locale,
   catalog,
+  images,
   region,
   platform,
+  blueprint,
   signedIn,
 }: {
   t: Tr;
   locale: Locale;
   catalog: PublicCatalog;
+  /** WPU-X22: the offered images; "unavailable" hides the image step (R16). */
+  images: PublicImages;
   region: string | undefined;
   platform: string | undefined;
+  blueprint?: string | undefined;
   signedIn: boolean;
 }) {
-  const chooser = homeChooser(catalog, { region, platform });
+  const chooser = homeChooser(catalog, images, { region, platform, blueprint });
   const home = localePath(locale, "/");
-  const link = (r: string, pl: HomePlatform): string =>
-    `${home}?region=${r}&platform=${pl}#chooser`;
+  // A choice is a link (no script). Changing the location or the platform drops the image choice, which
+  // belongs to one location and one platform.
+  const link = (r: string, pl: HomePlatform, bp?: string): string =>
+    `${home}?region=${r}&platform=${pl}${bp === undefined ? "" : `&blueprint=${encodeURIComponent(bp)}`}#chooser`;
   const create = signedIn ? localePath(locale, "/servers/new") : orderHref(locale);
   return (
     <div id="chooser">
@@ -234,6 +242,37 @@ export function Chooser({
               </Button>
             ))}
           </nav>
+          {chooser.blueprints.length === 0 ? null : (
+            <section aria-label={t("home.imageTitle")} className="mb-3">
+              <h3 className="h6 mergecolor">{t("home.imageTitle")}</h3>
+              <div className="row g-3">
+                {chooser.blueprints.map((image) => {
+                  const selected = image.id === chooser.blueprint?.id;
+                  return (
+                    <div key={image.id} className="col-md-6 col-xl-3">
+                      <div className="tc-mini bg-seccolorstyle">
+                        <p className="tc-mini-title mergecolor">
+                          {image.version === null ? image.name : `${image.name} ${image.version}`}
+                        </p>
+                        <p className="tc-mini-line seccolor">
+                          {t(image.kind === "app" ? "home.imageKindApp" : "home.imageKindOs")}
+                        </p>
+                        <Button
+                          variant={selected ? "primary" : "secondary"}
+                          href={link(chooser.region, chooser.platform, image.id)}
+                          className="tc-mini-btn"
+                          icon={selected ? "fas fa-check" : undefined}
+                        >
+                          {t(selected ? "home.imageSelected" : "home.imageSelect")}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="seccolor small mt-2 mb-0">{t("home.imageNote")}</p>
+            </section>
+          )}
           <section aria-label={t("home.planTitle")}>
             <h3 className="h6 mergecolor">{t("home.planTitle")}</h3>
             <div className="row g-3">

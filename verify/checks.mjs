@@ -4117,6 +4117,31 @@ TASKS["WPU-X18"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, 
 // /en), the public pages, SEO, sitemap and GEO-file tests; repo the journal and verify wiring.
 TASKS["WPU-X19"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X22 (owner decisions 2026-11-15): the admin console is English only (308 to /en), every notification
+// (e-mail, SMS, bell, Cognito mails) is English, and the home chooser shows platform and image steps from the
+// public image allow-list loader. The plan-type row is NOT done (Needs decision, JOURNEY). ui runs the locale
+// helpers; web the home page and the images loader; admin the proxy; notify and cognito-messages the English-only
+// rule; repo the journal and verify wiring.
+const cognitoMessagesFn = {
+  id: "cognito-messages-fn",
+  title: "functions/cognito-messages: handler, guard (English only)",
+  command: ["pnpm", "test", "--filter", "@tc/fn-cognito-messages", "--no-passWithNoTests"],
+};
+TASKS["WPU-X22"] = [
+  specSync,
+  baselineSync,
+  lint,
+  typecheck,
+  format,
+  ui,
+  uiKit,
+  web,
+  admin,
+  notifyAll,
+  cognitoMessagesFn,
+  repo,
+];
+
 // WPU-X20 (Gate B staging cycles, 2026-11-15): the WAF counts SizeRestrictions_QUERYSTRING on the review and
 // top-up paths only (repo: infra tests; web: the longest envelope URL), the catalog sync writes the container
 // plans (core mapper, aws source, catalog-sync handler), the review page names its own product, the DNS zone page

@@ -32,6 +32,7 @@ vi.mock("./server/public/load.ts", async () => {
   const catalog = await fixtures.openCatalog();
   return {
     publicCatalog: async () => catalog,
+    publicImages: async () => ({ state: "unavailable" as const }),
     publicOrigin: () => fixtures.ORIGIN,
     requestNonce: async () => state.nonce ?? undefined,
   };

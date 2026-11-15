@@ -21,6 +21,7 @@ export {
 } from "./templates/render";
 export type { RenderContext, RenderedEmail, RenderedInApp } from "./templates/render";
 export { COGNITO_MESSAGE_KINDS, renderCognitoMessage } from "./templates/cognito";
+export { notifyLocale, setNotifyEnglishOnly } from "./templates/locale";
 export type {
   CognitoMessageKind,
   CognitoPlaceholders,

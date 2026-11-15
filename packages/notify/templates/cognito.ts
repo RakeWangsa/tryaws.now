@@ -1,5 +1,6 @@
 import type { Locale } from "@tc/core";
 import { layoutEmail } from "./layout";
+import { notifyLocale } from "./locale";
 
 // The three emails that Cognito sends through the `cognito-messages` trigger (16.14): the email
 // verification code, the password reset code and an admin's one-time temporary password. They are
@@ -116,11 +117,11 @@ export function renderCognitoMessage(
   if (kind === "admin_temp_password" && username === undefined) {
     throw new TypeError("cognito message: bad placeholder");
   }
-  const text = COGNITO_TEXTS[kind][locale];
+  const text = COGNITO_TEXTS[kind][notifyLocale(locale)];
   // "{username}" stays as it is: Cognito replaces it.
   const fill = (s: string) => s.replace("{code}", placeholders.code);
   const { html } = layoutEmail({
-    locale,
+    locale: notifyLocale(locale),
     subject: text.subject,
     headline: text.headline,
     paragraphs: text.body.map(fill),
