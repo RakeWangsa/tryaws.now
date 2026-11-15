@@ -95,6 +95,17 @@ describe("bootstrapScript (10.4)", () => {
     expect(script).toContain("command -v conntrack >/dev/null 2>&1 || exit 1");
   });
 
+  it("[WPU-X28] a small instance gets a temporary swap file before the package install, removed after it", () => {
+    const swapOn = at(script, 'swapon "$TC_SWAP"');
+    expect(at(script, "fallocate -l 1G")).toBeLessThan(swapOn);
+    expect(swapOn).toBeLessThan(at(script, "apt-get update"));
+    expect(at(script, "dnf install")).toBeLessThan(at(script, 'swapoff "$TC_SWAP"'));
+    expect(at(script, 'swapoff "$TC_SWAP"')).toBeLessThan(at(script, "command -v nft"));
+    // only below 2 GB of memory, and nothing is made permanent
+    expect(script).toContain("-lt 2000000");
+    expect(script).not.toMatch(/fstab/);
+  });
+
   it("the rules come first; reading them back precedes the flush; the flush is fatal except 'nothing matched'", () => {
     const rules = script.slice(at(script, "TC_RULES_EOF'"), script.lastIndexOf("TC_RULES_EOF"));
     expect(at(rules, "nft -f -")).toBeLessThan(at(rules, "nft list table inet tc_isolation"));
