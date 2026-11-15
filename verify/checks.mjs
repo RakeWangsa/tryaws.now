@@ -4105,6 +4105,12 @@ TASKS["WPU-X13"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, 
 // customer message or GEO file), the review and the structured data; repo the journal and verify wiring.
 TASKS["WPU-X16"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X18 (owner request 2026-11-15): the home page is a simple page: the list of services and a read-only
+// preview of the create-instance choice (location, platform, plan in taka), set by links with a query and no
+// script. ui runs tc.css section 11; web runs the home page, public pages, anchors, messages and GEO-file
+// tests; repo the journal and verify wiring.
+TASKS["WPU-X18"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".

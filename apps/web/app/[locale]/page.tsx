@@ -10,8 +10,14 @@ export function generateMetadata({ params }: LocaleParams): Promise<Metadata> {
   return metadataOf(params, "/", "home");
 }
 
-/** `/`: the landing page of the public site (WPP-T1, 16.8). */
-export default async function HomePage({ params }: LocaleParams) {
+/** `/`: the simple home page of the public site (WPU-X18): services and a read-only instance chooser. */
+export default async function HomePage({
+  params,
+  searchParams,
+}: LocaleParams & {
+  searchParams?: Promise<{ region?: string | string[]; platform?: string | string[] }>;
+}) {
+  const { region, platform } = (await searchParams) ?? {};
   const locale = await localeOf(params);
   const [catalog, nonce, signedIn] = await Promise.all([
     publicCatalog(),
@@ -20,7 +26,15 @@ export default async function HomePage({ params }: LocaleParams) {
   ]);
   return (
     <PublicFrame signedIn={signedIn} locale={locale} path="/" {...menuOf(catalog)}>
-      <HomeContent locale={locale} catalog={catalog} origin={publicOrigin()} nonce={nonce} />
+      <HomeContent
+        locale={locale}
+        catalog={catalog}
+        origin={publicOrigin()}
+        nonce={nonce}
+        region={typeof region === "string" ? region : undefined}
+        platform={typeof platform === "string" ? platform : undefined}
+        signedIn={signedIn}
+      />
     </PublicFrame>
   );
 }

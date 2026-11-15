@@ -844,191 +844,72 @@ div.tc-modal-open {
   background-color: var(--tc-accent-pink-aa) !important;
 }
 
-/* ===== 11. Home page (WPU-X13) =====
-   Layout of the new home sections. They are built from the theme's own classes (top-header, pricing
-   special, sec-normal, bg-colorstyle, bg-seccolorstyle, getready, table compare, accordion faq); the
-   rules below only set spacing and the pieces the mockup has no class for: the hero panel, the trust
-   strip, the step and product tiles. Colors come from the theme's helper classes and the tokens of
-   section 2, so the dark and the light page both work. */
+/* ===== 11. Home page (WPU-X18) =====
+   The home page is a short heading, the list of services and a read-only preview of the create screen.
+   It is built from the theme's own classes (top-header, sidebar, pricing special, bg-colorstyle,
+   bg-seccolorstyle); the rules below only set spacing and the pieces the mockup has no class for: the
+   services list that wraps into a row at phone width, and the question of a FAQ pair. Colors come from
+   the theme's helper classes and the tokens of section 2, so the dark and the light page both work. */
 .tc-section {
-  padding: 56px 0;
+  padding: 32px 0 56px;
 }
 @media (min-width: 992px) {
   .tc-section {
-    padding: 88px 0;
+    padding: 48px 0 72px;
   }
 }
-.tc-section-head {
-  margin-bottom: 40px;
-  text-align: center;
-}
-/* Below the menu the theme gives a hero 200 px; the home hero has a panel beside the text, so less. */
+/* Below the menu the theme gives a hero 200 px; the home hero is only a heading and two buttons. */
 .tc-hero {
-  padding-top: 150px;
-  padding-bottom: 64px;
+  padding-top: 130px;
+  padding-bottom: 24px;
 }
 @media (max-width: 767.98px) {
   .tc-hero {
-    padding-top: 120px;
-    padding-bottom: 40px;
+    padding-top: 110px;
+    padding-bottom: 16px;
   }
 }
 /* The theme sets the heading at 80 px and capitalizes every word; a full sentence needs less. */
 .tc-hero-title {
-  font-size: 3rem;
+  font-size: 2.5rem;
   line-height: 1.15;
   text-transform: none;
 }
 @media (max-width: 767.98px) {
   .tc-hero-title {
-    font-size: 2rem;
+    font-size: 1.75rem;
   }
-}
-.tc-hero-lead {
-  font-size: 1.125rem;
-  line-height: 1.6;
-  margin-bottom: 1.75rem;
-}
-.tc-hero-panel {
-  border: 1px solid var(--tc-muted-on-dark);
-  border-radius: var(--tc-radius-card);
-  padding: 24px;
-}
-[data-background="light"] .tc-hero-panel {
-  border-color: var(--tc-muted-on-light);
-}
-/* The theme floats the language pills at the right edge of its hero; keep the panel clear of them. */
-@media (min-width: 992px) {
-  .tc-hero-panel {
-    margin-right: 72px;
-  }
-}
-.tc-hero-art {
-  color: var(--tc-text);
-  display: block;
-  height: auto;
-  margin: 0 0 20px;
-  width: 100%;
-}
-/* The SVG draws with currentColor and the accent, so one drawing works on both pages. */
-.tc-hero-art .tc-art-line {
-  fill: none;
-  stroke: currentcolor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 3;
-}
-.tc-hero-art .tc-art-unit {
-  fill: var(--tc-page);
-}
-.tc-hero-art .tc-art-accent {
-  fill: var(--tc-accent, #ee5586);
-}
-.tc-hero-art .tc-art-led {
-  fill: var(--tc-yellow);
-}
-.tc-hero-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.tc-hero-item {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-  padding: 6px 0;
-}
-.tc-hero-icon {
-  flex: none;
-  text-align: center;
-  width: 20px;
 }
 .tc-trust {
   padding: 28px 0;
 }
-.tc-trust-item {
-  align-items: flex-start;
+/* The services list: a column beside the chooser, a wrapping row of chips at phone width. */
+.tc-console-nav {
+  margin-top: 0;
+}
+.tc-svc-list {
   display: flex;
-  gap: 14px;
-  height: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.tc-trust-icon,
-.tc-step-number {
-  align-items: center;
-  background-color: var(--tc-yellow);
-  border-radius: 50%;
-  color: #212122;
-  display: inline-flex;
-  flex: none;
-  font-weight: 700;
-  height: 44px;
-  justify-content: center;
-  width: 44px;
+@media (min-width: 992px) {
+  .tc-svc-list {
+    display: block;
+  }
 }
-.tc-trust-title {
-  font-size: 1rem;
-  font-weight: 700;
-  margin: 0;
+.tc-svc-item {
+  padding: 4px 0;
 }
-.tc-trust-text {
-  margin: 0;
+.tc-plan-col {
+  margin-bottom: 30px;
 }
-.tc-tile {
-  border: 1px solid transparent;
-  border-radius: var(--tc-radius-card);
-  height: 100%;
-  padding: 28px;
-}
-.tc-tile-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin: 12px 0 8px;
-}
-.tc-tile-text {
-  margin: 0 0 12px;
-}
-.tc-step-label {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-/* A product that is not open is told by its label and its dashed border, not by color alone (U11). */
-.tc-tile-soon {
-  border-style: dashed;
-  border-color: var(--tc-muted-on-dark);
-}
-[data-background="light"] .tc-tile-soon {
-  border-color: var(--tc-muted-on-light);
+.tc-location-code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.9375rem;
 }
 /* The question of a FAQ pair stands out from its answer: larger and bold (the theme sets 14 px). */
 .accordion.faq .tc-faq-q {
   font-size: 1.125rem !important;
   font-weight: 700 !important;
   line-height: 1.4;
-}
-.tc-plan-more {
-  margin-top: 32px;
-  text-align: center;
-}
-.tc-plan-col {
-  margin-bottom: 30px;
-}
-.tc-compare-col {
-  width: 50%;
-}
-.tc-location-code {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 0.9375rem;
-}
-.tc-cta-band .tc-cta-title {
-  font-size: 2rem;
-}
-@media (max-width: 767.98px) {
-  .tc-cta-band .tc-cta-title {
-    font-size: 1.5rem;
-  }
-  .tc-cta-band .tc-cta-btn {
-    margin-bottom: 12px;
-  }
 }

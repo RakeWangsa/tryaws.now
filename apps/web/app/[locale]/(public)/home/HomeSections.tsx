@@ -1,200 +1,94 @@
 import { Button, EmptyState } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
-import { useFormatter } from "next-intl";
-import type { PublicCatalog, PublicOffer } from "../../../../server/public/catalog.ts";
-import { FaqList } from "../_components/FaqList.tsx";
-import { OfferCard, locationName } from "../_components/offers.tsx";
+import type { PublicCatalog } from "../../../../server/public/catalog.ts";
+import { OfferCard, locationName, orderHref } from "../_components/offers.tsx";
 import type { Tr } from "../_components/offers.tsx";
-import { HOME_FAQ_KEYS, HOME_REGIONS, homePlans, homeProducts } from "./home-data.ts";
+import { homeChooser, homeServices } from "./home-data.ts";
+import type { HomePlatform } from "./home-data.ts";
 
-// WPU-X13: the sections of the home page. Server Components, no script. Every class is a class of the
-// mockup (index.html, datacenter.html, hosting.html, faq.html) or a `tc-` class of tc.css section 11.
-// Every text is a message of `Public.home` (U5), and every claim in it is one the repository can show.
+// WPU-X18: the home page is a simple page that feels like the Lightsail console: a heading, the list of
+// services and a read-only preview of the create-instance choice (location, platform, plan). Server
+// Components, no script: a choice is a link with a query. Every class is a class of the mockup or a
+// `tc-` class of tc.css section 11. Every text is a message of `Public.home` (U5). Creating happens in the
+// panel after sign-in (R1): nothing here writes anything or calls AWS.
 
-/** The drawing of the hero panel: a rack of three server units. Decorative, made for this site. */
-function RackDrawing() {
-  return (
-    <svg
-      className="tc-hero-art"
-      viewBox="0 0 320 170"
-      width="320"
-      height="170"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {[0, 1, 2].map((row) => (
-        <g key={row} transform={`translate(0 ${row * 54})`}>
-          <rect className="tc-art-line tc-art-unit" x="8" y="8" width="304" height="42" rx="8" />
-          <line className="tc-art-line" x1="28" y1="29" x2="170" y2="29" />
-          <line className="tc-art-line" x1="28" y1="21" x2="110" y2="21" />
-          <circle className="tc-art-led" cx="268" cy="29" r="5" />
-          <circle className="tc-art-accent" cx="288" cy="29" r="5" />
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-export function Hero({ t, locale }: { t: Tr; locale: Locale }) {
+export function Hero({
+  t,
+  locale,
+  signedIn,
+  answer,
+}: {
+  t: Tr;
+  locale: Locale;
+  signedIn: boolean;
+  /** The answer block (the entity statement, WPU-Z16). */
+  answer: React.ReactNode;
+}) {
   const p = (path: string): string => localePath(locale, path);
   return (
     <section className="top-header sec-bg6 bg-colorstyle tc-hero">
       <div className="container">
-        <div className="row align-items-center">
-          <div className="col-lg-7">
-            <div className="wrapper">
-              <h1 className="heading mergecolor pb-2 tc-hero-title">{t("home.heroTitle")}</h1>
-              <p className="seccolor tc-hero-lead">{t("home.heroLead")}</p>
-              <Button variant="primary" href={p("/pricing")} className="me-2 mb-2">
-                {t("common.seePricing")}
+        <div className="wrapper">
+          <h1 className="heading mergecolor pb-2 tc-hero-title">{t("home.heroTitle")}</h1>
+          {answer}
+          {signedIn ? (
+            <Button variant="primary" href={p("/dashboard")} className="me-2 mb-2">
+              {t("common.login")}
+            </Button>
+          ) : (
+            <>
+              <Button variant="primary" href={p("/login")} className="me-2 mb-2">
+                {t("home.heroLogin")}
               </Button>
               <Button variant="secondary" href={p("/signup")} className="mb-2">
                 {t("home.heroSignup")}
               </Button>
-            </div>
-          </div>
-          <div className="col-lg-5 mt-5 mt-lg-0">
-            <div
-              className="tc-hero-panel bg-seccolorstyle"
-              role="group"
-              aria-label={t("home.panel.label")}
-            >
-              <RackDrawing />
-              <p className="h5 mergecolor mb-1">{t("home.panel.title")}</p>
-              <p className="seccolor small mb-3">{t("home.panel.engine")}</p>
-              <ul className="tc-hero-list seccolor">
-                <li className="tc-hero-item">
-                  <i className="tc-hero-icon fas fa-map-marker-alt c-pink" aria-hidden="true" />
-                  <span>{t("home.panel.location")}</span>
-                </li>
-                <li className="tc-hero-item">
-                  <i className="tc-hero-icon fas fa-wallet c-pink" aria-hidden="true" />
-                  <span>{t("home.panel.wallet")}</span>
-                </li>
-                <li className="tc-hero-item">
-                  <i className="tc-hero-icon fas fa-sliders-h c-pink" aria-hidden="true" />
-                  <span>{t("home.panel.panel")}</span>
-                </li>
-              </ul>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-const TRUST = [
-  { key: "aws", icon: "fas fa-cloud" },
-  { key: "eps", icon: "fas fa-wallet" },
-  { key: "regions", icon: "fas fa-globe-asia" },
-  { key: "support", icon: "fas fa-headset" },
-] as const;
-
-/** Four facts that are true today, and the entity statement (AEO answer block) under them. */
-export function TrustStrip({ t, answer }: { t: Tr; answer: React.ReactNode }) {
-  return (
-    <section className="bg-seccolorstyle tc-trust" aria-label={t("home.trustLabel")}>
-      <div className="container">
-        <div className="row g-4">
-          {TRUST.map((item) => (
-            <div key={item.key} className="col-sm-6 col-lg-3">
-              <div className="tc-trust-item">
-                <span className="tc-trust-icon">
-                  <i className={item.icon} aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="tc-trust-title mergecolor">{t(`home.trust.${item.key}.title`)}</p>
-                  <p className="tc-trust-text seccolor">{t(`home.trust.${item.key}.text`)}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="row mt-4">
-          <div className="col-lg-10">
-            <h2 className="h5 mergecolor">{t("home.aboutTitle")}</h2>
-            {answer}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const STEPS = ["topup", "plan", "ready"] as const;
-
-export function Steps({ t }: { t: Tr }) {
-  const format = useFormatter();
-  return (
-    <section className="sec-bg2 bg-colorstyle tc-section">
-      <div className="container">
-        <div className="tc-section-head">
-          <h2 className="section-heading mergecolor">{t("home.stepsTitle")}</h2>
-          <p className="section-subheading seccolor">{t("home.stepsLead")}</p>
-        </div>
-        <ol className="row g-4 list-unstyled mb-0">
-          {STEPS.map((key, index) => (
-            <li key={key} className="col-md-4">
-              <div className="tc-tile bg-seccolorstyle">
-                <span className="tc-step-number" aria-hidden="true">
-                  {format.number(index + 1)}
-                </span>
-                <p className="tc-step-label seccolor mt-3 mb-0">
-                  {t("home.stepLabel", { number: format.number(index + 1) })}
-                </p>
-                <h3 className="tc-tile-title mergecolor">{t(`home.steps.${key}.title`)}</h3>
-                <p className="tc-tile-text seccolor">{t(`home.steps.${key}.text`)}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </section>
-  );
-}
-
-/** The product grid. A product whose flag is off is "coming soon" and is never promised (R12). */
-export function Products({
+/** The services list (left column). A service whose flag is off is "coming soon" and is never promised (R12). */
+export function Services({
   t,
   locale,
   catalog,
-  statement,
 }: {
   t: Tr;
   locale: Locale;
   catalog: PublicCatalog;
-  statement: string;
 }) {
-  const products = homeProducts(catalog);
+  const services = homeServices(catalog);
   return (
-    <section className="bg-seccolorstyle tc-section">
-      <div className="container">
-        <div className="tc-section-head">
-          <h2 className="section-heading mergecolor">{t("home.productsTitle")}</h2>
-          <p className="section-subheading seccolor">{t("home.productsLead")}</p>
-        </div>
-        {products.length === 0 ? (
+    <aside className="sidebar sec-bg1 bg-seccolorstyle noshadow tc-console-nav">
+      <nav className="menu categories" aria-label={t("home.servicesLabel")}>
+        <h2 className="h5 mergecolor">
+          <b>{t("home.servicesTitle")}</b>
+        </h2>
+        <hr />
+        {services.length === 0 ? (
           <EmptyState
             title={t("common.unavailableTitle")}
             description={t("common.unavailableText")}
           />
         ) : (
-          <ul className="row g-4 list-unstyled mb-0">
-            {products.map((product) => (
-              <li key={product.key} className="col-sm-6 col-lg-4 col-xl-3">
-                <div
-                  className={
-                    product.open ? "tc-tile bg-colorstyle" : "tc-tile tc-tile-soon bg-colorstyle"
-                  }
-                >
-                  <i className={`${product.icon} fa-lg c-pink`} aria-hidden="true" />
-                  <h3 className="tc-tile-title mergecolor">
-                    {t(`home.products.${product.key}.title`)}
-                  </h3>
-                  <p className="tc-tile-text seccolor">{t(`home.products.${product.key}.text`)}</p>
-                  {product.open ? (
+          <ul className="list-unstyled mb-0 tc-svc-list">
+            {services.map((service) => {
+              const name = t(`home.services.${service.key}`);
+              return (
+                <li key={service.key} className="tc-svc-item">
+                  {service.path !== null ? (
+                    <a href={localePath(locale, service.path)} className="golink mergecolor">
+                      {name}
+                    </a>
+                  ) : (
+                    <span className="mergecolor">{name}</span>
+                  )}{" "}
+                  {service.open ? (
                     <span className="badge bg-success">
                       <i className="fas fa-check" aria-hidden="true" /> {t("home.productOpen")}
                     </span>
@@ -203,201 +97,119 @@ export function Products({
                       <i className="fas fa-clock" aria-hidden="true" /> {t("common.comingSoon")}
                     </span>
                   )}
-                  {product.path !== null ? (
-                    <p className="mt-3 mb-0">
-                      <a href={localePath(locale, product.path)} className="golink">
-                        {t("home.productsOpenLink", {
-                          name: t(`home.products.${product.key}.title`),
-                        })}
-                      </a>
-                    </p>
-                  ) : null}
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
-        <p className="seccolor text-center mt-4 mb-0">{statement}</p>
-      </div>
-    </section>
+      </nav>
+    </aside>
   );
 }
 
-export function Plans({ t, locale, catalog }: { t: Tr; locale: Locale; catalog: PublicCatalog }) {
-  const plans: readonly PublicOffer[] = homePlans(catalog);
-  const p = (path: string): string => localePath(locale, path);
+/** The read-only preview of the create screen. The prices are the catalog's, as taka only (WPU-X16). */
+export function Chooser({
+  t,
+  locale,
+  catalog,
+  region,
+  platform,
+  signedIn,
+}: {
+  t: Tr;
+  locale: Locale;
+  catalog: PublicCatalog;
+  region: string | undefined;
+  platform: string | undefined;
+  signedIn: boolean;
+}) {
+  const chooser = homeChooser(catalog, { region, platform });
+  const home = localePath(locale, "/");
+  const link = (r: string, pl: HomePlatform): string =>
+    `${home}?region=${r}&platform=${pl}#chooser`;
+  const create = signedIn ? localePath(locale, "/servers/new") : orderHref(locale);
   return (
-    <section className="pricing special sec-bg2 bg-colorstyle tc-section" id="plans">
-      <div className="container">
-        <div className="tc-section-head">
-          <h2 className="section-heading mergecolor">{t("home.plansTitle")}</h2>
-          <p className="section-subheading seccolor">{t("home.plansLead")}</p>
-        </div>
-        {plans.length > 0 ? (
-          <div className="row justify-content-center">
-            {plans.map((offer, index) => (
-              <div
-                key={offer.id}
-                className={
-                  plans.length >= 4
-                    ? "col-md-6 col-xl-3 tc-plan-col"
-                    : "col-md-6 col-lg-4 tc-plan-col"
-                }
+    <div id="chooser">
+      <h2 className="section-heading mergecolor">{t("home.chooserTitle")}</h2>
+      <p className="seccolor">{t("home.chooserLead")}</p>
+      {chooser.state === "unavailable" ? (
+        <EmptyState
+          title={t("common.unavailableTitle")}
+          description={t("common.unavailableText")}
+        />
+      ) : chooser.state === "closed" ? (
+        <EmptyState title={t("common.noPlansTitle")} description={t("common.noPlansText")} />
+      ) : (
+        <>
+          <nav aria-label={t("home.locationTitle")} className="mb-4">
+            <h3 className="h5 mergecolor">{t("home.locationTitle")}</h3>
+            {chooser.regions.map((code) => (
+              <Button
+                key={code}
+                variant={code === chooser.region ? "primary" : "secondary"}
+                href={link(code, chooser.platform)}
+                className="me-2 mb-2"
+                icon={code === chooser.region ? "fas fa-check" : undefined}
               >
-                <OfferCard
-                  t={t}
-                  locale={locale}
-                  offer={offer}
-                  recommended={plans.length >= 3 && index === 1}
-                  label={t("common.seePlans")}
-                  href={p("/products/cloud-servers")}
-                />
-              </div>
+                {locationName(t, code)}
+                {code === chooser.region ? (
+                  <span className="visually-hidden"> {t("pricing.regionCurrent")}</span>
+                ) : null}
+              </Button>
             ))}
-          </div>
-        ) : (
-          <EmptyState
-            title={catalog.state === "ok" ? t("common.noPlansTitle") : t("common.unavailableTitle")}
-            description={
-              catalog.state === "ok" ? t("common.noPlansText") : t("common.unavailableText")
-            }
-          />
-        )}
-        <p className="tc-plan-more">
-          <Button variant="secondary" href={p("/pricing")}>
-            {t("home.plansAll")}
-          </Button>
-        </p>
-        <p className="small seccolor text-center mt-3 mb-0">{t("common.priceNote")}</p>
-      </div>
-    </section>
-  );
-}
-
-const COMPARE = ["card", "bdt", "tax", "console"] as const;
-
-/** How buying works here: only statements the repository can show (EPS wallet, taka price with VAT and fees, tax invoice, panel). */
-export function Compare({ t }: { t: Tr }) {
-  return (
-    <section className="bg-seccolorstyle tc-section">
-      <div className="container">
-        <div className="tc-section-head">
-          <h2 className="section-heading mergecolor">{t("home.compareTitle")}</h2>
-          <p className="section-subheading seccolor">{t("home.compareLead")}</p>
-        </div>
-        <div className="table-responsive-lg">
-          <table className="table compare">
-            <caption className="visually-hidden">{t("home.compareCaption")}</caption>
-            <thead>
-              <tr>
-                <th scope="col" className="title mergecolor border-start-0 tc-compare-col">
-                  {t("home.compareFeature")}
-                </th>
-                <th scope="col" className="title mergecolor border-start-0 tc-compare-col">
-                  {t("home.compareHere")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {COMPARE.map((key) => (
-                <tr key={key}>
-                  <th scope="row" className="mergecolor">
-                    {t(`home.compare.${key}.label`)}
-                  </th>
-                  <td className="seccolor">
-                    <b className="c-black mergecolor">{t(`home.compare.${key}.here`)}</b>
-                  </td>
-                </tr>
+            <p className="seccolor small mb-0">
+              {t("home.locationRegion", { name: t(`home.regionNames.${chooser.region}`) })}
+              {", "}
+              <span className="tc-location-code">{chooser.region}</span>
+            </p>
+          </nav>
+          <nav aria-label={t("home.platformTitle")} className="mb-4">
+            <h3 className="h5 mergecolor">{t("home.platformTitle")}</h3>
+            {chooser.platforms.map((key) => (
+              <Button
+                key={key}
+                variant={key === chooser.platform ? "primary" : "secondary"}
+                href={link(chooser.region, key)}
+                className="me-2 mb-2"
+                icon={key === chooser.platform ? "fas fa-check" : undefined}
+              >
+                {t(`home.platforms.${key}`)}
+                {key === chooser.platform ? (
+                  <span className="visually-hidden"> {t("pricing.regionCurrent")}</span>
+                ) : null}
+              </Button>
+            ))}
+          </nav>
+          <section className="pricing special" aria-label={t("home.planTitle")}>
+            <h3 className="h5 mergecolor">{t("home.planTitle")}</h3>
+            <div className="row">
+              {chooser.offers.map((offer) => (
+                <div key={offer.id} className="col-md-6 col-xl-4 tc-plan-col">
+                  <OfferCard
+                    t={t}
+                    locale={locale}
+                    offer={offer}
+                    label={t("home.createInstance")}
+                    href={create}
+                  />
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
+            </div>
+          </section>
+          <p className="seccolor small">{t("home.createNote")}</p>
+        </>
+      )}
+    </div>
   );
 }
 
-export function Locations({ t, locale }: { t: Tr; locale: Locale }) {
-  const p = (path: string): string => localePath(locale, path);
+/** The trust line: what TryAWS.now is (the answer block of WPU-Z16 sits in the hero), the long AWS statement and the price note. */
+export function About({ t, statement }: { t: Tr; statement: string }) {
   return (
-    <section className="bg-colorstyle tc-section">
-      <div className="container">
-        <div className="tc-section-head">
-          <h2 className="section-heading mergecolor">{t("home.locationsTitle")}</h2>
-          <p className="section-subheading seccolor">{t("home.locationsText")}</p>
-        </div>
-        <div className="row g-4 justify-content-center">
-          {HOME_REGIONS.map((region) => (
-            <div key={region} className="col-md-6 col-lg-5">
-              <div className="tc-tile bg-seccolorstyle">
-                <i className="fas fa-map-marker-alt fa-lg c-pink" aria-hidden="true" />
-                <h3 className="tc-tile-title mergecolor">{locationName(t, region)}</h3>
-                <p className="tc-tile-text seccolor">
-                  {t("home.locationRegion", { name: t(`home.regionNames.${region}`) })}
-                </p>
-                <p className="tc-location-code seccolor">{region}</p>
-                <Button variant="secondary" href={`${p("/pricing")}?region=${region}`}>
-                  {t("home.locationCta", { location: locationName(t, region) })}
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-export function Faq({ t, locale }: { t: Tr; locale: Locale }) {
-  const items = HOME_FAQ_KEYS.map((key) => ({
-    question: t(`help.items.${key}.q`),
-    answer: t(`help.items.${key}.a`),
-  }));
-  return (
-    <section className="sec-bg2 bg-seccolorstyle tc-section">
-      <div className="container">
-        <div className="tc-section-head">
-          <h2 className="section-heading mergecolor">{t("home.faqTitle")}</h2>
-          <p className="section-subheading seccolor">{t("home.faqLead")}</p>
-        </div>
-        <FaqList items={items} />
-        <p className="text-center mt-4 mb-0">
-          <Button variant="secondary" href={localePath(locale, "/help")}>
-            {t("home.faqAll")}
-          </Button>
-        </p>
-      </div>
-    </section>
-  );
-}
-
-export function FinalCta({ t, locale }: { t: Tr; locale: Locale }) {
-  const p = (path: string): string => localePath(locale, path);
-  return (
-    <section className="getready sec-bg1 bg-seccolorstyle tc-cta-band">
-      <div className="container">
-        <div className="row align-items-center">
-          <div className="col-lg-8">
-            <div className="column-support-txt">
-              <h2 className="column-support-title tc-cta-title text-dark mergecolor">
-                {t("home.ctaTitle")}
-              </h2>
-              <div className="column-support-subtitle text-dark mergecolor">
-                {t("home.ctaText")}
-              </div>
-            </div>
-          </div>
-          <div className="col-lg-4">
-            <div className="btn-floats">
-              <Button variant="primary" href={p("/signup")} className="me-3 tc-cta-btn">
-                {t("home.heroSignup")}
-              </Button>
-              <Button variant="secondary" href={p("/pricing")} className="tc-cta-btn">
-                {t("common.seePricing")}
-              </Button>
-            </div>
-          </div>
-        </div>
+    <section className="bg-seccolorstyle tc-trust">
+      <div className="container text-center">
+        <p className="seccolor mb-2">{statement}</p>
+        <p className="small seccolor mb-0">{t("common.priceNote")}</p>
       </div>
     </section>
   );
