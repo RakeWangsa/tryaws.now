@@ -108,7 +108,10 @@ export const publicBn = {
         aws: { title: "১০০% AWS", text: "Amazon Lightsail দিয়ে তৈরি" },
         eps: { title: "EPS দিয়ে টপ আপ", text: "ওয়ালেট ও পেমেন্ট টাকায়" },
         regions: { title: "Singapore ও Mumbai", text: "দুটি AWS Region" },
-        support: { title: "প্যানেলে সাপোর্ট অনুরোধ", text: "বিক্রি, বিল ও সাপোর্ট TryAWS.now-এর" },
+        support: {
+          title: "বাংলায় সাপোর্ট",
+          text: "প্যানেলে সাপোর্ট অনুরোধ; বিক্রি, বিল ও সাপোর্ট TryAWS.now-এর",
+        },
       },
       stepsTitle: "কীভাবে কাজ করে",
       stepsLead: "তিনটি ধাপ, সব প্যানেল থেকেই।",
