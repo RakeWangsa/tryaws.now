@@ -12,6 +12,10 @@ export const publicEn: Same<typeof publicBn> = {
         "TryAWS.now is a prepaid cloud panel for people and businesses in Bangladesh. You buy Cloud Servers, built on Amazon Lightsail, that run in the AWS Region Singapore or Mumbai. Prices are in taka (BDT) and include VAT and fees; you pay from a taka wallet that you top up with EPS. TryAWS.now sells, bills and supports the service.",
     },
     updated: { label: "Last updated: <time>{date}</time>" },
+    // WPU-X21: the alt text of the official "Pay with EPS" badge (footer, home page, top-up page).
+    epsBadge: {
+      alt: "Pay with EPS: Visa, Mastercard, American Express, DBBL Nexus, UnionPay and Bangladeshi mobile wallets and banks. Verified by EPS.",
+    },
     meta: {
       home: {
         title: "TryAWS.now: Cloud Server, built on Amazon Lightsail",

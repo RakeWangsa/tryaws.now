@@ -215,7 +215,8 @@ describe("prices equal the pricing engine's output (WPP-T1, R4)", () => {
   it("is safe at 360 px: no inline style, no fixed width, the table scrolls inside its wrapper", () => {
     for (const id of ["pricing.data", "cloud.data", "home.data"]) {
       for (const locale of LOCALES) {
-        const page = all[id]!(locale);
+        // WPU-X21: the EPS badge declares its real size (1120 px wide); CSS sets it to 100% (max 560 px).
+        const page = all[id]!(locale).replace(/<img[^>]*eps-pay-dark\.png[^>]*>/g, "");
         expect(page, id).not.toMatch(/style="/);
         expect(page, id).not.toMatch(/\bwidth="\d{4,}/);
       }
