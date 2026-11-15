@@ -181,7 +181,9 @@ export function createLinuxInstanceAdapter(
       region: ctx.region,
     });
     if (spec === null || spec.publicKey === null) throw fail("validation");
-    // WPU-Y5 (e): ImportKeyPair documents publicKeyBase64 as "a base64-encoded public key of the ssh-rsa type". The
+    // Gate B (2026-11-15), verified live: despite its name, publicKeyBase64 takes the OpenSSH public key LINE as it
+    // is ("ssh-rsa AAAA..."); the base64 of that line or of its body is refused with "The format of this public key
+    // is not valid" (InvalidInputException), which stopped every server order with a key. WPU-Y5 (e): the
     // web accepts only such keys (2048 bits or more); a stored key of another type or size is refused here before
     // any AWS call (fail closed, R16). The create then ends failed with its refund: nothing was made yet.
     if (!isImportableSshKey(spec.publicKey)) throw fail("validation");
@@ -194,7 +196,7 @@ export function createLinuxInstanceAdapter(
       await lightsail.send(
         new ImportKeyPairCommand({
           keyPairName: keyName,
-          publicKeyBase64: Buffer.from(spec.publicKey, "utf8").toString("base64"),
+          publicKeyBase64: spec.publicKey.trim(),
         }),
       );
     }

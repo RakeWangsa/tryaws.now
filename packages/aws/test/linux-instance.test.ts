@@ -151,7 +151,10 @@ describe("create: key import, instance, static IP, ports", () => {
     const imp = aws.seen.find((r) => r.action === "ImportKeyPair")!;
     expect(JSON.parse(imp.body)).toEqual({
       keyPairName: awsResourceName("keypair", KID),
-      publicKeyBase64: Buffer.from(PUBLIC_KEY).toString("base64"),
+      // Verified live on 2026-11-15: Lightsail takes the OpenSSH public key line itself in publicKeyBase64 (the
+      // name is misleading); the base64 of the line, or of its body, is refused ("The format of this public key is
+      // not valid"), which stopped every server order of the Gate B run.
+      publicKeyBase64: PUBLIC_KEY,
     });
     const r2 = await adapter.aws.create(ctx("create_instance"));
     expect(r2).toMatchObject({ kind: "next", step: "wait_running", patch: { awsName: INSTANCE } });
