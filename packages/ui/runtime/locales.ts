@@ -55,6 +55,19 @@ export function englishOnlyTarget(pathname: string): string | null {
   return `/en${bare}`;
 }
 
+/**
+ * WPU-X22: the admin console is English only, home page included. Any path that is not `/en` or
+ * under `/en/` goes to the same path under `/en` (`/` to `/en`, `/bn/x` and `/x` to `/en/x`), or
+ * null when it is served as it is. Same U12 rule as `englishOnlyTarget`: only the request's own
+ * path is used and the caller keeps the query. To bring Bengali back to the console, drop the
+ * redirect in apps/admin/proxy.ts (see JOURNEY.md, WPU-X22).
+ */
+export function adminEnglishTarget(pathname: string): string | null {
+  if (pathname === "/en" || pathname.startsWith("/en/")) return null;
+  const bare = pathname === "/bn" || pathname.startsWith("/bn/") ? pathname.slice(3) : pathname;
+  return bare === "" || bare === "/" ? "/en" : `/en${bare}`;
+}
+
 export function localeHrefs(path: string): Record<Locale, string> {
   return { bn: localePath("bn", path), en: localePath("en", path) };
 }

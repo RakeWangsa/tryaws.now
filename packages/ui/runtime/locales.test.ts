@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_LOCALE,
   LOCALES,
+  adminEnglishTarget,
   englishOnlyTarget,
   isLocale,
   localeHrefs,
@@ -69,6 +70,22 @@ describe("splitLocale", () => {
     ["/x", "bn", "/x"],
   ] as const)("splitLocale(%s) is %s and %s", (pathname, locale, path) => {
     expect(splitLocale(pathname)).toEqual({ locale, path });
+  });
+});
+
+describe("adminEnglishTarget (WPU-X22)", () => {
+  it.each([
+    ["/", "/en"],
+    ["/bn", "/en"],
+    ["/bn/", "/en"],
+    ["/en", null],
+    ["/en/customers", null],
+    ["/customers", "/en/customers"],
+    ["/login", "/en/login"],
+    ["/bn/payments", "/en/payments"],
+    ["/english", "/en/english"],
+  ] as const)("adminEnglishTarget(%s) is %s", (pathname, expected) => {
+    expect(adminEnglishTarget(pathname)).toBe(expected);
   });
 });
 

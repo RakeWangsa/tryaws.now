@@ -22,7 +22,7 @@ function run(path: string, headers: Record<string, string> = {}) {
 
 describe("proxy: the IP allowlist (6.2, R10)", () => {
   it("outside the allowlist gets 403 with no body, no locale work and no CSP nonce", () => {
-    const response = run("/", { "cloudfront-viewer-address": "198.51.100.1:80" });
+    const response = run("/en", { "cloudfront-viewer-address": "198.51.100.1:80" });
     expect(response.status).toBe(403);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.has("x-middleware-request-x-nonce")).toBe(false);
@@ -46,7 +46,7 @@ describe("proxy: the IP allowlist (6.2, R10)", () => {
   });
 
   it("inside the allowlist the page is served", () => {
-    expect(run("/").status).toBeLessThan(300);
+    expect(run("/en").status).toBeLessThan(300);
   });
 });
 
@@ -58,7 +58,7 @@ function nonceOf(csp: string): string {
 
 describe("proxy: headers", () => {
   it("adds a report-only CSP and no enforced CSP header", () => {
-    const response = run("/");
+    const response = run("/en");
     expect(response.headers.get("content-security-policy-report-only")).toContain(
       "default-src 'self'",
     );
@@ -66,19 +66,19 @@ describe("proxy: headers", () => {
   });
 
   it("the CSP holds the nonce and the nonce differs between two requests", () => {
-    const first = nonceOf(run("/").headers.get("content-security-policy-report-only") ?? "");
-    const second = nonceOf(run("/").headers.get("content-security-policy-report-only") ?? "");
+    const first = nonceOf(run("/en").headers.get("content-security-policy-report-only") ?? "");
+    const second = nonceOf(run("/en").headers.get("content-security-policy-report-only") ?? "");
     expect(first).not.toBe(second);
   });
 
   it("forwards the nonce to the render", () => {
-    const response = run("/");
+    const response = run("/en");
     const csp = response.headers.get("content-security-policy-report-only") ?? "";
     expect(response.headers.get("x-middleware-request-x-nonce")).toBe(nonceOf(csp));
   });
 
   it("forwards the CSP to the render as a request header only", () => {
-    const response = run("/");
+    const response = run("/en");
     const forwarded = response.headers.get("x-middleware-request-content-security-policy");
     expect(forwarded).toBe(response.headers.get("content-security-policy-report-only"));
     expect(response.headers.has("content-security-policy")).toBe(false);
@@ -96,34 +96,55 @@ describe("proxy: headers", () => {
   });
 });
 
-describe("proxy: locale routing (16.7)", () => {
-  it("serves / without a redirect, also with Accept-Language: en", () => {
-    const variants: Record<string, string>[] = [{}, { "accept-language": "en-US,en;q=0.9" }];
-    for (const headers of variants) {
-      const response = run("/", headers);
-      expect(response.status).toBeLessThan(300);
-      expect(response.headers.has("location")).toBe(false);
+// WPU-X22 (owner, 2026-11-15): the admin console is English only. Whatever would be served in bn goes
+// with 308 to the same path under /en, query kept; the allowlist still comes first.
+describe("proxy: English only (WPU-X22)", () => {
+  it("redirects /, /x and /bn/x to /en, /en/x and /en/x with 308 and keeps the query", () => {
+    const cases: [string, string][] = [
+      ["/", "/en"],
+      ["/customers?q=a&page=2", "/en/customers"],
+      ["/bn/customers?q=a", "/en/customers"],
+      ["/bn", "/en"],
+      ["/login?next=/payments", "/en/login"],
+    ];
+    for (const [path, target] of cases) {
+      const response = run(path, { "accept-language": "bn" });
+      expect(response.status, path).toBe(308);
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.pathname, path).toBe(target);
+      expect(location.origin, path).toBe("http://localhost:3001");
+      expect(location.search, path).toBe(new URL(`http://x${path}`).search);
     }
   });
 
-  it("serves /en and /en/x", () => {
-    for (const path of ["/en", "/en/x"]) {
+  it("a hostile double-slash path stays on the same origin", () => {
+    const response = run("//evil.example/x");
+    const location = new URL(response.headers.get("location") ?? "");
+    expect(location.origin).toBe("http://localhost:3001");
+  });
+
+  it("serves /en and /en/x as they are", () => {
+    for (const path of ["/en", "/en/x", "/en/login"]) {
       const response = run(path);
       expect(response.status, path).toBeLessThan(300);
       expect(response.headers.has("location"), path).toBe(false);
     }
   });
 
-  it("redirects /bn to /", () => {
-    const response = run("/bn");
-    expect(response.status).toBe(307);
-    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/");
+  it("the redirect carries the security headers and a report-only CSP", () => {
+    const response = run("/customers");
+    expect(response.status).toBe(308);
+    expect(response.headers.get("content-security-policy-report-only")).toContain(
+      "default-src 'self'",
+    );
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.has("content-security-policy")).toBe(false);
   });
 
-  it("redirects /bn/x to /x", () => {
-    const response = run("/bn/x");
-    expect(response.status).toBe(307);
-    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/x");
+  it("the allowlist is checked before the redirect", () => {
+    const response = run("/customers", { "cloudfront-viewer-address": "198.51.100.1:80" });
+    expect(response.status).toBe(403);
+    expect(response.headers.has("location")).toBe(false);
   });
 
   it("sets no locale cookie", () => {
@@ -132,62 +153,20 @@ describe("proxy: locale routing (16.7)", () => {
       expect(cookie, path).not.toContain("NEXT_LOCALE");
     }
   });
-});
 
-// The loop of WPU-T4: the proxy rewrites `/x` to `/bn/x`. When the server hands that rewrite to the
-// proxy again (the router takes it for a request of its own), next-intl sees the default locale in
-// the path and redirects `/bn/x` back to `/x`: a 307 to the very path the visitor asked for. The
-// second pass has to be harmless: it serves the request and never redirects.
-describe("proxy: its own rewrite, handed to it again (no self-redirect)", () => {
-  // What the server forwards to the second pass: the rewrite target, the request headers and the
-  // `x-middleware-request-*` overrides of the first pass applied to them.
-  function secondPass(path: string) {
-    const first = run(path);
-    const target = first.headers.get("x-middleware-rewrite");
-    if (target === null) throw new Error(`${path} is not rewritten`);
-    const headers: Record<string, string> = { "cloudfront-viewer-address": ALLOWED };
-    for (const [name, value] of first.headers) {
-      if (name.startsWith("x-middleware-request-")) {
-        headers[name.slice("x-middleware-request-".length)] = value;
-      }
-    }
-    return proxy(new NextRequest(target, { headers }));
-  }
-
-  it("a path of the default locale and an unknown path are served by the second pass", () => {
-    for (const path of ["/", "/customers", "/this-path-does-not-exist", "/login"]) {
-      const response = secondPass(path);
-      expect(response.status, path).toBeLessThan(300);
-      expect(response.headers.has("location"), path).toBe(false);
-    }
-  });
-
-  it("the second pass keeps the security headers and a fresh nonce", () => {
-    const response = secondPass("/this-path-does-not-exist");
-    expect(response.headers.get("content-security-policy-report-only")).toContain(
-      "default-src 'self'",
+  it("a request that already went through the proxy is served, the allowlist still applies", () => {
+    const served = proxy(
+      new NextRequest("http://localhost:3001/en/x", {
+        headers: { "x-tc-proxied": "1", "cloudfront-viewer-address": ALLOWED },
+      }),
     );
-    expect(response.headers.get("x-frame-options")).toBe("DENY");
-    expect(response.headers.get("x-middleware-request-x-nonce")).toBeTruthy();
-  });
-
-  it("the second pass still checks the allowlist", () => {
-    const first = run("/this-path-does-not-exist");
-    const target = first.headers.get("x-middleware-rewrite") ?? "";
-    const response = proxy(
-      new NextRequest(target, {
+    expect(served.status).toBeLessThan(300);
+    const denied = proxy(
+      new NextRequest("http://localhost:3001/en/x", {
         headers: { "x-tc-proxied": "1", "cloudfront-viewer-address": "198.51.100.1:80" },
       }),
     );
-    expect(response.status).toBe(403);
-  });
-
-  it("a visitor request for /bn/x is still redirected to /x", () => {
-    const response = run("/bn/this-path-does-not-exist");
-    expect(response.status).toBe(307);
-    expect(new URL(response.headers.get("location") ?? "").pathname).toBe(
-      "/this-path-does-not-exist",
-    );
+    expect(denied.status).toBe(403);
   });
 });
 

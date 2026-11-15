@@ -1,6 +1,12 @@
 import createMiddleware from "next-intl/middleware";
 import { NextRequest, NextResponse } from "next/server";
-import { CSP_REPORT_ONLY_HEADER, CSP_REPORT_PATH, buildCsp, createNonce } from "@tc/ui/runtime";
+import {
+  CSP_REPORT_ONLY_HEADER,
+  CSP_REPORT_PATH,
+  adminEnglishTarget,
+  buildCsp,
+  createNonce,
+} from "@tc/ui/runtime";
 import { routing } from "./i18n/routing.ts";
 import { adminGate } from "./server/gate.ts";
 
@@ -32,9 +38,20 @@ export default function proxy(request: NextRequest): NextResponse {
   requestHeaders.set("Content-Security-Policy", csp);
   requestHeaders.set(PROXIED_HEADER, "1");
 
-  const response = again
-    ? NextResponse.next({ request: { headers: requestHeaders } })
-    : handleI18n(new NextRequest(request, { headers: requestHeaders }));
+  // WPU-X22 (owner, 2026-11-15): the admin console is English only. Any path that would be served in
+  // bn (`/`, `/x`, `/bn/x`) goes with 308 to the same path under /en; only the pathname changes on a
+  // clone of the request URL, so the origin is the request's own and the query is kept (U12).
+  const english = again ? null : adminEnglishTarget(request.nextUrl.pathname);
+  let response: NextResponse;
+  if (english !== null) {
+    const target = request.nextUrl.clone();
+    target.pathname = english;
+    response = NextResponse.redirect(target, 308);
+  } else if (again) {
+    response = NextResponse.next({ request: { headers: requestHeaders } });
+  } else {
+    response = handleI18n(new NextRequest(request, { headers: requestHeaders }));
+  }
 
   response.headers.set(CSP_REPORT_ONLY_HEADER, csp);
   response.headers.set("Reporting-Endpoints", `csp="${CSP_REPORT_PATH}"`);

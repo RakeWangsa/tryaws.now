@@ -1,6 +1,7 @@
 export {
   DEFAULT_LOCALE,
   LOCALES,
+  adminEnglishTarget,
   englishOnlyTarget,
   isLocale,
   localeHrefs,
