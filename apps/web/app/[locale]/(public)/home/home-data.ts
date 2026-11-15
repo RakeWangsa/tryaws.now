@@ -6,6 +6,9 @@ import type { PublicCatalog, PublicOffer } from "../../../../server/public/catal
 /** The two locations of the start, in the order of the messages. */
 export const HOME_REGIONS = ["ap-southeast-1", "ap-south-1"] as const;
 
+/** Never more plan cards than this on the home page: two rows of four. The rest is on /pricing. */
+export const HOME_CARD_LIMIT = 8;
+
 /** One part of a service: the feature flag that opens it and its public page, when it has one. */
 interface ServicePart {
   readonly flag: string;
@@ -100,8 +103,10 @@ export type HomeChooser =
       /** The locations that have plans for the chosen platform. */
       readonly regions: readonly string[];
       readonly region: string;
-      /** The plans of the chosen platform at the chosen location, cheapest first. */
+      /** At most HOME_CARD_LIMIT plans of the chosen platform at the chosen location, cheapest first. */
       readonly offers: readonly PublicOffer[];
+      /** How many plans there are in all; the rest is on /pricing. */
+      readonly total: number;
     };
 
 /**
@@ -123,12 +128,14 @@ export function homeChooser(
   const regions = HOME_REGIONS.filter((code) => all.some((offer) => offer.region === code));
   const region = regions.find((code) => code === query.region) ?? regions[0];
   if (region === undefined) return { state: "closed" };
+  const atRegion = all.filter((offer) => offer.region === region);
   return {
     state: "ok",
     platforms: platforms.map((p) => p.key),
     platform: chosen.key,
     regions,
     region,
-    offers: all.filter((offer) => offer.region === region),
+    offers: atRegion.slice(0, HOME_CARD_LIMIT),
+    total: atRegion.length,
   };
 }

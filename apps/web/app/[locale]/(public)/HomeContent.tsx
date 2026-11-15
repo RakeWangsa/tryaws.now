@@ -54,13 +54,7 @@ export function HomeContent({
           breadcrumbLd(o, locale, [{ name: t("crumb.home"), path: "/" }]),
         ]}
       />
-      {/* WPU-Z16: the answer block is the entity statement (who, what, where, how billed). */}
-      <Hero
-        t={t}
-        locale={locale}
-        signedIn={signedIn}
-        answer={<AnswerBlock text={t("entity.statement")} />}
-      />
+      <Hero t={t} locale={locale} signedIn={signedIn} lead={tAws("short")} />
       <section className="bg-colorstyle tc-section">
         <div className="container">
           <div className="row g-4">
@@ -80,7 +74,9 @@ export function HomeContent({
           </div>
         </div>
       </section>
-      <About t={t} statement={tAws("long")} />
+      {/* WPU-Z16: the answer block is the entity statement (who, what, where, how billed). Round 2 of
+          WPU-X18 moved it from the hero to the trust line, so the top of the page is one sentence. */}
+      <About t={t} statement={tAws("long")} answer={<AnswerBlock text={t("entity.statement")} />} />
     </>
   );
 }

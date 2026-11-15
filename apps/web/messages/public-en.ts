@@ -102,8 +102,7 @@ export const publicEn: Same<typeof publicBn> = {
         snapshots: "Snapshots",
       },
       chooserTitle: "Choose an instance",
-      chooserLead:
-        "After you log in, the panel shows these same steps. This is only a preview: you create the instance in the panel.",
+      chooserLead: "The same steps you see in the panel after you log in.",
       locationTitle: "Select your instance location",
       locationRegion: "AWS Region: {name}",
       regionNames: {
@@ -114,6 +113,10 @@ export const publicEn: Same<typeof publicBn> = {
       platforms: { linux: "Linux", windows: "Microsoft Windows" },
       planTitle: "Choose your instance plan",
       createInstance: "Create instance",
+      cardTitle: "{ram} GB · {cpu} vCPU",
+      cardLine: "{disk} GB SSD · {transfer} GB transfer",
+      perPeriod: "/ 30 days",
+      plansAll: "See all plans and prices",
       createNote:
         "You create and manage instances in the panel, after you log in. Nothing is created on this page.",
     },
