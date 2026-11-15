@@ -53,6 +53,18 @@ describe("WPU-X23 one live destroy per resource (R7)", () => {
     expect(await liveDestroyOf(fakeTx([LIVE]).tx, "not-a-uuid")).toBeNull();
   });
 
+  it("with a customer id the lookup joins the resource and names that customer (R8)", async () => {
+    const customer = "0198f4a0-0000-7000-8000-0000000000cc";
+    const scoped = fakeTx([LIVE]);
+    expect(await liveDestroyOf(scoped.tx, RESOURCE, customer)).toEqual(LIVE);
+    expect(scoped.texts[0]).toContain("join resources r");
+    expect(scoped.texts[0]).toContain("r.customer_id =");
+    expect(await liveDestroyOf(fakeTx([LIVE]).tx, RESOURCE, "not-a-uuid")).toBeNull();
+    const unscoped = fakeTx([LIVE]);
+    await liveDestroyOf(unscoped.tx, RESOURCE);
+    expect(unscoped.texts[0]).not.toContain("join resources");
+  });
+
   it("a lifecycle destroy under another key replays the live one: no insert", async () => {
     const { tx, texts } = fakeTx([LIVE]);
     const out = await insertOperation(tx, destroy("lifecycle:destroy:sub:2026"), new Date());

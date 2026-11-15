@@ -428,7 +428,7 @@ export const serversEn: Same<typeof serversBn> = {
       delayed: "Your order is delayed. Support is looking into it. You do not need to do anything.",
       failed:
         "The {noun} could not be created. The amount you paid is returned to your wallet automatically. The refund line shows in your wallet transactions.",
-      slow: "Your {noun} is taking longer than usual. We are still working on it. If it cannot be completed, your payment is returned to your wallet automatically.",
+      slow: "Your {noun} is taking longer than usual. We are still working on it. If we cannot complete it, your payment is returned to your wallet.",
       failedRefunded:
         "We could not create your {noun}. Your payment has been returned to your wallet.",
       refunded: "Returned to your wallet:",

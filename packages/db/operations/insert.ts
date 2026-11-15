@@ -210,14 +210,30 @@ export type LiveDestroy = {
  * needs_attention), oldest first; null when there is none. A failed or succeeded destroy is an ended
  * episode and does not count. Reads operations only.
  */
-export async function liveDestroyOf(tx: Tx, resourceId: string): Promise<LiveDestroy | null> {
+export async function liveDestroyOf(
+  tx: Tx,
+  resourceId: string,
+  /** A customer's call passes the session customer: the resource must be theirs (R8); system code omits it. */
+  customerId?: string,
+): Promise<LiveDestroy | null> {
   if (!isUuid(resourceId)) return null;
-  const { rows } = await tx.execute<LiveDestroy>(sql`
+  if (customerId !== undefined && !isUuid(customerId)) return null;
+  const { rows } =
+    customerId === undefined
+      ? await tx.execute<LiveDestroy>(sql`
     select o.id as "operationId", o.state as "state", o.enqueue_seq as "enqueueSeq",
       o.needs_approval as "needsApproval"
     from operations o
     where o.resource_id = ${resourceId} and o.kind = 'destroy'
       and o.state not in ('failed', 'succeeded')
+    order by o.created_at, o.id
+    limit 1`)
+      : await tx.execute<LiveDestroy>(sql`
+    select o.id as "operationId", o.state as "state", o.enqueue_seq as "enqueueSeq",
+      o.needs_approval as "needsApproval"
+    from operations o join resources r on r.id = o.resource_id
+    where o.resource_id = ${resourceId} and r.customer_id = ${customerId}
+      and o.kind = 'destroy' and o.state not in ('failed', 'succeeded')
     order by o.created_at, o.id
     limit 1`);
   return rows[0] ?? null;

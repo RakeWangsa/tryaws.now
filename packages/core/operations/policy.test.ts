@@ -485,6 +485,7 @@ describe("WPU-X23 a create that AWS keeps refusing at its first step", () => {
     awsErrorName: "InvalidInputException",
     mayHaveActed: false,
   } as const satisfies FailureFacts;
+  const SAME = "validation:InvalidInputException";
   const run = (over: Record<string, unknown>) =>
     decideFailure({
       kind: "create",
@@ -506,20 +507,38 @@ describe("WPU-X23 a create that AWS keeps refusing at its first step", () => {
       lastError: "validation:InvalidInputException",
     });
   });
+  // Money review: only the SAME refusal twice in a row proves nothing was made. An earlier failure that may have
+  // reached AWS (a lost answer, a time-out, a 5xx, a lease that expired) can have made the instance; the second
+  // attempt's "name already in use" refusal then must never refund.
+  it.each([
+    ["an earlier time-out", "upstream_unavailable:ServiceException"],
+    ["an earlier lease that expired", "lease_expired"],
+    ["no earlier error recorded", null],
+    ["an earlier error that is not known", undefined],
+    ["another earlier refusal", "validation:ValidationException"],
+  ])("%s followed by a refusal stays waiting", (_name, lastError) => {
+    expect(run({ attempts: 1, lastError }).to).toBe("waiting");
+  });
   it("the second refusal in a row ends failed (the hook refunds the order)", () => {
-    expect(run({ attempts: 1 })).toEqual({
+    expect(run({ attempts: 1, lastError: "validation:InvalidInputException" })).toEqual({
       to: "failed",
       attempts: 2,
       lastError: "validation:InvalidInputException",
     });
   });
   it("not at a later step, not when AWS may have acted, not when the step is unknown, not for another kind or code", () => {
-    expect(run({ attempts: 1, step: "wait_running" }).to).toBe("waiting");
-    expect(run({ attempts: 1, step: undefined }).to).toBe("waiting");
-    expect(run({ attempts: 1, facts: { ...refused, mayHaveActed: true } }).to).toBe("waiting");
-    expect(run({ attempts: 1, facts: { ...refused, mayHaveActed: undefined } }).to).toBe("waiting");
-    expect(run({ attempts: 1, kind: "reboot" }).to).toBe("waiting");
-    expect(run({ attempts: 1, facts: { ...refused, code: "conflict" } }).to).toBe("waiting");
+    expect(run({ attempts: 1, step: "wait_running", lastError: SAME }).to).toBe("waiting");
+    expect(run({ attempts: 1, step: undefined, lastError: SAME }).to).toBe("waiting");
+    expect(
+      run({ attempts: 1, lastError: SAME, facts: { ...refused, mayHaveActed: true } }).to,
+    ).toBe("waiting");
+    expect(
+      run({ attempts: 1, lastError: SAME, facts: { ...refused, mayHaveActed: undefined } }).to,
+    ).toBe("waiting");
+    expect(run({ attempts: 1, kind: "reboot", lastError: SAME }).to).toBe("waiting");
+    expect(run({ attempts: 1, lastError: SAME, facts: { ...refused, code: "conflict" } }).to).toBe(
+      "waiting",
+    );
   });
   it("a plain non-retryable validation error still fails a create at once", () => {
     expect(run({ attempts: 0, facts: { ...refused, retryable: false } }).to).toBe("failed");

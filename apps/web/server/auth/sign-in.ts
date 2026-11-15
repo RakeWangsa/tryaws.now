@@ -137,6 +137,17 @@ export async function signInCore(ctx: ActionContext, form: Form): Promise<Outcom
   // sign_in_failed answer says nothing about who the other account is.
   if (current !== null && reauth && signedIn.session.customerId !== current.customerId) {
     logAuth(ctx, "auth.signin", "reauth_other_customer");
+    // R9: the attempt is audited for the customer who is signed in; nothing of the other account is kept. A row
+    // that cannot be written changes nothing for the answer: it is a refusal either way (R16).
+    try {
+      const refusedAgent = userAgentOf(ctx);
+      await ctx.ports.recordReauthRefused(current, {
+        ...(ctx.ip !== null ? { ip: ctx.ip } : {}),
+        ...(refusedAgent !== undefined ? { userAgent: refusedAgent } : {}),
+      });
+    } catch {
+      logAuth(ctx, "auth.signin", "audit_failed");
+    }
     return failure(ctx, "sign_in_failed", { form: step });
   }
 

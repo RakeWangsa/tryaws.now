@@ -141,23 +141,31 @@ function endsFailed(
 
 /**
  * WPU-X23. Lightsail reports many problems as InvalidInputException, so the table keeps that name retryable. But a
- * `create` still at its FIRST step (step null: nothing was recorded as done) whose call AWS rejected
- * (`mayHaveActed === false`, not a time-out or a 5xx) has made nothing, and it sends the same input every time; five
- * tries and an admin only keep the customer's money held for about 15 minutes and then for days. Such a create fails
- * after one retry and its hook returns the money (10.1). An unknown step or an unknown `mayHaveActed` never counts (R16).
+ * `create` still at its FIRST step (step null: nothing was recorded as done) that AWS REFUSED TWICE IN A ROW with the
+ * same answer (`mayHaveActed === false` both times: the earlier failure's last_error equals this one, so it was not a
+ * time-out, a 5xx or a lost lease) has made nothing, and it sends the same input every time; five tries and an admin
+ * only keep the customer's money held for about 15 minutes and then for days. Such a create fails after one retry and
+ * its hook returns the money (10.1). An unknown step, an unknown `mayHaveActed`, or an earlier failure that is not
+ * this refusal never counts (R16).
  */
 function refusedAtFirstStep(
   kind: string,
   step: string | null | undefined,
   failures: number,
   facts: FailureFacts,
+  previousError: string | null | undefined,
+  currentError: string,
 ): boolean {
   return (
     kind === "create" &&
     step === null &&
     facts.code === "validation" &&
     facts.mayHaveActed === false &&
-    failures >= REPEATED_REFUSAL_ATTEMPTS
+    failures >= REPEATED_REFUSAL_ATTEMPTS &&
+    // Money review: the failure before this one must be the SAME refusal (last_error holds its code and AWS error
+    // name). An earlier failure that may have reached AWS (a time-out, a 5xx, an expired lease, an unknown error)
+    // leaves another text or none, so a create that may exist is never refunded because a later attempt was refused.
+    previousError === currentError
   );
 }
 
@@ -258,7 +266,7 @@ export function decideFailure(input: {
       lastError,
     };
   }
-  if (refusedAtFirstStep(kind, step, failures, facts)) {
+  if (refusedAtFirstStep(kind, step, failures, facts, input.lastError, lastError)) {
     return { to: "failed", attempts: failures, lastError };
   }
   if (failures >= MAX_ATTEMPTS) return { to: "needs_attention", attempts: failures, lastError };

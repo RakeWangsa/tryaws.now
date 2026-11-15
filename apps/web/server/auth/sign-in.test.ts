@@ -485,6 +485,13 @@ describe("signInCore with reauth=1 (step-up sign-in)", () => {
     });
     expect(out.state).toMatchObject({ status: "error", code: "sign_in_failed" });
     expect(out.effects.setCookies).toEqual([]);
+    // R9: one audit row, for the customer who is signed in, and nothing of the other account in it.
+    const refused = h.audits.filter((a) => a.action === "auth.reauth_refused");
+    expect(refused).toEqual([
+      { customerId: customer.customerId, action: "auth.reauth_refused", ip: "198.51.100.7" },
+    ]);
+    expect(JSON.stringify(h.audits)).not.toContain("other@example.com");
+    expect(JSON.stringify(h.audits)).not.toContain(other.customerId);
   });
 
   it("without reauth=1 a signed-in customer is still sent on", async () => {

@@ -73,6 +73,12 @@ export interface AuthPorts {
   /** Audit row `auth.sign_in` and the phone state of the profile. Throws when it cannot (fail closed). */
   recordSignIn(session: CustomerSession, meta: RequestMeta): Promise<{ phoneVerified: boolean }>;
   recordSignOut(session: CustomerSession, meta: Partial<RequestMeta>): Promise<void>;
+  /**
+   * WPU-X23 (R9). A sign-in again of a signed-in customer was refused because the tokens belong to ANOTHER customer:
+   * an audit row `auth.reauth_refused` for the SIGNED-IN customer, with the fixed reason `reauth_other_customer`. It
+   * holds no address and no token of the other account. Throws when it cannot be written.
+   */
+  recordReauthRefused(session: CustomerSession, meta: Partial<RequestMeta>): Promise<void>;
   sendOtp(
     session: CustomerSession,
     input: { phone: string; ip: string; idempotencyKey: string },
