@@ -2,11 +2,11 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Locale } from "@tc/ui/runtime";
 import { publicBn } from "../../../../messages/public-bn.ts";
 import { publicEn } from "../../../../messages/public-en.ts";
-import type { PublicCatalog } from "../../../../server/public/catalog.ts";
+import type { PublicCatalog, PublicOffer } from "../../../../server/public/catalog.ts";
 import { HomeContent } from "../HomeContent.tsx";
 import { html } from "../public-states.tsx";
 import { NONCE, ORIGIN, UNAVAILABLE, openCatalog } from "../public.fixtures.ts";
-import { HOME_SERVICES, homeChooser, homeServices } from "./home-data.ts";
+import { HOME_CARD_LIMIT, HOME_SERVICES, homeChooser, homeServices } from "./home-data.ts";
 
 // WPU-X18: the simple home page. It is a heading, the list of services and a read-only preview of the
 // create-instance choice. The tests pin the order of the services, that no service is promised whose
@@ -107,8 +107,10 @@ describe("the services list (WPU-X18)", () => {
 
   it("a state is told by an icon and a word, not by color alone (U11)", () => {
     const page = render(open, "en");
-    expect(page).toMatch(/badge bg-success"><i class="fas fa-check"[^>]*><\/i> Open</);
-    expect(page).toMatch(/badge bg-secondary"><i class="fas fa-clock"[^>]*><\/i> Coming soon</);
+    expect(page).toMatch(/badge bg-success tc-svc-badge"><i class="fas fa-check"[^>]*><\/i> Open</);
+    expect(page).toMatch(
+      /badge bg-secondary tc-svc-badge"><i class="fas fa-clock"[^>]*><\/i> Coming soon</,
+    );
   });
 
   it("shows no list and no price when the catalog cannot be read (R16)", () => {
@@ -189,8 +191,10 @@ describe("the instance chooser (WPU-X18)", () => {
 
   it("shows the plans as cards with taka prices of the catalog and no dollar (WPU-X16)", () => {
     const page = render(open, "en");
-    expect((page.match(/class="top-content/g) ?? []).length).toBe(3);
-    expect((page.match(/class="price seccolor"><span>৳[\d,]+<\/span>/g) ?? []).length).toBe(3);
+    expect((page.match(/class="tc-mini /g) ?? []).length).toBe(3);
+    expect((page.match(/class="tc-mini-price[^"]*"><span>৳[\d,]+<\/span>/g) ?? []).length).toBe(3);
+    expect(page).toContain("/ 30 days");
+    expect(page).not.toMatch(/icon-cpu|list-info|plans badge/);
     expect(text(page)).not.toMatch(/\$|USD|dollar/i);
     expect(text(render(open, "bn"))).not.toMatch(/\$|USD|ডলার/i);
   });
@@ -273,5 +277,75 @@ describe("heading, claims and wording (WPU-X18)", () => {
   it("shows no AWS account id, ARN or internal name", () => {
     const body = text(render(everything, "en"));
     expect(body).not.toMatch(/arn:aws|\b\d{12}\b|\btc-[a-z]+-[a-z0-9]+/);
+  });
+});
+
+describe("compact cards, the limit and the titles (WPU-X18 round 2)", () => {
+  const offer = (n: number, ram: string, vcpus: number, minor: bigint): PublicOffer => ({
+    id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    family: "linux_instance",
+    region: "ap-southeast-1",
+    priceMinor: minor,
+    specs: { vcpus, ramGb: ram, diskGb: 40 + n, transferGb: 1000 + n },
+    numerals: "latn",
+  });
+  // 12 plans; "4" GB exists twice with a different vCPU count and price (a general purpose and a
+  // compute-optimized plan of Lightsail have the same memory).
+  const many: PublicOffer[] = [
+    ...["0.5", "1", "2", "4", "8", "16", "32", "64", "96", "128"].map((ram, i) =>
+      offer(i, ram, 2, BigInt(100000 + i * 10000)),
+    ),
+    offer(20, "4", 4, 205000n),
+    offer(21, "8", 8, 305000n),
+  ];
+  const big: PublicCatalog = {
+    state: "ok",
+    families: [{ family: "linux_instance", offers: many }],
+    open: [],
+    domainsOpen: false,
+    flagOn: (key) => key === "linux_instance",
+  };
+
+  it("shows at most eight cards and one link to the pricing page of the same location", () => {
+    const c = homeChooser(big, {});
+    expect(c.state === "ok" && c.offers.length).toBe(HOME_CARD_LIMIT);
+    expect(c.state === "ok" && c.total).toBe(12);
+    const page = render(big, "en");
+    expect((page.match(/class="tc-mini /g) ?? []).length).toBe(8);
+    expect((page.match(/See all plans and prices/g) ?? []).length).toBe(1);
+    expect(page).toContain('href="/en/pricing?region=ap-southeast-1"');
+  });
+
+  it("gives every card a different title: the memory size and the vCPU count", () => {
+    const page = render(big, "en");
+    const titles = [...page.matchAll(/class="tc-mini-title[^"]*">([^<]*)</g)].map((m) => m[1]);
+    expect(titles.length).toBe(8);
+    expect(new Set(titles).size).toBe(8);
+    expect(titles[0]).toBe("0.5 GB · 2 vCPU");
+    const lines = [...page.matchAll(/class="tc-mini-line[^"]*">([^<]*)</g)].map((m) => m[1]);
+    expect(lines[0]).toBe("40 GB SSD · 1000 GB transfer");
+  });
+
+  it("sorts by price and keeps the price in whole taka with the period", () => {
+    const c = homeChooser(big, {});
+    if (c.state !== "ok") throw new Error("not ok");
+    for (let i = 1; i < c.offers.length; i++) {
+      expect(c.offers[i]!.priceMinor >= c.offers[i - 1]!.priceMinor).toBe(true);
+    }
+    expect(text(render(big, "bn"))).toContain("/ ৩০ দিন");
+  });
+
+  it("lists the services as one line each (name and state) and has no icon rows in a card", () => {
+    const page = render(open, "en");
+    expect((page.match(/class="tc-svc-item"/g) ?? []).length).toBe(7);
+    expect(page).not.toContain("list-info");
+  });
+
+  it("is a short page: one sentence under the heading, the answer block low in the trust line", () => {
+    const page = render(open, "en");
+    const hero = /<section class="top-header[^]*?<\/section>/.exec(page)?.[0] ?? "";
+    expect((hero.match(/<p\b/g) ?? []).length).toBe(1);
+    expect(hero).not.toContain("subheading");
+    expect(page.indexOf('class="subheading')).toBeGreaterThan(page.indexOf('id="chooser"'));
   });
 });

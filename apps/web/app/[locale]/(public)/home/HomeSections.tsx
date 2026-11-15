@@ -1,8 +1,8 @@
-import { Button, EmptyState } from "@tc/ui";
+import { Button, EmptyState, MoneyText } from "@tc/ui";
 import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
-import type { PublicCatalog } from "../../../../server/public/catalog.ts";
-import { OfferCard, locationName, orderHref } from "../_components/offers.tsx";
+import type { PublicCatalog, PublicOffer } from "../../../../server/public/catalog.ts";
+import { locationName, offerNumerals, orderHref } from "../_components/offers.tsx";
 import type { Tr } from "../_components/offers.tsx";
 import { homeChooser, homeServices } from "./home-data.ts";
 import type { HomePlatform } from "./home-data.ts";
@@ -17,13 +17,13 @@ export function Hero({
   t,
   locale,
   signedIn,
-  answer,
+  lead,
 }: {
   t: Tr;
   locale: Locale;
   signedIn: boolean;
-  /** The answer block (the entity statement, WPU-Z16). */
-  answer: React.ReactNode;
+  /** One short sentence: the short AWS statement of 16.13. */
+  lead: string;
 }) {
   const p = (path: string): string => localePath(locale, path);
   return (
@@ -31,7 +31,7 @@ export function Hero({
       <div className="container">
         <div className="wrapper">
           <h1 className="heading mergecolor pb-2 tc-hero-title">{t("home.heroTitle")}</h1>
-          {answer}
+          <p className="seccolor tc-hero-lead">{lead}</p>
           {signedIn ? (
             <Button variant="primary" href={p("/dashboard")} className="me-2 mb-2">
               {t("common.login")}
@@ -69,7 +69,6 @@ export function Services({
         <h2 className="h5 mergecolor">
           <b>{t("home.servicesTitle")}</b>
         </h2>
-        <hr />
         {services.length === 0 ? (
           <EmptyState
             title={t("common.unavailableTitle")}
@@ -87,13 +86,13 @@ export function Services({
                     </a>
                   ) : (
                     <span className="mergecolor">{name}</span>
-                  )}{" "}
+                  )}
                   {service.open ? (
-                    <span className="badge bg-success">
+                    <span className="badge bg-success tc-svc-badge">
                       <i className="fas fa-check" aria-hidden="true" /> {t("home.productOpen")}
                     </span>
                   ) : (
-                    <span className="badge bg-secondary">
+                    <span className="badge bg-secondary tc-svc-badge">
                       <i className="fas fa-clock" aria-hidden="true" /> {t("common.comingSoon")}
                     </span>
                   )}
@@ -104,6 +103,47 @@ export function Services({
         )}
       </nav>
     </aside>
+  );
+}
+
+/**
+ * A compact plan card: the size and the vCPU count as the title (two plans of one memory size differ in
+ * vCPU, so the title is never the same twice), the disk and transfer on one line, the price in whole
+ * taka (the engine's total, WPU-X16) and one button.
+ */
+function PlanMini({
+  t,
+  locale,
+  offer,
+  href,
+}: {
+  t: Tr;
+  locale: Locale;
+  offer: PublicOffer;
+  href: string;
+}) {
+  const none = t("spec.none");
+  const s = offer.specs;
+  return (
+    <div className="tc-mini bg-seccolorstyle">
+      <p className="tc-mini-title mergecolor">
+        {t("home.cardTitle", { ram: s.ramGb ?? none, cpu: s.vcpus ?? none })}
+      </p>
+      <p className="tc-mini-line seccolor">
+        {t("home.cardLine", { disk: s.diskGb ?? none, transfer: s.transferGb ?? none })}
+      </p>
+      <p className="tc-mini-price mergecolor">
+        <MoneyText
+          minor={offer.priceMinor}
+          mode="wholeUp"
+          numerals={offerNumerals(locale, offer)}
+        />{" "}
+        <span className="seccolor tc-mini-period">{t("home.perPeriod")}</span>
+      </p>
+      <Button variant="primary" size="sm" href={href} className="tc-mini-btn">
+        {t("home.createInstance")}
+      </Button>
+    </div>
   );
 }
 
@@ -130,7 +170,7 @@ export function Chooser({
   const create = signedIn ? localePath(locale, "/servers/new") : orderHref(locale);
   return (
     <div id="chooser">
-      <h2 className="section-heading mergecolor">{t("home.chooserTitle")}</h2>
+      <h2 className="h4 mergecolor">{t("home.chooserTitle")}</h2>
       <p className="seccolor">{t("home.chooserLead")}</p>
       {chooser.state === "unavailable" ? (
         <EmptyState
@@ -141,14 +181,15 @@ export function Chooser({
         <EmptyState title={t("common.noPlansTitle")} description={t("common.noPlansText")} />
       ) : (
         <>
-          <nav aria-label={t("home.locationTitle")} className="mb-4">
-            <h3 className="h5 mergecolor">{t("home.locationTitle")}</h3>
+          <nav aria-label={t("home.locationTitle")} className="mb-3">
+            <h3 className="h6 mergecolor">{t("home.locationTitle")}</h3>
             {chooser.regions.map((code) => (
               <Button
                 key={code}
                 variant={code === chooser.region ? "primary" : "secondary"}
+                size="sm"
                 href={link(code, chooser.platform)}
-                className="me-2 mb-2"
+                className="me-2 mb-1"
                 icon={code === chooser.region ? "fas fa-check" : undefined}
               >
                 {locationName(t, code)}
@@ -163,14 +204,15 @@ export function Chooser({
               <span className="tc-location-code">{chooser.region}</span>
             </p>
           </nav>
-          <nav aria-label={t("home.platformTitle")} className="mb-4">
-            <h3 className="h5 mergecolor">{t("home.platformTitle")}</h3>
+          <nav aria-label={t("home.platformTitle")} className="mb-3">
+            <h3 className="h6 mergecolor">{t("home.platformTitle")}</h3>
             {chooser.platforms.map((key) => (
               <Button
                 key={key}
                 variant={key === chooser.platform ? "primary" : "secondary"}
+                size="sm"
                 href={link(chooser.region, key)}
-                className="me-2 mb-2"
+                className="me-2 mb-1"
                 icon={key === chooser.platform ? "fas fa-check" : undefined}
               >
                 {t(`home.platforms.${key}`)}
@@ -180,34 +222,45 @@ export function Chooser({
               </Button>
             ))}
           </nav>
-          <section className="pricing special" aria-label={t("home.planTitle")}>
-            <h3 className="h5 mergecolor">{t("home.planTitle")}</h3>
-            <div className="row">
+          <section aria-label={t("home.planTitle")}>
+            <h3 className="h6 mergecolor">{t("home.planTitle")}</h3>
+            <div className="row g-3">
               {chooser.offers.map((offer) => (
-                <div key={offer.id} className="col-md-6 col-xl-4 tc-plan-col">
-                  <OfferCard
-                    t={t}
-                    locale={locale}
-                    offer={offer}
-                    label={t("home.createInstance")}
-                    href={create}
-                  />
+                <div key={offer.id} className="col-md-6 col-xl-3">
+                  <PlanMini t={t} locale={locale} offer={offer} href={create} />
                 </div>
               ))}
             </div>
+            <p className="mt-3 mb-1">
+              <a
+                href={`${localePath(locale, "/pricing")}?region=${chooser.region}`}
+                className="golink"
+              >
+                {t("home.plansAll")}
+              </a>
+            </p>
           </section>
-          <p className="seccolor small">{t("home.createNote")}</p>
+          <p className="seccolor small mb-0">{t("home.createNote")}</p>
         </>
       )}
     </div>
   );
 }
 
-/** The trust line: what TryAWS.now is (the answer block of WPU-Z16 sits in the hero), the long AWS statement and the price note. */
-export function About({ t, statement }: { t: Tr; statement: string }) {
+/** The trust line, low on the page: the answer block of WPU-Z16, the long AWS statement and the price note. */
+export function About({
+  t,
+  statement,
+  answer,
+}: {
+  t: Tr;
+  statement: string;
+  answer: React.ReactNode;
+}) {
   return (
     <section className="bg-seccolorstyle tc-trust">
       <div className="container text-center">
+        {answer}
         <p className="seccolor mb-2">{statement}</p>
         <p className="small seccolor mb-0">{t("common.priceNote")}</p>
       </div>

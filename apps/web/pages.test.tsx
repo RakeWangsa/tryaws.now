@@ -90,7 +90,7 @@ describe("landing page", () => {
 
   it("shows the plan cards of the catalog and no inline style", async () => {
     const html = intl(await HomePage({ params: Promise.resolve({ locale: "bn" }) }), "bn");
-    expect(html).toContain('class="price seccolor"');
+    expect(html).toContain('class="tc-mini-price');
     expect(html).not.toContain(' style="');
   });
 

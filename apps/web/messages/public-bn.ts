@@ -106,8 +106,7 @@ export const publicBn = {
         snapshots: "স্ন্যাপশট",
       },
       chooserTitle: "ইনস্ট্যান্স বেছে নিন",
-      chooserLead:
-        "লগইনের পরে প্যানেলে ঠিক এই ধাপগুলোই দেখবেন। এটি শুধু একটি পূর্বরূপ: ইনস্ট্যান্স তৈরি হয় প্যানেলে।",
+      chooserLead: "লগইনের পরে প্যানেলে ঠিক এই ধাপগুলোই দেখবেন।",
       locationTitle: "ইনস্ট্যান্সের লোকেশন বেছে নিন",
       locationRegion: "এই লোকেশনের AWS Region: {name}",
       regionNames: {
@@ -118,6 +117,10 @@ export const publicBn = {
       platforms: { linux: "Linux", windows: "মাইক্রোসফট উইন্ডোজ (Windows)" },
       planTitle: "ইনস্ট্যান্সের প্ল্যান বেছে নিন",
       createInstance: "ইনস্ট্যান্স তৈরি করুন",
+      cardTitle: "{ram} GB · {cpu} vCPU",
+      cardLine: "{disk} GB SSD · {transfer} GB ট্রান্সফার",
+      perPeriod: "/ ৩০ দিন",
+      plansAll: "সব প্ল্যান ও মূল্য দেখুন",
       createNote:
         "ইনস্ট্যান্স তৈরি ও পরিচালনা হয় প্যানেলে, লগইনের পরে। এই পাতায় কিছু তৈরি হয় না।",
     },

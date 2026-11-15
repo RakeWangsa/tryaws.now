@@ -846,16 +846,15 @@ div.tc-modal-open {
 
 /* ===== 11. Home page (WPU-X18) =====
    The home page is a short heading, the list of services and a read-only preview of the create screen.
-   It is built from the theme's own classes (top-header, sidebar, pricing special, bg-colorstyle,
-   bg-seccolorstyle); the rules below only set spacing and the pieces the mockup has no class for: the
-   services list that wraps into a row at phone width, and the question of a FAQ pair. Colors come from
+   It is built from the theme's own classes (top-header, sidebar, bg-colorstyle, bg-seccolorstyle); the rules below only set spacing and the pieces the mockup has no class for: the
+   services list, the compact plan card and the question of a FAQ pair. Colors come from
    the theme's helper classes and the tokens of section 2, so the dark and the light page both work. */
 .tc-section {
-  padding: 32px 0 56px;
+  padding: 16px 0 32px;
 }
 @media (min-width: 992px) {
   .tc-section {
-    padding: 48px 0 72px;
+    padding: 24px 0 40px;
   }
 }
 /* Below the menu the theme gives a hero 200 px; the home hero is only a heading and two buttons. */
@@ -870,38 +869,88 @@ div.tc-modal-open {
   }
 }
 /* The theme sets the heading at 80 px and capitalizes every word; a full sentence needs less. */
-.tc-hero-title {
-  font-size: 2.5rem;
-  line-height: 1.15;
+.top-header .wrapper .tc-hero-title {
+  font-size: 2rem;
+  line-height: 1.2;
   text-transform: none;
 }
 @media (max-width: 767.98px) {
-  .tc-hero-title {
-    font-size: 1.75rem;
+  .top-header .wrapper .tc-hero-title {
+    font-size: 1.5rem;
   }
 }
-.tc-trust {
-  padding: 28px 0;
+.tc-hero-lead {
+  font-size: 1.0625rem;
+  margin-bottom: 1rem;
 }
-/* The services list: a column beside the chooser, a wrapping row of chips at phone width. */
+.tc-trust {
+  padding: 24px 0;
+}
+/* The services list: a tidy column (name left, state right, one line each) beside the chooser, a
+   wrapping row of chips at phone width. */
 .tc-console-nav {
   margin-top: 0;
+  padding: 20px 10px;
 }
 .tc-svc-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px 14px;
+}
+.tc-svc-item {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+.tc-svc-badge {
+  font-size: 0.6875rem;
+  padding: 0.3em 0.5em;
 }
 @media (min-width: 992px) {
   .tc-svc-list {
     display: block;
   }
+  .tc-svc-item {
+    font-size: 0.8125rem;
+    justify-content: space-between;
+    padding: 5px 0;
+    white-space: nowrap;
+  }
 }
-.tc-svc-item {
-  padding: 4px 0;
+/* A compact plan card of the chooser: size, one line of specifications, the price, one button. */
+.tc-mini {
+  border: 1px solid var(--tc-muted-on-dark);
+  border-radius: var(--tc-radius-card);
+  height: 100%;
+  padding: 14px 16px;
 }
-.tc-plan-col {
-  margin-bottom: 30px;
+[data-background="light"] .tc-mini {
+  border-color: var(--tc-muted-on-light);
+}
+.tc-mini-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 2px;
+}
+.tc-mini-btn {
+  display: block;
+  padding-left: 8px;
+  padding-right: 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+.tc-mini-line {
+  font-size: 0.75rem;
+  margin: 0 0 8px;
+}
+.tc-mini-price {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+.tc-mini-period {
+  font-size: 0.8125rem;
+  font-weight: 400;
 }
 .tc-location-code {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;

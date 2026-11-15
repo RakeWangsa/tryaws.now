@@ -86,8 +86,14 @@ describe("answer blocks (AEO, OmniRank gate answer-block)", () => {
         expect(n, `${id} ${locale}: ${n} words`).toBeGreaterThanOrEqual(40);
         expect(n, `${id} ${locale}: ${n} words`).toBeLessThanOrEqual(60);
         // Near the top: before the first h2 of the page's own content.
+        // WPU-X18 round 2 (owner): the home page keeps only a heading and one sentence at the top, so its
+        // answer block sits in the trust line, after the services and the chooser (still inside <main>).
         const main = /<main[\s>][^]*<\/main>/.exec(page)![0];
-        expect(main.indexOf("subheading")).toBeLessThan(main.search(/<h2[\s>]/));
+        if (id !== "home.data") {
+          expect(main.indexOf("subheading")).toBeLessThan(main.search(/<h2[\s>]/));
+        } else {
+          expect(main.indexOf('class="subheading')).toBeGreaterThan(main.search(/<h2[\s>]/));
+        }
       }
     },
   );
