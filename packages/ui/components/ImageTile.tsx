@@ -41,7 +41,7 @@ export function ImageTile({
       {imageSrc === null ? (
         <i className="fas fa-server tc-image-tile-generic" aria-hidden="true" />
       ) : (
-        <img src={imageSrc} alt="" width={size} height={size} />
+        <img className="tc-image-tile-logo" src={imageSrc} alt="" width={size} height={size} />
       )}
       <span className="mergecolor">{label}</span>
       <i className="fas fa-check-circle tc-image-tile-check" aria-hidden="true" />

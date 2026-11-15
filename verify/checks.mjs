@@ -4202,6 +4202,11 @@ TASKS["WPU-X25"] = [specSync, baselineSync, lint, typecheck, format, core, web, 
 // the rule do not (core pricing and ledger tests re-run).
 TASKS["WPU-X26"] = [specSync, baselineSync, lint, typecheck, format, core, web, repo];
 
+// WPU-X27 (polish found on staging): the "Last updated" date comes from the one constant CONTENT_UPDATED (web,
+// GEO files regenerated), the image tile logo is a constrained square (ui), and a re-login revokes the replaced
+// refresh token at the provider, best effort (web auth core; the adapter port already existed).
+TASKS["WPU-X27"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".
