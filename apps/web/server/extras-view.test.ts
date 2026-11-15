@@ -18,7 +18,7 @@ vi.mock("@tc/db", () => ({
   readFeatureFlag: async () => true,
 }));
 
-const { diskOfferFor, loadMetrics, parsePriceLines, rangeOf, toNotificationItem } =
+const { customerLinesOf, diskOfferFor, loadMetrics, parsePriceLines, rangeOf, toNotificationItem } =
   await import("./extras-view.ts");
 
 const session = { customerId: "11111111-1111-4111-8111-111111111111" } as CustomerSession;
@@ -43,6 +43,32 @@ describe("parsePriceLines (R4: bigint paisa, a breakdown that does not add up is
     expect(parsePriceLines({ ...good, steps: [{ code: "x", amountMinor: 1.5 }] })).toBeNull();
     expect(parsePriceLines(null)).toBeNull();
     expect(parsePriceLines("{}")).toBeNull();
+  });
+});
+
+describe("customerLinesOf (WPU-X25: no Korea VAT line on the Billing tab, its amount is in the first line)", () => {
+  const nano = {
+    baseMinor: "63500",
+    steps: [
+      { code: "korea_vat", amountMinor: "6350" },
+      { code: "bd_vat", amountMinor: "3175" },
+      { code: "processing_fee", amountMinor: "1270" },
+    ],
+    totalMinor: "74295",
+  };
+  it("folds korea_vat and keeps the total", () => {
+    expect(customerLinesOf(nano)).toEqual({
+      baseMinor: 69850n,
+      steps: [
+        { code: "bd_vat", amountMinor: 3175n },
+        { code: "processing_fee", amountMinor: 1270n },
+      ],
+      totalMinor: 74295n,
+    });
+  });
+  it("shows nothing for a snapshot that does not add up (R16)", () => {
+    expect(customerLinesOf({ ...nano, totalMinor: "74296" })).toBeNull();
+    expect(customerLinesOf(null)).toBeNull();
   });
 });
 

@@ -340,7 +340,6 @@ export const serversBn = {
       lines: "মূল্যের বিবরণ",
       awsPrice: "AWS সার্ভিস মূল্য",
       step: {
-        korea_vat: "কোরিয়া ভ্যাট",
         bd_vat: "বাংলাদেশ ভ্যাট",
         processing_fee: "প্রসেসিং ফি",
         markup: "সার্ভিস চার্জ",

@@ -2,6 +2,7 @@ import { MAX_ENVELOPED_TOKEN } from "./draft-envelope.ts";
 import { snapshotToQuote } from "@tc/core";
 import type { verifyDraft } from "@tc/core";
 import { shortfallTopUpTaka } from "./servers-view.ts";
+import { customerPriceLines } from "./customer-price-lines.ts";
 
 // What /orders/review shows, built from the signed draft token (16.11 step 3). The token is the only
 // source of the price: nothing is priced again on this page, and the client adds nothing (R4).
@@ -49,8 +50,16 @@ export function reviewFromToken(
   if (claims.c !== customerId) return { state: "invalid" };
 
   let quote;
+  let lines;
   try {
     quote = snapshotToQuote(claims.snap);
+    // WPU-X25: the customer sees no Korea VAT line; its amount is in the first line. Lines that do not add
+    // up to the signed total make the screen invalid (R16).
+    lines = customerPriceLines(
+      quote.baseMinor,
+      quote.steps.map((s) => ({ code: s.code, amountMinor: s.amountMinor })),
+      quote.totalMinor,
+    );
   } catch {
     return { state: "invalid" };
   }
@@ -64,8 +73,8 @@ export function reviewFromToken(
     productId: claims.pid,
     ...(typeof claims.fam === "string" ? { family: claims.fam } : {}),
     expiresAt: new Date(claims.exp * 1000),
-    baseMinor: quote.baseMinor,
-    steps: quote.steps.map((s) => ({ code: s.code, amountMinor: s.amountMinor })),
+    baseMinor: lines.baseMinor,
+    steps: lines.steps,
     totalMinor: quote.totalMinor,
     balanceMinor,
     balanceAfterMinor: shortfallTaka === null ? balanceMinor - quote.totalMinor : null,

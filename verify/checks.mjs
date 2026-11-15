@@ -4192,6 +4192,11 @@ TASKS["WPU-X24"] = [
   repo,
 ];
 
+// WPU-X25 (owner decision 2026-11-15): customer price screens show no Korea VAT line; its amount is folded into the
+// first line (apps/web customerPriceLines). core re-runs the pricing and ledger tests that must stay unchanged; web
+// runs the helper, the review and Billing views and the message parity; repo the journal and verify wiring.
+TASKS["WPU-X25"] = [specSync, baselineSync, lint, typecheck, format, core, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".
