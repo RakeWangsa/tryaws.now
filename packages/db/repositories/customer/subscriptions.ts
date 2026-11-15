@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { readApprovalUntil } from "../../operations/approval";
-import { operationInsertValues } from "../../operations/insert";
+import { liveDestroyOf, operationInsertValues } from "../../operations/insert";
 import { customerOperationKey } from "./operations";
 import { created, refused, replayed, type Written } from "../result";
 import { retainAttachedDisks } from "../system/attached-disks";
@@ -148,6 +148,17 @@ export function subscriptionsRepo(scope: TenantScope): SubscriptionsRepo {
           destroyOperationId: existing.id,
           finalSnapshotOperationId: existing.snapshotId,
           needsApproval: existing.needsApproval,
+        });
+      }
+      // WPU-X23 (R7): a destroy that is already live for this resource answers the request, whatever its
+      // key (the customer's earlier click with another request id, or the one the lifecycle's ensure pass
+      // queued for the retained subscription). Never a second row.
+      const live = await liveDestroyOf(tx, input.resourceId);
+      if (live !== null) {
+        return replayed({
+          destroyOperationId: live.operationId,
+          finalSnapshotOperationId: null,
+          needsApproval: live.needsApproval,
         });
       }
       // Only a paid-up or suspended subscription is destroyed by its owner; anything else is a

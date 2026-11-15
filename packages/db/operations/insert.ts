@@ -140,6 +140,21 @@ export async function insertOperation(
   const until = await readApprovalUntil(tx);
   const v = operationInsertValues(input, at, until);
 
+  // WPU-X23 (R7). One live destroy per resource, whatever the key: the customer's own destroy
+  // (`customer:...:destroy:<request>`) and the lifecycle's ensure pass (`lifecycle:destroy:<sub>:<end>`) are
+  // two key spaces for one episode, and the second used to add a second row a minute later.
+  if (v.kind === "destroy") {
+    const live = await liveDestroyOf(tx, v.resourceId);
+    if (live !== null) {
+      return {
+        operationId: live.operationId,
+        created: false,
+        state: live.state,
+        enqueueSeq: live.enqueueSeq,
+      };
+    }
+  }
+
   const inserted = v.needsApproval
     ? await tx.execute<Omit<StoredOperation, "resourceId" | "kind">>(sql`
         insert into operations as o (id, resource_id, kind, state, idempotency_key, payload, needs_approval)
@@ -181,6 +196,31 @@ export async function insertOperation(
     state: stored.state,
     enqueueSeq: stored.enqueueSeq,
   };
+}
+
+export interface LiveDestroy {
+  readonly operationId: string;
+  readonly state: OperationState;
+  readonly enqueueSeq: number;
+  readonly needsApproval: boolean;
+}
+
+/**
+ * WPU-X23. The destroy of a resource that has not ended (queued, running, waiting, needs_approval or
+ * needs_attention), oldest first; null when there is none. A failed or succeeded destroy is an ended
+ * episode and does not count. Reads operations only.
+ */
+export async function liveDestroyOf(tx: Tx, resourceId: string): Promise<LiveDestroy | null> {
+  if (!isUuid(resourceId)) return null;
+  const { rows } = await tx.execute<LiveDestroy>(sql`
+    select o.id as "operationId", o.state as "state", o.enqueue_seq as "enqueueSeq",
+      o.needs_approval as "needsApproval"
+    from operations o
+    where o.resource_id = ${resourceId} and o.kind = 'destroy'
+      and o.state not in ('failed', 'succeeded')
+    order by o.created_at, o.id
+    limit 1`);
+  return rows[0] ?? null;
 }
 
 /** WPU-Y4 fix round 4. The most ended operations one key chain may pass before it refuses (R16). */
