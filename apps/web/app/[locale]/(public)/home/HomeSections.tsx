@@ -81,11 +81,14 @@ export function Services({
               return (
                 <li key={service.key} className="tc-svc-item">
                   {service.path !== null ? (
-                    <a href={localePath(locale, service.path)} className="golink mergecolor">
+                    <a
+                      href={localePath(locale, service.path)}
+                      className="golink mergecolor tc-svc-name"
+                    >
                       {name}
                     </a>
                   ) : (
-                    <span className="mergecolor">{name}</span>
+                    <span className="mergecolor tc-svc-name">{name}</span>
                   )}
                   {service.open ? (
                     <span className="badge bg-success tc-svc-badge">
@@ -124,13 +127,22 @@ function PlanMini({
 }) {
   const none = t("spec.none");
   const s = offer.specs;
+  // The digits of the market setting, as the price (the unit letters stay as they are). Sizes are plain
+  // counts, not money: no grouping, so "1000 GB" reads as on the pricing page.
+  const tag = `${locale === "bn" ? "bn-BD" : "en-BD"}-u-nu-${offerNumerals(locale, offer)}`;
+  const num = (v: number | string | undefined): string =>
+    v === undefined
+      ? none
+      : new Intl.NumberFormat(tag, { useGrouping: false, maximumFractionDigits: 2 }).format(
+          Number(v),
+        );
   return (
     <div className="tc-mini bg-seccolorstyle">
       <p className="tc-mini-title mergecolor">
-        {t("home.cardTitle", { ram: s.ramGb ?? none, cpu: s.vcpus ?? none })}
+        {t("home.cardTitle", { ram: num(s.ramGb), cpu: num(s.vcpus) })}
       </p>
       <p className="tc-mini-line seccolor">
-        {t("home.cardLine", { disk: s.diskGb ?? none, transfer: s.transferGb ?? none })}
+        {t("home.cardLine", { disk: num(s.diskGb), transfer: num(s.transferGb) })}
       </p>
       <p className="tc-mini-price mergecolor">
         <MoneyText
@@ -140,7 +152,7 @@ function PlanMini({
         />{" "}
         <span className="seccolor tc-mini-period">{t("home.perPeriod")}</span>
       </p>
-      <Button variant="primary" size="sm" href={href} className="tc-mini-btn">
+      <Button variant="primary" href={href} className="tc-mini-btn">
         {t("home.createInstance")}
       </Button>
     </div>

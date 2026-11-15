@@ -349,3 +349,23 @@ describe("compact cards, the limit and the titles (WPU-X18 round 2)", () => {
     expect(page.indexOf('class="subheading')).toBeGreaterThan(page.indexOf('id="chooser"'));
   });
 });
+
+describe("digits and names (WPU-X18 round 3)", () => {
+  it("writes the numbers of a card title and spec line in the market digits, units unchanged", () => {
+    const bn = render(open, "bn");
+    expect(bn).toContain("৪ GB · ২ vCPU");
+    expect(bn).toContain("৮০ GB SSD · ৪০০০ GB ট্রান্সফার");
+    expect(bn).not.toMatch(/tc-mini-(title|line)[^>]*>[^<]*[0-9]/);
+    const en = render(open, "en");
+    expect(en).toContain("4 GB · 2 vCPU");
+    expect(en).toContain("80 GB SSD · 4000 GB transfer");
+    expect(en).not.toMatch(/tc-mini-(title|line)[^>]*>[^<]*[০-৯]/);
+  });
+
+  it("gives every service name the same class, so linked and unlinked names weigh the same", () => {
+    const page = render(open, "en");
+    expect((page.match(/tc-svc-name/g) ?? []).length).toBe(7);
+    expect(page).toMatch(/<a [^>]*class="golink mergecolor tc-svc-name"/);
+    expect(page).toMatch(/<span class="mergecolor tc-svc-name">Containers<\/span>/);
+  });
+});
