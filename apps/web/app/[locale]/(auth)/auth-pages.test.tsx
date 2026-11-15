@@ -205,6 +205,25 @@ describe("/login: next, banners and signed-in customers", () => {
   });
 });
 
+// WPU-X20: "sign in again" for a fresh sign-in must open the form for a signed-in customer; nothing else changes.
+describe("/login?reauth=1 (fresh sign-in)", () => {
+  it("opens the form for a signed-in customer, with next kept on the allow-list", async () => {
+    state.session = { customerId: "11111111-1111-4111-8111-111111111111" };
+    const html = await render(PAGES[0], "en", { reauth: "1", next: "/dns/abc" });
+    expect(html).toContain('name="next" value="/dns/abc"');
+    const hostile = await render(PAGES[0], "en", { reauth: "1", next: "//evil.com" });
+    expect(hostile).not.toContain("evil.com");
+    expect(hostile).not.toContain('name="next"');
+  });
+  it("any other value of reauth still sends a signed-in customer to the panel; the other guest pages ignore it", async () => {
+    state.session = { customerId: "11111111-1111-4111-8111-111111111111" };
+    for (const bad of ["2", "true", "", "0"]) {
+      await expect(render(PAGES[0], "en", { reauth: bad })).rejects.toThrow("REDIRECT:/en/wallet");
+    }
+    await expect(render(PAGES[1], "en", { reauth: "1" })).rejects.toThrow("REDIRECT:/en/wallet");
+  });
+});
+
 describe("/signup, /forgot-password and /reset-password content", () => {
   it("/signup has the personal and security groups, the three consents and no company or account type field", async () => {
     const html = await render(PAGES[1], "en");

@@ -24,6 +24,7 @@ export const serversBn = {
       name_mismatch: "নাম মেলেনি। হুবহু একই নাম লিখুন।",
       fresh_sign_in_required: "নিরাপত্তার জন্য আবার সাইন ইন করুন, তারপর চেষ্টা করুন।",
     },
+    reauthLink: "আবার সাইন ইন করুন",
     field: {
       invalid: "এই ঘরের তথ্য ঠিক নয়।",
     },

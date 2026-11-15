@@ -11,6 +11,7 @@ import type {
   DatabaseConsole,
   LoadBalancerConsole,
 } from "../../../../server/console-view.ts";
+import { FreshSignInLink } from "../_family/FreshSignInLink.tsx";
 
 // The console forms of the detail pages (WPU-G7, U8: a button is inert while its action runs, U11:
 // a result is a text, never a color alone). Every form carries the id of the resource and the request
@@ -31,6 +32,7 @@ export function ConsoleNotice({ state }: { state: FormState }) {
       <div className="alert alert-danger text-start" role="alert">
         <i className="fas fa-exclamation-triangle me-2" aria-hidden="true" />
         {t.has(`error.${state.error}`) ? t(`error.${state.error}`) : t("error.unavailable")}
+        <FreshSignInLink error={state.error} />
       </div>
     );
   }

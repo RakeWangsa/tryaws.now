@@ -28,7 +28,10 @@ export default async function LoginPage({ params, searchParams }: Props) {
   if (!hasLocale(routing.locales, locale)) notFound();
   const query = await searchParams;
   const next = queryText(query["next"]);
-  const page = await loadAuthPage(locale, next, { guest: true });
+  // WPU-X20: `?reauth=1` (the link of "sign in again" for a fresh sign-in) opens the form for a signed-in customer.
+  // It changes nothing else: `next` still passes the U12 allow-list and the new sign-in makes the fresh session.
+  const reauth = isFlag(query["reauth"]);
+  const page = await loadAuthPage(locale, next, { guest: !reauth });
   const banner = isFlag(query["verified"]) ? "verified" : isFlag(query["reset"]) ? "reset" : null;
   return (
     <AuthPageFrame locale={locale} path="/login">

@@ -23,6 +23,7 @@ export const serversEn: Same<typeof serversBn> = {
       name_mismatch: "The name does not match. Type exactly the same name.",
       fresh_sign_in_required: "For your security, sign in again and then try once more.",
     },
+    reauthLink: "Sign in again",
     field: {
       invalid: "The value in this field is not valid.",
     },

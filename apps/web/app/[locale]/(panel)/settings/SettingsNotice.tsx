@@ -26,7 +26,9 @@ export function SettingsNotice({
         {state.error === "fresh_sign_in_required" ? (
           <>
             {" "}
-            <a href={signInHref}>{t("fresh.signIn")}</a>
+            <a href={`${signInHref}${signInHref.includes("?") ? "&" : "?"}reauth=1`}>
+              {t("fresh.signIn")}
+            </a>
           </>
         ) : null}
       </div>
