@@ -4,6 +4,7 @@ import { localePath } from "@tc/ui/runtime";
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { TopUpScreen } from "../../../../../server/topup-view.ts";
+import { EpsBadge } from "../../../_components/EpsBadge.tsx";
 import { TopUpForm } from "./TopUpForm.tsx";
 
 // The content of /wallet/topup. Synchronous, so it renders in a test without a request. Its markup
@@ -28,6 +29,7 @@ export function TopUpContent({
 }) {
   const t = useTranslations("Wallet.topup");
   const status = useTranslations("Wallet.status");
+  const publicT = useTranslations("Public");
   const walletHref = localePath(locale, "/wallet");
   const open = eps && screen.market !== null;
 
@@ -81,6 +83,11 @@ export function TopUpContent({
   return (
     <div>
       <h1 className="h3 mergecolor mb-4">{t("heading")}</h1>
+
+      <div className="mb-4">
+        <EpsBadge alt={publicT("epsBadge.alt")} />
+        <p className="small seccolor mt-2 mb-0">{t("badgeCaption")}</p>
+      </div>
 
       <Card as="section" className="mb-4">
         <TopUpForm
