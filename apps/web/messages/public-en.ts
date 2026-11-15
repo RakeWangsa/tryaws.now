@@ -105,8 +105,8 @@ export const publicEn: Same<typeof publicBn> = {
         eps: { title: "Top up with EPS", text: "Wallet and payments in taka" },
         regions: { title: "Singapore and Mumbai", text: "Two AWS Regions" },
         support: {
-          title: "Support requests in the panel",
-          text: "TryAWS.now sells, bills and supports",
+          title: "Support in Bengali",
+          text: "Support requests in the panel; TryAWS.now sells, bills and supports",
         },
       },
       stepsTitle: "How it works",
