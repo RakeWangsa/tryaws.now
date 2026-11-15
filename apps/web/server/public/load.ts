@@ -3,12 +3,19 @@ import { cache } from "react";
 import { readWebConfig } from "../config.ts";
 import { loadPublicCatalog } from "./catalog.ts";
 import type { PublicCatalog } from "./catalog.ts";
+import { PUBLIC_IMAGE_REGIONS, loadPublicImages } from "./images.ts";
+import type { PublicImages } from "./images.ts";
 
 // What every public page reads, once per request (`cache`): the catalog with its prices and flags,
 // the plain origin for canonical URLs, and the nonce of the request for the JSON-LD blocks (U4).
 
 export const publicCatalog = cache((): Promise<PublicCatalog> =>
   loadPublicCatalog(() => new Date()),
+);
+
+// WPU-X22: the offered images of the two public locations (the home chooser).
+export const publicImages = cache((): Promise<PublicImages> =>
+  loadPublicImages(PUBLIC_IMAGE_REGIONS),
 );
 
 /**

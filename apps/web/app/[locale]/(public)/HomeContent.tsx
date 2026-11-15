@@ -1,6 +1,7 @@
 import type { Locale } from "@tc/ui/runtime";
 import { useTranslations } from "next-intl";
 import type { PublicCatalog } from "../../../server/public/catalog.ts";
+import type { PublicImages } from "../../../server/public/images.ts";
 import { breadcrumbLd } from "../../../server/public/seo.ts";
 import { AnswerBlock } from "./_components/AnswerBlock.tsx";
 import { JsonLds } from "./_components/JsonLd.tsx";
@@ -18,20 +19,26 @@ import { About, Chooser, Hero, Services } from "./home/HomeSections.tsx";
 export function HomeContent({
   locale,
   catalog,
+  images = { state: "unavailable" },
   origin,
   nonce,
   region,
   platform,
+  blueprint,
   signedIn = false,
 }: {
   locale: Locale;
   catalog: PublicCatalog;
+  /** WPU-X22: the offered images (the image step); "unavailable" hides it. */
+  images?: PublicImages;
   origin: string | null;
   nonce: string | undefined;
   /** The `region` of the query; anything unknown falls back to the first location that has plans. */
   region?: string | undefined;
   /** The `platform` of the query: `linux` or `windows`; anything else falls back to the first. */
   platform?: string | undefined;
+  /** The `blueprint` of the query: an image id of the chosen platform; anything else falls back to the first. */
+  blueprint?: string | undefined;
   /** A valid customer session exists: the create button then goes to the panel (a boolean only). */
   signedIn?: boolean;
 }) {
@@ -66,8 +73,10 @@ export function HomeContent({
                 t={t}
                 locale={locale}
                 catalog={catalog}
+                images={images}
                 region={region}
                 platform={platform}
+                blueprint={blueprint}
                 signedIn={signedIn}
               />
             </div>

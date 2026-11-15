@@ -3,6 +3,7 @@ import type { Locale } from "@tc/ui/runtime";
 import { publicBn } from "../../../../messages/public-bn.ts";
 import { publicEn } from "../../../../messages/public-en.ts";
 import type { PublicCatalog, PublicOffer } from "../../../../server/public/catalog.ts";
+import type { PublicImages } from "../../../../server/public/images.ts";
 import { HomeContent } from "../HomeContent.tsx";
 import { html } from "../public-states.tsx";
 import { NONCE, ORIGIN, UNAVAILABLE, openCatalog } from "../public.fixtures.ts";
@@ -28,10 +29,18 @@ const ALL_FLAGS = [
   "container_service",
 ];
 
+const NO_IMAGES: PublicImages = { state: "unavailable" };
+
 const render = (
   catalog: PublicCatalog,
   locale: Locale,
-  extra: { region?: string; platform?: string; signedIn?: boolean } = {},
+  extra: {
+    region?: string;
+    platform?: string;
+    blueprint?: string;
+    signedIn?: boolean;
+    images?: PublicImages;
+  } = {},
 ): string =>
   html(
     <HomeContent locale={locale} catalog={catalog} origin={ORIGIN} nonce={NONCE} {...extra} />,
@@ -124,7 +133,7 @@ describe("the services list (WPU-X18)", () => {
 
 describe("the instance chooser (WPU-X18)", () => {
   it("starts at the first platform and the first location that have plans, cheapest first", () => {
-    const c = homeChooser(open, {});
+    const c = homeChooser(open, NO_IMAGES, {});
     expect(c.state).toBe("ok");
     if (c.state !== "ok") return;
     expect(c.platform).toBe("linux");
@@ -136,43 +145,43 @@ describe("the instance chooser (WPU-X18)", () => {
   });
 
   it("follows ?region= and falls back to the first location for an unknown value", () => {
-    const mumbai = homeChooser(open, { region: "ap-south-1" });
+    const mumbai = homeChooser(open, NO_IMAGES, { region: "ap-south-1" });
     expect(mumbai.state === "ok" && mumbai.offers.map((o) => o.region)).toEqual(["ap-south-1"]);
     for (const bad of ["us-east-1", "", "ap-south-1,ap-southeast-1", "<script>"]) {
-      const c = homeChooser(open, { region: bad });
+      const c = homeChooser(open, NO_IMAGES, { region: bad });
       expect(c.state === "ok" && c.region).toBe("ap-southeast-1");
     }
   });
 
   it("offers Windows only when the catalog has Windows plans, and follows ?platform=", () => {
-    const win = homeChooser(withWindows, { platform: "windows" });
+    const win = homeChooser(withWindows, NO_IMAGES, { platform: "windows" });
     expect(win.state === "ok" && win.platforms).toEqual(["linux", "windows"]);
     expect(win.state === "ok" && win.platform).toBe("windows");
     expect(win.state === "ok" && win.offers.every((o) => o.family === "windows_instance")).toBe(
       true,
     );
-    const noWin = homeChooser(open, { platform: "windows" });
+    const noWin = homeChooser(open, NO_IMAGES, { platform: "windows" });
     expect(noWin.state === "ok" && noWin.platform).toBe("linux");
     expect(render(open, "en")).not.toContain("Microsoft Windows");
     expect(render(withWindows, "en")).toContain("Microsoft Windows");
   });
 
   it("shows the database family nowhere in the instance chooser", () => {
-    const c = homeChooser(everything, {});
+    const c = homeChooser(everything, NO_IMAGES, {});
     expect(c.state === "ok" && c.offers.some((o) => o.family === "database")).toBe(false);
   });
 
   it("is closed when no instance family is open and unavailable when the catalog is", () => {
-    expect(homeChooser(none, {}).state).toBe("closed");
-    expect(homeChooser(UNAVAILABLE, {}).state).toBe("unavailable");
+    expect(homeChooser(none, NO_IMAGES, {}).state).toBe("closed");
+    expect(homeChooser(UNAVAILABLE, NO_IMAGES, {}).state).toBe("unavailable");
     expect(render(none, "en")).toContain("No plan is open yet");
   });
 
   it("makes each choice a plain link with a query, no script and no form (U2, U7)", () => {
-    const page = render(withWindows, "en", { region: "ap-south-1", platform: "linux" });
+    const page = render(withWindows, "en", { region: "ap-southeast-1", platform: "linux" });
     expect(page).toContain('href="/en?region=ap-southeast-1&amp;platform=linux#chooser"');
     expect(page).toContain('href="/en?region=ap-south-1&amp;platform=linux#chooser"');
-    expect(page).toContain('href="/en?region=ap-south-1&amp;platform=windows#chooser"');
+    expect(page).toContain('href="/en?region=ap-southeast-1&amp;platform=windows#chooser"');
     expect(page).not.toMatch(/<form\b|<select\b|onclick|<input/i);
     expect(page.replace(/<script type="application\/ld\+json"[^]*?<\/script>/g, "")).not.toContain(
       "<script",
@@ -307,7 +316,7 @@ describe("compact cards, the limit and the titles (WPU-X18 round 2)", () => {
   };
 
   it("shows at most eight cards and one link to the pricing page of the same location", () => {
-    const c = homeChooser(big, {});
+    const c = homeChooser(big, NO_IMAGES, {});
     expect(c.state === "ok" && c.offers.length).toBe(HOME_CARD_LIMIT);
     expect(c.state === "ok" && c.total).toBe(12);
     const page = render(big, "en");
@@ -327,7 +336,7 @@ describe("compact cards, the limit and the titles (WPU-X18 round 2)", () => {
   });
 
   it("sorts by price and keeps the price in whole taka with the period", () => {
-    const c = homeChooser(big, {});
+    const c = homeChooser(big, NO_IMAGES, {});
     if (c.state !== "ok") throw new Error("not ok");
     for (let i = 1; i < c.offers.length; i++) {
       expect(c.offers[i]!.priceMinor >= c.offers[i - 1]!.priceMinor).toBe(true);
@@ -367,5 +376,125 @@ describe("digits and names (WPU-X18 round 3)", () => {
     expect((page.match(/tc-svc-name/g) ?? []).length).toBe(7);
     expect(page).toMatch(/<a [^>]*class="golink mergecolor tc-svc-name"/);
     expect(page).toMatch(/<span class="mergecolor tc-svc-name">Containers<\/span>/);
+  });
+});
+
+// WPU-X22 item 4: the platform and image steps of the Lightsail console, from the same allow-list the
+// panel reads. Plain text cards, no logo, links only; unreadable images hide the steps (R16).
+const IMAGES: PublicImages = {
+  state: "ok",
+  byRegion: {
+    "ap-southeast-1": [
+      { id: "wordpress_ls_1_0", name: "WordPress", version: "6.8", kind: "app" },
+      { id: "node_ls_1_0", name: "Node.js", version: null, kind: "app" },
+      { id: "debian_12", name: "Debian", version: "12", kind: "os" },
+      { id: "ubuntu_24_04", name: "Ubuntu", version: "24.04 LTS", kind: "os" },
+    ],
+    "ap-south-1": [{ id: "ubuntu_24_04", name: "Ubuntu", version: "24.04 LTS", kind: "os" }],
+  },
+};
+
+describe("platform and image steps (WPU-X22)", () => {
+  it("offers Linux apps, Linux operating system and Windows (only where they exist), apps first", () => {
+    const c = homeChooser(withWindows, IMAGES, {});
+    expect(c.state === "ok" && c.platforms).toEqual(["apps", "os", "windows"]);
+    expect(c.state === "ok" && c.platform).toBe("apps");
+    expect(c.state === "ok" && c.blueprints.map((b) => b.id)).toEqual([
+      "wordpress_ls_1_0",
+      "node_ls_1_0",
+    ]);
+    // Mumbai has only an OS image (and the fixture has no Windows plan there): the list is per location.
+    const mumbai = homeChooser(withWindows, IMAGES, { region: "ap-south-1", platform: "os" });
+    expect(mumbai.state === "ok" && mumbai.region).toBe("ap-south-1");
+    expect(mumbai.state === "ok" && mumbai.platforms).toEqual(["os"]);
+    // ?platform=apps with a location that has no apps falls to the first location that has them.
+    const apps = homeChooser(withWindows, IMAGES, { region: "ap-south-1", platform: "apps" });
+    expect(apps.state === "ok" && apps.region).toBe("ap-southeast-1");
+  });
+
+  it("follows ?blueprint= for the chosen platform and ignores anything else", () => {
+    const node = homeChooser(open, IMAGES, { platform: "apps", blueprint: "node_ls_1_0" });
+    expect(node.state === "ok" && node.blueprint?.id).toBe("node_ls_1_0");
+    for (const bad of ["debian_12", "nope", "", "<script>"]) {
+      const c = homeChooser(open, IMAGES, { platform: "apps", blueprint: bad });
+      expect(c.state === "ok" && c.blueprint?.id).toBe("wordpress_ls_1_0");
+    }
+    const win = homeChooser(withWindows, IMAGES, { platform: "windows", blueprint: "node_ls_1_0" });
+    expect(win.state === "ok" && win.blueprints).toEqual([]);
+    expect(win.state === "ok" && win.blueprint).toBeNull();
+  });
+
+  it("the old ?platform=linux means Linux apps when images are known, and stays when they are not", () => {
+    const known = homeChooser(open, IMAGES, { platform: "linux" });
+    expect(known.state === "ok" && known.platform).toBe("apps");
+    const unknown = homeChooser(open, NO_IMAGES, { platform: "linux" });
+    expect(unknown.state === "ok" && unknown.platform).toBe("linux");
+    expect(unknown.state === "ok" && unknown.platforms).toEqual(["linux"]);
+    expect(unknown.state === "ok" && unknown.blueprints).toEqual([]);
+  });
+
+  it("shows no image step when the images cannot be read, and the plain Linux button (R16)", () => {
+    const page = render(open, "en");
+    expect(page).not.toContain("Select an image");
+    expect(page).not.toContain("Linux apps");
+    expect(text(page)).toContain("Linux");
+  });
+
+  it("renders plain text cards with name, version and kind: no logo, no image, links only", () => {
+    const page = render(open, "en", { images: IMAGES });
+    expect(page).toContain("Select a platform");
+    expect(page).toContain("Linux apps");
+    expect(page).toContain("Linux operating system");
+    expect(page).toContain("Select an image");
+    expect(text(page)).toContain("WordPress 6.8");
+    expect(text(page)).toContain("Node.js");
+    expect(text(page)).toContain("App image");
+    expect(page).not.toContain("Debian");
+    expect(page).not.toMatch(/<img|\/theme\/assets\/apps/);
+    expect(page).not.toMatch(/<form|<button|<script[^>]*src/);
+    // the chosen image is marked by text, not by colour alone
+    expect(text(page)).toMatch(/WordPress 6\.8 App image.*Selected/);
+    expect(page).toContain(
+      'href="/en?region=ap-southeast-1&amp;platform=apps&amp;blueprint=node_ls_1_0#chooser"',
+    );
+    expect(page).toContain('href="/en?region=ap-southeast-1&amp;platform=os#chooser"');
+    // the OS step shows the operating systems
+    const os = render(open, "en", { images: IMAGES, platform: "os", blueprint: "debian_12" });
+    expect(text(os)).toContain("Debian 12");
+    expect(text(os)).toContain("Ubuntu 24.04 LTS");
+    expect(text(os)).not.toContain("WordPress");
+  });
+
+  it("does not invent a parameter for the panel: the create links carry no image", () => {
+    const page = render(open, "en", { images: IMAGES, blueprint: "node_ls_1_0" });
+    const creates = [...page.matchAll(/href="([^"]*)"[^>]*>\s*Create instance/g)].map((m) => m[1]);
+    expect(creates.length).toBeGreaterThan(0);
+    for (const href of creates) expect(href).not.toMatch(/blueprint|node_ls/);
+    const signedIn = render(open, "en", { images: IMAGES, signedIn: true });
+    expect(signedIn).toContain('href="/en/servers/new"');
+  });
+
+  it("is bilingual: the Bengali home has the steps in Bengali", () => {
+    const page = render(open, "bn", { images: IMAGES });
+    expect(page).toContain(publicBn.Public.home.imageTitle);
+    expect(page).toContain(publicBn.Public.home.platforms.apps);
+  });
+
+  it("every new message exists in bn and en", () => {
+    const keys = [
+      "imageTitle",
+      "imageKindApp",
+      "imageKindOs",
+      "imageSelect",
+      "imageSelected",
+      "imageNote",
+    ] as const;
+    for (const key of keys) {
+      expect(publicEn.Public.home[key].length).toBeGreaterThan(0);
+      expect(publicBn.Public.home[key].length).toBeGreaterThan(0);
+    }
+    expect(Object.keys(publicBn.Public.home.platforms)).toEqual(
+      Object.keys(publicEn.Public.home.platforms),
+    );
   });
 });

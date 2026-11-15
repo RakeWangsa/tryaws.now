@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { publicCatalog, publicOrigin, requestNonce } from "../../server/public/load.ts";
+import {
+  publicCatalog,
+  publicImages,
+  publicOrigin,
+  requestNonce,
+} from "../../server/public/load.ts";
 import { publicSignedIn } from "../../server/public/signed-in.ts";
 import { PublicFrame } from "./(public)/_components/PublicFrame.tsx";
 import { localeOf, menuOf, metadataOf } from "./(public)/_components/page.ts";
@@ -15,12 +20,17 @@ export default async function HomePage({
   params,
   searchParams,
 }: LocaleParams & {
-  searchParams?: Promise<{ region?: string | string[]; platform?: string | string[] }>;
+  searchParams?: Promise<{
+    region?: string | string[];
+    platform?: string | string[];
+    blueprint?: string | string[];
+  }>;
 }) {
-  const { region, platform } = (await searchParams) ?? {};
+  const { region, platform, blueprint } = (await searchParams) ?? {};
   const locale = await localeOf(params);
-  const [catalog, nonce, signedIn] = await Promise.all([
+  const [catalog, images, nonce, signedIn] = await Promise.all([
     publicCatalog(),
+    publicImages(),
     requestNonce(),
     publicSignedIn(),
   ]);
@@ -29,10 +39,12 @@ export default async function HomePage({
       <HomeContent
         locale={locale}
         catalog={catalog}
+        images={images}
         origin={publicOrigin()}
         nonce={nonce}
         region={typeof region === "string" ? region : undefined}
         platform={typeof platform === "string" ? platform : undefined}
+        blueprint={typeof blueprint === "string" ? blueprint : undefined}
         signedIn={signedIn}
       />
     </PublicFrame>
