@@ -381,7 +381,7 @@ function classify(error: unknown, operation: string | null): AwsError {
     code: row?.code ?? "internal",
     retryable: credentialsStep ? true : (row?.retryable ?? true),
     poolFull: row?.poolFull ?? false,
-    // Row 11 is the only row that names the error by its network code.
+    // Row 12 (the network row) is the only row that names the error by its network code.
     awsErrorName: safeName(index === NETWORK_ROW ? f.code : f.name),
     operation,
     httpStatus: f.status,
@@ -393,8 +393,8 @@ function classify(error: unknown, operation: string | null): AwsError {
 
 /**
  * Turns anything that a failed AWS call can throw into an `AwsError`. The raw message is read
- * only to classify (rows 1 and 2) and is dropped. Never throws: a value whose properties cannot
- * be read gives row 12.
+ * only to classify (rows 1 to 3) and is dropped. Never throws: a value whose properties cannot
+ * be read gives row 13.
  */
 export function toAwsError(error: unknown, operation: string | null): AwsError {
   try {
