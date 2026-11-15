@@ -517,9 +517,7 @@ describe("WPU-X23 a create that AWS keeps refusing at its first step", () => {
     expect(run({ attempts: 1, step: "wait_running" }).to).toBe("waiting");
     expect(run({ attempts: 1, step: undefined }).to).toBe("waiting");
     expect(run({ attempts: 1, facts: { ...refused, mayHaveActed: true } }).to).toBe("waiting");
-    expect(run({ attempts: 1, facts: { ...refused, mayHaveActed: undefined } }).to).toBe(
-      "waiting",
-    );
+    expect(run({ attempts: 1, facts: { ...refused, mayHaveActed: undefined } }).to).toBe("waiting");
     expect(run({ attempts: 1, kind: "reboot" }).to).toBe("waiting");
     expect(run({ attempts: 1, facts: { ...refused, code: "conflict" } }).to).toBe("waiting");
   });

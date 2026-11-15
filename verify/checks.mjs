@@ -4167,6 +4167,13 @@ TASKS["WPU-X20"] = [
 // the messages parity; repo the journal and verify wiring.
 TASKS["WPU-X21"] = [specSync, baselineSync, lint, typecheck, format, ui, uiKit, web, repo];
 
+// WPU-X23 (second Gate B run, 2026-11-15): one live destroy per resource whatever the key (db unit test), the
+// step-up sign-in that runs the whole flow for the same customer (web auth tests), the "Sign in again" link on every
+// fresh-sign-in notice, a create that AWS refuses at its first step failing after one retry with its refund (core
+// policy tests), the proxy on /domains/<name> (web proxy test), the pages that refresh themselves, and the review
+// term of a domain. Database tests are left to CI.
+TASKS["WPU-X23"] = [specSync, baselineSync, lint, typecheck, format, core, provisioner, web, repo];
+
 export const GATES = { M0: WP0_T1, M1, M2, M3, M4, M5, M6, M7 };
 
 // `packages` holds package names (from changedPackages) or "all".
