@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { vendoredThemePresent } from "../theme/present.ts";
 import { renderKit, ssr, unknownClasses } from "../test/render";
 import { ImageTile } from "./ImageTile";
 
@@ -151,7 +152,8 @@ describe("ImageTile", () => {
     }
   });
 
-  it("points at a file that exists", () => {
+  // The logo is a file of the vendored Antler theme, which a public checkout does not have (docs/theme.md).
+  it.skipIf(!vendoredThemePresent())("points at a file that exists", () => {
     expect(existsSync(resolve(repoRoot, "packages/ui/theme/assets/apps/ubuntu.svg"))).toBe(true);
   });
 

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
+import { mockupPresent, vendoredThemePresent } from "@tc/ui/theme-present";
 import type {
   AbuseCaseDetail,
   AbuseCaseRow,
@@ -632,7 +633,7 @@ describe("the support, abuse and reconciliation screens follow the mockup", () =
   };
 
   for (const anchor of ANCHORS) {
-    it(`${anchor.screen} / ${anchor.file}: ${anchor.why}`, async () => {
+    it.skipIf(!mockupPresent())(`${anchor.screen} / ${anchor.file}: ${anchor.why}`, async () => {
       const inMockup = mockup(anchor.file);
       expect(
         anchor.classes.filter((c) => !inMockup.has(c)),
@@ -648,21 +649,24 @@ describe("the support, abuse and reconciliation screens follow the mockup", () =
     });
   }
 
-  it("every class of every screen is defined by the theme, Bootstrap, Font Awesome or tc.css", async () => {
-    const known = knownClasses();
-    for (const screen of [
-      "supportList",
-      "supportDetail",
-      "abuseList",
-      "abuseDetail",
-      "reconciliation",
-    ] as const) {
-      for (const locale of LOCALES) {
-        const unknown = [...classTokens(await render(screen, locale))].filter(
-          (c) => !known.has(c) && c !== "clear" && c !== "tc-skip-link",
-        );
-        expect(unknown, `${screen} in ${locale}`).toEqual([]);
+  it.skipIf(!vendoredThemePresent())(
+    "every class of every screen is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    async () => {
+      const known = knownClasses();
+      for (const screen of [
+        "supportList",
+        "supportDetail",
+        "abuseList",
+        "abuseDetail",
+        "reconciliation",
+      ] as const) {
+        for (const locale of LOCALES) {
+          const unknown = [...classTokens(await render(screen, locale))].filter(
+            (c) => !known.has(c) && c !== "clear" && c !== "tc-skip-link",
+          );
+          expect(unknown, `${screen} in ${locale}`).toEqual([]);
+        }
       }
-    }
-  });
+    },
+  );
 });

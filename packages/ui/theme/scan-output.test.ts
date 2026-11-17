@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { mockupPresent } from "./present.ts";
 import { scanOutput, scanThemeOutputMain, type Finding } from "./scan-output.ts";
 import {
   SCRIPT_HASH_FILE,
@@ -11,17 +12,36 @@ import {
   formatScriptList,
   readScriptList,
   scriptHashSet,
+  type ScriptEntry,
 } from "./script-hashes.ts";
 import { ThemeError, sha256Of } from "./tree.ts";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const mockup = `${repoRoot}design/mockup`;
-const jquery = `${mockup}/template/assets/js/jquery.min.js`;
+const haveMockup = mockupPresent();
 const made: string[] = [];
 afterAll(() => {
   for (const dir of made) rmSync(dir, { recursive: true, force: true });
 });
-const list = buildScriptList(mockup);
+// With the mockup, the real jQuery of the theme is the sample and the real list is the list. Without
+// it (a public checkout, docs/theme.md) a stand-in that carries the same signature and is on the
+// list takes its place, so the scanner itself is tested in both situations. Only the two tests that
+// compare with the real files skip.
+const STAND_IN = `/*! jQuery requires a window with a document */ ${"x".repeat(200)}`;
+const standInDir = mkdtempSync(join(tmpdir(), "stand-in-"));
+made.push(standInDir);
+writeFileSync(join(standInDir, "jquery.min.js"), STAND_IN);
+const jquery = haveMockup
+  ? `${mockup}/template/assets/js/jquery.min.js`
+  : join(standInDir, "jquery.min.js");
+const standInList: ScriptEntry[] = [
+  {
+    path: "template/assets/js/jquery.min.js",
+    bytes: STAND_IN.length,
+    sha256: sha256Of(Buffer.from(STAND_IN)),
+  },
+];
+const list = haveMockup ? buildScriptList(mockup) : standInList;
 const hashes = scriptHashSet(list);
 /** The list of the mockup as a file, for the command-line tests. */
 const hashDir = mkdtempSync(join(tmpdir(), "hashes-"));
@@ -50,17 +70,23 @@ const CHUNK =
   );
 
 describe("the hashes of the theme's scripts", () => {
-  it("hold the sha256 of every script of the zip that is at least 100 bytes", () => {
-    expect(hashes.size).toBeGreaterThan(40);
-    expect(hashes.has(sha256Of(readFileSync(jquery)))).toBe(true);
-    expect(hashes.has(sha256Of(readFileSync(`${mockup}/template/assets/js/custom.js`)))).toBe(
-      false,
-    );
-  });
+  it.skipIf(!haveMockup)(
+    "hold the sha256 of every script of the zip that is at least 100 bytes",
+    () => {
+      expect(hashes.size).toBeGreaterThan(40);
+      expect(hashes.has(sha256Of(readFileSync(jquery)))).toBe(true);
+      expect(hashes.has(sha256Of(readFileSync(`${mockup}/template/assets/js/custom.js`)))).toBe(
+        false,
+      );
+    },
+  );
 
-  it("the committed list packages/ui/theme/script-hashes.txt equals the list of design/mockup (so the scan needs no design/)", () => {
-    expect(readScriptList(join(repoRoot, SCRIPT_HASH_FILE))).toEqual(list);
-  });
+  it.skipIf(!haveMockup)(
+    "the committed list packages/ui/theme/script-hashes.txt equals the list of design/mockup (so the scan needs no design/)",
+    () => {
+      expect(readScriptList(join(repoRoot, SCRIPT_HASH_FILE))).toEqual(list);
+    },
+  );
 });
 
 describe("scanOutput", () => {
@@ -210,7 +236,13 @@ describe("scanThemeOutputMain and scripts/scan-theme-output.ts", () => {
     const script = `${repoRoot}scripts/scan-theme-output.ts`;
     const result = spawnSync(process.execPath, [script, dirty], { encoding: "utf8" });
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("FOUND theme-script-bytes theme/assets/js/jquery.min.js");
+    // The command reads the committed list of the real theme's scripts, which the stand-in is not on:
+    // without the mockup the path and the signature are what it finds.
+    expect(result.stderr).toContain(
+      haveMockup
+        ? "FOUND theme-script-bytes theme/assets/js/jquery.min.js"
+        : "FOUND jquery-signature theme/assets/js/jquery.min.js",
+    );
     const clean = spawnSync(process.execPath, [script, output({ "a.txt": "hello" })], {
       encoding: "utf8",
     });

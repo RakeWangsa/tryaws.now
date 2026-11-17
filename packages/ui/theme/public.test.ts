@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { readFontFaces } from "./font-faces.ts";
 import { TC_FONTS, TC_OWN_FONTS } from "./manifest.ts";
+import { mockupPresent } from "./present.ts";
 import {
   THEME_CONTENT_CLASSES,
   THEME_STYLESHEETS,
@@ -13,10 +14,13 @@ import {
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const mockup = `${repoRoot}design/mockup/template`;
-const themeCss = readFileSync(`${mockup}/assets/css/theme.min.css`, "utf8");
+// The mockup is the paid Antler theme; without it (a public checkout) the tests that read it skip
+// (docs/theme.md) and the rest run.
+const withMockup = it.skipIf(!mockupPresent());
+const themeCss = mockupPresent() ? readFileSync(`${mockup}/assets/css/theme.min.css`, "utf8") : "";
 
 describe("THEME_STYLESHEETS", () => {
-  it("is the order of the <head> of all 53 pages of the mockup, then tc.css", () => {
+  withMockup("is the order of the <head> of all 53 pages of the mockup, then tc.css", () => {
     const orders = new Set<string>();
     let pages = 0;
     for (const name of readdirSync(mockup).filter((f) => f.endsWith(".html"))) {
@@ -44,16 +48,21 @@ describe("THEME_STYLESHEETS", () => {
 });
 
 describe("THEME_CONTENT_CLASSES (16.4)", () => {
-  it("is the wrapper that all 53 pages of the mockup have, and the theme's rules need it", () => {
-    expect(THEME_CONTENT_CLASSES).toBe("box-container limit-width");
-    const wrapped = readdirSync(mockup)
-      .filter((name) => name.endsWith(".html"))
-      .filter((name) =>
-        readFileSync(`${mockup}/${name}`, "utf8").includes(`<div class="${THEME_CONTENT_CLASSES}"`),
-      );
-    expect(wrapped).toHaveLength(53); // measured on 2026-11-11 (Antler 4.5.0)
-    expect(themeCss).toContain(".box-container .bg-colorstyle");
-  });
+  withMockup(
+    "is the wrapper that all 53 pages of the mockup have, and the theme's rules need it",
+    () => {
+      expect(THEME_CONTENT_CLASSES).toBe("box-container limit-width");
+      const wrapped = readdirSync(mockup)
+        .filter((name) => name.endsWith(".html"))
+        .filter((name) =>
+          readFileSync(`${mockup}/${name}`, "utf8").includes(
+            `<div class="${THEME_CONTENT_CLASSES}"`,
+          ),
+        );
+      expect(wrapped).toHaveLength(53); // measured on 2026-11-11 (Antler 4.5.0)
+      expect(themeCss).toContain(".box-container .bg-colorstyle");
+    },
+  );
 });
 
 describe("themeAttributes (16.4)", () => {
@@ -71,7 +80,7 @@ describe("themeAttributes (16.4)", () => {
     );
   });
 
-  it("uses values that the theme has a rule for (wide is the default and has none)", () => {
+  withMockup("uses values that the theme has a rule for (wide is the default and has none)", () => {
     for (const app of ["web", "admin"] as const) {
       for (const [name, value] of Object.entries(themeAttributes(app))) {
         if (name === "data-layout") continue;

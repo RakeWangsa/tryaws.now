@@ -2,11 +2,14 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
+import { mockupPresent, vendoredThemePresent } from "@tc/ui/theme-present";
 import { describe, expect, it } from "vitest";
 import type { MockupAnchor } from "./anchors.ts";
 
 // The test suite behind the rows of anchors.ts, shared by the database and load balancer screens.
-// Used by the mockup-anchors tests only (never by a page).
+// Used by the mockup-anchors tests only (never by a page). The rows compare with the paid Antler mockup
+// and the class check reads its vendored copy; a public checkout has neither (docs/theme.md), so those
+// tests skip and the others run.
 
 const here = dirname(fileURLToPath(import.meta.url));
 // apps/web/app/[locale]/(panel)/_family -> the repository root
@@ -43,7 +46,7 @@ export function defineAnchorSuite(input: {
   const { anchors, renderers } = input;
   describe(input.title, () => {
     for (const row of anchors) {
-      it(`${row.state} / ${row.mockupFile}: ${row.why}`, () => {
+      it.skipIf(!mockupPresent())(`${row.state} / ${row.mockupFile}: ${row.why}`, () => {
         const inMockup = mockupTokens(row.mockupFile);
         const missingInMockup = row.classes.filter((token) => !inMockup.has(token));
         expect(missingInMockup, `not in ${row.mockupFile}`).toEqual([]);
@@ -58,15 +61,20 @@ export function defineAnchorSuite(input: {
       });
     }
 
-    it("every class of every rendered state is defined by the theme, Bootstrap, Font Awesome or tc.css", () => {
-      const known = knownClasses();
-      for (const [state, render] of Object.entries(renderers)) {
-        for (const locale of ["bn", "en"] as const) {
-          const unknown = [...renderedTokens(render(locale))].filter((token) => !known.has(token));
-          expect(unknown, `${state} in ${locale}`).toEqual([]);
+    it.skipIf(!vendoredThemePresent())(
+      "every class of every rendered state is defined by the theme, Bootstrap, Font Awesome or tc.css",
+      () => {
+        const known = knownClasses();
+        for (const [state, render] of Object.entries(renderers)) {
+          for (const locale of ["bn", "en"] as const) {
+            const unknown = [...renderedTokens(render(locale))].filter(
+              (token) => !known.has(token),
+            );
+            expect(unknown, `${state} in ${locale}`).toEqual([]);
+          }
         }
-      }
-    });
+      },
+    );
 
     it("every state id of a row has a renderer, and every renderer has at least one anchor row", () => {
       for (const row of anchors) expect(renderers[row.state]).toBeDefined();

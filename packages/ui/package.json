@@ -9,7 +9,8 @@
     "./runtime": "./runtime/index.ts",
     "./messages": "./messages/index.ts",
     "./gallery": "./gallery/index.ts",
-    "./class-inventory": "./test/class-inventory.ts"
+    "./class-inventory": "./test/class-inventory.ts",
+    "./theme-present": "./theme/present.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

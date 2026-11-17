@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { expect, it } from "vitest";
 import { blockAfter, sectionRange, tablesIn } from "../../scripts/lib/md.mjs";
 
@@ -45,7 +45,8 @@ it(".gitignore holds every line of the plan's block", () => {
     expect(lines, line).toContain(line);
   }
 });
-it("JOURNEY.md starts with the entry form", () => {
+// JOURNEY.md is the owner's private working log; a public checkout does not have it, and this skips.
+it.skipIf(!existsSync("JOURNEY.md"))("JOURNEY.md starts with the entry form", () => {
   const form =
     "# JOURNEY\n\nOne entry per task or handoff, newest last. Copy this form:\n\n```markdown\n" +
     blockAfter(plan, "`JOURNEY.md` entry:") +

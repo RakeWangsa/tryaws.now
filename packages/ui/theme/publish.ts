@@ -24,6 +24,13 @@ export interface PublishInputs {
   /** The repository root, where the fonts of `TC_OWN_FONTS` sit. */
   repoRoot: string;
   manifest: ThemeManifest;
+  /**
+   * The theme-less mode (docs/theme.md): the checkout has no vendored copy of the paid theme, so the
+   * tree holds `tc.css` and the fonts only and `vendoredRoot` is not read. The caller chooses it
+   * explicitly (sync-main.ts, when the folder is absent); a vendored folder that is there is never
+   * skipped, so a damaged licensed checkout still fails (R16).
+   */
+  themeLess?: boolean;
 }
 
 /** A file of the vendored copy that a row with `inline: true` chose: it is imported, never published. */
@@ -37,13 +44,14 @@ function isInline(path: string, manifest: ThemeManifest): boolean {
 }
 
 /**
- * What `public/theme/` of an app holds: the vendored files under `assets/`, `tc.css`, the font
- * files of `TC_FONTS` and their licences under `fonts/`. It reads, checks and writes nothing.
+ * What `public/theme/` of an app holds: the vendored files under `assets/` (none in the theme-less
+ * mode), `tc.css`, the font files of `TC_FONTS` and their licences under `fonts/`. It reads, checks
+ * and writes nothing.
  * Problems of one kind are collected before the error is thrown (R16).
  */
 export function buildPublishTree(input: PublishInputs): { tree: Tree; refs: RefReport } {
   const { manifest } = input;
-  const vendored = listTree(input.vendoredRoot);
+  const vendored = input.themeLess === true ? [] : listTree(input.vendoredRoot);
 
   const forbidden: string[] = [];
   for (const path of vendored) {

@@ -14,6 +14,7 @@ import {
   VENDORED_ASSETS,
   type ThemeManifest,
 } from "./manifest.ts";
+import { vendoredThemePresent } from "./present.ts";
 import { THEME_STYLESHEETS, fontPreloads } from "./public.ts";
 import { buildPublishTree } from "./publish.ts";
 import { scanOutput } from "./scan-output.ts";
@@ -250,6 +251,69 @@ describe("--stage publish on a small repository", () => {
     expect(existsSync(join(root, "apps/admin/public/theme/tc.css"))).toBe(true);
   });
 
+  describe("without the paid theme (the theme-less mode, docs/theme.md)", () => {
+    /** A public checkout: tc.css and our own fonts are there, the vendored copy and the list may be. */
+    const publicRepo = (withList: boolean): string => {
+      const root = temp("publish-");
+      write(root, { [TC_CSS]: TC, ...OWN_FONT_FILES });
+      if (withList)
+        write(root, {
+          [SCRIPT_HASH_FILE]: formatScriptList([
+            {
+              path: "template/assets/js/lib.js",
+              bytes: SCRIPT.length,
+              sha256: sha256Of(new TextEncoder().encode(SCRIPT)),
+            },
+          ]),
+        });
+      return root;
+    };
+
+    it("publishes tc.css and the fonts only, says why once, exits 0, and a second run writes nothing", () => {
+      const root = publicRepo(true);
+      const fonts = fakeFonts();
+      const first = run(["--stage", "publish"], root, fonts);
+      expect(first.err).toEqual([]);
+      expect(first.code).toBe(0);
+      expect(first.out.filter((l) => l.startsWith("theme-sync: "))).toEqual([
+        "theme-sync: the Antler theme is not in this checkout (theme-less mode).",
+      ]);
+      expect(first.out).toContain(`  missing: ${VENDORED_ASSETS}`);
+      expect(first.out).toContain("  To use your own licensed copy, follow docs/theme.md");
+      expect(first.out).toContain("publish web: 11 written, 0 removed, 0 unchanged");
+      expect(first.out).toContain("publish admin: scanned 11 files, 0 findings");
+      const web = listFiles(join(root, "apps/web/public/theme"));
+      expect(web).toEqual(listFiles(join(root, "apps/admin/public/theme")));
+      expect(web.filter((p) => p.startsWith("assets/"))).toEqual([]);
+      expect(web).toContain("tc.css");
+      expect(web).toContain("fonts/hind-siliguri-400.woff2");
+      const second = run(["--stage", "publish"], root, fonts);
+      expect(second.out).toContain("publish web: 0 written, 0 removed, 11 unchanged");
+      expect(run(["--stage", "publish", "--check"], root, fonts).code).toBe(0);
+    });
+
+    it("needs no list of the theme's scripts: the tree holds no file of the theme to match", () => {
+      const result = run(["--stage", "publish", "--app", "web"], publicRepo(false));
+      expect([result.code, result.err]).toEqual([0, []]);
+    });
+
+    it("still refuses what is wrong with our own files (R16): a missing tc.css, a missing font package", () => {
+      const noCss = temp("publish-");
+      write(noCss, { ...OWN_FONT_FILES });
+      expect(run(["--stage", "publish"], noCss).code).toBe(1);
+      const noFonts = (): string => temp("fonts-");
+      expect(run(["--stage", "publish"], publicRepo(true), noFonts).code).toBe(1);
+    });
+
+    it("a vendored folder that is there is never skipped: an empty one is read, and refused without the list", () => {
+      const root = publicRepo(false);
+      mkdirSync(join(root, VENDORED_ASSETS), { recursive: true });
+      const result = run(["--stage", "publish"], root);
+      expect(result.code).toBe(1);
+      expect(result.err[0]).toMatch(/\(missing_input\)$/);
+    });
+  });
+
   it("refuses an unknown app, and a list of the theme's scripts that is gone (the scan needs it, R16)", () => {
     expect(run(["--stage", "publish", "--app", "nope"], miniRepo()).code).toBe(1);
     const noList = temp("publish-");
@@ -260,17 +324,45 @@ describe("--stage publish on a small repository", () => {
   });
 });
 
-describe("the real repository", { timeout: 30000 }, () => {
-  const real = {
-    vendoredRoot: join(repoRoot, VENDORED_ASSETS),
-    tcCssFile: join(repoRoot, TC_CSS),
-    fontPackageDir,
-    repoRoot,
-    manifest: THEME_MANIFEST,
-  };
-  const { tree, refs } = buildPublishTree(real);
+const real = {
+  vendoredRoot: join(repoRoot, VENDORED_ASSETS),
+  tcCssFile: join(repoRoot, TC_CSS),
+  fontPackageDir,
+  repoRoot,
+  manifest: THEME_MANIFEST,
+};
+
+// The theme-less mode runs on the real tc.css and the real fonts, with or without the paid theme, so
+// a public checkout proves that `next build` has everything the root layout asks for from our own files.
+describe("the real repository, theme-less (docs/theme.md)", { timeout: 30000 }, () => {
+  const { tree, refs } = buildPublishTree({ ...real, themeLess: true });
+
+  it("publishes tc.css, seven fonts and three licences, and nothing of the theme", () => {
+    const paths = tree.files.map((f) => f.path);
+    expect(paths.filter((p) => p.startsWith("assets/"))).toEqual([]);
+    expect(paths.filter((p) => p.startsWith("fonts/"))).toHaveLength(10);
+    expect(paths).toContain("tc.css");
+    expect(tree.files).toHaveLength(11);
+    expect(refs.shipped).toBeGreaterThan(0);
+    expect(buildPublishTree({ ...real, themeLess: true }).tree.digest).toBe(tree.digest);
+  });
+
+  it("holds the fonts that the root layout preloads and tc.css, and no file of the theme", () => {
+    const paths = new Set(tree.files.map((f) => `/theme/${f.path}`));
+    for (const preload of fontPreloads("bn"))
+      expect(paths.has(preload.href), preload.href).toBe(true);
+    expect(paths.has("/theme/tc.css")).toBe(true);
+    for (const href of THEME_STYLESHEETS.slice(0, 5)) expect(paths.has(href), href).toBe(false);
+  });
+});
+
+describe.skipIf(!vendoredThemePresent())("the real repository", { timeout: 30000 }, () => {
+  // Lazy: a skipped suite still runs its body, and a public checkout has no vendored copy to read.
+  let built: ReturnType<typeof buildPublishTree> | undefined;
+  const publish = (): ReturnType<typeof buildPublishTree> => (built ??= buildPublishTree(real));
 
   it("publishes 66 files: the 55 of the theme, tc.css, seven fonts and three licences", () => {
+    const { tree, refs } = publish();
     expect(tree.files).toHaveLength(66);
     const paths = tree.files.map((f) => f.path);
     expect(paths.filter((p) => p.startsWith("assets/"))).toHaveLength(55);
@@ -283,6 +375,7 @@ describe("the real repository", { timeout: 30000 }, () => {
   });
 
   it("holds every file that the root layout will ask for", () => {
+    const { tree } = publish();
     const paths = new Set(tree.files.map((f) => `/theme/${f.path}`));
     for (const href of THEME_STYLESHEETS) expect(paths.has(href), href).toBe(true);
     for (const preload of fontPreloads("bn"))
@@ -290,6 +383,7 @@ describe("the real repository", { timeout: 30000 }, () => {
   });
 
   it("Review Focus 4: the real output has no file from the theme's assets/js, no jQuery, no other origin (checked against the committed list, not design/)", () => {
+    const { tree } = publish();
     const dest = temp("real-");
     writeTree(tree, dest);
     const { files, findings } = scanOutput(

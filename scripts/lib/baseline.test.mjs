@@ -80,11 +80,15 @@ it("copies the theme lists and the secret names", () => {
     "SmsApiKey",
   ]);
 });
+// JOURNEY.md is the owner's private working log; a public checkout does not have it (docs/theme.md lists
+// what is left out). Every other kit file must exist.
+const PRIVATE_FILES = new Set(["JOURNEY.md"]);
 it("lists the 21 kit files, and each one exists", () => {
   expect(KIT_FILES).toHaveLength(21);
   expect(KIT_FILES).toContain(".github/CODEOWNERS");
   expect(b.kitFiles).toEqual(KIT_FILES);
-  for (const file of KIT_FILES) expect(existsSync(file), file).toBe(true);
+  for (const file of KIT_FILES)
+    if (!PRIVATE_FILES.has(file)) expect(existsSync(file), file).toBe(true);
 });
 it("holds no value that looks like a secret", () => {
   expect(JSON.stringify(b)).not.toMatch(/AKIA[0-9A-Z]{16}|PRIVATE KEY|password\s*[:=]/i);

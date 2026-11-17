@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { listFiles } from "./glob.ts";
 import { MOCKUP_ASSETS, VENDORED_ASSETS, type ThemeManifest } from "./manifest.ts";
+import { antlerThemePresent } from "./present.ts";
 import { SCRIPT_HASH_FILE } from "./script-hashes.ts";
 import { syncThemeMain } from "./sync-main.ts";
 
@@ -143,10 +144,34 @@ describe("--stage import on a small repository", () => {
     expect(existsSync(join(root, VENDORED_ASSETS))).toBe(false);
   });
 
-  it("refuses a mockup that is not there (R16)", () => {
-    const result = run(IMPORT, emptyRoot());
-    expect(result.code).toBe(1);
-    expect(result.err[0]).toMatch(/\(missing_input\)$/);
+  // WPU-X30a (docs/theme.md): a public checkout has no mockup. That is the theme-less mode: say so,
+  // write nothing, exit 0. A mockup that is there but wrong is still refused (the two tests above).
+  it("a mockup that is not there is the theme-less mode: one notice, nothing written, exit 0", () => {
+    const root = emptyRoot();
+    for (const argv of [IMPORT, [...IMPORT, "--check"]]) {
+      const result = run(argv, root);
+      expect([result.code, result.err]).toEqual([0, []]);
+      expect(result.out).toEqual([
+        "theme-sync: the Antler theme is not in this checkout (theme-less mode).",
+        "  Antler is a paid third-party theme (Envato). It is not part of the public repository.",
+        `  missing: ${MOCKUP_ASSETS}`,
+        `  missing: ${VENDORED_ASSETS}`,
+        "  Without it the apps build, with tc.css and the self-hosted fonts and no theme styling.",
+        "  To use your own licensed copy, follow docs/theme.md",
+        `import: skipped, ${MOCKUP_ASSETS} is absent`,
+      ]);
+    }
+    expect(existsSync(join(root, VENDORED_ASSETS))).toBe(false);
+    expect(existsSync(join(root, SCRIPT_HASH_FILE))).toBe(false);
+  });
+
+  it("names only the folder that is missing: a vendored copy without its mockup", () => {
+    const root = emptyRoot();
+    mkdirSync(join(root, VENDORED_ASSETS), { recursive: true });
+    const result = run(IMPORT, root);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain(`  missing: ${MOCKUP_ASSETS}`);
+    expect(result.out).not.toContain(`  missing: ${VENDORED_ASSETS}`);
   });
 
   it("prints the usage for --help (exit 0) and for a wrong request (exit 1)", () => {
@@ -162,16 +187,20 @@ describe("--stage import on a small repository", () => {
 });
 
 describe("the real repository", () => {
-  it("the committed copy in packages/ui/theme/assets is the 16.3 allow-list of the mockup, byte for byte", () => {
-    const result = run(["--stage", "import", "--check"], repoRoot, null);
-    expect(result.err).toEqual([]);
-    expect(result.out[0]).toMatch(/^import: 55 files, 2416190 bytes, digest [0-9a-f]{64}$/);
-    expect(result.out).toContain("import: in sync");
-    expect(
-      result.out.some((line) => /^import: scripts: \d+ listed, \d+ hashed, in sync$/.test(line)),
-    ).toBe(true);
-    expect(result.code).toBe(0);
-  }, 30000);
+  it.skipIf(!antlerThemePresent())(
+    "the committed copy in packages/ui/theme/assets is the 16.3 allow-list of the mockup, byte for byte",
+    () => {
+      const result = run(["--stage", "import", "--check"], repoRoot, null);
+      expect(result.err).toEqual([]);
+      expect(result.out[0]).toMatch(/^import: 55 files, 2416190 bytes, digest [0-9a-f]{64}$/);
+      expect(result.out).toContain("import: in sync");
+      expect(
+        result.out.some((line) => /^import: scripts: \d+ listed, \d+ hashed, in sync$/.test(line)),
+      ).toBe(true);
+      expect(result.code).toBe(0);
+    },
+    30000,
+  );
 
   it("scripts/sync-theme.ts runs under the pinned Node without a build step", () => {
     const script = `${repoRoot}scripts/sync-theme.ts`;

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
+import { mockupPresent, vendoredThemePresent } from "@tc/ui/theme-present";
 import { describe, expect, it, vi } from "vitest";
 import { INVOICE_ANCHORS } from "./mockup-anchors.ts";
 import { STATE_RENDERERS } from "./mockup-states.tsx";
@@ -24,7 +25,7 @@ const render = (id: string, locale: "bn" | "en" = "en"): string =>
 
 describe("the invoice screens follow the shared mockup", () => {
   for (const row of INVOICE_ANCHORS) {
-    it(`${row.state} / ${row.mockupFile}: ${row.why}`, () => {
+    it.skipIf(!mockupPresent())(`${row.state} / ${row.mockupFile}: ${row.why}`, () => {
       const inMockup = tokens(readFileSync(resolve(mockupRoot, row.mockupFile), "utf8"));
       expect(
         row.classes.filter((t) => !inMockup.has(t)),
@@ -40,15 +41,18 @@ describe("the invoice screens follow the shared mockup", () => {
     });
   }
 
-  it("every class of every rendered state is defined by the theme, Bootstrap, Font Awesome or tc.css", () => {
-    const known = knownClasses();
-    for (const [id, renderer] of Object.entries(STATE_RENDERERS)) {
-      for (const locale of ["bn", "en"] as const) {
-        const unknown = [...tokens(renderer(locale))].filter((t) => !known.has(t));
-        expect(unknown, `${id} in ${locale}`).toEqual([]);
+  it.skipIf(!vendoredThemePresent())(
+    "every class of every rendered state is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    () => {
+      const known = knownClasses();
+      for (const [id, renderer] of Object.entries(STATE_RENDERERS)) {
+        for (const locale of ["bn", "en"] as const) {
+          const unknown = [...tokens(renderer(locale))].filter((t) => !known.has(t));
+          expect(unknown, `${id} in ${locale}`).toEqual([]);
+        }
       }
-    }
-  });
+    },
+  );
 
   it("every state of a row has a renderer", () => {
     for (const row of INVOICE_ANCHORS) expect(STATE_RENDERERS[row.state]).toBeDefined();

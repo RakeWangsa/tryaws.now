@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { refKind, resolveRef, scanCssRefs } from "./css-refs.ts";
+import { mockupPresent } from "./present.ts";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -43,14 +44,20 @@ describe("scanCssRefs", () => {
     ]);
   });
 
-  it("reads the real theme.min.css: many references, all relative files", () => {
-    const css = readFileSync(`${repoRoot}design/mockup/template/assets/css/theme.min.css`, "utf8");
-    const refs = scanCssRefs(css);
-    expect(refs.length).toBeGreaterThan(30);
-    expect(refs.every((r) => r.kind === "url" && refKind(r.raw) === "relative")).toBe(true);
-    expect(refs.map((r) => r.raw)).toContain("../patterns/exapath.svg");
-    expect(refs.map((r) => r.raw)).toContain("../../assets/img/topbanner01.jpg");
-  });
+  it.skipIf(!mockupPresent())(
+    "reads the real theme.min.css: many references, all relative files",
+    () => {
+      const css = readFileSync(
+        `${repoRoot}design/mockup/template/assets/css/theme.min.css`,
+        "utf8",
+      );
+      const refs = scanCssRefs(css);
+      expect(refs.length).toBeGreaterThan(30);
+      expect(refs.every((r) => r.kind === "url" && refKind(r.raw) === "relative")).toBe(true);
+      expect(refs.map((r) => r.raw)).toContain("../patterns/exapath.svg");
+      expect(refs.map((r) => r.raw)).toContain("../../assets/img/topbanner01.jpg");
+    },
+  );
 });
 
 it.each([

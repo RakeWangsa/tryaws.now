@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
+import { mockupPresent, vendoredThemePresent } from "@tc/ui/theme-present";
 import type { Locale, Messages } from "@tc/ui/runtime";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactElement } from "react";
@@ -427,32 +428,42 @@ describe("the price list follows the mockup", () => {
     return inProvider(await BookPage(params(locale, { family: "disk", go: "terms" })), locale);
   };
 
-  it("uses the table, form and card classes of the theme pages", async () => {
-    const cart = tokensOf(readFileSync(resolve(root, "cart.html"), "utf8"));
-    const checkout = tokensOf(readFileSync(resolve(root, "checkout.html"), "utf8"));
-    const wanted = {
-      "cart.html": ["table-responsive-lg", "compare", "seccolor", "mergecolor"],
-      "checkout.html": ["sec-main", "sec-bg1", "bg-seccolorstyle", "noshadow"],
-    };
-    expect(wanted["cart.html"].filter((c) => !cart.has(c))).toEqual([]);
-    expect(wanted["checkout.html"].filter((c) => !checkout.has(c))).toEqual([]);
+  it.skipIf(!mockupPresent())(
+    "uses the table, form and card classes of the theme pages",
+    async () => {
+      const cart = tokensOf(readFileSync(resolve(root, "cart.html"), "utf8"));
+      const checkout = tokensOf(readFileSync(resolve(root, "checkout.html"), "utf8"));
+      const wanted = {
+        "cart.html": ["table-responsive-lg", "compare", "seccolor", "mergecolor"],
+        "checkout.html": ["sec-main", "sec-bg1", "bg-seccolorstyle", "noshadow"],
+      };
+      expect(wanted["cart.html"].filter((c) => !cart.has(c))).toEqual([]);
+      expect(wanted["checkout.html"].filter((c) => !checkout.has(c))).toEqual([]);
+      for (const locale of LOCALES) {
+        const tokens = tokensOf(await render(locale));
+        expect(
+          [...wanted["cart.html"], ...wanted["checkout.html"]].filter((c) => !tokens.has(c)),
+        ).toEqual([]);
+      }
+    },
+  );
+
+  it("has no inline style (360px)", async () => {
     for (const locale of LOCALES) {
-      const tokens = tokensOf(await render(locale));
-      expect(
-        [...wanted["cart.html"], ...wanted["checkout.html"]].filter((c) => !tokens.has(c)),
-      ).toEqual([]);
+      expect(await render(locale), locale).not.toMatch(/\sstyle\s*=/);
     }
   });
 
-  it("every class is defined by the theme, Bootstrap, Font Awesome or tc.css; no inline style (360px)", async () => {
-    const known = knownClasses();
-    for (const locale of LOCALES) {
-      const html = await render(locale);
-      const unknown = [...tokensOf(html)].filter(
-        (c) => !known.has(c) && c !== "clear" && c !== "tc-skip-link",
-      );
-      expect(unknown, locale).toEqual([]);
-      expect(html).not.toMatch(/\sstyle\s*=/);
-    }
-  });
+  it.skipIf(!vendoredThemePresent())(
+    "every class is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    async () => {
+      const known = knownClasses();
+      for (const locale of LOCALES) {
+        const unknown = [...tokensOf(await render(locale))].filter(
+          (c) => !known.has(c) && c !== "clear" && c !== "tc-skip-link",
+        );
+        expect(unknown, locale).toEqual([]);
+      }
+    },
+  );
 });

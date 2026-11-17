@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ENABLED_BLUEPRINTS,
@@ -148,10 +150,9 @@ describe("imageLogoOf", () => {
     expect(imageLogoOf("../ubuntu")).toBeNull();
     expect(imageLogoOf(undefined)).toBeNull();
   });
-  it("every logo is a file of the theme", async () => {
-    const { readdirSync } = await import("node:fs");
-    const { fileURLToPath } = await import("node:url");
-    const dir = fileURLToPath(new URL("../../ui/theme/assets/apps", import.meta.url));
+  // The logos are files of the vendored Antler theme, which a public checkout does not have (docs/theme.md).
+  const dir = fileURLToPath(new URL("../../ui/theme/assets/apps", import.meta.url));
+  it.skipIf(!existsSync(dir))("every logo is a file of the theme", () => {
     const files = new Set(readdirSync(dir));
     for (const id of ["ubuntu", "debian", "wordpress", "lamp", "joomla", "plesk", "docker"]) {
       expect(files.has(`${imageLogoOf(id)}.svg`), id).toBe(true);

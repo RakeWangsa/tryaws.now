@@ -1,4 +1,5 @@
 import { knownClasses } from "@tc/ui/class-inventory";
+import { vendoredThemePresent } from "@tc/ui/theme-present";
 import type { Locale, Messages } from "@tc/ui/runtime";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactElement } from "react";
@@ -197,20 +198,25 @@ describe("/pricing/seller", () => {
     expect(state.asked).toEqual([]);
   });
 
-  it.each(LOCALES)("uses only classes of the mockup theme in %s", async (locale) => {
-    for (const s of [screen(), screen({ state: "missing", seller: null, history: [] })]) {
-      state.screen = s;
-      const html = inProvider(await SellerPage(params(locale)), locale);
-      const known = knownClasses();
-      const used = [...html.matchAll(/class="([^"]*)"/g)].flatMap((m) => (m[1] ?? "").split(/\s+/));
-      // `clear` and `tc-skip-link` are the menu and the skip link of the frame, not of this screen.
-      const unknown = used.filter(
-        (c) => c !== "" && !known.has(c) && c !== "clear" && c !== "tc-skip-link",
-      );
-      expect(unknown).toEqual([]);
-      expect(html).not.toMatch(/\sstyle=/);
-    }
-  });
+  it.skipIf(!vendoredThemePresent()).each(LOCALES)(
+    "uses only classes of the mockup theme in %s",
+    async (locale) => {
+      for (const s of [screen(), screen({ state: "missing", seller: null, history: [] })]) {
+        state.screen = s;
+        const html = inProvider(await SellerPage(params(locale)), locale);
+        const known = knownClasses();
+        const used = [...html.matchAll(/class="([^"]*)"/g)].flatMap((m) =>
+          (m[1] ?? "").split(/\s+/),
+        );
+        // `clear` and `tc-skip-link` are the menu and the skip link of the frame, not of this screen.
+        const unknown = used.filter(
+          (c) => c !== "" && !known.has(c) && c !== "clear" && c !== "tc-skip-link",
+        );
+        expect(unknown).toEqual([]);
+        expect(html).not.toMatch(/\sstyle=/);
+      }
+    },
+  );
 
   it("shows the result banner for a known code and ignores an unknown one", async () => {
     const ok = inProvider(await SellerPage(params("en", { result: "ok" })), "en");

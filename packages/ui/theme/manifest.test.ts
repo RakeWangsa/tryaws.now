@@ -12,10 +12,12 @@ import {
   forbiddenReason,
   neverPattern,
 } from "./manifest.ts";
+import { mockupPresent } from "./present.ts";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const assets = `${repoRoot}${MOCKUP_ASSETS}`;
-const mockupFiles = listFiles(assets);
+// Empty without the paid mockup (a public checkout); the suites that read it skip (docs/theme.md).
+const mockupFiles = mockupPresent() ? listFiles(assets) : [];
 const baseline = JSON.parse(readFileSync(`${repoRoot}verify/baseline.json`, "utf8")) as {
   theme: { shipped: string[]; neverShipped: string[] };
 };
@@ -49,7 +51,7 @@ describe("the manifest follows the tables of 16.3 in verify/baseline.json", () =
   });
 });
 
-describe("the manifest against the mockup (Antler 4.5.0)", () => {
+describe.skipIf(!mockupPresent())("the manifest against the mockup (Antler 4.5.0)", () => {
   it("holds the 26 app logos and the 306 line illustrations that 16.3 counts", () => {
     expect(expand("apps/*.svg")).toHaveLength(26);
     expect(expand("fonts/svg/*.svg")).toHaveLength(306);
