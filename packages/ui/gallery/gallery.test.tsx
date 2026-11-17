@@ -13,6 +13,7 @@ import { loadKitMessages } from "../messages/index.ts";
 import { composeMessages, type Locale, type Messages } from "../runtime/index.ts";
 import { shellMessages } from "../shells/messages/index.ts";
 import { unknownClasses } from "../test/render.tsx";
+import { vendoredThemePresent } from "../theme/present.ts";
 import { themeAttributes } from "../theme/public.ts";
 import { KitGallery } from "./KitGallery.tsx";
 import { galleryMessages } from "./messages/index.ts";
@@ -223,13 +224,16 @@ describe("KitGallery", () => {
     }
   });
 
-  it("uses only classes that a stylesheet of the kit defines, besides the gallery hooks", () => {
-    const hooks = new Set(["tc-gallery", "tc-gallery-source", "tc-gallery-sample"]);
-    for (const locale of LOCALES) {
-      const unknown = unknownClasses(html(locale)).filter((name) => !hooks.has(name));
-      expect(unknown, locale).toEqual([]);
-    }
-  });
+  it.skipIf(!vendoredThemePresent())(
+    "uses only classes that a stylesheet of the kit defines, besides the gallery hooks",
+    () => {
+      const hooks = new Set(["tc-gallery", "tc-gallery-source", "tc-gallery-sample"]);
+      for (const locale of LOCALES) {
+        const unknown = unknownClasses(html(locale)).filter((name) => !hooks.has(name));
+        expect(unknown, locale).toEqual([]);
+      }
+    },
+  );
 
   it("links to the other locale and to the shell demos of the app", () => {
     const web = dom("bn", "web");

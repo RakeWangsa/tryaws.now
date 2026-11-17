@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { mockupPresent } from "./present.ts";
 import {
   buildScriptList,
   formatScriptList,
@@ -103,7 +104,8 @@ describe("the text form", () => {
   });
 });
 
-describe("the real mockup (Antler 4.5.0)", () => {
+// The mockup is the paid Antler theme; a public checkout has none (docs/theme.md).
+describe.skipIf(!mockupPresent())("the real mockup (Antler 4.5.0)", () => {
   it("lists more than 40 hashed scripts, jquery.min.js among them, and no stylesheet", () => {
     const list = buildScriptList(`${repoRoot}design/mockup`);
     expect(scriptHashSet(list).size).toBeGreaterThan(40);

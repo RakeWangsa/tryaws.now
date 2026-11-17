@@ -11,7 +11,10 @@ import { woff2CodePoints } from "./woff2.ts";
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (path: string): string => readFileSync(`${repoRoot}${path}`, "utf8");
 const tc = read("packages/ui/styles/tc.css");
-const themeCss = read("design/mockup/template/assets/css/theme.min.css");
+// The theme is the paid Antler theme; a public checkout has none (docs/theme.md), and the one test that
+// reads its CSS skips. The tests of tc.css and the fonts run.
+const hasTheme = existsSync(`${repoRoot}design/mockup/template`);
+const themeCss = hasTheme ? read("design/mockup/template/assets/css/theme.min.css") : "";
 const faces = readFontFaces(tc);
 
 const LATIN = "open-sans-latin-wght-normal.woff2";
@@ -94,16 +97,19 @@ describe("the composite family 'Open Sans' (16.4, WPU-F1)", () => {
     }
   });
 
-  it("is the family that the theme names for the body, headings, buttons and inputs, with !important", () => {
-    let rule: { value: string; important: boolean } | undefined;
-    parse(themeCss).walkRules((r) => {
-      if (r.selectors.includes("body[data-font=opensans] button"))
-        r.walkDecls("font-family", (d) => {
-          rule = { value: d.value, important: d.important === true };
-        });
-    });
-    expect(rule).toEqual({ value: "'Open Sans',sans-serif", important: true });
-  });
+  it.skipIf(!hasTheme)(
+    "is the family that the theme names for the body, headings, buttons and inputs, with !important",
+    () => {
+      let rule: { value: string; important: boolean } | undefined;
+      parse(themeCss).walkRules((r) => {
+        if (r.selectors.includes("body[data-font=opensans] button"))
+          r.walkDecls("font-family", (d) => {
+            rule = { value: d.value, important: d.important === true };
+          });
+      });
+      expect(rule).toEqual({ value: "'Open Sans',sans-serif", important: true });
+    },
+  );
 
   it("draws Bengali text with Hind Siliguri in every weight, and the Latin text with Open Sans", () => {
     for (const group of GROUPS) {

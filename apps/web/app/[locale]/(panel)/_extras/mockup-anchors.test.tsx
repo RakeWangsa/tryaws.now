@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
+import { mockupPresent, vendoredThemePresent } from "@tc/ui/theme-present";
 import { describe, expect, it, vi } from "vitest";
 import { EXTRAS_ANCHORS } from "./mockup-anchors.ts";
 import { STATE_RENDERERS } from "./mockup-states.tsx";
@@ -25,7 +26,7 @@ const renderedTokens = (html: string) => tokensOf(html, /class="([^"]*)"/g);
 
 describe("the screens of WP5-T6 follow the shared mockup (U1)", () => {
   for (const row of EXTRAS_ANCHORS) {
-    it(`${row.state} / ${row.mockupFile}: ${row.why}`, () => {
+    it.skipIf(!mockupPresent())(`${row.state} / ${row.mockupFile}: ${row.why}`, () => {
       const missingInMockup = row.classes.filter(
         (token) => !mockupTokens(row.mockupFile).has(token),
       );
@@ -40,15 +41,18 @@ describe("the screens of WP5-T6 follow the shared mockup (U1)", () => {
     });
   }
 
-  it("every class of every rendered state is defined by the theme, Bootstrap, Font Awesome or tc.css", () => {
-    const known = knownClasses();
-    for (const [state, render] of Object.entries(STATE_RENDERERS)) {
-      for (const locale of ["bn", "en"] as const) {
-        const unknown = [...renderedTokens(render(locale))].filter((token) => !known.has(token));
-        expect(unknown, `${state} in ${locale}`).toEqual([]);
+  it.skipIf(!vendoredThemePresent())(
+    "every class of every rendered state is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    () => {
+      const known = knownClasses();
+      for (const [state, render] of Object.entries(STATE_RENDERERS)) {
+        for (const locale of ["bn", "en"] as const) {
+          const unknown = [...renderedTokens(render(locale))].filter((token) => !known.has(token));
+          expect(unknown, `${state} in ${locale}`).toEqual([]);
+        }
       }
-    }
-  });
+    },
+  );
 
   it("every state that has a renderer has an anchor row, and every anchor has a renderer", () => {
     const anchored = new Set(EXTRAS_ANCHORS.map((row) => row.state));

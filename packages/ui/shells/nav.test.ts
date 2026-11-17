@@ -1,13 +1,15 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { vendoredThemePresent } from "../theme/present.ts";
 import { ADMIN_NAV, APP_NAV, PUBLIC_FAMILY_HREF, visibleAdminNav, visibleAppNav } from "./nav.ts";
 import type { AdminNavId, AppNavId, ProductFamily } from "./types.ts";
 
-const faCss = readFileSync(
-  fileURLToPath(new URL("../theme/assets/fonts/fontawesome/css/all.min.css", import.meta.url)),
-  "utf8",
-);
+const readFontAwesome = (): string =>
+  readFileSync(
+    fileURLToPath(new URL("../theme/assets/fonts/fontawesome/css/all.min.css", import.meta.url)),
+    "utf8",
+  );
 
 const FAMILIES: readonly ProductFamily[] = [
   "cloudServers",
@@ -57,7 +59,9 @@ describe("APP_NAV", () => {
     ]);
   });
 
-  it("every icon class exists in the vendored Font Awesome", () => {
+  // The vendored copy is part of the paid Antler theme; a public checkout has none (docs/theme.md).
+  it.skipIf(!vendoredThemePresent())("every icon class exists in the vendored Font Awesome", () => {
+    const faCss = readFontAwesome();
     expect(faCss.length).toBeGreaterThan(1000);
     for (const entry of [...APP_NAV, ...ADMIN_NAV]) {
       expect(entry.icon.startsWith("fa-")).toBe(true);

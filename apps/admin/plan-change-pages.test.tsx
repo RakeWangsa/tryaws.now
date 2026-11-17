@@ -1,4 +1,5 @@
 import { knownClasses } from "@tc/ui/class-inventory";
+import { vendoredThemePresent } from "@tc/ui/theme-present";
 import type { Locale, Messages } from "@tc/ui/runtime";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactElement } from "react";
@@ -288,10 +289,15 @@ describe("/operations/resources/[id]", () => {
     expect(other).not.toContain("alert(1)");
   });
 
-  it("shows no AWS account id or ARN, and every class is in the theme (360px, no inline style)", async () => {
+  it("shows no AWS account id or ARN, and no inline style (360px)", async () => {
     const html = inProvider(await PlanPage(params("en")), "en");
     // (a UUID ends in twelve digits here, so the account id pattern must not sit inside a word or a dash)
     expect(html).not.toMatch(/arn:aws|(?<![\w-])\d{12}(?![\w-])/);
+    expect(html).not.toMatch(/\sstyle\s*=/);
+  });
+
+  it.skipIf(!vendoredThemePresent())("every class is in the theme", async () => {
+    const html = inProvider(await PlanPage(params("en")), "en");
     const known = knownClasses();
     const unknown = new Set<string>();
     for (const attribute of html.matchAll(/class="([^"]*)"/g)) {
@@ -302,6 +308,5 @@ describe("/operations/resources/[id]", () => {
       }
     }
     expect([...unknown]).toEqual([]);
-    expect(html).not.toMatch(/\sstyle\s*=/);
   });
 });

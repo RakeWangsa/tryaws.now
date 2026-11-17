@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildImportTree } from "./import-tree.ts";
 import { MOCKUP_ASSETS, THEME_MANIFEST, type ThemeManifest } from "./manifest.ts";
+import { mockupPresent } from "./present.ts";
 import { ThemeError, treeDigest } from "./tree.ts";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -125,12 +126,17 @@ describe("buildImportTree on a small tree", () => {
   });
 });
 
-describe("buildImportTree on the real mockup (Antler 4.5.0)", () => {
-  const { tree, refs } = buildImportTree(`${repoRoot}${MOCKUP_ASSETS}`, THEME_MANIFEST);
+// The mockup is the paid Antler theme; a public checkout has none, so these skip (docs/theme.md). The
+// build is lazy because a skipped suite still runs its body.
+describe.skipIf(!mockupPresent())("buildImportTree on the real mockup (Antler 4.5.0)", () => {
+  let built: ReturnType<typeof buildImportTree> | undefined;
+  const real = (): ReturnType<typeof buildImportTree> =>
+    (built ??= buildImportTree(`${repoRoot}${MOCKUP_ASSETS}`, THEME_MANIFEST));
   const count = (prefix: string): number =>
-    tree.files.filter((f) => f.path.startsWith(prefix)).length;
+    real().tree.files.filter((f) => f.path.startsWith(prefix)).length;
 
   it("gives the 55 files of 16.3, 2416190 bytes, and nothing inline yet", () => {
+    const { tree } = real();
     expect(tree.files).toHaveLength(55);
     expect([count("apps/"), count("patterns/"), count("img/filter/")]).toEqual([26, 8, 3]);
     expect([
@@ -144,6 +150,7 @@ describe("buildImportTree on the real mockup (Antler 4.5.0)", () => {
   });
 
   it("sorts every reference of the shipped stylesheets into the classes of 16.3", () => {
+    const { refs } = real();
     expect(refs.knownMissing).toEqual([
       "fonts/evafeat/evafeat.svg",
       "img/arrow-left-2-act.png",
@@ -164,8 +171,10 @@ describe("buildImportTree on the real mockup (Antler 4.5.0)", () => {
 
   it("is deterministic: the same digest on a second build", () => {
     expect(buildImportTree(`${repoRoot}${MOCKUP_ASSETS}`, THEME_MANIFEST).tree.digest).toBe(
-      tree.digest,
+      real().tree.digest,
     );
-    expect(tree.digest).toBe("1844c80660978d5a5168b8906b07321d47d720f6196c01b4d1d32b875f3c962b");
+    expect(real().tree.digest).toBe(
+      "1844c80660978d5a5168b8906b07321d47d720f6196c01b4d1d32b875f3c962b",
+    );
   });
 });

@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 import { useTranslations } from "next-intl";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { vendoredThemePresent } from "../theme/present.ts";
 import { kitMessages, renderKit, ssr, unknownClasses } from "./render";
 
 function Probe() {
   const t = useTranslations("kit.common");
   return <p>{t("close")}</p>;
 }
+
+// These three read the class inventory of the vendored theme; a public checkout has none (docs/theme.md).
+const withTheme = it.skipIf(!vendoredThemePresent());
 
 describe("test helpers", () => {
   it("renders in jsdom with the kit messages", () => {
@@ -35,20 +39,36 @@ describe("test helpers", () => {
     expect(html.startsWith("<p>")).toBe(true);
   });
 
-  it("unknownClasses names a class no stylesheet defines", () => {
+  // The other state: no stylesheet to check against, so nothing is evaluated and the run says so once.
+  it.skipIf(vendoredThemePresent())(
+    "without the theme unknownClasses evaluates nothing and says so once",
+    () => {
+      const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      try {
+        expect(unknownClasses('<p class="nope-xyz">')).toEqual([]);
+        expect(unknownClasses('<p class="nope-abc">')).toEqual([]);
+        expect(write).toHaveBeenCalledTimes(1);
+        expect(String(write.mock.calls[0]?.[0])).toContain("docs/theme.md");
+      } finally {
+        write.mockRestore();
+      }
+    },
+  );
+
+  withTheme("unknownClasses names a class no stylesheet defines", () => {
     expect(unknownClasses('<p class="btn nope-xyz">')).toEqual(["nope-xyz"]);
     expect(unknownClasses('<i class="fas fa-check-circle icon-cpu tc-x">')).toEqual(["tc-x"]);
     expect(unknownClasses('<a class="btn btn-default-yellow-fill">')).toEqual([]);
   });
 
-  it("unknownClasses reads an element tree, svg included", () => {
+  withTheme("unknownClasses reads an element tree, svg included", () => {
     const root = document.createElement("div");
     root.innerHTML =
       '<span class="btn"><svg class="nope-svg"></svg><b class="nope-xyz nope-xyz"></b></span>';
     expect(unknownClasses(root)).toEqual(["nope-svg", "nope-xyz"]);
   });
 
-  it("mockup hook classes are accepted", () => {
+  withTheme("mockup hook classes are accepted", () => {
     expect(unknownClasses('<ul class="radios-filter">')).toEqual([]);
     expect(unknownClasses('<ul class="select-filter price-container btn-group-toggle">')).toEqual(
       [],

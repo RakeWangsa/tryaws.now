@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
+import { mockupPresent, vendoredThemePresent } from "@tc/ui/theme-present";
 import { describe, expect, it } from "vitest";
 import { KYC_ANCHORS } from "./mockup-anchors.ts";
 import { STATE_RENDERERS } from "./mockup-states.tsx";
@@ -29,7 +30,7 @@ function renderedTokens(html: string): Set<string> {
 
 describe("the kyc screens follow the shared mockup", () => {
   for (const row of KYC_ANCHORS) {
-    it(`${row.state} / ${row.mockupFile}: ${row.why}`, () => {
+    it.skipIf(!mockupPresent())(`${row.state} / ${row.mockupFile}: ${row.why}`, () => {
       const inMockup = mockupTokens(row.mockupFile);
       const missingInMockup = row.classes.filter((token) => !inMockup.has(token));
       expect(missingInMockup, `not in ${row.mockupFile}`).toEqual([]);
@@ -44,15 +45,18 @@ describe("the kyc screens follow the shared mockup", () => {
     });
   }
 
-  it("every class of every rendered state is defined by the theme, Bootstrap, Font Awesome or tc.css", () => {
-    const known = knownClasses();
-    for (const [state, render] of Object.entries(STATE_RENDERERS)) {
-      for (const locale of ["bn", "en"] as const) {
-        const unknown = [...renderedTokens(render(locale))].filter((token) => !known.has(token));
-        expect(unknown, `${state} in ${locale}`).toEqual([]);
+  it.skipIf(!vendoredThemePresent())(
+    "every class of every rendered state is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    () => {
+      const known = knownClasses();
+      for (const [state, render] of Object.entries(STATE_RENDERERS)) {
+        for (const locale of ["bn", "en"] as const) {
+          const unknown = [...renderedTokens(render(locale))].filter((token) => !known.has(token));
+          expect(unknown, `${state} in ${locale}`).toEqual([]);
+        }
       }
-    }
-  });
+    },
+  );
 
   it("every state id of a row has a renderer", () => {
     for (const row of KYC_ANCHORS) expect(STATE_RENDERERS[row.state]).toBeDefined();

@@ -44,6 +44,11 @@ export const USAGE: string[] = [
   "  --app            publish: only this app (web or admin); the default is both",
   "  --check          write nothing; exit 1 when a copy, the list or a public/theme differs",
   "  --help           print this text",
+  "",
+  "The Antler theme is a paid third-party product and is not in a public checkout. Without",
+  "design/mockup, import does nothing and exits 0. Without packages/ui/theme/assets, publish writes",
+  "tc.css and the fonts only (the theme-less mode) and exits 0, so that next build works.",
+  "Bring your own licensed copy: docs/theme.md",
 ];
 
 /** The most lines of one kind that a report prints. */
@@ -99,7 +104,40 @@ function readTextOrNull(file: string): string | null {
   return existsSync(file) ? readFileSync(file, "utf8") : null;
 }
 
+const noticePrinted = new WeakSet<SyncContext>();
+
+/**
+ * The theme-less mode (docs/theme.md): printed once per run, at the first stage that needs the theme.
+ * `missing` names the folders that are not there. It is a notice, not an error: a public checkout has
+ * no theme by design, and the exit code stays 0 (WPU-X30a).
+ */
+function themeLessNotice(missing: readonly string[], ctx: SyncContext): void {
+  if (noticePrinted.has(ctx)) return;
+  noticePrinted.add(ctx);
+  ctx.out("theme-sync: the Antler theme is not in this checkout (theme-less mode).");
+  ctx.out(
+    "  Antler is a paid third-party theme (Envato). It is not part of the public repository.",
+  );
+  for (const folder of missing) ctx.out(`  missing: ${folder}`);
+  ctx.out(
+    "  Without it the apps build, with tc.css and the self-hosted fonts and no theme styling.",
+  );
+  ctx.out("  To use your own licensed copy, follow docs/theme.md");
+}
+
 function runImport(check: boolean, ctx: SyncContext): number {
+  // No mockup, nothing to import (and nothing to compare a vendored copy with): say so and stop.
+  if (!existsSync(join(ctx.repoRoot, MOCKUP_ASSETS))) {
+    themeLessNotice(
+      [
+        MOCKUP_ASSETS,
+        ...(existsSync(join(ctx.repoRoot, VENDORED_ASSETS)) ? [] : [VENDORED_ASSETS]),
+      ],
+      ctx,
+    );
+    ctx.out(`import: skipped, ${MOCKUP_ASSETS} is absent`);
+    return 0;
+  }
   const manifest = ctx.manifest ?? THEME_MANIFEST;
   const dest = join(ctx.repoRoot, VENDORED_ASSETS);
   const listFile = join(ctx.repoRoot, SCRIPT_HASH_FILE);
@@ -170,16 +208,26 @@ function scanApp(
 
 function runPublish(app: AppName | null, check: boolean, ctx: SyncContext): number {
   const manifest = ctx.manifest ?? THEME_MANIFEST;
+  // The theme-less mode is chosen only when the whole vendored folder is absent. A folder that is
+  // there is read in full, so a damaged licensed checkout still fails (R16).
+  const themeLess = !existsSync(join(ctx.repoRoot, VENDORED_ASSETS));
+  if (themeLess) themeLessNotice([VENDORED_ASSETS], ctx);
   const { tree, refs } = buildPublishTree({
     vendoredRoot: join(ctx.repoRoot, VENDORED_ASSETS),
     tcCssFile: join(ctx.repoRoot, TC_CSS),
     fontPackageDir: ctx.fontPackageDir ?? fontPackageDir,
     repoRoot: ctx.repoRoot,
     manifest,
+    themeLess,
   });
-  // The scan needs the theme's scripts; without them nothing is written (R16).
-  const hashes = scriptHashSet(readScriptList(join(ctx.repoRoot, SCRIPT_HASH_FILE)));
-  if (hashes.size === 0)
+  // The scan needs the theme's scripts; without them nothing is written (R16). The theme-less tree
+  // holds no file of the theme, so there is nothing to match and the list may be empty.
+  const listFile = join(ctx.repoRoot, SCRIPT_HASH_FILE);
+  const hashes =
+    themeLess && !existsSync(listFile)
+      ? new Set<string>()
+      : scriptHashSet(readScriptList(listFile));
+  if (hashes.size === 0 && !themeLess)
     throw new ThemeError("missing_input", "the list of the theme's scripts has no hash", [
       SCRIPT_HASH_FILE,
     ]);

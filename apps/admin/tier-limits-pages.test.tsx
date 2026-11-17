@@ -1,4 +1,5 @@
 import { knownClasses } from "@tc/ui/class-inventory";
+import { vendoredThemePresent } from "@tc/ui/theme-present";
 import type { Locale, Messages } from "@tc/ui/runtime";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactElement } from "react";
@@ -239,19 +240,27 @@ describe("/catalog/limits", () => {
     expect(other).not.toContain("alert(1)");
   });
 
-  it("every class is defined by the theme, Bootstrap, Font Awesome or tc.css; no inline style (360px)", async () => {
+  it("has no inline style (360px)", async () => {
     state.screen = screen([{ history: [audit("a1", 50, 80, "r")] }]);
     const html = inProvider(await LimitsPage(params("en")), "en");
-    const known = knownClasses();
-    const unknown = new Set<string>();
-    for (const attribute of html.matchAll(/class="([^"]*)"/g)) {
-      for (const token of (attribute[1] ?? "").split(/\s+/)) {
-        if (token !== "" && !known.has(token) && token !== "clear" && token !== "tc-skip-link") {
-          unknown.add(token);
-        }
-      }
-    }
-    expect([...unknown]).toEqual([]);
     expect(html).not.toMatch(/\sstyle\s*=/);
   });
+
+  it.skipIf(!vendoredThemePresent())(
+    "every class is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    async () => {
+      state.screen = screen([{ history: [audit("a1", 50, 80, "r")] }]);
+      const html = inProvider(await LimitsPage(params("en")), "en");
+      const known = knownClasses();
+      const unknown = new Set<string>();
+      for (const attribute of html.matchAll(/class="([^"]*)"/g)) {
+        for (const token of (attribute[1] ?? "").split(/\s+/)) {
+          if (token !== "" && !known.has(token) && token !== "clear" && token !== "tc-skip-link") {
+            unknown.add(token);
+          }
+        }
+      }
+      expect([...unknown]).toEqual([]);
+    },
+  );
 });

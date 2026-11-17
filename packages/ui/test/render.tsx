@@ -6,6 +6,7 @@ import { NextIntlClientProvider } from "next-intl";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Locale } from "../components/types";
+import { THEME_ABSENT, vendoredThemePresent } from "../theme/present.ts";
 import { knownClasses } from "./class-inventory";
 
 // Not `new URL("../messages/", import.meta.url)`: in a jsdom test Vite rewrites that form to an http URL.
@@ -60,11 +61,25 @@ export function ssr(ui: ReactElement, opts: { locale?: Locale } = {}): string {
   return renderToStaticMarkup(inProvider(ui, opts.locale ?? "bn"));
 }
 
+let announced = false;
+
 /**
  * The classes in `root` (an element tree, or an HTML string) that no stylesheet of the kit defines.
  * Each class appears once, in order of first use.
+ *
+ * Without the paid Antler theme (a public checkout, docs/theme.md) there is no stylesheet to check
+ * against, and this returns [] so that the other assertions of the same test still run. That is the
+ * one check a public checkout does not make, so it says so once per test file on stderr. A test whose
+ * whole point is the class inventory uses knownClasses(), which throws, behind vendoredThemePresent().
  */
 export function unknownClasses(root: Element | string): string[] {
+  if (!vendoredThemePresent()) {
+    if (!announced) {
+      announced = true;
+      process.stderr.write(`unknownClasses: not evaluated, ${THEME_ABSENT}\n`);
+    }
+    return [];
+  }
   const values: string[] = [];
   if (typeof root === "string") {
     for (const match of root.matchAll(/\sclass\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {

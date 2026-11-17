@@ -82,6 +82,8 @@ const EXPORTS = {
     "./gallery": "./gallery/index.ts",
     // The class inventory of the theme, for the mockup-anchors tests of the apps (WP3-T4).
     "./class-inventory": "./test/class-inventory.ts",
+    // Is the paid Antler theme in this checkout? The tests that need it skip themselves (WPU-X30a).
+    "./theme-present": "./theme/present.ts",
   },
 };
 
@@ -134,7 +136,6 @@ it("has the other folders of spec section 5", () => {
   for (const dir of [
     "infra/org",
     "tests/repo",
-    "design/mockup/template",
     "design/brand",
     "design/reference",
     "scripts/lib",
@@ -144,6 +145,12 @@ it("has the other folders of spec section 5", () => {
   ]) {
     expect(existsSync(dir), dir).toBe(true);
   }
+});
+
+// The mockup is the paid Antler theme; a public checkout has none (docs/theme.md). One that is there
+// must have the layout of spec section 5.
+it.skipIf(!existsSync("design/mockup"))("a design/mockup folder has its template folder", () => {
+  expect(existsSync("design/mockup/template")).toBe(true);
 });
 
 it("no longer has mockup/ at the root", () => {

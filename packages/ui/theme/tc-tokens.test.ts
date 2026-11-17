@@ -2,12 +2,17 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse, type Rule } from "postcss";
 import { describe, expect, it } from "vitest";
+import { mockupPresent } from "./present.ts";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (path: string): string => readFileSync(`${repoRoot}${path}`, "utf8");
 const tc = read("packages/ui/styles/tc.css");
-const themeCss = read("design/mockup/template/assets/css/theme.min.css");
-const bootstrapCss = read("design/mockup/template/assets/css/bootstrap.min.css");
+// The theme is the paid Antler theme. A public checkout has none (docs/theme.md): the tests that compare
+// tc.css with it skip, and the tests of tc.css alone run.
+const hasTheme = mockupPresent();
+const withTheme = it.skipIf(!hasTheme);
+const themeCss = hasTheme ? read("design/mockup/template/assets/css/theme.min.css") : "";
+const bootstrapCss = hasTheme ? read("design/mockup/template/assets/css/bootstrap.min.css") : "";
 
 /** The last declaration of `prop` in a rule whose selector list holds `selector` exactly. */
 function declaration(css: string, selector: string, prop: string) {
@@ -30,7 +35,7 @@ describe("tokens (16.4): the values of the theme itself", () => {
   const light = 'body[data-background="light"]';
   const pink = 'body[data-color="pink"]';
   const blue = 'body[data-color="blue"]';
-  it.each([
+  withTheme.each([
     [
       dark,
       "--tc-page",
@@ -140,70 +145,82 @@ describe("Bengali typography (16.4)", () => {
     expect(declaration(tc, 'html[lang="bn"] *::before', "letter-spacing")?.value).toBe("0");
   });
 
-  it("wins against every !important letter-spacing or text-transform of the theme that html[lang=bn] * cannot beat", () => {
-    // html[lang="bn"] * is (0,1,1). The theme's `.btn.question { letter-spacing:1px !important; text-transform:uppercase
-    // !important }` is (0,2,0) and would win; tc.css repeats that selector behind html[lang="bn"].
-    const hard = new Set<string>();
-    parse(themeCss).walkDecls(/^(letter-spacing|text-transform)$/, (d) => {
-      const rule = d.parent as Rule | undefined;
-      if (!d.important || d.value === "0" || d.value === "none" || rule?.type !== "rule") return;
-      for (const selector of rule.selectors)
-        if (above(specificity(selector), [0, 1, 1])) hard.add(selector.replace(/\s+/g, " ").trim());
-    });
-    expect([...hard].sort()).toEqual([".btn.question"]); // measured on 2026-11-11 (Antler 4.5.0)
-    for (const selector of hard) {
-      expect(declaration(tc, `html[lang="bn"] ${selector}`, "letter-spacing"), selector).toEqual({
-        value: "0",
-        important: true,
+  withTheme(
+    "wins against every !important letter-spacing or text-transform of the theme that html[lang=bn] * cannot beat",
+    () => {
+      // html[lang="bn"] * is (0,1,1). The theme's `.btn.question { letter-spacing:1px !important; text-transform:uppercase
+      // !important }` is (0,2,0) and would win; tc.css repeats that selector behind html[lang="bn"].
+      const hard = new Set<string>();
+      parse(themeCss).walkDecls(/^(letter-spacing|text-transform)$/, (d) => {
+        const rule = d.parent as Rule | undefined;
+        if (!d.important || d.value === "0" || d.value === "none" || rule?.type !== "rule") return;
+        for (const selector of rule.selectors)
+          if (above(specificity(selector), [0, 1, 1]))
+            hard.add(selector.replace(/\s+/g, " ").trim());
       });
-      expect(declaration(tc, `html[lang="bn"] ${selector}`, "text-transform"), selector).toEqual({
-        value: "none",
-        important: true,
-      });
-    }
-  });
+      expect([...hard].sort()).toEqual([".btn.question"]); // measured on 2026-11-11 (Antler 4.5.0)
+      for (const selector of hard) {
+        expect(declaration(tc, `html[lang="bn"] ${selector}`, "letter-spacing"), selector).toEqual({
+          value: "0",
+          important: true,
+        });
+        expect(declaration(tc, `html[lang="bn"] ${selector}`, "text-transform"), selector).toEqual({
+          value: "none",
+          important: true,
+        });
+      }
+    },
+  );
 
-  it("is needed: the theme sets a letter spacing on the body and capitals on some elements", () => {
-    expect(declaration(themeCss, "body", "letter-spacing")?.value).toBe(".3px");
-    expect(themeCss).toContain("text-transform:uppercase");
-  });
+  withTheme(
+    "is needed: the theme sets a letter spacing on the body and capitals on some elements",
+    () => {
+      expect(declaration(themeCss, "body", "letter-spacing")?.value).toBe(".3px");
+      expect(themeCss).toContain("text-transform:uppercase");
+    },
+  );
 });
 
 describe("keyboard focus", () => {
-  it("Review Focus 3: the theme removes the outline with !important, and tc.css puts a ring back with !important", () => {
-    expect(declaration(themeCss, "a", "outline")).toEqual({ value: "0", important: true });
-    expect(declaration(themeCss, ".btn:focus", "outline")).toEqual({
-      value: "0",
-      important: true,
-    });
-    // Later tasks may add rules, also with :focus-visible. This finds the rule of section 3 by its :is() list and keeps the first.
-    let rule: { selector: string; outline: string; important: boolean } | undefined;
-    parse(tc).walkRules((r) => {
-      const selector = r.selector.replace(/\s+/g, "");
-      if (
-        rule !== undefined ||
-        !selector.includes(":is(a,") ||
-        !selector.includes(":focus-visible")
-      )
-        return;
-      r.walkDecls("outline", (d) => {
-        rule = { selector, outline: d.value, important: d.important === true };
+  withTheme(
+    "Review Focus 3: the theme removes the outline with !important, and tc.css puts a ring back with !important",
+    () => {
+      expect(declaration(themeCss, "a", "outline")).toEqual({ value: "0", important: true });
+      expect(declaration(themeCss, ".btn:focus", "outline")).toEqual({
+        value: "0",
+        important: true,
       });
-    });
-    expect(rule?.important).toBe(true);
-    expect(rule?.outline).toBe("3px solid var(--tc-focus)");
-    for (const element of [
-      "a",
-      "button",
-      "input",
-      "select",
-      "textarea",
-      ".btn",
-      ".form-control",
-      ".form-select",
-    ])
-      expect(rule?.selector, element).toMatch(new RegExp(`[(,]${element.replace(".", "\\.")}[,)]`));
-  });
+      // Later tasks may add rules, also with :focus-visible. This finds the rule of section 3 by its :is() list and keeps the first.
+      let rule: { selector: string; outline: string; important: boolean } | undefined;
+      parse(tc).walkRules((r) => {
+        const selector = r.selector.replace(/\s+/g, "");
+        if (
+          rule !== undefined ||
+          !selector.includes(":is(a,") ||
+          !selector.includes(":focus-visible")
+        )
+          return;
+        r.walkDecls("outline", (d) => {
+          rule = { selector, outline: d.value, important: d.important === true };
+        });
+      });
+      expect(rule?.important).toBe(true);
+      expect(rule?.outline).toBe("3px solid var(--tc-focus)");
+      for (const element of [
+        "a",
+        "button",
+        "input",
+        "select",
+        "textarea",
+        ".btn",
+        ".form-control",
+        ".form-select",
+      ])
+        expect(rule?.selector, element).toMatch(
+          new RegExp(`[(,]${element.replace(".", "\\.")}[,)]`),
+        );
+    },
+  );
 });
 
 describe("what tc.css may contain (U1, U3, U4)", () => {

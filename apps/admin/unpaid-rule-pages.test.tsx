@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownClasses } from "@tc/ui/class-inventory";
+import { mockupPresent, vendoredThemePresent } from "@tc/ui/theme-present";
 import type { Locale, Messages } from "@tc/ui/runtime";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactElement } from "react";
@@ -340,7 +341,7 @@ describe("the unpaid-rule screen follows the mockup", () => {
   ];
 
   for (const anchor of ANCHORS) {
-    it(`${anchor.file}: ${anchor.why}`, async () => {
+    it.skipIf(!mockupPresent())(`${anchor.file}: ${anchor.why}`, async () => {
       const inMockup = mockup(anchor.file);
       expect(
         anchor.classes.filter((c) => !inMockup.has(c)),
@@ -356,20 +357,23 @@ describe("the unpaid-rule screen follows the mockup", () => {
     });
   }
 
-  it("every class of the screen is defined by the theme, Bootstrap, Font Awesome or tc.css", async () => {
-    const known = knownClasses();
-    state.audit = okW({ rows: [auditRow()], nextAfter: null });
-    for (const read of [stored(false, "none"), stored(true), stored(false, "invalid")]) {
-      state.read = read;
-      for (const role of ["superadmin", "finance"]) {
-        as(role);
-        for (const locale of LOCALES) {
-          const unknown = [...classTokens(await render(locale))].filter(
-            (c) => !known.has(c) && c !== "clear" && c !== "tc-skip-link",
-          );
-          expect(unknown, `${role} in ${locale}`).toEqual([]);
+  it.skipIf(!vendoredThemePresent())(
+    "every class of the screen is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    async () => {
+      const known = knownClasses();
+      state.audit = okW({ rows: [auditRow()], nextAfter: null });
+      for (const read of [stored(false, "none"), stored(true), stored(false, "invalid")]) {
+        state.read = read;
+        for (const role of ["superadmin", "finance"]) {
+          as(role);
+          for (const locale of LOCALES) {
+            const unknown = [...classTokens(await render(locale))].filter(
+              (c) => !known.has(c) && c !== "clear" && c !== "tc-skip-link",
+            );
+            expect(unknown, `${role} in ${locale}`).toEqual([]);
+          }
         }
       }
-    }
-  });
+    },
+  );
 });

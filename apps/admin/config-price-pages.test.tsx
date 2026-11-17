@@ -1,4 +1,5 @@
 import { knownClasses } from "@tc/ui/class-inventory";
+import { vendoredThemePresent } from "@tc/ui/theme-present";
 import type { Locale, Messages } from "@tc/ui/runtime";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactElement } from "react";
@@ -333,23 +334,26 @@ describe("the editor of one price", () => {
 });
 
 describe("the markup uses only the classes of the theme (mockup classes only)", () => {
-  it("every class of the screen is defined by the theme, Bootstrap, Font Awesome or tc.css", async () => {
-    state.screen = screen({ edit: edit({ go: true, usd: "0.60", preview: good }) });
-    const html = inProvider(
-      await ConfigPage(params("en", { key: "config_price.dns_zone_month", go: "preview" })),
-      "en",
-    );
-    const known = knownClasses();
-    const unknown = new Set<string>();
-    for (const attribute of html.matchAll(/class="([^"]*)"/g)) {
-      for (const token of (attribute[1] ?? "").split(/\s+/)) {
-        // `clear` and `tc-skip-link` are the menu and the skip link of the frame, not of this screen.
-        if (token !== "" && !known.has(token) && token !== "clear" && token !== "tc-skip-link") {
-          unknown.add(token);
+  it.skipIf(!vendoredThemePresent())(
+    "every class of the screen is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    async () => {
+      state.screen = screen({ edit: edit({ go: true, usd: "0.60", preview: good }) });
+      const html = inProvider(
+        await ConfigPage(params("en", { key: "config_price.dns_zone_month", go: "preview" })),
+        "en",
+      );
+      const known = knownClasses();
+      const unknown = new Set<string>();
+      for (const attribute of html.matchAll(/class="([^"]*)"/g)) {
+        for (const token of (attribute[1] ?? "").split(/\s+/)) {
+          // `clear` and `tc-skip-link` are the menu and the skip link of the frame, not of this screen.
+          if (token !== "" && !known.has(token) && token !== "clear" && token !== "tc-skip-link") {
+            unknown.add(token);
+          }
         }
       }
-    }
-    expect([...unknown]).toEqual([]);
-    expect(html).not.toContain(" style=");
-  });
+      expect([...unknown]).toEqual([]);
+      expect(html).not.toContain(" style=");
+    },
+  );
 });

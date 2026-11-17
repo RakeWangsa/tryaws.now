@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { messageKeys, forbiddenWording } from "@tc/ui";
 import { knownClasses } from "@tc/ui/class-inventory";
+import { mockupPresent, vendoredThemePresent } from "@tc/ui/theme-present";
 import type { Locale } from "@tc/ui/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { windowsAccessBn } from "../../../../../messages/windows-access-bn.ts";
@@ -74,7 +75,7 @@ const ANCHORS = [
 
 describe("the Windows part of the Access tab follows the shared mockup", () => {
   for (const row of ANCHORS) {
-    it(`${row.state} / ${row.file}`, () => {
+    it.skipIf(!mockupPresent())(`${row.state} / ${row.file}`, () => {
       const inMockup = mockupTokens(row.file);
       expect(row.classes.filter((c) => !inMockup.has(c))).toEqual([]);
       for (const locale of ["bn", "en"] as const) {
@@ -87,17 +88,20 @@ describe("the Windows part of the Access tab follows the shared mockup", () => {
     });
   }
 
-  it("every class rendered is defined by the theme, Bootstrap, Font Awesome or tc.css", () => {
-    const known = knownClasses();
-    for (const [state, render] of Object.entries(STATES)) {
-      for (const locale of ["bn", "en"] as const) {
-        const unknown = [...tokens(render(locale), /class="([^"]*)"/g)].filter(
-          (c) => !known.has(c),
-        );
-        expect(unknown, `${state} ${locale}`).toEqual([]);
+  it.skipIf(!vendoredThemePresent())(
+    "every class rendered is defined by the theme, Bootstrap, Font Awesome or tc.css",
+    () => {
+      const known = knownClasses();
+      for (const [state, render] of Object.entries(STATES)) {
+        for (const locale of ["bn", "en"] as const) {
+          const unknown = [...tokens(render(locale), /class="([^"]*)"/g)].filter(
+            (c) => !known.has(c),
+          );
+          expect(unknown, `${state} ${locale}`).toEqual([]);
+        }
       }
-    }
-  });
+    },
+  );
 
   it("the password is never in the server HTML, in any state (U9)", () => {
     for (const render of Object.values(STATES)) {

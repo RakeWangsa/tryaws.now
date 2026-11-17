@@ -24,15 +24,27 @@ it("prettier leaves the vendored theme alone but formats tc.css and the code (WP
   }
 });
 
-it("git keeps the vendored theme and tc.css (they are committed)", () => {
-  for (const file of [
-    "packages/ui/theme/assets/css/theme.min.css",
-    "packages/ui/theme/assets/fonts/cloudicon/Cloudicon.woff",
-    "packages/ui/theme/script-hashes.txt",
-    "packages/ui/styles/tc.css",
-  ]) {
+it("git keeps the list of the theme's scripts and tc.css (they are committed)", () => {
+  for (const file of ["packages/ui/theme/script-hashes.txt", "packages/ui/styles/tc.css"]) {
     expect(ignoredByGit(file), file).toBe(false);
   }
+});
+
+// WPU-X30a: the paid Antler theme is not part of the public repository, so the licensed original and
+// its vendored copy are ignored (docs/theme.md). In the owner's private repository they are still
+// tracked, so the rule changes nothing there; `--no-index` asks the patterns alone.
+it("git ignores the paid theme: the mockup and its vendored copy (docs/theme.md)", () => {
+  for (const file of [
+    "design/mockup/template/index.html",
+    "packages/ui/theme/assets/css/theme.min.css",
+    "packages/ui/theme/assets/fonts/cloudicon/Cloudicon.woff",
+  ]) {
+    expect(ignoredByGit(file), file).toBe(true);
+  }
+  // design/brand is ours and stays in the public repository
+  expect(ignoredByGit("design/brand/logo.svg")).toBe(false);
+  // the code around the vendored copy stays visible
+  expect(ignoredByGit("packages/ui/theme/present.ts")).toBe(false);
 });
 
 it("prettier and git leave the generated public/theme of both apps alone (WPU-T1)", async () => {
