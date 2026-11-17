@@ -39,3 +39,7 @@ JOURNEY or the ticket: payment id (not the customer's phone or email), the state
 Credit from a status in a URL; credit without a matching amount; pass an amount through `Number()`; print the verify payload or EPS credentials.
 
 Related: [ledger-check-failed.md](ledger-check-failed.md), [refund.md](refund.md).
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

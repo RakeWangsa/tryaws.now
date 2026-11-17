@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Locale } from "../runtime/index.ts";
 import { localeHrefs } from "../runtime/index.ts";
 import { shellMessages } from "./messages/index.ts";
+import { CREDIT_URL } from "./parts/CreditLine.tsx";
 import { PublicShell, type PublicShellProps } from "./PublicShell.tsx";
 import { withIntl } from "./test-utils.tsx";
 
@@ -154,10 +155,12 @@ describe.each(LOCALES)("PublicShell (%s)", (locale) => {
     const { container } = shell(locale, { paymentBanner: <span>EPS</span> });
     expect(container.querySelector("[style]")).toBeNull();
     expect(container.querySelector("script")).toBeNull();
-    for (const href of hrefs(container)) {
+    // WPU-X30: the one outbound link is the open-source credit to the author (NOTICE, Apache-2.0 4(d)).
+    for (const href of hrefs(container).filter((h) => h !== CREDIT_URL)) {
       expect(href.startsWith("/") || href.startsWith("#") || href.startsWith("tel:")).toBe(true);
       expect(href.startsWith("//")).toBe(false);
     }
+    expect(hrefs(container).filter((h) => h === CREDIT_URL)).toHaveLength(1);
   });
 
   it("puts the name of the company behind TryAWS.now before any AWS text", () => {

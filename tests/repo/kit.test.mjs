@@ -17,12 +17,23 @@ it.each([
   [".claude/agents/security-reviewer.md", "`.claude/agents/security-reviewer.md`"],
   [".claude/agents/money-reviewer.md", "`.claude/agents/money-reviewer.md`"],
   [".claude/agents/spec-checker.md", "`.claude/agents/spec-checker.md`"],
-  [".github/pull_request_template.md", "Pull request description:"],
 ])("%s is the plan's block, unchanged", (file, marker) => {
   // WPU-Y6 (owner, 2026-11-14): the first brand name of the plan is TryAWS.now in these files; the plan
   // itself is edited in its own pull request. Nothing else may differ from the plan's block.
   const brand = (text) => text.replace(/TiCON\s+Cloud/g, "TryAWS.now");
   expect(read(file)).toBe(brand(blockAfter(plan, marker)));
+});
+
+// WPU-X30: the public pull request template replaces the private process block of the plan.
+it(".github/pull_request_template.md asks for the change, the proof and the risk", () => {
+  const text = read(".github/pull_request_template.md");
+  for (const heading of [
+    "## What changed and why",
+    "## Proof",
+    "## Checklist",
+    "## Risk if this is wrong",
+  ])
+    expect(text, heading).toContain(heading);
 });
 
 it("CLAUDE.md is under 200 lines", () => {
@@ -154,7 +165,7 @@ const owners = read(".github/CODEOWNERS")
   .split("\n")
   .filter((line) => line !== "" && !line.startsWith("#"))
   .map((line) => line.split(/\s+/));
-it("CODEOWNERS covers the paths of spec E.1, each with the two placeholder owners", () => {
+it("CODEOWNERS covers the paths of spec E.1, each owned by the maintainer (WPU-X30: no placeholder handles in a public repo)", () => {
   expect(owners.map((rule) => rule[0])).toEqual([
     "/packages/core/pricing/",
     "/packages/core/ledger/",
@@ -185,7 +196,7 @@ it("CODEOWNERS covers the paths of spec E.1, each with the two placeholder owner
     "/.worktreeinclude",
   ]);
   for (const rule of owners) {
-    expect(rule.slice(1), rule[0]).toEqual(["@REPLACE-WITH-LEAD", "@REPLACE-WITH-SECOND-REVIEWER"]);
+    expect(rule.slice(1), rule[0]).toEqual(["@bemoshiur"]);
   }
 });
 it("CODEOWNERS covers every kit path that B.2 of the plan lists", () => {

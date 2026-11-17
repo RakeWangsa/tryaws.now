@@ -71,3 +71,7 @@ Write in JOURNEY.md: the date, the audit target and its overall score, the gates
 - Put a mark of AWS into a profile name other than the brand token TryAWS.now (16.13), or claim that AWS sells, supports or endorses the service.
 - Add a `sameAs` URL of a profile that does not exist.
 - Print or store the password of Search Console, Bing Webmaster Tools or a listing site anywhere in this repository.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

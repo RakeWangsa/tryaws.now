@@ -50,3 +50,7 @@ After
 
 Not covered here: restoring a deleted instance from its final snapshot, cross-region copies and the restore of the
 KYC bucket (S3 versioning). Each needs its own drill.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

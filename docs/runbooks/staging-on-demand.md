@@ -84,3 +84,7 @@ Date, who, start and end time of the session, the way (CI or terminal), the proo
 ## Must not
 
 Leave staging up overnight without a test that needs it; remove production or point any of this at production; run `sst remove` from a Claude Code session; delete the kept user pools or the SST secrets to "clean up"; activate cost allocation tags from a Claude Code session or touch the management account in any other way; delete a resource that belongs to another project of the shared account; put a pool id variable on production or a personal stage (the deploy refuses it).
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

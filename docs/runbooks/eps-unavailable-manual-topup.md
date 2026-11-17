@@ -43,3 +43,7 @@ Adjustment id, amount, receipt reference, requester, approver. Never the full ph
 ## Must not
 
 Credit a wallet from a screenshot nobody checked; credit without a reason; approve your own adjustment; touch the ledger tables directly.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

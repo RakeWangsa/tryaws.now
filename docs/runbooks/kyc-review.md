@@ -34,3 +34,7 @@ Customer id (not the document number, name or phone), decision, admin, reason. T
 ## Must not
 
 Copy document images or numbers into tickets, logs or chats; approve from a screenshot; grant `trusted` after the first purchase to change the home pool.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

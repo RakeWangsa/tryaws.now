@@ -40,3 +40,7 @@ R10: a reset made outside the admin app leaves no admin audit row. The record is
 ## Must not
 
 Reset on the word of a chat message or a forwarded e-mail alone; switch the authenticator off at Cognito and consider the job done without telling the customer; read or ask for the secret key or a code of the app; keep a copy of any code or key in a ticket; change `customers` by hand to clear the copy.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

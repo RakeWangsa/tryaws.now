@@ -41,3 +41,7 @@ Which secret name, when, who, staging and production result. Never the value, no
 ## Must not
 
 Put a value in `.env`, the repository, a log, a pull request or a chat; deploy production from a laptop.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

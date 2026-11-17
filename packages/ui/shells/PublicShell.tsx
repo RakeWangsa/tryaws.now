@@ -4,6 +4,7 @@ import { LocaleSwitch } from "../components/LocaleSwitch.tsx";
 import { localePath, type Locale } from "../runtime/index.ts";
 import { PUBLIC_FAMILY_HREF } from "./nav.ts";
 import { AwsLines } from "./parts/AwsLines.tsx";
+import { CreditLine } from "./parts/CreditLine.tsx";
 import { Logo } from "./parts/Logo.tsx";
 import { MobileMenu } from "./parts/MobileMenu.tsx";
 import type { ProductFamily } from "./types.ts";
@@ -272,6 +273,7 @@ export function PublicShell({
               <div className="row">
                 <div className="col-12 contact tc-footer-aws">
                   <AwsLines variant="short" />
+                  <CreditLine />
                 </div>
               </div>
             </div>

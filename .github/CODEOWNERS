@@ -1,40 +1,39 @@
 # Code owners (spec E.1, B.2 and C.7). A pull request that touches one of these paths needs a review by an owner.
-# The two owners below are placeholders. Replace them with the GitHub handles of the lead developer and of the
-# second reviewer (spec section 17) before branch protection is switched on.
+# Owner of every path below is the maintainer. Add more handles here as the team grows.
 
 # Money
-/packages/core/pricing/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/packages/core/ledger/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/packages/core/orders/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/packages/eps/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/functions/payments-sweeper/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/packages/core/pricing/ @bemoshiur
+/packages/core/ledger/ @bemoshiur
+/packages/core/orders/ @bemoshiur
+/packages/eps/ @bemoshiur
+/functions/payments-sweeper/ @bemoshiur
 
 # Database migrations: the ledger triggers and the grants. A merged migration is never edited.
-/packages/db/migrations/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/packages/db/migrations/ @bemoshiur
 
 # Auth, IAM and infrastructure
-/packages/auth/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/infra/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/sst.config.ts @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/packages/auth/ @bemoshiur
+/infra/ @bemoshiur
+/sst.config.ts @bemoshiur
 # Runbooks of operations. The file has no DevOps placeholder (WP0-T6 did not invent a handle): the same two
 # placeholders own the workflows, infra and runbooks until a DevOps team handle is chosen (JOURNEY.md, WP0-T6).
-/docs/runbooks/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/docs/runbooks/ @bemoshiur
 
 # The kit: what decides which checks a gate runs and what they accept
-/.claude/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/CLAUDE.md @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/.github/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/scripts/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/verify/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/tests/repo/ @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/TICON_CLOUD_MEGA_PLAN.md @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/package.json @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/pnpm-workspace.yaml @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/eslint.config.mjs @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/vitest.config.mjs @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/tsconfig.base.json @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/.prettierrc.json @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/.prettierignore @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/.gitleaks.toml @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/.gitignore @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
-/.worktreeinclude @REPLACE-WITH-LEAD @REPLACE-WITH-SECOND-REVIEWER
+/.claude/ @bemoshiur
+/CLAUDE.md @bemoshiur
+/.github/ @bemoshiur
+/scripts/ @bemoshiur
+/verify/ @bemoshiur
+/tests/repo/ @bemoshiur
+/TICON_CLOUD_MEGA_PLAN.md @bemoshiur
+/package.json @bemoshiur
+/pnpm-workspace.yaml @bemoshiur
+/eslint.config.mjs @bemoshiur
+/vitest.config.mjs @bemoshiur
+/tsconfig.base.json @bemoshiur
+/.prettierrc.json @bemoshiur
+/.prettierignore @bemoshiur
+/.gitleaks.toml @bemoshiur
+/.gitignore @bemoshiur
+/.worktreeinclude @bemoshiur

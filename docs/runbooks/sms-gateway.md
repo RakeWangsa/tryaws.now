@@ -102,3 +102,7 @@ Date, stage, which secret names were set (never a value), the whitelisted addres
 ## Must not
 
 Write a token, a sender id, a portal password or a phone number in the repository, a log, a ticket, a pull request or a chat; test with a customer's number or on production; use the account for bulk SMS or for the OTP of another service (Google, Facebook, WhatsApp and the like are forbidden by the provider); change the OTP text without the provider's template; turn off the IP whitelist to make a test pass.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

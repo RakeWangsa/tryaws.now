@@ -38,3 +38,7 @@ Operation id, kind, step, decision, admin. The audit row is written by the actio
 ## Must not
 
 Call Lightsail from the web or admin app (R1); assume a pool role from a laptop; change the queue or alarm settings in production by hand.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

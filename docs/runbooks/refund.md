@@ -35,3 +35,7 @@ Payment id, refund amount, reason, admin, EPS dashboard reference (not the accou
 Refund more than the original payment; refund to a different person than the payer; post a refund without a reason.
 
 Related: [payment-stuck-or-disputed.md](payment-stuck-or-disputed.md).
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

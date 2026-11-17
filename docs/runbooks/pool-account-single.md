@@ -71,3 +71,7 @@ Account alias (not the id in shared notes), stage, date, who, the real quotas, t
 ## Must not
 
 Run this against production without the owner; put an AWS account id, ExternalId or any key in a ticket, chat or the repository; create IAM users or access keys; raise a limit above the real AWS quota; use the management account.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

@@ -3,6 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 import { LocaleSwitch } from "../components/LocaleSwitch.tsx";
 import { localePath, type Locale } from "../runtime/index.ts";
 import { AwsLines } from "./parts/AwsLines.tsx";
+import { CreditLine } from "./parts/CreditLine.tsx";
 import { Logo } from "./parts/Logo.tsx";
 
 export interface AuthShellProps {
@@ -47,6 +48,7 @@ export function AuthShell({ locale, localeHrefs, children }: AuthShellProps): Re
           </p>
           <div className="mergecolor tc-footer-aws">
             <AwsLines variant="short" />
+            <CreditLine />
           </div>
         </div>
       </section>

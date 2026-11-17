@@ -32,3 +32,7 @@ Set it to `false`. The next run does nothing (`enabled: false` in the report). S
 ## Must not
 
 Turn it on before every item above is done; turn it on in production without the owner's written go; delete a final snapshot or approve a destroy only because the job is on.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

@@ -99,3 +99,7 @@ In JOURNEY.md: the date of each step, the stack names and statuses of step 3, th
 - Never use the management account; `scripts/golive/ci-roles.sh` refuses it.
 - Never widen a CI role by removing a Deny statement; widen by pull request after reading the AccessDenied in CloudTrail.
 - Never turn a product flag on at go-live.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

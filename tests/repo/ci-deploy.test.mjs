@@ -377,7 +377,7 @@ describe("scripts/post-deploy-check.mjs", () => {
 });
 
 describe("CODEOWNERS", () => {
-  it("covers workflows, infra and runbooks with the placeholders of the file", () => {
+  it("covers workflows, infra and runbooks with the maintainer (WPU-X30: the placeholders are gone)", () => {
     const text = read(join(root, ".github/CODEOWNERS"));
     const owners = (path) =>
       text
@@ -385,8 +385,10 @@ describe("CODEOWNERS", () => {
         .find((line) => line.startsWith(`${path} `))
         ?.split(/\s+/)
         .slice(1);
+    // A placeholder handle in a public repository could be registered by a stranger and become a code owner.
+    expect(text).not.toMatch(/REPLACE-WITH/);
     for (const path of ["/.github/", "/infra/", "/docs/runbooks/"]) {
-      expect(owners(path), path).toEqual(["@REPLACE-WITH-LEAD", "@REPLACE-WITH-SECOND-REVIEWER"]);
+      expect(owners(path), path).toEqual(["@bemoshiur"]);
     }
   });
 });

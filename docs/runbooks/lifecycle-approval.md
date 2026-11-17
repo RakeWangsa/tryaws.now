@@ -61,3 +61,7 @@ Operation id, resource id, state, snapshot check, decision, admin.
 ## Must not
 
 Approve without a final snapshot where one is supported; approve for a customer who paid in the last hour; let a renewal resume an admin-suspended resource.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

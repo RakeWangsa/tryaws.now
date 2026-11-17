@@ -75,3 +75,7 @@ In the support request or ticket: the operation ids, the date the customer was a
 - Never approve a destroy without the final snapshot where the family has one (R13).
 - A reject of a destroy whose subscription is `retained` (server or disk) writes an attention item (`missing`, source `admin_reject`, reason `retention_destroy_rejected`): the subscription is then retained with no live destroy, so decide what happens to the resource and write a Needs decision.
 - Never reject a disk's destroy that names `withServer` while the server's destroy is approved: the server's destroy then waits for that disk and ends in `needs_attention`.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

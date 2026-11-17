@@ -39,6 +39,11 @@ export const en: Same<typeof bn> = {
       tradeLicense: "Trade License: TRAD/DNCC/098737/2020",
       address: "Level 6, House of Veritas, 8 Gareeb-e-Newaz Avenue, Sector-13, Uttara, Dhaka-1230",
     },
+    // WPU-X30: the open-source credit (Apache-2.0 NOTICE). One link, to the author.
+    credit: {
+      text: "Open source software, created by",
+      link: "S M Moshiur Rahman on LinkedIn",
+    },
     auth: {
       backHome: "Back to home",
     },

@@ -41,3 +41,7 @@ Bucket id, request id, outcome word, admin and reason. Never the key id of the c
 ## Must not
 
 Print or store a secret key; create a key for the customer to "see it again" (AWS shows the secret once); delete a key the customer still uses without asking; touch the management account or use a long-lived key.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

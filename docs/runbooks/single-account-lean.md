@@ -113,3 +113,7 @@ Put the account id, an ExternalId or any key in the repository, a ticket or a ch
 ### Warning: ControlPlaneStage=staging for the DNS roles
 
 `dns-account.yaml` accepts `ControlPlaneStage=staging` only so that the one-account stage can use it. The DNS roles can change and delete every hosted zone of the account (`Resource: "*"`). Never deploy a staging-trusted DNS stack into a separate customer DNS account (`tc-dns` of the three-account design); keep `production` there. In the one account the zones of customers and of the platform share the account anyway, which is the accepted cost of the one-account ruling (JOURNEY.md, 2026-11-13).
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

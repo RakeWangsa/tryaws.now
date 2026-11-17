@@ -1,0 +1,17 @@
+# Dependabot: weekly update pull requests. Dependencies are pinned by pnpm-lock.yaml (rule R17); a pull request
+# here still has to pass CI and a human review before it is merged.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

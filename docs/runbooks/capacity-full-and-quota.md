@@ -36,3 +36,7 @@ Quota code, Region, account alias (not the account id in public places), old and
 ## Must not
 
 Touch the management account; set a limit higher than AWS granted; put an order in another pool account by hand.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

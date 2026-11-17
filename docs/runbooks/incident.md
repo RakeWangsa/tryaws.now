@@ -39,3 +39,7 @@ Times (UTC and local), who, level, actions, customer notice text. No secret, doc
 ## Must not
 
 Deploy production by hand; touch the management account; edit or delete ledger or audit rows; paste logs with personal data into a chat.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

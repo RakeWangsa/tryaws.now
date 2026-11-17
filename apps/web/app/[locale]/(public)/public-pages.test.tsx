@@ -100,8 +100,11 @@ describe("every public page, in bn and en (U1, U4, U6, U11, 16.8)", () => {
           expect(named, `${id} ${locale}: ${a.slice(0, 80)}`).toBe(true);
         }
         // Nothing from a third-party origin (U3): every URL in an attribute is local or a mailto/tel.
+        // WPU-X30: the one exception is the open-source credit link to the author (NOTICE, Apache-2.0 4(d)).
         for (const url of page.match(/(?:src|href)="https?:\/\/[^"]+"/g) ?? []) {
-          expect(url, `${id} ${locale}`).toMatch(/cloud\.example\.test|schema\.org/);
+          expect(url, `${id} ${locale}`).toMatch(
+            /cloud\.example\.test|schema\.org|www\.linkedin\.com\/in\/in-moshiur/,
+          );
         }
       }
     }

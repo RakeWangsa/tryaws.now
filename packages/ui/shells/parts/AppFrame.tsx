@@ -3,6 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 import { LocaleSwitch } from "../../components/LocaleSwitch.tsx";
 import { LOCALES, type Locale } from "../../runtime/index.ts";
 import { AwsLines } from "./AwsLines.tsx";
+import { CreditLine } from "./CreditLine.tsx";
 import { Logo } from "./Logo.tsx";
 import { NavDrawer } from "./NavDrawer.tsx";
 
@@ -96,6 +97,7 @@ export function AppFrame({
         <footer className="tc-app-footer bg-colorstyle mergecolor">
           <div className="container-fluid">
             <AwsLines variant="short" />
+            <CreditLine />
           </div>
         </footer>
       </div>

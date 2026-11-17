@@ -45,3 +45,7 @@ Old rate, new rate, effective time, requester, approver (or the single-admin gro
 ## Must not
 
 Use floats or spreadsheet rounding for the stored rate; change a price of an existing subscription; skip the preview.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

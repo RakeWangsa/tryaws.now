@@ -1,65 +1,74 @@
+<div align="center">
+
 # TryAWS.now
 
-**Prepaid cloud servers for Bangladesh, built on 100% AWS infrastructure.**
-Pay in taka from a wallet, launch a server in minutes, and get support in Bangla or English, with no
-dollar card needed.
+### Open-source AWS Lightsail reseller panel: prepaid wallet, billing and automatic provisioning
 
-[Website](https://tryaws.now) · [Go-live runbook](docs/runbooks/go-live.md) ·
-[Runbooks](docs/runbooks/README.md) · [Engineering journal](JOURNEY.md)
+Sell AWS Lightsail servers, databases, storage, CDN, DNS and domains under your own brand, to customers who pay
+in their own currency from a prepaid wallet. Built with TypeScript, Next.js, PostgreSQL and SST on AWS.
+
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
+![AWS](https://img.shields.io/badge/AWS-Lightsail%20%C2%B7%20Route%2053%20%C2%B7%20Lambda-ff9900)
+![Status](https://img.shields.io/badge/status-pre--launch-orange)
+
+[Website](https://tryaws.now) · [Documentation](docs/index.md) · [Architecture explained](docs/architecture-explained.md) ·
+[For hosting resellers](docs/for-hosting-resellers.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md)
+
+**Created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [Connect on LinkedIn](https://www.linkedin.com/in/in-moshiur)**
+
+</div>
 
 ---
 
-## Why TryAWS.now
+## What is TryAWS.now?
 
-Bangladeshi developers, agencies and small businesses want AWS-grade infrastructure, but they hit three walls:
+**TryAWS.now is a free, open-source control panel and billing system for reselling Amazon Lightsail.** A
+customer signs up, tops up a prepaid wallet, and launches a server, a managed database, a storage bucket, a CDN
+distribution, a DNS zone or a domain from a simple panel. The platform charges the wallet, writes a
+double-entry ledger, creates the resource in your AWS accounts, and renews or suspends it on schedule.
 
-| Problem                                               | What TryAWS.now does                                                          |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------- |
-| AWS bills in USD and needs an international card      | A **prepaid BDT wallet**, topped up through the local **EPS** payment gateway |
-| Prices change with the dollar rate and VAT is unclear | **All-in BDT prices**, 5% VAT included, with a VAT invoice for every charge   |
-| The AWS console is hard for a first server            | A **simple panel** in Bangla and English, and in-app support tickets          |
+It started as a production system for the Bangladesh market (prices in taka, payments through the EPS gateway,
+a Bangla and English panel). The market, currency and payment gateway are configuration and adapters, so the
+design works for any region where customers cannot or do not want to pay AWS in dollars with a card.
 
-Customer resources run on **Amazon Lightsail** in TryAWS.now's AWS accounts. Domains and DNS run on
-**Amazon Route 53**.
+> **Status: pre-launch.** The platform code is complete and was proven on a staging environment, which has since
+> been torn down. It has not taken real customer money in production. Treat it as a serious starting point and
+> reference implementation, and read [docs/spec/15-security-gate-before-launch.md](docs/spec/15-security-gate-before-launch.md)
+> before you accept payments.
 
-## Products
+## Who is it for?
 
-Every product family sits behind its own feature flag, and every flag is **off by default in production**.
-Each family is switched on only after it has been proven on staging.
+- **Hosting resellers and WHMCS sellers** who want to add AWS-backed servers to their offer without writing
+  provisioning code. See [For hosting resellers](docs/for-hosting-resellers.md) for an honest comparison.
+- **Regional cloud providers and MSPs** who bill in a local currency and need a prepaid, self-service panel.
+- **Developers and students** who want to learn how a real multi-account AWS platform is built: STS
+  AssumeRole, Lightsail and Route 53 APIs, SQS-driven provisioning, tenant isolation, a double-entry ledger,
+  idempotent jobs, infrastructure as code with SST. See [Architecture explained](docs/architecture-explained.md).
 
-| Family                                  | What the customer gets                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Linux and Windows servers               | Lightsail instances: plans, Regions, OS and app images (WordPress, LAMP, Node.js, Nginx) |
-| Block storage disks                     | Attach, detach and snapshot; a disk is deleted together with its server                  |
-| Managed databases                       | Lightsail MySQL and PostgreSQL                                                           |
-| Object storage                          | Lightsail buckets with access keys                                                       |
-| Load balancers, CDN, container services | The Lightsail services, billed from the same wallet                                      |
-| Static IPs and backups                  | Add-ons of a server                                                                      |
-| Domains and DNS zones                   | Registration and renewal through Route 53, renewed 30 days before expiry                 |
+## Features
 
-**Money rules customers can rely on:**
-
-- Prepaid only.
-- Every charge is in the ledger.
-- Auto-renew is on at purchase and can be switched off on the service's page.
-- A refund goes back to the wallet with a credit note.
-
-## Status
-
-| Milestone                                                    | State                                                          |
-| ------------------------------------------------------------ | -------------------------------------------------------------- |
-| Platform code (panel, admin, billing, provisioning, support) | Done and reviewed; every task has a `pnpm verify --task` proof |
-| Go-live kit (CI roles, secrets script, runbooks)             | Done                                                           |
-| Staging test session and the two manual staging proofs       | **Next**: owner, see [go-live](docs/runbooks/go-live.md)       |
-| Production at tryaws.now, buying **off**                     | After the `v0.1.0` tag                                         |
-| Buying **on**, one product family at a time                  | After live EPS payments are proven on staging                  |
+| Area            | What it does                                                                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Products        | Lightsail Linux and Windows instances, block disks, managed databases, object storage, load balancers, CDN, containers, static IPs, snapshots |
+| Domains and DNS | Domain registration and renewal and DNS zones through Amazon Route 53                                                                         |
+| Money           | Prepaid wallet, integer-paisa maths, **append-only double-entry ledger**, VAT invoices, credit notes, refunds to the wallet                   |
+| Payments        | EPS hosted checkout with server-to-server verification (adapter pattern for other gateways)                                                   |
+| Provisioning    | Operation queue with idempotent jobs, retries, capacity pooling across many AWS accounts, final snapshots before destroy                      |
+| Isolation       | Tenant-scoped data access with cross-tenant tests; private-network isolation rules bootstrapped on every Linux instance                       |
+| Lifecycle       | Auto-renew, suspend, unpaid grace, retention and deletion with admin approval                                                                 |
+| Identity        | Amazon Cognito for customers; separate admin app with TOTP and an IP allowlist                                                                |
+| Operations      | Admin console with audit log, price book, FX rate with four-eyes approval, reconciler against AWS usage, runbooks                             |
+| Safety          | Every product family behind a feature flag, off by default in production; fail-closed checks                                                  |
+| Languages       | Panel messages in English and Bangla (`next-intl`)                                                                                            |
 
 ## Architecture at a glance
 
 ```
 Customer ─▶ CloudFront + WAF ─▶ Next.js panel (apps/web) ──┐
 Admin ────▶ CloudFront + WAF ─▶ Next.js admin (apps/admin) ┤  write an operation row,
-                                                           │  never call AWS directly (R1)
+                                                           │  never call AWS directly (rule R1)
                                                            ▼
                          PostgreSQL (private, RDS Proxy, TLS) ◀── Lambda workers (functions/)
                                                            │      provisioner, scheduler,
@@ -69,28 +78,39 @@ Admin ────▶ CloudFront + WAF ─▶ Next.js admin (apps/admin) ┤  wr
                                    reached only through STS AssumeRole
 ```
 
-- **Web tier never provisions:** the apps write an operation row and enqueue it. Lambda workers in the VPC
-  do the AWS work.
-- **Double-entry, append-only ledger** in integer paisa. A correction is a reversing transaction, never an
-  edit.
-- **Idempotent everything:** every state-changing request and job carries a unique key.
-- **Tenant isolation:** customer data is read only through tenant-scoped repositories, and every endpoint
-  has a cross-tenant test.
-- **Fail closed:** if a check cannot complete, the action is refused.
-
-The full rule set (R1–R17) is in [CLAUDE.md](CLAUDE.md). The specification is in [docs/spec/](docs/spec/).
+Read the long version with the reasons behind each choice in [Architecture explained](docs/architecture-explained.md).
 
 ## Tech stack
 
-| Layer                 | Technology                                                                      |
-| --------------------- | ------------------------------------------------------------------------------- |
-| Apps                  | Next.js 16, React, next-intl (bn, en), the mockup theme (self-hosted)           |
-| Backend               | TypeScript on AWS Lambda, Amazon SQS, Amazon EventBridge                        |
-| Data                  | PostgreSQL on Amazon RDS behind RDS Proxy, Drizzle ORM                          |
-| Identity              | Amazon Cognito (customers; admins with TOTP MFA and an IP allowlist)            |
-| Infrastructure        | SST 4 (Pulumi) in ap-southeast-1, GitHub Actions with OIDC (no long-lived keys) |
-| Payments and messages | EPS (BDT), Amazon SES e-mail, Gennet SMS                                        |
-| Quality               | Vitest, Playwright, ESLint, Prettier, OmniRank SEO/AEO audit                    |
+| Layer          | Technology                                                                        |
+| -------------- | --------------------------------------------------------------------------------- |
+| Apps           | Next.js, React, `next-intl` (English and Bangla), self-hosted fonts               |
+| Backend        | TypeScript on AWS Lambda, Amazon SQS, Amazon EventBridge Scheduler                |
+| Data           | PostgreSQL on Amazon RDS behind RDS Proxy, Drizzle ORM, forward-only migrations   |
+| Identity       | Amazon Cognito (customers), TOTP and IP allowlist for admins                      |
+| Infrastructure | SST 4 (Pulumi) in `ap-southeast-1`; GitHub Actions with OIDC (no long-lived keys) |
+| Payments       | EPS (BDT) today; adapter boundary for others                                      |
+| Quality        | Vitest, Playwright, ESLint, Prettier, gitleaks secret scan, SEO/AEO audit         |
+
+## Quick start (developers)
+
+Requirements: Node.js 24, pnpm 10, Docker.
+
+```bash
+git clone https://github.com/bemoshiur/tryaws.now.git
+cd tryaws.now
+pnpm install
+pnpm db:up && pnpm db:migrate      # local PostgreSQL in Docker
+pnpm verify --quick                # lint, typecheck and unit tests of the packages you changed
+pnpm test --filter @tc/core        # the pricing, ledger and lifecycle logic, pure and fast
+```
+
+The project builds and tests **without** the commercial website theme. To get the full look, bring your own
+licensed copy: see [docs/theme.md](docs/theme.md).
+
+To run it on AWS you need your own AWS accounts and a payment-gateway agreement. Start with
+[docs/runbooks/single-account-lean.md](docs/runbooks/single-account-lean.md) and
+[docs/runbooks/go-live.md](docs/runbooks/go-live.md).
 
 ## Repository layout
 
@@ -104,45 +124,61 @@ packages/
   aws/             AWS clients and product adapters (imported only by functions/)
   eps/ notify/ auth/ ui/
 functions/         Lambda handlers: provisioner, scheduler, reconciler, notifier, migrator, ...
-infra/             SST app, stacks and the CI role templates (infra/org)
+infra/             SST app, stacks and the CI role templates
 verify/            proofs per task and per gate
-docs/runbooks/     operations: go-live, incidents, refunds, KYC, restore drill, ...
+docs/              specification, runbooks and guides
 ```
 
-## Getting started (developers)
+## The rules
 
-Requirements: Node.js 24, pnpm 10 and Docker.
+Money and customer data are protected by 17 rules that are tested, not just written. The first ones: money is
+integer paisa; the ledger is append-only; credit a wallet only after server-to-server verification; every job
+is idempotent; the web tier never provisions; fail closed. Read them in [CLAUDE.md](CLAUDE.md) and
+[docs/spec/02-rules-that-are-never-broken.md](docs/spec/02-rules-that-are-never-broken.md).
 
-```bash
-pnpm install
-pnpm db:up && pnpm db:migrate      # local PostgreSQL in Docker
-pnpm verify --quick                # lint, typecheck, unit tests of changed packages
-pnpm test --filter @tc/core        # one package
-pnpm verify --task <task id>       # the proof of one task
-```
+## Documentation
 
-Rules of the road:
+| Read this                                                        | When you want to                                                |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- |
+| [docs/index.md](docs/index.md)                                   | find your way around                                            |
+| [docs/architecture-explained.md](docs/architecture-explained.md) | understand how it works on AWS                                  |
+| [docs/for-hosting-resellers.md](docs/for-hosting-resellers.md)   | decide if it fits your hosting business, and compare with WHMCS |
+| [docs/faq.md](docs/faq.md)                                       | get quick answers                                               |
+| [docs/spec/](docs/spec/)                                         | read the full specification                                     |
+| [docs/runbooks/](docs/runbooks/README.md)                        | operate it: deploys, refunds, incidents, restore drills         |
 
-- One task per branch. Plan first. Write tests first for `packages/core`, `db`, `eps` and `aws`.
-- Run `pnpm verify --task <id>` before the pull request. A reviewer checks every change; money code goes to the
-  money reviewer.
-- Never commit secrets. Never deploy production by hand. Production deploys only from a signed-off `v*` tag
-  through CI.
-- Every task appends an entry to [JOURNEY.md](JOURNEY.md).
+## Important notes before you use it
 
-## Operations
+- **AWS terms.** Reselling AWS services is governed by the AWS Customer Agreement and service terms, and by any
+  programme you join. This software does not give you any right to resell AWS. Check with AWS that your
+  business model is allowed before you sell.
+- **Tax, payments and law.** Invoice formats, VAT rules, KYC and payment rules differ by country. The Bangladesh
+  settings are examples and not legal advice. Get local advice.
+- **Not affiliated.** Amazon Web Services, AWS and Amazon Lightsail are trademarks of Amazon.com, Inc. or its
+  affiliates. WHMCS is a trademark of WHMCS Limited. This project is independent and is not affiliated with or
+  endorsed by either.
 
-- **Deploys:** staging runs on demand; production deploys from a `v*` tag (see
-  [staging-on-demand](docs/runbooks/staging-on-demand.md) and [go-live](docs/runbooks/go-live.md)).
-- **Runbooks:** every operational event (failed provisioning, a stuck payment, a refund, KYC review,
-  secret rotation, incidents) has a runbook in [docs/runbooks/](docs/runbooks/README.md).
-- **Cost:** production runs lean, at about 80–90 USD a month before customer resources.
+## Contributing
 
-## Company
+Contributions are welcome, from a typo to a new payment gateway. Start with [CONTRIBUTING.md](CONTRIBUTING.md),
+look for **good first issue**, and follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report a security problem
+privately: see [SECURITY.md](SECURITY.md).
 
-**TryAWS.now** · BIN: 008073062-0507 · Trade License: TRAD/DNCC/098737/2020 · Dhaka, Bangladesh
+## Credits
 
-Amazon Web Services, AWS and Amazon Lightsail are trademarks of Amazon.com, Inc. or its affiliates.
-TryAWS.now is an independent reseller and is not affiliated with or endorsed by Amazon.
+TryAWS.now is created and maintained by **[S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur)**
+([LinkedIn](https://www.linkedin.com/in/in-moshiur)). If this project helps you, please keep the attribution in
+[NOTICE](NOTICE), star the repository, and share it.
 
-This is a private, proprietary repository. All rights reserved.
+## License
+
+[Apache License 2.0](LICENSE). The commercial website theme is not included and is not covered by this licence
+(see [NOTICE](NOTICE)).
+
+---
+
+<div align="center">
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._
+
+</div>

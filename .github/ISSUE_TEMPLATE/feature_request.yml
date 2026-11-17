@@ -1,0 +1,20 @@
+name: Feature or adapter request
+description: Suggest an improvement, a payment-gateway adapter, a translation or a WHMCS bridge.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What do you propose?
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to build it?
+      options:
+        - label: Yes, I can open a pull request after we agree on the approach

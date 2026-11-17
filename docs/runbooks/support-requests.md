@@ -45,3 +45,7 @@ Request id, category, time to first answer. No message text in logs.
 ## Must not
 
 Put an AWS account id, ARN or raw AWS text into a reply; ask for passwords, card numbers or full document numbers in a reply.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._

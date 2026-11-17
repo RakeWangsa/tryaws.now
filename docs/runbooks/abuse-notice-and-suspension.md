@@ -36,3 +36,7 @@ Case id, resource id, notice time, suspension time, AWS case reference. No custo
 ## Must not
 
 Ignore a notice past 24 hours; delete the resource from the AWS console; assume a role in a pool account from a laptop; tell the customer an AWS account id or ARN.
+
+---
+
+_TryAWS.now is open source (Apache-2.0), created by [S M Moshiur Rahman](https://www.linkedin.com/in/in-moshiur) · [LinkedIn](https://www.linkedin.com/in/in-moshiur)._
